@@ -126,7 +126,7 @@ DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/...
 MAX_TRADES_PER_DAY=3           # Maximum trades per day
 DAILY_LOSS_LIMIT_PERCENT=5.0   # Stop trading if daily loss exceeds this
 POSITION_SIZE_PERCENT=10.0     # Base position size as % of balance
-LEVERAGE=5                      # Leverage for futures trades
+LEVERAGE=3                      # Leverage for futures trades (3x recommended)
 TAKE_PROFIT_PERCENT=3.5        # Take profit target
 STOP_LOSS_PERCENT=2.0          # Stop loss level
 ```
@@ -209,8 +209,14 @@ Default: **3 trades per day** to avoid overtrading.
 
 ## Trading Schedule
 
-The bot analyzes markets every 4 hours:
-- 02:00, 06:00, 10:00, 14:00, 18:00, 22:00 UTC
+The bot analyzes markets at optimal times aligned with major market sessions:
+
+| Time (UTC) | Session | Reason |
+|------------|---------|--------|
+| **01:00** | Asia (Tokyo +1h) | Reaction to US session, liquidation cascades |
+| **08:00** | EU Open (London) | European traders enter, potential reversals |
+| **14:00** | US Open + ETFs | **Critical!** BTC ETF flows (IBIT, FBTC, etc.) |
+| **21:00** | US Close | End-of-day profit-taking, position adjustments |
 
 Position monitoring runs every 5 minutes.
 

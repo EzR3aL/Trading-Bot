@@ -153,11 +153,17 @@ class TradingBot:
 
     def _setup_scheduled_jobs(self):
         """Set up scheduled analysis and trading jobs."""
-        # Main analysis job - runs every 4 hours
-        # This allows for 2-3 potential trades per day
+        # Main analysis job - aligned with major market sessions for optimal liquidation hunting
+        #
+        # Schedule (all times UTC):
+        # - 01:00: Asia Session (1h after Tokyo open) - Reaction to US session, liquidation cascades
+        # - 08:00: EU Open (London) - European traders enter, potential reversals
+        # - 14:00: US Open + ETFs (30min after NYSE) - Critical! BTC ETF flows (IBIT, FBTC, etc.)
+        # - 21:00: US Close - End-of-day profit-taking and position adjustments
+        #
         self.scheduler.add_job(
             self.analyze_and_trade,
-            CronTrigger(hour="2,6,10,14,18,22", minute=0),
+            CronTrigger(hour="1,8,14,21", minute=0),
             id="main_analysis",
             name="Main Market Analysis",
             replace_existing=True,
