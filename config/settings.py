@@ -53,7 +53,7 @@ class TradingConfig:
     max_trades_per_day: int = field(default_factory=lambda: get_env("MAX_TRADES_PER_DAY", "3", int))
     daily_loss_limit_percent: float = field(default_factory=lambda: get_env("DAILY_LOSS_LIMIT_PERCENT", "5.0", float))
     position_size_percent: float = field(default_factory=lambda: get_env("POSITION_SIZE_PERCENT", "10.0", float))
-    leverage: int = field(default_factory=lambda: get_env("LEVERAGE", "5", int))
+    leverage: int = field(default_factory=lambda: get_env("LEVERAGE", "3", int))
     take_profit_percent: float = field(default_factory=lambda: get_env("TAKE_PROFIT_PERCENT", "3.5", float))
     stop_loss_percent: float = field(default_factory=lambda: get_env("STOP_LOSS_PERCENT", "2.0", float))
     trading_pairs: List[str] = field(default_factory=lambda: get_env("TRADING_PAIRS", "BTCUSDT,ETHUSDT", list))

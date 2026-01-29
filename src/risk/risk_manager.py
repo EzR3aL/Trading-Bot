@@ -88,6 +88,7 @@ class RiskManager:
     - Position sizing based on risk
     - Drawdown monitoring
     - Trade statistics tracking
+    - Profit Lock-In (dynamic loss limits)
     """
 
     def __init__(
@@ -96,6 +97,9 @@ class RiskManager:
         daily_loss_limit_percent: Optional[float] = None,
         position_size_percent: Optional[float] = None,
         data_dir: str = "data/risk",
+        enable_profit_lock: bool = True,
+        profit_lock_percent: float = 75.0,
+        min_profit_floor: float = 0.5,
     ):
         """
         Initialize the risk manager.
@@ -109,6 +113,11 @@ class RiskManager:
         self.max_trades = max_trades_per_day or settings.trading.max_trades_per_day
         self.daily_loss_limit = daily_loss_limit_percent or settings.trading.daily_loss_limit_percent
         self.position_size_pct = position_size_percent or settings.trading.position_size_percent
+
+        # Profit Lock-In settings
+        self.enable_profit_lock = enable_profit_lock
+        self.profit_lock_percent = profit_lock_percent  # Lock 75% of gains
+        self.min_profit_floor = min_profit_floor  # Minimum profit to keep (0.5%)
 
         self.data_dir = Path(data_dir)
         self.data_dir.mkdir(parents=True, exist_ok=True)
@@ -183,6 +192,45 @@ class RiskManager:
 
         return self._daily_stats
 
+    def get_dynamic_loss_limit(self) -> float:
+        """
+        Calculate dynamic loss limit based on current daily PnL.
+
+        Implements the Profit Lock-In feature:
+        - When in profit, reduces allowed loss to lock in gains
+        - Example: If +4% profit, with 75% lock, only allows -1% loss
+          (keeping minimum +0.5% profit)
+
+        Returns:
+            Current effective loss limit as percentage
+        """
+        if not self.enable_profit_lock or not self._daily_stats:
+            return self.daily_loss_limit
+
+        current_return = self._daily_stats.return_percent
+
+        if current_return <= 0:
+            # Not in profit, use standard loss limit
+            return self.daily_loss_limit
+
+        # Calculate how much profit to lock
+        # locked_profit = current_return * (profit_lock_percent / 100)
+        # The max allowed loss = current_return - min_profit_floor
+        # But capped at standard loss limit
+
+        max_allowed_loss = current_return - self.min_profit_floor
+        new_limit = min(self.daily_loss_limit, max_allowed_loss)
+
+        # Ensure at least some small loss is allowed for flexibility
+        new_limit = max(new_limit, 0.5)
+
+        logger.debug(
+            f"Profit Lock-In: Return={current_return:.2f}%, "
+            f"Dynamic Limit={new_limit:.2f}% (Standard: {self.daily_loss_limit}%)"
+        )
+
+        return new_limit
+
     def can_trade(self) -> tuple[bool, str]:
         """
         Check if trading is allowed based on risk limits.
@@ -201,11 +249,13 @@ class RiskManager:
         if self._daily_stats.trades_executed >= self.max_trades:
             return False, f"Daily trade limit reached ({self.max_trades} trades)"
 
-        # Check daily loss limit
+        # Check dynamic loss limit (includes Profit Lock-In)
+        current_loss_limit = self.get_dynamic_loss_limit()
         loss_percent = abs(min(0, self._daily_stats.return_percent))
-        if loss_percent >= self.daily_loss_limit:
-            self._halt_trading(f"Daily loss limit exceeded ({loss_percent:.2f}% > {self.daily_loss_limit}%)")
-            return False, f"Daily loss limit exceeded: {loss_percent:.2f}%"
+
+        if loss_percent >= current_loss_limit:
+            self._halt_trading(f"Loss limit exceeded ({loss_percent:.2f}% > {current_loss_limit:.2f}%)")
+            return False, f"Loss limit exceeded: {loss_percent:.2f}%"
 
         return True, "Trading allowed"
 

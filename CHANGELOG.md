@@ -12,9 +12,89 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 ## [Unreleased]
 
 ### Geplant
-- Funding Rate Tracking über Zeit
-- Backtesting-Modul
-- Web-Dashboard für Live-Monitoring
+- Funding Rate Tracking ueber Zeit
+- Web-Dashboard fuer Live-Monitoring
+
+---
+
+## [1.3.0] - 2026-01-29
+
+### Hinzugefuegt
+
+#### Backtesting-Modul
+- **`src/backtest/historical_data.py`**: Historische Daten-Fetcher mit Caching
+  - Fear & Greed Index (Alternative.me API)
+  - Long/Short Ratio (Binance Futures)
+  - Funding Rates (Binance)
+  - Preisdaten OHLCV (Binance)
+- **`src/backtest/engine.py`**: Backtest-Engine mit Trade-Simulation
+  - Vollstaendige Strategie-Simulation
+  - TP/SL basierend auf Intraday High/Low
+  - Gebuehren- und Funding-Berechnung
+- **`src/backtest/report.py`**: Report-Generator mit Empfehlungen
+  - Konsolen-Report mit ASCII-Charts
+  - JSON-Export fuer detaillierte Analyse
+  - Automatische Empfehlungen basierend auf Metriken
+- **`src/backtest/mock_data.py`**: Simulierte Daten fuer Offline-Tests
+- **CLI-Integration**: `python main.py --backtest`
+  - `--backtest-days N`: Anzahl Tage (Standard: 180)
+  - `--backtest-capital N`: Startkapital (Standard: 10000)
+
+#### Profit Lock-In Feature
+Neues Risikomanagement-Feature in `risk_manager.py`:
+- **Funktion**: Sperrt Gewinne dynamisch, um positive Tage zu schuetzen
+- **Logik**: Bei Gewinn wird das Verlustlimit automatisch reduziert
+- **Konfiguration**:
+  - `enable_profit_lock`: Feature ein/aus (Standard: True)
+  - `profit_lock_percent`: Anteil der gesperrten Gewinne (Standard: 75%)
+  - `min_profit_floor`: Mindestgewinn der erhalten bleibt (Standard: 0.5%)
+
+**Beispiel:**
+| Tages-PnL | Standard Limit | Mit Profit Lock | Garantiert |
+|-----------|----------------|-----------------|------------|
+| +0% | -5% | -5% | -5% |
+| +2% | -5% | -1.5% | +0.5% |
+| +4% | -5% | -3.5% | +0.5% |
+
+### Backtest-Ergebnisse (6 Monate, $10.000, 3x Leverage)
+
+| Metrik | Wert | Bewertung |
+|--------|------|-----------|
+| Zeitraum | 2025-08-02 bis 2026-01-28 | 179 Tage |
+| Startkapital | $10,000.00 | - |
+| Endkapital | $14,952.60 | +49.53% |
+| Max Drawdown | 9.23% | OK |
+| Anzahl Trades | 338 | ~1.9/Tag |
+| Win Rate | 47.93% | Unter Ziel |
+| Profit Factor | 1.33 | OK |
+| Gebuehren | $535.40 | 5.4% |
+| Funding | $224.12 | 2.2% |
+
+#### Monatliche Performance
+| Monat | P&L | Return |
+|-------|-----|--------|
+| 2025-08 | +$955.83 | +9.56% |
+| 2025-09 | +$1,788.03 | +17.88% |
+| 2025-10 | +$1,006.08 | +10.06% |
+| 2025-11 | +$1,037.60 | +10.38% |
+| 2025-12 | +$1,244.69 | +12.45% |
+| 2026-01 | -$1,079.62 | -10.80% |
+
+### Empfehlungen basierend auf Backtest
+
+Die Win Rate liegt mit 47.93% unter dem Ziel von 60%. Folgende Anpassungen werden empfohlen:
+
+| Parameter | Aktuell | Empfohlen | Grund |
+|-----------|---------|-----------|-------|
+| Low Conf Min | 55% | 60% | Weniger Trades, hoehere Qualitaet |
+| Take Profit | 3.5% | 4.0% | Besseres Risiko/Reward |
+| Stop Loss | 2.0% | 1.5% | Schnellere Verlustbegrenzung |
+| Position Size | 10% | 7.5% | Geringere Kosten |
+
+**Strategie-Anpassungen:**
+1. Nur bei echten Extremen handeln (F&G < 20 oder > 80)
+2. L/S Ratio Thresholds erhoehen (>2.5 statt >2.0)
+3. Trades pro Tag auf 2 reduzieren
 
 ---
 
