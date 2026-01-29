@@ -250,7 +250,8 @@ Examples:
   python main.py --test                  Run analysis without trading
   python main.py --status                Show current status and statistics
   python main.py --backtest              Run 6-month backtest with $10,000
-  python main.py --backtest --backtest-days 90 --backtest-capital 5000
+  python main.py --dashboard             Start web dashboard at http://localhost:8080
+  python main.py --dashboard --dashboard-port 3000
 
 For more information, see the README.md file.
         """,
@@ -295,6 +296,19 @@ For more information, see the README.md file.
         help="Starting capital for backtest (default: 10000)",
     )
 
+    parser.add_argument(
+        "--dashboard",
+        action="store_true",
+        help="Start the web dashboard for live monitoring",
+    )
+
+    parser.add_argument(
+        "--dashboard-port",
+        type=int,
+        default=8080,
+        help="Port for the web dashboard (default: 8080)",
+    )
+
     args = parser.parse_args()
 
     # Setup logging
@@ -311,6 +325,10 @@ For more information, see the README.md file.
         return asyncio.run(run_test())
     elif args.backtest:
         return asyncio.run(run_backtest(args.backtest_days, args.backtest_capital))
+    elif args.dashboard:
+        from src.dashboard import run_dashboard
+        run_dashboard(port=args.dashboard_port)
+        return 0
     else:
         return asyncio.run(run_bot())
 

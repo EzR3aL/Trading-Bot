@@ -27,6 +27,7 @@ from src.strategy.liquidation_hunter import LiquidationHunterStrategy, TradeSign
 from src.risk.risk_manager import RiskManager
 from src.notifications.discord_notifier import DiscordNotifier
 from src.models.trade_database import TradeDatabase
+from src.data.funding_tracker import FundingTracker
 from src.utils.logger import get_logger, setup_logging
 from config import settings
 
@@ -66,6 +67,7 @@ class TradingBot:
         self.risk_manager: Optional[RiskManager] = None
         self.discord: Optional[DiscordNotifier] = None
         self.trade_db: Optional[TradeDatabase] = None
+        self.funding_tracker: Optional[FundingTracker] = None
         self.scheduler: Optional[AsyncIOScheduler] = None
 
         # State
@@ -115,6 +117,11 @@ class TradingBot:
             self.trade_db = TradeDatabase()
             await self.trade_db.initialize()
             logger.info("Trade database initialized")
+
+            # Initialize funding tracker
+            self.funding_tracker = FundingTracker()
+            await self.funding_tracker.initialize()
+            logger.info("Funding tracker initialized")
 
             # Initialize scheduler
             self.scheduler = AsyncIOScheduler()
@@ -428,6 +435,7 @@ class TradingBot:
         - If TP/SL have been hit
         - If positions need manual closing
         - Updates trade records
+        - Records funding payments at funding times
         """
         try:
             # Get open trades from database
@@ -438,11 +446,54 @@ class TradingBot:
 
             logger.debug(f"Monitoring {len(open_trades)} open positions")
 
+            # Check if it's funding time and record payments
+            if self.funding_tracker.is_funding_time():
+                await self._record_funding_payments(open_trades)
+
             for trade in open_trades:
                 await self._check_position(trade)
 
         except Exception as e:
             logger.error(f"Error monitoring positions: {e}")
+
+    async def _record_funding_payments(self, open_trades):
+        """
+        Record funding payments for all open positions.
+
+        Called when current time is near a funding payment time (00:00, 08:00, 16:00 UTC).
+        """
+        logger.info("Recording funding payments for open positions...")
+
+        for trade in open_trades:
+            try:
+                # Get current funding rate for the symbol
+                funding_rate = await self.data_fetcher.get_funding_rate(trade.symbol)
+
+                if funding_rate is None:
+                    continue
+
+                # Calculate position value
+                current_price = await self.data_fetcher.get_ticker(trade.symbol)
+                if current_price:
+                    position_value = trade.size * current_price.get("last", trade.entry_price)
+                else:
+                    position_value = trade.size * trade.entry_price
+
+                # Record the funding payment
+                await self.funding_tracker.record_funding_payment(
+                    symbol=trade.symbol,
+                    funding_rate=funding_rate,
+                    position_size=trade.size,
+                    position_value=position_value,
+                    side=trade.side,
+                    trade_id=trade.id
+                )
+
+                # Also record the funding rate for historical tracking
+                await self.funding_tracker.record_funding_rate(trade.symbol, funding_rate)
+
+            except Exception as e:
+                logger.error(f"Error recording funding for {trade.symbol}: {e}")
 
     async def _check_position(self, trade):
         """
@@ -514,8 +565,8 @@ class TradingBot:
 
             pnl_percent = (pnl / (trade.entry_price * trade.size)) * 100
 
-            # Get funding paid (simplified - would need to track over time)
-            funding_paid = 0  # TODO: Implement funding tracking
+            # Get total funding paid for this trade from tracker
+            funding_paid = await self.funding_tracker.get_total_funding_for_trade(trade.id)
 
             # Update database
             await self.trade_db.close_trade(

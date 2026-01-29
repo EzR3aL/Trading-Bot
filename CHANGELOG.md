@@ -9,11 +9,62 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
-## [Unreleased]
+## [1.5.0] - 2026-01-29
 
-### Geplant
-- Funding Rate Tracking ueber Zeit
-- Web-Dashboard fuer Live-Monitoring
+### Hinzugefuegt
+
+#### Web-Dashboard (Live-Monitoring)
+Neues Echtzeit-Dashboard fuer den Trading Bot:
+
+- **Backend**: FastAPI-basierter REST-API Server
+  - `/api/status` - Bot-Status und Konfiguration
+  - `/api/trades` - Trade-Historie und offene Positionen
+  - `/api/statistics` - Performance-Statistiken
+  - `/api/funding` - Funding-Rate Daten und Zahlungen
+  - `/api/config` - Aktuelle Konfiguration
+  - WebSocket fuer Echtzeit-Updates
+
+- **Frontend**: Responsive Web-Interface
+  - Equity-Kurve (30 Tage)
+  - Funding-Rate Historie Chart
+  - Offene Positionen Tabelle
+  - Trade-Historie mit P&L
+  - Konfigurations-Uebersicht
+
+- **CLI**: `python main.py --dashboard [--dashboard-port 8080]`
+
+#### Funding Rate Tracking
+Vollstaendiges Tracking von Funding-Zahlungen:
+
+- **`src/data/funding_tracker.py`**: Neues Modul
+  - SQLite-Datenbank fuer Funding-Zahlungen
+  - Automatische Aufzeichnung bei Funding-Zeiten (00:00, 08:00, 16:00 UTC)
+  - Aggregierte Statistiken (total paid/received, avg rate)
+  - Historische Funding-Rate Analyse
+
+- **Integration in Trading Bot**:
+  - Automatische Erfassung bei offenen Positionen
+  - Korrekte PnL-Berechnung inkl. Funding-Kosten
+  - Taeglich/woechentliche Funding-Uebersicht
+
+- **API Endpoints**:
+  - `GET /api/funding` - Funding-Statistiken
+  - `GET /api/funding/history/{symbol}` - Rate-Historie
+
+### Technische Details
+
+| Komponente | Technologie |
+|------------|-------------|
+| Backend | FastAPI + uvicorn |
+| Frontend | Tailwind CSS + Chart.js |
+| Datenbank | SQLite (aiosqlite) |
+| Updates | WebSocket (5s Intervall) |
+
+### Neue Abhaengigkeiten
+```
+fastapi>=0.109.0
+uvicorn>=0.27.0
+```
 
 ---
 
