@@ -38,6 +38,16 @@ The bot acts as an "Institutional Market Maker" by analyzing:
 - **Persistent Tracking**: SQLite database for trade history and statistics
 - **Multi-Source Data**: Combines Binance, Alternative.me, and Bitget data
 
+## Documentation
+
+| Document | Description |
+|----------|-------------|
+| [CHANGELOG.md](CHANGELOG.md) | Version history and all changes |
+| [docs/STRATEGY.md](docs/STRATEGY.md) | Detailed strategy explanation |
+| [docs/SETUP.md](docs/SETUP.md) | Installation and configuration guide |
+| [docs/API.md](docs/API.md) | Technical API reference |
+| [docs/FAQ.md](docs/FAQ.md) | Frequently asked questions |
+
 ## Project Structure
 
 ```
