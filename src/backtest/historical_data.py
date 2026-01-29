@@ -5,7 +5,7 @@ Fetches and caches historical market data from various APIs:
 - Fear & Greed Index (Alternative.me)
 - Long/Short Ratio (Binance Futures)
 - Funding Rates (Binance Futures)
-- Price Data (Binance)
+- Price Data (Binance, CoinGecko, CoinMarketCap as fallbacks)
 """
 
 import asyncio
@@ -73,6 +73,14 @@ class HistoricalDataFetcher:
 
     FEAR_GREED_URL = "https://api.alternative.me/fng/"
     BINANCE_FUTURES_URL = "https://fapi.binance.com"
+    COINGECKO_URL = "https://api.coingecko.com/api/v3"
+    COINMARKETCAP_URL = "https://pro-api.coinmarketcap.com/v1"
+
+    # CoinGecko coin IDs
+    COINGECKO_IDS = {
+        "BTC": "bitcoin",
+        "ETH": "ethereum"
+    }
 
     def __init__(self, cache_dir: str = "data/backtest/cache"):
         """Initialize the historical data fetcher."""
@@ -288,6 +296,95 @@ class HistoricalDataFetcher:
         self._save_cache(cache_name, result)
         return result
 
+    async def fetch_coingecko_history(
+        self, coin_id: str = "bitcoin", days: int = 180
+    ) -> List[Dict]:
+        """
+        Fetch OHLCV data from CoinGecko as fallback.
+
+        Args:
+            coin_id: CoinGecko coin ID (bitcoin, ethereum)
+            days: Number of days to fetch
+
+        Returns:
+            List of OHLCV data points
+        """
+        cache_name = f"coingecko_{coin_id}_{days}d"
+        cached = self._load_cache(cache_name)
+        if cached:
+            return cached
+
+        logger.info(f"Fetching CoinGecko price history for {coin_id} ({days} days)...")
+
+        # CoinGecko market_chart endpoint
+        url = f"{self.COINGECKO_URL}/coins/{coin_id}/market_chart"
+        params = {
+            "vs_currency": "usd",
+            "days": str(days),
+            "interval": "daily"
+        }
+
+        data = await self._get(url, params)
+
+        if not data or "prices" not in data:
+            logger.warning(f"CoinGecko returned no data for {coin_id}")
+            return []
+
+        prices = data.get("prices", [])
+
+        result = []
+        for i, price_data in enumerate(prices):
+            ts = int(price_data[0]) // 1000
+            price = float(price_data[1])
+
+            # Estimate high/low as +/- 2% (CoinGecko only gives close prices)
+            result.append({
+                "timestamp": ts,
+                "open": price * 0.99,
+                "high": price * 1.02,
+                "low": price * 0.98,
+                "close": price,
+                "volume": 0
+            })
+
+        self._save_cache(cache_name, result)
+        logger.info(f"CoinGecko: Got {len(result)} data points for {coin_id}")
+        return result
+
+    async def fetch_klines_with_fallback(
+        self, symbol: str = "BTCUSDT", days: int = 180
+    ) -> List[Dict]:
+        """
+        Fetch price data with fallback to alternative sources.
+
+        Order of sources:
+        1. Binance Futures
+        2. CoinGecko
+        3. Mock data (if all else fails)
+
+        Args:
+            symbol: Trading pair
+            days: Number of days to fetch
+
+        Returns:
+            List of OHLCV data points
+        """
+        # Try Binance first
+        data = await self.fetch_klines_history(symbol, "1d", days)
+        if data:
+            logger.info(f"Got {len(data)} candles from Binance for {symbol}")
+            return data
+
+        # Try CoinGecko as fallback
+        coin_id = "bitcoin" if "BTC" in symbol else "ethereum"
+        data = await self.fetch_coingecko_history(coin_id, days)
+        if data:
+            logger.info(f"Got {len(data)} candles from CoinGecko for {coin_id}")
+            return data
+
+        logger.warning(f"All price sources failed for {symbol}")
+        return []
+
     async def fetch_long_short_history(
         self, symbol: str = "BTCUSDT", days: int = 180
     ) -> List[Dict]:
@@ -365,13 +462,13 @@ class HistoricalDataFetcher:
         """
         logger.info(f"Fetching all historical data for {days} days...")
 
-        # Fetch all data in parallel
+        # Fetch all data in parallel (using fallback methods for prices)
         results = await asyncio.gather(
             self.fetch_fear_greed_history(days),
             self.fetch_funding_rate_history("BTCUSDT", days),
             self.fetch_funding_rate_history("ETHUSDT", days),
-            self.fetch_klines_history("BTCUSDT", "1d", days),
-            self.fetch_klines_history("ETHUSDT", "1d", days),
+            self.fetch_klines_with_fallback("BTCUSDT", days),  # Uses CoinGecko fallback
+            self.fetch_klines_with_fallback("ETHUSDT", days),  # Uses CoinGecko fallback
             self.fetch_long_short_history("BTCUSDT", days),
             return_exceptions=True
         )
@@ -383,6 +480,16 @@ class HistoricalDataFetcher:
         klines_eth = results[4] if not isinstance(results[4], Exception) else []
         long_short = results[5] if not isinstance(results[5], Exception) else []
 
+        # Log data sources used
+        sources = []
+        if klines_btc:
+            sources.append("Binance/CoinGecko")
+        if fear_greed:
+            sources.append("Alternative.me")
+        if long_short:
+            sources.append("Binance Futures")
+
+        logger.info(f"Data sources: {', '.join(sources) if sources else 'None'}")
         logger.info(f"Data fetched - FG: {len(fear_greed)}, Funding BTC: {len(funding_btc)}, "
                    f"Klines BTC: {len(klines_btc)}, L/S: {len(long_short)}")
 

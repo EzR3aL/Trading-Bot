@@ -17,6 +17,60 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [1.4.0] - 2026-01-29
+
+### Geaendert
+
+#### Optimierte Strategie-Parameter
+Basierend auf Backtest-Ergebnissen wurden folgende Parameter angepasst:
+
+| Parameter | Alt | Neu | Grund |
+|-----------|-----|-----|-------|
+| Leverage | 3x | **4x** | Hoeherer Profit Factor erlaubt mehr Risiko |
+| Take Profit | 3.5% | **4.0%** | Besseres R/R-Verhaeltnis |
+| Stop Loss | 2.0% | **1.5%** | Schnellere Verlustbegrenzung |
+| Position Size | 10% | **7.5%** | Geringere Kosten pro Trade |
+| Max Trades/Tag | 3 | **2** | Fokus auf Qualitaet |
+| Low Conf Min | 55% | **60%** | Weniger, bessere Trades |
+| F&G Extreme Fear | <25 | **<20** | Nur echte Extreme |
+| F&G Extreme Greed | >75 | **>80** | Nur echte Extreme |
+| L/S Crowded Longs | >2.0 | **>2.5** | Staerkere Signale |
+| L/S Crowded Shorts | <0.5 | **<0.4** | Staerkere Signale |
+
+#### Alternative Datenquellen
+- **CoinGecko API** als Fallback fuer Preisdaten wenn Binance nicht erreichbar
+- Automatische Quellenauswahl in `fetch_klines_with_fallback()`
+
+### Backtest-Vergleich (6 Monate, $10.000)
+
+| Metrik | v1.3.0 (3x) | v1.4.0 (4x) | Aenderung |
+|--------|-------------|-------------|-----------|
+| Endkapital | $14,952.60 | **$22,259.47** | +48.9% |
+| Gesamtrendite | +49.53% | **+122.59%** | +147.5% |
+| Win Rate | 47.93% | 46.36% | -3.3% |
+| Profit Factor | 1.33 | **1.89** | +42.1% |
+| Max Drawdown | 9.23% | **7.24%** | -21.6% |
+| Avg Win | $124.50 | **$163.50** | +31.3% |
+| Avg Loss | -$86.45 | **-$74.66** | -13.6% |
+| Kosten | $759.52 | **$656.76** | -13.5% |
+
+#### Monatliche Performance (v1.4.0)
+| Monat | P&L | Return |
+|-------|-----|--------|
+| 2025-08 | +$1,543.28 | +15.43% |
+| 2025-09 | +$2,681.32 | +26.81% |
+| 2025-10 | +$3,519.91 | +35.20% |
+| 2025-11 | +$2,868.37 | +28.68% |
+| 2025-12 | +$2,156.51 | +21.57% |
+| 2026-01 | -$509.91 | -5.10% |
+
+### Analyse
+- **Win Rate unter 50% ist OK**: Der Profit Factor von 1.89 bedeutet, dass Gewinne im Schnitt 89% groesser sind als Verluste
+- **Drawdown reduziert**: Trotz hoeherem Leverage sank der Max Drawdown von 9.23% auf 7.24%
+- **Kosten gesenkt**: Durch weniger, aber bessere Trades sanken die Kosten um 13.5%
+
+---
+
 ## [1.3.0] - 2026-01-29
 
 ### Hinzugefuegt

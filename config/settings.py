@@ -50,33 +50,33 @@ class DiscordConfig:
 @dataclass
 class TradingConfig:
     """Trading parameters configuration."""
-    max_trades_per_day: int = field(default_factory=lambda: get_env("MAX_TRADES_PER_DAY", "3", int))
+    max_trades_per_day: int = field(default_factory=lambda: get_env("MAX_TRADES_PER_DAY", "2", int))
     daily_loss_limit_percent: float = field(default_factory=lambda: get_env("DAILY_LOSS_LIMIT_PERCENT", "5.0", float))
-    position_size_percent: float = field(default_factory=lambda: get_env("POSITION_SIZE_PERCENT", "10.0", float))
-    leverage: int = field(default_factory=lambda: get_env("LEVERAGE", "3", int))
-    take_profit_percent: float = field(default_factory=lambda: get_env("TAKE_PROFIT_PERCENT", "3.5", float))
-    stop_loss_percent: float = field(default_factory=lambda: get_env("STOP_LOSS_PERCENT", "2.0", float))
+    position_size_percent: float = field(default_factory=lambda: get_env("POSITION_SIZE_PERCENT", "7.5", float))
+    leverage: int = field(default_factory=lambda: get_env("LEVERAGE", "4", int))
+    take_profit_percent: float = field(default_factory=lambda: get_env("TAKE_PROFIT_PERCENT", "4.0", float))
+    stop_loss_percent: float = field(default_factory=lambda: get_env("STOP_LOSS_PERCENT", "1.5", float))
     trading_pairs: List[str] = field(default_factory=lambda: get_env("TRADING_PAIRS", "BTCUSDT,ETHUSDT", list))
 
 
 @dataclass
 class StrategyConfig:
     """Strategy thresholds configuration."""
-    # Fear & Greed Index thresholds
-    fear_greed_extreme_fear: int = field(default_factory=lambda: get_env("FEAR_GREED_EXTREME_FEAR", "25", int))
-    fear_greed_extreme_greed: int = field(default_factory=lambda: get_env("FEAR_GREED_EXTREME_GREED", "75", int))
+    # Fear & Greed Index thresholds (stricter for better signals)
+    fear_greed_extreme_fear: int = field(default_factory=lambda: get_env("FEAR_GREED_EXTREME_FEAR", "20", int))
+    fear_greed_extreme_greed: int = field(default_factory=lambda: get_env("FEAR_GREED_EXTREME_GREED", "80", int))
 
-    # Long/Short Ratio thresholds
-    long_short_crowded_longs: float = field(default_factory=lambda: get_env("LONG_SHORT_CROWDED_LONGS", "2.0", float))
-    long_short_crowded_shorts: float = field(default_factory=lambda: get_env("LONG_SHORT_CROWDED_SHORTS", "0.5", float))
+    # Long/Short Ratio thresholds (stricter for stronger signals)
+    long_short_crowded_longs: float = field(default_factory=lambda: get_env("LONG_SHORT_CROWDED_LONGS", "2.5", float))
+    long_short_crowded_shorts: float = field(default_factory=lambda: get_env("LONG_SHORT_CROWDED_SHORTS", "0.4", float))
 
     # Funding Rate thresholds (in decimal, e.g., 0.0005 = 0.05%)
     funding_rate_high: float = field(default_factory=lambda: get_env("FUNDING_RATE_HIGH", "0.0005", float))
     funding_rate_low: float = field(default_factory=lambda: get_env("FUNDING_RATE_LOW", "-0.0002", float))
 
-    # Confidence thresholds
+    # Confidence thresholds (raised low min for better trade quality)
     high_confidence_min: int = field(default_factory=lambda: get_env("HIGH_CONFIDENCE_MIN", "85", int))
-    low_confidence_min: int = field(default_factory=lambda: get_env("LOW_CONFIDENCE_MIN", "55", int))
+    low_confidence_min: int = field(default_factory=lambda: get_env("LOW_CONFIDENCE_MIN", "60", int))
 
 
 @dataclass
