@@ -15,7 +15,7 @@ based on the Contrarian Liquidation Hunter strategy.
 
 import asyncio
 import json
-from datetime import datetime, time
+from datetime import datetime
 from typing import Optional, List
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -26,7 +26,7 @@ from src.data.market_data import MarketDataFetcher
 from src.strategy.liquidation_hunter import LiquidationHunterStrategy, TradeSignal, SignalDirection
 from src.risk.risk_manager import RiskManager
 from src.notifications.discord_notifier import DiscordNotifier
-from src.models.trade_database import TradeDatabase, TradeStatus
+from src.models.trade_database import TradeDatabase
 from src.utils.logger import get_logger, setup_logging
 from config import settings
 

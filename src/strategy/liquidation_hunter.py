@@ -352,8 +352,13 @@ class LiquidationHunterStrategy:
         # === STEP 5: Clamp Confidence ===
         confidence = max(self.config.low_confidence_min, min(confidence, 95))
 
-        # === STEP 6: Calculate Targets ===
-        take_profit, stop_loss = self._calculate_targets(final_direction, current_price)
+        # === STEP 6: Validate Price and Calculate Targets ===
+        if current_price <= 0:
+            logger.error(f"Invalid price for {symbol}: {current_price}. Using fallback.")
+            # Signal will be rejected by should_trade() due to invalid price
+            take_profit, stop_loss = 0.0, 0.0
+        else:
+            take_profit, stop_loss = self._calculate_targets(final_direction, current_price)
 
         # Build reasoning summary
         full_reason = " | ".join(reasons)

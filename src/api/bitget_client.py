@@ -3,17 +3,15 @@ Bitget Exchange API Client.
 Handles all interactions with Bitget's Futures API for trading operations.
 """
 
-import asyncio
+import json
 import time
 import hmac
 import hashlib
 import base64
 from typing import Optional, Dict, Any, Literal
 from datetime import datetime
-from decimal import Decimal
 
 import aiohttp
-import requests
 
 from config import settings
 from src.utils.logger import get_logger
@@ -115,7 +113,6 @@ class BitgetClient:
         body = ""
 
         if data:
-            import json
             body = json.dumps(data)
 
         if params:

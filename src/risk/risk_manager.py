@@ -11,7 +11,7 @@ Handles:
 
 import json
 from dataclasses import dataclass, field
-from datetime import datetime, date
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional, Dict, List
 
@@ -497,7 +497,3 @@ class RiskManager:
             "max_drawdown": max_dd,
             "sharpe_estimate": sharpe,
         }
-
-
-# Import timedelta for historical stats
-from datetime import timedelta

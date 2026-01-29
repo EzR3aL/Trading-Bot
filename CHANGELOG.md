@@ -18,6 +18,36 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [1.2.0] - 2026-01-29
+
+### Behoben (Bug Fixes)
+- **Kritisch**: Preis-Validierung in `liquidation_hunter.py` hinzugefügt
+  - Verhindert fehlerhafte TP/SL-Berechnung wenn Preis = 0 (API-Fehler)
+  - Signal wird nun korrekt abgelehnt bei ungültigem Preis
+- **Import-Fehler**: `timedelta` in `risk_manager.py` korrigiert
+  - War am Ende der Datei (Zeile 503) statt am Anfang importiert
+  - Konnte zu `NameError` bei historischen Statistiken führen
+
+### Bereinigt (Code Cleanup)
+- **`bitget_client.py`**: Unbenutzte Imports entfernt
+  - `asyncio`, `Decimal`, `requests` entfernt
+  - `json` Import an den Dateianfang verschoben
+- **`market_data.py`**: Unbenutzte Imports entfernt
+  - `timedelta`, `requests` entfernt
+- **`trading_bot.py`**: Unbenutzte Imports entfernt
+  - `time`, `TradeStatus` entfernt
+
+### Code-Review Ergebnisse
+| Datei | Problem | Schwere | Status |
+|-------|---------|---------|--------|
+| `liquidation_hunter.py:356` | Keine Preis-Validierung | **Hoch** | ✅ Behoben |
+| `risk_manager.py:503` | `timedelta` am Dateiende | Mittel | ✅ Behoben |
+| `bitget_client.py:6,13,16,118` | Unbenutzte/falsche Imports | Gering | ✅ Behoben |
+| `market_data.py:14,18` | Unbenutzte Imports | Gering | ✅ Behoben |
+| `trading_bot.py:18,29` | Unbenutzte Imports | Gering | ✅ Behoben |
+
+---
+
 ## [1.1.1] - 2026-01-29
 
 ### Hinzugefügt
