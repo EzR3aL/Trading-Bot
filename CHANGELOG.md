@@ -5,12 +5,29 @@ Alle wichtigen Änderungen an diesem Projekt werden in dieser Datei dokumentiert
 Das Format basiert auf [Keep a Changelog](https://keepachangelog.com/de/1.0.0/),
 und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
+> **Hinweis:** Dieser Changelog wird automatisch bei jeder Änderung aktualisiert.
+
+---
+
 ## [Unreleased]
 
 ### Geplant
 - Funding Rate Tracking über Zeit
 - Backtesting-Modul
 - Web-Dashboard für Live-Monitoring
+
+---
+
+## [1.1.1] - 2026-01-29
+
+### Hinzugefügt
+- **Dokumentation**: Umfassende Projekt-Dokumentation erstellt
+  - `CHANGELOG.md` - Versions-Historie (dieses Dokument)
+  - `docs/STRATEGY.md` - Detaillierte Strategie-Erklärung
+  - `docs/SETUP.md` - Installations- und Konfigurations-Anleitung
+  - `docs/API.md` - Technische API-Referenz
+  - `docs/FAQ.md` - Häufig gestellte Fragen
+- **README.md**: Dokumentations-Übersicht mit Links hinzugefügt
 
 ---
 
