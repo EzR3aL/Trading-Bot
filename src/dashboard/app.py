@@ -2,18 +2,29 @@
 Web Dashboard Application using FastAPI.
 
 Provides REST API endpoints and serves the web interface.
+
+Security Features (v1.7.0):
+- API key authentication on sensitive endpoints
+- CORS restricted to localhost
+- Rate limiting on mode toggle
+- Health check endpoint
 """
 
 import asyncio
 import json
+import os
+import secrets
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional, List, Dict, Any
 
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, Depends, Header, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 import uvicorn
 
 from src.utils.logger import get_logger
@@ -27,6 +38,31 @@ logger = get_logger(__name__)
 # Dashboard directory
 DASHBOARD_DIR = Path(__file__).parent
 
+# Rate limiter
+limiter = Limiter(key_func=get_remote_address)
+
+# API Key for dashboard authentication
+DASHBOARD_API_KEY = os.getenv("DASHBOARD_API_KEY", "")
+
+
+async def verify_api_key(x_api_key: str = Header(None, alias="X-API-Key")):
+    """
+    Verify API key for protected endpoints.
+
+    If DASHBOARD_API_KEY is not set, authentication is disabled (development mode).
+    """
+    if not DASHBOARD_API_KEY:
+        # No API key configured - allow access (development mode)
+        return True
+
+    if not x_api_key or not secrets.compare_digest(x_api_key, DASHBOARD_API_KEY):
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid or missing API key",
+            headers={"WWW-Authenticate": "API key required in X-API-Key header"}
+        )
+    return True
+
 
 def create_app() -> FastAPI:
     """Create and configure the FastAPI application."""
@@ -34,15 +70,26 @@ def create_app() -> FastAPI:
     app = FastAPI(
         title="Bitget Trading Bot Dashboard",
         description="Real-time monitoring dashboard for the Contrarian Liquidation Hunter",
-        version="1.5.0"
+        version="1.7.0"
     )
 
-    # CORS middleware
+    # Rate limiter
+    app.state.limiter = limiter
+    app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+    # CORS middleware - restricted to localhost only
+    allowed_origins = [
+        "http://localhost:8080",
+        "http://127.0.0.1:8080",
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+    ]
+
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],
+        allow_origins=allowed_origins,
         allow_credentials=True,
-        allow_methods=["*"],
+        allow_methods=["GET", "POST"],
         allow_headers=["*"],
     )
 
@@ -74,6 +121,56 @@ def create_app() -> FastAPI:
 
     # ==================== API ENDPOINTS ====================
 
+    @app.get("/api/health")
+    async def health_check():
+        """
+        Health check endpoint for monitoring and container orchestration.
+
+        Returns service health status and component connectivity.
+        No authentication required.
+        """
+        health = {
+            "status": "healthy",
+            "timestamp": datetime.now().isoformat(),
+            "version": "1.7.0",
+            "components": {
+                "database": "unknown",
+                "risk_manager": "unknown",
+                "funding_tracker": "unknown",
+            }
+        }
+
+        # Check database
+        try:
+            if app.state.trade_db:
+                # Simple query to verify DB is responsive
+                await app.state.trade_db.get_statistics(1)
+                health["components"]["database"] = "healthy"
+        except Exception as e:
+            health["components"]["database"] = f"unhealthy: {str(e)}"
+            health["status"] = "degraded"
+
+        # Check risk manager
+        try:
+            if app.state.risk_manager:
+                app.state.risk_manager.get_daily_stats()
+                health["components"]["risk_manager"] = "healthy"
+        except Exception as e:
+            health["components"]["risk_manager"] = f"unhealthy: {str(e)}"
+            health["status"] = "degraded"
+
+        # Check funding tracker
+        try:
+            if app.state.funding_tracker:
+                health["components"]["funding_tracker"] = "healthy"
+        except Exception as e:
+            health["components"]["funding_tracker"] = f"unhealthy: {str(e)}"
+            health["status"] = "degraded"
+
+        # Return appropriate HTTP status
+        status_code = 200 if health["status"] == "healthy" else 503
+        return JSONResponse(content=health, status_code=status_code)
+
     @app.get("/api/status")
     async def get_status():
         """Get current bot status."""
@@ -97,13 +194,20 @@ def create_app() -> FastAPI:
         }
 
     @app.post("/api/mode/toggle")
-    async def toggle_trading_mode():
-        """Toggle between demo and live trading mode."""
+    @limiter.limit("5/minute")
+    async def toggle_trading_mode(request: Request, auth: bool = Depends(verify_api_key)):
+        """
+        Toggle between demo and live trading mode.
+
+        Security:
+        - Requires API key authentication (if DASHBOARD_API_KEY is set)
+        - Rate limited to 5 requests per minute
+        """
         current_mode = settings.trading.demo_mode
         settings.trading.demo_mode = not current_mode
         new_mode = "demo" if settings.trading.demo_mode else "live"
 
-        logger.info(f"Trading mode changed to: {new_mode.upper()}")
+        logger.warning(f"Trading mode changed to: {new_mode.upper()} (by API request)")
 
         return {
             "success": True,
@@ -568,10 +672,27 @@ def get_default_html() -> str:
 """
 
 
-def run_dashboard(host: str = "0.0.0.0", port: int = 8080):
-    """Run the dashboard server."""
+def run_dashboard(host: str = "127.0.0.1", port: int = 8080):
+    """
+    Run the dashboard server.
+
+    Args:
+        host: Host to bind to. Default is 127.0.0.1 (localhost only) for security.
+              Use 0.0.0.0 only if you need external access and have proper auth.
+        port: Port to listen on. Default is 8080.
+    """
     app = create_app()
+
+    # Security warning if binding to all interfaces
+    if host == "0.0.0.0":
+        if not DASHBOARD_API_KEY:
+            logger.warning(
+                "WARNING: Dashboard exposed on all interfaces without API key! "
+                "Set DASHBOARD_API_KEY environment variable for production use."
+            )
+
     logger.info(f"Starting dashboard at http://{host}:{port}")
+    logger.info(f"API authentication: {'ENABLED' if DASHBOARD_API_KEY else 'DISABLED (development mode)'}")
     uvicorn.run(app, host=host, port=port, log_level="info")
 
 
