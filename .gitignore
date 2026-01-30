@@ -81,3 +81,4 @@ logs/
 *.pem
 *.key
 credentials.json
+.claude/
