@@ -1,8 +1,34 @@
 # Bitget Trading Bot
 
-**Contrarian Liquidation Hunter Strategy**
+**Contrarian Liquidation Hunter Strategy** | v1.7.0
 
 An automated cryptocurrency trading bot for Bitget Futures that implements a sophisticated contrarian strategy, betting against the crowd when leverage and sentiment reach extreme levels.
+
+## Quick Start
+
+```bash
+# Clone and setup
+git clone https://github.com/yourusername/Bitget-Trading-Bot.git
+cd Bitget-Trading-Bot
+pip install -r requirements.txt
+cp .env.example .env
+
+# Configure your credentials in .env, then:
+
+# Run in Demo Mode (safe testing, no real trades)
+python main.py
+
+# Start Web Dashboard
+python main.py --dashboard
+# Open http://localhost:8080
+```
+
+**Or with Docker:**
+```bash
+docker-compose up -d
+```
+
+---
 
 ## Strategy Overview
 
@@ -30,13 +56,42 @@ The bot acts as an "Institutional Market Maker" by analyzing:
 
 **Key Principle:** NO NEUTRALITY - The bot always picks a side. When leverage is extreme, it ignores news and trends to bet on the reversal.
 
+---
+
 ## Features
 
+### Core Trading
 - **Automated Trading**: Executes up to 2-3 trades per day on BTC and ETH
 - **Risk Management**: Daily loss limits, position sizing based on confidence
-- **Discord Notifications**: Real-time trade alerts with full details
 - **Persistent Tracking**: SQLite database for trade history and statistics
-- **Multi-Source Data**: Combines Binance, Alternative.me, and Bitget data
+
+### Web Dashboard (v1.5.0+)
+- **Real-time Monitoring**: Live equity curve, open positions, trade history
+- **Funding Rate Tracking**: 30-day funding history with daily breakdown
+- **Configuration View**: Current settings and daily statistics
+- **Demo/Live Toggle**: Switch trading modes directly from the UI
+
+### Demo/Live Mode (v1.6.0+)
+- **Demo Mode** (Default): Simulates trades without placing real orders
+- **Live Mode**: Executes real trades on Bitget
+- Test your strategy for days/weeks before going live
+
+### WebSocket Infrastructure (v1.6.0+)
+- **Binance WebSocket**: Real-time market data (mark prices, funding rates)
+- **Bitget WebSocket**: Execution prices and position updates
+
+### Security Features (v1.7.0+)
+- **API Key Authentication**: Protect dashboard with `X-API-Key` header
+- **CORS Protection**: Restricted to localhost origins
+- **Rate Limiting**: 5 requests/minute on mode toggle
+- **Secure Defaults**: Dashboard binds to 127.0.0.1 only
+
+### Notifications
+- **Discord Integration**: Real-time trade alerts with full details
+- Entry/exit notifications with PnL breakdown
+- Daily summaries and risk alerts
+
+---
 
 ## Documentation
 
@@ -48,6 +103,8 @@ The bot acts as an "Institutional Market Maker" by analyzing:
 | [docs/API.md](docs/API.md) | Technical API reference |
 | [docs/FAQ.md](docs/FAQ.md) | Frequently asked questions |
 
+---
+
 ## Project Structure
 
 ```
@@ -55,14 +112,21 @@ Bitget-Trading-Bot/
 ├── main.py                     # Main entry point
 ├── requirements.txt            # Python dependencies
 ├── .env.example               # Environment variables template
+├── Dockerfile                 # Production Docker image
+├── docker-compose.yml         # Docker Compose configuration
 ├── config/
-│   ├── __init__.py
 │   └── settings.py            # Configuration management
 ├── src/
 │   ├── api/
 │   │   └── bitget_client.py   # Bitget API wrapper
+│   ├── websocket/             # WebSocket clients (v1.6.0+)
+│   │   ├── binance_ws.py      # Binance market data
+│   │   └── bitget_ws.py       # Bitget execution data
+│   ├── dashboard/             # Web Dashboard (v1.5.0+)
+│   │   └── app.py             # FastAPI application
 │   ├── data/
-│   │   └── market_data.py     # Market data fetchers
+│   │   ├── market_data.py     # Market data fetchers
+│   │   └── funding_tracker.py # Funding rate tracking
 │   ├── strategy/
 │   │   └── liquidation_hunter.py  # Main trading strategy
 │   ├── risk/
@@ -79,40 +143,57 @@ Bitget-Trading-Bot/
 └── logs/                       # Log files
 ```
 
+---
+
 ## Installation
 
-### Prerequisites
+### Option 1: Python (Recommended for Development)
 
+**Prerequisites:**
 - Python 3.10 or higher
 - Bitget account with API access
 - Discord server with webhook
 
-### Setup
+```bash
+# Clone the repository
+git clone https://github.com/yourusername/Bitget-Trading-Bot.git
+cd Bitget-Trading-Bot
 
-1. **Clone the repository:**
-   ```bash
-   git clone https://github.com/yourusername/Bitget-Trading-Bot.git
-   cd Bitget-Trading-Bot
-   ```
+# Create virtual environment
+python -m venv venv
+source venv/bin/activate  # Linux/Mac
+# or: venv\Scripts\activate  # Windows
 
-2. **Create virtual environment:**
-   ```bash
-   python -m venv venv
-   source venv/bin/activate  # Linux/Mac
-   # or
-   venv\Scripts\activate     # Windows
-   ```
+# Install dependencies
+pip install -r requirements.txt
 
-3. **Install dependencies:**
-   ```bash
-   pip install -r requirements.txt
-   ```
+# Configure environment
+cp .env.example .env
+# Edit .env with your credentials
+```
 
-4. **Configure environment:**
-   ```bash
-   cp .env.example .env
-   # Edit .env with your credentials
-   ```
+### Option 2: Docker (Recommended for Production)
+
+```bash
+# Clone the repository
+git clone https://github.com/yourusername/Bitget-Trading-Bot.git
+cd Bitget-Trading-Bot
+
+# Configure environment
+cp .env.example .env
+# Edit .env with your credentials
+
+# Build and run
+docker-compose up -d
+
+# View logs
+docker-compose logs -f
+
+# Stop
+docker-compose down
+```
+
+---
 
 ## Configuration
 
@@ -129,6 +210,24 @@ BITGET_TESTNET=false
 ### Discord (Required for notifications)
 ```env
 DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/...
+```
+
+### Trading Mode (v1.6.0+)
+```env
+# Demo mode for testing (true = no real trades)
+DEMO_MODE=true
+```
+
+### Dashboard Security (v1.7.0+)
+```env
+# API key for dashboard authentication (leave empty for development)
+# Generate: python -c "import secrets; print(secrets.token_urlsafe(32))"
+DASHBOARD_API_KEY=
+
+# Host binding (127.0.0.1 = localhost only, 0.0.0.0 = all interfaces)
+# WARNING: Only use 0.0.0.0 if you have set DASHBOARD_API_KEY!
+DASHBOARD_HOST=127.0.0.1
+DASHBOARD_PORT=8080
 ```
 
 ### Trading Parameters
@@ -149,27 +248,111 @@ LONG_SHORT_CROWDED_LONGS=2.0   # L/S ratio threshold for SHORT
 LONG_SHORT_CROWDED_SHORTS=0.5  # L/S ratio threshold for LONG
 ```
 
+---
+
 ## Usage
 
 ### Run the Bot
+
 ```bash
+# Demo Mode (default, no real trades)
 python main.py
-```
 
-### Test Mode (Analysis Only)
-```bash
+# Test Mode (single analysis, no trading)
 python main.py --test
-```
 
-### Check Status
-```bash
+# Check Status
 python main.py --status
-```
 
-### Debug Mode
-```bash
+# Run Backtest
+python main.py --backtest --backtest-days 180
+
+# Debug Mode
 python main.py --log-level DEBUG
 ```
+
+### Web Dashboard
+
+```bash
+# Start dashboard at http://localhost:8080
+python main.py --dashboard
+
+# Custom port
+python main.py --dashboard --dashboard-port 3000
+```
+
+**Dashboard Features:**
+- Real-time equity curve (30 days)
+- Open positions with TP/SL levels
+- Recent trades history
+- Funding rate tracking
+- Demo/Live mode toggle
+- Configuration view
+
+### Demo/Live Mode
+
+The bot defaults to **Demo Mode** for safety. In demo mode:
+- Trades are simulated (no real orders placed)
+- All statistics and tracking work normally
+- Perfect for testing strategy changes
+
+**Switch to Live Mode:**
+
+1. **Via Dashboard**: Click the mode toggle button (requires confirmation)
+
+2. **Via API**:
+   ```bash
+   # Without API key (development)
+   curl -X POST http://localhost:8080/api/mode/toggle
+
+   # With API key (production)
+   curl -X POST -H "X-API-Key: your_key" http://localhost:8080/api/mode/toggle
+   ```
+
+3. **Via Environment**:
+   ```env
+   DEMO_MODE=false
+   ```
+
+---
+
+## API Endpoints
+
+| Endpoint | Method | Auth | Description |
+|----------|--------|------|-------------|
+| `/api/health` | GET | No | Health check for monitoring |
+| `/api/status` | GET | No | Bot status and daily stats |
+| `/api/mode` | GET | No | Current trading mode |
+| `/api/mode/toggle` | POST | Yes* | Toggle demo/live mode |
+| `/api/trades` | GET | No | Trade history |
+| `/api/funding` | GET | No | Funding rate history |
+| `/api/performance/daily` | GET | No | Daily performance stats |
+
+*Auth required only if `DASHBOARD_API_KEY` is set
+
+### Example API Usage
+
+```bash
+# Get bot status
+curl http://localhost:8080/api/status
+
+# Get current mode
+curl http://localhost:8080/api/mode
+
+# Toggle mode (with auth)
+curl -X POST -H "X-API-Key: your_key" http://localhost:8080/api/mode/toggle
+
+# Get recent trades
+curl http://localhost:8080/api/trades?limit=20
+
+# Get funding history
+curl http://localhost:8080/api/funding?days=30
+
+# Health check
+curl http://localhost:8080/api/health
+```
+
+---
 
 ## Discord Notifications
 
@@ -199,12 +382,12 @@ The bot sends detailed notifications for:
 - Maximum trades reached
 - Errors and warnings
 
+---
+
 ## Risk Management
 
 ### Daily Loss Limit
 Default: **5%** of starting balance. When reached, trading halts for the day.
-
-**Recommendation:** For conservative trading, set to 3-5%. For aggressive trading, 7-10%.
 
 ### Position Sizing
 Base position: **10%** of available balance, scaled by confidence:
@@ -217,44 +400,38 @@ Base position: **10%** of available balance, scaled by confidence:
 ### Maximum Trades
 Default: **3 trades per day** to avoid overtrading.
 
-## Trading Schedule
+---
 
-The bot analyzes markets at optimal times aligned with major market sessions:
+## Security Best Practices
 
-| Time (UTC) | Session | Reason |
-|------------|---------|--------|
-| **01:00** | Asia (Tokyo +1h) | Reaction to US session, liquidation cascades |
-| **08:00** | EU Open (London) | European traders enter, potential reversals |
-| **14:00** | US Open + ETFs | **Critical!** BTC ETF flows (IBIT, FBTC, etc.) |
-| **21:00** | US Close | End-of-day profit-taking, position adjustments |
+### Production Deployment
 
-Position monitoring runs every 5 minutes.
+1. **Set API Key**:
+   ```bash
+   # Generate secure key
+   python -c "import secrets; print(secrets.token_urlsafe(32))"
 
-Daily summary sent at 23:55 UTC.
+   # Add to .env
+   DASHBOARD_API_KEY=your_generated_key
+   ```
 
-## Performance Goals
+2. **Use Docker** with resource limits (included in docker-compose.yml)
 
-- **Success Rate Target:** 60%+ win rate
-- **Risk/Reward:** 3.5% TP / 2% SL = 1.75:1 ratio
-- **Maximum Drawdown:** 5% daily limit
+3. **Bind to localhost** unless you need external access:
+   ```env
+   DASHBOARD_HOST=127.0.0.1
+   ```
 
-## API Data Sources
+4. **If external access needed**, set API key AND use reverse proxy (nginx) with HTTPS
 
-| Data | Source | Update Frequency |
-|------|--------|-----------------|
-| Fear & Greed Index | Alternative.me | Daily |
-| Long/Short Ratio | Binance Futures | Hourly |
-| Funding Rate | Binance/Bitget | 8-hour intervals |
-| Price Data | Binance Futures | Real-time |
-| Open Interest | Binance Futures | Real-time |
+### API Key Security
 
-## Safety Features
+- Never commit `.env` to version control
+- Rotate keys periodically
+- Use IP whitelisting on Bitget API
+- Disable withdraw permissions on Bitget API
 
-1. **Testnet Support:** Enable `BITGET_TESTNET=true` for paper trading
-2. **Rate Limiting:** Respects API rate limits
-3. **Error Handling:** Graceful handling of API errors
-4. **Shutdown Handling:** Clean shutdown on SIGINT/SIGTERM
-5. **Position Monitoring:** Automatic detection of closed positions
+---
 
 ## Troubleshooting
 
@@ -270,11 +447,37 @@ Wait until the next day or adjust `DAILY_LOSS_LIMIT_PERCENT`.
 ### "No remaining trades for today"
 Maximum trades reached. Wait until tomorrow or adjust `MAX_TRADES_PER_DAY`.
 
+### Dashboard not accessible
+- Check if running: `python main.py --dashboard`
+- Verify port: default is 8080
+- Check firewall settings
+
+### Mode toggle returns 401
+Set `X-API-Key` header if `DASHBOARD_API_KEY` is configured.
+
+---
+
+## Version History
+
+| Version | Features |
+|---------|----------|
+| v1.7.0 | Security hardening, Docker support, health checks |
+| v1.6.0 | WebSocket infrastructure, Demo/Live mode |
+| v1.5.0 | Web Dashboard, Funding rate tracking |
+| v1.4.0 | Backtesting module, profit lock-in |
+| v1.0.0 | Initial release |
+
+See [CHANGELOG.md](CHANGELOG.md) for full details.
+
+---
+
 ## Disclaimer
 
 **This bot is for educational purposes only.** Trading cryptocurrency carries significant risk. Past performance does not guarantee future results. Only trade with funds you can afford to lose.
 
 The authors are not responsible for any financial losses incurred through the use of this software.
+
+---
 
 ## License
 
