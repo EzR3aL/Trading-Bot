@@ -407,35 +407,49 @@ class TradingBot:
                 entry_price = signal.entry_price  # Use signal price in demo mode
             else:
                 # LIVE MODE: Actually place the order
-            if order_result:
+                # Set leverage
+                await self.bitget_client.set_leverage(
+                    symbol=signal.symbol,
+                    leverage=settings.trading.leverage,
+                    product_type="USDT-FUTURES",
+                )
+
+                # Place market order
+                order_result = await self.bitget_client.place_market_order(
+                    symbol=signal.symbol,
+                    side="buy" if signal.direction.value == "long" else "sell",
+                    size=position_size,
+                    product_type="USDT-FUTURES",
+                )
+
+                if not order_result:
+                    logger.error(f"Failed to place order for {signal.symbol}")
+                    return
+
                 order_id = order_result.get("orderId", "unknown")
 
-                # Get actual fill price (only in live mode)
-                if is_demo:
-                    entry_price = signal.entry_price
+                # Get actual fill price from exchange (with retries)
+                actual_entry_price = await self.bitget_client.get_fill_price(
+                    symbol=signal.symbol,
+                    order_id=order_id,
+                )
+
+                # Use actual fill price if available, otherwise fall back to signal price
+                if actual_entry_price:
+                    entry_price = actual_entry_price
+                    slippage = actual_entry_price - signal.entry_price
+                    slippage_pct = (slippage / signal.entry_price) * 100
+                    logger.info(
+                        f"Fill price: ${actual_entry_price:.2f} "
+                        f"(Signal: ${signal.entry_price:.2f}, Slippage: {slippage_pct:+.3f}%)"
+                    )
                 else:
-                    # Get actual fill price from exchange (with retries)
-                    actual_entry_price = await self.bitget_client.get_fill_price(
-                        symbol=signal.symbol,
-                        order_id=order_id,
+                    entry_price = signal.entry_price
+                    logger.warning(
+                        f"Could not get fill price, using signal price: ${signal.entry_price:.2f}"
                     )
 
-                    # Use actual fill price if available, otherwise fall back to signal price
-                    if actual_entry_price:
-                        entry_price = actual_entry_price
-                        slippage = actual_entry_price - signal.entry_price
-                        slippage_pct = (slippage / signal.entry_price) * 100
-                        logger.info(
-                            f"Fill price: ${actual_entry_price:.2f} "
-                            f"(Signal: ${signal.entry_price:.2f}, Slippage: {slippage_pct:+.3f}%)"
-                        )
-                    else:
-                        entry_price = signal.entry_price
-                        logger.warning(
-                            f"Could not get fill price, using signal price: ${signal.entry_price:.2f}"
-                        )
-
-                # Record in database with actual entry price
+            if order_result:
                 trade_id = await self.trade_db.create_trade(
                     symbol=signal.symbol,
                     side=signal.direction.value,
