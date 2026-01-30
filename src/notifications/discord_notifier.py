@@ -247,7 +247,8 @@ class DiscordNotifier:
             True if sent successfully
         """
         # Determine if profit or loss
-        net_pnl = pnl - fees - abs(funding_paid)
+        # funding_paid: positive = paid (reduces profit), negative = received (increases profit)
+        net_pnl = pnl - fees - funding_paid
 
         if net_pnl >= 0:
             emoji = "✅"
@@ -328,7 +329,8 @@ class DiscordNotifier:
         Returns:
             True if sent successfully
         """
-        net_pnl = total_pnl - total_fees - abs(total_funding)
+        # total_funding: positive = paid (reduces profit), negative = received (increases profit)
+        net_pnl = total_pnl - total_fees - total_funding
         return_pct = (net_pnl / starting_balance) * 100 if starting_balance > 0 else 0
         win_rate = (winning_trades / total_trades * 100) if total_trades > 0 else 0
 

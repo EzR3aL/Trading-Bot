@@ -579,6 +579,58 @@ class BitgetClient:
         }
         return await self._request("GET", endpoint, params=params)
 
+    async def get_fill_price(
+        self,
+        symbol: str,
+        order_id: str,
+        product_type: str = "USDT-FUTURES",
+        max_retries: int = 3,
+        retry_delay: float = 0.5,
+    ) -> Optional[float]:
+        """
+        Get the actual fill price for a completed order.
+
+        For market orders, the fill price may not be immediately available.
+        This method retries with exponential backoff.
+
+        Args:
+            symbol: Trading pair (e.g., BTCUSDT)
+            order_id: Order ID
+            product_type: USDT-FUTURES or COIN-FUTURES
+            max_retries: Maximum number of retries
+            retry_delay: Initial delay between retries (doubles each retry)
+
+        Returns:
+            Fill price as float, or None if not available
+        """
+        import asyncio
+
+        for attempt in range(max_retries):
+            try:
+                order_detail = await self.get_order(symbol, order_id, product_type)
+
+                if order_detail:
+                    # Bitget returns 'priceAvg' for average fill price
+                    fill_price = order_detail.get("priceAvg") or order_detail.get("fillPrice")
+                    if fill_price and float(fill_price) > 0:
+                        logger.info(f"Order {order_id} fill price: ${float(fill_price):.2f}")
+                        return float(fill_price)
+
+                    # Check order state - if still pending, wait
+                    state = order_detail.get("state", "")
+                    if state in ["live", "new", "pending"]:
+                        logger.debug(f"Order {order_id} still pending (attempt {attempt + 1})")
+                        await asyncio.sleep(retry_delay * (2 ** attempt))
+                        continue
+
+            except Exception as e:
+                logger.warning(f"Error getting fill price (attempt {attempt + 1}): {e}")
+
+            await asyncio.sleep(retry_delay * (2 ** attempt))
+
+        logger.warning(f"Could not get fill price for order {order_id} after {max_retries} attempts")
+        return None
+
     # ==================== Utility Methods ====================
 
     async def get_symbol_info(self, symbol: str, product_type: str = "USDT-FUTURES") -> Dict[str, Any]:

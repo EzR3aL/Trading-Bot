@@ -10,15 +10,65 @@ Fetches:
 """
 
 import asyncio
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Optional, Dict, Any, Tuple
+from typing import Optional, Dict, Any, Tuple, List
 
 import aiohttp
 
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
+
+
+class DataFetchError(Exception):
+    """Raised when market data cannot be fetched from any source."""
+
+    def __init__(self, source: str, message: str, original_error: Optional[Exception] = None):
+        self.source = source
+        self.message = message
+        self.original_error = original_error
+        super().__init__(f"[{source}] {message}")
+
+
+class DataQuality:
+    """Tracks the quality/reliability of fetched market data."""
+
+    def __init__(self):
+        self.failed_sources: List[str] = []
+        self.successful_sources: List[str] = []
+        self.warnings: List[str] = []
+
+    def mark_success(self, source: str):
+        """Mark a data source as successfully fetched."""
+        self.successful_sources.append(source)
+
+    def mark_failure(self, source: str, reason: str):
+        """Mark a data source as failed."""
+        self.failed_sources.append(source)
+        self.warnings.append(f"{source}: {reason}")
+
+    @property
+    def is_reliable(self) -> bool:
+        """Check if enough data sources succeeded for reliable trading."""
+        critical_sources = {"fear_greed", "long_short_ratio", "ticker_btc"}
+        return all(s in self.successful_sources for s in critical_sources)
+
+    @property
+    def success_rate(self) -> float:
+        """Calculate the percentage of successful data fetches."""
+        total = len(self.failed_sources) + len(self.successful_sources)
+        if total == 0:
+            return 0.0
+        return len(self.successful_sources) / total * 100
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "is_reliable": self.is_reliable,
+            "success_rate": self.success_rate,
+            "failed_sources": self.failed_sources,
+            "warnings": self.warnings,
+        }
 
 
 @dataclass
@@ -51,9 +101,12 @@ class MarketMetrics:
     # Timestamp
     timestamp: datetime
 
+    # Data Quality tracking
+    data_quality: Optional[DataQuality] = field(default=None)
+
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for logging/storage."""
-        return {
+        result = {
             "fear_greed_index": self.fear_greed_index,
             "fear_greed_classification": self.fear_greed_classification,
             "long_short_ratio": self.long_short_ratio,
@@ -67,6 +120,16 @@ class MarketMetrics:
             "eth_open_interest": self.eth_open_interest,
             "timestamp": self.timestamp.isoformat(),
         }
+        if self.data_quality:
+            result["data_quality"] = self.data_quality.to_dict()
+        return result
+
+    @property
+    def is_reliable(self) -> bool:
+        """Check if the market data is reliable enough for trading."""
+        if self.data_quality is None:
+            return True  # Assume reliable if no quality tracking
+        return self.data_quality.is_reliable
 
 
 class MarketDataFetcher:
@@ -405,14 +468,23 @@ class MarketDataFetcher:
 
     # ==================== Aggregate Fetching ====================
 
-    async def fetch_all_metrics(self) -> MarketMetrics:
+    async def fetch_all_metrics(self, require_reliable: bool = True) -> MarketMetrics:
         """
         Fetch all market metrics in parallel for strategy analysis.
 
+        Args:
+            require_reliable: If True, raises DataFetchError when critical data is missing
+
         Returns:
             MarketMetrics dataclass with all relevant data
+
+        Raises:
+            DataFetchError: If require_reliable=True and critical data sources fail
         """
         logger.info("Fetching all market metrics...")
+
+        # Track data quality
+        quality = DataQuality()
 
         # Fetch all data in parallel
         results = await asyncio.gather(
@@ -427,15 +499,104 @@ class MarketDataFetcher:
             return_exceptions=True,
         )
 
-        # Unpack results with error handling
-        fear_greed = results[0] if not isinstance(results[0], Exception) else (50, "Neutral")
-        long_short = results[1] if not isinstance(results[1], Exception) else 1.0
-        funding_btc = results[2] if not isinstance(results[2], Exception) else 0.0
-        funding_eth = results[3] if not isinstance(results[3], Exception) else 0.0
-        ticker_btc = results[4] if not isinstance(results[4], Exception) else {"price": 0, "price_change_percent": 0}
-        ticker_eth = results[5] if not isinstance(results[5], Exception) else {"price": 0, "price_change_percent": 0}
-        oi_btc = results[6] if not isinstance(results[6], Exception) else 0.0
-        oi_eth = results[7] if not isinstance(results[7], Exception) else 0.0
+        # Unpack results with proper error tracking
+        # Fear & Greed Index
+        if isinstance(results[0], Exception):
+            quality.mark_failure("fear_greed", str(results[0]))
+            fear_greed = (50, "Unknown")
+        elif results[0] is None or results[0][0] is None:
+            quality.mark_failure("fear_greed", "No data returned")
+            fear_greed = (50, "Unknown")
+        else:
+            quality.mark_success("fear_greed")
+            fear_greed = results[0]
+
+        # Long/Short Ratio
+        if isinstance(results[1], Exception):
+            quality.mark_failure("long_short_ratio", str(results[1]))
+            long_short = 1.0
+        elif results[1] is None:
+            quality.mark_failure("long_short_ratio", "No data returned")
+            long_short = 1.0
+        else:
+            quality.mark_success("long_short_ratio")
+            long_short = results[1]
+
+        # Funding Rate BTC
+        if isinstance(results[2], Exception):
+            quality.mark_failure("funding_btc", str(results[2]))
+            funding_btc = 0.0
+        elif results[2] is None:
+            quality.mark_failure("funding_btc", "No data returned")
+            funding_btc = 0.0
+        else:
+            quality.mark_success("funding_btc")
+            funding_btc = results[2]
+
+        # Funding Rate ETH
+        if isinstance(results[3], Exception):
+            quality.mark_failure("funding_eth", str(results[3]))
+            funding_eth = 0.0
+        elif results[3] is None:
+            quality.mark_failure("funding_eth", "No data returned")
+            funding_eth = 0.0
+        else:
+            quality.mark_success("funding_eth")
+            funding_eth = results[3]
+
+        # Ticker BTC
+        if isinstance(results[4], Exception):
+            quality.mark_failure("ticker_btc", str(results[4]))
+            ticker_btc = {"price": 0, "price_change_percent": 0}
+        elif results[4] is None or results[4].get("price", 0) == 0:
+            quality.mark_failure("ticker_btc", "No price data")
+            ticker_btc = {"price": 0, "price_change_percent": 0}
+        else:
+            quality.mark_success("ticker_btc")
+            ticker_btc = results[4]
+
+        # Ticker ETH
+        if isinstance(results[5], Exception):
+            quality.mark_failure("ticker_eth", str(results[5]))
+            ticker_eth = {"price": 0, "price_change_percent": 0}
+        elif results[5] is None or results[5].get("price", 0) == 0:
+            quality.mark_failure("ticker_eth", "No price data")
+            ticker_eth = {"price": 0, "price_change_percent": 0}
+        else:
+            quality.mark_success("ticker_eth")
+            ticker_eth = results[5]
+
+        # Open Interest BTC
+        if isinstance(results[6], Exception):
+            quality.mark_failure("oi_btc", str(results[6]))
+            oi_btc = 0.0
+        else:
+            quality.mark_success("oi_btc")
+            oi_btc = results[6] if results[6] is not None else 0.0
+
+        # Open Interest ETH
+        if isinstance(results[7], Exception):
+            quality.mark_failure("oi_eth", str(results[7]))
+            oi_eth = 0.0
+        else:
+            quality.mark_success("oi_eth")
+            oi_eth = results[7] if results[7] is not None else 0.0
+
+        # Check if data is reliable enough for trading
+        if require_reliable and not quality.is_reliable:
+            error_msg = f"Critical data sources failed: {', '.join(quality.failed_sources)}"
+            logger.error(f"Data fetch failed - {error_msg}")
+            raise DataFetchError(
+                source="fetch_all_metrics",
+                message=error_msg
+            )
+
+        # Log warnings if any sources failed
+        if quality.failed_sources:
+            logger.warning(
+                f"Some data sources failed ({len(quality.failed_sources)}/{len(quality.failed_sources) + len(quality.successful_sources)}): "
+                f"{', '.join(quality.warnings)}"
+            )
 
         metrics = MarketMetrics(
             fear_greed_index=fear_greed[0],
@@ -450,9 +611,13 @@ class MarketDataFetcher:
             btc_open_interest=oi_btc,
             eth_open_interest=oi_eth,
             timestamp=datetime.now(),
+            data_quality=quality,
         )
 
-        logger.info(f"Market Metrics Collected: {metrics.to_dict()}")
+        logger.info(
+            f"Market Metrics Collected (Quality: {quality.success_rate:.0f}% reliable): "
+            f"{metrics.to_dict()}"
+        )
         return metrics
 
     # ==================== Technical Analysis Helpers ====================

@@ -255,6 +255,55 @@ class TradeDatabase:
         logger.info(f"Closed trade #{trade_id}: PnL=${pnl:.2f} ({pnl_percent:+.2f}%)")
         return True
 
+    async def update_entry_price(
+        self,
+        trade_id: int,
+        actual_entry_price: float,
+        slippage: Optional[float] = None,
+    ) -> bool:
+        """
+        Update the entry price with the actual fill price from the exchange.
+
+        This should be called after order execution to record the real fill price
+        instead of the signal's estimated entry price.
+
+        Args:
+            trade_id: Trade ID to update
+            actual_entry_price: Actual fill price from exchange
+            slippage: Optional slippage amount (actual - expected)
+
+        Returns:
+            True if updated successfully
+        """
+        await self.initialize()
+
+        async with aiosqlite.connect(self.db_path) as db:
+            # Get current trade to calculate slippage if not provided
+            if slippage is not None:
+                await db.execute(
+                    """
+                    UPDATE trades SET
+                        entry_price = ?,
+                        updated_at = ?
+                    WHERE id = ?
+                    """,
+                    (actual_entry_price, datetime.now(), trade_id),
+                )
+            else:
+                await db.execute(
+                    """
+                    UPDATE trades SET
+                        entry_price = ?,
+                        updated_at = ?
+                    WHERE id = ?
+                    """,
+                    (actual_entry_price, datetime.now(), trade_id),
+                )
+            await db.commit()
+
+        logger.info(f"Updated trade #{trade_id} entry price to ${actual_entry_price:.2f}")
+        return True
+
     async def get_trade(self, trade_id: int) -> Optional[Trade]:
         """
         Get a specific trade by ID.

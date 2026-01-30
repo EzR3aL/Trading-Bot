@@ -5,11 +5,19 @@ Loads settings from environment variables with sensible defaults.
 
 import os
 from dataclasses import dataclass, field
-from typing import List
+from typing import List, Tuple
 from dotenv import load_dotenv
 
 # Load environment variables from .env file
 load_dotenv()
+
+
+class ConfigValidationError(Exception):
+    """Raised when configuration validation fails."""
+
+    def __init__(self, errors: List[str]):
+        self.errors = errors
+        super().__init__(f"Configuration validation failed:\n" + "\n".join(f"  - {e}" for e in errors))
 
 
 def get_env(key: str, default: str = "", cast_type: type = str):
@@ -19,7 +27,10 @@ def get_env(key: str, default: str = "", cast_type: type = str):
         return value.lower() in ("true", "1", "yes")
     if cast_type == list:
         return [item.strip() for item in value.split(",") if item.strip()]
-    return cast_type(value) if value else cast_type(default)
+    try:
+        return cast_type(value) if value else cast_type(default)
+    except (ValueError, TypeError):
+        return cast_type(default) if default else None
 
 
 @dataclass
@@ -58,6 +69,53 @@ class TradingConfig:
     stop_loss_percent: float = field(default_factory=lambda: get_env("STOP_LOSS_PERCENT", "1.5", float))
     trading_pairs: List[str] = field(default_factory=lambda: get_env("TRADING_PAIRS", "BTCUSDT,ETHUSDT", list))
 
+    # Trading mode (demo = no real trades, live = real trades)
+    demo_mode: bool = field(default_factory=lambda: get_env("DEMO_MODE", "true", bool))
+
+    def validate(self) -> Tuple[bool, List[str]]:
+        """
+        Validate trading configuration with range checks.
+
+        Returns:
+            Tuple of (is_valid, list of error messages)
+        """
+        errors = []
+
+        # Max trades per day: 1-10
+        if not (1 <= self.max_trades_per_day <= 10):
+            errors.append(f"MAX_TRADES_PER_DAY must be 1-10 (got {self.max_trades_per_day})")
+
+        # Daily loss limit: 1-20%
+        if not (1.0 <= self.daily_loss_limit_percent <= 20.0):
+            errors.append(f"DAILY_LOSS_LIMIT_PERCENT must be 1-20% (got {self.daily_loss_limit_percent}%)")
+
+        # Position size: 1-25%
+        if not (1.0 <= self.position_size_percent <= 25.0):
+            errors.append(f"POSITION_SIZE_PERCENT must be 1-25% (got {self.position_size_percent}%)")
+
+        # Leverage: 1-20x (above 20x is extremely risky)
+        if not (1 <= self.leverage <= 20):
+            errors.append(f"LEVERAGE must be 1-20x (got {self.leverage}x)")
+
+        # Take profit: 0.5-20%
+        if not (0.5 <= self.take_profit_percent <= 20.0):
+            errors.append(f"TAKE_PROFIT_PERCENT must be 0.5-20% (got {self.take_profit_percent}%)")
+
+        # Stop loss: 0.5-10%
+        if not (0.5 <= self.stop_loss_percent <= 10.0):
+            errors.append(f"STOP_LOSS_PERCENT must be 0.5-10% (got {self.stop_loss_percent}%)")
+
+        # Must have at least one trading pair
+        if not self.trading_pairs:
+            errors.append("TRADING_PAIRS must have at least one pair")
+
+        # Validate trading pairs format
+        for pair in self.trading_pairs:
+            if not pair.endswith("USDT"):
+                errors.append(f"Invalid trading pair '{pair}' - must end with USDT")
+
+        return (len(errors) == 0, errors)
+
 
 @dataclass
 class StrategyConfig:
@@ -78,6 +136,39 @@ class StrategyConfig:
     high_confidence_min: int = field(default_factory=lambda: get_env("HIGH_CONFIDENCE_MIN", "85", int))
     low_confidence_min: int = field(default_factory=lambda: get_env("LOW_CONFIDENCE_MIN", "60", int))
 
+    def validate(self) -> Tuple[bool, List[str]]:
+        """
+        Validate strategy configuration.
+
+        Returns:
+            Tuple of (is_valid, list of error messages)
+        """
+        errors = []
+
+        # Fear & Greed thresholds: 0-100
+        if not (0 <= self.fear_greed_extreme_fear <= 50):
+            errors.append(f"FEAR_GREED_EXTREME_FEAR must be 0-50 (got {self.fear_greed_extreme_fear})")
+        if not (50 <= self.fear_greed_extreme_greed <= 100):
+            errors.append(f"FEAR_GREED_EXTREME_GREED must be 50-100 (got {self.fear_greed_extreme_greed})")
+        if self.fear_greed_extreme_fear >= self.fear_greed_extreme_greed:
+            errors.append("FEAR_GREED_EXTREME_FEAR must be less than FEAR_GREED_EXTREME_GREED")
+
+        # Long/Short Ratio thresholds
+        if not (1.5 <= self.long_short_crowded_longs <= 5.0):
+            errors.append(f"LONG_SHORT_CROWDED_LONGS must be 1.5-5.0 (got {self.long_short_crowded_longs})")
+        if not (0.2 <= self.long_short_crowded_shorts <= 0.7):
+            errors.append(f"LONG_SHORT_CROWDED_SHORTS must be 0.2-0.7 (got {self.long_short_crowded_shorts})")
+
+        # Confidence thresholds: 0-100
+        if not (50 <= self.low_confidence_min <= 100):
+            errors.append(f"LOW_CONFIDENCE_MIN must be 50-100 (got {self.low_confidence_min})")
+        if not (50 <= self.high_confidence_min <= 100):
+            errors.append(f"HIGH_CONFIDENCE_MIN must be 50-100 (got {self.high_confidence_min})")
+        if self.low_confidence_min >= self.high_confidence_min:
+            errors.append("LOW_CONFIDENCE_MIN must be less than HIGH_CONFIDENCE_MIN")
+
+        return (len(errors) == 0, errors)
+
 
 @dataclass
 class LoggingConfig:
@@ -97,12 +188,58 @@ class Settings:
 
     def validate(self) -> dict:
         """Validate all configurations and return status."""
+        trading_valid, _ = self.trading.validate()
+        strategy_valid, _ = self.strategy.validate()
+
         return {
             "bitget": self.bitget.validate(),
             "discord": self.discord.validate(),
-            "trading": True,  # Has sensible defaults
-            "strategy": True,  # Has sensible defaults
+            "trading": trading_valid,
+            "strategy": strategy_valid,
         }
+
+    def validate_strict(self, raise_on_error: bool = True) -> Tuple[bool, List[str]]:
+        """
+        Validate all configurations with detailed error messages.
+
+        Args:
+            raise_on_error: If True, raises ConfigValidationError on failure
+
+        Returns:
+            Tuple of (is_valid, list of all error messages)
+
+        Raises:
+            ConfigValidationError: If raise_on_error=True and validation fails
+        """
+        all_errors = []
+
+        # Validate Bitget credentials
+        if not self.bitget.validate():
+            all_errors.append("Bitget API credentials are incomplete")
+
+        # Validate Discord (optional, just warn)
+        if not self.discord.validate():
+            all_errors.append("Discord notifications not configured (optional)")
+
+        # Validate trading config
+        trading_valid, trading_errors = self.trading.validate()
+        all_errors.extend(trading_errors)
+
+        # Validate strategy config
+        strategy_valid, strategy_errors = self.strategy.validate()
+        all_errors.extend(strategy_errors)
+
+        is_valid = len([e for e in all_errors if "optional" not in e.lower()]) == 0
+
+        if not is_valid and raise_on_error:
+            raise ConfigValidationError(all_errors)
+
+        return (is_valid, all_errors)
+
+    @property
+    def is_demo_mode(self) -> bool:
+        """Check if bot is running in demo mode."""
+        return self.trading.demo_mode
 
 
 # Global settings instance

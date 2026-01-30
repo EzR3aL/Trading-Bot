@@ -82,6 +82,7 @@ def create_app() -> FastAPI:
         return {
             "status": "running",
             "timestamp": datetime.now().isoformat(),
+            "demo_mode": settings.is_demo_mode,
             "config": {
                 "trading_pairs": settings.trading.trading_pairs,
                 "leverage": settings.trading.leverage,
@@ -93,6 +94,30 @@ def create_app() -> FastAPI:
             "daily_stats": daily_stats.to_dict() if daily_stats else None,
             "can_trade": app.state.risk_manager.can_trade()[0],
             "remaining_trades": app.state.risk_manager.get_remaining_trades(),
+        }
+
+    @app.post("/api/mode/toggle")
+    async def toggle_trading_mode():
+        """Toggle between demo and live trading mode."""
+        current_mode = settings.trading.demo_mode
+        settings.trading.demo_mode = not current_mode
+        new_mode = "demo" if settings.trading.demo_mode else "live"
+
+        logger.info(f"Trading mode changed to: {new_mode.upper()}")
+
+        return {
+            "success": True,
+            "mode": new_mode,
+            "demo_mode": settings.trading.demo_mode,
+            "message": f"Switched to {new_mode.upper()} mode"
+        }
+
+    @app.get("/api/mode")
+    async def get_trading_mode():
+        """Get current trading mode."""
+        return {
+            "demo_mode": settings.is_demo_mode,
+            "mode": "demo" if settings.is_demo_mode else "live"
         }
 
     @app.get("/api/trades")
@@ -279,7 +304,15 @@ def get_default_html() -> str:
     <nav class="bg-indigo-600 text-white p-4 shadow-lg">
         <div class="container mx-auto flex justify-between items-center">
             <h1 class="text-xl font-bold">Bitget Trading Bot</h1>
-            <span id="status-indicator" class="px-3 py-1 rounded-full bg-green-500 text-sm">Running</span>
+            <div class="flex items-center gap-4">
+                <div class="flex items-center gap-2">
+                    <span class="text-sm">Mode:</span>
+                    <button id="mode-toggle" onclick="toggleMode()" class="px-3 py-1 rounded-full text-sm font-semibold transition-all duration-200 cursor-pointer hover:opacity-80">
+                        DEMO
+                    </button>
+                </div>
+                <span id="status-indicator" class="px-3 py-1 rounded-full bg-green-500 text-sm">Running</span>
+            </div>
         </div>
     </nav>
 
@@ -376,6 +409,51 @@ def get_default_html() -> str:
     <script>
         // Charts
         let equityChart, fundingChart;
+        let currentMode = 'demo';
+
+        // Update mode indicator UI
+        function updateModeUI(mode) {
+            currentMode = mode;
+            const btn = document.getElementById('mode-toggle');
+            if (mode === 'demo') {
+                btn.textContent = 'DEMO';
+                btn.className = 'px-3 py-1 rounded-full text-sm font-semibold transition-all duration-200 cursor-pointer hover:opacity-80 bg-orange-500 text-white';
+            } else {
+                btn.textContent = 'LIVE';
+                btn.className = 'px-3 py-1 rounded-full text-sm font-semibold transition-all duration-200 cursor-pointer hover:opacity-80 bg-red-600 text-white animate-pulse';
+            }
+        }
+
+        // Toggle trading mode
+        async function toggleMode() {
+            const newMode = currentMode === 'demo' ? 'live' : 'demo';
+            if (newMode === 'live') {
+                if (!confirm('WARNING: Switching to LIVE mode will execute REAL trades with REAL money. Are you sure?')) {
+                    return;
+                }
+            }
+            try {
+                const response = await fetch('/api/mode/toggle', { method: 'POST' });
+                const data = await response.json();
+                if (data.success) {
+                    updateModeUI(data.mode);
+                }
+            } catch (error) {
+                console.error('Error toggling mode:', error);
+                alert('Failed to toggle mode');
+            }
+        }
+
+        // Fetch current mode
+        async function fetchMode() {
+            try {
+                const response = await fetch('/api/mode');
+                const data = await response.json();
+                updateModeUI(data.mode);
+            } catch (error) {
+                console.error('Error fetching mode:', error);
+            }
+        }
 
         // Initialize charts
         function initCharts() {
@@ -480,6 +558,7 @@ def get_default_html() -> str:
         // Initialize
         document.addEventListener('DOMContentLoaded', () => {
             initCharts();
+            fetchMode();
             updateDashboard();
             setInterval(updateDashboard, 10000); // Update every 10 seconds
         });

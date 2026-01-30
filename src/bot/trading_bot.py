@@ -22,14 +22,14 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 
 from src.api.bitget_client import BitgetClient, BitgetClientError
-from src.data.market_data import MarketDataFetcher
+from src.data.market_data import MarketDataFetcher, DataFetchError
 from src.strategy.liquidation_hunter import LiquidationHunterStrategy, TradeSignal, SignalDirection
 from src.risk.risk_manager import RiskManager
 from src.notifications.discord_notifier import DiscordNotifier
 from src.models.trade_database import TradeDatabase
 from src.data.funding_tracker import FundingTracker
 from src.utils.logger import get_logger, setup_logging
-from config import settings
+from config.settings import settings, ConfigValidationError
 
 logger = get_logger(__name__)
 
@@ -84,11 +84,31 @@ class TradingBot:
         logger.info("Initializing trading bot components...")
 
         try:
-            # Validate configuration
-            validation = settings.validate()
-            if not validation["bitget"]:
-                logger.error("Bitget API credentials not configured!")
+            # Validate configuration with strict checks
+            try:
+                is_valid, errors = settings.validate_strict(raise_on_error=False)
+                if errors:
+                    for error in errors:
+                        if "optional" in error.lower():
+                            logger.warning(f"Config: {error}")
+                        else:
+                            logger.error(f"Config: {error}")
+                if not is_valid:
+                    logger.error("Configuration validation failed!")
+                    return False
+            except ConfigValidationError as e:
+                logger.error(f"Configuration error: {e}")
                 return False
+
+            # Log trading mode
+            if settings.is_demo_mode:
+                logger.info("=" * 40)
+                logger.info("  DEMO MODE - No real trades will execute")
+                logger.info("=" * 40)
+            else:
+                logger.warning("=" * 40)
+                logger.warning("  LIVE MODE - Real trades will execute!")
+                logger.warning("=" * 40)
 
             # Initialize Bitget client
             self.bitget_client = BitgetClient()
@@ -287,6 +307,15 @@ class TradingBot:
             try:
                 await self._analyze_symbol(symbol)
                 remaining_trades = self.risk_manager.get_remaining_trades()
+            except DataFetchError as e:
+                # Critical: market data unavailable - do NOT trade with unreliable data
+                logger.error(f"Market data unreliable for {symbol}: {e}")
+                await self.discord.send_error(
+                    "DATA_FETCH_ERROR",
+                    f"Cannot trade {symbol} - market data unavailable",
+                    f"Failed sources: {e.source}\n{e.message}"
+                )
+                # Continue to next symbol, don't crash the bot
             except Exception as e:
                 logger.error(f"Error analyzing {symbol}: {e}")
                 await self.discord.send_error("ANALYSIS_ERROR", f"Failed to analyze {symbol}", str(e))
@@ -338,12 +367,20 @@ class TradingBot:
         Args:
             signal: Trade signal to execute
         """
-        logger.info(f"Executing {signal.direction.value.upper()} trade on {signal.symbol}")
+        is_demo = settings.is_demo_mode
+        mode_prefix = "[DEMO] " if is_demo else ""
+
+        logger.info(f"{mode_prefix}Executing {signal.direction.value.upper()} trade on {signal.symbol}")
 
         try:
             # Get current account balance
             balance_data = await self.bitget_client.get_account_balance()
             available_balance = float(balance_data.get("available", 0))
+
+            # In demo mode, use a simulated balance if real balance is 0
+            if is_demo and available_balance == 0:
+                available_balance = 10000.0  # Simulated $10k for demo
+                logger.info(f"{mode_prefix}Using simulated balance: ${available_balance:.2f}")
 
             # Calculate position size
             position_usdt, position_size = self.risk_manager.calculate_position_size(
@@ -355,34 +392,55 @@ class TradingBot:
 
             # Validate minimum order size
             if position_usdt < 10:  # Minimum $10 position
-                logger.warning(f"Position size too small: ${position_usdt:.2f}")
+                logger.warning(f"{mode_prefix}Position size too small: ${position_usdt:.2f}")
                 return
 
-            # Set leverage
-            await self.bitget_client.set_leverage(
-                symbol=signal.symbol,
-                leverage=settings.trading.leverage,
-                hold_side=signal.direction.value,
-            )
+            # In demo mode, skip actual order placement
+            if is_demo:
+                logger.info(f"{mode_prefix}Would place order: {signal.direction.value.upper()} {position_size:.6f} {signal.symbol}")
+                logger.info(f"{mode_prefix}Entry: ${signal.entry_price:.2f}, TP: ${signal.target_price:.2f}, SL: ${signal.stop_loss:.2f}")
 
-            # Place the order
-            order_result = await self.bitget_client.place_market_order(
-                symbol=signal.symbol,
-                side=signal.direction.value,
-                size=str(round(position_size, 6)),
-                take_profit=str(signal.target_price),
-                stop_loss=str(signal.stop_loss),
-            )
-
+                # Generate a demo order ID
+                import time
+                order_id = f"DEMO_{int(time.time() * 1000)}"
+                order_result = {"orderId": order_id}
+                entry_price = signal.entry_price  # Use signal price in demo mode
+            else:
+                # LIVE MODE: Actually place the order
             if order_result:
                 order_id = order_result.get("orderId", "unknown")
 
-                # Record in database
+                # Get actual fill price (only in live mode)
+                if is_demo:
+                    entry_price = signal.entry_price
+                else:
+                    # Get actual fill price from exchange (with retries)
+                    actual_entry_price = await self.bitget_client.get_fill_price(
+                        symbol=signal.symbol,
+                        order_id=order_id,
+                    )
+
+                    # Use actual fill price if available, otherwise fall back to signal price
+                    if actual_entry_price:
+                        entry_price = actual_entry_price
+                        slippage = actual_entry_price - signal.entry_price
+                        slippage_pct = (slippage / signal.entry_price) * 100
+                        logger.info(
+                            f"Fill price: ${actual_entry_price:.2f} "
+                            f"(Signal: ${signal.entry_price:.2f}, Slippage: {slippage_pct:+.3f}%)"
+                        )
+                    else:
+                        entry_price = signal.entry_price
+                        logger.warning(
+                            f"Could not get fill price, using signal price: ${signal.entry_price:.2f}"
+                        )
+
+                # Record in database with actual entry price
                 trade_id = await self.trade_db.create_trade(
                     symbol=signal.symbol,
                     side=signal.direction.value,
                     size=position_size,
-                    entry_price=signal.entry_price,
+                    entry_price=entry_price,
                     take_profit=signal.target_price,
                     stop_loss=signal.stop_loss,
                     leverage=settings.trading.leverage,
@@ -392,24 +450,24 @@ class TradingBot:
                     metrics_snapshot=json.dumps(signal.metrics_snapshot),
                 )
 
-                # Record in risk manager
+                # Record in risk manager with actual entry price
                 self.risk_manager.record_trade_entry(
                     symbol=signal.symbol,
                     side=signal.direction.value,
                     size=position_size,
-                    entry_price=signal.entry_price,
+                    entry_price=entry_price,
                     leverage=settings.trading.leverage,
                     confidence=signal.confidence,
                     reason=signal.reason,
                     order_id=order_id,
                 )
 
-                # Send Discord notification
+                # Send Discord notification with actual entry price
                 await self.discord.send_trade_entry(
                     symbol=signal.symbol,
                     side=signal.direction.value,
                     size=position_size,
-                    entry_price=signal.entry_price,
+                    entry_price=entry_price,
                     leverage=settings.trading.leverage,
                     take_profit=signal.target_price,
                     stop_loss=signal.stop_loss,
