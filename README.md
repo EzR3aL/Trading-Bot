@@ -4,6 +4,22 @@
 
 An automated cryptocurrency trading bot for Bitget Futures that implements a sophisticated contrarian strategy, betting against the crowd when leverage and sentiment reach extreme levels.
 
+---
+
+## Neu hier? Einsteiger-Anleitung
+
+Wenn du neu bist und eine einfache Schritt-für-Schritt Anleitung suchst:
+
+**[Anleitung für den Bot & Notification](Anleitung%20für%20den%20Bot%20%26%20Notification.md)** - Komplette Anleitung für Einsteiger (Deutsch)
+
+Diese Anleitung erklärt:
+- Bitget Account & API einrichten
+- Discord Benachrichtigungen aktivieren
+- Bot installieren und starten
+- Alle Einstellungen verstehen
+
+---
+
 ## Quick Start
 
 ```bash
