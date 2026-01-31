@@ -150,6 +150,7 @@ class DiscordNotifier:
         confidence: int,
         reason: str,
         order_id: str,
+        demo_mode: Optional[bool] = None,
     ) -> bool:
         """
         Send a trade entry notification.
@@ -165,10 +166,21 @@ class DiscordNotifier:
             confidence: Strategy confidence (0-100)
             reason: Trade reasoning
             order_id: Exchange order ID
+            demo_mode: If True, mark as DEMO; if False, mark as LIVE; if None, use settings
 
         Returns:
             True if sent successfully
         """
+        # Import here to avoid circular dependency
+        from config import settings
+
+        # Determine trading mode
+        if demo_mode is None:
+            demo_mode = settings.is_demo_mode
+
+        mode_label = "🧪 DEMO" if demo_mode else "⚡ LIVE"
+        mode_badge = "DEMO" if demo_mode else "LIVE"
+
         # Determine direction emoji and color
         if side.lower() == "long":
             emoji = "📈"
@@ -182,13 +194,14 @@ class DiscordNotifier:
         # Calculate position value
         position_value = size * entry_price
 
-        # Create fields
+        # Create fields (mode as first field for visibility)
         fields = [
+            {"name": "🔸 Mode", "value": f"**`{mode_badge}`**", "inline": True},
             {"name": "📊 Asset", "value": f"`{symbol}`", "inline": True},
             {"name": "📍 Direction", "value": f"`{direction}`", "inline": True},
-            {"name": "⚡ Leverage", "value": f"`{leverage}x`", "inline": True},
             {"name": "💰 Entry Price", "value": f"`${entry_price:,.2f}`", "inline": True},
             {"name": "📦 Size", "value": f"`{size:.6f}`", "inline": True},
+            {"name": "⚡ Leverage", "value": f"`{leverage}x`", "inline": True},
             {"name": "💵 Value", "value": f"`${position_value:,.2f}`", "inline": True},
             {"name": "🎯 Take Profit", "value": f"`${take_profit:,.2f}`", "inline": True},
             {"name": "🛑 Stop Loss", "value": f"`${stop_loss:,.2f}`", "inline": True},
@@ -197,11 +210,11 @@ class DiscordNotifier:
         ]
 
         embed = self._create_embed(
-            title=f"{emoji} NEW TRADE OPENED - {direction} {symbol}",
-            description=f"A new **{direction}** position has been opened on **{symbol}**",
+            title=f"{emoji} {mode_label} - NEW TRADE OPENED - {direction} {symbol}",
+            description=f"A new **{direction}** position has been opened on **{symbol}** in **{mode_badge} mode**",
             color=color,
             fields=fields,
-            footer=f"Order ID: {order_id}",
+            footer=f"Order ID: {order_id} | Mode: {mode_badge}",
         )
 
         payload = {
@@ -225,6 +238,7 @@ class DiscordNotifier:
         reason: str,
         order_id: str,
         duration_minutes: Optional[int] = None,
+        demo_mode: Optional[bool] = None,
     ) -> bool:
         """
         Send a trade exit notification.
@@ -242,10 +256,21 @@ class DiscordNotifier:
             reason: Exit reason
             order_id: Exchange order ID
             duration_minutes: Trade duration in minutes
+            demo_mode: If True, mark as DEMO; if False, mark as LIVE; if None, use settings
 
         Returns:
             True if sent successfully
         """
+        # Import here to avoid circular dependency
+        from config import settings
+
+        # Determine trading mode
+        if demo_mode is None:
+            demo_mode = settings.is_demo_mode
+
+        mode_label = "🧪 DEMO" if demo_mode else "⚡ LIVE"
+        mode_badge = "DEMO" if demo_mode else "LIVE"
+
         # Determine if profit or loss
         # funding_paid: positive = paid (reduces profit), negative = received (increases profit)
         net_pnl = pnl - fees - funding_paid
@@ -263,12 +288,13 @@ class DiscordNotifier:
         direction_emoji = "📈" if side.lower() == "long" else "📉"
 
         fields = [
+            {"name": "🔸 Mode", "value": f"**`{mode_badge}`**", "inline": True},
             {"name": "📊 Asset", "value": f"`{symbol}`", "inline": True},
             {"name": "📍 Direction", "value": f"`{side.upper()}`", "inline": True},
-            {"name": "📦 Size", "value": f"`{size:.6f}`", "inline": True},
             {"name": "💰 Entry Price", "value": f"`${entry_price:,.2f}`", "inline": True},
             {"name": "💸 Exit Price", "value": f"`${exit_price:,.2f}`", "inline": True},
             {"name": "📈 Price Change", "value": f"`{((exit_price - entry_price) / entry_price * 100):+.2f}%`", "inline": True},
+            {"name": "📦 Size", "value": f"`{size:.6f}`", "inline": True},
             {"name": "💵 Gross PnL", "value": f"`${pnl:+,.2f}`", "inline": True},
             {"name": "📊 ROI", "value": f"`{pnl_percent:+.2f}%`", "inline": True},
             {"name": "💳 Fees", "value": f"`${fees:.2f}`", "inline": True},
@@ -284,11 +310,11 @@ class DiscordNotifier:
             fields.append({"name": "⏱️ Duration", "value": f"`{duration_str}`", "inline": True})
 
         embed = self._create_embed(
-            title=f"{emoji} TRADE CLOSED - {result} on {symbol}",
-            description=f"**{side.upper()}** position on **{symbol}** has been closed with a **{result}**",
+            title=f"{emoji} {mode_label} - TRADE CLOSED - {result} on {symbol}",
+            description=f"**{side.upper()}** position on **{symbol}** has been closed with a **{result}** in **{mode_badge} mode**",
             color=color,
             fields=fields,
-            footer=f"Order ID: {order_id}",
+            footer=f"Order ID: {order_id} | Mode: {mode_badge}",
         )
 
         payload = {

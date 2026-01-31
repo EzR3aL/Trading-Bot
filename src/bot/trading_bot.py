@@ -374,13 +374,14 @@ class TradingBot:
 
         try:
             # Get current account balance
-            balance_data = await self.bitget_client.get_account_balance()
-            available_balance = float(balance_data.get("available", 0))
-
-            # In demo mode, use a simulated balance if real balance is 0
-            if is_demo and available_balance == 0:
+            if is_demo:
+                # In demo mode, use simulated balance (skip API call)
                 available_balance = 10000.0  # Simulated $10k for demo
                 logger.info(f"{mode_prefix}Using simulated balance: ${available_balance:.2f}")
+            else:
+                # In live mode, get real balance from API
+                balance_data = await self.bitget_client.get_account_balance()
+                available_balance = float(balance_data.get("available", 0))
 
             # Calculate position size
             position_usdt, position_size = self.risk_manager.calculate_position_size(

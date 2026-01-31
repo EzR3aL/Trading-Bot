@@ -37,7 +37,7 @@ class BitgetClient:
     """
 
     BASE_URL = "https://api.bitget.com"
-    TESTNET_URL = "https://api.bitget.com"  # Bitget uses same URL, different endpoints for demo
+    TESTNET_URL = "https://api.bitget.com"  # Bitget uses same URL for demo trading
 
     def __init__(
         self,
@@ -45,13 +45,33 @@ class BitgetClient:
         api_secret: Optional[str] = None,
         passphrase: Optional[str] = None,
         testnet: bool = False,
+        demo_mode: bool = False,
     ):
-        """Initialize the Bitget client."""
-        self.api_key = api_key or settings.bitget.api_key
-        self.api_secret = api_secret or settings.bitget.api_secret
-        self.passphrase = passphrase or settings.bitget.passphrase
-        self.testnet = testnet or settings.bitget.testnet
+        """
+        Initialize the Bitget client.
 
+        Args:
+            api_key: API key (if None, loads from settings based on demo_mode)
+            api_secret: API secret (if None, loads from settings based on demo_mode)
+            passphrase: API passphrase (if None, loads from settings based on demo_mode)
+            testnet: Use testnet (different from demo mode)
+            demo_mode: Use demo trading API (paper trading on Bitget Demo Account)
+        """
+        self.demo_mode = demo_mode if demo_mode is not None else settings.is_demo_mode
+
+        # Load appropriate credentials based on trading mode
+        if self.demo_mode:
+            self.api_key = api_key or settings.bitget.demo_api_key
+            self.api_secret = api_secret or settings.bitget.demo_api_secret
+            self.passphrase = passphrase or settings.bitget.demo_passphrase
+            logger.info("BitgetClient initialized in DEMO mode (paper trading)")
+        else:
+            self.api_key = api_key or settings.bitget.api_key
+            self.api_secret = api_secret or settings.bitget.api_secret
+            self.passphrase = passphrase or settings.bitget.passphrase
+            logger.info("BitgetClient initialized in LIVE mode (real trading)")
+
+        self.testnet = testnet or settings.bitget.testnet
         self.base_url = self.TESTNET_URL if self.testnet else self.BASE_URL
         self._session: Optional[aiohttp.ClientSession] = None
 
@@ -89,7 +109,7 @@ class BitgetClient:
         timestamp = str(int(time.time() * 1000))
         signature = self._generate_signature(timestamp, method, request_path, body)
 
-        return {
+        headers = {
             "ACCESS-KEY": self.api_key,
             "ACCESS-SIGN": signature,
             "ACCESS-TIMESTAMP": timestamp,
@@ -97,6 +117,14 @@ class BitgetClient:
             "Content-Type": "application/json",
             "locale": "en-US",
         }
+
+        # Add demo trading header if in demo mode
+        # Note: Bitget's exact demo trading implementation may vary
+        # This header is a common pattern used by many exchanges
+        if self.demo_mode:
+            headers["X-SIMULATED-TRADING"] = "1"
+
+        return headers
 
     async def _request(
         self,

@@ -13,6 +13,36 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ### Hinzugefuegt
 
+#### Bitget Demo Trading Integration
+Vollständige Integration mit Bitget Demo Trading Account für realitätsnahes Paper Trading:
+
+- **Separate Demo API Keys**: Unterstützung für dedizierte Demo Trading API Credentials
+  - `BITGET_DEMO_API_KEY`, `BITGET_DEMO_API_SECRET`, `BITGET_DEMO_PASSPHRASE` in `.env`
+  - Automatische Credential-Auswahl basierend auf `DEMO_MODE` Setting
+
+- **BitgetClient Erweiterung** (`src/api/bitget_client.py`):
+  - `demo_mode` Parameter im `__init__` für Modus-Auswahl
+  - Automatisches Laden der korrekten API Keys (Demo vs. Live)
+  - `X-SIMULATED-TRADING` Header für Demo Trading Requests
+  - Logging zeigt aktiven Modus (DEMO/LIVE) bei Initialisierung
+
+- **Settings Erweiterung** (`config/settings.py`):
+  - `BitgetConfig.get_active_credentials(demo_mode)` - Liefert aktive Credentials
+  - `BitgetConfig.validate(demo_mode)` - Validiert Demo oder Live API Keys
+  - Separate Felder für Demo API Keys
+
+- **Discord Notifications mit Mode Labels**:
+  - `send_trade_entry()` und `send_trade_exit()` erweitert mit `demo_mode` Parameter
+  - **🧪 DEMO** Label für Paper Trading Benachrichtigungen
+  - **⚡ LIVE** Label für echte Trades
+  - Mode Badge in Titel, Beschreibung und Footer
+  - "Mode" als erstes Field für sofortige Sichtbarkeit
+
+- **Trades im Bitget Account sichtbar**:
+  - Demo Trades erscheinen im Bitget Demo Trading Account
+  - Live Trades erscheinen im Bitget Live Account
+  - Beide Modi nutzen echte Bitget Order Flow (REST API)
+
 #### Steuerreport für Web Dashboard
 Umfassende Steuerreport-Funktion für deutsche Steuerbehörden:
 
@@ -75,6 +105,96 @@ Umfassende Steuerreport-Funktion für deutsche Steuerbehörden:
 | CSV Export | Built-in csv Modul mit UTF-8 BOM |
 | Datenbank | SQLite mit Jahr-Filter via strftime('%Y', entry_time) |
 | Frontend | Vanilla JavaScript + Chart.js für monatliches Diagramm |
+
+---
+
+## [1.7.0] - 2026-01-30
+
+### Hinzugefuegt
+
+#### Security Hardening
+- **Environment-basierte Secrets**: Alle sensiblen Daten nur noch über Umgebungsvariablen
+- **DASHBOARD_API_KEY**: Optionaler API-Key für Dashboard-Authentifizierung
+  - Mode-Toggle-Endpoint erfordert API-Key wenn gesetzt
+  - Read-Only Endpoints bleiben öffentlich
+- **Dashboard Host Binding**: `DASHBOARD_HOST` konfigurierbar (Standard: 127.0.0.1)
+  - Verhindert unbeabsichtigten externen Zugriff
+
+#### Docker Support
+- **Multi-Stage Dockerfile**: Optimierte Container-Images
+  - Stage 1: Dependencies Build
+  - Stage 2: Production Runtime
+- **Docker Compose**: Vollständige Orchestrierung
+  - Bot + Dashboard Service
+  - Dashboard-Only Profile für Read-Only Betrieb
+  - Health Checks integriert
+  - Resource Limits (CPU/Memory)
+- **Non-Root User**: Container läuft als unprivilegierter User (UID 1000)
+- **Persistent Volumes**: `./data` und `./logs` gemountet
+
+#### Dokumentation
+- **Beginner Guide (German)**: Umfassende Anfänger-Anleitung
+  - Schritt-für-Schritt Setup
+  - Erklärungen zu allen Konzepten
+  - Troubleshooting-Sektion
+
+### Geaendert
+- **`.env.example`**: Aktualisiert mit neuen Security-Parametern
+- **README.md**: Docker-Anweisungen hinzugefügt
+- **SETUP.md**: v1.7.0 Features dokumentiert
+
+### Sicherheit
+- Firewall-Empfehlungen in SETUP.md
+- Reverse Proxy (nginx) Beispiel-Konfiguration
+- IP-Whitelist Best Practices
+
+---
+
+## [1.6.0] - 2026-01-30
+
+### Hinzugefuegt
+
+#### WebSocket-Infrastruktur
+- **Echtzeit-Updates**: WebSocket-Verbindung für Live-Daten
+  - Position-Updates alle 5 Sekunden
+  - Trade-Notifications bei Entry/Exit
+  - Status-Updates bei Mode-Wechsel
+
+#### Demo/Live Mode
+- **Demo-Modus** (Standard): Simulierte Trades ohne echte Orderausführung
+  - Alle Statistiken und Tracking funktionieren normal
+  - Perfekt für Strategie-Tests
+  - Empfohlen für 1-2 Wochen vor Live-Gang
+- **Live-Modus**: Echte Trades auf Bitget
+  - Echtes Geld involviert
+  - Alle Sicherheitschecks aktiv
+- **Mode-Toggle**:
+  - Über Dashboard UI (mit Bestätigungs-Dialog)
+  - Über API: `POST /api/mode/toggle`
+  - Über Environment: `DEMO_MODE=true/false`
+- **Persistenz**: Modus-Zustand wird in `data/bot_state.json` gespeichert
+
+#### API-Endpunkte
+- **`GET /api/mode`**: Aktuellen Trading-Modus abfragen
+- **`POST /api/mode/toggle`**: Zwischen Demo/Live wechseln
+  - Validierung: Keine offenen Positionen erlaubt
+  - Bestätigung erforderlich
+
+### Behoben (Critical Bug Fixes)
+- **`execute_trade()` Fehler**: Live-Trading-Code wiederhergestellt
+  - Bug: Demo-Modus-Check blockierte alle Order-Platzierungen
+  - Fix: Korrekte Verzweigung Demo vs. Live
+  - Impact: **Kritisch** - Bot konnte keine echten Trades platzieren
+- **Position Monitoring**: Robustere Fehlerbehandlung
+  - Timeout-Handling für API-Calls
+  - Retry-Logik bei temporären Fehlern
+
+### Technische Details
+| Komponente | Technologie |
+|------------|-------------|
+| WebSocket | FastAPI WebSocketRoute |
+| State Management | JSON-Persistenz in `data/bot_state.json` |
+| Frontend Updates | JavaScript EventSource + WebSocket |
 
 ---
 
