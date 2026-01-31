@@ -1,6 +1,6 @@
 # Bitget Trading Bot
 
-**Contrarian Liquidation Hunter Strategy** | v1.7.0
+**Contrarian Liquidation Hunter Strategy** | v1.8.0
 
 An automated cryptocurrency trading bot for Bitget Futures that implements a sophisticated contrarian strategy, betting against the crowd when leverage and sentiment reach extreme levels.
 
@@ -101,6 +101,16 @@ The bot acts as an "Institutional Market Maker" by analyzing:
 - **CORS Protection**: Restricted to localhost origins
 - **Rate Limiting**: 5 requests/minute on mode toggle
 - **Secure Defaults**: Dashboard binds to 127.0.0.1 only
+
+### Tax Reporting (v1.8.0+)
+- **Steuerreport für deutsche Behörden**: Comprehensive tax reports for German tax compliance
+- **CSV Export**: Download complete trade history with realized gains/losses, fees, funding costs
+- **Bilingual Support**: Toggle between German and English (Deutsch ⟷ English)
+- **Calendar Year Reports**: Select any year with trade data for tax filing
+- **Monthly Breakdown**: Performance aggregated by month with visual chart
+- **Tax-Compliant Format**: Includes holding duration (critical for German tax: <1yr vs ≥1yr)
+- **Deductible Costs**: Trading fees and funding payments separated for tax deductions
+- **Live Preview**: View summary (gains, losses, net PnL) before downloading
 
 ### Notifications
 - **Discord Integration**: Real-time trade alerts with full details

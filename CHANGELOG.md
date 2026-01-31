@@ -9,6 +9,60 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [1.8.0] - 2026-01-31
+
+### Hinzugefuegt
+
+#### Steuerreport für Web Dashboard
+Umfassende Steuerreport-Funktion für deutsche Steuerbehörden:
+
+- **Backend**: `src/dashboard/tax_report.py`
+  - `TaxReportGenerator` Klasse für Report-Generierung
+  - Aggregation von Gewinnen, Verlusten, Gebühren, Funding-Kosten
+  - Monatliche Aufschlüsselung der Performance
+  - Zweisprachige Unterstützung (Deutsch/Englisch)
+  - CSV-Export mit UTF-8 BOM für Excel-Kompatibilität
+
+- **API Endpoints**:
+  - `GET /api/tax-report/years` - Verfügbare Jahre mit Trade-Daten
+  - `GET /api/tax-report/{year}?language={de|en}` - Tax-Report-Daten als JSON
+  - `GET /api/tax-report/{year}/download?language={de|en}` - CSV-Download
+
+- **Frontend**: Tax Report Sektion im Dashboard
+  - Kalenderjahr-Auswahl (Dropdown mit verfügbaren Jahren)
+  - Sprach-Toggle (Deutsch ⟷ English)
+  - Live-Vorschau der Zusammenfassung (Gewinne, Verluste, Netto-PnL)
+  - Chart.js Balkendiagramm für monatliche Performance
+  - CSV-Download-Button
+
+- **CSV-Format** (Steuerkonform):
+  - Bilingual Headers (Deutsch/English)
+  - 4 Sektionen: Header, Zusammenfassung, Einzeltransaktionen, Monatliche Aufschlüsselung
+  - Haltedauer für jede Position (wichtig für deutsche Steuerberechnung)
+  - Separate Funding Payments Auflistung
+  - Disclaimer für Steuerberater-Konsultation
+
+- **Deutsche Steuer-Compliance**:
+  - Realized Gains/Losses Berechnung
+  - Absetzbare Kosten (Gebühren, Funding) separiert
+  - Haltedauer in Stunden für steuerliche Bewertung (<1 Jahr vs. ≥1 Jahr)
+
+### Geaendert
+
+- **TradeDatabase**: Neue Methode `get_trades_by_year(year)` für effizienten Jahres-basierten Zugriff
+- **Dashboard UI**: Neue Tax Report Sektion nach Configuration-Card
+
+### Technische Details
+
+| Komponente | Beschreibung |
+|------------|--------------|
+| Tax Report Generator | Python-Klasse mit i18n-Support |
+| CSV Export | Built-in csv Modul mit UTF-8 BOM |
+| Datenbank | SQLite mit Jahr-Filter via strftime('%Y', entry_time) |
+| Frontend | Vanilla JavaScript + Chart.js für monatliches Diagramm |
+
+---
+
 ## [1.5.0] - 2026-01-29
 
 ### Hinzugefuegt

@@ -429,6 +429,32 @@ class TradeDatabase:
             rows = await cursor.fetchall()
             return [self._row_to_trade(row) for row in rows]
 
+    async def get_trades_by_year(self, year: int) -> List[Trade]:
+        """
+        Get all closed trades for a specific calendar year.
+
+        Args:
+            year: Calendar year (e.g., 2025)
+
+        Returns:
+            List of closed trades for the year, ordered by entry time
+        """
+        await self.initialize()
+
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            cursor = await db.execute(
+                """
+                SELECT * FROM trades
+                WHERE strftime('%Y', entry_time) = ?
+                AND status = 'closed'
+                ORDER BY entry_time ASC
+                """,
+                (str(year),),
+            )
+            rows = await cursor.fetchall()
+            return [self._row_to_trade(row) for row in rows]
+
     async def get_statistics(self, days: int = 30) -> dict:
         """
         Calculate trading statistics over a period.

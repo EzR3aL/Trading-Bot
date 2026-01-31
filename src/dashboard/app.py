@@ -31,6 +31,7 @@ from src.utils.logger import get_logger
 from src.models.trade_database import TradeDatabase
 from src.risk.risk_manager import RiskManager
 from src.data.funding_tracker import FundingTracker
+from src.dashboard.tax_report import TaxReportGenerator
 from config import settings
 
 logger = get_logger(__name__)
@@ -97,6 +98,7 @@ def create_app() -> FastAPI:
     app.state.trade_db = None
     app.state.risk_manager = None
     app.state.funding_tracker = None
+    app.state.tax_generator = None
     app.state.websocket_clients = []
 
     @app.on_event("startup")
@@ -109,6 +111,11 @@ def create_app() -> FastAPI:
 
         app.state.funding_tracker = FundingTracker()
         await app.state.funding_tracker.initialize()
+
+        app.state.tax_generator = TaxReportGenerator(
+            app.state.trade_db,
+            app.state.funding_tracker
+        )
 
         logger.info("Dashboard started")
 
@@ -331,6 +338,73 @@ def create_app() -> FastAPI:
             }
         }
 
+    # ==================== TAX REPORT ====================
+
+    @app.get("/api/tax-report/years")
+    async def get_tax_report_years():
+        """Get list of years with trade data for tax reporting."""
+        years = await app.state.tax_generator.get_available_years()
+        return {"years": years}
+
+    @app.get("/api/tax-report/{year}")
+    async def get_tax_report_data(year: int, language: str = "de"):
+        """
+        Get tax report data for a specific year.
+
+        Args:
+            year: Calendar year (e.g., 2025)
+            language: Language code ('de' or 'en')
+
+        Returns:
+            JSON with summary, trades, monthly breakdown, and funding payments
+        """
+        if language not in ['de', 'en']:
+            language = 'de'
+
+        data = await app.state.tax_generator.get_year_data(year, language)
+        return data
+
+    @app.get("/api/tax-report/{year}/download")
+    async def download_tax_report_csv(year: int, language: str = "de"):
+        """
+        Download tax report as CSV file.
+
+        Args:
+            year: Calendar year (e.g., 2025)
+            language: Language code ('de' or 'en')
+
+        Returns:
+            CSV file download
+        """
+        from fastapi.responses import StreamingResponse
+        from io import BytesIO
+
+        if language not in ['de', 'en']:
+            language = 'de'
+
+        # Generate CSV content
+        csv_content = await app.state.tax_generator.generate_csv_content(year, language)
+
+        # Convert to bytes
+        csv_bytes = csv_content.encode('utf-8')
+        stream = BytesIO(csv_bytes)
+
+        # Determine filename
+        if language == 'de':
+            filename = f"Steuerreport_{year}_DE.csv"
+        else:
+            filename = f"TaxReport_{year}_EN.csv"
+
+        # Return as streaming response
+        return StreamingResponse(
+            stream,
+            media_type="text/csv",
+            headers={
+                "Content-Disposition": f"attachment; filename={filename}",
+                "Content-Type": "text/csv; charset=utf-8"
+            }
+        )
+
     # ==================== WEBSOCKET ====================
 
     @app.websocket("/ws")
@@ -508,6 +582,74 @@ def get_default_html() -> str:
                 <div><span class="text-gray-500">Max Trades:</span> <span id="cfg-max-trades">-</span></div>
             </div>
         </div>
+
+        <!-- Tax Report -->
+        <div class="card">
+            <h2 class="text-lg font-semibold mb-4">📊 <span id="tax-report-title">Steuerreport / Tax Report</span></h2>
+
+            <!-- Controls Row -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                <!-- Year Selector -->
+                <div>
+                    <label class="text-gray-500 text-sm block mb-1"><span id="tax-year-label">Jahr / Year</span></label>
+                    <select id="tax-year-select" class="w-full px-3 py-2 border rounded-md bg-white">
+                        <option value="">Loading...</option>
+                    </select>
+                </div>
+
+                <!-- Language Toggle -->
+                <div>
+                    <label class="text-gray-500 text-sm block mb-1"><span id="tax-lang-label">Sprache / Language</span></label>
+                    <div class="flex gap-2">
+                        <button id="lang-de" onclick="toggleTaxLanguage('de')" class="flex-1 px-4 py-2 rounded-md bg-indigo-600 text-white font-semibold transition-colors">
+                            Deutsch
+                        </button>
+                        <button id="lang-en" onclick="toggleTaxLanguage('en')" class="flex-1 px-4 py-2 rounded-md bg-gray-300 text-gray-700 font-semibold transition-colors">
+                            English
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Download Button -->
+                <div>
+                    <label class="text-gray-500 text-sm block mb-1">&nbsp;</label>
+                    <button id="download-tax-csv" onclick="downloadTaxCSV()" class="w-full px-4 py-2 rounded-md bg-green-600 text-white font-semibold hover:bg-green-700 transition-colors">
+                        📥 <span id="download-btn-text">CSV Herunterladen</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Tax Summary Preview -->
+            <div id="tax-summary" class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4 p-4 bg-gray-50 rounded-lg">
+                <div class="text-center">
+                    <div class="text-gray-500 text-sm" id="tax-label-trades">Trades</div>
+                    <div class="text-2xl font-bold" id="tax-value-trades">-</div>
+                </div>
+                <div class="text-center">
+                    <div class="text-gray-500 text-sm" id="tax-label-gains">Gewinne / Gains</div>
+                    <div class="text-2xl font-bold text-green-600" id="tax-value-gains">€0.00</div>
+                </div>
+                <div class="text-center">
+                    <div class="text-gray-500 text-sm" id="tax-label-losses">Verluste / Losses</div>
+                    <div class="text-2xl font-bold text-red-600" id="tax-value-losses">€0.00</div>
+                </div>
+                <div class="text-center">
+                    <div class="text-gray-500 text-sm" id="tax-label-net">Netto / Net</div>
+                    <div class="text-2xl font-bold" id="tax-value-net">€0.00</div>
+                </div>
+            </div>
+
+            <!-- Monthly Breakdown Chart -->
+            <div class="mt-4">
+                <h3 class="text-md font-semibold mb-2" id="tax-monthly-title">Monatliche Aufschlüsselung / Monthly Breakdown</h3>
+                <canvas id="tax-monthly-chart"></canvas>
+            </div>
+
+            <!-- No Data Message -->
+            <div id="tax-no-data" class="text-center py-8 text-gray-500" style="display: none;">
+                <span id="tax-no-data-text">Keine Daten für dieses Jahr / No data for this year</span>
+            </div>
+        </div>
     </div>
 
     <script>
@@ -659,11 +801,241 @@ def get_default_html() -> str:
             }
         }
 
+        // ==================== TAX REPORT ====================
+
+        // Tax report state
+        let currentTaxYear = new Date().getFullYear();
+        let currentTaxLanguage = 'de';
+        let taxMonthlyChart = null;
+        let taxData = null;
+
+        // Tax report translations
+        const taxTranslations = {
+            de: {
+                trades: 'Trades',
+                gains: 'Gewinne',
+                losses: 'Verluste',
+                net: 'Netto',
+                downloadBtn: 'CSV Herunterladen',
+                noData: 'Keine Daten für dieses Jahr',
+                yearLabel: 'Jahr',
+                langLabel: 'Sprache'
+            },
+            en: {
+                trades: 'Trades',
+                gains: 'Gains',
+                losses: 'Losses',
+                net: 'Net',
+                downloadBtn: 'Download CSV',
+                noData: 'No data for this year',
+                yearLabel: 'Year',
+                langLabel: 'Language'
+            }
+        };
+
+        // Load available years
+        async function loadAvailableYears() {
+            try {
+                const response = await fetch('/api/tax-report/years');
+                const data = await response.json();
+
+                const select = document.getElementById('tax-year-select');
+                select.innerHTML = '';
+
+                if (data.years && data.years.length > 0) {
+                    data.years.forEach(year => {
+                        const option = document.createElement('option');
+                        option.value = year;
+                        option.textContent = year;
+                        if (year === currentTaxYear) {
+                            option.selected = true;
+                        }
+                        select.appendChild(option);
+                    });
+
+                    // Set to first available year if current year not available
+                    if (!data.years.includes(currentTaxYear)) {
+                        currentTaxYear = data.years[0];
+                    }
+                } else {
+                    const option = document.createElement('option');
+                    option.value = '';
+                    option.textContent = 'No data available';
+                    select.appendChild(option);
+                }
+
+                // Add change listener
+                select.addEventListener('change', (e) => {
+                    currentTaxYear = parseInt(e.target.value);
+                    loadTaxReportData();
+                });
+            } catch (error) {
+                console.error('Error loading available years:', error);
+            }
+        }
+
+        // Load tax report data
+        async function loadTaxReportData() {
+            try {
+                const response = await fetch(`/api/tax-report/${currentTaxYear}?language=${currentTaxLanguage}`);
+                taxData = await response.json();
+
+                updateTaxSummaryUI();
+                updateTaxMonthlyChart();
+            } catch (error) {
+                console.error('Error loading tax report data:', error);
+                showTaxNoData();
+            }
+        }
+
+        // Update tax summary UI
+        function updateTaxSummaryUI() {
+            const summary = taxData.summary;
+
+            if (!summary || summary.trade_count === 0) {
+                showTaxNoData();
+                return;
+            }
+
+            // Hide no-data message
+            document.getElementById('tax-no-data').style.display = 'none';
+            document.getElementById('tax-summary').style.display = 'grid';
+            document.getElementById('tax-monthly-chart').parentElement.style.display = 'block';
+
+            // Update values
+            document.getElementById('tax-value-trades').textContent = summary.trade_count || 0;
+            document.getElementById('tax-value-gains').textContent = '€' + (summary.total_gains || 0).toFixed(2);
+            document.getElementById('tax-value-losses').textContent = '€' + (summary.total_losses || 0).toFixed(2);
+            document.getElementById('tax-value-net').textContent = '€' + (summary.net_pnl || 0).toFixed(2);
+
+            // Update net color
+            const netElement = document.getElementById('tax-value-net');
+            if (summary.net_pnl >= 0) {
+                netElement.className = 'text-2xl font-bold text-green-600';
+            } else {
+                netElement.className = 'text-2xl font-bold text-red-600';
+            }
+        }
+
+        // Show no data message
+        function showTaxNoData() {
+            document.getElementById('tax-no-data').style.display = 'block';
+            document.getElementById('tax-summary').style.display = 'none';
+            document.getElementById('tax-monthly-chart').parentElement.style.display = 'none';
+        }
+
+        // Initialize tax monthly chart
+        function initTaxMonthlyChart() {
+            const ctx = document.getElementById('tax-monthly-chart').getContext('2d');
+            taxMonthlyChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: 'Net PnL (€)',
+                        data: [],
+                        backgroundColor: 'rgba(99, 102, 241, 0.8)',
+                        borderColor: 'rgba(99, 102, 241, 1)',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                callback: function(value) {
+                                    return '€' + value.toFixed(2);
+                                }
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            display: false
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return 'Net: €' + context.parsed.y.toFixed(2);
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Update tax monthly chart
+        function updateTaxMonthlyChart() {
+            if (!taxData || !taxData.monthly_breakdown) return;
+
+            const monthly = taxData.monthly_breakdown.filter(m => m.trades > 0);
+
+            if (monthly.length === 0) {
+                return;
+            }
+
+            taxMonthlyChart.data.labels = monthly.map(m => m.month);
+            taxMonthlyChart.data.datasets[0].data = monthly.map(m => m.net);
+
+            // Update colors based on positive/negative
+            taxMonthlyChart.data.datasets[0].backgroundColor = monthly.map(m =>
+                m.net >= 0 ? 'rgba(34, 197, 94, 0.8)' : 'rgba(239, 68, 68, 0.8)'
+            );
+
+            taxMonthlyChart.update();
+        }
+
+        // Toggle tax language
+        function toggleTaxLanguage(lang) {
+            if (lang !== 'de' && lang !== 'en') return;
+
+            currentTaxLanguage = lang;
+
+            // Update button styles
+            document.getElementById('lang-de').className = lang === 'de'
+                ? 'flex-1 px-4 py-2 rounded-md bg-indigo-600 text-white font-semibold transition-colors'
+                : 'flex-1 px-4 py-2 rounded-md bg-gray-300 text-gray-700 font-semibold transition-colors';
+
+            document.getElementById('lang-en').className = lang === 'en'
+                ? 'flex-1 px-4 py-2 rounded-md bg-indigo-600 text-white font-semibold transition-colors'
+                : 'flex-1 px-4 py-2 rounded-md bg-gray-300 text-gray-700 font-semibold transition-colors';
+
+            // Update UI labels
+            const t = taxTranslations[lang];
+            document.getElementById('tax-label-trades').textContent = t.trades;
+            document.getElementById('tax-label-gains').textContent = t.gains;
+            document.getElementById('tax-label-losses').textContent = t.losses;
+            document.getElementById('tax-label-net').textContent = t.net;
+            document.getElementById('download-btn-text').textContent = t.downloadBtn;
+            document.getElementById('tax-no-data-text').textContent = t.noData;
+
+            // Reload data in new language
+            loadTaxReportData();
+        }
+
+        // Download tax CSV
+        function downloadTaxCSV() {
+            const filename = currentTaxLanguage === 'de'
+                ? `Steuerreport_${currentTaxYear}_DE.csv`
+                : `TaxReport_${currentTaxYear}_EN.csv`;
+
+            window.location.href = `/api/tax-report/${currentTaxYear}/download?language=${currentTaxLanguage}`;
+        }
+
+        // ==================== END TAX REPORT ====================
+
         // Initialize
         document.addEventListener('DOMContentLoaded', () => {
             initCharts();
+            initTaxMonthlyChart();
             fetchMode();
             updateDashboard();
+            loadAvailableYears();
+            loadTaxReportData();
             setInterval(updateDashboard, 10000); // Update every 10 seconds
         });
     </script>
