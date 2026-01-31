@@ -125,7 +125,8 @@ The bot acts as an "Institutional Market Maker" by analyzing:
 |----------|-------------|
 | [CHANGELOG.md](CHANGELOG.md) | Version history and all changes |
 | [docs/STRATEGY.md](docs/STRATEGY.md) | Detailed strategy explanation |
-| [docs/SETUP.md](docs/SETUP.md) | Installation and configuration guide |
+| [docs/SETUP.md](docs/SETUP.md) | Local installation and configuration guide |
+| [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | **Cloud deployment guide (DigitalOcean, 24/7)** |
 | [docs/API.md](docs/API.md) | Technical API reference |
 | [docs/FAQ.md](docs/FAQ.md) | Frequently asked questions |
 

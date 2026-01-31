@@ -2,7 +2,26 @@
 
 Diese Anleitung führt dich durch die vollständige Installation und Konfiguration des Bitget Trading Bots.
 
-**Version:** 1.7.0
+**Version:** 1.8.0
+
+---
+
+## 🚀 Cloud Deployment (24/7 Betrieb)
+
+**Möchtest du den Bot auf einem Server laufen lassen?**
+
+Für 24/7-Betrieb des Bots empfehlen wir Cloud-Deployment. Eine vollständige Schritt-für-Schritt-Anleitung findest du hier:
+
+👉 **[Cloud Deployment Guide (DigitalOcean)](DEPLOYMENT.md)**
+
+Beinhaltet:
+- DigitalOcean Droplet Setup (~$12/Monat)
+- Docker-Installation und Bot-Deployment
+- HTTPS mit SSL (Let's Encrypt)
+- Automatische Backups und Monitoring
+- Firewall und Security-Hardening
+
+**Diese Anleitung hier** ist für lokale Entwicklung und Tests gedacht.
 
 ---
 

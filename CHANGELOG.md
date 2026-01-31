@@ -52,6 +52,21 @@ Umfassende Steuerreport-Funktion für deutsche Steuerbehörden:
 - **TradeDatabase**: Neue Methode `get_trades_by_year(year)` für effizienten Jahres-basierten Zugriff
 - **Dashboard UI**: Neue Tax Report Sektion nach Configuration-Card
 
+### Dokumentation
+
+- **DEPLOYMENT.md** (NEU): Umfassende Cloud-Deployment-Anleitung für DigitalOcean
+  - Schritt-für-Schritt Setup für 24/7-Betrieb auf VPS
+  - Droplet-Erstellung und Server-Konfiguration
+  - Docker-Installation und Bot-Deployment
+  - Nginx Reverse Proxy mit HTTPS/SSL (Let's Encrypt)
+  - Firewall-Konfiguration (UFW) und SSH-Hardening
+  - Systemd-Service für Auto-Start
+  - Monitoring, Backups, und Wartungs-Skripte
+  - Kosten-Übersicht (~$15/Monat für 2 GB Droplet)
+  - Fehlerbehebung und Support-Ressourcen
+- **SETUP.md**: Aktualisiert mit Hinweis auf Cloud-Deployment-Option (v1.8.0)
+- **README.md**: DEPLOYMENT.md zur Dokumentations-Tabelle hinzugefügt
+
 ### Technische Details
 
 | Komponente | Beschreibung |
