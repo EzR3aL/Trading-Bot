@@ -224,6 +224,28 @@ class CredentialRepository:
                 return True
             return False
 
+    async def activate(self, credential_id: int, user_id: int) -> bool:
+        """
+        Reactivate a previously deactivated credential.
+
+        Args:
+            credential_id: Credential ID
+            user_id: User ID (for tenant isolation)
+        """
+        async with aiosqlite.connect(self.db_path) as db:
+            cursor = await db.execute(
+                """
+                UPDATE user_credentials SET is_active = 1
+                WHERE id = ? AND user_id = ?
+                """,
+                (credential_id, user_id)
+            )
+            await db.commit()
+            if cursor.rowcount > 0:
+                logger.info(f"Activated credential id={credential_id}")
+                return True
+            return False
+
     async def delete(self, credential_id: int, user_id: int) -> bool:
         """
         Permanently delete a credential.

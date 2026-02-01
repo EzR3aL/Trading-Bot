@@ -26,6 +26,7 @@ class User:
     is_admin: bool = False
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
+    last_login: Optional[datetime] = None
 
     def to_dict(self, include_sensitive: bool = False) -> dict:
         """Convert to dictionary for API responses."""
@@ -37,6 +38,7 @@ class User:
             "is_admin": self.is_admin,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+            "last_login": self.last_login.isoformat() if self.last_login else None,
         }
         if include_sensitive:
             data["password_hash"] = self.password_hash
@@ -254,6 +256,36 @@ class UserRepository:
             logger.info(f"Activated user id={user_id}")
             return True
 
+    async def update_last_login(self, user_id: int) -> bool:
+        """Update user's last login timestamp."""
+        async with aiosqlite.connect(self.db_path) as db:
+            await db.execute(
+                """
+                UPDATE users SET
+                    last_login = ?
+                WHERE id = ?
+                """,
+                (datetime.now().isoformat(), user_id)
+            )
+            await db.commit()
+            return True
+
+    async def update_email(self, user_id: int, new_email: str) -> bool:
+        """Update user's email address."""
+        async with aiosqlite.connect(self.db_path) as db:
+            await db.execute(
+                """
+                UPDATE users SET
+                    email = ?,
+                    updated_at = ?
+                WHERE id = ?
+                """,
+                (new_email.lower(), datetime.now(), user_id)
+            )
+            await db.commit()
+            logger.info(f"Updated email for user id={user_id}")
+            return True
+
     async def delete(self, user_id: int) -> bool:
         """
         Permanently delete a user account.
@@ -280,6 +312,15 @@ class UserRepository:
 
     def _row_to_user(self, row) -> User:
         """Convert database row to User object."""
+        # Handle last_login which may not exist in older schemas
+        last_login = None
+        try:
+            last_login_str = row["last_login"]
+            if last_login_str:
+                last_login = datetime.fromisoformat(last_login_str)
+        except (KeyError, IndexError):
+            pass
+
         return User(
             id=row["id"],
             username=row["username"],
@@ -289,4 +330,5 @@ class UserRepository:
             is_admin=bool(row["is_admin"]),
             created_at=datetime.fromisoformat(row["created_at"]) if row["created_at"] else None,
             updated_at=datetime.fromisoformat(row["updated_at"]) if row["updated_at"] else None,
+            last_login=last_login,
         )

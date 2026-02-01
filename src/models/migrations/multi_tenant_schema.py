@@ -82,7 +82,8 @@ async def upgrade(db_path: str = "data/trades.db") -> bool:
                     is_active INTEGER DEFAULT 1,
                     is_admin INTEGER DEFAULT 0,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    last_login TIMESTAMP
                 )
             """)
             await db.execute("CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)")
