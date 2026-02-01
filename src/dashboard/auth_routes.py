@@ -25,6 +25,7 @@ from src.auth.dependencies import (
     TokenPayload,
 )
 from src.models.user import UserRepository, User
+from src.security.audit import get_audit_logger, AuditEventType, AuditSeverity
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -207,6 +208,16 @@ async def register(
 
     logger.info(f"New user registered: {user.username} (ID: {user.id})")
 
+    # Audit log registration
+    audit = await get_audit_logger()
+    await audit.log_auth_event(
+        event_type=AuditEventType.USER_REGISTER,
+        user_id=user.id,
+        ip_address=request.client.host if request.client else None,
+        username=user.username,
+        success=True,
+    )
+
     return TokenResponse(
         access_token=tokens.access_token,
         refresh_token=tokens.refresh_token,
@@ -231,7 +242,19 @@ async def login(
 
     # Get user by username
     user = await user_repo.get_by_username(data.username)
+    ip_address = request.client.host if request.client else None
+
     if not user:
+        # Log failed login attempt
+        audit = await get_audit_logger()
+        await audit.log_auth_event(
+            event_type=AuditEventType.USER_LOGIN_FAILED,
+            user_id=None,
+            ip_address=ip_address,
+            username=data.username,
+            success=False,
+            error_message="Invalid username",
+        )
         # Use same error message to prevent username enumeration
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -248,6 +271,16 @@ async def login(
     # Verify password
     if not password_handler.verify(data.password, user.password_hash):
         logger.warning(f"Failed login attempt for user: {data.username}")
+        # Log failed login
+        audit = await get_audit_logger()
+        await audit.log_auth_event(
+            event_type=AuditEventType.USER_LOGIN_FAILED,
+            user_id=user.id,
+            ip_address=ip_address,
+            username=data.username,
+            success=False,
+            error_message="Invalid password",
+        )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid username or password"
@@ -281,6 +314,16 @@ async def login(
     )
 
     logger.info(f"User logged in: {data.username}")
+
+    # Log successful login
+    audit = await get_audit_logger()
+    await audit.log_auth_event(
+        event_type=AuditEventType.USER_LOGIN,
+        user_id=user.id,
+        ip_address=ip_address,
+        username=data.username,
+        success=True,
+    )
 
     return TokenResponse(
         access_token=tokens.access_token,
@@ -366,6 +409,16 @@ async def logout(
         await session_manager.revoke_session(token_hash)
 
     logger.info(f"User logged out: {payload.username}")
+
+    # Log logout
+    audit = await get_audit_logger()
+    await audit.log_auth_event(
+        event_type=AuditEventType.USER_LOGOUT,
+        user_id=payload.user_id,
+        ip_address=request.client.host if request.client else None,
+        username=payload.username,
+        success=True,
+    )
 
     return MessageResponse(message="Successfully logged out")
 

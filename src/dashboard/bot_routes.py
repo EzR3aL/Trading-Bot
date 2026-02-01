@@ -16,6 +16,7 @@ from slowapi.util import get_remote_address
 from src.auth.dependencies import get_current_user_payload, TokenPayload
 from src.models.bot_instance import BotInstanceRepository, BotConfig
 from src.bot.orchestrator import get_orchestrator, BotStatus
+from src.security.audit import get_audit_logger, AuditEventType
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -173,6 +174,17 @@ async def create_bot(
 
     logger.info(f"User {payload.user_id} created bot '{data.name}'")
 
+    # Audit log
+    audit = await get_audit_logger()
+    await audit.log_bot_event(
+        event_type=AuditEventType.BOT_CREATE,
+        user_id=payload.user_id,
+        bot_id=instance.id,
+        ip_address=request.client.host if request.client else None,
+        bot_name=data.name,
+        success=True,
+    )
+
     return BotResponse(
         id=instance.id,
         name=instance.name,
@@ -317,6 +329,16 @@ async def delete_bot(
 
     logger.info(f"User {payload.user_id} deleted bot {bot_id}")
 
+    # Audit log
+    audit = await get_audit_logger()
+    await audit.log_bot_event(
+        event_type=AuditEventType.BOT_DELETE,
+        user_id=payload.user_id,
+        bot_id=bot_id,
+        ip_address=request.client.host if request.client else None,
+        success=True,
+    )
+
     return MessageResponse(message="Bot deleted")
 
 
@@ -335,6 +357,17 @@ async def start_bot(
     try:
         await orchestrator.start_instance(bot_id, payload.user_id)
         logger.info(f"User {payload.user_id} started bot {bot_id}")
+
+        # Audit log
+        audit = await get_audit_logger()
+        await audit.log_bot_event(
+            event_type=AuditEventType.BOT_START,
+            user_id=payload.user_id,
+            bot_id=bot_id,
+            ip_address=request.client.host if request.client else None,
+            success=True,
+        )
+
         return MessageResponse(message="Bot started")
     except ValueError as e:
         raise HTTPException(
@@ -368,6 +401,17 @@ async def stop_bot(
     try:
         await orchestrator.stop_instance(bot_id, payload.user_id, force=force)
         logger.info(f"User {payload.user_id} stopped bot {bot_id}")
+
+        # Audit log
+        audit = await get_audit_logger()
+        await audit.log_bot_event(
+            event_type=AuditEventType.BOT_STOP,
+            user_id=payload.user_id,
+            bot_id=bot_id,
+            ip_address=request.client.host if request.client else None,
+            success=True,
+        )
+
         return MessageResponse(message="Bot stopped")
     except ValueError as e:
         raise HTTPException(

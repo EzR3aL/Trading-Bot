@@ -16,6 +16,7 @@ from slowapi.util import get_remote_address
 
 from src.auth.dependencies import get_current_user_payload, TokenPayload
 from src.security.credential_manager import CredentialManager
+from src.security.audit import get_audit_logger, AuditEventType
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -165,6 +166,17 @@ async def create_credential(
         )
 
         logger.info(f"User {payload.user_id} created credential '{data.name}'")
+
+        # Audit log
+        audit = await get_audit_logger()
+        await audit.log_credential_event(
+            event_type=AuditEventType.CREDENTIAL_CREATE,
+            user_id=payload.user_id,
+            credential_id=credential.id,
+            ip_address=request.client.host if request.client else None,
+            credential_name=data.name,
+            success=True,
+        )
 
         return CredentialResponse(
             id=credential.id,
