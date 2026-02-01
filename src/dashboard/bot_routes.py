@@ -451,3 +451,124 @@ async def restart_bot(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to restart bot: {str(e)}"
         )
+
+
+class RiskStatsResponse(BaseModel):
+    """Risk statistics response."""
+    can_trade: bool
+    reason: str
+    config: dict
+    daily_stats: Optional[dict]
+    remaining_trades: int
+    remaining_risk_budget_percent: float
+    dynamic_loss_limit_percent: float
+
+
+@router.get("/{bot_id}/risk", response_model=RiskStatsResponse)
+@limiter.limit("30/minute")
+async def get_bot_risk_stats(
+    request: Request,
+    bot_id: int,
+    payload: TokenPayload = Depends(get_current_user_payload),
+):
+    """
+    Get risk management stats for a bot instance.
+
+    Returns current risk limits, daily stats, and trading status.
+    Only available for running bots.
+    """
+    orchestrator = await get_orchestrator()
+
+    # Get running instance to access risk manager
+    running = orchestrator._instances.get(bot_id)
+
+    if not running or running.bot_instance.user_id != payload.user_id:
+        # Bot not running or doesn't belong to user
+        # Return default stats from config
+        repo = BotInstanceRepository()
+        instance = await repo.get_by_id(bot_id, payload.user_id)
+        if not instance:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Bot not found"
+            )
+
+        # Return offline risk config
+        return RiskStatsResponse(
+            can_trade=False,
+            reason="Bot is not running",
+            config={
+                "user_id": payload.user_id,
+                "bot_instance_id": bot_id,
+                "max_trades_per_day": instance.config.max_trades_per_day,
+                "daily_loss_limit_percent": instance.config.daily_loss_limit_percent,
+                "position_size_percent": instance.config.position_size_percent,
+            },
+            daily_stats=None,
+            remaining_trades=instance.config.max_trades_per_day,
+            remaining_risk_budget_percent=instance.config.daily_loss_limit_percent,
+            dynamic_loss_limit_percent=instance.config.daily_loss_limit_percent,
+        )
+
+    # Bot is running, get real risk stats
+    risk_status = running.risk_manager.get_risk_status()
+
+    return RiskStatsResponse(
+        can_trade=risk_status["can_trade"],
+        reason=risk_status["reason"],
+        config=risk_status["config"],
+        daily_stats=risk_status["daily_stats"],
+        remaining_trades=risk_status["remaining_trades"],
+        remaining_risk_budget_percent=risk_status["remaining_risk_budget_percent"],
+        dynamic_loss_limit_percent=risk_status["dynamic_loss_limit_percent"],
+    )
+
+
+class PerformanceResponse(BaseModel):
+    """Performance summary response."""
+    period_days: int
+    total_trades: int
+    winning_trades: int
+    losing_trades: int
+    win_rate: float
+    total_pnl: float
+    total_fees: float
+    average_daily_return: float
+    max_drawdown: float
+    sharpe_estimate: float
+
+
+@router.get("/{bot_id}/performance", response_model=PerformanceResponse)
+@limiter.limit("10/minute")
+async def get_bot_performance(
+    request: Request,
+    bot_id: int,
+    days: int = 30,
+    payload: TokenPayload = Depends(get_current_user_payload),
+):
+    """
+    Get performance summary for a bot instance.
+
+    Args:
+        days: Number of days to analyze (default: 30)
+    """
+    from src.risk.risk_manager import RiskManager
+
+    # Verify bot belongs to user
+    repo = BotInstanceRepository()
+    instance = await repo.get_by_id(bot_id, payload.user_id)
+    if not instance:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Bot not found"
+        )
+
+    # Create temp risk manager to read historical stats
+    risk_manager = RiskManager(
+        user_id=payload.user_id,
+        bot_instance_id=bot_id,
+    )
+
+    summary = risk_manager.get_performance_summary(days=days)
+
+    return PerformanceResponse(**summary)

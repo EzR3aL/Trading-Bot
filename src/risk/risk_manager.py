@@ -89,6 +89,11 @@ class RiskManager:
     - Drawdown monitoring
     - Trade statistics tracking
     - Profit Lock-In (dynamic loss limits)
+
+    Multi-Tenant Support:
+    - Isolated stats per user_id and bot_instance_id
+    - Configurable limits per bot instance
+    - No cross-instance interference
     """
 
     def __init__(
@@ -100,6 +105,8 @@ class RiskManager:
         enable_profit_lock: bool = True,
         profit_lock_percent: float = 75.0,
         min_profit_floor: float = 0.5,
+        user_id: Optional[int] = None,
+        bot_instance_id: Optional[int] = None,
     ):
         """
         Initialize the risk manager.
@@ -109,17 +116,33 @@ class RiskManager:
             daily_loss_limit_percent: Maximum loss percentage before halting
             position_size_percent: Default position size as percentage of balance
             data_dir: Directory to store risk data
+            enable_profit_lock: Enable profit lock-in feature
+            profit_lock_percent: Percentage of profits to lock
+            min_profit_floor: Minimum profit floor percentage
+            user_id: User ID for multi-tenant isolation
+            bot_instance_id: Bot instance ID for isolation
         """
         self.max_trades = max_trades_per_day or settings.trading.max_trades_per_day
         self.daily_loss_limit = daily_loss_limit_percent or settings.trading.daily_loss_limit_percent
         self.position_size_pct = position_size_percent or settings.trading.position_size_percent
+
+        # Multi-tenant identification
+        self.user_id = user_id
+        self.bot_instance_id = bot_instance_id
 
         # Profit Lock-In settings
         self.enable_profit_lock = enable_profit_lock
         self.profit_lock_percent = profit_lock_percent  # Lock 75% of gains
         self.min_profit_floor = min_profit_floor  # Minimum profit to keep (0.5%)
 
-        self.data_dir = Path(data_dir)
+        # Set up isolated data directory for this bot instance
+        base_dir = Path(data_dir)
+        if user_id is not None and bot_instance_id is not None:
+            self.data_dir = base_dir / f"user_{user_id}" / f"bot_{bot_instance_id}"
+        elif user_id is not None:
+            self.data_dir = base_dir / f"user_{user_id}"
+        else:
+            self.data_dir = base_dir
         self.data_dir.mkdir(parents=True, exist_ok=True)
 
         self.trade_logger = TradeLogger()
@@ -546,4 +569,68 @@ class RiskManager:
             "average_daily_return": avg_return,
             "max_drawdown": max_dd,
             "sharpe_estimate": sharpe,
+        }
+
+    def get_config(self) -> Dict:
+        """
+        Get current risk configuration.
+
+        Returns:
+            Dictionary of risk configuration settings
+        """
+        return {
+            "user_id": self.user_id,
+            "bot_instance_id": self.bot_instance_id,
+            "max_trades_per_day": self.max_trades,
+            "daily_loss_limit_percent": self.daily_loss_limit,
+            "position_size_percent": self.position_size_pct,
+            "enable_profit_lock": self.enable_profit_lock,
+            "profit_lock_percent": self.profit_lock_percent,
+            "min_profit_floor": self.min_profit_floor,
+        }
+
+    def update_config(
+        self,
+        max_trades_per_day: Optional[int] = None,
+        daily_loss_limit_percent: Optional[float] = None,
+        position_size_percent: Optional[float] = None,
+    ) -> None:
+        """
+        Update risk configuration dynamically.
+
+        Args:
+            max_trades_per_day: New max trades limit
+            daily_loss_limit_percent: New daily loss limit
+            position_size_percent: New position size percentage
+        """
+        if max_trades_per_day is not None:
+            self.max_trades = max_trades_per_day
+            logger.info(f"Updated max_trades_per_day to {max_trades_per_day}")
+
+        if daily_loss_limit_percent is not None:
+            self.daily_loss_limit = daily_loss_limit_percent
+            logger.info(f"Updated daily_loss_limit_percent to {daily_loss_limit_percent}")
+
+        if position_size_percent is not None:
+            self.position_size_pct = position_size_percent
+            logger.info(f"Updated position_size_percent to {position_size_percent}")
+
+    def get_risk_status(self) -> Dict:
+        """
+        Get comprehensive risk status for API exposure.
+
+        Returns:
+            Dictionary with current risk status, limits, and stats
+        """
+        can_trade, reason = self.can_trade()
+        stats = self._daily_stats
+
+        return {
+            "can_trade": can_trade,
+            "reason": reason,
+            "config": self.get_config(),
+            "daily_stats": stats.to_dict() if stats else None,
+            "remaining_trades": self.get_remaining_trades(),
+            "remaining_risk_budget_percent": self.get_remaining_risk_budget(),
+            "dynamic_loss_limit_percent": self.get_dynamic_loss_limit(),
         }

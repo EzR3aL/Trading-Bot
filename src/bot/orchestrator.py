@@ -395,10 +395,13 @@ class MultiTenantOrchestrator:
         config = running.bot_instance.config
         credential = running.credential
 
-        # Create isolated risk manager
+        # Create isolated risk manager with user and bot identification
         running.risk_manager = RiskManager(
             max_trades_per_day=config.max_trades_per_day,
             daily_loss_limit_percent=config.daily_loss_limit_percent,
+            position_size_percent=config.position_size_percent,
+            user_id=running.bot_instance.user_id,
+            bot_instance_id=running.bot_instance.id,
         )
 
         # Create Bitget client with user's credentials

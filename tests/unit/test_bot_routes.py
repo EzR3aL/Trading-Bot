@@ -482,5 +482,90 @@ class TestBotStatus:
         assert data["trades_today"] == 0
 
 
+class TestBotRisk:
+    """Tests for bot risk management endpoints."""
+
+    def test_get_risk_stats_offline(self, client, auth_headers, credential_id):
+        """Test getting risk stats for a stopped bot."""
+        # Create bot with custom config
+        create_response = client.post(
+            "/api/bots",
+            headers=auth_headers,
+            json={
+                "name": "Risk Bot",
+                "credential_id": credential_id,
+                "config": {
+                    "max_trades_per_day": 5,
+                    "daily_loss_limit_percent": 3.0,
+                    "position_size_percent": 10.0
+                }
+            }
+        )
+        bot_id = create_response.json()["id"]
+
+        # Get risk stats
+        response = client.get(f"/api/bots/{bot_id}/risk", headers=auth_headers)
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["can_trade"] is False
+        assert "not running" in data["reason"].lower()
+        assert data["config"]["max_trades_per_day"] == 5
+        assert data["config"]["daily_loss_limit_percent"] == 3.0
+        assert data["remaining_trades"] == 5
+
+    def test_get_performance_summary(self, client, auth_headers, credential_id):
+        """Test getting performance summary."""
+        # Create bot
+        create_response = client.post(
+            "/api/bots",
+            headers=auth_headers,
+            json={
+                "name": "Performance Bot",
+                "credential_id": credential_id
+            }
+        )
+        bot_id = create_response.json()["id"]
+
+        # Get performance
+        response = client.get(f"/api/bots/{bot_id}/performance", headers=auth_headers)
+
+        assert response.status_code == 200
+        data = response.json()
+        assert "period_days" in data
+        assert "total_trades" in data
+        assert "win_rate" in data
+        assert data["total_trades"] == 0  # No trades yet
+
+    def test_risk_stats_not_accessible_to_other_users(self, client, auth_headers, credential_id):
+        """Test that users cannot access other users' risk stats."""
+        # Create bot as first user
+        create_response = client.post(
+            "/api/bots",
+            headers=auth_headers,
+            json={
+                "name": "Protected Risk Bot",
+                "credential_id": credential_id
+            }
+        )
+        bot_id = create_response.json()["id"]
+
+        # Create second user
+        client.post("/api/auth/register", json={
+            "username": "riskattacker",
+            "email": "riskattacker@example.com",
+            "password": "SecurePass123"
+        })
+        attacker_token = client.post("/api/auth/login", json={
+            "username": "riskattacker",
+            "password": "SecurePass123"
+        }).json()["access_token"]
+        attacker_headers = {"Authorization": f"Bearer {attacker_token}"}
+
+        # Attacker tries to access risk stats
+        response = client.get(f"/api/bots/{bot_id}/risk", headers=attacker_headers)
+        assert response.status_code == 404
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
