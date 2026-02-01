@@ -18,7 +18,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional, List, Dict, Any
 
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, Depends, Header, Request
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, Depends, Header, Request, Query
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -179,8 +179,9 @@ def create_app() -> FastAPI:
         return JSONResponse(content=health, status_code=status_code)
 
     @app.get("/api/status")
-    async def get_status():
-        """Get current bot status."""
+    @limiter.limit("30/minute")
+    async def get_status(request: Request, auth: bool = Depends(verify_api_key)):
+        """Get current bot status. Requires API key authentication."""
         daily_stats = app.state.risk_manager.get_daily_stats()
 
         return {
@@ -224,20 +225,24 @@ def create_app() -> FastAPI:
         }
 
     @app.get("/api/mode")
-    async def get_trading_mode():
-        """Get current trading mode."""
+    @limiter.limit("30/minute")
+    async def get_trading_mode(request: Request, auth: bool = Depends(verify_api_key)):
+        """Get current trading mode. Requires API key authentication."""
         return {
             "demo_mode": settings.is_demo_mode,
             "mode": "demo" if settings.is_demo_mode else "live"
         }
 
     @app.get("/api/trades")
+    @limiter.limit("30/minute")
     async def get_trades(
-        limit: int = 50,
-        status: Optional[str] = None,
-        symbol: Optional[str] = None
+        request: Request,
+        auth: bool = Depends(verify_api_key),
+        limit: int = Query(50, ge=1, le=500, description="Number of trades to return"),
+        status: Optional[str] = Query(None, regex="^(open|closed)?$", description="Filter by status"),
+        symbol: Optional[str] = Query(None, max_length=20, description="Filter by symbol")
     ):
-        """Get trade history."""
+        """Get trade history. Requires API key authentication."""
         if status == "open":
             trades = await app.state.trade_db.get_open_trades(symbol)
         else:
@@ -249,8 +254,9 @@ def create_app() -> FastAPI:
         }
 
     @app.get("/api/trades/{trade_id}")
-    async def get_trade(trade_id: int):
-        """Get single trade details."""
+    @limiter.limit("30/minute")
+    async def get_trade(request: Request, trade_id: int, auth: bool = Depends(verify_api_key)):
+        """Get single trade details. Requires API key authentication."""
         trade = await app.state.trade_db.get_trade(trade_id)
         if not trade:
             raise HTTPException(status_code=404, detail="Trade not found")
@@ -265,8 +271,13 @@ def create_app() -> FastAPI:
         }
 
     @app.get("/api/statistics")
-    async def get_statistics(days: int = 30):
-        """Get performance statistics."""
+    @limiter.limit("30/minute")
+    async def get_statistics(
+        request: Request,
+        auth: bool = Depends(verify_api_key),
+        days: int = Query(30, ge=1, le=365, description="Number of days to analyze")
+    ):
+        """Get performance statistics. Requires API key authentication."""
         stats = await app.state.trade_db.get_statistics(days)
         funding_stats = await app.state.funding_tracker.get_funding_stats(days=days)
 
@@ -283,8 +294,14 @@ def create_app() -> FastAPI:
         }
 
     @app.get("/api/funding")
-    async def get_funding(days: int = 30, symbol: Optional[str] = None):
-        """Get funding rate data."""
+    @limiter.limit("30/minute")
+    async def get_funding(
+        request: Request,
+        auth: bool = Depends(verify_api_key),
+        days: int = Query(30, ge=1, le=365, description="Number of days"),
+        symbol: Optional[str] = Query(None, max_length=20, description="Filter by symbol")
+    ):
+        """Get funding rate data. Requires API key authentication."""
         stats = await app.state.funding_tracker.get_funding_stats(symbol, days)
         daily_summary = await app.state.funding_tracker.get_daily_funding_summary(days)
         recent = await app.state.funding_tracker.get_recent_payments(50)
@@ -304,20 +321,32 @@ def create_app() -> FastAPI:
         }
 
     @app.get("/api/funding/history/{symbol}")
-    async def get_funding_history(symbol: str, days: int = 7):
-        """Get funding rate history for a symbol."""
+    @limiter.limit("30/minute")
+    async def get_funding_history(
+        request: Request,
+        symbol: str,
+        auth: bool = Depends(verify_api_key),
+        days: int = Query(7, ge=1, le=90, description="Number of days")
+    ):
+        """Get funding rate history for a symbol. Requires API key authentication."""
         history = await app.state.funding_tracker.get_funding_rate_history(symbol, days)
         return {"symbol": symbol, "history": history}
 
     @app.get("/api/performance/daily")
-    async def get_daily_performance(days: int = 30):
-        """Get daily performance breakdown."""
+    @limiter.limit("30/minute")
+    async def get_daily_performance(
+        request: Request,
+        auth: bool = Depends(verify_api_key),
+        days: int = Query(30, ge=1, le=365, description="Number of days")
+    ):
+        """Get daily performance breakdown. Requires API key authentication."""
         stats = app.state.risk_manager.get_historical_stats(days)
         return {"daily_stats": stats}
 
     @app.get("/api/config")
-    async def get_config():
-        """Get current configuration."""
+    @limiter.limit("30/minute")
+    async def get_config(request: Request, auth: bool = Depends(verify_api_key)):
+        """Get current configuration. Requires API key authentication."""
         return {
             "trading": {
                 "trading_pairs": settings.trading.trading_pairs,
@@ -670,23 +699,59 @@ def get_default_html() -> str:
             }
         }
 
-        // Toggle trading mode
+        // Toggle trading mode with enhanced security
         async function toggleMode() {
             const newMode = currentMode === 'demo' ? 'live' : 'demo';
+
             if (newMode === 'live') {
-                if (!confirm('WARNING: Switching to LIVE mode will execute REAL trades with REAL money. Are you sure?')) {
+                // First confirmation
+                if (!confirm('WARNING: You are about to switch to LIVE mode.\\n\\nThis will execute REAL trades with REAL money!\\n\\nAre you absolutely sure?')) {
+                    return;
+                }
+
+                // Second confirmation: User must type "Live"
+                const userInput = prompt(
+                    'SECURITY CHECK\\n\\n' +
+                    'To confirm switching to LIVE mode, please type the word "Live" exactly:\\n\\n' +
+                    '(This prevents accidental mode switches)'
+                );
+
+                if (userInput !== 'Live') {
+                    alert('Mode switch cancelled.\\n\\nYou must type "Live" exactly (case-sensitive) to confirm.');
+                    return;
+                }
+
+                // Final confirmation with countdown
+                let countdown = 5;
+                const countdownConfirm = confirm(
+                    'FINAL CONFIRMATION\\n\\n' +
+                    'You typed "Live" - switching to LIVE TRADING MODE.\\n\\n' +
+                    'This is your LAST CHANCE to cancel.\\n\\n' +
+                    'Click OK to proceed or Cancel to abort.'
+                );
+
+                if (!countdownConfirm) {
+                    alert('Mode switch cancelled.');
                     return;
                 }
             }
+
             try {
                 const response = await fetch('/api/mode/toggle', { method: 'POST' });
                 const data = await response.json();
                 if (data.success) {
                     updateModeUI(data.mode);
+                    if (data.mode === 'live') {
+                        alert('⚠️ LIVE MODE ACTIVATED\\n\\nThe bot will now execute REAL trades!');
+                    } else {
+                        alert('✅ DEMO MODE ACTIVATED\\n\\nNo real trades will be executed.');
+                    }
+                } else {
+                    alert('Failed to toggle mode: ' + (data.detail || 'Unknown error'));
                 }
             } catch (error) {
                 console.error('Error toggling mode:', error);
-                alert('Failed to toggle mode');
+                alert('Failed to toggle mode: ' + error.message);
             }
         }
 
@@ -739,7 +804,7 @@ def get_default_html() -> str:
                 // Funding
                 const funding = await fetch('/api/funding?days=30').then(r => r.json());
                 document.getElementById('net-funding').textContent = '$' + (funding.stats.net_funding || 0).toFixed(2);
-                document.getElementById('net-funding').className = 'stat-value ' + (funding.stats.net_funding <= 0 ? 'positive' : 'negative');
+                document.getElementById('net-funding').className = 'stat-value ' + (funding.stats.net_funding >= 0 ? 'positive' : 'negative');
 
                 // Update funding chart
                 if (funding.daily_summary && funding.daily_summary.length > 0) {
