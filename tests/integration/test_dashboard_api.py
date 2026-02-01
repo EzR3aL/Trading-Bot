@@ -87,11 +87,12 @@ def mock_tax():
 @pytest.fixture
 def client(mock_db, mock_rm, mock_ft, mock_tax):
     """Create test client with mocked components injected into app.state."""
-    # Patch the classes before importing create_app
+    # Enable dev mode for testing (bypasses API key requirement)
     with patch('src.dashboard.app.TradeDatabase', return_value=mock_db), \
          patch('src.dashboard.app.RiskManager', return_value=mock_rm), \
          patch('src.dashboard.app.FundingTracker', return_value=mock_ft), \
-         patch('src.dashboard.app.TaxReportGenerator', return_value=mock_tax):
+         patch('src.dashboard.app.TaxReportGenerator', return_value=mock_tax), \
+         patch('src.dashboard.app.DASHBOARD_DEV_MODE', True):
 
         from src.dashboard.app import create_app
         app = create_app()
@@ -215,11 +216,12 @@ class TestModeToggle:
 
     def test_mode_toggle_with_disabled_limiter(self, mock_db, mock_rm, mock_ft, mock_tax):
         """Mode toggle should work when rate limiter is disabled."""
-        # Create a separate client with disabled rate limiting
+        # Create a separate client with disabled rate limiting and dev mode
         with patch('src.dashboard.app.TradeDatabase', return_value=mock_db), \
              patch('src.dashboard.app.RiskManager', return_value=mock_rm), \
              patch('src.dashboard.app.FundingTracker', return_value=mock_ft), \
              patch('src.dashboard.app.TaxReportGenerator', return_value=mock_tax), \
+             patch('src.dashboard.app.DASHBOARD_DEV_MODE', True), \
              patch('src.dashboard.app.limiter') as mock_limiter:
 
             # Make the limiter a no-op

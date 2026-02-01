@@ -104,6 +104,11 @@ class TradeDatabase:
             return
 
         async with aiosqlite.connect(self.db_path) as db:
+            # Enable WAL mode for better concurrency
+            # WAL allows readers and writers to operate concurrently
+            await db.execute("PRAGMA journal_mode=WAL")
+            await db.execute("PRAGMA busy_timeout=5000")  # 5 second timeout for locks
+
             await db.execute("""
                 CREATE TABLE IF NOT EXISTS trades (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,

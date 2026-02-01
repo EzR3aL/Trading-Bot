@@ -348,11 +348,21 @@ In `.env` eintragen:
 DASHBOARD_API_KEY=dein_generierter_key_hier
 DASHBOARD_HOST=127.0.0.1
 DASHBOARD_PORT=8080
+
+# Development Mode (v1.10.0+)
+# ONLY set to true for local development without API key!
+# DASHBOARD_DEV_MODE=false
 ```
 
-**Mit API Key aktiv:**
-- Der Mode-Toggle erfordert den Header: `X-API-Key: dein_key`
-- Alle anderen Endpoints bleiben öffentlich (Read-Only)
+**Produktions-Betrieb (empfohlen):**
+- `DASHBOARD_API_KEY` setzen → alle Endpoints erfordern Auth
+- `DASHBOARD_DEV_MODE` nicht setzen oder auf `false`
+
+**Entwicklungs-Betrieb:**
+- `DASHBOARD_DEV_MODE=true` → Auth komplett deaktiviert
+- Nur für lokale Entwicklung verwenden!
+
+> **Sicherheitshinweis (v1.10.0):** Wenn weder API-Key noch DEV_MODE gesetzt sind, gibt das Dashboard einen 503-Fehler zurück statt stillschweigend Auth zu deaktivieren.
 
 ### Dashboard mit Docker
 

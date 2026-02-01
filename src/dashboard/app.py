@@ -49,16 +49,37 @@ limiter = Limiter(key_func=get_remote_address)
 # API Key for dashboard authentication
 DASHBOARD_API_KEY = os.getenv("DASHBOARD_API_KEY", "")
 
+# Explicit development mode flag - must be explicitly set to disable auth
+# This prevents accidental auth bypass when API key is not configured
+DASHBOARD_DEV_MODE = os.getenv("DASHBOARD_DEV_MODE", "false").lower() == "true"
+
+# Log warning at startup if dev mode is enabled
+if DASHBOARD_DEV_MODE:
+    logger.warning("=" * 60)
+    logger.warning("⚠️  DASHBOARD_DEV_MODE=true - Authentication DISABLED!")
+    logger.warning("⚠️  Do NOT use this in production!")
+    logger.warning("=" * 60)
+
 
 async def verify_api_key(x_api_key: str = Header(None, alias="X-API-Key")):
     """
     Verify API key for protected endpoints.
 
-    If DASHBOARD_API_KEY is not set, authentication is disabled (development mode).
+    Security behavior:
+    - If DASHBOARD_DEV_MODE=true: Auth disabled (with warning)
+    - If DASHBOARD_API_KEY is set: Requires valid API key
+    - If neither: Returns 503 (misconfiguration)
     """
-    if not DASHBOARD_API_KEY:
-        # No API key configured - allow access (development mode)
+    if DASHBOARD_DEV_MODE:
+        # Explicit dev mode - allow access (logged at startup)
         return True
+
+    if not DASHBOARD_API_KEY:
+        # No API key configured and not in dev mode = misconfiguration
+        raise HTTPException(
+            status_code=503,
+            detail="Dashboard not configured. Set DASHBOARD_API_KEY or DASHBOARD_DEV_MODE=true"
+        )
 
     if not x_api_key or not secrets.compare_digest(x_api_key, DASHBOARD_API_KEY):
         raise HTTPException(
@@ -75,7 +96,7 @@ def create_app() -> FastAPI:
     app = FastAPI(
         title="Bitget Trading Bot Dashboard",
         description="Real-time monitoring dashboard for the Contrarian Liquidation Hunter",
-        version="1.7.0"
+        version="1.10.0"
     )
 
     # Rate limiter
@@ -143,7 +164,7 @@ def create_app() -> FastAPI:
         health = {
             "status": "healthy",
             "timestamp": datetime.now().isoformat(),
-            "version": "1.7.0",
+            "version": "1.10.0",
             "components": {
                 "database": "unknown",
                 "risk_manager": "unknown",
@@ -451,7 +472,7 @@ def create_app() -> FastAPI:
         health = {
             "status": "healthy",
             "timestamp": datetime.now().isoformat(),
-            "version": "1.8.0",
+            "version": "1.10.0",
             "components": {
                 "database": "unknown",
                 "risk_manager": "unknown",
@@ -507,11 +528,32 @@ def create_app() -> FastAPI:
     # ==================== WEBSOCKET ====================
 
     async def verify_ws_token(websocket: WebSocket) -> bool:
-        """Verify WebSocket authentication token."""
+        """
+        Verify WebSocket authentication token.
+
+        Supports multiple authentication methods (in order of preference):
+        1. Sec-WebSocket-Protocol header with 'token.XXX' subprotocol
+        2. Query parameter ?token=XXX (legacy, less secure)
+        """
+        # Dev mode bypasses auth
+        if DASHBOARD_DEV_MODE:
+            return True
+
+        # No API key configured
         if not WS_AUTH_ENABLED:
             return True
 
-        # Check query parameter
+        # Method 1: Check Sec-WebSocket-Protocol header (preferred)
+        # Client sends: Sec-WebSocket-Protocol: token.YOUR_API_KEY
+        protocols = websocket.headers.get("sec-websocket-protocol", "")
+        for protocol in protocols.split(","):
+            protocol = protocol.strip()
+            if protocol.startswith("token."):
+                token = protocol[6:]  # Remove 'token.' prefix
+                if token and secrets.compare_digest(token, DASHBOARD_API_KEY):
+                    return True
+
+        # Method 2: Check query parameter (legacy fallback)
         token = websocket.query_params.get("token")
         if token and secrets.compare_digest(token, DASHBOARD_API_KEY):
             return True
@@ -524,9 +566,17 @@ def create_app() -> FastAPI:
         """
         WebSocket for real-time updates.
 
-        Authentication:
-        - If DASHBOARD_API_KEY is set, requires ?token=<api_key> query parameter
-        - If not set, authentication is disabled (development mode)
+        Authentication (in order of preference):
+        1. Sec-WebSocket-Protocol header: 'token.YOUR_API_KEY' (recommended)
+        2. Query parameter: ?token=YOUR_API_KEY (legacy, less secure)
+        3. DASHBOARD_DEV_MODE=true: No authentication required
+
+        Example JavaScript connection:
+            // Recommended: Header-based auth
+            new WebSocket(wsUrl, ['token.' + apiKey]);
+
+            // Legacy: URL parameter (token visible in logs)
+            new WebSocket(wsUrl + '?token=' + apiKey);
         """
         # Verify authentication
         if not await verify_ws_token(websocket):
@@ -534,7 +584,16 @@ def create_app() -> FastAPI:
             logger.warning("WebSocket connection rejected: Invalid or missing token")
             return
 
-        await websocket.accept()
+        # Accept with subprotocol if one was provided
+        subprotocol = None
+        protocols = websocket.headers.get("sec-websocket-protocol", "")
+        for protocol in protocols.split(","):
+            protocol = protocol.strip()
+            if protocol.startswith("token."):
+                subprotocol = protocol
+                break
+
+        await websocket.accept(subprotocol=subprotocol)
         app.state.websocket_clients.append(websocket)
         logger.info(f"WebSocket client connected (total: {len(app.state.websocket_clients)})")
 
@@ -1108,11 +1167,15 @@ def get_default_html() -> str:
         // WebSocket connection with authentication
         function connectWebSocket() {
             const apiKey = ''; // Will be empty in dev mode
-            const wsUrl = apiKey
-                ? `ws://${window.location.host}/ws?token=${apiKey}`
-                : `ws://${window.location.host}/ws`;
+            const wsUrl = `ws://${window.location.host}/ws`;
 
-            wsConnection = new WebSocket(wsUrl);
+            // Use subprotocol-based authentication (preferred, keeps token out of URLs/logs)
+            // Falls back to URL parameter for older implementations
+            if (apiKey) {
+                wsConnection = new WebSocket(wsUrl, ['token.' + apiKey]);
+            } else {
+                wsConnection = new WebSocket(wsUrl);
+            }
 
             wsConnection.onopen = function() {
                 console.log('WebSocket connected');

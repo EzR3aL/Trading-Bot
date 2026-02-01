@@ -86,6 +86,11 @@ class FundingTracker:
     async def initialize(self):
         """Initialize the database connection and create tables."""
         self._db = await aiosqlite.connect(self.db_path)
+
+        # Enable WAL mode for better concurrency
+        await self._db.execute("PRAGMA journal_mode=WAL")
+        await self._db.execute("PRAGMA busy_timeout=5000")  # 5 second timeout for locks
+
         await self._create_tables()
         logger.info("Funding tracker initialized")
 

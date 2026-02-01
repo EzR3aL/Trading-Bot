@@ -9,6 +9,103 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [1.10.0] - 2026-02-01
+
+### Hinzugefuegt
+
+#### Security Hardening v2
+- **Explizite DEV_MODE Variable** (`DASHBOARD_DEV_MODE`)
+  - Verhindert versehentlichen Auth-Bypass wenn API-Key vergessen wird
+  - Startup-Warnung bei aktiviertem Dev-Mode
+  - Bei fehlender Konfiguration: 503 Fehler statt stillschweigendem Bypass
+
+- **WebSocket Header-basierte Authentifizierung**
+  - Neuer Auth-Mechanismus via `Sec-WebSocket-Protocol: token.XXX`
+  - Token nicht mehr in URL sichtbar (keine Log-Leakage)
+  - Legacy URL-Parameter weiterhin unterstützt
+  - JavaScript-Client aktualisiert für neue Auth-Methode
+
+#### Performance & Stabilität
+- **SQLite WAL-Mode** für bessere Concurrency
+  - Write-Ahead Logging aktiviert in TradeDatabase und FundingTracker
+  - `PRAGMA busy_timeout=5000` für Lock-Handling
+  - Verhindert "database is locked" Fehler unter Last
+
+### Geaendert
+
+- **Dashboard Auth** (`src/dashboard/app.py`):
+  - Neue Umgebungsvariable `DASHBOARD_DEV_MODE`
+  - Bessere Fehlermeldungen bei Konfigurationsproblemen
+  - WebSocket akzeptiert beide Auth-Methoden (Header + URL)
+
+- **Tests**: Integration Tests patchen jetzt `DASHBOARD_DEV_MODE`
+
+### Sicherheit
+
+| Vorher | Nachher |
+|--------|---------|
+| Kein API-Key = Auth deaktiviert | Kein API-Key + kein DEV_MODE = 503 Fehler |
+| WebSocket Token in URL (log-sichtbar) | WebSocket Token in Header (sicher) |
+| SQLite ohne WAL (Locking-Probleme) | SQLite mit WAL (bessere Concurrency) |
+
+### Konfiguration
+
+Neue Umgebungsvariablen in `.env`:
+
+```bash
+# Development Mode (ONLY for local development!)
+DASHBOARD_DEV_MODE=false
+
+# Production: Always set API key
+DASHBOARD_API_KEY=your-secure-api-key
+```
+
+---
+
+## [1.9.0] - 2026-02-01
+
+### Hinzugefuegt
+
+#### Circuit Breaker & Retry Logic
+Robuste Fehlerbehandlung für externe API-Aufrufe:
+
+- **Circuit Breaker** (`src/utils/circuit_breaker.py`)
+  - States: CLOSED → OPEN → HALF_OPEN → CLOSED
+  - Automatische Erholung nach Timeout
+  - Registry für mehrere Breaker (Bitget, Binance, etc.)
+  - Decorator-basierte API: `@with_circuit_breaker("service_name")`
+
+- **Retry mit Exponential Backoff**
+  - tenacity-basiert
+  - Konfigurierbare Wartezeiten und Versuche
+  - Kombinierbar mit Circuit Breaker
+
+- **Health Monitoring**
+  - `/api/health/detailed` Endpoint
+  - Circuit Breaker Status im Dashboard
+  - Degraded-Status bei API-Ausfällen
+
+#### Dashboard Erweiterungen
+- **API Status Card**: Echtzeit-Status aller Komponenten
+- **Error/Warning Banners**: Automatische Anzeige bei Problemen
+- **Health Modal**: Detaillierte Systeminfo per Klick
+
+### Test Suite
+- **57 Unit Tests** für LiquidationHunter und RiskManager
+- **15 Integration Tests** für Dashboard API
+- Alle Tests bestehen (72 total)
+
+### Technische Details
+
+| Feature | Implementation |
+|---------|----------------|
+| Circuit Breaker | 3 States, konfigurierbarer Threshold |
+| Retry | tenacity mit exponential backoff |
+| Tests | pytest + pytest-asyncio |
+| Coverage | LiquidationHunter, RiskManager, Dashboard API |
+
+---
+
 ## [1.8.0] - 2026-01-31
 
 ### Hinzugefuegt
