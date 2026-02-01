@@ -95,8 +95,8 @@ def neutral_metrics(mock_market_metrics):
 def crowded_longs_extreme_greed(mock_market_metrics):
     """Crowded longs + extreme greed = Strong SHORT signal."""
     return mock_market_metrics(
-        fear_greed_index=85,  # Extreme greed (>75)
-        long_short_ratio=2.5,  # Crowded longs (>2.0)
+        fear_greed_index=85,  # Extreme greed (>80)
+        long_short_ratio=2.6,  # Crowded longs (>2.5)
         funding_rate_btc=0.001,  # High funding (expensive to long)
         btc_price=95000.0,
         btc_24h_change_percent=5.0,
@@ -119,8 +119,8 @@ def crowded_shorts_extreme_fear(mock_market_metrics):
 def conflicting_signals(mock_market_metrics):
     """Leverage says SHORT, sentiment says LONG = Follow leverage."""
     return mock_market_metrics(
-        fear_greed_index=20,  # Extreme fear (suggests LONG)
-        long_short_ratio=2.5,  # Crowded longs (suggests SHORT)
+        fear_greed_index=15,  # Extreme fear (<20, suggests LONG)
+        long_short_ratio=2.7,  # Crowded longs (>2.5, suggests SHORT)
         funding_rate_btc=0.0001,
         btc_price=90000.0,
         btc_24h_change_percent=-2.0,

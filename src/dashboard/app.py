@@ -708,6 +708,57 @@ def get_default_html() -> str:
             </div>
         </div>
 
+        <!-- API Status Card -->
+        <div class="card mb-6">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-lg font-semibold">🔌 API & System Status</h2>
+                <button onclick="refreshApiStatus()" class="text-sm text-indigo-600 hover:text-indigo-800">↻ Refresh</button>
+            </div>
+            <div id="api-status-grid" class="grid grid-cols-2 md:grid-cols-5 gap-4">
+                <!-- Bot Status -->
+                <div class="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
+                    <span id="bot-status-icon" class="text-2xl">🤖</span>
+                    <div>
+                        <div class="text-sm font-medium">Trading Bot</div>
+                        <div id="bot-status-text" class="text-xs text-green-600">Running</div>
+                    </div>
+                </div>
+                <!-- Bitget API -->
+                <div class="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
+                    <span id="bitget-status-icon" class="text-2xl">📊</span>
+                    <div>
+                        <div class="text-sm font-medium">Bitget API</div>
+                        <div id="bitget-status-text" class="text-xs text-gray-500">Checking...</div>
+                    </div>
+                </div>
+                <!-- Binance API -->
+                <div class="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
+                    <span id="binance-status-icon" class="text-2xl">📈</span>
+                    <div>
+                        <div class="text-sm font-medium">Binance Data</div>
+                        <div id="binance-status-text" class="text-xs text-gray-500">Checking...</div>
+                    </div>
+                </div>
+                <!-- Fear & Greed API -->
+                <div class="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
+                    <span id="fng-status-icon" class="text-2xl">😰</span>
+                    <div>
+                        <div class="text-sm font-medium">Fear & Greed</div>
+                        <div id="fng-status-text" class="text-xs text-gray-500">Checking...</div>
+                    </div>
+                </div>
+                <!-- Database -->
+                <div class="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
+                    <span id="db-status-icon" class="text-2xl">💾</span>
+                    <div>
+                        <div class="text-sm font-medium">Database</div>
+                        <div id="db-status-text" class="text-xs text-gray-500">Checking...</div>
+                    </div>
+                </div>
+            </div>
+            <div id="api-last-update" class="text-xs text-gray-400 mt-3 text-right">Last updated: --</div>
+        </div>
+
         <!-- Charts Row -->
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
             <div class="card">
@@ -977,6 +1028,81 @@ def get_default_html() -> str:
 
         function closeHealthModal() {
             document.getElementById('health-modal').classList.add('hidden');
+        }
+
+        // API Status Card update
+        async function refreshApiStatus() {
+            try {
+                const response = await fetch('/api/health/detailed');
+                const data = await response.json();
+
+                // Update Bot status
+                updateStatusItem('bot', data.status === 'healthy' ? 'online' : (data.status === 'degraded' ? 'degraded' : 'offline'),
+                    data.status === 'healthy' ? 'Running' : (data.status === 'degraded' ? 'Degraded' : 'Offline'));
+
+                // Update Database status
+                const dbStatus = data.components?.database;
+                updateStatusItem('db', dbStatus === 'healthy' ? 'online' : 'offline',
+                    dbStatus === 'healthy' ? 'Connected' : 'Error');
+
+                // Update Bitget API status
+                const bitgetCB = data.circuit_breakers?.bitget_api;
+                if (bitgetCB) {
+                    const bitgetState = bitgetCB.state;
+                    updateStatusItem('bitget',
+                        bitgetState === 'closed' ? 'online' : (bitgetState === 'half_open' ? 'degraded' : 'offline'),
+                        bitgetState === 'closed' ? 'Connected' : (bitgetState === 'half_open' ? 'Recovering' : 'Unavailable'));
+                } else {
+                    updateStatusItem('bitget', 'online', 'Connected');
+                }
+
+                // Update Binance API status
+                const binanceCB = data.circuit_breakers?.binance_api;
+                if (binanceCB) {
+                    const binanceState = binanceCB.state;
+                    updateStatusItem('binance',
+                        binanceState === 'closed' ? 'online' : (binanceState === 'half_open' ? 'degraded' : 'offline'),
+                        binanceState === 'closed' ? 'Connected' : (binanceState === 'half_open' ? 'Recovering' : 'Unavailable'));
+                } else {
+                    updateStatusItem('binance', 'online', 'Connected');
+                }
+
+                // Update Fear & Greed API status
+                const fngCB = data.circuit_breakers?.alternative_me_api;
+                if (fngCB) {
+                    const fngState = fngCB.state;
+                    updateStatusItem('fng',
+                        fngState === 'closed' ? 'online' : (fngState === 'half_open' ? 'degraded' : 'offline'),
+                        fngState === 'closed' ? 'Connected' : (fngState === 'half_open' ? 'Recovering' : 'Unavailable'));
+                } else {
+                    updateStatusItem('fng', 'online', 'Connected');
+                }
+
+                // Update last update time
+                document.getElementById('api-last-update').textContent =
+                    'Last updated: ' + new Date().toLocaleTimeString();
+
+            } catch (error) {
+                console.error('Failed to refresh API status:', error);
+                updateStatusItem('bot', 'offline', 'Connection Error');
+            }
+        }
+
+        function updateStatusItem(id, status, text) {
+            const iconEl = document.getElementById(id + '-status-icon');
+            const textEl = document.getElementById(id + '-status-text');
+
+            // Set status text
+            textEl.textContent = text;
+
+            // Set status color
+            if (status === 'online') {
+                textEl.className = 'text-xs text-green-600 font-medium';
+            } else if (status === 'degraded') {
+                textEl.className = 'text-xs text-yellow-600 font-medium';
+            } else {
+                textEl.className = 'text-xs text-red-600 font-medium';
+            }
         }
 
         // WebSocket connection with authentication
@@ -1475,11 +1601,15 @@ def get_default_html() -> str:
             connectWebSocket(); // Start WebSocket connection
             setInterval(updateDashboard, 10000); // Update every 10 seconds
 
-            // Initial health check
+            // Initial health check and API status
             fetch('/api/health/detailed')
                 .then(r => r.json())
                 .then(data => updateHealthIndicator(data))
                 .catch(err => console.error('Health check failed:', err));
+
+            // Initial API status update and refresh every 30 seconds
+            refreshApiStatus();
+            setInterval(refreshApiStatus, 30000);
         });
     </script>
 </body>

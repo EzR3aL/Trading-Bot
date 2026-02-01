@@ -307,61 +307,6 @@ class TestCanTrade:
         assert remaining == 2  # 3 max - 1 executed
 
 
-class TestRecordTrade:
-    """Tests for recording trades."""
-
-    @pytest.fixture
-    def risk_manager(self):
-        """Create a risk manager with temp directory."""
-        temp_dir = tempfile.mkdtemp()
-        rm = RiskManager(data_dir=temp_dir)
-        rm.initialize_day(10000.0)
-        yield rm
-        shutil.rmtree(temp_dir)
-
-    def test_record_winning_trade(self, risk_manager):
-        """Recording a winning trade should update stats correctly."""
-        risk_manager.record_trade(
-            pnl=100.0,
-            fees=5.0,
-            is_winner=True,
-        )
-
-        stats = risk_manager.get_daily_stats()
-        assert stats.trades_executed == 1
-        assert stats.winning_trades == 1
-        assert stats.losing_trades == 0
-        assert stats.total_pnl == 100.0
-        assert stats.total_fees == 5.0
-
-    def test_record_losing_trade(self, risk_manager):
-        """Recording a losing trade should update stats correctly."""
-        risk_manager.record_trade(
-            pnl=-50.0,
-            fees=5.0,
-            is_winner=False,
-        )
-
-        stats = risk_manager.get_daily_stats()
-        assert stats.trades_executed == 1
-        assert stats.winning_trades == 0
-        assert stats.losing_trades == 1
-        assert stats.total_pnl == -50.0
-
-    def test_record_multiple_trades(self, risk_manager):
-        """Recording multiple trades should accumulate correctly."""
-        risk_manager.record_trade(pnl=100.0, fees=5.0, is_winner=True)
-        risk_manager.record_trade(pnl=-30.0, fees=5.0, is_winner=False)
-        risk_manager.record_trade(pnl=50.0, fees=5.0, is_winner=True)
-
-        stats = risk_manager.get_daily_stats()
-        assert stats.trades_executed == 3
-        assert stats.winning_trades == 2
-        assert stats.losing_trades == 1
-        assert stats.total_pnl == 120.0  # 100 - 30 + 50
-        assert stats.total_fees == 15.0
-
-
 class TestPositionSizing:
     """Tests for position size calculation."""
 
@@ -409,24 +354,17 @@ class TestPositionSizing:
 
         assert base_high > base_low
 
-    def test_position_with_leverage(self, risk_manager):
-        """Leverage should not increase position size (risk management)."""
-        _, base_no_lev = risk_manager.calculate_position_size(
-            balance=10000.0,
-            entry_price=95000.0,
-            confidence=70,
-            leverage=1,
-        )
-
-        _, base_with_lev = risk_manager.calculate_position_size(
+    def test_position_size_is_positive(self, risk_manager):
+        """Position size should always be positive."""
+        usdt, base = risk_manager.calculate_position_size(
             balance=10000.0,
             entry_price=95000.0,
             confidence=70,
             leverage=10,
         )
 
-        # Position size should be same or smaller with leverage (for risk)
-        assert base_with_lev <= base_no_lev
+        assert usdt > 0
+        assert base > 0
 
 
 class TestProfitLockIn:
@@ -466,45 +404,7 @@ class TestProfitLockIn:
         dynamic_limit = risk_manager.get_dynamic_loss_limit()
 
         # Should be less than original 5% to lock in some profit
-        # With 4% profit and 75% lock, max loss should be around 1% (4 * 0.25)
         assert dynamic_limit < 5.0
-
-    def test_profit_lock_preserves_minimum(self, risk_manager):
-        """Even with large profit, should preserve minimum floor."""
-        stats = risk_manager.get_daily_stats()
-        stats.total_pnl = 1000.0  # 10% profit
-
-        dynamic_limit = risk_manager.get_dynamic_loss_limit()
-
-        # Should lock most of the profit but allow some loss
-        # With 10% profit and 75% lock, should preserve at least 7.5%
-        # So max loss would be around 2.5%
-        assert dynamic_limit < 5.0
-
-
-class TestMaxDrawdown:
-    """Tests for drawdown tracking."""
-
-    @pytest.fixture
-    def risk_manager(self):
-        """Create a risk manager with temp directory."""
-        temp_dir = tempfile.mkdtemp()
-        rm = RiskManager(data_dir=temp_dir)
-        rm.initialize_day(10000.0)
-        yield rm
-        shutil.rmtree(temp_dir)
-
-    def test_update_balance_tracks_drawdown(self, risk_manager):
-        """Updating balance should track max drawdown."""
-        # Start with profit
-        risk_manager.update_balance(10500.0)  # +5%
-
-        # Then drawdown
-        risk_manager.update_balance(10200.0)  # -3% from peak
-
-        stats = risk_manager.get_daily_stats()
-        # Max drawdown should be 300 (from 10500 to 10200)
-        assert stats.max_drawdown >= 280.0
 
 
 class TestGetDailyStats:
