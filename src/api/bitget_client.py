@@ -8,6 +8,7 @@ import time
 import hmac
 import hashlib
 import base64
+import asyncio
 from typing import Optional, Dict, Any, Literal
 from datetime import datetime
 
@@ -15,8 +16,16 @@ import aiohttp
 
 from config import settings
 from src.utils.logger import get_logger
+from src.utils.circuit_breaker import (
+    circuit_registry,
+    CircuitBreakerError,
+    with_retry,
+)
 
 logger = get_logger(__name__)
+
+# Circuit breaker for Bitget API
+_bitget_breaker = circuit_registry.get("bitget_api", fail_threshold=5, reset_timeout=60)
 
 
 class BitgetClientError(Exception):
@@ -133,8 +142,30 @@ class BitgetClient:
         params: Optional[Dict] = None,
         data: Optional[Dict] = None,
         auth: bool = True,
+        use_circuit_breaker: bool = True,
     ) -> Dict[str, Any]:
-        """Make an API request to Bitget."""
+        """Make an API request to Bitget with circuit breaker protection."""
+        if use_circuit_breaker:
+            async def _do_request():
+                return await self._raw_request(method, endpoint, params, data, auth)
+            try:
+                return await _bitget_breaker.call(_do_request)
+            except CircuitBreakerError as e:
+                logger.warning(f"Bitget API circuit breaker open: {e}")
+                raise BitgetClientError(f"API temporarily unavailable: {e}")
+        else:
+            return await self._raw_request(method, endpoint, params, data, auth)
+
+    @with_retry(max_attempts=3, min_wait=1.0, max_wait=10.0, retry_on=(aiohttp.ClientError, asyncio.TimeoutError))
+    async def _raw_request(
+        self,
+        method: str,
+        endpoint: str,
+        params: Optional[Dict] = None,
+        data: Optional[Dict] = None,
+        auth: bool = True,
+    ) -> Dict[str, Any]:
+        """Make a raw API request to Bitget with retry logic."""
         await self._ensure_session()
 
         url = f"{self.base_url}{endpoint}"
@@ -158,8 +189,19 @@ class BitgetClient:
                 url=url,
                 headers=headers,
                 data=body if body else None,
+                timeout=aiohttp.ClientTimeout(total=15),
             ) as response:
                 result = await response.json()
+
+                # Rate limiting - raise to trigger retry
+                if response.status == 429:
+                    logger.warning("Bitget API rate limited, will retry...")
+                    raise aiohttp.ClientResponseError(
+                        response.request_info,
+                        response.history,
+                        status=429,
+                        message="Rate limited"
+                    )
 
                 if response.status != 200:
                     logger.error(f"API Error: {response.status} - {result}")
@@ -173,7 +215,10 @@ class BitgetClient:
 
         except aiohttp.ClientError as e:
             logger.error(f"HTTP Error: {e}")
-            raise BitgetClientError(f"HTTP Error: {e}")
+            raise  # Re-raise for retry/circuit breaker
+        except asyncio.TimeoutError:
+            logger.error(f"Request timeout for {endpoint}")
+            raise  # Re-raise for retry/circuit breaker
 
     # ==================== Account Methods ====================
 

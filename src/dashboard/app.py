@@ -32,9 +32,13 @@ from src.models.trade_database import TradeDatabase
 from src.risk.risk_manager import RiskManager
 from src.data.funding_tracker import FundingTracker
 from src.dashboard.tax_report import TaxReportGenerator
+from src.utils.circuit_breaker import circuit_registry
 from config import settings
 
 logger = get_logger(__name__)
+
+# WebSocket authentication token (optional, uses same key as API)
+WS_AUTH_ENABLED = bool(os.getenv("DASHBOARD_API_KEY", ""))
 
 # Dashboard directory
 DASHBOARD_DIR = Path(__file__).parent
@@ -434,22 +438,136 @@ def create_app() -> FastAPI:
             }
         )
 
+    # ==================== HEALTH & CIRCUIT BREAKER STATUS ====================
+
+    @app.get("/api/health/detailed")
+    @limiter.limit("30/minute")
+    async def get_detailed_health(request: Request, auth: bool = Depends(verify_api_key)):
+        """
+        Get detailed health status including circuit breaker states.
+        Requires API key authentication.
+        """
+        # Get basic health
+        health = {
+            "status": "healthy",
+            "timestamp": datetime.now().isoformat(),
+            "version": "1.8.0",
+            "components": {
+                "database": "unknown",
+                "risk_manager": "unknown",
+                "funding_tracker": "unknown",
+            },
+            "circuit_breakers": {},
+            "errors": []
+        }
+
+        # Check database
+        try:
+            if app.state.trade_db:
+                await app.state.trade_db.get_statistics(1)
+                health["components"]["database"] = "healthy"
+        except Exception as e:
+            health["components"]["database"] = f"unhealthy: {str(e)}"
+            health["status"] = "degraded"
+            health["errors"].append({"component": "database", "error": str(e)})
+
+        # Check risk manager
+        try:
+            if app.state.risk_manager:
+                app.state.risk_manager.get_daily_stats()
+                health["components"]["risk_manager"] = "healthy"
+        except Exception as e:
+            health["components"]["risk_manager"] = f"unhealthy: {str(e)}"
+            health["status"] = "degraded"
+            health["errors"].append({"component": "risk_manager", "error": str(e)})
+
+        # Check funding tracker
+        try:
+            if app.state.funding_tracker:
+                health["components"]["funding_tracker"] = "healthy"
+        except Exception as e:
+            health["components"]["funding_tracker"] = f"unhealthy: {str(e)}"
+            health["status"] = "degraded"
+            health["errors"].append({"component": "funding_tracker", "error": str(e)})
+
+        # Get circuit breaker statuses
+        health["circuit_breakers"] = circuit_registry.get_all_statuses()
+
+        # Check if any circuit breakers are open
+        for name, breaker_status in health["circuit_breakers"].items():
+            if breaker_status.get("state") == "open":
+                health["status"] = "degraded"
+                health["errors"].append({
+                    "component": f"circuit_breaker:{name}",
+                    "error": f"Circuit breaker {name} is OPEN - API temporarily unavailable"
+                })
+
+        return health
+
     # ==================== WEBSOCKET ====================
+
+    async def verify_ws_token(websocket: WebSocket) -> bool:
+        """Verify WebSocket authentication token."""
+        if not WS_AUTH_ENABLED:
+            return True
+
+        # Check query parameter
+        token = websocket.query_params.get("token")
+        if token and secrets.compare_digest(token, DASHBOARD_API_KEY):
+            return True
+
+        # Reject unauthenticated connection
+        return False
 
     @app.websocket("/ws")
     async def websocket_endpoint(websocket: WebSocket):
-        """WebSocket for real-time updates."""
+        """
+        WebSocket for real-time updates.
+
+        Authentication:
+        - If DASHBOARD_API_KEY is set, requires ?token=<api_key> query parameter
+        - If not set, authentication is disabled (development mode)
+        """
+        # Verify authentication
+        if not await verify_ws_token(websocket):
+            await websocket.close(code=4001, reason="Authentication required")
+            logger.warning("WebSocket connection rejected: Invalid or missing token")
+            return
+
         await websocket.accept()
         app.state.websocket_clients.append(websocket)
+        logger.info(f"WebSocket client connected (total: {len(app.state.websocket_clients)})")
 
         try:
             while True:
-                # Send status update every 5 seconds
-                status = await get_status()
-                await websocket.send_json({"type": "status", "data": status})
+                # Build status update with health info
+                daily_stats = app.state.risk_manager.get_daily_stats()
+
+                # Get circuit breaker status
+                circuit_status = circuit_registry.get_all_statuses()
+                has_api_issues = any(
+                    s.get("state") == "open" for s in circuit_status.values()
+                )
+
+                status_data = {
+                    "status": "running",
+                    "timestamp": datetime.now().isoformat(),
+                    "demo_mode": settings.is_demo_mode,
+                    "daily_stats": daily_stats.to_dict() if daily_stats else None,
+                    "can_trade": app.state.risk_manager.can_trade()[0],
+                    "remaining_trades": app.state.risk_manager.get_remaining_trades(),
+                    "health": {
+                        "has_api_issues": has_api_issues,
+                        "circuit_breakers": circuit_status
+                    }
+                }
+
+                await websocket.send_json({"type": "status", "data": status_data})
                 await asyncio.sleep(5)
         except WebSocketDisconnect:
-            app.state.websocket_clients.remove(websocket)
+            if websocket in app.state.websocket_clients:
+                app.state.websocket_clients.remove(websocket)
+            logger.info(f"WebSocket client disconnected (remaining: {len(app.state.websocket_clients)})")
 
     # ==================== WEB INTERFACE ====================
 
@@ -508,10 +626,43 @@ def get_default_html() -> str:
     </style>
 </head>
 <body class="bg-gray-100 min-h-screen">
+    <!-- Error Banner (hidden by default) -->
+    <div id="error-banner" class="hidden bg-red-600 text-white p-3 shadow-lg">
+        <div class="container mx-auto flex justify-between items-center">
+            <div class="flex items-center gap-3">
+                <span class="text-xl">⚠️</span>
+                <div>
+                    <strong id="error-title">API Connection Issue</strong>
+                    <p id="error-message" class="text-sm opacity-90">Some external APIs are temporarily unavailable.</p>
+                </div>
+            </div>
+            <button onclick="dismissError()" class="px-3 py-1 bg-red-700 hover:bg-red-800 rounded text-sm">Dismiss</button>
+        </div>
+    </div>
+
+    <!-- Warning Banner (hidden by default) -->
+    <div id="warning-banner" class="hidden bg-yellow-500 text-yellow-900 p-3 shadow-lg">
+        <div class="container mx-auto flex justify-between items-center">
+            <div class="flex items-center gap-3">
+                <span class="text-xl">⚡</span>
+                <div>
+                    <strong id="warning-title">Degraded Performance</strong>
+                    <p id="warning-message" class="text-sm">Some features may be temporarily limited.</p>
+                </div>
+            </div>
+            <button onclick="dismissWarning()" class="px-3 py-1 bg-yellow-600 hover:bg-yellow-700 rounded text-sm text-white">Dismiss</button>
+        </div>
+    </div>
+
     <nav class="bg-indigo-600 text-white p-4 shadow-lg">
         <div class="container mx-auto flex justify-between items-center">
             <h1 class="text-xl font-bold">Bitget Trading Bot</h1>
             <div class="flex items-center gap-4">
+                <!-- Health Status Indicator -->
+                <div id="health-status" class="flex items-center gap-2 cursor-pointer" onclick="showHealthDetails()" title="Click for details">
+                    <span id="health-icon" class="text-lg">🟢</span>
+                    <span id="health-text" class="text-sm hidden md:inline">Healthy</span>
+                </div>
                 <div class="flex items-center gap-2">
                     <span class="text-sm">Mode:</span>
                     <button id="mode-toggle" onclick="toggleMode()" class="px-3 py-1 rounded-full text-sm font-semibold transition-all duration-200 cursor-pointer hover:opacity-80">
@@ -522,6 +673,19 @@ def get_default_html() -> str:
             </div>
         </div>
     </nav>
+
+    <!-- Health Details Modal (hidden by default) -->
+    <div id="health-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div class="bg-white rounded-lg p-6 max-w-lg w-full mx-4 max-h-96 overflow-y-auto">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-lg font-bold">System Health Status</h2>
+                <button onclick="closeHealthModal()" class="text-gray-500 hover:text-gray-700 text-xl">&times;</button>
+            </div>
+            <div id="health-details" class="space-y-4">
+                <p class="text-gray-500">Loading...</p>
+            </div>
+        </div>
+    </div>
 
     <div class="container mx-auto p-6">
         <!-- Stats Overview -->
@@ -685,6 +849,213 @@ def get_default_html() -> str:
         // Charts
         let equityChart, fundingChart;
         let currentMode = 'demo';
+        let wsConnection = null;
+        let wsReconnectAttempts = 0;
+        let healthStatus = { status: 'unknown', errors: [] };
+
+        // Error/Warning banner management
+        function showErrorBanner(title, message) {
+            document.getElementById('error-title').textContent = title;
+            document.getElementById('error-message').textContent = message;
+            document.getElementById('error-banner').classList.remove('hidden');
+        }
+
+        function dismissError() {
+            document.getElementById('error-banner').classList.add('hidden');
+        }
+
+        function showWarningBanner(title, message) {
+            document.getElementById('warning-title').textContent = title;
+            document.getElementById('warning-message').textContent = message;
+            document.getElementById('warning-banner').classList.remove('hidden');
+        }
+
+        function dismissWarning() {
+            document.getElementById('warning-banner').classList.add('hidden');
+        }
+
+        // Health status management
+        function updateHealthIndicator(status) {
+            const icon = document.getElementById('health-icon');
+            const text = document.getElementById('health-text');
+
+            if (status.status === 'healthy') {
+                icon.textContent = '🟢';
+                text.textContent = 'Healthy';
+                text.className = 'text-sm hidden md:inline text-green-200';
+                dismissError();
+                dismissWarning();
+            } else if (status.status === 'degraded') {
+                icon.textContent = '🟡';
+                text.textContent = 'Degraded';
+                text.className = 'text-sm hidden md:inline text-yellow-200';
+
+                // Show warning if circuit breakers are open
+                if (status.errors && status.errors.length > 0) {
+                    const cbErrors = status.errors.filter(e => e.component.startsWith('circuit_breaker:'));
+                    if (cbErrors.length > 0) {
+                        showWarningBanner(
+                            'External API Issues',
+                            cbErrors.map(e => e.error).join('; ')
+                        );
+                    }
+                }
+            } else if (status.status === 'unhealthy') {
+                icon.textContent = '🔴';
+                text.textContent = 'Unhealthy';
+                text.className = 'text-sm hidden md:inline text-red-200';
+                showErrorBanner('System Error', 'Critical components are unavailable. Trading may be affected.');
+            }
+
+            healthStatus = status;
+        }
+
+        // Show health details modal
+        async function showHealthDetails() {
+            document.getElementById('health-modal').classList.remove('hidden');
+
+            try {
+                const response = await fetch('/api/health/detailed');
+                const data = await response.json();
+
+                let html = '';
+
+                // Components
+                html += '<div class="border-b pb-3 mb-3">';
+                html += '<h3 class="font-semibold mb-2">Components</h3>';
+                for (const [name, status] of Object.entries(data.components)) {
+                    const isHealthy = status === 'healthy';
+                    html += `<div class="flex justify-between items-center py-1">
+                        <span class="text-gray-700">${name}</span>
+                        <span class="${isHealthy ? 'text-green-600' : 'text-red-600'}">${status}</span>
+                    </div>`;
+                }
+                html += '</div>';
+
+                // Circuit Breakers
+                if (Object.keys(data.circuit_breakers).length > 0) {
+                    html += '<div class="border-b pb-3 mb-3">';
+                    html += '<h3 class="font-semibold mb-2">External APIs (Circuit Breakers)</h3>';
+                    for (const [name, breaker] of Object.entries(data.circuit_breakers)) {
+                        const state = breaker.state;
+                        let stateColor = 'text-green-600';
+                        let stateIcon = '✓';
+                        if (state === 'open') {
+                            stateColor = 'text-red-600';
+                            stateIcon = '✗';
+                        } else if (state === 'half_open') {
+                            stateColor = 'text-yellow-600';
+                            stateIcon = '~';
+                        }
+                        html += `<div class="flex justify-between items-center py-1">
+                            <span class="text-gray-700">${name}</span>
+                            <span class="${stateColor}">${stateIcon} ${state} (${breaker.stats.success_rate.toFixed(0)}% success)</span>
+                        </div>`;
+                    }
+                    html += '</div>';
+                }
+
+                // Errors
+                if (data.errors && data.errors.length > 0) {
+                    html += '<div>';
+                    html += '<h3 class="font-semibold mb-2 text-red-600">Active Issues</h3>';
+                    for (const error of data.errors) {
+                        html += `<div class="bg-red-50 p-2 rounded mb-2">
+                            <strong class="text-red-700">${error.component}</strong>
+                            <p class="text-sm text-red-600">${error.error}</p>
+                        </div>`;
+                    }
+                    html += '</div>';
+                }
+
+                document.getElementById('health-details').innerHTML = html;
+            } catch (error) {
+                document.getElementById('health-details').innerHTML =
+                    '<p class="text-red-500">Failed to load health details: ' + error.message + '</p>';
+            }
+        }
+
+        function closeHealthModal() {
+            document.getElementById('health-modal').classList.add('hidden');
+        }
+
+        // WebSocket connection with authentication
+        function connectWebSocket() {
+            const apiKey = ''; // Will be empty in dev mode
+            const wsUrl = apiKey
+                ? `ws://${window.location.host}/ws?token=${apiKey}`
+                : `ws://${window.location.host}/ws`;
+
+            wsConnection = new WebSocket(wsUrl);
+
+            wsConnection.onopen = function() {
+                console.log('WebSocket connected');
+                wsReconnectAttempts = 0;
+                document.getElementById('status-indicator').textContent = 'Connected';
+                document.getElementById('status-indicator').className = 'px-3 py-1 rounded-full bg-green-500 text-sm';
+            };
+
+            wsConnection.onmessage = function(event) {
+                const message = JSON.parse(event.data);
+                if (message.type === 'status') {
+                    handleStatusUpdate(message.data);
+                }
+            };
+
+            wsConnection.onclose = function(event) {
+                console.log('WebSocket closed:', event.code, event.reason);
+                document.getElementById('status-indicator').textContent = 'Disconnected';
+                document.getElementById('status-indicator').className = 'px-3 py-1 rounded-full bg-yellow-500 text-sm';
+
+                // Reconnect with exponential backoff
+                if (wsReconnectAttempts < 5) {
+                    const delay = Math.min(1000 * Math.pow(2, wsReconnectAttempts), 30000);
+                    wsReconnectAttempts++;
+                    console.log(`Reconnecting in ${delay}ms (attempt ${wsReconnectAttempts})`);
+                    setTimeout(connectWebSocket, delay);
+                } else {
+                    showErrorBanner('Connection Lost', 'Unable to connect to the server. Please refresh the page.');
+                }
+            };
+
+            wsConnection.onerror = function(error) {
+                console.error('WebSocket error:', error);
+            };
+        }
+
+        // Handle status updates from WebSocket
+        function handleStatusUpdate(status) {
+            // Update mode
+            updateModeUI(status.demo_mode ? 'demo' : 'live');
+
+            // Update health
+            if (status.health) {
+                const healthInfo = {
+                    status: status.health.has_api_issues ? 'degraded' : 'healthy',
+                    errors: [],
+                    circuit_breakers: status.health.circuit_breakers
+                };
+
+                // Check for open circuit breakers
+                for (const [name, cb] of Object.entries(status.health.circuit_breakers || {})) {
+                    if (cb.state === 'open') {
+                        healthInfo.errors.push({
+                            component: `circuit_breaker:${name}`,
+                            error: `${name} is temporarily unavailable`
+                        });
+                    }
+                }
+
+                updateHealthIndicator(healthInfo);
+            }
+
+            // Update stats
+            if (status.daily_stats) {
+                document.getElementById('daily-pnl').textContent = '$' + (status.daily_stats.net_pnl || 0).toFixed(2);
+                document.getElementById('daily-pnl').className = 'stat-value ' + ((status.daily_stats.net_pnl || 0) >= 0 ? 'positive' : 'negative');
+                document.getElementById('win-rate').textContent = (status.daily_stats.win_rate || 0).toFixed(1) + '%';
+            }
+        }
 
         // Update mode indicator UI
         function updateModeUI(mode) {
@@ -1101,7 +1472,14 @@ def get_default_html() -> str:
             updateDashboard();
             loadAvailableYears();
             loadTaxReportData();
+            connectWebSocket(); // Start WebSocket connection
             setInterval(updateDashboard, 10000); // Update every 10 seconds
+
+            // Initial health check
+            fetch('/api/health/detailed')
+                .then(r => r.json())
+                .then(data => updateHealthIndicator(data))
+                .catch(err => console.error('Health check failed:', err));
         });
     </script>
 </body>

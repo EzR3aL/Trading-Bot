@@ -17,8 +17,17 @@ from typing import Optional, Dict, Any, Tuple, List
 import aiohttp
 
 from src.utils.logger import get_logger
+from src.utils.circuit_breaker import (
+    circuit_registry,
+    CircuitBreakerError,
+    with_retry,
+)
 
 logger = get_logger(__name__)
+
+# Circuit breakers for external APIs
+_binance_breaker = circuit_registry.get("binance_api", fail_threshold=5, reset_timeout=60)
+_alternative_me_breaker = circuit_registry.get("alternative_me_api", fail_threshold=3, reset_timeout=120)
 
 
 class DataFetchError(Exception):
@@ -171,18 +180,37 @@ class MarketDataFetcher:
             await self._session.close()
 
     async def _get(self, url: str, params: Optional[Dict] = None) -> Dict[str, Any]:
-        """Make a GET request."""
+        """Make a GET request with retry logic."""
         await self._ensure_session()
         try:
             async with self._session.get(url, params=params, timeout=10) as response:
                 if response.status == 200:
                     return await response.json()
+                elif response.status == 429:
+                    # Rate limited - raise to trigger retry
+                    raise aiohttp.ClientResponseError(
+                        response.request_info,
+                        response.history,
+                        status=429,
+                        message="Rate limited"
+                    )
                 else:
                     logger.error(f"HTTP {response.status} from {url}")
                     return {}
+        except aiohttp.ClientError as e:
+            logger.error(f"Network error fetching {url}: {e}")
+            raise  # Re-raise for circuit breaker
+        except asyncio.TimeoutError:
+            logger.error(f"Timeout fetching {url}")
+            raise  # Re-raise for circuit breaker
         except Exception as e:
             logger.error(f"Error fetching {url}: {e}")
             return {}
+
+    @with_retry(max_attempts=3, min_wait=1.0, max_wait=5.0, retry_on=(aiohttp.ClientError, asyncio.TimeoutError))
+    async def _get_with_retry(self, url: str, params: Optional[Dict] = None) -> Dict[str, Any]:
+        """Make a GET request with automatic retry on failure."""
+        return await self._get(url, params)
 
     # ==================== Fear & Greed Index ====================
 
@@ -194,7 +222,11 @@ class MarketDataFetcher:
             Tuple of (index value 0-100, classification string)
         """
         try:
-            data = await self._get(self.FEAR_GREED_URL, {"limit": "1"})
+            # Use circuit breaker for Alternative.me API
+            async def _fetch():
+                return await self._get_with_retry(self.FEAR_GREED_URL, {"limit": "1"})
+
+            data = await _alternative_me_breaker.call(_fetch)
 
             if data and "data" in data and len(data["data"]) > 0:
                 fng_data = data["data"][0]
@@ -204,6 +236,8 @@ class MarketDataFetcher:
                 logger.info(f"Fear & Greed Index: {value} ({classification})")
                 return value, classification
 
+        except CircuitBreakerError as e:
+            logger.warning(f"Fear & Greed API circuit open: {e}")
         except Exception as e:
             logger.error(f"Error fetching Fear & Greed Index: {e}")
 
@@ -234,13 +268,18 @@ class MarketDataFetcher:
                 "limit": 1,
             }
 
-            data = await self._get(url, params)
+            async def _fetch():
+                return await self._get_with_retry(url, params)
+
+            data = await _binance_breaker.call(_fetch)
 
             if data and len(data) > 0:
                 ratio = float(data[0].get("longShortRatio", 1.0))
                 logger.info(f"Long/Short Ratio ({symbol}): {ratio:.4f}")
                 return ratio
 
+        except CircuitBreakerError as e:
+            logger.warning(f"Binance API circuit open for L/S ratio: {e}")
         except Exception as e:
             logger.error(f"Error fetching Long/Short Ratio: {e}")
 
@@ -298,13 +337,18 @@ class MarketDataFetcher:
             url = f"{self.BINANCE_FUTURES_URL}/fapi/v1/premiumIndex"
             params = {"symbol": symbol}
 
-            data = await self._get(url, params)
+            async def _fetch():
+                return await self._get_with_retry(url, params)
+
+            data = await _binance_breaker.call(_fetch)
 
             if data:
                 rate = float(data.get("lastFundingRate", 0))
                 logger.info(f"Funding Rate ({symbol}): {rate:.6f} ({rate*100:.4f}%)")
                 return rate
 
+        except CircuitBreakerError as e:
+            logger.warning(f"Binance API circuit open for funding rate: {e}")
         except Exception as e:
             logger.error(f"Error fetching Funding Rate: {e}")
 
@@ -352,7 +396,10 @@ class MarketDataFetcher:
             url = f"{self.BINANCE_FUTURES_URL}/fapi/v1/ticker/24hr"
             params = {"symbol": symbol}
 
-            data = await self._get(url, params)
+            async def _fetch():
+                return await self._get_with_retry(url, params)
+
+            data = await _binance_breaker.call(_fetch)
 
             if data:
                 result = {
@@ -367,6 +414,8 @@ class MarketDataFetcher:
                 logger.info(f"24h Ticker ({symbol}): Price={result['price']}, Change={result['price_change_percent']:.2f}%")
                 return result
 
+        except CircuitBreakerError as e:
+            logger.warning(f"Binance API circuit open for 24h ticker: {e}")
         except Exception as e:
             logger.error(f"Error fetching 24h Ticker: {e}")
 
@@ -396,13 +445,18 @@ class MarketDataFetcher:
             url = f"{self.BINANCE_FUTURES_URL}/fapi/v1/openInterest"
             params = {"symbol": symbol}
 
-            data = await self._get(url, params)
+            async def _fetch():
+                return await self._get_with_retry(url, params)
+
+            data = await _binance_breaker.call(_fetch)
 
             if data:
                 oi = float(data.get("openInterest", 0))
                 logger.info(f"Open Interest ({symbol}): {oi:.2f}")
                 return oi
 
+        except CircuitBreakerError as e:
+            logger.warning(f"Binance API circuit open for open interest: {e}")
         except Exception as e:
             logger.error(f"Error fetching Open Interest: {e}")
 
