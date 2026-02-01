@@ -243,7 +243,7 @@ def create_app() -> FastAPI:
         request: Request,
         auth: bool = Depends(verify_api_key),
         limit: int = Query(50, ge=1, le=500, description="Number of trades to return"),
-        status: Optional[str] = Query(None, regex="^(open|closed)?$", description="Filter by status"),
+        status: Optional[str] = Query(None, pattern="^(open|closed)?$", description="Filter by status"),
         symbol: Optional[str] = Query(None, max_length=20, description="Filter by symbol")
     ):
         """Get trade history. Requires API key authentication."""
