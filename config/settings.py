@@ -126,6 +126,12 @@ class TradingConfig:
     # Maximum concurrent arbitrage positions
     funding_arb_max_positions: int = field(default_factory=lambda: get_env("FUNDING_ARB_MAX_POSITIONS", "3", int))
 
+    # Smart execution settings
+    execution_strategy: str = field(default_factory=lambda: get_env("EXECUTION_STRATEGY", "limit_with_fallback"))
+    limit_timeout_seconds: float = field(default_factory=lambda: get_env("LIMIT_TIMEOUT_SECONDS", "5.0", float))
+    max_slippage_pct: float = field(default_factory=lambda: get_env("MAX_SLIPPAGE_PCT", "0.5", float))
+    iceberg_chunk_pct: float = field(default_factory=lambda: get_env("ICEBERG_CHUNK_PCT", "25.0", float))
+
     # Trading mode (demo = no real trades, live = real trades)
     demo_mode: bool = field(default_factory=lambda: get_env("DEMO_MODE", "true", bool))
 

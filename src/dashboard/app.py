@@ -954,6 +954,44 @@ def create_app() -> FastAPI:
             "configured_weights": settings.strategy.signal_weights,
         }
 
+    # ==================== EXECUTION ====================
+
+    @app.get("/api/execution/stats")
+    @limiter.limit("30/minute")
+    async def get_execution_stats(request: Request, auth: bool = Depends(verify_api_key)):
+        """Get execution quality metrics and slippage statistics."""
+        from src.execution.engine import ExecutionEngine, ExecutionStrategy
+
+        strategy_map = {
+            "market": ExecutionStrategy.MARKET,
+            "limit_with_fallback": ExecutionStrategy.LIMIT_WITH_FALLBACK,
+            "twap": ExecutionStrategy.TWAP,
+            "iceberg": ExecutionStrategy.ICEBERG,
+        }
+
+        engine = ExecutionEngine(
+            default_strategy=strategy_map.get(
+                settings.trading.execution_strategy,
+                ExecutionStrategy.LIMIT_WITH_FALLBACK,
+            ),
+            limit_timeout_seconds=settings.trading.limit_timeout_seconds,
+            max_slippage_pct=settings.trading.max_slippage_pct,
+            iceberg_chunk_pct=settings.trading.iceberg_chunk_pct,
+        )
+
+        return engine.get_summary()
+
+    @app.get("/api/execution/config")
+    @limiter.limit("30/minute")
+    async def get_execution_config(request: Request, auth: bool = Depends(verify_api_key)):
+        """Get current execution engine configuration."""
+        return {
+            "strategy": settings.trading.execution_strategy,
+            "limit_timeout_seconds": settings.trading.limit_timeout_seconds,
+            "max_slippage_pct": settings.trading.max_slippage_pct,
+            "iceberg_chunk_pct": settings.trading.iceberg_chunk_pct,
+        }
+
     # ==================== ARBITRAGE ====================
 
     @app.get("/api/arbitrage/opportunities")
