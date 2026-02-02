@@ -1093,6 +1093,46 @@ def create_app() -> FastAPI:
             "reference_position": settings.trading.cross_arb_reference_position,
         }
 
+    # ==================== PREDICTION MARKETS ====================
+
+    @app.get("/api/predictions/scanner")
+    @limiter.limit("30/minute")
+    async def get_prediction_scanner(request: Request, auth: bool = Depends(verify_api_key)):
+        """Get prediction market arbitrage scanner summary."""
+        from src.predictions.scanner import PredictionArbScanner
+
+        scanner = PredictionArbScanner(
+            min_edge_pct=settings.trading.prediction_min_edge_pct,
+            min_liquidity=settings.trading.prediction_min_liquidity,
+            reference_position=settings.trading.prediction_max_position,
+        )
+
+        return scanner.get_summary()
+
+    @app.get("/api/predictions/execution")
+    @limiter.limit("30/minute")
+    async def get_prediction_execution(request: Request, auth: bool = Depends(verify_api_key)):
+        """Get prediction market execution stats."""
+        from src.predictions.execution import PredictionExecutor
+
+        executor = PredictionExecutor(
+            max_slippage_pct=settings.trading.prediction_max_slippage_pct,
+            max_position_usd=settings.trading.prediction_max_position,
+        )
+
+        return executor.get_summary()
+
+    @app.get("/api/predictions/config")
+    @limiter.limit("30/minute")
+    async def get_prediction_config(request: Request, auth: bool = Depends(verify_api_key)):
+        """Get prediction markets configuration."""
+        return {
+            "min_edge_pct": settings.trading.prediction_min_edge_pct,
+            "min_liquidity": settings.trading.prediction_min_liquidity,
+            "max_position": settings.trading.prediction_max_position,
+            "max_slippage_pct": settings.trading.prediction_max_slippage_pct,
+        }
+
     # ==================== WEBSOCKET ====================
 
     async def verify_ws_token(websocket: WebSocket) -> bool:
