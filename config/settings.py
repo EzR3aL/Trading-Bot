@@ -132,6 +132,12 @@ class TradingConfig:
     max_slippage_pct: float = field(default_factory=lambda: get_env("MAX_SLIPPAGE_PCT", "0.5", float))
     iceberg_chunk_pct: float = field(default_factory=lambda: get_env("ICEBERG_CHUNK_PCT", "25.0", float))
 
+    # Prediction markets settings
+    prediction_min_edge_pct: float = field(default_factory=lambda: get_env("PREDICTION_MIN_EDGE_PCT", "0.5", float))
+    prediction_min_liquidity: float = field(default_factory=lambda: get_env("PREDICTION_MIN_LIQUIDITY", "100", float))
+    prediction_max_position: float = field(default_factory=lambda: get_env("PREDICTION_MAX_POSITION", "500", float))
+    prediction_max_slippage_pct: float = field(default_factory=lambda: get_env("PREDICTION_MAX_SLIPPAGE_PCT", "2.0", float))
+
     # Cross-exchange arbitrage settings
     cross_arb_min_spread_pct: float = field(default_factory=lambda: get_env("CROSS_ARB_MIN_SPREAD_PCT", "0.1", float))
     cross_arb_min_profit_pct: float = field(default_factory=lambda: get_env("CROSS_ARB_MIN_PROFIT_PCT", "0.02", float))
