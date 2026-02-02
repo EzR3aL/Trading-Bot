@@ -1,0 +1,160 @@
+# Bitget Trading Bot - Production Docker Compose with Traefik
+# Usage: docker-compose -f docker-compose.yml -f docker-compose.traefik.yml up -d
+#
+# Features:
+#   - Automatic HTTPS with Let's Encrypt
+#   - Traefik dashboard for monitoring
+#   - Rate limiting and security headers
+#   - WebSocket support
+#   - Health checks
+#
+# Prerequisites:
+#   1. Copy .env.example to .env and configure all values
+#   2. Set DOMAIN and ACME_EMAIL environment variables
+#   3. Create external network: docker network create traefik-public
+
+version: '3.8'
+
+services:
+  # Override trading-bot for production
+  trading-bot:
+    restart: always
+    environment:
+      - DASHBOARD_HOST=0.0.0.0
+      - ENABLE_HSTS=true
+      - PYTHONUNBUFFERED=1
+    # Remove localhost binding - Traefik will handle external traffic
+    ports: []
+    # Only expose to internal network
+    expose:
+      - "8080"
+    networks:
+      - internal
+      - traefik-public
+    labels:
+      - "traefik.enable=true"
+      # API Router
+      - "traefik.http.routers.trading-api.rule=Host(`${DOMAIN}`) && PathPrefix(`/api`)"
+      - "traefik.http.routers.trading-api.entrypoints=websecure"
+      - "traefik.http.routers.trading-api.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.trading-api.middlewares=security-headers@file,rate-limit@file"
+      # WebSocket Router
+      - "traefik.http.routers.trading-ws.rule=Host(`${DOMAIN}`) && PathPrefix(`/ws`)"
+      - "traefik.http.routers.trading-ws.entrypoints=websecure"
+      - "traefik.http.routers.trading-ws.tls.certresolver=letsencrypt"
+      # Service
+      - "traefik.http.services.trading-bot.loadbalancer.server.port=8080"
+      - "traefik.http.services.trading-bot.loadbalancer.healthcheck.path=/api/health"
+      - "traefik.http.services.trading-bot.loadbalancer.healthcheck.interval=30s"
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 256M
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Frontend (React SPA)
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: bitget-frontend
+    restart: always
+    expose:
+      - "80"
+    networks:
+      - traefik-public
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.frontend.rule=Host(`${DOMAIN}`)"
+      - "traefik.http.routers.frontend.entrypoints=websecure"
+      - "traefik.http.routers.frontend.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.frontend.priority=1"
+      - "traefik.http.routers.frontend.middlewares=security-headers@file,compress@file"
+      - "traefik.http.services.frontend.loadbalancer.server.port=80"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:80/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Traefik reverse proxy with auto SSL
+  traefik:
+    image: traefik:v3.0
+    container_name: bitget-traefik
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      - DOMAIN=${DOMAIN}
+      - ACME_EMAIL=${ACME_EMAIL}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./traefik/traefik.yml:/etc/traefik/traefik.yml:ro
+      - ./traefik/dynamic:/etc/traefik/dynamic:ro
+      - traefik-acme:/etc/traefik/acme
+      - traefik-logs:/var/log/traefik
+    networks:
+      - traefik-public
+    labels:
+      - "traefik.enable=true"
+      # Dashboard
+      - "traefik.http.routers.traefik-dashboard.rule=Host(`traefik.${DOMAIN}`)"
+      - "traefik.http.routers.traefik-dashboard.entrypoints=websecure"
+      - "traefik.http.routers.traefik-dashboard.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.traefik-dashboard.service=api@internal"
+      - "traefik.http.routers.traefik-dashboard.middlewares=dashboard-auth@file"
+    healthcheck:
+      test: ["CMD", "traefik", "healthcheck"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+
+  # Redis for session storage and rate limiting
+  redis:
+    image: redis:7-alpine
+    container_name: bitget-redis
+    restart: always
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-changeme}
+    volumes:
+      - redis-data:/data
+    expose:
+      - "6379"
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-changeme}", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 128M
+
+networks:
+  internal:
+    driver: bridge
+    internal: true
+  traefik-public:
+    external: true
+
+volumes:
+  redis-data:
+  traefik-acme:
+  traefik-logs:

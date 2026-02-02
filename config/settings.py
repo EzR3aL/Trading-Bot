@@ -107,6 +107,42 @@ class TradingConfig:
     stop_loss_percent: float = field(default_factory=lambda: get_env("STOP_LOSS_PERCENT", "1.5", float))
     trading_pairs: List[str] = field(default_factory=lambda: get_env("TRADING_PAIRS", "BTCUSDT,ETHUSDT", list))
 
+    # Portfolio weights (comma-separated, must match trading_pairs count)
+    # e.g., "40,30,15,15" for 40% BTC, 30% ETH, 15% SOL, 15% DOGE
+    portfolio_weights: str = field(default_factory=lambda: get_env("PORTFOLIO_WEIGHTS", ""))
+
+    # Portfolio rebalance threshold (0.10 = rebalance when weight drifts >10%)
+    rebalance_threshold: float = field(default_factory=lambda: get_env("REBALANCE_THRESHOLD", "0.10", float))
+
+    # Funding rate arbitrage settings
+    # Minimum funding rate to trigger entry (0.0005 = 0.05%)
+    funding_arb_min_rate: float = field(default_factory=lambda: get_env("FUNDING_ARB_MIN_RATE", "0.0005", float))
+    # Rate below which to close positions (0.0001 = 0.01%)
+    funding_arb_exit_rate: float = field(default_factory=lambda: get_env("FUNDING_ARB_EXIT_RATE", "0.0001", float))
+    # Maximum value per side per arbitrage position
+    funding_arb_max_position: float = field(default_factory=lambda: get_env("FUNDING_ARB_MAX_POSITION", "10000", float))
+    # Maximum delta drift before rebalancing (0.05 = 5%)
+    funding_arb_delta_threshold: float = field(default_factory=lambda: get_env("FUNDING_ARB_DELTA_THRESHOLD", "0.05", float))
+    # Maximum concurrent arbitrage positions
+    funding_arb_max_positions: int = field(default_factory=lambda: get_env("FUNDING_ARB_MAX_POSITIONS", "3", int))
+
+    # Smart execution settings
+    execution_strategy: str = field(default_factory=lambda: get_env("EXECUTION_STRATEGY", "limit_with_fallback"))
+    limit_timeout_seconds: float = field(default_factory=lambda: get_env("LIMIT_TIMEOUT_SECONDS", "5.0", float))
+    max_slippage_pct: float = field(default_factory=lambda: get_env("MAX_SLIPPAGE_PCT", "0.5", float))
+    iceberg_chunk_pct: float = field(default_factory=lambda: get_env("ICEBERG_CHUNK_PCT", "25.0", float))
+
+    # Prediction markets settings
+    prediction_min_edge_pct: float = field(default_factory=lambda: get_env("PREDICTION_MIN_EDGE_PCT", "0.5", float))
+    prediction_min_liquidity: float = field(default_factory=lambda: get_env("PREDICTION_MIN_LIQUIDITY", "100", float))
+    prediction_max_position: float = field(default_factory=lambda: get_env("PREDICTION_MAX_POSITION", "500", float))
+    prediction_max_slippage_pct: float = field(default_factory=lambda: get_env("PREDICTION_MAX_SLIPPAGE_PCT", "2.0", float))
+
+    # Cross-exchange arbitrage settings
+    cross_arb_min_spread_pct: float = field(default_factory=lambda: get_env("CROSS_ARB_MIN_SPREAD_PCT", "0.1", float))
+    cross_arb_min_profit_pct: float = field(default_factory=lambda: get_env("CROSS_ARB_MIN_PROFIT_PCT", "0.02", float))
+    cross_arb_reference_position: float = field(default_factory=lambda: get_env("CROSS_ARB_REFERENCE_POSITION", "10000", float))
+
     # Trading mode (demo = no real trades, live = real trades)
     demo_mode: bool = field(default_factory=lambda: get_env("DEMO_MODE", "true", bool))
 
@@ -173,6 +209,10 @@ class StrategyConfig:
     # Confidence thresholds (raised low min for better trade quality)
     high_confidence_min: int = field(default_factory=lambda: get_env("HIGH_CONFIDENCE_MIN", "85", int))
     low_confidence_min: int = field(default_factory=lambda: get_env("LOW_CONFIDENCE_MIN", "60", int))
+
+    # Signal stack weights (comma-separated: fear_greed,funding,ls_ratio,oi,momentum,rsi,volume,liquidation)
+    # Default: "20,15,20,10,10,10,8,7"
+    signal_weights: str = field(default_factory=lambda: get_env("SIGNAL_WEIGHTS", "20,15,20,10,10,10,8,7"))
 
     def validate(self) -> Tuple[bool, List[str]]:
         """

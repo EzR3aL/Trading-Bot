@@ -554,6 +554,55 @@ class BacktestEngine:
         # Generate result
         return self._generate_result(data_points)
 
+    def _calculate_risk_metrics(self, max_drawdown: float) -> tuple:
+        """
+        Calculate risk-adjusted performance metrics.
+
+        Returns:
+            Tuple of (sharpe_ratio, sortino_ratio, calmar_ratio)
+        """
+        import math
+
+        if not self.daily_stats:
+            return 0.0, 0.0, 0.0
+
+        # Get daily returns
+        daily_returns = [s.daily_return_percent for s in self.daily_stats]
+
+        if not daily_returns:
+            return 0.0, 0.0, 0.0
+
+        # Sharpe Ratio (annualized)
+        # Sharpe = (mean return - risk free rate) / std dev of returns
+        # Assuming 0% risk-free rate for simplicity
+        mean_return = sum(daily_returns) / len(daily_returns)
+        variance = sum((r - mean_return) ** 2 for r in daily_returns) / len(daily_returns)
+        std_dev = math.sqrt(variance) if variance > 0 else 0
+
+        # Annualize (assuming 252 trading days)
+        annualized_return = mean_return * 252
+        annualized_std = std_dev * math.sqrt(252)
+
+        sharpe_ratio = annualized_return / annualized_std if annualized_std > 0 else 0
+
+        # Sortino Ratio (only considers downside volatility)
+        negative_returns = [r for r in daily_returns if r < 0]
+        if negative_returns:
+            downside_variance = sum(r ** 2 for r in negative_returns) / len(negative_returns)
+            downside_std = math.sqrt(downside_variance)
+            annualized_downside_std = downside_std * math.sqrt(252)
+            sortino_ratio = annualized_return / annualized_downside_std if annualized_downside_std > 0 else 0
+        else:
+            sortino_ratio = float('inf') if annualized_return > 0 else 0
+
+        # Calmar Ratio (annualized return / max drawdown)
+        total_return = ((self.capital - self.config.starting_capital) / self.config.starting_capital) * 100
+        days = len(self.daily_stats)
+        annualized_total_return = (total_return / days * 252) if days > 0 else 0
+        calmar_ratio = annualized_total_return / max_drawdown if max_drawdown > 0 else 0
+
+        return round(sharpe_ratio, 2), round(sortino_ratio, 2), round(calmar_ratio, 2)
+
     def _save_daily_stats(self):
         """Save statistics for the current day."""
         if not self.current_date:
@@ -620,6 +669,12 @@ class BacktestEngine:
         gross_loss = abs(sum(t.net_pnl for t in losing_trades))
         profit_factor = gross_profit / gross_loss if gross_loss > 0 else float('inf')
 
+        # Calculate risk-adjusted metrics
+        sharpe_ratio, sortino_ratio, calmar_ratio = self._calculate_risk_metrics(max_drawdown)
+
+        # Get unique symbols traded
+        symbols_traded = list(set(t.symbol for t in self.trades))
+
         return BacktestResult(
             start_date=data_points[0].date_str,
             end_date=data_points[-1].date_str,
@@ -637,6 +692,11 @@ class BacktestEngine:
             total_pnl=total_pnl,
             total_fees=total_fees,
             total_funding=total_funding,
+            sharpe_ratio=sharpe_ratio,
+            sortino_ratio=sortino_ratio,
+            calmar_ratio=calmar_ratio,
+            timeframe="1D",
+            symbols_traded=symbols_traded,
             monthly_returns=monthly_returns,
             trades=self.trades,
             daily_stats=self.daily_stats,

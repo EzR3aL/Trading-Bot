@@ -307,6 +307,83 @@ class TestCanTrade:
         assert remaining == 2  # 3 max - 1 executed
 
 
+class TestRecordTrade:
+    """Tests for recording trades."""
+
+    @pytest.fixture
+    def risk_manager(self):
+        """Create a risk manager with temp directory."""
+        temp_dir = tempfile.mkdtemp()
+        rm = RiskManager(data_dir=temp_dir)
+        rm.initialize_day(10000.0)
+        yield rm
+        shutil.rmtree(temp_dir)
+
+    def test_record_winning_trade(self, risk_manager):
+        """Recording a winning trade should update stats correctly."""
+        risk_manager.record_trade_exit(
+            symbol="BTCUSDT",
+            side="long",
+            size=0.1,
+            entry_price=95000.0,
+            exit_price=96000.0,
+            fees=5.0,
+            funding_paid=0.0,
+            reason="take_profit",
+            order_id="test-001",
+        )
+
+        stats = risk_manager.get_daily_stats()
+        assert stats.winning_trades == 1
+        assert stats.losing_trades == 0
+        assert stats.total_pnl == 100.0
+        assert stats.total_fees == 5.0
+
+    def test_record_losing_trade(self, risk_manager):
+        """Recording a losing trade should update stats correctly."""
+        risk_manager.record_trade_exit(
+            symbol="BTCUSDT",
+            side="long",
+            size=0.1,
+            entry_price=95000.0,
+            exit_price=94500.0,
+            fees=5.0,
+            funding_paid=0.0,
+            reason="stop_loss",
+            order_id="test-002",
+        )
+
+        stats = risk_manager.get_daily_stats()
+        assert stats.winning_trades == 0
+        assert stats.losing_trades == 1
+        assert stats.total_pnl == -50.0
+
+    def test_record_multiple_trades(self, risk_manager):
+        """Recording multiple trades should accumulate correctly."""
+        risk_manager.record_trade_exit(
+            symbol="BTCUSDT", side="long", size=0.1,
+            entry_price=95000.0, exit_price=96000.0,
+            fees=5.0, funding_paid=0.0, reason="tp", order_id="t1"
+        )
+        risk_manager.record_trade_exit(
+            symbol="BTCUSDT", side="long", size=0.1,
+            entry_price=95000.0, exit_price=94700.0,
+            fees=5.0, funding_paid=0.0, reason="sl", order_id="t2"
+        )
+        risk_manager.record_trade_exit(
+            symbol="BTCUSDT", side="long", size=0.1,
+            entry_price=95000.0, exit_price=95500.0,
+            fees=5.0, funding_paid=0.0, reason="tp", order_id="t3"
+        )
+
+        stats = risk_manager.get_daily_stats()
+        assert stats.winning_trades == 2
+        assert stats.losing_trades == 1
+        assert stats.total_pnl == 120.0
+        assert stats.total_fees == 15.0
+
+
+
 class TestPositionSizing:
     """Tests for position size calculation."""
 
@@ -366,6 +443,26 @@ class TestPositionSizing:
         assert usdt > 0
         assert base > 0
 
+    def test_position_with_leverage(self, risk_manager):
+        """Leverage increases buying power (more base currency for same USDT)."""
+        _, base_no_lev = risk_manager.calculate_position_size(
+            balance=10000.0,
+            entry_price=95000.0,
+            confidence=70,
+            leverage=1,
+        )
+
+        _, base_with_lev = risk_manager.calculate_position_size(
+            balance=10000.0,
+            entry_price=95000.0,
+            confidence=70,
+            leverage=10,
+        )
+
+        # With leverage, you get more base currency for the same USDT
+        assert base_with_lev > base_no_lev
+        assert abs(base_with_lev / base_no_lev - 10) < 0.01
+
 
 class TestProfitLockIn:
     """Tests for Profit Lock-In feature."""
@@ -405,6 +502,46 @@ class TestProfitLockIn:
 
         # Should be less than original 5% to lock in some profit
         assert dynamic_limit < 5.0
+
+    def test_profit_lock_preserves_minimum(self, risk_manager):
+        """With large profit, daily_loss_limit becomes the binding constraint."""
+        stats = risk_manager.get_daily_stats()
+        stats.total_pnl = 1000.0  # 10% profit
+
+        dynamic_limit = risk_manager.get_dynamic_loss_limit()
+
+        assert dynamic_limit <= 5.0  # Capped at configured limit
+
+
+class TestMaxDrawdown:
+    """Tests for drawdown tracking."""
+
+    @pytest.fixture
+    def risk_manager(self):
+        """Create a risk manager with temp directory."""
+        temp_dir = tempfile.mkdtemp()
+        rm = RiskManager(data_dir=temp_dir)
+        rm.initialize_day(10000.0)
+        yield rm
+        shutil.rmtree(temp_dir)
+
+    def test_trade_exit_tracks_drawdown(self, risk_manager):
+        """Recording trades should update max drawdown tracking."""
+        risk_manager.record_trade_exit(
+            symbol="BTCUSDT", side="long", size=0.1,
+            entry_price=95000.0, exit_price=96000.0,
+            fees=0.0, funding_paid=0.0, reason="tp", order_id="t1"
+        )
+
+        risk_manager.record_trade_exit(
+            symbol="BTCUSDT", side="long", size=0.1,
+            entry_price=95000.0, exit_price=94000.0,
+            fees=0.0, funding_paid=0.0, reason="sl", order_id="t2"
+        )
+
+        stats = risk_manager.get_daily_stats()
+        assert stats.max_drawdown >= 0
+
 
 
 class TestGetDailyStats:

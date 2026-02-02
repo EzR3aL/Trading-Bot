@@ -1,0 +1,35 @@
+# Bitget Trading Bot - Terraform Variables
+# Copy this file to terraform.tfvars and fill in your values
+#
+# NEVER commit terraform.tfvars to git!
+
+# DigitalOcean API Token (required)
+# Get one at: https://cloud.digitalocean.com/account/api/tokens
+do_token = "dop_v1_your_token_here"
+
+# SSH Key Fingerprint (required)
+# Find it at: https://cloud.digitalocean.com/account/security
+# Or run: ssh-keygen -E md5 -lf ~/.ssh/id_rsa.pub | awk '{print $2}' | sed 's/MD5://'
+ssh_key_fingerprint = "aa:bb:cc:dd:ee:ff:00:11:22:33:44:55:66:77:88:99"
+
+# Region (optional, default: nyc3)
+# Options: nyc1, nyc3, sfo3, ams3, lon1, fra1, sgp1, blr1, tor1, syd1
+region = "nyc3"
+
+# Droplet Size (optional, default: s-2vcpu-4gb)
+# s-1vcpu-1gb  = $6/month  (testing only)
+# s-1vcpu-2gb  = $12/month (minimal)
+# s-2vcpu-2gb  = $18/month (basic)
+# s-2vcpu-4gb  = $24/month (recommended)
+# s-4vcpu-8gb  = $48/month (high performance)
+droplet_size = "s-2vcpu-4gb"
+
+# Domain Name (optional, leave empty if not using)
+# If set, creates DNS records automatically
+domain_name = ""
+
+# Environment (optional, default: production)
+environment = "production"
+
+# Project Name (optional, used for resource naming)
+project_name = "bitget-trading-bot"

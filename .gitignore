@@ -82,3 +82,30 @@ logs/
 *.key
 credentials.json
 .claude/
+
+# Node.js / Frontend
+node_modules/
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+*.tsbuildinfo
+.npm/
+.yarn/
+.pnpm-store/
+
+# Build artifacts
+dist/
+build/
+*.local
+
+# Terraform
+terraform/.terraform/
+terraform/*.tfstate
+terraform/*.tfstate.*
+terraform/*.tfvars
+terraform/.terraform.lock.hcl
+
+# Misc
+*.bak
+*.tmp
+*.temp

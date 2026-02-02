@@ -27,6 +27,9 @@ from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 import uvicorn
 
+from src.middleware.security_headers import SecurityHeadersMiddleware, CORSSecurityMiddleware
+from src.middleware.csrf_protection import CSRFProtectionMiddleware, CSRFTokenEndpoint
+
 from src.utils.logger import get_logger
 from src.models.trade_database import TradeDatabase
 from src.risk.risk_manager import RiskManager
@@ -34,6 +37,13 @@ from src.data.funding_tracker import FundingTracker
 from src.dashboard.tax_report import TaxReportGenerator
 from src.utils.circuit_breaker import circuit_registry
 from config import settings
+
+# Multi-tenant routes
+from src.dashboard.auth_routes import router as auth_router
+from src.dashboard.credential_routes import router as credential_router
+from src.dashboard.bot_routes import router as bot_router
+from src.dashboard.admin_routes import router as admin_router
+from src.dashboard.websocket_manager import get_connection_manager
 
 logger = get_logger(__name__)
 
@@ -115,9 +125,40 @@ def create_app() -> FastAPI:
         CORSMiddleware,
         allow_origins=allowed_origins,
         allow_credentials=True,
-        allow_methods=["GET", "POST"],
+        allow_methods=["GET", "POST", "PUT", "DELETE"],
         allow_headers=["*"],
     )
+
+    # Security headers middleware (adds CSP, HSTS, X-Frame-Options, etc.)
+    # Disable HSTS in development (localhost), enable in production
+    enable_hsts = os.getenv("ENABLE_HSTS", "false").lower() == "true"
+    app.add_middleware(
+        SecurityHeadersMiddleware,
+        enable_hsts=enable_hsts,
+        hsts_max_age=31536000,  # 1 year
+    )
+
+    # CORS violation logging
+    app.add_middleware(
+        CORSSecurityMiddleware,
+        allowed_origins=allowed_origins,
+        log_violations=True,
+    )
+
+    # CSRF protection middleware (double-submit cookie pattern)
+    # Disable secure cookie in development (localhost without HTTPS)
+    csrf_secure = os.getenv("CSRF_COOKIE_SECURE", "false").lower() == "true"
+    app.add_middleware(
+        CSRFProtectionMiddleware,
+        cookie_secure=csrf_secure,
+        cookie_samesite="lax",  # Allow same-site navigation
+    )
+
+    # Register multi-tenant API routers
+    app.include_router(auth_router)
+    app.include_router(credential_router)
+    app.include_router(bot_router)
+    app.include_router(admin_router)
 
     # Shared state
     app.state.trade_db = None
@@ -129,6 +170,10 @@ def create_app() -> FastAPI:
     @app.on_event("startup")
     async def startup():
         """Initialize database connections on startup."""
+        # Run database migrations first
+        from src.models.migrations.multi_tenant_schema import run_migrations
+        await run_migrations()
+
         app.state.trade_db = TradeDatabase()
         await app.state.trade_db.initialize()
 
@@ -152,6 +197,18 @@ def create_app() -> FastAPI:
         logger.info("Dashboard stopped")
 
     # ==================== API ENDPOINTS ====================
+
+    @app.get("/api/csrf-token")
+    async def get_csrf_token_endpoint(request: Request):
+        """
+        Get a CSRF token for use in subsequent requests.
+
+        Returns:
+            csrf_token: The token to include in X-CSRF-Token header
+            header_name: Name of the header to use
+            cookie_name: Name of the cookie that contains the token
+        """
+        return CSRFTokenEndpoint.get_token_response(request)
 
     @app.get("/api/health")
     async def health_check():
@@ -392,6 +449,67 @@ def create_app() -> FastAPI:
             }
         }
 
+    # ==================== OHLC / CANDLESTICK DATA ====================
+
+    @app.get("/api/ohlc/{symbol}")
+    @limiter.limit("30/minute")
+    async def get_ohlc_data(
+        request: Request,
+        symbol: str,
+        auth: bool = Depends(verify_api_key),
+        granularity: str = Query("1H", description="Timeframe: 1m, 5m, 15m, 30m, 1H, 4H, 1D"),
+        limit: int = Query(100, ge=10, le=500, description="Number of candles")
+    ):
+        """
+        Get OHLC candlestick data for a symbol.
+
+        Returns candlestick data with open, high, low, close, volume.
+        Requires API key authentication.
+        """
+        try:
+            from src.api.bitget_client import BitgetClient
+
+            # Create client (uses environment credentials)
+            client = BitgetClient()
+
+            # Fetch candlestick data
+            candles = await client.get_candlesticks(
+                symbol=symbol,
+                granularity=granularity,
+                limit=limit
+            )
+
+            # Format response
+            ohlc_data = []
+            for candle in candles:
+                # Bitget returns: [timestamp, open, high, low, close, volume, quoteVolume]
+                if len(candle) >= 6:
+                    ohlc_data.append({
+                        "time": int(candle[0]),
+                        "open": float(candle[1]),
+                        "high": float(candle[2]),
+                        "low": float(candle[3]),
+                        "close": float(candle[4]),
+                        "volume": float(candle[5]),
+                    })
+
+            # Sort by time ascending (oldest first)
+            ohlc_data.sort(key=lambda x: x["time"])
+
+            return {
+                "symbol": symbol,
+                "granularity": granularity,
+                "count": len(ohlc_data),
+                "data": ohlc_data
+            }
+
+        except Exception as e:
+            logger.error(f"Failed to fetch OHLC data for {symbol}: {e}")
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to fetch candlestick data: {str(e)}"
+            )
+
     # ==================== TAX REPORT ====================
 
     @app.get("/api/tax-report/years")
@@ -525,6 +643,517 @@ def create_app() -> FastAPI:
 
         return health
 
+    # ==================== BACKTESTING API ====================
+
+    @app.get("/api/backtest/data")
+    @limiter.limit("30/minute")
+    async def list_backtest_data(request: Request, auth: bool = Depends(verify_api_key)):
+        """
+        List available historical data for backtesting.
+
+        Returns list of data files with metadata.
+        """
+        from src.backtest.data_storage import ParquetDataStorage
+
+        storage = ParquetDataStorage()
+        data_list = storage.list_available_data()
+
+        return {
+            "data_files": data_list,
+            "supported_timeframes": ["1m", "5m", "15m", "30m", "1H", "4H", "1D"],
+            "supported_symbols": ["BTCUSDT", "ETHUSDT", "SOLUSDT", "DOGEUSDT"]
+        }
+
+    @app.post("/api/backtest/download")
+    @limiter.limit("5/minute")
+    async def download_backtest_data(
+        request: Request,
+        symbol: str = Query("BTCUSDT", description="Trading pair"),
+        timeframe: str = Query("1H", description="Candle timeframe"),
+        days: int = Query(365, ge=1, le=1000, description="Days to download"),
+        auth: bool = Depends(verify_api_key)
+    ):
+        """
+        Download historical data from Binance.
+
+        This is a long-running operation that downloads data month by month.
+        """
+        from src.backtest.data_storage import ParquetDataStorage, BinanceDataDownloader
+        from datetime import datetime, timedelta
+
+        storage = ParquetDataStorage()
+        downloader = BinanceDataDownloader(storage)
+
+        start_date = datetime.now() - timedelta(days=days)
+
+        try:
+            total_rows = await downloader.download_klines(
+                symbol=symbol,
+                timeframe=timeframe,
+                start_date=start_date
+            )
+
+            return {
+                "success": True,
+                "symbol": symbol,
+                "timeframe": timeframe,
+                "days": days,
+                "rows_downloaded": total_rows,
+                "message": f"Downloaded {total_rows} rows for {symbol} {timeframe}"
+            }
+        except Exception as e:
+            logger.error(f"Error downloading backtest data: {e}")
+            raise HTTPException(status_code=500, detail=str(e))
+
+    @app.post("/api/backtest/run")
+    @limiter.limit("5/minute")
+    async def run_backtest(
+        request: Request,
+        symbol: str = Query("BTCUSDT", description="Trading pair"),
+        days: int = Query(180, ge=30, le=365, description="Days to backtest"),
+        capital: float = Query(10000.0, ge=100, le=1000000, description="Starting capital"),
+        leverage: int = Query(3, ge=1, le=20, description="Leverage"),
+        take_profit: float = Query(3.5, ge=0.5, le=20, description="Take profit %"),
+        stop_loss: float = Query(2.0, ge=0.5, le=10, description="Stop loss %"),
+        auth: bool = Depends(verify_api_key)
+    ):
+        """
+        Run a backtest with custom parameters.
+
+        Returns detailed backtest results including performance metrics.
+        """
+        from src.backtest.historical_data import HistoricalDataFetcher
+        from src.backtest.engine import BacktestEngine, BacktestConfig
+        from src.backtest.report import BacktestReport
+        from src.backtest.mock_data import generate_mock_historical_data
+
+        try:
+            # Fetch data
+            fetcher = HistoricalDataFetcher()
+            data_points = await fetcher.fetch_all_historical_data(days)
+            await fetcher.close()
+
+            if not data_points:
+                logger.info("No live data available, using mock data")
+                data_points = generate_mock_historical_data(days)
+
+            if not data_points:
+                raise HTTPException(status_code=500, detail="No data available for backtest")
+
+            # Configure backtest
+            config = BacktestConfig(
+                starting_capital=capital,
+                leverage=leverage,
+                take_profit_percent=take_profit,
+                stop_loss_percent=stop_loss,
+                max_trades_per_day=settings.trading.max_trades_per_day,
+                daily_loss_limit_percent=settings.trading.daily_loss_limit_percent,
+                position_size_percent=settings.trading.position_size_percent,
+            )
+
+            # Run backtest
+            engine = BacktestEngine(config)
+            result = engine.run(data_points)
+
+            # Save results
+            report = BacktestReport(result)
+            report.save_json()
+
+            return {
+                "success": True,
+                "results": result.to_dict(),
+                "trades_count": len([t for t in result.trades if hasattr(t, 'to_dict')]),
+                "daily_stats_count": len(result.daily_stats),
+            }
+
+        except Exception as e:
+            logger.error(f"Backtest error: {e}")
+            raise HTTPException(status_code=500, detail=str(e))
+
+    @app.get("/api/backtest/results")
+    @limiter.limit("30/minute")
+    async def get_backtest_results(request: Request, auth: bool = Depends(verify_api_key)):
+        """
+        Get the most recent backtest results.
+
+        Returns saved backtest results from the last run.
+        """
+        import json
+        from pathlib import Path
+
+        results_file = Path("data/backtest/results.json")
+
+        if not results_file.exists():
+            return {"results": None, "message": "No backtest results found. Run a backtest first."}
+
+        try:
+            with open(results_file, "r") as f:
+                results = json.load(f)
+            return {"results": results}
+        except Exception as e:
+            logger.error(f"Error reading backtest results: {e}")
+            raise HTTPException(status_code=500, detail=str(e))
+
+    # ==================== PORTFOLIO API ====================
+
+    @app.get("/api/portfolio/state")
+    @limiter.limit("30/minute")
+    async def get_portfolio_state(request: Request, auth: bool = Depends(verify_api_key)):
+        """
+        Get current portfolio state with per-asset allocation.
+
+        Returns portfolio value, cash balance, and per-asset weights.
+        """
+        from src.portfolio.manager import PortfolioManager
+
+        pm = PortfolioManager.from_config(
+            trading_pairs=settings.trading.trading_pairs,
+            portfolio_weights=settings.trading.portfolio_weights or None,
+        )
+        state = pm.get_state()
+        return state.to_dict()
+
+    @app.get("/api/portfolio/stats")
+    @limiter.limit("30/minute")
+    async def get_portfolio_stats(request: Request, auth: bool = Depends(verify_api_key)):
+        """
+        Get per-asset portfolio statistics.
+
+        Shows target vs current weights, PnL per asset, trade counts.
+        """
+        from src.portfolio.manager import PortfolioManager
+
+        pm = PortfolioManager.from_config(
+            trading_pairs=settings.trading.trading_pairs,
+            portfolio_weights=settings.trading.portfolio_weights or None,
+        )
+
+        return {
+            "portfolio": pm.get_per_asset_stats(),
+            "total_value": pm.total_value,
+            "symbols": pm.symbols,
+            "rebalance_recommendations": pm.get_rebalance_recommendations(),
+        }
+
+    @app.get("/api/portfolio/correlation")
+    @limiter.limit("10/minute")
+    async def get_portfolio_correlation(
+        request: Request,
+        days: int = Query(30, ge=7, le=90, description="Days for correlation window"),
+        auth: bool = Depends(verify_api_key)
+    ):
+        """
+        Get correlation matrix between portfolio assets.
+
+        Uses historical price data to calculate asset correlations.
+        """
+        from src.portfolio.correlation import CorrelationTracker
+
+        tracker = CorrelationTracker(window=days)
+        tracker.load_from_parquet(settings.trading.trading_pairs, days=days)
+
+        return {
+            "correlation_matrix": tracker.get_matrix(),
+            "diversification_score": tracker.get_portfolio_diversification_score(),
+            "high_correlation_pairs": tracker.get_high_correlation_pairs(),
+            "window_days": days,
+        }
+
+    @app.get("/api/portfolio/rebalance")
+    @limiter.limit("10/minute")
+    async def get_rebalance_recommendations(request: Request, auth: bool = Depends(verify_api_key)):
+        """
+        Get portfolio rebalancing recommendations.
+
+        Shows which assets need to be bought/sold to match target weights.
+        """
+        from src.portfolio.manager import PortfolioManager
+
+        pm = PortfolioManager.from_config(
+            trading_pairs=settings.trading.trading_pairs,
+            portfolio_weights=settings.trading.portfolio_weights or None,
+            rebalance_threshold=settings.trading.rebalance_threshold,
+        )
+
+        return {
+            "recommendations": pm.get_rebalance_recommendations(),
+            "threshold": settings.trading.rebalance_threshold,
+            "current_allocation": pm.get_per_asset_stats(),
+        }
+
+    # ==================== SIGNALS ====================
+
+    @app.get("/api/signals/weights")
+    @limiter.limit("30/minute")
+    async def get_signal_weights(request: Request, auth: bool = Depends(verify_api_key)):
+        """Get current signal stack weights."""
+        from src.signals.composite import SignalComposite, DEFAULT_WEIGHTS
+
+        weight_str = settings.strategy.signal_weights
+        weight_names = [
+            "fear_greed", "funding_rate", "long_short_ratio",
+            "open_interest_change", "price_momentum", "rsi",
+            "volume_profile", "liquidation_imbalance",
+        ]
+
+        try:
+            values = [float(x.strip()) for x in weight_str.split(",")]
+            if len(values) == len(weight_names):
+                total = sum(values)
+                weights = {name: val / total for name, val in zip(weight_names, values)}
+            else:
+                weights = dict(DEFAULT_WEIGHTS)
+        except (ValueError, ZeroDivisionError):
+            weights = dict(DEFAULT_WEIGHTS)
+
+        composite = SignalComposite(weights=weights)
+        return {
+            "weights": {k: round(v, 4) for k, v in composite.get_weights().items()},
+            "signal_count": len(weights),
+        }
+
+    @app.get("/api/signals/dashboard")
+    @limiter.limit("30/minute")
+    async def get_signal_dashboard(request: Request, auth: bool = Depends(verify_api_key)):
+        """Get signal normalizer descriptions and current configuration."""
+        from src.signals.composite import DEFAULT_WEIGHTS
+
+        signal_info = {
+            "fear_greed": {
+                "description": "Fear & Greed Index (contrarian)",
+                "source": "Alternative.me",
+                "range": "0-100",
+                "interpretation": "Low = buy signal, High = sell signal",
+            },
+            "funding_rate": {
+                "description": "Perpetual funding rate (contrarian)",
+                "source": "Binance/Bitget",
+                "range": "decimal (0.001 = 0.1%)",
+                "interpretation": "High positive = short signal, Negative = long signal",
+            },
+            "long_short_ratio": {
+                "description": "Long/Short account ratio (contrarian)",
+                "source": "Binance Futures",
+                "range": "0.1 - 5.0+",
+                "interpretation": "High = crowded longs (short signal)",
+            },
+            "open_interest_change": {
+                "description": "Open Interest 24h change",
+                "source": "Binance/Coinglass",
+                "range": "percentage",
+                "interpretation": "Rising = conviction, Falling = unwinding",
+            },
+            "price_momentum": {
+                "description": "24h price change momentum",
+                "source": "Exchange ticker",
+                "range": "percentage",
+                "interpretation": "Trend-following signal",
+            },
+            "rsi": {
+                "description": "Relative Strength Index (contrarian at extremes)",
+                "source": "Calculated from OHLCV",
+                "range": "0-100",
+                "interpretation": "<30 = oversold (buy), >70 = overbought (sell)",
+            },
+            "volume_profile": {
+                "description": "Buy/Sell volume ratio",
+                "source": "Exchange data",
+                "range": "0.0-1.0",
+                "interpretation": "High buy ratio = bullish",
+            },
+            "liquidation_imbalance": {
+                "description": "Long vs Short liquidation imbalance (contrarian)",
+                "source": "Coinglass/Exchange",
+                "range": "-1 to +1",
+                "interpretation": "Long liquidation cascade = buy signal",
+            },
+        }
+
+        return {
+            "signals": signal_info,
+            "default_weights": DEFAULT_WEIGHTS,
+            "configured_weights": settings.strategy.signal_weights,
+        }
+
+    # ==================== EXECUTION ====================
+
+    @app.get("/api/execution/stats")
+    @limiter.limit("30/minute")
+    async def get_execution_stats(request: Request, auth: bool = Depends(verify_api_key)):
+        """Get execution quality metrics and slippage statistics."""
+        from src.execution.engine import ExecutionEngine, ExecutionStrategy
+
+        strategy_map = {
+            "market": ExecutionStrategy.MARKET,
+            "limit_with_fallback": ExecutionStrategy.LIMIT_WITH_FALLBACK,
+            "twap": ExecutionStrategy.TWAP,
+            "iceberg": ExecutionStrategy.ICEBERG,
+        }
+
+        engine = ExecutionEngine(
+            default_strategy=strategy_map.get(
+                settings.trading.execution_strategy,
+                ExecutionStrategy.LIMIT_WITH_FALLBACK,
+            ),
+            limit_timeout_seconds=settings.trading.limit_timeout_seconds,
+            max_slippage_pct=settings.trading.max_slippage_pct,
+            iceberg_chunk_pct=settings.trading.iceberg_chunk_pct,
+        )
+
+        return engine.get_summary()
+
+    @app.get("/api/execution/config")
+    @limiter.limit("30/minute")
+    async def get_execution_config(request: Request, auth: bool = Depends(verify_api_key)):
+        """Get current execution engine configuration."""
+        return {
+            "strategy": settings.trading.execution_strategy,
+            "limit_timeout_seconds": settings.trading.limit_timeout_seconds,
+            "max_slippage_pct": settings.trading.max_slippage_pct,
+            "iceberg_chunk_pct": settings.trading.iceberg_chunk_pct,
+        }
+
+    # ==================== ARBITRAGE ====================
+
+    @app.get("/api/arbitrage/opportunities")
+    @limiter.limit("30/minute")
+    async def get_arbitrage_opportunities(request: Request, auth: bool = Depends(verify_api_key)):
+        """Get current funding rate arbitrage opportunities."""
+        from src.arbitrage.funding_rate import FundingRateMonitor
+
+        monitor = FundingRateMonitor(
+            min_rate=settings.trading.funding_arb_min_rate,
+            exit_rate=settings.trading.funding_arb_exit_rate,
+        )
+
+        return monitor.get_summary()
+
+    @app.get("/api/arbitrage/positions")
+    @limiter.limit("30/minute")
+    async def get_arbitrage_positions(request: Request, auth: bool = Depends(verify_api_key)):
+        """Get open and recent closed arbitrage positions."""
+        from src.arbitrage.delta_neutral import DeltaNeutralManager
+
+        manager = DeltaNeutralManager(
+            max_positions=settings.trading.funding_arb_max_positions,
+            max_position_value=settings.trading.funding_arb_max_position,
+            delta_threshold=settings.trading.funding_arb_delta_threshold,
+        )
+
+        return manager.get_summary()
+
+    @app.get("/api/arbitrage/config")
+    @limiter.limit("30/minute")
+    async def get_arbitrage_config(request: Request, auth: bool = Depends(verify_api_key)):
+        """Get current arbitrage configuration."""
+        return {
+            "min_rate": settings.trading.funding_arb_min_rate,
+            "min_rate_pct": f"{settings.trading.funding_arb_min_rate * 100:.4f}%",
+            "exit_rate": settings.trading.funding_arb_exit_rate,
+            "exit_rate_pct": f"{settings.trading.funding_arb_exit_rate * 100:.4f}%",
+            "max_position_value": settings.trading.funding_arb_max_position,
+            "delta_threshold": settings.trading.funding_arb_delta_threshold,
+            "max_positions": settings.trading.funding_arb_max_positions,
+        }
+
+    @app.get("/api/arbitrage/pnl")
+    @limiter.limit("30/minute")
+    async def get_arbitrage_pnl(request: Request, auth: bool = Depends(verify_api_key)):
+        """Get arbitrage P&L summary."""
+        from src.arbitrage.delta_neutral import DeltaNeutralManager
+
+        manager = DeltaNeutralManager(
+            max_positions=settings.trading.funding_arb_max_positions,
+            max_position_value=settings.trading.funding_arb_max_position,
+        )
+
+        open_positions = manager.get_open_positions()
+        closed_positions = manager.get_closed_positions()
+
+        return {
+            "total_pnl": round(manager.get_total_pnl(), 4),
+            "total_funding_collected": round(manager.get_total_funding_collected(), 4),
+            "open_positions_pnl": round(sum(p.total_pnl for p in open_positions), 4),
+            "closed_positions_pnl": round(sum(p.total_pnl for p in closed_positions), 4),
+            "open_count": len(open_positions),
+            "closed_count": len(closed_positions),
+        }
+
+    # ==================== CROSS-EXCHANGE ====================
+
+    @app.get("/api/exchanges/registry")
+    @limiter.limit("30/minute")
+    async def get_exchange_registry(request: Request, auth: bool = Depends(verify_api_key)):
+        """Get registered exchanges and connection status."""
+        from src.exchanges.registry import ExchangeRegistry
+
+        registry = ExchangeRegistry()
+        return registry.get_summary()
+
+    @app.get("/api/exchanges/arb-scan")
+    @limiter.limit("30/minute")
+    async def get_cross_exchange_arb(request: Request, auth: bool = Depends(verify_api_key)):
+        """Get cross-exchange arbitrage scanner summary."""
+        from src.exchanges.arb_scanner import ArbScanner
+
+        scanner = ArbScanner(
+            min_spread_pct=settings.trading.cross_arb_min_spread_pct,
+            min_profit_pct=settings.trading.cross_arb_min_profit_pct,
+            reference_position=settings.trading.cross_arb_reference_position,
+        )
+
+        return scanner.get_summary()
+
+    @app.get("/api/exchanges/config")
+    @limiter.limit("30/minute")
+    async def get_cross_exchange_config(request: Request, auth: bool = Depends(verify_api_key)):
+        """Get cross-exchange arbitrage configuration."""
+        return {
+            "min_spread_pct": settings.trading.cross_arb_min_spread_pct,
+            "min_profit_pct": settings.trading.cross_arb_min_profit_pct,
+            "reference_position": settings.trading.cross_arb_reference_position,
+        }
+
+    # ==================== PREDICTION MARKETS ====================
+
+    @app.get("/api/predictions/scanner")
+    @limiter.limit("30/minute")
+    async def get_prediction_scanner(request: Request, auth: bool = Depends(verify_api_key)):
+        """Get prediction market arbitrage scanner summary."""
+        from src.predictions.scanner import PredictionArbScanner
+
+        scanner = PredictionArbScanner(
+            min_edge_pct=settings.trading.prediction_min_edge_pct,
+            min_liquidity=settings.trading.prediction_min_liquidity,
+            reference_position=settings.trading.prediction_max_position,
+        )
+
+        return scanner.get_summary()
+
+    @app.get("/api/predictions/execution")
+    @limiter.limit("30/minute")
+    async def get_prediction_execution(request: Request, auth: bool = Depends(verify_api_key)):
+        """Get prediction market execution stats."""
+        from src.predictions.execution import PredictionExecutor
+
+        executor = PredictionExecutor(
+            max_slippage_pct=settings.trading.prediction_max_slippage_pct,
+            max_position_usd=settings.trading.prediction_max_position,
+        )
+
+        return executor.get_summary()
+
+    @app.get("/api/predictions/config")
+    @limiter.limit("30/minute")
+    async def get_prediction_config(request: Request, auth: bool = Depends(verify_api_key)):
+        """Get prediction markets configuration."""
+        return {
+            "min_edge_pct": settings.trading.prediction_min_edge_pct,
+            "min_liquidity": settings.trading.prediction_min_liquidity,
+            "max_position": settings.trading.prediction_max_position,
+            "max_slippage_pct": settings.trading.prediction_max_slippage_pct,
+        }
+
     # ==================== WEBSOCKET ====================
 
     async def verify_ws_token(websocket: WebSocket) -> bool:
@@ -627,6 +1256,94 @@ def create_app() -> FastAPI:
             if websocket in app.state.websocket_clients:
                 app.state.websocket_clients.remove(websocket)
             logger.info(f"WebSocket client disconnected (remaining: {len(app.state.websocket_clients)})")
+
+    # ==================== AUTHENTICATED WEBSOCKET ====================
+
+    @app.websocket("/ws/user")
+    async def user_websocket_endpoint(websocket: WebSocket):
+        """
+        Per-user WebSocket for real-time updates.
+
+        Authentication:
+        - Requires JWT token as ?token=<jwt> query parameter
+        - Each connection is isolated to the authenticated user
+        - Receives only data for that user's bots and trades
+        """
+        # Get token from query parameter
+        token = websocket.query_params.get("token")
+        if not token:
+            await websocket.close(code=4001, reason="JWT token required")
+            logger.warning("User WebSocket rejected: Missing token")
+            return
+
+        # Authenticate with JWT
+        manager = get_connection_manager()
+        payload = await manager.authenticate(websocket, token)
+
+        if not payload:
+            await websocket.close(code=4001, reason="Invalid or expired token")
+            logger.warning("User WebSocket rejected: Invalid token")
+            return
+
+        # Register connection
+        await manager.connect(websocket, payload)
+
+        try:
+            while True:
+                # Send periodic status updates for this user
+                user_id = payload.user_id
+
+                # Get user-specific bot status
+                try:
+                    from src.bot.orchestrator import get_orchestrator
+                    orchestrator = get_orchestrator()
+                    user_bots = await orchestrator.get_user_bots(user_id)
+                    bot_statuses = [
+                        {
+                            "id": bot.bot_instance.id,
+                            "name": bot.bot_instance.name,
+                            "status": bot.status.value,
+                            "symbol": bot.bot_instance.symbol,
+                        }
+                        for bot in user_bots
+                    ]
+                except Exception:
+                    bot_statuses = []
+
+                # Send user-specific status
+                status_data = {
+                    "type": "status",
+                    "timestamp": datetime.now().isoformat(),
+                    "data": {
+                        "user_id": user_id,
+                        "bots": bot_statuses,
+                        "bot_count": len(bot_statuses),
+                        "active_bots": sum(1 for b in bot_statuses if b["status"] == "running"),
+                    }
+                }
+
+                await websocket.send_json(status_data)
+
+                # Wait for next update or client message
+                try:
+                    # Non-blocking receive with timeout
+                    data = await asyncio.wait_for(
+                        websocket.receive_json(),
+                        timeout=5.0
+                    )
+                    # Handle client commands if needed
+                    if data.get("type") == "ping":
+                        await websocket.send_json({"type": "pong"})
+                except asyncio.TimeoutError:
+                    # No message received, continue loop
+                    pass
+
+        except WebSocketDisconnect:
+            await manager.disconnect(websocket)
+            logger.info(f"User WebSocket disconnected: user={payload.user_id}")
+        except Exception as e:
+            logger.error(f"User WebSocket error: {e}")
+            await manager.disconnect(websocket)
 
     # ==================== WEB INTERFACE ====================
 
