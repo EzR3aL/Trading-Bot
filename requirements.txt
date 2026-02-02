@@ -1,7 +1,6 @@
 # Bitget Trading Bot Dependencies
 
-# Exchange API
-pybitget==1.0.8
+# Exchange API (ccxt supports Bitget natively)
 ccxt>=4.0.0
 
 # Data Analysis
@@ -41,6 +40,10 @@ websockets>=12.0
 fastapi>=0.109.0
 uvicorn>=0.27.0
 slowapi>=0.1.9
+
+# Authentication
+python-jose[cryptography]>=3.3.0
+bcrypt>=4.0.0
 
 # Resilience & Retry
 pybreaker>=1.0.0

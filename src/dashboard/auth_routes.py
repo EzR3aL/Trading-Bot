@@ -16,6 +16,7 @@ from slowapi.util import get_remote_address
 
 from src.auth.jwt_handler import JWTHandler, TokenPair, TokenExpiredError, TokenInvalidError
 from src.auth.password import PasswordHandler
+from src.auth.account_lockout import get_lockout_manager, AccountLockedException
 from src.auth.dependencies import (
     get_jwt_handler,
     get_token_payload,
@@ -237,14 +238,39 @@ async def login(
     Authenticate user and return tokens.
 
     Rate limited to 10 attempts per minute per IP.
+    Implements account lockout after 5 failed attempts.
     """
     user_repo = UserRepository()
+    ip_address = request.client.host if request.client else None
+
+    # Check for account lockout FIRST (before any DB lookup)
+    lockout_manager = await get_lockout_manager()
+    lockout_status = await lockout_manager.check_lockout(data.username, ip_address)
+
+    if lockout_status.is_locked:
+        logger.warning(f"Login blocked - account locked: {data.username}")
+        # Log the blocked attempt
+        audit = await get_audit_logger()
+        await audit.log_auth_event(
+            event_type=AuditEventType.USER_LOGIN_FAILED,
+            user_id=None,
+            ip_address=ip_address,
+            username=data.username,
+            success=False,
+            error_message=f"Account locked until {lockout_status.lockout_until}",
+        )
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=f"Account temporarily locked. Try again in {lockout_status.lockout_duration_minutes} minutes.",
+            headers={"Retry-After": str(lockout_status.lockout_duration_minutes * 60)}
+        )
 
     # Get user by username
     user = await user_repo.get_by_username(data.username)
-    ip_address = request.client.host if request.client else None
 
     if not user:
+        # Record failed attempt for lockout tracking
+        await lockout_manager.record_failed_attempt(data.username, ip_address)
         # Log failed login attempt
         audit = await get_audit_logger()
         await audit.log_auth_event(
@@ -271,6 +297,8 @@ async def login(
     # Verify password
     if not password_handler.verify(data.password, user.password_hash):
         logger.warning(f"Failed login attempt for user: {data.username}")
+        # Record failed attempt for lockout tracking
+        new_status = await lockout_manager.record_failed_attempt(data.username, ip_address)
         # Log failed login
         audit = await get_audit_logger()
         await audit.log_auth_event(
@@ -281,10 +309,19 @@ async def login(
             success=False,
             error_message="Invalid password",
         )
+        # Include remaining attempts in error (helps legitimate users)
+        detail = "Invalid username or password"
+        if new_status.is_locked:
+            detail = f"Account locked for {new_status.lockout_duration_minutes} minutes due to too many failed attempts"
+        elif new_status.remaining_attempts <= 2:
+            detail = f"Invalid username or password. {new_status.remaining_attempts} attempts remaining."
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid username or password"
+            detail=detail
         )
+
+    # Clear failed attempts on successful login
+    await lockout_manager.clear_failed_attempts(data.username, ip_address)
 
     # Update last login
     await user_repo.update_last_login(user.id)

@@ -27,6 +27,9 @@ from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 import uvicorn
 
+from src.middleware.security_headers import SecurityHeadersMiddleware, CORSSecurityMiddleware
+from src.middleware.csrf_protection import CSRFProtectionMiddleware, CSRFTokenEndpoint
+
 from src.utils.logger import get_logger
 from src.models.trade_database import TradeDatabase
 from src.risk.risk_manager import RiskManager
@@ -34,6 +37,13 @@ from src.data.funding_tracker import FundingTracker
 from src.dashboard.tax_report import TaxReportGenerator
 from src.utils.circuit_breaker import circuit_registry
 from config import settings
+
+# Multi-tenant routes
+from src.dashboard.auth_routes import router as auth_router
+from src.dashboard.credential_routes import router as credential_router
+from src.dashboard.bot_routes import router as bot_router
+from src.dashboard.admin_routes import router as admin_router
+from src.dashboard.websocket_manager import get_connection_manager
 
 logger = get_logger(__name__)
 
@@ -94,9 +104,40 @@ def create_app() -> FastAPI:
         CORSMiddleware,
         allow_origins=allowed_origins,
         allow_credentials=True,
-        allow_methods=["GET", "POST"],
+        allow_methods=["GET", "POST", "PUT", "DELETE"],
         allow_headers=["*"],
     )
+
+    # Security headers middleware (adds CSP, HSTS, X-Frame-Options, etc.)
+    # Disable HSTS in development (localhost), enable in production
+    enable_hsts = os.getenv("ENABLE_HSTS", "false").lower() == "true"
+    app.add_middleware(
+        SecurityHeadersMiddleware,
+        enable_hsts=enable_hsts,
+        hsts_max_age=31536000,  # 1 year
+    )
+
+    # CORS violation logging
+    app.add_middleware(
+        CORSSecurityMiddleware,
+        allowed_origins=allowed_origins,
+        log_violations=True,
+    )
+
+    # CSRF protection middleware (double-submit cookie pattern)
+    # Disable secure cookie in development (localhost without HTTPS)
+    csrf_secure = os.getenv("CSRF_COOKIE_SECURE", "false").lower() == "true"
+    app.add_middleware(
+        CSRFProtectionMiddleware,
+        cookie_secure=csrf_secure,
+        cookie_samesite="lax",  # Allow same-site navigation
+    )
+
+    # Register multi-tenant API routers
+    app.include_router(auth_router)
+    app.include_router(credential_router)
+    app.include_router(bot_router)
+    app.include_router(admin_router)
 
     # Shared state
     app.state.trade_db = None
@@ -108,6 +149,10 @@ def create_app() -> FastAPI:
     @app.on_event("startup")
     async def startup():
         """Initialize database connections on startup."""
+        # Run database migrations first
+        from src.models.migrations.multi_tenant_schema import run_migrations
+        await run_migrations()
+
         app.state.trade_db = TradeDatabase()
         await app.state.trade_db.initialize()
 
@@ -131,6 +176,18 @@ def create_app() -> FastAPI:
         logger.info("Dashboard stopped")
 
     # ==================== API ENDPOINTS ====================
+
+    @app.get("/api/csrf-token")
+    async def get_csrf_token_endpoint(request: Request):
+        """
+        Get a CSRF token for use in subsequent requests.
+
+        Returns:
+            csrf_token: The token to include in X-CSRF-Token header
+            header_name: Name of the header to use
+            cookie_name: Name of the cookie that contains the token
+        """
+        return CSRFTokenEndpoint.get_token_response(request)
 
     @app.get("/api/health")
     async def health_check():
@@ -371,6 +428,67 @@ def create_app() -> FastAPI:
             }
         }
 
+    # ==================== OHLC / CANDLESTICK DATA ====================
+
+    @app.get("/api/ohlc/{symbol}")
+    @limiter.limit("30/minute")
+    async def get_ohlc_data(
+        request: Request,
+        symbol: str,
+        auth: bool = Depends(verify_api_key),
+        granularity: str = Query("1H", description="Timeframe: 1m, 5m, 15m, 30m, 1H, 4H, 1D"),
+        limit: int = Query(100, ge=10, le=500, description="Number of candles")
+    ):
+        """
+        Get OHLC candlestick data for a symbol.
+
+        Returns candlestick data with open, high, low, close, volume.
+        Requires API key authentication.
+        """
+        try:
+            from src.api.bitget_client import BitgetClient
+
+            # Create client (uses environment credentials)
+            client = BitgetClient()
+
+            # Fetch candlestick data
+            candles = await client.get_candlesticks(
+                symbol=symbol,
+                granularity=granularity,
+                limit=limit
+            )
+
+            # Format response
+            ohlc_data = []
+            for candle in candles:
+                # Bitget returns: [timestamp, open, high, low, close, volume, quoteVolume]
+                if len(candle) >= 6:
+                    ohlc_data.append({
+                        "time": int(candle[0]),
+                        "open": float(candle[1]),
+                        "high": float(candle[2]),
+                        "low": float(candle[3]),
+                        "close": float(candle[4]),
+                        "volume": float(candle[5]),
+                    })
+
+            # Sort by time ascending (oldest first)
+            ohlc_data.sort(key=lambda x: x["time"])
+
+            return {
+                "symbol": symbol,
+                "granularity": granularity,
+                "count": len(ohlc_data),
+                "data": ohlc_data
+            }
+
+        except Exception as e:
+            logger.error(f"Failed to fetch OHLC data for {symbol}: {e}")
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to fetch candlestick data: {str(e)}"
+            )
+
     # ==================== TAX REPORT ====================
 
     @app.get("/api/tax-report/years")
@@ -568,6 +686,94 @@ def create_app() -> FastAPI:
             if websocket in app.state.websocket_clients:
                 app.state.websocket_clients.remove(websocket)
             logger.info(f"WebSocket client disconnected (remaining: {len(app.state.websocket_clients)})")
+
+    # ==================== AUTHENTICATED WEBSOCKET ====================
+
+    @app.websocket("/ws/user")
+    async def user_websocket_endpoint(websocket: WebSocket):
+        """
+        Per-user WebSocket for real-time updates.
+
+        Authentication:
+        - Requires JWT token as ?token=<jwt> query parameter
+        - Each connection is isolated to the authenticated user
+        - Receives only data for that user's bots and trades
+        """
+        # Get token from query parameter
+        token = websocket.query_params.get("token")
+        if not token:
+            await websocket.close(code=4001, reason="JWT token required")
+            logger.warning("User WebSocket rejected: Missing token")
+            return
+
+        # Authenticate with JWT
+        manager = get_connection_manager()
+        payload = await manager.authenticate(websocket, token)
+
+        if not payload:
+            await websocket.close(code=4001, reason="Invalid or expired token")
+            logger.warning("User WebSocket rejected: Invalid token")
+            return
+
+        # Register connection
+        await manager.connect(websocket, payload)
+
+        try:
+            while True:
+                # Send periodic status updates for this user
+                user_id = payload.user_id
+
+                # Get user-specific bot status
+                try:
+                    from src.bot.orchestrator import get_orchestrator
+                    orchestrator = get_orchestrator()
+                    user_bots = await orchestrator.get_user_bots(user_id)
+                    bot_statuses = [
+                        {
+                            "id": bot.bot_instance.id,
+                            "name": bot.bot_instance.name,
+                            "status": bot.status.value,
+                            "symbol": bot.bot_instance.symbol,
+                        }
+                        for bot in user_bots
+                    ]
+                except Exception:
+                    bot_statuses = []
+
+                # Send user-specific status
+                status_data = {
+                    "type": "status",
+                    "timestamp": datetime.now().isoformat(),
+                    "data": {
+                        "user_id": user_id,
+                        "bots": bot_statuses,
+                        "bot_count": len(bot_statuses),
+                        "active_bots": sum(1 for b in bot_statuses if b["status"] == "running"),
+                    }
+                }
+
+                await websocket.send_json(status_data)
+
+                # Wait for next update or client message
+                try:
+                    # Non-blocking receive with timeout
+                    data = await asyncio.wait_for(
+                        websocket.receive_json(),
+                        timeout=5.0
+                    )
+                    # Handle client commands if needed
+                    if data.get("type") == "ping":
+                        await websocket.send_json({"type": "pong"})
+                except asyncio.TimeoutError:
+                    # No message received, continue loop
+                    pass
+
+        except WebSocketDisconnect:
+            await manager.disconnect(websocket)
+            logger.info(f"User WebSocket disconnected: user={payload.user_id}")
+        except Exception as e:
+            logger.error(f"User WebSocket error: {e}")
+            await manager.disconnect(websocket)
 
     # ==================== WEB INTERFACE ====================
 

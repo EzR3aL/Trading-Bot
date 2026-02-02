@@ -2,7 +2,39 @@
 
 Diese Anleitung zeigt dir, wie du den Bitget Trading Bot auf einem DigitalOcean Droplet einrichtest, damit er 24/7 läuft.
 
-**Version:** 1.8.0
+**Version:** 1.9.0
+
+---
+
+## Quick Start: Terraform + Traefik (Empfohlen)
+
+Für eine schnelle, automatisierte Deployment mit automatischem HTTPS:
+
+```bash
+# 1. Terraform initialisieren und deployen
+cd terraform
+cp terraform.tfvars.example terraform.tfvars
+# Bearbeite terraform.tfvars mit deinem API Token und SSH Key
+terraform init && terraform apply
+
+# 2. SSH auf den Server
+ssh root@$(terraform output -raw droplet_ip)
+
+# 3. Repository klonen und konfigurieren
+cd /opt/bitget-trading-bot
+git clone https://github.com/your-repo/bitget-trading-bot.git .
+cp .env.example .env
+nano .env  # DOMAIN, ACME_EMAIL, und andere Secrets eintragen
+
+# 4. Mit Traefik deployen (Auto-SSL via Let's Encrypt)
+./scripts/deploy-traefik.sh
+```
+
+Das Dashboard ist dann erreichbar unter:
+- **App:** `https://trading.deinedomain.com`
+- **Traefik Dashboard:** `https://traefik.deinedomain.com`
+
+Siehe auch: [terraform/README.md](../terraform/README.md) für Details.
 
 ---
 

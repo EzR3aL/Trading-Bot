@@ -1,0 +1,95 @@
+# Bitget Trading Bot - Production Docker Compose
+# Usage: docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+#
+# Prerequisites:
+#   1. Copy .env.example to .env and configure all values
+#   2. Generate SSL certificates (see nginx/ssl/README.md)
+#   3. Set DOMAIN_NAME environment variable
+#
+# SSL Certificate Options:
+#   - Let's Encrypt (recommended): Use certbot with nginx
+#   - Self-signed (testing): Run ./scripts/generate-ssl.sh
+
+version: '3.8'
+
+services:
+  # Override trading-bot for production
+  trading-bot:
+    restart: always
+    environment:
+      - DASHBOARD_HOST=0.0.0.0
+      - ENABLE_HSTS=true
+      - PYTHONUNBUFFERED=1
+    # Remove localhost binding - nginx will handle external traffic
+    ports: []
+    # Only expose to internal network
+    expose:
+      - "8080"
+    networks:
+      - internal
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 256M
+
+  # Nginx reverse proxy with TLS termination
+  nginx:
+    image: nginx:1.25-alpine
+    container_name: bitget-nginx
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+      - ./nginx/logs:/var/log/nginx
+      - ./frontend/dist:/usr/share/nginx/html:ro
+    depends_on:
+      - trading-bot
+    networks:
+      - internal
+      - external
+    healthcheck:
+      test: ["CMD", "nginx", "-t"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Redis for session storage and rate limiting (optional but recommended)
+  redis:
+    image: redis:7-alpine
+    container_name: bitget-redis
+    restart: always
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-changeme}
+    volumes:
+      - redis-data:/data
+    expose:
+      - "6379"
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 128M
+
+networks:
+  internal:
+    driver: bridge
+    internal: true
+  external:
+    driver: bridge
+
+volumes:
+  redis-data:

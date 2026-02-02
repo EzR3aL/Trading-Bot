@@ -35,6 +35,7 @@ import argparse
 import asyncio
 import signal
 import sys
+import threading
 from pathlib import Path
 
 # Add project root to path
@@ -49,6 +50,9 @@ from config import settings
 bot: TradingBot = None
 logger = get_logger(__name__)
 
+# Dashboard server thread
+dashboard_thread = None
+
 
 def handle_shutdown(signum, frame):
     """Handle shutdown signals gracefully."""
@@ -57,9 +61,42 @@ def handle_shutdown(signum, frame):
         asyncio.create_task(bot.stop())
 
 
+def start_dashboard_thread(host: str = "0.0.0.0", port: int = 8080):
+    """Start the dashboard server in a background thread."""
+    global dashboard_thread
+
+    from src.dashboard import create_app
+    import uvicorn
+
+    app = create_app()
+
+    config = uvicorn.Config(
+        app,
+        host=host,
+        port=port,
+        log_level="info",
+        access_log=False,  # Reduce log noise
+    )
+    server = uvicorn.Server(config)
+
+    dashboard_thread = threading.Thread(
+        target=server.run,
+        daemon=True,
+        name="dashboard-server"
+    )
+    dashboard_thread.start()
+    logger.info(f"Dashboard server started at http://{host}:{port}")
+
+
 async def run_bot():
-    """Run the trading bot."""
+    """Run the trading bot with dashboard."""
     global bot
+    import os
+
+    # Start dashboard server in background thread
+    dashboard_port = int(os.getenv("DASHBOARD_PORT", "8080"))
+    dashboard_host = os.getenv("DASHBOARD_HOST", "0.0.0.0")
+    start_dashboard_thread(dashboard_host, dashboard_port)
 
     bot = TradingBot()
 

@@ -24,18 +24,22 @@ class User:
     password_hash: str
     is_active: bool = True
     is_admin: bool = False
+    role: str = "trader"  # viewer, trader, admin
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
     last_login: Optional[datetime] = None
 
     def to_dict(self, include_sensitive: bool = False) -> dict:
         """Convert to dictionary for API responses."""
+        # Derive role from is_admin flag for backward compatibility
+        effective_role = "admin" if self.is_admin else self.role
         data = {
             "id": self.id,
             "username": self.username,
             "email": self.email,
             "is_active": self.is_active,
             "is_admin": self.is_admin,
+            "role": effective_role,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
             "last_login": self.last_login.isoformat() if self.last_login else None,
@@ -284,6 +288,37 @@ class UserRepository:
             )
             await db.commit()
             logger.info(f"Updated email for user id={user_id}")
+            return True
+
+    async def update_role(self, user_id: int, role: str, is_admin: bool = None) -> bool:
+        """
+        Update user's role.
+
+        Args:
+            user_id: User ID to update
+            role: New role (viewer, trader, admin)
+            is_admin: Optional override for is_admin flag
+
+        Returns:
+            True if updated successfully
+        """
+        # Determine is_admin from role if not explicitly provided
+        if is_admin is None:
+            is_admin = (role == "admin")
+
+        async with aiosqlite.connect(self.db_path) as db:
+            await db.execute(
+                """
+                UPDATE users SET
+                    role = ?,
+                    is_admin = ?,
+                    updated_at = ?
+                WHERE id = ?
+                """,
+                (role, int(is_admin), datetime.now(), user_id)
+            )
+            await db.commit()
+            logger.info(f"Updated role for user id={user_id} to {role}")
             return True
 
     async def delete(self, user_id: int) -> bool:

@@ -166,21 +166,23 @@ async def upgrade(db_path: str = "data/trades.db") -> bool:
             await db.execute("""
                 CREATE TABLE IF NOT EXISTS audit_logs (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    event_type TEXT NOT NULL,
                     user_id INTEGER,
-                    action TEXT NOT NULL,
+                    ip_address TEXT,
+                    severity TEXT DEFAULT 'info',
+                    details TEXT,
                     resource_type TEXT,
                     resource_id INTEGER,
-                    details TEXT,
-                    ip_address TEXT,
-                    user_agent TEXT,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    success INTEGER DEFAULT 1,
+                    error_message TEXT,
+                    timestamp TEXT NOT NULL,
                     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
                 )
             """)
             await db.execute("CREATE INDEX IF NOT EXISTS idx_audit_user ON audit_logs(user_id)")
-            await db.execute("CREATE INDEX IF NOT EXISTS idx_audit_action ON audit_logs(action)")
-            await db.execute("CREATE INDEX IF NOT EXISTS idx_audit_time ON audit_logs(created_at DESC)")
-            await db.execute("CREATE INDEX IF NOT EXISTS idx_audit_user_time ON audit_logs(user_id, created_at DESC)")
+            await db.execute("CREATE INDEX IF NOT EXISTS idx_audit_event_type ON audit_logs(event_type)")
+            await db.execute("CREATE INDEX IF NOT EXISTS idx_audit_timestamp ON audit_logs(timestamp)")
+            await db.execute("CREATE INDEX IF NOT EXISTS idx_audit_resource ON audit_logs(resource_type, resource_id)")
             logger.info("Created audit_logs table")
 
             # ============================================

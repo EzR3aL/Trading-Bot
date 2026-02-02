@@ -13,6 +13,7 @@ Tests cover:
 import pytest
 from unittest.mock import AsyncMock, patch, MagicMock
 from datetime import datetime
+from dataclasses import dataclass
 
 import sys
 from pathlib import Path
@@ -25,12 +26,27 @@ from src.strategy.liquidation_hunter import (
 )
 
 
+@dataclass
+class MockStrategyConfig:
+    """Test configuration with known values."""
+    fear_greed_extreme_fear: int = 25
+    fear_greed_extreme_greed: int = 75
+    long_short_crowded_longs: float = 2.0
+    long_short_crowded_shorts: float = 0.5
+    funding_rate_high: float = 0.0005
+    funding_rate_low: float = -0.0002
+    high_confidence_min: int = 85
+    low_confidence_min: int = 55
+
+
 class TestLeverageAnalysis:
     """Tests for leverage (L/S ratio) analysis."""
 
     def setup_method(self):
-        """Set up test fixtures."""
+        """Set up test fixtures with known config values."""
         self.strategy = LiquidationHunterStrategy(data_fetcher=None)
+        # Override config with test values for consistent behavior
+        self.strategy.config = MockStrategyConfig()
 
     def test_crowded_longs_signals_short(self):
         """When L/S ratio > 2.0, signal should be SHORT."""
@@ -76,8 +92,9 @@ class TestSentimentAnalysis:
     """Tests for Fear & Greed sentiment analysis."""
 
     def setup_method(self):
-        """Set up test fixtures."""
+        """Set up test fixtures with known config values."""
         self.strategy = LiquidationHunterStrategy(data_fetcher=None)
+        self.strategy.config = MockStrategyConfig()
 
     def test_extreme_greed_signals_short(self):
         """Fear & Greed > 75 should signal SHORT."""
@@ -128,8 +145,9 @@ class TestFundingRateAnalysis:
     """Tests for funding rate analysis."""
 
     def setup_method(self):
-        """Set up test fixtures."""
+        """Set up test fixtures with known config values."""
         self.strategy = LiquidationHunterStrategy(data_fetcher=None)
+        self.strategy.config = MockStrategyConfig()
 
     def test_high_funding_strengthens_short(self):
         """High funding rate should strengthen SHORT signal."""
@@ -179,8 +197,9 @@ class TestTargetCalculation:
     """Tests for take profit and stop loss calculation."""
 
     def setup_method(self):
-        """Set up test fixtures."""
+        """Set up test fixtures with known config values."""
         self.strategy = LiquidationHunterStrategy(data_fetcher=None)
+        self.strategy.config = MockStrategyConfig()
 
     def test_long_targets_calculated_correctly(self):
         """LONG targets: TP above entry, SL below entry."""
@@ -220,8 +239,9 @@ class TestSignalGeneration:
 
     @pytest.fixture
     def strategy_with_mock_fetcher(self, mock_data_fetcher):
-        """Create strategy with mocked data fetcher."""
+        """Create strategy with mocked data fetcher and test config."""
         strategy = LiquidationHunterStrategy(data_fetcher=mock_data_fetcher)
+        strategy.config = MockStrategyConfig()
         return strategy
 
     @pytest.mark.asyncio
@@ -375,6 +395,7 @@ class TestShouldTrade:
     async def test_high_confidence_approved(self, valid_signal):
         """High confidence signal should be approved."""
         strategy = LiquidationHunterStrategy(data_fetcher=None)
+        strategy.config = MockStrategyConfig()
         valid_signal.confidence = 80
 
         should_trade, reason = await strategy.should_trade(valid_signal)
@@ -386,6 +407,7 @@ class TestShouldTrade:
     async def test_low_confidence_rejected(self, valid_signal):
         """Below minimum confidence should be rejected."""
         strategy = LiquidationHunterStrategy(data_fetcher=None)
+        strategy.config = MockStrategyConfig()
         valid_signal.confidence = 40  # Below minimum
 
         should_trade, reason = await strategy.should_trade(valid_signal)
@@ -397,6 +419,7 @@ class TestShouldTrade:
     async def test_invalid_price_rejected(self, valid_signal):
         """Signal with invalid entry price should be rejected."""
         strategy = LiquidationHunterStrategy(data_fetcher=None)
+        strategy.config = MockStrategyConfig()
         valid_signal.entry_price = 0
 
         should_trade, reason = await strategy.should_trade(valid_signal)
@@ -409,8 +432,9 @@ class TestPositionSizeRecommendation:
     """Tests for position size calculation."""
 
     def setup_method(self):
-        """Set up test fixtures."""
+        """Set up test fixtures with known config values."""
         self.strategy = LiquidationHunterStrategy(data_fetcher=None)
+        self.strategy.config = MockStrategyConfig()
 
     def test_high_confidence_larger_position(self):
         """High confidence should result in larger position."""

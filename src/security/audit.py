@@ -33,6 +33,9 @@ class AuditEventType(Enum):
     USER_LOGIN_FAILED = "user.login_failed"
     USER_PASSWORD_CHANGE = "user.password_change"
     USER_PROFILE_UPDATE = "user.profile_update"
+    USER_ROLE_CHANGE = "user.role_change"
+    USER_STATUS_CHANGE = "user.status_change"
+    USER_DELETE = "user.delete"
 
     # Credentials
     CREDENTIAL_CREATE = "credential.create"
@@ -492,6 +495,56 @@ class AuditLogger:
                 AuditEventType.USER_LOGOUT.value,
             ],
         )
+
+    async def get_all_logs(
+        self,
+        limit: int = 100,
+        offset: int = 0,
+        event_types: Optional[List[str]] = None,
+        start_date: Optional[datetime] = None,
+        end_date: Optional[datetime] = None,
+    ) -> List[AuditEntry]:
+        """
+        Get all audit logs (admin view).
+
+        Args:
+            limit: Maximum number of entries to return
+            offset: Offset for pagination
+            event_types: Filter by event types
+            start_date: Filter logs after this date
+            end_date: Filter logs before this date
+
+        Returns:
+            List of audit entries
+        """
+        if not self._initialized:
+            await self.initialize()
+
+        query = "SELECT * FROM audit_logs WHERE 1=1"
+        params = []
+
+        if event_types:
+            placeholders = ",".join("?" * len(event_types))
+            query += f" AND event_type IN ({placeholders})"
+            params.extend(event_types)
+
+        if start_date:
+            query += " AND timestamp >= ?"
+            params.append(start_date.isoformat())
+
+        if end_date:
+            query += " AND timestamp <= ?"
+            params.append(end_date.isoformat())
+
+        query += " ORDER BY timestamp DESC LIMIT ? OFFSET ?"
+        params.extend([limit, offset])
+
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            cursor = await db.execute(query, params)
+            rows = await cursor.fetchall()
+
+        return [self._row_to_entry(row) for row in rows]
 
     async def count_failed_logins(
         self,

@@ -1,0 +1,72 @@
+# Bitget Trading Bot - Traefik Configuration
+#
+# Features:
+# - Automatic HTTPS with Let's Encrypt
+# - Dashboard for monitoring
+# - Rate limiting
+# - Security headers
+# - WebSocket support
+
+# API and Dashboard
+api:
+  dashboard: true
+  insecure: false # Secured by middleware
+
+# Entry Points
+entryPoints:
+  web:
+    address: ":80"
+    http:
+      redirections:
+        entryPoint:
+          to: websecure
+          scheme: https
+          permanent: true
+
+  websecure:
+    address: ":443"
+    http:
+      tls:
+        certResolver: letsencrypt
+      middlewares:
+        - security-headers@file
+        - rate-limit@file
+
+# Certificate Resolvers (Let's Encrypt)
+certificatesResolvers:
+  letsencrypt:
+    acme:
+      email: "${ACME_EMAIL}"
+      storage: /etc/traefik/acme/acme.json
+      httpChallenge:
+        entryPoint: web
+      # For testing, use staging server:
+      # caServer: https://acme-staging-v02.api.letsencrypt.org/directory
+
+# Providers
+providers:
+  docker:
+    endpoint: "unix:///var/run/docker.sock"
+    exposedByDefault: false
+    network: traefik-public
+
+  file:
+    directory: /etc/traefik/dynamic
+    watch: true
+
+# Logging
+log:
+  level: INFO
+  format: json
+
+accessLog:
+  format: json
+  filters:
+    statusCodes:
+      - "400-599"
+
+# Metrics (optional - for Prometheus)
+# metrics:
+#   prometheus:
+#     addEntryPointsLabels: true
+#     addServicesLabels: true

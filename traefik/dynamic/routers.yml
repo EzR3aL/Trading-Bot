@@ -1,0 +1,80 @@
+# Traefik Dynamic Configuration - Routers and Services
+
+http:
+  routers:
+    # Traefik Dashboard
+    traefik-dashboard:
+      rule: "Host(`traefik.${DOMAIN}`) || (Host(`${DOMAIN}`) && PathPrefix(`/traefik`))"
+      service: api@internal
+      middlewares:
+        - dashboard-auth
+        - security-headers
+      tls:
+        certResolver: letsencrypt
+      entryPoints:
+        - websecure
+
+    # API Routes
+    api-router:
+      rule: "Host(`${DOMAIN}`) && PathPrefix(`/api`)"
+      service: trading-bot
+      middlewares:
+        - security-headers
+        - rate-limit
+        - compress
+      tls:
+        certResolver: letsencrypt
+      entryPoints:
+        - websecure
+
+    # Auth Routes (stricter rate limiting)
+    auth-router:
+      rule: "Host(`${DOMAIN}`) && PathPrefix(`/api/auth`)"
+      service: trading-bot
+      middlewares:
+        - security-headers
+        - rate-limit-auth
+      tls:
+        certResolver: letsencrypt
+      entryPoints:
+        - websecure
+      priority: 100 # Higher priority than api-router
+
+    # WebSocket Route
+    websocket-router:
+      rule: "Host(`${DOMAIN}`) && PathPrefix(`/ws`)"
+      service: trading-bot
+      middlewares:
+        - security-headers
+      tls:
+        certResolver: letsencrypt
+      entryPoints:
+        - websecure
+
+    # Frontend (React SPA)
+    frontend-router:
+      rule: "Host(`${DOMAIN}`)"
+      service: frontend
+      middlewares:
+        - security-headers
+        - compress
+      tls:
+        certResolver: letsencrypt
+      entryPoints:
+        - websecure
+      priority: 1 # Lowest priority - catch-all
+
+  services:
+    trading-bot:
+      loadBalancer:
+        servers:
+          - url: "http://trading-bot:8080"
+        healthCheck:
+          path: /api/health
+          interval: 30s
+          timeout: 5s
+
+    frontend:
+      loadBalancer:
+        servers:
+          - url: "http://frontend:80"
