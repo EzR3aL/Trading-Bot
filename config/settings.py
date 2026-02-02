@@ -114,6 +114,18 @@ class TradingConfig:
     # Portfolio rebalance threshold (0.10 = rebalance when weight drifts >10%)
     rebalance_threshold: float = field(default_factory=lambda: get_env("REBALANCE_THRESHOLD", "0.10", float))
 
+    # Funding rate arbitrage settings
+    # Minimum funding rate to trigger entry (0.0005 = 0.05%)
+    funding_arb_min_rate: float = field(default_factory=lambda: get_env("FUNDING_ARB_MIN_RATE", "0.0005", float))
+    # Rate below which to close positions (0.0001 = 0.01%)
+    funding_arb_exit_rate: float = field(default_factory=lambda: get_env("FUNDING_ARB_EXIT_RATE", "0.0001", float))
+    # Maximum value per side per arbitrage position
+    funding_arb_max_position: float = field(default_factory=lambda: get_env("FUNDING_ARB_MAX_POSITION", "10000", float))
+    # Maximum delta drift before rebalancing (0.05 = 5%)
+    funding_arb_delta_threshold: float = field(default_factory=lambda: get_env("FUNDING_ARB_DELTA_THRESHOLD", "0.05", float))
+    # Maximum concurrent arbitrage positions
+    funding_arb_max_positions: int = field(default_factory=lambda: get_env("FUNDING_ARB_MAX_POSITIONS", "3", int))
+
     # Trading mode (demo = no real trades, live = real trades)
     demo_mode: bool = field(default_factory=lambda: get_env("DEMO_MODE", "true", bool))
 
