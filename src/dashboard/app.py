@@ -773,6 +773,93 @@ def create_app() -> FastAPI:
             logger.error(f"Error reading backtest results: {e}")
             raise HTTPException(status_code=500, detail=str(e))
 
+    # ==================== PORTFOLIO API ====================
+
+    @app.get("/api/portfolio/state")
+    @limiter.limit("30/minute")
+    async def get_portfolio_state(request: Request, auth: bool = Depends(verify_api_key)):
+        """
+        Get current portfolio state with per-asset allocation.
+
+        Returns portfolio value, cash balance, and per-asset weights.
+        """
+        from src.portfolio.manager import PortfolioManager
+
+        pm = PortfolioManager.from_config(
+            trading_pairs=settings.trading.trading_pairs,
+            portfolio_weights=settings.trading.portfolio_weights or None,
+        )
+        state = pm.get_state()
+        return state.to_dict()
+
+    @app.get("/api/portfolio/stats")
+    @limiter.limit("30/minute")
+    async def get_portfolio_stats(request: Request, auth: bool = Depends(verify_api_key)):
+        """
+        Get per-asset portfolio statistics.
+
+        Shows target vs current weights, PnL per asset, trade counts.
+        """
+        from src.portfolio.manager import PortfolioManager
+
+        pm = PortfolioManager.from_config(
+            trading_pairs=settings.trading.trading_pairs,
+            portfolio_weights=settings.trading.portfolio_weights or None,
+        )
+
+        return {
+            "portfolio": pm.get_per_asset_stats(),
+            "total_value": pm.total_value,
+            "symbols": pm.symbols,
+            "rebalance_recommendations": pm.get_rebalance_recommendations(),
+        }
+
+    @app.get("/api/portfolio/correlation")
+    @limiter.limit("10/minute")
+    async def get_portfolio_correlation(
+        request: Request,
+        days: int = Query(30, ge=7, le=90, description="Days for correlation window"),
+        auth: bool = Depends(verify_api_key)
+    ):
+        """
+        Get correlation matrix between portfolio assets.
+
+        Uses historical price data to calculate asset correlations.
+        """
+        from src.portfolio.correlation import CorrelationTracker
+
+        tracker = CorrelationTracker(window=days)
+        tracker.load_from_parquet(settings.trading.trading_pairs, days=days)
+
+        return {
+            "correlation_matrix": tracker.get_matrix(),
+            "diversification_score": tracker.get_portfolio_diversification_score(),
+            "high_correlation_pairs": tracker.get_high_correlation_pairs(),
+            "window_days": days,
+        }
+
+    @app.get("/api/portfolio/rebalance")
+    @limiter.limit("10/minute")
+    async def get_rebalance_recommendations(request: Request, auth: bool = Depends(verify_api_key)):
+        """
+        Get portfolio rebalancing recommendations.
+
+        Shows which assets need to be bought/sold to match target weights.
+        """
+        from src.portfolio.manager import PortfolioManager
+
+        pm = PortfolioManager.from_config(
+            trading_pairs=settings.trading.trading_pairs,
+            portfolio_weights=settings.trading.portfolio_weights or None,
+            rebalance_threshold=settings.trading.rebalance_threshold,
+        )
+
+        return {
+            "recommendations": pm.get_rebalance_recommendations(),
+            "threshold": settings.trading.rebalance_threshold,
+            "current_allocation": pm.get_per_asset_stats(),
+        }
+
     # ==================== WEBSOCKET ====================
 
     async def verify_ws_token(websocket: WebSocket) -> bool:
