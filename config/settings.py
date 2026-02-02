@@ -132,6 +132,11 @@ class TradingConfig:
     max_slippage_pct: float = field(default_factory=lambda: get_env("MAX_SLIPPAGE_PCT", "0.5", float))
     iceberg_chunk_pct: float = field(default_factory=lambda: get_env("ICEBERG_CHUNK_PCT", "25.0", float))
 
+    # Cross-exchange arbitrage settings
+    cross_arb_min_spread_pct: float = field(default_factory=lambda: get_env("CROSS_ARB_MIN_SPREAD_PCT", "0.1", float))
+    cross_arb_min_profit_pct: float = field(default_factory=lambda: get_env("CROSS_ARB_MIN_PROFIT_PCT", "0.02", float))
+    cross_arb_reference_position: float = field(default_factory=lambda: get_env("CROSS_ARB_REFERENCE_POSITION", "10000", float))
+
     # Trading mode (demo = no real trades, live = real trades)
     demo_mode: bool = field(default_factory=lambda: get_env("DEMO_MODE", "true", bool))
 

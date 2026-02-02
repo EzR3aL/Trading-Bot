@@ -1058,6 +1058,41 @@ def create_app() -> FastAPI:
             "closed_count": len(closed_positions),
         }
 
+    # ==================== CROSS-EXCHANGE ====================
+
+    @app.get("/api/exchanges/registry")
+    @limiter.limit("30/minute")
+    async def get_exchange_registry(request: Request, auth: bool = Depends(verify_api_key)):
+        """Get registered exchanges and connection status."""
+        from src.exchanges.registry import ExchangeRegistry
+
+        registry = ExchangeRegistry()
+        return registry.get_summary()
+
+    @app.get("/api/exchanges/arb-scan")
+    @limiter.limit("30/minute")
+    async def get_cross_exchange_arb(request: Request, auth: bool = Depends(verify_api_key)):
+        """Get cross-exchange arbitrage scanner summary."""
+        from src.exchanges.arb_scanner import ArbScanner
+
+        scanner = ArbScanner(
+            min_spread_pct=settings.trading.cross_arb_min_spread_pct,
+            min_profit_pct=settings.trading.cross_arb_min_profit_pct,
+            reference_position=settings.trading.cross_arb_reference_position,
+        )
+
+        return scanner.get_summary()
+
+    @app.get("/api/exchanges/config")
+    @limiter.limit("30/minute")
+    async def get_cross_exchange_config(request: Request, auth: bool = Depends(verify_api_key)):
+        """Get cross-exchange arbitrage configuration."""
+        return {
+            "min_spread_pct": settings.trading.cross_arb_min_spread_pct,
+            "min_profit_pct": settings.trading.cross_arb_min_profit_pct,
+            "reference_position": settings.trading.cross_arb_reference_position,
+        }
+
     # ==================== WEBSOCKET ====================
 
     async def verify_ws_token(websocket: WebSocket) -> bool:
