@@ -860,6 +860,100 @@ def create_app() -> FastAPI:
             "current_allocation": pm.get_per_asset_stats(),
         }
 
+    # ==================== SIGNALS ====================
+
+    @app.get("/api/signals/weights")
+    @limiter.limit("30/minute")
+    async def get_signal_weights(request: Request, auth: bool = Depends(verify_api_key)):
+        """Get current signal stack weights."""
+        from src.signals.composite import SignalComposite, DEFAULT_WEIGHTS
+
+        weight_str = settings.strategy.signal_weights
+        weight_names = [
+            "fear_greed", "funding_rate", "long_short_ratio",
+            "open_interest_change", "price_momentum", "rsi",
+            "volume_profile", "liquidation_imbalance",
+        ]
+
+        try:
+            values = [float(x.strip()) for x in weight_str.split(",")]
+            if len(values) == len(weight_names):
+                total = sum(values)
+                weights = {name: val / total for name, val in zip(weight_names, values)}
+            else:
+                weights = dict(DEFAULT_WEIGHTS)
+        except (ValueError, ZeroDivisionError):
+            weights = dict(DEFAULT_WEIGHTS)
+
+        composite = SignalComposite(weights=weights)
+        return {
+            "weights": {k: round(v, 4) for k, v in composite.get_weights().items()},
+            "signal_count": len(weights),
+        }
+
+    @app.get("/api/signals/dashboard")
+    @limiter.limit("30/minute")
+    async def get_signal_dashboard(request: Request, auth: bool = Depends(verify_api_key)):
+        """Get signal normalizer descriptions and current configuration."""
+        from src.signals.composite import DEFAULT_WEIGHTS
+
+        signal_info = {
+            "fear_greed": {
+                "description": "Fear & Greed Index (contrarian)",
+                "source": "Alternative.me",
+                "range": "0-100",
+                "interpretation": "Low = buy signal, High = sell signal",
+            },
+            "funding_rate": {
+                "description": "Perpetual funding rate (contrarian)",
+                "source": "Binance/Bitget",
+                "range": "decimal (0.001 = 0.1%)",
+                "interpretation": "High positive = short signal, Negative = long signal",
+            },
+            "long_short_ratio": {
+                "description": "Long/Short account ratio (contrarian)",
+                "source": "Binance Futures",
+                "range": "0.1 - 5.0+",
+                "interpretation": "High = crowded longs (short signal)",
+            },
+            "open_interest_change": {
+                "description": "Open Interest 24h change",
+                "source": "Binance/Coinglass",
+                "range": "percentage",
+                "interpretation": "Rising = conviction, Falling = unwinding",
+            },
+            "price_momentum": {
+                "description": "24h price change momentum",
+                "source": "Exchange ticker",
+                "range": "percentage",
+                "interpretation": "Trend-following signal",
+            },
+            "rsi": {
+                "description": "Relative Strength Index (contrarian at extremes)",
+                "source": "Calculated from OHLCV",
+                "range": "0-100",
+                "interpretation": "<30 = oversold (buy), >70 = overbought (sell)",
+            },
+            "volume_profile": {
+                "description": "Buy/Sell volume ratio",
+                "source": "Exchange data",
+                "range": "0.0-1.0",
+                "interpretation": "High buy ratio = bullish",
+            },
+            "liquidation_imbalance": {
+                "description": "Long vs Short liquidation imbalance (contrarian)",
+                "source": "Coinglass/Exchange",
+                "range": "-1 to +1",
+                "interpretation": "Long liquidation cascade = buy signal",
+            },
+        }
+
+        return {
+            "signals": signal_info,
+            "default_weights": DEFAULT_WEIGHTS,
+            "configured_weights": settings.strategy.signal_weights,
+        }
+
     # ==================== ARBITRAGE ====================
 
     @app.get("/api/arbitrage/opportunities")
