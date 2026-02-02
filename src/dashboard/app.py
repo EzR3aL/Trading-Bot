@@ -300,7 +300,7 @@ def create_app() -> FastAPI:
         request: Request,
         auth: bool = Depends(verify_api_key),
         limit: int = Query(50, ge=1, le=500, description="Number of trades to return"),
-        status: Optional[str] = Query(None, regex="^(open|closed)?$", description="Filter by status"),
+        status: Optional[str] = Query(None, pattern="^(open|closed)?$", description="Filter by status"),
         symbol: Optional[str] = Query(None, max_length=20, description="Filter by symbol")
     ):
         """Get trade history. Requires API key authentication."""
@@ -621,6 +621,157 @@ def create_app() -> FastAPI:
                 })
 
         return health
+
+    # ==================== BACKTESTING API ====================
+
+    @app.get("/api/backtest/data")
+    @limiter.limit("30/minute")
+    async def list_backtest_data(request: Request, auth: bool = Depends(verify_api_key)):
+        """
+        List available historical data for backtesting.
+
+        Returns list of data files with metadata.
+        """
+        from src.backtest.data_storage import ParquetDataStorage
+
+        storage = ParquetDataStorage()
+        data_list = storage.list_available_data()
+
+        return {
+            "data_files": data_list,
+            "supported_timeframes": ["1m", "5m", "15m", "30m", "1H", "4H", "1D"],
+            "supported_symbols": ["BTCUSDT", "ETHUSDT", "SOLUSDT", "DOGEUSDT"]
+        }
+
+    @app.post("/api/backtest/download")
+    @limiter.limit("5/minute")
+    async def download_backtest_data(
+        request: Request,
+        symbol: str = Query("BTCUSDT", description="Trading pair"),
+        timeframe: str = Query("1H", description="Candle timeframe"),
+        days: int = Query(365, ge=1, le=1000, description="Days to download"),
+        auth: bool = Depends(verify_api_key)
+    ):
+        """
+        Download historical data from Binance.
+
+        This is a long-running operation that downloads data month by month.
+        """
+        from src.backtest.data_storage import ParquetDataStorage, BinanceDataDownloader
+        from datetime import datetime, timedelta
+
+        storage = ParquetDataStorage()
+        downloader = BinanceDataDownloader(storage)
+
+        start_date = datetime.now() - timedelta(days=days)
+
+        try:
+            total_rows = await downloader.download_klines(
+                symbol=symbol,
+                timeframe=timeframe,
+                start_date=start_date
+            )
+
+            return {
+                "success": True,
+                "symbol": symbol,
+                "timeframe": timeframe,
+                "days": days,
+                "rows_downloaded": total_rows,
+                "message": f"Downloaded {total_rows} rows for {symbol} {timeframe}"
+            }
+        except Exception as e:
+            logger.error(f"Error downloading backtest data: {e}")
+            raise HTTPException(status_code=500, detail=str(e))
+
+    @app.post("/api/backtest/run")
+    @limiter.limit("5/minute")
+    async def run_backtest(
+        request: Request,
+        symbol: str = Query("BTCUSDT", description="Trading pair"),
+        days: int = Query(180, ge=30, le=365, description="Days to backtest"),
+        capital: float = Query(10000.0, ge=100, le=1000000, description="Starting capital"),
+        leverage: int = Query(3, ge=1, le=20, description="Leverage"),
+        take_profit: float = Query(3.5, ge=0.5, le=20, description="Take profit %"),
+        stop_loss: float = Query(2.0, ge=0.5, le=10, description="Stop loss %"),
+        auth: bool = Depends(verify_api_key)
+    ):
+        """
+        Run a backtest with custom parameters.
+
+        Returns detailed backtest results including performance metrics.
+        """
+        from src.backtest.historical_data import HistoricalDataFetcher
+        from src.backtest.engine import BacktestEngine, BacktestConfig
+        from src.backtest.report import BacktestReport
+        from src.backtest.mock_data import generate_mock_historical_data
+
+        try:
+            # Fetch data
+            fetcher = HistoricalDataFetcher()
+            data_points = await fetcher.fetch_all_historical_data(days)
+            await fetcher.close()
+
+            if not data_points:
+                logger.info("No live data available, using mock data")
+                data_points = generate_mock_historical_data(days)
+
+            if not data_points:
+                raise HTTPException(status_code=500, detail="No data available for backtest")
+
+            # Configure backtest
+            config = BacktestConfig(
+                starting_capital=capital,
+                leverage=leverage,
+                take_profit_percent=take_profit,
+                stop_loss_percent=stop_loss,
+                max_trades_per_day=settings.trading.max_trades_per_day,
+                daily_loss_limit_percent=settings.trading.daily_loss_limit_percent,
+                position_size_percent=settings.trading.position_size_percent,
+            )
+
+            # Run backtest
+            engine = BacktestEngine(config)
+            result = engine.run(data_points)
+
+            # Save results
+            report = BacktestReport(result)
+            report.save_json()
+
+            return {
+                "success": True,
+                "results": result.to_dict(),
+                "trades_count": len([t for t in result.trades if hasattr(t, 'to_dict')]),
+                "daily_stats_count": len(result.daily_stats),
+            }
+
+        except Exception as e:
+            logger.error(f"Backtest error: {e}")
+            raise HTTPException(status_code=500, detail=str(e))
+
+    @app.get("/api/backtest/results")
+    @limiter.limit("30/minute")
+    async def get_backtest_results(request: Request, auth: bool = Depends(verify_api_key)):
+        """
+        Get the most recent backtest results.
+
+        Returns saved backtest results from the last run.
+        """
+        import json
+        from pathlib import Path
+
+        results_file = Path("data/backtest/results.json")
+
+        if not results_file.exists():
+            return {"results": None, "message": "No backtest results found. Run a backtest first."}
+
+        try:
+            with open(results_file, "r") as f:
+                results = json.load(f)
+            return {"results": results}
+        except Exception as e:
+            logger.error(f"Error reading backtest results: {e}")
+            raise HTTPException(status_code=500, detail=str(e))
 
     # ==================== WEBSOCKET ====================
 
