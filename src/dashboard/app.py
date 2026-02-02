@@ -860,6 +860,72 @@ def create_app() -> FastAPI:
             "current_allocation": pm.get_per_asset_stats(),
         }
 
+    # ==================== ARBITRAGE ====================
+
+    @app.get("/api/arbitrage/opportunities")
+    @limiter.limit("30/minute")
+    async def get_arbitrage_opportunities(request: Request, auth: bool = Depends(verify_api_key)):
+        """Get current funding rate arbitrage opportunities."""
+        from src.arbitrage.funding_rate import FundingRateMonitor
+
+        monitor = FundingRateMonitor(
+            min_rate=settings.trading.funding_arb_min_rate,
+            exit_rate=settings.trading.funding_arb_exit_rate,
+        )
+
+        return monitor.get_summary()
+
+    @app.get("/api/arbitrage/positions")
+    @limiter.limit("30/minute")
+    async def get_arbitrage_positions(request: Request, auth: bool = Depends(verify_api_key)):
+        """Get open and recent closed arbitrage positions."""
+        from src.arbitrage.delta_neutral import DeltaNeutralManager
+
+        manager = DeltaNeutralManager(
+            max_positions=settings.trading.funding_arb_max_positions,
+            max_position_value=settings.trading.funding_arb_max_position,
+            delta_threshold=settings.trading.funding_arb_delta_threshold,
+        )
+
+        return manager.get_summary()
+
+    @app.get("/api/arbitrage/config")
+    @limiter.limit("30/minute")
+    async def get_arbitrage_config(request: Request, auth: bool = Depends(verify_api_key)):
+        """Get current arbitrage configuration."""
+        return {
+            "min_rate": settings.trading.funding_arb_min_rate,
+            "min_rate_pct": f"{settings.trading.funding_arb_min_rate * 100:.4f}%",
+            "exit_rate": settings.trading.funding_arb_exit_rate,
+            "exit_rate_pct": f"{settings.trading.funding_arb_exit_rate * 100:.4f}%",
+            "max_position_value": settings.trading.funding_arb_max_position,
+            "delta_threshold": settings.trading.funding_arb_delta_threshold,
+            "max_positions": settings.trading.funding_arb_max_positions,
+        }
+
+    @app.get("/api/arbitrage/pnl")
+    @limiter.limit("30/minute")
+    async def get_arbitrage_pnl(request: Request, auth: bool = Depends(verify_api_key)):
+        """Get arbitrage P&L summary."""
+        from src.arbitrage.delta_neutral import DeltaNeutralManager
+
+        manager = DeltaNeutralManager(
+            max_positions=settings.trading.funding_arb_max_positions,
+            max_position_value=settings.trading.funding_arb_max_position,
+        )
+
+        open_positions = manager.get_open_positions()
+        closed_positions = manager.get_closed_positions()
+
+        return {
+            "total_pnl": round(manager.get_total_pnl(), 4),
+            "total_funding_collected": round(manager.get_total_funding_collected(), 4),
+            "open_positions_pnl": round(sum(p.total_pnl for p in open_positions), 4),
+            "closed_positions_pnl": round(sum(p.total_pnl for p in closed_positions), 4),
+            "open_count": len(open_positions),
+            "closed_count": len(closed_positions),
+        }
+
     # ==================== WEBSOCKET ====================
 
     async def verify_ws_token(websocket: WebSocket) -> bool:
