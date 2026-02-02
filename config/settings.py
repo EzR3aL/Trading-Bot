@@ -193,6 +193,10 @@ class StrategyConfig:
     high_confidence_min: int = field(default_factory=lambda: get_env("HIGH_CONFIDENCE_MIN", "85", int))
     low_confidence_min: int = field(default_factory=lambda: get_env("LOW_CONFIDENCE_MIN", "60", int))
 
+    # Signal stack weights (comma-separated: fear_greed,funding,ls_ratio,oi,momentum,rsi,volume,liquidation)
+    # Default: "20,15,20,10,10,10,8,7"
+    signal_weights: str = field(default_factory=lambda: get_env("SIGNAL_WEIGHTS", "20,15,20,10,10,10,8,7"))
+
     def validate(self) -> Tuple[bool, List[str]]:
         """
         Validate strategy configuration.
