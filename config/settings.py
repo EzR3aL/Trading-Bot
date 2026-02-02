@@ -107,6 +107,13 @@ class TradingConfig:
     stop_loss_percent: float = field(default_factory=lambda: get_env("STOP_LOSS_PERCENT", "1.5", float))
     trading_pairs: List[str] = field(default_factory=lambda: get_env("TRADING_PAIRS", "BTCUSDT,ETHUSDT", list))
 
+    # Portfolio weights (comma-separated, must match trading_pairs count)
+    # e.g., "40,30,15,15" for 40% BTC, 30% ETH, 15% SOL, 15% DOGE
+    portfolio_weights: str = field(default_factory=lambda: get_env("PORTFOLIO_WEIGHTS", ""))
+
+    # Portfolio rebalance threshold (0.10 = rebalance when weight drifts >10%)
+    rebalance_threshold: float = field(default_factory=lambda: get_env("REBALANCE_THRESHOLD", "0.10", float))
+
     # Trading mode (demo = no real trades, live = real trades)
     demo_mode: bool = field(default_factory=lambda: get_env("DEMO_MODE", "true", bool))
 
