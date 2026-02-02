@@ -47,6 +47,15 @@ class BacktestResult:
     total_fees: float
     total_funding: float
 
+    # Risk-Adjusted Metrics
+    sharpe_ratio: float = 0.0
+    sortino_ratio: float = 0.0
+    calmar_ratio: float = 0.0
+
+    # Additional Metrics
+    timeframe: str = "1D"  # Backtest timeframe
+    symbols_traded: List[str] = field(default_factory=list)
+
     # Breakdowns
     monthly_returns: Dict[str, float] = field(default_factory=dict)
     trades: List[Any] = field(default_factory=list)
@@ -73,6 +82,9 @@ class BacktestResult:
             total_pnl=0,
             total_fees=0,
             total_funding=0,
+            sharpe_ratio=0,
+            sortino_ratio=0,
+            calmar_ratio=0,
         )
 
     def to_dict(self) -> Dict[str, Any]:
@@ -94,6 +106,11 @@ class BacktestResult:
             "total_pnl": self.total_pnl,
             "total_fees": self.total_fees,
             "total_funding": self.total_funding,
+            "sharpe_ratio": self.sharpe_ratio,
+            "sortino_ratio": self.sortino_ratio,
+            "calmar_ratio": self.calmar_ratio,
+            "timeframe": self.timeframe,
+            "symbols_traded": self.symbols_traded,
             "monthly_returns": self.monthly_returns,
         }
 
@@ -128,6 +145,14 @@ class BacktestReport:
             f"Total P&L:           ${r.total_pnl:>12,.2f}",
             f"Total Return:        {r.total_return_percent:>12.2f}%",
             f"Max Drawdown:        {r.max_drawdown_percent:>12.2f}%",
+            "",
+            "-" * 70,
+            "RISK-ADJUSTED METRICS",
+            "-" * 70,
+            "",
+            f"Sharpe Ratio:        {r.sharpe_ratio:>12.2f}",
+            f"Sortino Ratio:       {r.sortino_ratio:>12.2f}",
+            f"Calmar Ratio:        {r.calmar_ratio:>12.2f}",
             "",
             "-" * 70,
             "TRADE STATISTICS",
