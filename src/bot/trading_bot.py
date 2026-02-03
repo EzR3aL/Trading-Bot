@@ -672,7 +672,7 @@ class TradingBot:
                 duration = datetime.now() - trade.entry_time
                 duration_minutes = int(duration.total_seconds() / 60)
 
-            # Send Discord notification
+            # Send Discord notification with strategy reason
             await self.discord.send_trade_exit(
                 symbol=trade.symbol,
                 side=trade.side,
@@ -686,6 +686,7 @@ class TradingBot:
                 reason=exit_reason,
                 order_id=trade.order_id,
                 duration_minutes=duration_minutes,
+                strategy_reason=getattr(trade, 'reason', None),
             )
 
             logger.info(

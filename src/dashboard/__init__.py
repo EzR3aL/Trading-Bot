@@ -1,13 +1,8 @@
-"""
-Web Dashboard for the Bitget Trading Bot.
+"""Dashboard module - Web UI and API."""
 
-Provides a real-time web interface for:
-- Monitoring open positions
-- Viewing trade history
-- Analyzing performance metrics
-- Configuring bot settings
-"""
+def run_dashboard(host: str = "0.0.0.0", port: int = 8080):
+    """Start the web dashboard."""
+    import uvicorn
+    from src.api.main_app import app
 
-from src.dashboard.app import create_app, run_dashboard
-
-__all__ = ["create_app", "run_dashboard"]
+    uvicorn.run(app, host=host, port=port)

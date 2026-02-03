@@ -239,6 +239,41 @@ async def run_backtest(days: int = 180, capital: float = 10000.0):
         await fetcher.close()
 
 
+async def create_admin(username: str, password: str):
+    """Create an admin user."""
+    from src.models.session import init_db, close_db, get_session
+    from src.models.database import User
+    from src.auth.password import hash_password
+    from sqlalchemy import select
+
+    await init_db()
+
+    try:
+        async with get_session() as session:
+            # Check if user exists
+            result = await session.execute(
+                select(User).where(User.username == username)
+            )
+            existing = result.scalar_one_or_none()
+            if existing:
+                print(f"User '{username}' already exists!")
+                return 1
+
+            user = User(
+                username=username,
+                password_hash=hash_password(password),
+                role="admin",
+                is_active=True,
+                language="de",
+            )
+            session.add(user)
+
+        print(f"Admin user '{username}' created successfully!")
+        return 0
+    finally:
+        await close_db()
+
+
 def main():
     """Main entry point."""
     parser = argparse.ArgumentParser(
@@ -309,7 +344,33 @@ For more information, see the README.md file.
         help="Port for the web dashboard (default: 8080)",
     )
 
+    parser.add_argument(
+        "--create-admin",
+        action="store_true",
+        help="Create an admin user (requires --username and --password)",
+    )
+
+    parser.add_argument(
+        "--username",
+        type=str,
+        help="Username for --create-admin",
+    )
+
+    parser.add_argument(
+        "--password",
+        type=str,
+        help="Password for --create-admin (min 8 characters)",
+    )
+
     args = parser.parse_args()
+
+    # Handle create-admin (before logging setup)
+    if args.create_admin:
+        if not args.username or not args.password:
+            parser.error("--create-admin requires --username and --password")
+        if len(args.password) < 8:
+            parser.error("Password must be at least 8 characters")
+        return asyncio.run(create_admin(args.username, args.password))
 
     # Setup logging
     setup_logging(log_level=args.log_level)

@@ -1,9 +1,7 @@
 # Bitget Trading Bot - Docker Compose Configuration
 # Usage:
-#   Development: docker-compose up
-#   Production:  docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
-
-version: '3.8'
+#   Build & Run: docker-compose up --build
+#   Detached:    docker-compose up -d --build
 
 services:
   trading-bot:
@@ -13,68 +11,32 @@ services:
     container_name: bitget-trading-bot
     restart: unless-stopped
 
-    # Environment variables
     env_file:
       - .env
 
-    # Override for dashboard mode
     environment:
       - DASHBOARD_HOST=0.0.0.0
       - PYTHONUNBUFFERED=1
 
-    # Expose dashboard port (only to localhost by default)
     ports:
       - "127.0.0.1:8080:8080"
 
-    # Persist data
     volumes:
       - ./data:/app/data
       - ./logs:/app/logs
 
-    # Health check
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/api/health')"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 10s
+      start_period: 15s
 
-    # Resource limits (adjust as needed)
     deploy:
       resources:
         limits:
-          cpus: '1'
-          memory: 512M
+          cpus: '2'
+          memory: 1024M
         reservations:
-          cpus: '0.25'
-          memory: 128M
-
-  # Dashboard-only service (for monitoring without trading)
-  dashboard:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: bitget-dashboard
-    profiles:
-      - dashboard-only
-    restart: unless-stopped
-    env_file:
-      - .env
-    environment:
-      - DASHBOARD_HOST=0.0.0.0
-    ports:
-      - "127.0.0.1:8080:8080"
-    volumes:
-      - ./data:/app/data:ro
-      - ./logs:/app/logs:ro
-    command: ["python", "main.py", "--dashboard"]
-    healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/api/health')"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-
-# Named volumes for persistent data
-volumes:
-  bot-data:
-  bot-logs:
+          cpus: '0.5'
+          memory: 256M

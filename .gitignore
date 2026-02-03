@@ -76,6 +76,11 @@ logs/
 *.db
 *.log
 
+# Frontend
+node_modules/
+frontend/node_modules/
+static/frontend/
+
 # Secrets - Never commit these!
 .env
 *.pem

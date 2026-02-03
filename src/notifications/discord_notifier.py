@@ -239,6 +239,7 @@ class DiscordNotifier:
         order_id: str,
         duration_minutes: Optional[int] = None,
         demo_mode: Optional[bool] = None,
+        strategy_reason: Optional[str] = None,
     ) -> bool:
         """
         Send a trade exit notification.
@@ -308,6 +309,9 @@ class DiscordNotifier:
             mins = duration_minutes % 60
             duration_str = f"{hours}h {mins}m" if hours > 0 else f"{mins}m"
             fields.append({"name": "⏱️ Duration", "value": f"`{duration_str}`", "inline": True})
+
+        if strategy_reason:
+            fields.append({"name": "🧠 Strategy Decision", "value": f"```{strategy_reason[:500]}```", "inline": False})
 
         embed = self._create_embed(
             title=f"{emoji} {mode_label} - TRADE CLOSED - {result} on {symbol}",
