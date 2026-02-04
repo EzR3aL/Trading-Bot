@@ -117,3 +117,29 @@ export interface ConfigResponse {
   api_keys_configured: boolean
   demo_api_keys_configured: boolean
 }
+
+export interface ServiceStatus {
+  label: string
+  type: 'data_source' | 'exchange' | 'notification'
+  reachable: boolean
+  status_code?: number | null
+  latency_ms?: number
+  configured?: boolean
+  error?: string
+}
+
+export interface ConnectionsStatusResponse {
+  timestamp: string
+  services: Record<string, ServiceStatus>
+  circuit_breakers: Record<string, {
+    name: string
+    state: 'closed' | 'open' | 'half_open'
+    stats: {
+      total_calls: number
+      successful_calls: number
+      failed_calls: number
+      success_rate: number
+      consecutive_failures: number
+    }
+  }>
+}

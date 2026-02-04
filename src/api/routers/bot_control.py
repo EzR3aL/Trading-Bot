@@ -42,13 +42,16 @@ async def start_bot(
 ):
     """Start the trading bot for the current user."""
     manager = _get_bot_manager()
-    success = await manager.start_bot(
-        user_id=user.id,
-        exchange_type=request.exchange_type,
-        preset_id=request.preset_id,
-        demo_mode=request.demo_mode,
-        db=db,
-    )
+    try:
+        success = await manager.start_bot(
+            user_id=user.id,
+            exchange_type=request.exchange_type,
+            preset_id=request.preset_id,
+            demo_mode=request.demo_mode,
+            db=db,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     if not success:
         raise HTTPException(status_code=400, detail="Failed to start bot")
     return {"status": "ok", "message": "Bot started"}
@@ -112,17 +115,12 @@ async def open_test_trade(
     if not config:
         raise HTTPException(status_code=400, detail="No config found. Set up API keys first.")
 
-    # Get API credentials (prefer demo keys, fall back to regular)
-    if config.demo_api_key_encrypted:
-        api_key = decrypt_value(config.demo_api_key_encrypted)
-        api_secret = decrypt_value(config.demo_api_secret_encrypted)
-        passphrase = decrypt_value(config.demo_passphrase_encrypted) if config.demo_passphrase_encrypted else ""
-    elif config.api_key_encrypted:
-        api_key = decrypt_value(config.api_key_encrypted)
-        api_secret = decrypt_value(config.api_secret_encrypted)
-        passphrase = decrypt_value(config.passphrase_encrypted) if config.passphrase_encrypted else ""
-    else:
-        raise HTTPException(status_code=400, detail="No API keys configured.")
+    # Get demo API credentials (test trades are always demo)
+    if not config.demo_api_key_encrypted:
+        raise HTTPException(status_code=400, detail="No demo API keys configured. Set up demo keys in Settings first.")
+    api_key = decrypt_value(config.demo_api_key_encrypted)
+    api_secret = decrypt_value(config.demo_api_secret_encrypted)
+    passphrase = decrypt_value(config.demo_passphrase_encrypted) if config.demo_passphrase_encrypted else ""
 
     exchange_type = config.exchange_type or "bitget"
 
@@ -249,16 +247,18 @@ async def open_test_trade(
 
 async def _get_exchange_client(config: UserConfig, demo_mode: bool = True):
     """Create exchange client from user config."""
-    if config.demo_api_key_encrypted:
+    if demo_mode:
+        if not config.demo_api_key_encrypted:
+            return None
         api_key = decrypt_value(config.demo_api_key_encrypted)
         api_secret = decrypt_value(config.demo_api_secret_encrypted)
         passphrase = decrypt_value(config.demo_passphrase_encrypted) if config.demo_passphrase_encrypted else ""
-    elif config.api_key_encrypted:
+    else:
+        if not config.api_key_encrypted:
+            return None
         api_key = decrypt_value(config.api_key_encrypted)
         api_secret = decrypt_value(config.api_secret_encrypted)
         passphrase = decrypt_value(config.passphrase_encrypted) if config.passphrase_encrypted else ""
-    else:
-        return None
 
     return create_exchange_client(
         exchange_type=config.exchange_type or "bitget",

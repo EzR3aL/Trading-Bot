@@ -37,7 +37,7 @@ class BotManager:
         """Start a bot for a user."""
         if user_id in self._bots and self._bots[user_id].get("running"):
             logger.warning(f"Bot already running for user {user_id}")
-            return False
+            raise ValueError("Bot is already running")
 
         try:
             async with get_session() as session:
@@ -49,20 +49,23 @@ class BotManager:
 
                 if not config:
                     logger.error(f"No config found for user {user_id}")
-                    return False
+                    raise ValueError("No configuration found. Set up your settings first.")
 
-                # Get credentials
-                if demo_mode and config.demo_api_key_encrypted:
+                # Get credentials based on mode
+                if demo_mode:
+                    if not config.demo_api_key_encrypted:
+                        logger.error(f"Demo mode requested but no demo API keys configured for user {user_id}")
+                        raise ValueError("No demo API keys configured. Add demo keys in Settings first.")
                     api_key = decrypt_value(config.demo_api_key_encrypted)
                     api_secret = decrypt_value(config.demo_api_secret_encrypted)
                     passphrase = decrypt_value(config.demo_passphrase_encrypted) if config.demo_passphrase_encrypted else ""
-                elif config.api_key_encrypted:
+                else:
+                    if not config.api_key_encrypted:
+                        logger.error(f"Live mode requested but no live API keys configured for user {user_id}")
+                        raise ValueError("No live API keys configured. Add live keys in Settings first.")
                     api_key = decrypt_value(config.api_key_encrypted)
                     api_secret = decrypt_value(config.api_secret_encrypted)
                     passphrase = decrypt_value(config.passphrase_encrypted) if config.passphrase_encrypted else ""
-                else:
-                    logger.error(f"No API keys configured for user {user_id}")
-                    return False
 
                 # Get preset config if specified
                 preset_name = None

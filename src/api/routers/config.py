@@ -1,8 +1,12 @@
 """User configuration endpoints (per-user settings)."""
 
+import asyncio
 import json
-from typing import Optional
+import time
+from datetime import datetime
+from typing import Any, Dict, Literal, Optional
 
+import aiohttp
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -18,6 +22,7 @@ from src.api.schemas.config import (
 from src.auth.dependencies import get_current_user
 from src.models.database import User, UserConfig
 from src.models.session import get_db
+from src.utils.circuit_breaker import circuit_registry
 from src.utils.encryption import decrypt_value, encrypt_value, mask_value
 
 router = APIRouter(prefix="/api/config", tags=["config"])
@@ -165,20 +170,34 @@ async def update_api_keys(
 
 @router.post("/api-keys/test")
 async def test_api_keys(
+    mode: Optional[Literal["live", "demo"]] = None,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Test exchange connection with stored API keys."""
+    """Test exchange connection with stored API keys.
+
+    Query params:
+        mode: 'live' | 'demo' | None (None = demo first, then live)
+    """
     config = await _get_or_create_config(user, db)
 
-    if not config.api_key_encrypted and not config.demo_api_key_encrypted:
-        raise HTTPException(status_code=400, detail="No API keys configured")
+    if mode == "live":
+        if not config.api_key_encrypted:
+            raise HTTPException(status_code=400, detail="No live API keys configured")
+        use_demo = False
+    elif mode == "demo":
+        if not config.demo_api_key_encrypted:
+            raise HTTPException(status_code=400, detail="No demo API keys configured")
+        use_demo = True
+    else:
+        if not config.api_key_encrypted and not config.demo_api_key_encrypted:
+            raise HTTPException(status_code=400, detail="No API keys configured")
+        use_demo = bool(config.demo_api_key_encrypted)
 
     try:
         from src.exchanges.factory import create_exchange_client
 
-        # Try demo keys first, then live
-        if config.demo_api_key_encrypted:
+        if use_demo:
             client = create_exchange_client(
                 exchange_type=config.exchange_type,
                 api_key=decrypt_value(config.demo_api_key_encrypted),
@@ -203,6 +222,7 @@ async def test_api_keys(
             "exchange": config.exchange_type,
             "balance": balance.total,
             "currency": balance.currency,
+            "mode": "demo" if use_demo else "live",
         }
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Connection failed: {str(e)}")
@@ -218,3 +238,82 @@ async def update_exchange(
     config = await _get_or_create_config(user, db)
     config.exchange_type = data.exchange_type
     return {"status": "ok", "message": f"Exchange set to {data.exchange_type}"}
+
+
+async def _ping_service(
+    session: aiohttp.ClientSession,
+    url: str,
+    method: str = "GET",
+    json_body: Optional[Dict] = None,
+    timeout: float = 3.0,
+) -> Dict[str, Any]:
+    """Ping a URL and return status + latency."""
+    start = time.monotonic()
+    try:
+        client_timeout = aiohttp.ClientTimeout(total=timeout)
+        if method == "POST":
+            req = session.post(url, json=json_body or {}, timeout=client_timeout)
+        else:
+            req = session.get(url, timeout=client_timeout)
+        async with req as resp:
+            latency_ms = round((time.monotonic() - start) * 1000)
+            return {"reachable": resp.status < 500, "status_code": resp.status, "latency_ms": latency_ms}
+    except Exception as e:
+        latency_ms = round((time.monotonic() - start) * 1000)
+        return {"reachable": False, "status_code": None, "latency_ms": latency_ms, "error": type(e).__name__}
+
+
+@router.get("/connections")
+async def get_connections_status(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Check connectivity to all external data sources and services."""
+    config = await _get_or_create_config(user, db)
+
+    services: Dict[str, Dict[str, Any]] = {
+        "binance_futures": {
+            "label": "Binance Futures", "type": "data_source",
+            "url": "https://fapi.binance.com/fapi/v1/ping",
+        },
+        "alternative_me": {
+            "label": "Alternative.me (Fear & Greed)", "type": "data_source",
+            "url": "https://api.alternative.me/fng/?limit=1",
+        },
+    }
+
+    # Exchange endpoint based on config
+    if config.exchange_type == "bitget":
+        services["exchange"] = {"label": "Bitget", "type": "exchange", "url": "https://api.bitget.com/api/v2/public/time"}
+    elif config.exchange_type == "weex":
+        services["exchange"] = {"label": "Weex", "type": "exchange", "url": "https://api.weex.com/api/v2/public/time"}
+    elif config.exchange_type == "hyperliquid":
+        services["exchange"] = {"label": "Hyperliquid", "type": "exchange", "url": "https://api.hyperliquid.xyz/info", "method": "POST", "json_body": {"type": "meta"}}
+
+    has_discord = bool(config.discord_webhook_url)
+
+    # Ping all in parallel
+    service_names = list(services.keys())
+    async with aiohttp.ClientSession() as http:
+        coros = [
+            _ping_service(http, services[n]["url"], method=services[n].get("method", "GET"), json_body=services[n].get("json_body"))
+            for n in service_names
+        ]
+        pings = await asyncio.gather(*coros, return_exceptions=True)
+
+    results: Dict[str, Any] = {}
+    for name, ping_result in zip(service_names, pings):
+        svc = services[name]
+        if isinstance(ping_result, Exception):
+            ping_data: Dict[str, Any] = {"reachable": False, "error": str(ping_result)}
+        else:
+            ping_data = ping_result
+        results[name] = {"label": svc["label"], "type": svc["type"], **ping_data}
+
+    results["discord"] = {"label": "Discord Webhook", "type": "notification", "configured": has_discord, "reachable": has_discord}
+
+    return {
+        "timestamp": datetime.utcnow().isoformat(),
+        "services": results,
+        "circuit_breakers": circuit_registry.get_all_statuses(),
+    }
