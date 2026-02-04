@@ -87,7 +87,13 @@ async def get_config(
 
     discord = None
     if config.discord_webhook_url:
-        discord = DiscordConfigUpdate(webhook_url=mask_value(config.discord_webhook_url, 8))
+        try:
+            decrypted_url = decrypt_value(config.discord_webhook_url)
+            masked = mask_value(decrypted_url, 8)
+        except (ValueError, Exception):
+            masked = "****invalid****"
+        # Use model_construct to skip validation on the masked display value
+        discord = DiscordConfigUpdate.model_construct(webhook_url=masked)
 
     conn_responses = [_conn_to_response(c) for c in connections]
 
@@ -138,7 +144,10 @@ async def update_discord_config(
 ):
     """Update Discord webhook URL."""
     config = await _get_or_create_config(user, db)
-    config.discord_webhook_url = data.webhook_url
+    if data.webhook_url:
+        config.discord_webhook_url = encrypt_value(data.webhook_url)
+    else:
+        config.discord_webhook_url = None
     return {"status": "ok", "message": "Discord config updated"}
 
 
@@ -153,6 +162,11 @@ async def test_discord_webhook(
         raise HTTPException(status_code=400, detail="No Discord webhook configured")
 
     try:
+        webhook_url = decrypt_value(config.discord_webhook_url)
+    except (ValueError, Exception):
+        raise HTTPException(status_code=400, detail="Discord webhook URL could not be decrypted")
+
+    try:
         async with aiohttp.ClientSession() as session:
             payload = {
                 "content": None,
@@ -162,7 +176,7 @@ async def test_discord_webhook(
                     "color": 3447003,
                 }],
             }
-            async with session.post(config.discord_webhook_url, json=payload) as resp:
+            async with session.post(webhook_url, json=payload) as resp:
                 if resp.status in (200, 204):
                     return {"status": "ok", "message": "Test message sent"}
                 return {"status": "error", "message": f"Discord returned {resp.status}"}
@@ -365,6 +379,12 @@ async def get_connections_status(
             }
 
     has_discord = bool(config.discord_webhook_url)
+    # Verify we can decrypt it
+    if has_discord:
+        try:
+            decrypt_value(config.discord_webhook_url)
+        except (ValueError, Exception):
+            has_discord = False
 
     # Ping all in parallel
     service_names = list(services.keys())

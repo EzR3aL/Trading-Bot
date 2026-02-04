@@ -27,9 +27,13 @@ export default function Dashboard() {
   const [recentTrades, setRecentTrades] = useState<Trade[]>([])
   const [botStatus, setBotStatus] = useState<BotStatus | null>(null)
   const [period, setPeriod] = useState<number>(30)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
 
   useEffect(() => {
     const load = async () => {
+      setLoading(true)
+      setError('')
       try {
         await api.post('/trades/sync').catch(() => {})
 
@@ -44,14 +48,31 @@ export default function Dashboard() {
         setRecentTrades(tradesRes.data.trades)
         setBotStatus(botRes.data)
       } catch {
-        // API may not be fully set up yet
+        setError(t('common.error'))
+      } finally {
+        setLoading(false)
       }
     }
     load()
   }, [period])
 
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <div className="text-gray-500 text-lg">{t('common.loading')}</div>
+      </div>
+    )
+  }
+
   return (
     <div>
+      {/* Error */}
+      {error && (
+        <div className="mb-4 p-3 bg-red-900/30 border border-red-800 rounded text-red-400 text-sm">
+          {error}
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold text-white">{t('dashboard.title')}</h1>

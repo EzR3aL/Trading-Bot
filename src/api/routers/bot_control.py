@@ -17,7 +17,7 @@ from src.auth.dependencies import get_current_user
 from src.exchanges.factory import create_exchange_client
 from src.models.database import ExchangeConnection, TradeRecord, User, UserConfig
 from src.models.session import get_db
-from src.utils.encryption import decrypt_value
+from src.utils.encryption import decrypt_value, encrypt_value
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -197,26 +197,32 @@ async def open_test_trade(
 
         # Send Discord notification
         if config and config.discord_webhook_url:
-            from src.notifications.discord_notifier import DiscordNotifier
-            notifier = DiscordNotifier(webhook_url=config.discord_webhook_url)
             try:
-                await notifier.send_trade_entry(
-                    symbol="BTCUSDT",
-                    side="long",
-                    size=size,
-                    entry_price=fill_price,
-                    leverage=leverage,
-                    take_profit=tp,
-                    stop_loss=sl,
-                    confidence=75,
-                    reason="Test trade via API",
-                    order_id=order.order_id,
-                    demo_mode=True,
-                )
-            except Exception as e:
-                logger.warning(f"Discord notification failed: {e}")
-            finally:
-                await notifier.close()
+                webhook_url = decrypt_value(config.discord_webhook_url)
+            except (ValueError, Exception):
+                webhook_url = None
+
+            if webhook_url:
+                from src.notifications.discord_notifier import DiscordNotifier
+                notifier = DiscordNotifier(webhook_url=webhook_url)
+                try:
+                    await notifier.send_trade_entry(
+                        symbol="BTCUSDT",
+                        side="long",
+                        size=size,
+                        entry_price=fill_price,
+                        leverage=leverage,
+                        take_profit=tp,
+                        stop_loss=sl,
+                        confidence=75,
+                        reason="Test trade via API",
+                        order_id=order.order_id,
+                        demo_mode=True,
+                    )
+                except Exception as e:
+                    logger.warning(f"Discord notification failed: {e}")
+                finally:
+                    await notifier.close()
 
         trade = TradeRecord(
             user_id=user.id,
@@ -376,29 +382,35 @@ async def close_trade(
         await db.flush()
 
         if config and config.discord_webhook_url:
-            from src.notifications.discord_notifier import DiscordNotifier
-            notifier = DiscordNotifier(webhook_url=config.discord_webhook_url)
             try:
-                await notifier.send_trade_exit(
-                    symbol=trade.symbol,
-                    side=trade.side,
-                    size=trade.size,
-                    entry_price=trade.entry_price,
-                    exit_price=exit_price,
-                    pnl=pnl,
-                    pnl_percent=pnl_percent,
-                    fees=fees,
-                    funding_paid=funding_paid,
-                    reason=exit_reason,
-                    order_id=trade.order_id,
-                    duration_minutes=duration_minutes,
-                    demo_mode=trade.demo_mode,
-                    strategy_reason=trade.reason,
-                )
-            except Exception as e:
-                logger.warning(f"Discord close notification failed: {e}")
-            finally:
-                await notifier.close()
+                close_webhook_url = decrypt_value(config.discord_webhook_url)
+            except (ValueError, Exception):
+                close_webhook_url = None
+
+            if close_webhook_url:
+                from src.notifications.discord_notifier import DiscordNotifier
+                notifier = DiscordNotifier(webhook_url=close_webhook_url)
+                try:
+                    await notifier.send_trade_exit(
+                        symbol=trade.symbol,
+                        side=trade.side,
+                        size=trade.size,
+                        entry_price=trade.entry_price,
+                        exit_price=exit_price,
+                        pnl=pnl,
+                        pnl_percent=pnl_percent,
+                        fees=fees,
+                        funding_paid=funding_paid,
+                        reason=exit_reason,
+                        order_id=trade.order_id,
+                        duration_minutes=duration_minutes,
+                        demo_mode=trade.demo_mode,
+                        strategy_reason=trade.reason,
+                    )
+                except Exception as e:
+                    logger.warning(f"Discord close notification failed: {e}")
+                finally:
+                    await notifier.close()
 
         logger.info(f"Trade #{trade.id} closed: {exit_reason} | PnL: ${pnl:.2f} ({pnl_percent:+.2f}%)")
 

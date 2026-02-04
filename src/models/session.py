@@ -49,8 +49,10 @@ async def init_db() -> None:
                 await conn.execute(
                     text("ALTER TABLE trade_records ADD COLUMN demo_mode BOOLEAN NOT NULL DEFAULT 0")
                 )
-            except Exception:
-                pass  # Column already exists
+            except Exception as e:
+                if "duplicate column" not in str(e).lower():
+                    from src.utils.logger import get_logger
+                    get_logger(__name__).warning(f"Migration check: {e}")
 
 
 async def close_db() -> None:

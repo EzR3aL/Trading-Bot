@@ -1,8 +1,9 @@
 """Configuration and settings schemas."""
 
+import re
 from typing import List, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class TradingConfigUpdate(BaseModel):
@@ -27,8 +28,25 @@ class StrategyConfigUpdate(BaseModel):
     low_confidence_min: int = Field(ge=50, le=100, default=60)
 
 
+DISCORD_WEBHOOK_PATTERN = re.compile(
+    r"^https://discord\.com/api/webhooks/\d+/[\w-]+$"
+)
+
+
 class DiscordConfigUpdate(BaseModel):
     webhook_url: Optional[str] = None
+
+    @field_validator("webhook_url")
+    @classmethod
+    def validate_webhook_url(cls, v: Optional[str]) -> Optional[str]:
+        if v is None or v == "":
+            return None
+        if not DISCORD_WEBHOOK_PATTERN.match(v):
+            raise ValueError(
+                "Invalid Discord webhook URL. "
+                "Must match: https://discord.com/api/webhooks/<id>/<token>"
+            )
+        return v
 
 
 class ApiKeysUpdate(BaseModel):

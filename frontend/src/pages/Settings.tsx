@@ -151,7 +151,9 @@ export default function Settings() {
           setLossLimit(tc.daily_loss_limit_percent)
           setDemoMode(tc.demo_mode)
         }
-      } catch { /* ignore */ }
+      } catch {
+        setMessage(t('common.error'))
+      }
     }
     load()
   }, [])
@@ -340,7 +342,7 @@ export default function Settings() {
             </div>
             <label className="flex items-center gap-2 text-sm text-gray-300">
               <input type="checkbox" checked={demoMode} onChange={(e) => setDemoMode(e.target.checked)} className="rounded" />
-              Demo Mode
+              {t('bot.demoMode')}
             </label>
             <button onClick={saveTrading} disabled={saving}
               className="px-4 py-2 bg-primary-600 text-white rounded hover:bg-primary-700 disabled:opacity-50">
@@ -526,7 +528,7 @@ export default function Settings() {
       {activeTab === 'strategy' && (
         <div className="bg-gray-900 border border-gray-800 rounded-lg p-6 max-w-2xl">
           <div className="text-gray-400 text-sm">
-            Strategy settings are configured per preset. Go to Presets to edit.
+            {t('settings.strategyHint')}
           </div>
         </div>
       )}

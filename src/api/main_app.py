@@ -13,9 +13,13 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from starlette.middleware.base import BaseHTTPMiddleware
 
 from src.api.routers import (
     auth,
@@ -34,6 +38,20 @@ from src.models.session import close_db, init_db
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
+
+
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    """Add security headers to all responses."""
+
+    async def dispatch(self, request: Request, call_next):
+        response: Response = await call_next(request)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["X-XSS-Protection"] = "1; mode=block"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        if os.getenv("ENABLE_HSTS", "false").lower() == "true":
+            response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+        return response
 
 
 @asynccontextmanager
@@ -91,19 +109,32 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
+    # Security headers
+    app.add_middleware(SecurityHeadersMiddleware)
+
     # CORS
+    allowed_origins = [
+        "http://localhost:5173",
+        "http://localhost:8000",
+        "http://127.0.0.1:5173",
+        "http://127.0.0.1:8000",
+    ]
+    extra_origins = os.getenv("CORS_ORIGINS", "")
+    if extra_origins:
+        allowed_origins.extend(o.strip() for o in extra_origins.split(",") if o.strip())
+
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=[
-            "http://localhost:5173",  # Vite dev server
-            "http://localhost:8080",
-            "http://127.0.0.1:5173",
-            "http://127.0.0.1:8080",
-        ],
+        allow_origins=allowed_origins,
         allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
+        allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        allow_headers=["Authorization", "Content-Type", "Accept"],
     )
+
+    # Rate limit handler
+    from src.api.routers.auth import limiter
+    app.state.limiter = limiter
+    app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
     # Register routers
     app.include_router(status.router)

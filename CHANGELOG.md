@@ -9,6 +9,52 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [2.2.0] - 2026-02-04
+
+### Security Hardening
+
+- **JWT Secret Key**: Server now refuses to start if `JWT_SECRET_KEY` is not set (no more insecure default)
+- **Rate Limiting**: Login endpoint limited to 5 attempts per minute (slowapi)
+- **Security Headers**: All responses now include `X-Content-Type-Options`, `X-Frame-Options`, `X-XSS-Protection`, `Referrer-Policy`
+- **CORS Hardening**: Explicit methods (`GET, POST, PUT, DELETE, OPTIONS`) and headers instead of wildcards
+- **Discord Webhook Validation**: Pydantic validator ensures only valid `discord.com/api/webhooks` URLs are accepted (SSRF prevention)
+- **Discord Webhook Encryption**: Webhook URLs are now encrypted at rest using Fernet (same as API keys)
+- **HSTS**: Optional via `ENABLE_HSTS=true` environment variable
+
+### Architecture Improvements
+
+- **Bot Manager Thread Safety**: All bot start/stop operations protected by `asyncio.Lock()` to prevent race conditions
+- **Database Compound Indexes**: Added `(user_id, status)` and `(user_id, symbol, side)` indexes on `trade_records` for faster queries
+- **Migration Error Handling**: Catches specific `duplicate column` errors instead of blanket `except: pass`
+
+### Frontend UX
+
+- **Loading States**: Dashboard and Trades pages show loading indicator while fetching data
+- **Error Handling**: Dashboard, Trades, and Settings pages display error messages on API failures
+- **Empty States**: Trades table shows "No trades yet" message when empty
+- **i18n Fixes**: Removed hardcoded German "Alle Status" and English "Demo Mode", "Strategy settings..." strings — all use i18n now
+
+### Changed
+
+| File | Change |
+|------|--------|
+| `src/auth/jwt_handler.py` | Crash on missing JWT_SECRET_KEY |
+| `src/api/main_app.py` | Security headers middleware, CORS fix, rate limit handler |
+| `src/api/routers/auth.py` | Rate limiting on login (5/min) |
+| `src/api/schemas/config.py` | Discord webhook URL validation |
+| `src/api/routers/config.py` | Encrypt/decrypt webhook URL |
+| `src/api/routers/bot_control.py` | Decrypt webhook URL for notifications |
+| `src/api/routers/trades.py` | Decrypt webhook URL for sync notifications |
+| `src/bot/bot_manager.py` | asyncio.Lock on all state mutations |
+| `src/models/database.py` | Compound indexes on TradeRecord |
+| `src/models/session.py` | Specific migration exception handling |
+| `frontend/src/pages/Dashboard.tsx` | Loading/error states |
+| `frontend/src/pages/Trades.tsx` | Loading/error/empty states, i18n fix |
+| `frontend/src/pages/Settings.tsx` | Error handling, i18n fixes |
+| `.env.example` | JWT_SECRET_KEY now required |
+
+---
+
 ## [2.1.0] - 2026-02-04
 
 ### Hinzugefuegt

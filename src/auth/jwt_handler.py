@@ -1,12 +1,22 @@
 """JWT token creation and validation."""
 
 import os
+import sys
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from jose import JWTError, jwt
 
-SECRET_KEY = os.getenv("JWT_SECRET_KEY", "change-me-in-production")
+SECRET_KEY = os.getenv("JWT_SECRET_KEY", "")
+if not SECRET_KEY:
+    print(
+        "FATAL: JWT_SECRET_KEY environment variable is not set.\n"
+        "Generate one with: python -c \"import secrets; print(secrets.token_urlsafe(64))\"\n"
+        "Then add it to your .env file.",
+        file=sys.stderr,
+    )
+    sys.exit(1)
+
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 REFRESH_TOKEN_EXPIRE_DAYS = 7

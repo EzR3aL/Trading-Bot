@@ -220,41 +220,46 @@ async def sync_trades(
         config = cfg_result.scalar_one_or_none()
 
         if config and config.discord_webhook_url:
-            from src.notifications.discord_notifier import DiscordNotifier
-            notifier = DiscordNotifier(webhook_url=config.discord_webhook_url)
             try:
-                for ct in closed_trades:
-                    # Find the matching trade record for full details
-                    matching = [t for t in open_trades if t.id == ct["id"]]
-                    if not matching:
-                        continue
-                    trade = matching[0]
+                webhook_url = decrypt_value(config.discord_webhook_url)
+            except (ValueError, Exception):
+                webhook_url = None
 
-                    duration_minutes = None
-                    if trade.entry_time:
-                        duration = datetime.utcnow() - trade.entry_time
-                        duration_minutes = int(duration.total_seconds() / 60)
+            if webhook_url:
+                from src.notifications.discord_notifier import DiscordNotifier
+                notifier = DiscordNotifier(webhook_url=webhook_url)
+                try:
+                    for ct in closed_trades:
+                        matching = [t for t in open_trades if t.id == ct["id"]]
+                        if not matching:
+                            continue
+                        trade = matching[0]
 
-                    await notifier.send_trade_exit(
-                        symbol=trade.symbol,
-                        side=trade.side,
-                        size=trade.size,
-                        entry_price=trade.entry_price,
-                        exit_price=trade.exit_price,
-                        pnl=trade.pnl,
-                        pnl_percent=trade.pnl_percent,
-                        fees=trade.fees or 0,
-                        funding_paid=trade.funding_paid or 0,
-                        reason=trade.exit_reason,
-                        order_id=trade.order_id,
-                        duration_minutes=duration_minutes,
-                        demo_mode=trade.demo_mode,
-                        strategy_reason=trade.reason,
-                    )
-            except Exception as e:
-                logger.warning(f"Discord sync notification failed: {e}")
-            finally:
-                await notifier.close()
+                        duration_minutes = None
+                        if trade.entry_time:
+                            duration = datetime.utcnow() - trade.entry_time
+                            duration_minutes = int(duration.total_seconds() / 60)
+
+                        await notifier.send_trade_exit(
+                            symbol=trade.symbol,
+                            side=trade.side,
+                            size=trade.size,
+                            entry_price=trade.entry_price,
+                            exit_price=trade.exit_price,
+                            pnl=trade.pnl,
+                            pnl_percent=trade.pnl_percent,
+                            fees=trade.fees or 0,
+                            funding_paid=trade.funding_paid or 0,
+                            reason=trade.exit_reason,
+                            order_id=trade.order_id,
+                            duration_minutes=duration_minutes,
+                            demo_mode=trade.demo_mode,
+                            strategy_reason=trade.reason,
+                        )
+                except Exception as e:
+                    logger.warning(f"Discord sync notification failed: {e}")
+                finally:
+                    await notifier.close()
 
     return {"synced": len(closed_trades), "closed_trades": closed_trades}
 

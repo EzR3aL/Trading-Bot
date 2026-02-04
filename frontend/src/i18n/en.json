@@ -91,7 +91,8 @@
     "circuitOpen": "Tripped",
     "circuitHalfOpen": "Recovering",
     "refreshStatus": "Refresh",
-    "refreshing": "Checking..."
+    "refreshing": "Checking...",
+    "strategyHint": "Strategy settings are configured per preset. Go to Presets to edit."
   },
   "presets": {
     "title": "Configuration Presets",

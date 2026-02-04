@@ -91,7 +91,8 @@
     "circuitOpen": "Ausgeloest",
     "circuitHalfOpen": "Erholung",
     "refreshStatus": "Aktualisieren",
-    "refreshing": "Pruefe..."
+    "refreshing": "Pruefe...",
+    "strategyHint": "Strategie-Einstellungen werden pro Preset konfiguriert. Gehe zu Presets zum Bearbeiten."
   },
   "presets": {
     "title": "Konfigurations-Presets",

@@ -14,6 +14,7 @@ from sqlalchemy import (
     DateTime,
     Float,
     ForeignKey,
+    Index,
     Integer,
     String,
     Text,
@@ -112,6 +113,10 @@ class ConfigPreset(Base):
 
 class TradeRecord(Base):
     __tablename__ = "trade_records"
+    __table_args__ = (
+        Index("ix_trade_user_status", "user_id", "status"),
+        Index("ix_trade_user_symbol_side", "user_id", "symbol", "side"),
+    )
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)

@@ -5,7 +5,7 @@ Handles starting, stopping, and switching presets for individual user bots.
 Supports running multiple bots in parallel on different exchanges.
 """
 
-import json
+import asyncio
 from datetime import datetime
 from typing import Dict, List, Optional
 
@@ -27,6 +27,7 @@ class BotManager:
     def __init__(self):
         # user_id -> {exchange_type -> bot_info}
         self._bots: Dict[int, Dict[str, dict]] = {}
+        self._lock = asyncio.Lock()
 
     async def start_bot(
         self,
@@ -37,6 +38,20 @@ class BotManager:
         db: Optional[AsyncSession] = None,
     ) -> bool:
         """Start a bot for a user on a specific exchange."""
+        async with self._lock:
+            return await self._start_bot_locked(
+                user_id, exchange_type, preset_id, demo_mode, db
+            )
+
+    async def _start_bot_locked(
+        self,
+        user_id: int,
+        exchange_type: str,
+        preset_id: Optional[int],
+        demo_mode: bool,
+        db: Optional[AsyncSession],
+    ) -> bool:
+        """Internal: start bot while holding lock."""
         user_bots = self._bots.get(user_id, {})
         if exchange_type in user_bots and user_bots[exchange_type].get("running"):
             raise ValueError(f"Bot already running on {exchange_type}")
@@ -138,6 +153,11 @@ class BotManager:
 
     async def stop_bot(self, user_id: int, exchange_type: str) -> bool:
         """Stop a user's bot on a specific exchange."""
+        async with self._lock:
+            return await self._stop_bot_locked(user_id, exchange_type)
+
+    async def _stop_bot_locked(self, user_id: int, exchange_type: str) -> bool:
+        """Internal: stop bot while holding lock."""
         user_bots = self._bots.get(user_id, {})
         if exchange_type not in user_bots or not user_bots[exchange_type].get("running"):
             return False
@@ -224,34 +244,38 @@ class BotManager:
 
     async def stop_all_for_user(self, user_id: int) -> int:
         """Stop all running bots for a user. Returns count of stopped bots."""
-        user_bots = self._bots.get(user_id, {})
-        stopped = 0
-        for exchange_type in list(user_bots.keys()):
-            if user_bots[exchange_type].get("running"):
-                await self.stop_bot(user_id, exchange_type)
-                stopped += 1
-        return stopped
+        async with self._lock:
+            user_bots = self._bots.get(user_id, {})
+            stopped = 0
+            for exchange_type in list(user_bots.keys()):
+                if user_bots[exchange_type].get("running"):
+                    await self._stop_bot_locked(user_id, exchange_type)
+                    stopped += 1
+            return stopped
 
     async def switch_preset(self, user_id: int, preset_id: int, exchange_type: str) -> bool:
         """Switch preset: stop current bot on exchange, load new preset, restart."""
-        was_running = self.is_running(user_id, exchange_type)
-        demo_mode = True
+        async with self._lock:
+            was_running = self.is_running(user_id, exchange_type)
+            demo_mode = True
 
-        if was_running:
-            demo_mode = self._bots[user_id][exchange_type].get("demo_mode", True)
-            await self.stop_bot(user_id, exchange_type)
+            if was_running:
+                demo_mode = self._bots[user_id][exchange_type].get("demo_mode", True)
+                await self._stop_bot_locked(user_id, exchange_type)
 
-        return await self.start_bot(
-            user_id=user_id,
-            exchange_type=exchange_type,
-            preset_id=preset_id,
-            demo_mode=demo_mode,
-        )
+            return await self._start_bot_locked(
+                user_id=user_id,
+                exchange_type=exchange_type,
+                preset_id=preset_id,
+                demo_mode=demo_mode,
+                db=None,
+            )
 
     async def shutdown_all(self):
         """Stop all running bots (called on app shutdown)."""
-        for user_id in list(self._bots.keys()):
-            for exchange_type in list(self._bots[user_id].keys()):
-                if self._bots[user_id][exchange_type].get("running"):
-                    await self.stop_bot(user_id, exchange_type)
+        async with self._lock:
+            for user_id in list(self._bots.keys()):
+                for exchange_type in list(self._bots[user_id].keys()):
+                    if self._bots[user_id][exchange_type].get("running"):
+                        await self._stop_bot_locked(user_id, exchange_type)
         logger.info("All bots shut down")

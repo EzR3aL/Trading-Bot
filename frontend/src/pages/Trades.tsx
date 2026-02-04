@@ -10,6 +10,8 @@ export default function Trades() {
   const [page, setPage] = useState(1)
   const [statusFilter, setStatusFilter] = useState('')
   const [symbolFilter, setSymbolFilter] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
   const perPage = 25
 
   const [synced, setSynced] = useState(false)
@@ -22,6 +24,8 @@ export default function Trades() {
   useEffect(() => {
     if (!synced) return
     const load = async () => {
+      setLoading(true)
+      setError('')
       const params = new URLSearchParams({ page: String(page), per_page: String(perPage) })
       if (statusFilter) params.set('status', statusFilter)
       if (symbolFilter) params.set('symbol', symbolFilter)
@@ -30,7 +34,11 @@ export default function Trades() {
         const res = await api.get(`/trades?${params}`)
         setTrades(res.data.trades)
         setTotal(res.data.total)
-      } catch { /* ignore */ }
+      } catch {
+        setError(t('common.error'))
+      } finally {
+        setLoading(false)
+      }
     }
     load()
   }, [synced, page, statusFilter, symbolFilter])
@@ -41,6 +49,13 @@ export default function Trades() {
     <div>
       <h1 className="text-2xl font-bold text-white mb-6">{t('trades.title')}</h1>
 
+      {/* Error */}
+      {error && (
+        <div className="mb-4 p-3 bg-red-900/30 border border-red-800 rounded text-red-400 text-sm">
+          {error}
+        </div>
+      )}
+
       {/* Filters */}
       <div className="flex gap-4 mb-4">
         <select
@@ -48,7 +63,7 @@ export default function Trades() {
           onChange={(e) => { setStatusFilter(e.target.value); setPage(1) }}
           className="bg-gray-800 border border-gray-700 text-gray-300 rounded px-3 py-2 text-sm"
         >
-          <option value="">Alle Status</option>
+          <option value="">{t('trades.allModes')}</option>
           <option value="open">{t('trades.open')}</option>
           <option value="closed">{t('trades.closed')}</option>
           <option value="cancelled">{t('trades.cancelled')}</option>
@@ -62,7 +77,13 @@ export default function Trades() {
         />
       </div>
 
+      {/* Loading */}
+      {loading && (
+        <div className="text-center text-gray-500 py-12">{t('common.loading')}</div>
+      )}
+
       {/* Table */}
+      {!loading && (
       <div className="bg-gray-900 border border-gray-800 rounded-lg overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
@@ -81,7 +102,14 @@ export default function Trades() {
             </tr>
           </thead>
           <tbody>
-            {trades.map((trade) => (
+            {trades.length === 0 ? (
+              <tr>
+                <td colSpan={11} className="p-8 text-center text-gray-500">
+                  {t('dashboard.noTrades')}
+                </td>
+              </tr>
+            ) : (
+            trades.map((trade) => (
               <tr key={trade.id} className="border-b border-gray-800/50 hover:bg-gray-800/30">
                 <td className="p-3 text-gray-500">{trade.id}</td>
                 <td className="p-3 text-gray-300">{new Date(trade.entry_time).toLocaleDateString()}</td>
@@ -121,10 +149,12 @@ export default function Trades() {
                   </span>
                 </td>
               </tr>
-            ))}
+            ))
+            )}
           </tbody>
         </table>
       </div>
+      )}
 
       {/* Pagination */}
       {totalPages > 1 && (
