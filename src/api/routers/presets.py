@@ -130,8 +130,6 @@ async def delete_preset(
     preset = result.scalar_one_or_none()
     if not preset:
         raise HTTPException(status_code=404, detail="Preset not found")
-    if preset.is_active:
-        raise HTTPException(status_code=400, detail="Cannot delete active preset")
     await db.delete(preset)
 
 

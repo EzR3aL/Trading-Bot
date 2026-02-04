@@ -45,10 +45,27 @@ class ExchangeConfigUpdate(BaseModel):
     exchange_type: str = Field(pattern="^(bitget|weex|hyperliquid)$")
 
 
+class ExchangeConnectionResponse(BaseModel):
+    exchange_type: str
+    api_keys_configured: bool = False
+    demo_api_keys_configured: bool = False
+
+
+class ExchangeConnectionUpdate(BaseModel):
+    api_key: str = ""
+    api_secret: str = ""
+    passphrase: str = ""
+    demo_api_key: str = ""
+    demo_api_secret: str = ""
+    demo_passphrase: str = ""
+
+
 class ConfigResponse(BaseModel):
     trading: Optional[TradingConfigUpdate] = None
     strategy: Optional[StrategyConfigUpdate] = None
     discord: Optional[DiscordConfigUpdate] = None
+    connections: List[ExchangeConnectionResponse] = []
+    # Deprecated: kept for backward compatibility
     exchange_type: str = "bitget"
     api_keys_configured: bool = False
     demo_api_keys_configured: bool = False

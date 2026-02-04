@@ -9,6 +9,76 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [2.1.0] - 2026-02-04
+
+### Hinzugefuegt
+
+#### Demo/Live Badge auf Trades
+- **`demo_mode` Spalte** in `trade_records` Tabelle mit Auto-Migration
+- **Demo/Live Badge** auf Trades-Seite und Dashboard (gelb = Demo, gruen = Live)
+- **Mode-Filter** in der Trades-Tabelle (Spalte "Modus")
+- i18n Keys fuer EN/DE
+
+#### Dashboard Analytics Charts (Recharts)
+- **PnL Chart** (Area + Line): Taeglicher PnL + kumulativer PnL im Zeitverlauf
+- **Win/Loss Donut Chart**: Gewinne vs Verluste mit Win-Rate im Zentrum
+- **Fees & Funding Bar Chart**: Gestapelte Balken fuer Gebuehren + Funding pro Tag
+- **Zeitraum-Selector**: 7 / 14 / 30 / 90 Tage Filter fuer alle Charts
+- **Erweiterte Statistik-Karten**: Net PnL (mit Fees/Funding Sub), Win Rate, Best/Worst Trade
+- **Daily Stats API erweitert**: `/api/statistics/daily` liefert jetzt `funding`, `wins`, `losses` pro Tag
+
+#### Discord Notifications bei Trade-Sync
+- **Sync-Endpoint** (`POST /api/trades/sync`) sendet jetzt Discord-Benachrichtigungen wenn Trades geschlossen werden (TP/SL/Manual Close)
+- Vorher wurden Trades beim Sync still geschlossen ohne Notification
+
+### Behoben
+
+#### TP/SL: Partial → Entire umgestellt
+- **Problem:** TP/SL wurde als "Partial" gesetzt (nur Order-Groesse, nicht gesamte Position)
+- **Ursache:** `presetStopSurplusPrice`/`presetStopLossPrice` auf dem Place-Order Endpoint erstellt Partial TP/SL
+- **Fix:** Neue `_set_position_tpsl()` Methode nutzt `/api/v2/mix/order/place-pos-tpsl` Endpoint fuer Entire Position TP/SL
+- **Hinweis:** `executePrice` Felder duerfen nicht mit "0" gesendet werden — werden komplett weggelassen fuer Market Execution
+
+#### Bitget Demo API Header
+- **Problem:** Demo-Trading schlug fehl mit "exchange environment is incorrect"
+- **Ursache:** Header war `X-SIMULATED-TRADING` statt `paptrading: 1`
+- **Fix:** `_get_headers()` in `client.py` nutzt jetzt korrekten Header
+
+#### Discord Close Notification demo_mode Bug
+- **Problem:** Close-Trade Endpoint sendete immer `demo_mode=True` unabhaengig vom tatsaechlichen Trade-Modus
+- **Fix:** Nutzt jetzt `trade.demo_mode` statt hardcoded `True`
+
+#### Vite Proxy Port Mismatch
+- **Problem:** Frontend-Login schlug fehl im Development
+- **Ursache:** Vite Proxy leitete an Port 8080 weiter, Backend laeuft auf Port 8000
+- **Fix:** `vite.config.ts` Proxy-Target auf `localhost:8000` geaendert
+
+### Geaendert
+
+| Datei | Aenderung |
+|-------|-----------|
+| `src/exchanges/bitget/client.py` | `paptrading` Header, `_set_position_tpsl()`, Partial TP/SL entfernt |
+| `src/models/database.py` | `demo_mode` Spalte |
+| `src/models/session.py` | ALTER TABLE Migration |
+| `src/api/schemas/trade.py` | `demo_mode` Feld |
+| `src/api/routers/trades.py` | `demo_mode` in Response, Discord Sync Notifications |
+| `src/api/routers/bot_control.py` | `demo_mode=True` bei Test-Trade, `trade.demo_mode` bei Close |
+| `src/api/routers/statistics.py` | Daily Stats erweitert (funding/wins/losses) |
+| `frontend/vite.config.ts` | Proxy-Port 8080 → 8000 |
+| `frontend/src/types/index.ts` | `demo_mode` + `DailyStats` Interface |
+| `frontend/src/pages/Dashboard.tsx` | Charts, Zeitraum-Selector, Demo/Live Badge |
+| `frontend/src/pages/Trades.tsx` | Mode-Spalte mit Demo/Live Badge |
+| `frontend/src/components/dashboard/` | NEU: PnlChart, WinLossChart, FeesChart, ChartTooltip |
+| `frontend/src/i18n/en.json` + `de.json` | Neue Keys fuer Charts, Mode, Zeitraum |
+
+### Neue Abhaengigkeiten (Frontend)
+
+```
+recharts (via npm)
+```
+
+---
+
 ## [1.10.0] - 2026-02-01
 
 ### Hinzugefuegt

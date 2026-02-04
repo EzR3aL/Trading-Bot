@@ -1,4 +1,4 @@
-"""Bot control endpoints (start/stop/mode per user)."""
+"""Bot control endpoints (start/stop/mode per user, per exchange)."""
 
 from datetime import datetime
 
@@ -6,10 +6,16 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.api.schemas.bot import BotModeRequest, BotStartRequest, BotStatusResponse
+from src.api.schemas.bot import (
+    BotModeRequest,
+    BotStartRequest,
+    BotStatusResponse,
+    BotStopRequest,
+    MultiBotStatusResponse,
+)
 from src.auth.dependencies import get_current_user
 from src.exchanges.factory import create_exchange_client
-from src.models.database import TradeRecord, User, UserConfig
+from src.models.database import ExchangeConnection, TradeRecord, User, UserConfig
 from src.models.session import get_db
 from src.utils.encryption import decrypt_value
 from src.utils.logger import get_logger
@@ -40,7 +46,7 @@ async def start_bot(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Start the trading bot for the current user."""
+    """Start the trading bot on a specific exchange."""
     manager = _get_bot_manager()
     try:
         success = await manager.start_bot(
@@ -54,29 +60,42 @@ async def start_bot(
         raise HTTPException(status_code=400, detail=str(e))
     if not success:
         raise HTTPException(status_code=400, detail="Failed to start bot")
-    return {"status": "ok", "message": "Bot started"}
+    return {"status": "ok", "message": f"Bot started on {request.exchange_type}"}
 
 
 @router.post("/stop")
 async def stop_bot(
+    request: BotStopRequest,
     user: User = Depends(get_current_user),
 ):
-    """Stop the trading bot for the current user."""
+    """Stop the trading bot on a specific exchange."""
     manager = _get_bot_manager()
-    success = await manager.stop_bot(user.id)
+    success = await manager.stop_bot(user.id, request.exchange_type)
     if not success:
-        raise HTTPException(status_code=400, detail="Bot is not running")
-    return {"status": "ok", "message": "Bot stopped"}
+        raise HTTPException(status_code=400, detail=f"Bot is not running on {request.exchange_type}")
+    return {"status": "ok", "message": f"Bot stopped on {request.exchange_type}"}
 
 
-@router.get("/status", response_model=BotStatusResponse)
+@router.post("/stop-all")
+async def stop_all_bots(
+    user: User = Depends(get_current_user),
+):
+    """Stop all running bots for the current user."""
+    manager = _get_bot_manager()
+    stopped = await manager.stop_all_for_user(user.id)
+    return {"status": "ok", "message": f"{stopped} bot(s) stopped"}
+
+
+@router.get("/status", response_model=MultiBotStatusResponse)
 async def get_bot_status(
     user: User = Depends(get_current_user),
 ):
-    """Get bot status for the current user."""
+    """Get bot status for all exchanges."""
     manager = _get_bot_manager()
-    status = manager.get_status(user.id)
-    return BotStatusResponse(**status)
+    statuses = manager.get_status(user.id)
+    return MultiBotStatusResponse(
+        bots=[BotStatusResponse(**s) for s in statuses]
+    )
 
 
 @router.post("/mode")
@@ -84,18 +103,18 @@ async def set_bot_mode(
     request: BotModeRequest,
     user: User = Depends(get_current_user),
 ):
-    """Switch between demo and live mode."""
+    """Switch between demo and live mode for a specific exchange."""
     manager = _get_bot_manager()
-    is_running = manager.is_running(user.id)
+    is_running = manager.is_running(user.id, request.exchange_type)
 
     if is_running:
-        # Stop, switch mode, restart
-        await manager.stop_bot(user.id)
+        await manager.stop_bot(user.id, request.exchange_type)
 
     return {
         "status": "ok",
+        "exchange_type": request.exchange_type,
         "demo_mode": request.demo_mode,
-        "message": f"Mode set to {'demo' if request.demo_mode else 'live'}. "
+        "message": f"Mode set to {'demo' if request.demo_mode else 'live'} for {request.exchange_type}. "
                    f"{'Bot was stopped - restart with new mode.' if is_running else ''}",
     }
 
@@ -106,25 +125,35 @@ async def open_test_trade(
     db: AsyncSession = Depends(get_db),
 ):
     """Open a small test trade in demo mode on the configured exchange."""
-
-    # Get user config
-    result = await db.execute(
+    # Get user config for discord + general settings
+    cfg_result = await db.execute(
         select(UserConfig).where(UserConfig.user_id == user.id)
     )
-    config = result.scalar_one_or_none()
-    if not config:
-        raise HTTPException(status_code=400, detail="No config found. Set up API keys first.")
+    config = cfg_result.scalar_one_or_none()
 
-    # Get demo API credentials (test trades are always demo)
-    if not config.demo_api_key_encrypted:
-        raise HTTPException(status_code=400, detail="No demo API keys configured. Set up demo keys in Settings first.")
-    api_key = decrypt_value(config.demo_api_key_encrypted)
-    api_secret = decrypt_value(config.demo_api_secret_encrypted)
-    passphrase = decrypt_value(config.demo_passphrase_encrypted) if config.demo_passphrase_encrypted else ""
+    # Find first exchange connection with demo keys
+    result = await db.execute(
+        select(ExchangeConnection).where(ExchangeConnection.user_id == user.id)
+    )
+    connections = result.scalars().all()
 
-    exchange_type = config.exchange_type or "bitget"
+    conn = None
+    for c in connections:
+        if c.demo_api_key_encrypted:
+            conn = c
+            break
 
-    # Create exchange client in DEMO mode
+    if not conn:
+        raise HTTPException(
+            status_code=400,
+            detail="No demo API keys configured on any exchange. Set up demo keys in Settings first.",
+        )
+
+    api_key = decrypt_value(conn.demo_api_key_encrypted)
+    api_secret = decrypt_value(conn.demo_api_secret_encrypted)
+    passphrase = decrypt_value(conn.demo_passphrase_encrypted) if conn.demo_passphrase_encrypted else ""
+    exchange_type = conn.exchange_type
+
     client = create_exchange_client(
         exchange_type=exchange_type,
         api_key=api_key,
@@ -134,27 +163,22 @@ async def open_test_trade(
     )
 
     try:
-        # Get current price
         ticker = await client.get_ticker("BTCUSDT")
         price = ticker.last_price
         if price <= 0:
             raise HTTPException(status_code=502, detail="Could not get current BTC price")
 
-        # Get balance
         balance = await client.get_account_balance()
         logger.info(f"Test trade: Balance={balance.available} USDT, BTC price={price}")
 
-        # Calculate small position: ~50 USDT notional with 4x leverage
         leverage = 4
-        notional = 50.0  # 50 USDT worth
+        notional = 50.0
         size = round(notional / price, 6)
         if size < 0.001:
-            size = 0.001  # Bitget minimum for BTC
+            size = 0.001
 
-        # Place demo market order (long)
-        # Bitget requires prices as multiples of 0.1 for BTCUSDT
-        tp = float(f"{round(price * 1.02, 1):.1f}")  # +2% take profit
-        sl = float(f"{round(price * 0.99, 1):.1f}")  # -1% stop loss
+        tp = float(f"{round(price * 1.02, 1):.1f}")
+        sl = float(f"{round(price * 0.99, 1):.1f}")
 
         order = await client.place_market_order(
             symbol="BTCUSDT",
@@ -165,7 +189,6 @@ async def open_test_trade(
             stop_loss=sl,
         )
 
-        # Get fill price
         fill_price = price
         if hasattr(client, 'get_fill_price') and order.order_id:
             actual = await client.get_fill_price("BTCUSDT", order.order_id)
@@ -173,8 +196,8 @@ async def open_test_trade(
                 fill_price = actual
 
         # Send Discord notification
-        from src.notifications.discord_notifier import DiscordNotifier
-        if config.discord_webhook_url:
+        if config and config.discord_webhook_url:
+            from src.notifications.discord_notifier import DiscordNotifier
             notifier = DiscordNotifier(webhook_url=config.discord_webhook_url)
             try:
                 await notifier.send_trade_entry(
@@ -195,7 +218,6 @@ async def open_test_trade(
             finally:
                 await notifier.close()
 
-        # Record in database
         trade = TradeRecord(
             user_id=user.id,
             exchange=exchange_type,
@@ -211,6 +233,7 @@ async def open_test_trade(
             order_id=order.order_id,
             status="open",
             entry_time=datetime.utcnow(),
+            demo_mode=True,
         )
         db.add(trade)
         await db.flush()
@@ -220,7 +243,7 @@ async def open_test_trade(
 
         return {
             "status": "ok",
-            "message": f"Demo test trade opened: BTCUSDT Long",
+            "message": f"Demo test trade opened: BTCUSDT Long on {exchange_type}",
             "trade": {
                 "id": trade.id,
                 "order_id": order.order_id,
@@ -245,23 +268,34 @@ async def open_test_trade(
         await client.close()
 
 
-async def _get_exchange_client(config: UserConfig, demo_mode: bool = True):
-    """Create exchange client from user config."""
-    if demo_mode:
-        if not config.demo_api_key_encrypted:
-            return None
-        api_key = decrypt_value(config.demo_api_key_encrypted)
-        api_secret = decrypt_value(config.demo_api_secret_encrypted)
-        passphrase = decrypt_value(config.demo_passphrase_encrypted) if config.demo_passphrase_encrypted else ""
+async def _get_exchange_client_for_trade(trade: TradeRecord, user_id: int, db: AsyncSession):
+    """Create exchange client from ExchangeConnection matching the trade's exchange."""
+    result = await db.execute(
+        select(ExchangeConnection).where(
+            ExchangeConnection.user_id == user_id,
+            ExchangeConnection.exchange_type == trade.exchange,
+        )
+    )
+    conn = result.scalar_one_or_none()
+    if not conn:
+        return None
+
+    # Use demo keys if available, otherwise live
+    if conn.demo_api_key_encrypted:
+        api_key = decrypt_value(conn.demo_api_key_encrypted)
+        api_secret = decrypt_value(conn.demo_api_secret_encrypted)
+        passphrase = decrypt_value(conn.demo_passphrase_encrypted) if conn.demo_passphrase_encrypted else ""
+        demo_mode = True
+    elif conn.api_key_encrypted:
+        api_key = decrypt_value(conn.api_key_encrypted)
+        api_secret = decrypt_value(conn.api_secret_encrypted)
+        passphrase = decrypt_value(conn.passphrase_encrypted) if conn.passphrase_encrypted else ""
+        demo_mode = False
     else:
-        if not config.api_key_encrypted:
-            return None
-        api_key = decrypt_value(config.api_key_encrypted)
-        api_secret = decrypt_value(config.api_secret_encrypted)
-        passphrase = decrypt_value(config.passphrase_encrypted) if config.passphrase_encrypted else ""
+        return None
 
     return create_exchange_client(
-        exchange_type=config.exchange_type or "bitget",
+        exchange_type=trade.exchange,
         api_key=api_key,
         api_secret=api_secret,
         passphrase=passphrase,
@@ -276,8 +310,6 @@ async def close_trade(
     db: AsyncSession = Depends(get_db),
 ):
     """Close an open trade and send Discord notification with strategy details."""
-
-    # Get trade
     result = await db.execute(
         select(TradeRecord).where(
             TradeRecord.id == trade_id,
@@ -290,23 +322,20 @@ async def close_trade(
     if trade.status != "open":
         raise HTTPException(status_code=400, detail=f"Trade is already {trade.status}")
 
-    # Get user config for exchange credentials + discord
+    # Get exchange client from ExchangeConnection
+    client = await _get_exchange_client_for_trade(trade, user.id, db)
+    if not client:
+        raise HTTPException(status_code=400, detail=f"No API keys configured for {trade.exchange}")
+
+    # Get user config for discord webhook
     cfg_result = await db.execute(
         select(UserConfig).where(UserConfig.user_id == user.id)
     )
     config = cfg_result.scalar_one_or_none()
-    if not config:
-        raise HTTPException(status_code=400, detail="No config found")
-
-    client = await _get_exchange_client(config, demo_mode=True)
-    if not client:
-        raise HTTPException(status_code=400, detail="No API keys configured")
 
     try:
-        # Close the position on the exchange
         close_order = await client.close_position(trade.symbol, trade.side)
 
-        # Get exit price
         exit_price = None
         if close_order and close_order.order_id:
             if hasattr(client, 'get_fill_price'):
@@ -316,7 +345,6 @@ async def close_trade(
             ticker = await client.get_ticker(trade.symbol)
             exit_price = ticker.last_price
 
-        # Calculate PnL
         if trade.side == "long":
             pnl = (exit_price - trade.entry_price) * trade.size
         else:
@@ -326,7 +354,6 @@ async def close_trade(
         fees = trade.fees or 0
         funding_paid = trade.funding_paid or 0
 
-        # Determine exit reason
         if abs(exit_price - trade.take_profit) < trade.entry_price * 0.001:
             exit_reason = "TAKE_PROFIT"
         elif abs(exit_price - trade.stop_loss) < trade.entry_price * 0.001:
@@ -334,13 +361,11 @@ async def close_trade(
         else:
             exit_reason = "MANUAL_CLOSE"
 
-        # Calculate duration
         duration_minutes = None
         if trade.entry_time:
             duration = datetime.utcnow() - trade.entry_time
             duration_minutes = int(duration.total_seconds() / 60)
 
-        # Update trade in database
         trade.exit_price = exit_price
         trade.pnl = pnl
         trade.pnl_percent = pnl_percent
@@ -350,9 +375,8 @@ async def close_trade(
         trade.status = "closed"
         await db.flush()
 
-        # Send Discord close notification with strategy reason
-        from src.notifications.discord_notifier import DiscordNotifier
-        if config.discord_webhook_url:
+        if config and config.discord_webhook_url:
+            from src.notifications.discord_notifier import DiscordNotifier
             notifier = DiscordNotifier(webhook_url=config.discord_webhook_url)
             try:
                 await notifier.send_trade_exit(
@@ -368,7 +392,7 @@ async def close_trade(
                     reason=exit_reason,
                     order_id=trade.order_id,
                     duration_minutes=duration_minutes,
-                    demo_mode=True,
+                    demo_mode=trade.demo_mode,
                     strategy_reason=trade.reason,
                 )
             except Exception as e:

@@ -1,7 +1,8 @@
-# Bitget Trading Bot - Docker Compose Configuration
+# Bitget Trading Bot v2.0 - Docker Compose Configuration
 # Usage:
-#   Build & Run: docker-compose up --build
-#   Detached:    docker-compose up -d --build
+#   Build & Run: docker compose up --build -d
+#   Logs:        docker compose logs -f
+#   Stop:        docker compose down
 
 services:
   trading-bot:
@@ -15,18 +16,17 @@ services:
       - .env
 
     environment:
-      - DASHBOARD_HOST=0.0.0.0
       - PYTHONUNBUFFERED=1
 
     ports:
-      - "127.0.0.1:8080:8080"
+      - "127.0.0.1:8000:8000"
 
     volumes:
       - ./data:/app/data
       - ./logs:/app/logs
 
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/api/health')"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')"]
       interval: 30s
       timeout: 10s
       retries: 3

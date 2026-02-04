@@ -2,7 +2,7 @@
 
 Diese Anleitung führt dich durch die vollständige Installation und Konfiguration des Bitget Trading Bots.
 
-**Version:** 1.8.0
+**Version:** 2.1.0
 
 ---
 

@@ -81,6 +81,9 @@ async def get_daily_stats(
             func.count().label("trades"),
             func.sum(TradeRecord.pnl).label("pnl"),
             func.sum(TradeRecord.fees).label("fees"),
+            func.sum(TradeRecord.funding_paid).label("funding"),
+            func.sum(case((TradeRecord.pnl > 0, 1), else_=0)).label("wins"),
+            func.sum(case((TradeRecord.pnl <= 0, 1), else_=0)).label("losses"),
         )
         .where(
             TradeRecord.user_id == user.id,
@@ -98,6 +101,9 @@ async def get_daily_stats(
                 "trades": row.trades,
                 "pnl": row.pnl or 0,
                 "fees": row.fees or 0,
+                "funding": row.funding or 0,
+                "wins": row.wins or 0,
+                "losses": row.losses or 0,
             }
             for row in result.all()
         ]

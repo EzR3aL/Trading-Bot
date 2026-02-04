@@ -35,6 +35,7 @@ export interface Trade {
   exit_time: string | null
   exit_reason: string | null
   exchange: string
+  demo_mode: boolean
 }
 
 export interface TradeListResponse {
@@ -57,6 +58,16 @@ export interface Statistics {
   avg_pnl_percent: number
   best_trade: number
   worst_trade: number
+}
+
+export interface DailyStats {
+  date: string
+  trades: number
+  pnl: number
+  fees: number
+  funding: number
+  wins: number
+  losses: number
 }
 
 export interface Preset {
@@ -109,10 +120,18 @@ export interface ExchangeInfo {
   requires_passphrase: boolean
 }
 
+export interface ExchangeConnectionStatus {
+  exchange_type: string
+  api_keys_configured: boolean
+  demo_api_keys_configured: boolean
+}
+
 export interface ConfigResponse {
   trading: TradingConfig | null
   strategy: StrategyConfig | null
   discord: { webhook_url: string | null } | null
+  connections: ExchangeConnectionStatus[]
+  // Deprecated
   exchange_type: string
   api_keys_configured: boolean
   demo_api_keys_configured: boolean

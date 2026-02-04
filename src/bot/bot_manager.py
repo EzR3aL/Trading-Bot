@@ -1,18 +1,19 @@
 """
-BotManager: Per-user bot instance management.
+BotManager: Per-user, per-exchange bot instance management.
 
 Handles starting, stopping, and switching presets for individual user bots.
+Supports running multiple bots in parallel on different exchanges.
 """
 
 import json
 from datetime import datetime
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.exchanges.factory import create_exchange_client, create_exchange_websocket
-from src.models.database import BotInstance, ConfigPreset, UserConfig
+from src.models.database import BotInstance, ConfigPreset, ExchangeConnection
 from src.models.session import get_session
 from src.utils.encryption import decrypt_value
 from src.utils.logger import get_logger
@@ -21,10 +22,11 @@ logger = get_logger(__name__)
 
 
 class BotManager:
-    """Manages per-user bot instances."""
+    """Manages per-user, per-exchange bot instances."""
 
     def __init__(self):
-        self._bots: Dict[int, dict] = {}  # user_id -> bot info
+        # user_id -> {exchange_type -> bot_info}
+        self._bots: Dict[int, Dict[str, dict]] = {}
 
     async def start_bot(
         self,
@@ -34,38 +36,47 @@ class BotManager:
         demo_mode: bool = True,
         db: Optional[AsyncSession] = None,
     ) -> bool:
-        """Start a bot for a user."""
-        if user_id in self._bots and self._bots[user_id].get("running"):
-            logger.warning(f"Bot already running for user {user_id}")
-            raise ValueError("Bot is already running")
+        """Start a bot for a user on a specific exchange."""
+        user_bots = self._bots.get(user_id, {})
+        if exchange_type in user_bots and user_bots[exchange_type].get("running"):
+            raise ValueError(f"Bot already running on {exchange_type}")
 
         try:
             async with get_session() as session:
-                # Get user config
+                # Get exchange connection credentials
                 result = await session.execute(
-                    select(UserConfig).where(UserConfig.user_id == user_id)
+                    select(ExchangeConnection).where(
+                        ExchangeConnection.user_id == user_id,
+                        ExchangeConnection.exchange_type == exchange_type,
+                    )
                 )
-                config = result.scalar_one_or_none()
+                conn = result.scalar_one_or_none()
 
-                if not config:
-                    logger.error(f"No config found for user {user_id}")
-                    raise ValueError("No configuration found. Set up your settings first.")
+                if not conn:
+                    raise ValueError(
+                        f"No API keys configured for {exchange_type}. "
+                        "Add keys in Settings first."
+                    )
 
                 # Get credentials based on mode
                 if demo_mode:
-                    if not config.demo_api_key_encrypted:
-                        logger.error(f"Demo mode requested but no demo API keys configured for user {user_id}")
-                        raise ValueError("No demo API keys configured. Add demo keys in Settings first.")
-                    api_key = decrypt_value(config.demo_api_key_encrypted)
-                    api_secret = decrypt_value(config.demo_api_secret_encrypted)
-                    passphrase = decrypt_value(config.demo_passphrase_encrypted) if config.demo_passphrase_encrypted else ""
+                    if not conn.demo_api_key_encrypted:
+                        raise ValueError(
+                            f"No demo API keys configured for {exchange_type}. "
+                            "Add demo keys in Settings first."
+                        )
+                    api_key = decrypt_value(conn.demo_api_key_encrypted)
+                    api_secret = decrypt_value(conn.demo_api_secret_encrypted)
+                    passphrase = decrypt_value(conn.demo_passphrase_encrypted) if conn.demo_passphrase_encrypted else ""
                 else:
-                    if not config.api_key_encrypted:
-                        logger.error(f"Live mode requested but no live API keys configured for user {user_id}")
-                        raise ValueError("No live API keys configured. Add live keys in Settings first.")
-                    api_key = decrypt_value(config.api_key_encrypted)
-                    api_secret = decrypt_value(config.api_secret_encrypted)
-                    passphrase = decrypt_value(config.passphrase_encrypted) if config.passphrase_encrypted else ""
+                    if not conn.api_key_encrypted:
+                        raise ValueError(
+                            f"No live API keys configured for {exchange_type}. "
+                            "Add live keys in Settings first."
+                        )
+                    api_key = decrypt_value(conn.api_key_encrypted)
+                    api_secret = decrypt_value(conn.api_secret_encrypted)
+                    passphrase = decrypt_value(conn.passphrase_encrypted) if conn.passphrase_encrypted else ""
 
                 # Get preset config if specified
                 preset_name = None
@@ -79,7 +90,6 @@ class BotManager:
                     preset = preset_result.scalar_one_or_none()
                     if preset:
                         preset_name = preset.name
-                        exchange_type = preset.exchange_type
 
                 # Create exchange client
                 exchange_client = create_exchange_client(
@@ -91,7 +101,9 @@ class BotManager:
                 )
 
                 # Store bot info
-                self._bots[user_id] = {
+                if user_id not in self._bots:
+                    self._bots[user_id] = {}
+                self._bots[user_id][exchange_type] = {
                     "running": True,
                     "exchange_type": exchange_type,
                     "demo_mode": demo_mode,
@@ -118,16 +130,19 @@ class BotManager:
             )
             return True
 
+        except ValueError:
+            raise
         except Exception as e:
-            logger.error(f"Failed to start bot for user {user_id}: {e}")
+            logger.error(f"Failed to start bot for user {user_id} on {exchange_type}: {e}")
             return False
 
-    async def stop_bot(self, user_id: int) -> bool:
-        """Stop a user's bot."""
-        if user_id not in self._bots or not self._bots[user_id].get("running"):
+    async def stop_bot(self, user_id: int, exchange_type: str) -> bool:
+        """Stop a user's bot on a specific exchange."""
+        user_bots = self._bots.get(user_id, {})
+        if exchange_type not in user_bots or not user_bots[exchange_type].get("running"):
             return False
 
-        bot_info = self._bots[user_id]
+        bot_info = user_bots[exchange_type]
 
         # Close exchange client
         client = bot_info.get("exchange_client")
@@ -144,8 +159,11 @@ class BotManager:
         try:
             async with get_session() as session:
                 result = await session.execute(
-                    select(BotInstance)
-                    .where(BotInstance.user_id == user_id, BotInstance.is_running == True)
+                    select(BotInstance).where(
+                        BotInstance.user_id == user_id,
+                        BotInstance.exchange_type == exchange_type,
+                        BotInstance.is_running == True,
+                    )
                 )
                 instance = result.scalar_one_or_none()
                 if instance:
@@ -154,22 +172,40 @@ class BotManager:
         except Exception as e:
             logger.error(f"Error updating bot instance in DB: {e}")
 
-        logger.info(f"Bot stopped for user {user_id}")
+        logger.info(f"Bot stopped for user {user_id} on {exchange_type}")
         return True
 
-    def get_status(self, user_id: int) -> dict:
-        """Get bot status for a user."""
-        if user_id not in self._bots:
+    def get_status(self, user_id: int) -> List[dict]:
+        """Get bot status for all exchanges of a user."""
+        user_bots = self._bots.get(user_id, {})
+        if not user_bots:
+            return []
+
+        statuses = []
+        for exchange_type, info in user_bots.items():
+            statuses.append({
+                "is_running": info.get("running", False),
+                "exchange_type": info.get("exchange_type"),
+                "demo_mode": info.get("demo_mode", True),
+                "active_preset_id": info.get("preset_id"),
+                "active_preset_name": info.get("preset_name"),
+                "started_at": info.get("started_at"),
+            })
+        return statuses
+
+    def get_exchange_status(self, user_id: int, exchange_type: str) -> dict:
+        """Get bot status for a specific exchange."""
+        user_bots = self._bots.get(user_id, {})
+        info = user_bots.get(exchange_type)
+        if not info:
             return {
                 "is_running": False,
-                "exchange_type": None,
+                "exchange_type": exchange_type,
                 "demo_mode": True,
                 "active_preset_id": None,
                 "active_preset_name": None,
                 "started_at": None,
             }
-
-        info = self._bots[user_id]
         return {
             "is_running": info.get("running", False),
             "exchange_type": info.get("exchange_type"),
@@ -179,21 +215,35 @@ class BotManager:
             "started_at": info.get("started_at"),
         }
 
-    def is_running(self, user_id: int) -> bool:
-        """Check if a bot is running for a user."""
-        return user_id in self._bots and self._bots[user_id].get("running", False)
+    def is_running(self, user_id: int, exchange_type: Optional[str] = None) -> bool:
+        """Check if a bot is running. If exchange_type is None, checks any exchange."""
+        user_bots = self._bots.get(user_id, {})
+        if exchange_type:
+            return exchange_type in user_bots and user_bots[exchange_type].get("running", False)
+        return any(info.get("running", False) for info in user_bots.values())
 
-    async def switch_preset(self, user_id: int, preset_id: int) -> bool:
-        """Switch preset: stop current bot, load new preset, restart."""
-        was_running = self.is_running(user_id)
+    async def stop_all_for_user(self, user_id: int) -> int:
+        """Stop all running bots for a user. Returns count of stopped bots."""
+        user_bots = self._bots.get(user_id, {})
+        stopped = 0
+        for exchange_type in list(user_bots.keys()):
+            if user_bots[exchange_type].get("running"):
+                await self.stop_bot(user_id, exchange_type)
+                stopped += 1
+        return stopped
+
+    async def switch_preset(self, user_id: int, preset_id: int, exchange_type: str) -> bool:
+        """Switch preset: stop current bot on exchange, load new preset, restart."""
+        was_running = self.is_running(user_id, exchange_type)
         demo_mode = True
 
         if was_running:
-            demo_mode = self._bots[user_id].get("demo_mode", True)
-            await self.stop_bot(user_id)
+            demo_mode = self._bots[user_id][exchange_type].get("demo_mode", True)
+            await self.stop_bot(user_id, exchange_type)
 
         return await self.start_bot(
             user_id=user_id,
+            exchange_type=exchange_type,
             preset_id=preset_id,
             demo_mode=demo_mode,
         )
@@ -201,6 +251,7 @@ class BotManager:
     async def shutdown_all(self):
         """Stop all running bots (called on app shutdown)."""
         for user_id in list(self._bots.keys()):
-            if self._bots[user_id].get("running"):
-                await self.stop_bot(user_id)
+            for exchange_type in list(self._bots[user_id].keys()):
+                if self._bots[user_id][exchange_type].get("running"):
+                    await self.stop_bot(user_id, exchange_type)
         logger.info("All bots shut down")

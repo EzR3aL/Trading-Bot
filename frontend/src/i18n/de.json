@@ -26,7 +26,22 @@
     "openPositions": "Offene Positionen",
     "recentTrades": "Letzte Trades",
     "noPositions": "Keine offenen Positionen",
-    "noTrades": "Keine Trades vorhanden"
+    "noTrades": "Keine Trades vorhanden",
+    "pnlOverTime": "PnL im Zeitverlauf",
+    "winLoss": "Gewinn / Verlust",
+    "feesAndFunding": "Gebuehren & Funding",
+    "cumulativePnl": "Kumulativer PnL",
+    "dailyPnl": "Taeglicher PnL",
+    "fees": "Gebuehren",
+    "funding": "Funding",
+    "bestTrade": "Bester Trade",
+    "worstTrade": "Schlechtester Trade",
+    "period": "Zeitraum",
+    "days7": "7 Tage",
+    "days14": "14 Tage",
+    "days30": "30 Tage",
+    "days90": "90 Tage",
+    "noData": "Keine Daten vorhanden"
   },
   "trades": {
     "title": "Trade-Verlauf",
@@ -43,7 +58,9 @@
     "short": "Short",
     "open": "Offen",
     "closed": "Geschlossen",
-    "cancelled": "Abgebrochen"
+    "cancelled": "Abgebrochen",
+    "mode": "Modus",
+    "allModes": "Alle Modi"
   },
   "settings": {
     "title": "Einstellungen",
@@ -95,7 +112,10 @@
     "demoMode": "Demo-Modus",
     "liveMode": "Live-Modus",
     "selectExchange": "Exchange waehlen",
-    "selectPreset": "Preset waehlen"
+    "selectPreset": "Preset waehlen",
+    "stopAll": "Alle stoppen",
+    "noKeysConfigured": "Keine API-Schluessel fuer diese Exchange konfiguriert.",
+    "configureKeys": "API-Schluessel konfigurieren"
   },
   "tax": {
     "title": "Steuerbericht",

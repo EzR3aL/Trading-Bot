@@ -17,6 +17,7 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    UniqueConstraint,
     func,
 )
 from sqlalchemy.orm import DeclarativeBase, relationship
@@ -46,6 +47,7 @@ class User(Base):
     trades = relationship("TradeRecord", back_populates="user", cascade="all, delete-orphan")
     funding_payments = relationship("FundingPayment", back_populates="user", cascade="all, delete-orphan")
     bot_instances = relationship("BotInstance", back_populates="user", cascade="all, delete-orphan")
+    exchange_connections = relationship("ExchangeConnection", back_populates="user", cascade="all, delete-orphan")
 
 
 class UserConfig(Base):
@@ -136,6 +138,7 @@ class TradeRecord(Base):
     exit_time = Column(DateTime, nullable=True)
     exit_reason = Column(String(50), nullable=True)
     metrics_snapshot = Column(Text, nullable=True)  # JSON string
+    demo_mode = Column(Boolean, default=False, nullable=False, server_default="0")
 
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, onupdate=func.now())
@@ -185,6 +188,34 @@ class BotInstance(Base):
     # Relationships
     user = relationship("User", back_populates="bot_instances")
     active_preset = relationship("ConfigPreset", back_populates="bot_instances")
+
+
+class ExchangeConnection(Base):
+    """Per-exchange API credentials for a user."""
+    __tablename__ = "exchange_connections"
+    __table_args__ = (
+        UniqueConstraint("user_id", "exchange_type", name="uq_user_exchange"),
+    )
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    exchange_type = Column(String(50), nullable=False)  # bitget | weex | hyperliquid
+
+    # Encrypted API credentials (live)
+    api_key_encrypted = Column(Text, nullable=True)
+    api_secret_encrypted = Column(Text, nullable=True)
+    passphrase_encrypted = Column(Text, nullable=True)
+
+    # Encrypted API credentials (demo)
+    demo_api_key_encrypted = Column(Text, nullable=True)
+    demo_api_secret_encrypted = Column(Text, nullable=True)
+    demo_passphrase_encrypted = Column(Text, nullable=True)
+
+    created_at = Column(DateTime, server_default=func.now())
+    updated_at = Column(DateTime, onupdate=func.now())
+
+    # Relationships
+    user = relationship("User", back_populates="exchange_connections")
 
 
 class Exchange(Base):

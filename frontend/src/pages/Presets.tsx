@@ -211,12 +211,10 @@ export default function Presets() {
                   className="px-3 py-1.5 text-sm bg-gray-800 text-gray-300 rounded hover:bg-gray-700">
                   {t('presets.duplicate')}
                 </button>
-                {!preset.is_active && (
-                  <button onClick={() => deletePreset(preset.id)}
-                    className="px-3 py-1.5 text-sm bg-red-900/20 text-red-400 rounded hover:bg-red-900/30">
-                    {t('presets.delete')}
-                  </button>
-                )}
+                <button onClick={() => deletePreset(preset.id)}
+                  className="px-3 py-1.5 text-sm bg-red-900/20 text-red-400 rounded hover:bg-red-900/30">
+                  {t('presets.delete')}
+                </button>
               </div>
             </div>
           </div>

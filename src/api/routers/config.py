@@ -4,28 +4,34 @@ import asyncio
 import json
 import time
 from datetime import datetime
-from typing import Any, Dict, Literal, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 import aiohttp
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Path
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.schemas.config import (
-    ApiKeysUpdate,
     ConfigResponse,
     DiscordConfigUpdate,
-    ExchangeConfigUpdate,
+    ExchangeConnectionResponse,
+    ExchangeConnectionUpdate,
     StrategyConfigUpdate,
     TradingConfigUpdate,
 )
 from src.auth.dependencies import get_current_user
-from src.models.database import User, UserConfig
+from src.models.database import ExchangeConnection, User, UserConfig
 from src.models.session import get_db
 from src.utils.circuit_breaker import circuit_registry
 from src.utils.encryption import decrypt_value, encrypt_value, mask_value
 
 router = APIRouter(prefix="/api/config", tags=["config"])
+
+EXCHANGE_PING_URLS: Dict[str, Dict[str, Any]] = {
+    "bitget": {"label": "Bitget", "url": "https://api.bitget.com/api/v2/public/time"},
+    "weex": {"label": "Weex", "url": "https://api.weex.com/api/v2/public/time"},
+    "hyperliquid": {"label": "Hyperliquid", "url": "https://api.hyperliquid.xyz/info", "method": "POST", "json_body": {"type": "meta"}},
+}
 
 
 async def _get_or_create_config(
@@ -44,6 +50,24 @@ async def _get_or_create_config(
     return config
 
 
+async def _get_user_connections(
+    user_id: int, db: AsyncSession
+) -> List[ExchangeConnection]:
+    """Get all exchange connections for a user."""
+    result = await db.execute(
+        select(ExchangeConnection).where(ExchangeConnection.user_id == user_id)
+    )
+    return list(result.scalars().all())
+
+
+def _conn_to_response(conn: ExchangeConnection) -> ExchangeConnectionResponse:
+    return ExchangeConnectionResponse(
+        exchange_type=conn.exchange_type,
+        api_keys_configured=bool(conn.api_key_encrypted),
+        demo_api_keys_configured=bool(conn.demo_api_key_encrypted),
+    )
+
+
 @router.get("", response_model=ConfigResponse)
 async def get_config(
     user: User = Depends(get_current_user),
@@ -51,6 +75,7 @@ async def get_config(
 ):
     """Get current user's configuration."""
     config = await _get_or_create_config(user, db)
+    connections = await _get_user_connections(user.id, db)
 
     trading = None
     if config.trading_config:
@@ -64,6 +89,9 @@ async def get_config(
     if config.discord_webhook_url:
         discord = DiscordConfigUpdate(webhook_url=mask_value(config.discord_webhook_url, 8))
 
+    conn_responses = [_conn_to_response(c) for c in connections]
+
+    # Deprecated fields for backward compat
     has_live_keys = bool(config.api_key_encrypted)
     has_demo_keys = bool(config.demo_api_key_encrypted)
 
@@ -71,6 +99,7 @@ async def get_config(
         trading=trading,
         strategy=strategy,
         discord=discord,
+        connections=conn_responses,
         exchange_type=config.exchange_type,
         api_keys_configured=has_live_keys,
         demo_api_keys_configured=has_demo_keys,
@@ -123,7 +152,6 @@ async def test_discord_webhook(
     if not config.discord_webhook_url:
         raise HTTPException(status_code=400, detail="No Discord webhook configured")
 
-    import aiohttp
     try:
         async with aiohttp.ClientSession() as session:
             payload = {
@@ -142,75 +170,124 @@ async def test_discord_webhook(
         raise HTTPException(status_code=400, detail=f"Failed to send: {str(e)}")
 
 
-@router.put("/api-keys")
-async def update_api_keys(
-    data: ApiKeysUpdate,
+# ── Exchange Connection CRUD ─────────────────────────────────────────
+
+
+@router.get("/exchange-connections")
+async def get_exchange_connections(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Update exchange API keys (encrypted at rest)."""
-    config = await _get_or_create_config(user, db)
-    config.exchange_type = data.exchange_type
+    """Get all exchange connections for the user."""
+    connections = await _get_user_connections(user.id, db)
+    return {"connections": [_conn_to_response(c) for c in connections]}
+
+
+@router.put("/exchange-connections/{exchange_type}")
+async def upsert_exchange_connection(
+    data: ExchangeConnectionUpdate,
+    exchange_type: str = Path(pattern="^(bitget|weex|hyperliquid)$"),
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Create or update API keys for a specific exchange."""
+    result = await db.execute(
+        select(ExchangeConnection).where(
+            ExchangeConnection.user_id == user.id,
+            ExchangeConnection.exchange_type == exchange_type,
+        )
+    )
+    conn = result.scalar_one_or_none()
+
+    if not conn:
+        conn = ExchangeConnection(user_id=user.id, exchange_type=exchange_type)
+        db.add(conn)
 
     if data.api_key:
-        config.api_key_encrypted = encrypt_value(data.api_key)
+        conn.api_key_encrypted = encrypt_value(data.api_key)
     if data.api_secret:
-        config.api_secret_encrypted = encrypt_value(data.api_secret)
+        conn.api_secret_encrypted = encrypt_value(data.api_secret)
     if data.passphrase:
-        config.passphrase_encrypted = encrypt_value(data.passphrase)
+        conn.passphrase_encrypted = encrypt_value(data.passphrase)
     if data.demo_api_key:
-        config.demo_api_key_encrypted = encrypt_value(data.demo_api_key)
+        conn.demo_api_key_encrypted = encrypt_value(data.demo_api_key)
     if data.demo_api_secret:
-        config.demo_api_secret_encrypted = encrypt_value(data.demo_api_secret)
+        conn.demo_api_secret_encrypted = encrypt_value(data.demo_api_secret)
     if data.demo_passphrase:
-        config.demo_passphrase_encrypted = encrypt_value(data.demo_passphrase)
+        conn.demo_passphrase_encrypted = encrypt_value(data.demo_passphrase)
 
-    return {"status": "ok", "message": "API keys updated"}
+    return {"status": "ok", "message": f"{exchange_type} API keys updated"}
 
 
-@router.post("/api-keys/test")
-async def test_api_keys(
+@router.delete("/exchange-connections/{exchange_type}")
+async def delete_exchange_connection(
+    exchange_type: str = Path(pattern="^(bitget|weex|hyperliquid)$"),
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Delete API keys for a specific exchange."""
+    result = await db.execute(
+        select(ExchangeConnection).where(
+            ExchangeConnection.user_id == user.id,
+            ExchangeConnection.exchange_type == exchange_type,
+        )
+    )
+    conn = result.scalar_one_or_none()
+    if not conn:
+        raise HTTPException(status_code=404, detail=f"No connection for {exchange_type}")
+
+    await db.delete(conn)
+    return {"status": "ok", "message": f"{exchange_type} connection deleted"}
+
+
+@router.post("/exchange-connections/{exchange_type}/test")
+async def test_exchange_connection(
+    exchange_type: str = Path(pattern="^(bitget|weex|hyperliquid)$"),
     mode: Optional[Literal["live", "demo"]] = None,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Test exchange connection with stored API keys.
-
-    Query params:
-        mode: 'live' | 'demo' | None (None = demo first, then live)
-    """
-    config = await _get_or_create_config(user, db)
+    """Test connection for a specific exchange."""
+    result = await db.execute(
+        select(ExchangeConnection).where(
+            ExchangeConnection.user_id == user.id,
+            ExchangeConnection.exchange_type == exchange_type,
+        )
+    )
+    conn = result.scalar_one_or_none()
+    if not conn:
+        raise HTTPException(status_code=400, detail=f"No API keys configured for {exchange_type}")
 
     if mode == "live":
-        if not config.api_key_encrypted:
+        if not conn.api_key_encrypted:
             raise HTTPException(status_code=400, detail="No live API keys configured")
         use_demo = False
     elif mode == "demo":
-        if not config.demo_api_key_encrypted:
+        if not conn.demo_api_key_encrypted:
             raise HTTPException(status_code=400, detail="No demo API keys configured")
         use_demo = True
     else:
-        if not config.api_key_encrypted and not config.demo_api_key_encrypted:
+        if not conn.api_key_encrypted and not conn.demo_api_key_encrypted:
             raise HTTPException(status_code=400, detail="No API keys configured")
-        use_demo = bool(config.demo_api_key_encrypted)
+        use_demo = bool(conn.demo_api_key_encrypted)
 
     try:
         from src.exchanges.factory import create_exchange_client
 
         if use_demo:
             client = create_exchange_client(
-                exchange_type=config.exchange_type,
-                api_key=decrypt_value(config.demo_api_key_encrypted),
-                api_secret=decrypt_value(config.demo_api_secret_encrypted),
-                passphrase=decrypt_value(config.demo_passphrase_encrypted) if config.demo_passphrase_encrypted else "",
+                exchange_type=exchange_type,
+                api_key=decrypt_value(conn.demo_api_key_encrypted),
+                api_secret=decrypt_value(conn.demo_api_secret_encrypted),
+                passphrase=decrypt_value(conn.demo_passphrase_encrypted) if conn.demo_passphrase_encrypted else "",
                 demo_mode=True,
             )
         else:
             client = create_exchange_client(
-                exchange_type=config.exchange_type,
-                api_key=decrypt_value(config.api_key_encrypted),
-                api_secret=decrypt_value(config.api_secret_encrypted),
-                passphrase=decrypt_value(config.passphrase_encrypted) if config.passphrase_encrypted else "",
+                exchange_type=exchange_type,
+                api_key=decrypt_value(conn.api_key_encrypted),
+                api_secret=decrypt_value(conn.api_secret_encrypted),
+                passphrase=decrypt_value(conn.passphrase_encrypted) if conn.passphrase_encrypted else "",
                 demo_mode=False,
             )
 
@@ -219,7 +296,7 @@ async def test_api_keys(
 
         return {
             "status": "ok",
-            "exchange": config.exchange_type,
+            "exchange": exchange_type,
             "balance": balance.total,
             "currency": balance.currency,
             "mode": "demo" if use_demo else "live",
@@ -228,16 +305,7 @@ async def test_api_keys(
         raise HTTPException(status_code=400, detail=f"Connection failed: {str(e)}")
 
 
-@router.put("/exchange")
-async def update_exchange(
-    data: ExchangeConfigUpdate,
-    user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-):
-    """Update active exchange type."""
-    config = await _get_or_create_config(user, db)
-    config.exchange_type = data.exchange_type
-    return {"status": "ok", "message": f"Exchange set to {data.exchange_type}"}
+# ── Connection Status (Ping) ────────────────────────────────────────
 
 
 async def _ping_service(
@@ -270,6 +338,7 @@ async def get_connections_status(
 ):
     """Check connectivity to all external data sources and services."""
     config = await _get_or_create_config(user, db)
+    user_connections = await _get_user_connections(user.id, db)
 
     services: Dict[str, Dict[str, Any]] = {
         "binance_futures": {
@@ -282,13 +351,18 @@ async def get_connections_status(
         },
     }
 
-    # Exchange endpoint based on config
-    if config.exchange_type == "bitget":
-        services["exchange"] = {"label": "Bitget", "type": "exchange", "url": "https://api.bitget.com/api/v2/public/time"}
-    elif config.exchange_type == "weex":
-        services["exchange"] = {"label": "Weex", "type": "exchange", "url": "https://api.weex.com/api/v2/public/time"}
-    elif config.exchange_type == "hyperliquid":
-        services["exchange"] = {"label": "Hyperliquid", "type": "exchange", "url": "https://api.hyperliquid.xyz/info", "method": "POST", "json_body": {"type": "meta"}}
+    # Add exchange pings for all configured exchanges
+    configured_exchanges = {c.exchange_type for c in user_connections}
+    for ex_type in configured_exchanges:
+        ping_info = EXCHANGE_PING_URLS.get(ex_type)
+        if ping_info:
+            services[f"exchange_{ex_type}"] = {
+                "label": ping_info["label"],
+                "type": "exchange",
+                "url": ping_info["url"],
+                "method": ping_info.get("method", "GET"),
+                "json_body": ping_info.get("json_body"),
+            }
 
     has_discord = bool(config.discord_webhook_url)
 

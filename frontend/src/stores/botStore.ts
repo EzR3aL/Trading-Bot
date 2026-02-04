@@ -3,23 +3,24 @@ import api from '../api/client'
 import type { BotStatus } from '../types'
 
 interface BotState {
-  status: BotStatus | null
+  statuses: BotStatus[]
   isLoading: boolean
   fetchStatus: () => Promise<void>
   startBot: (exchangeType: string, presetId?: number, demoMode?: boolean) => Promise<void>
-  stopBot: () => Promise<void>
+  stopBot: (exchangeType: string) => Promise<void>
+  stopAll: () => Promise<void>
 }
 
 export const useBotStore = create<BotState>((set) => ({
-  status: null,
+  statuses: [],
   isLoading: false,
 
   fetchStatus: async () => {
     try {
       const res = await api.get('/bot/status')
-      set({ status: res.data })
+      set({ statuses: res.data.bots || [] })
     } catch {
-      set({ status: null })
+      set({ statuses: [] })
     }
   },
 
@@ -32,22 +33,34 @@ export const useBotStore = create<BotState>((set) => ({
         demo_mode: demoMode,
       })
       const res = await api.get('/bot/status')
-      set({ status: res.data, isLoading: false })
+      set({ statuses: res.data.bots || [], isLoading: false })
     } catch {
       set({ isLoading: false })
       throw new Error('Failed to start bot')
     }
   },
 
-  stopBot: async () => {
+  stopBot: async (exchangeType: string) => {
     set({ isLoading: true })
     try {
-      await api.post('/bot/stop')
+      await api.post('/bot/stop', { exchange_type: exchangeType })
       const res = await api.get('/bot/status')
-      set({ status: res.data, isLoading: false })
+      set({ statuses: res.data.bots || [], isLoading: false })
     } catch {
       set({ isLoading: false })
       throw new Error('Failed to stop bot')
+    }
+  },
+
+  stopAll: async () => {
+    set({ isLoading: true })
+    try {
+      await api.post('/bot/stop-all')
+      const res = await api.get('/bot/status')
+      set({ statuses: res.data.bots || [], isLoading: false })
+    } catch {
+      set({ isLoading: false })
+      throw new Error('Failed to stop bots')
     }
   },
 }))

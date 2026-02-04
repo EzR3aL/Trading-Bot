@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import api from '../api/client'
-import type { ConfigResponse, ConnectionsStatusResponse, ExchangeInfo, ServiceStatus } from '../types'
+import type { ConnectionsStatusResponse, ExchangeConnectionStatus, ExchangeInfo, ServiceStatus } from '../types'
 
-const TABS = ['trading', 'strategy', 'apiKeys', 'discord', 'connections', 'exchange'] as const
+const TABS = ['trading', 'strategy', 'apiKeys', 'discord', 'connections'] as const
 
 /* ------------------------------------------------------------------ */
 /*  Reusable API Key Section                                          */
@@ -13,7 +13,7 @@ function ApiKeySection({
   title, configured, borderClass, badgeClass, badgeActiveClass,
   keyValue, secretValue, passphraseValue,
   onKeyChange, onSecretChange, onPassphraseChange,
-  onSave, onTest, saving, t,
+  onSave, onTest, saving, t, showPassphrase,
 }: {
   title: string
   configured: boolean
@@ -30,38 +30,41 @@ function ApiKeySection({
   onTest: () => void
   saving: boolean
   t: (key: string) => string
+  showPassphrase?: boolean
 }) {
   return (
-    <div className={`border rounded-lg p-4 space-y-4 ${borderClass}`}>
+    <div className={`border rounded-lg p-4 space-y-3 ${borderClass}`}>
       <div className="flex items-center justify-between">
-        <h3 className="text-white font-medium">{title}</h3>
+        <h4 className="text-white text-sm font-medium">{title}</h4>
         <span className={`text-xs px-2 py-0.5 rounded-full ${configured ? badgeActiveClass : badgeClass}`}>
           {configured ? t('settings.configured') : t('settings.notConfigured')}
         </span>
       </div>
       <div>
-        <label className="block text-sm text-gray-400 mb-1">API Key</label>
+        <label className="block text-xs text-gray-500 mb-1">API Key</label>
         <input type="password" value={keyValue} onChange={(e) => onKeyChange(e.target.value)}
           placeholder={configured ? '****configured****' : ''}
-          className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded text-white" />
+          className="w-full px-3 py-1.5 bg-gray-800 border border-gray-700 rounded text-white text-sm" />
       </div>
       <div>
-        <label className="block text-sm text-gray-400 mb-1">API Secret</label>
+        <label className="block text-xs text-gray-500 mb-1">API Secret</label>
         <input type="password" value={secretValue} onChange={(e) => onSecretChange(e.target.value)}
-          className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded text-white" />
+          className="w-full px-3 py-1.5 bg-gray-800 border border-gray-700 rounded text-white text-sm" />
       </div>
-      <div>
-        <label className="block text-sm text-gray-400 mb-1">Passphrase</label>
-        <input type="password" value={passphraseValue} onChange={(e) => onPassphraseChange(e.target.value)}
-          className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded text-white" />
-      </div>
+      {showPassphrase !== false && (
+        <div>
+          <label className="block text-xs text-gray-500 mb-1">Passphrase</label>
+          <input type="password" value={passphraseValue} onChange={(e) => onPassphraseChange(e.target.value)}
+            className="w-full px-3 py-1.5 bg-gray-800 border border-gray-700 rounded text-white text-sm" />
+        </div>
+      )}
       <div className="flex gap-2">
         <button onClick={onSave} disabled={saving}
-          className="px-4 py-2 bg-primary-600 text-white rounded hover:bg-primary-700 disabled:opacity-50">
+          className="px-3 py-1.5 text-sm bg-primary-600 text-white rounded hover:bg-primary-700 disabled:opacity-50">
           {t('settings.save')}
         </button>
         <button onClick={onTest} disabled={!configured}
-          className="px-4 py-2 bg-gray-700 text-white rounded hover:bg-gray-600 disabled:opacity-50">
+          className="px-3 py-1.5 text-sm bg-gray-700 text-white rounded hover:bg-gray-600 disabled:opacity-50">
           {t('settings.testConnection')}
         </button>
       </div>
@@ -80,14 +83,28 @@ function StatusDot({ reachable }: { reachable: boolean }) {
 }
 
 /* ------------------------------------------------------------------ */
+/*  Per-Exchange Key Form State                                       */
+/* ------------------------------------------------------------------ */
+
+interface ExchangeKeyForm {
+  apiKey: string; apiSecret: string; passphrase: string
+  demoApiKey: string; demoApiSecret: string; demoPassphrase: string
+}
+
+const emptyForm = (): ExchangeKeyForm => ({
+  apiKey: '', apiSecret: '', passphrase: '',
+  demoApiKey: '', demoApiSecret: '', demoPassphrase: '',
+})
+
+/* ------------------------------------------------------------------ */
 /*  Main Settings Page                                                */
 /* ------------------------------------------------------------------ */
 
 export default function Settings() {
   const { t } = useTranslation()
   const [activeTab, setActiveTab] = useState<typeof TABS[number]>('trading')
-  const [config, setConfig] = useState<ConfigResponse | null>(null)
   const [exchanges, setExchanges] = useState<ExchangeInfo[]>([])
+  const [connections, setConnections] = useState<ExchangeConnectionStatus[]>([])
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState('')
 
@@ -100,16 +117,8 @@ export default function Settings() {
   const [lossLimit, setLossLimit] = useState(5.0)
   const [demoMode, setDemoMode] = useState(true)
 
-  // Live API Keys form
-  const [apiKey, setApiKey] = useState('')
-  const [apiSecret, setApiSecret] = useState('')
-  const [passphrase, setPassphrase] = useState('')
-  const [selectedExchange, setSelectedExchange] = useState('bitget')
-
-  // Demo API Keys form
-  const [demoApiKey, setDemoApiKey] = useState('')
-  const [demoApiSecret, setDemoApiSecret] = useState('')
-  const [demoPassphrase, setDemoPassphrase] = useState('')
+  // Per-exchange API key forms
+  const [keyForms, setKeyForms] = useState<Record<string, ExchangeKeyForm>>({})
 
   // Discord form
   const [webhookUrl, setWebhookUrl] = useState('')
@@ -121,14 +130,17 @@ export default function Settings() {
   useEffect(() => {
     const load = async () => {
       try {
-        const [configRes, exchRes] = await Promise.all([
+        const [configRes, exchRes, connRes] = await Promise.all([
           api.get('/config'),
           api.get('/exchanges'),
+          api.get('/config/exchange-connections'),
         ])
-        setConfig(configRes.data)
         setExchanges(exchRes.data.exchanges)
-        setSelectedExchange(configRes.data.exchange_type)
+        setConnections(connRes.data.connections || [])
 
+        if (configRes.data.discord?.webhook_url) {
+          setWebhookUrl(configRes.data.discord.webhook_url)
+        }
         if (configRes.data.trading) {
           const tc = configRes.data.trading
           setLeverage(tc.leverage)
@@ -149,6 +161,14 @@ export default function Settings() {
     setTimeout(() => setMessage(''), 3000)
   }
 
+  const getForm = (ex: string): ExchangeKeyForm => keyForms[ex] || emptyForm()
+  const updateForm = (ex: string, patch: Partial<ExchangeKeyForm>) =>
+    setKeyForms((prev) => ({ ...prev, [ex]: { ...getForm(ex), ...patch } }))
+
+  const getConn = (ex: string) => connections.find((c) => c.exchange_type === ex)
+
+  // ── Save Handlers ──
+
   const saveTrading = async () => {
     setSaving(true)
     try {
@@ -163,43 +183,41 @@ export default function Settings() {
     setSaving(false)
   }
 
-  const saveLiveApiKeys = async () => {
+  const saveLiveKeys = async (exchangeType: string) => {
+    const form = getForm(exchangeType)
     setSaving(true)
     try {
-      await api.put('/config/api-keys', {
-        exchange_type: selectedExchange,
-        api_key: apiKey, api_secret: apiSecret, passphrase,
-        demo_api_key: '', demo_api_secret: '', demo_passphrase: '',
+      await api.put(`/config/exchange-connections/${exchangeType}`, {
+        api_key: form.apiKey, api_secret: form.apiSecret, passphrase: form.passphrase,
       })
-      const res = await api.get('/config')
-      setConfig(res.data)
+      const res = await api.get('/config/exchange-connections')
+      setConnections(res.data.connections || [])
+      updateForm(exchangeType, { apiKey: '', apiSecret: '', passphrase: '' })
       showMessage(t('settings.saved'))
-      setApiKey(''); setApiSecret(''); setPassphrase('')
     } catch { showMessage(t('common.error')) }
     setSaving(false)
   }
 
-  const saveDemoApiKeys = async () => {
+  const saveDemoKeys = async (exchangeType: string) => {
+    const form = getForm(exchangeType)
     setSaving(true)
     try {
-      await api.put('/config/api-keys', {
-        exchange_type: selectedExchange,
-        api_key: '', api_secret: '', passphrase: '',
-        demo_api_key: demoApiKey, demo_api_secret: demoApiSecret, demo_passphrase: demoPassphrase,
+      await api.put(`/config/exchange-connections/${exchangeType}`, {
+        demo_api_key: form.demoApiKey, demo_api_secret: form.demoApiSecret, demo_passphrase: form.demoPassphrase,
       })
-      const res = await api.get('/config')
-      setConfig(res.data)
+      const res = await api.get('/config/exchange-connections')
+      setConnections(res.data.connections || [])
+      updateForm(exchangeType, { demoApiKey: '', demoApiSecret: '', demoPassphrase: '' })
       showMessage(t('settings.saved'))
-      setDemoApiKey(''); setDemoApiSecret(''); setDemoPassphrase('')
     } catch { showMessage(t('common.error')) }
     setSaving(false)
   }
 
-  const testConnection = async (mode: 'live' | 'demo') => {
+  const testConnection = async (exchangeType: string, mode: 'live' | 'demo') => {
     try {
-      const res = await api.post(`/config/api-keys/test?mode=${mode}`)
+      const res = await api.post(`/config/exchange-connections/${exchangeType}/test?mode=${mode}`)
       const label = mode === 'demo' ? 'Demo' : 'Live'
-      showMessage(`${label} connected! Balance: $${res.data.balance}`)
+      showMessage(`${label} ${exchangeType} connected! Balance: $${res.data.balance}`)
     } catch { showMessage('Connection failed') }
   }
 
@@ -228,7 +246,6 @@ export default function Settings() {
     setConnLoading(false)
   }
 
-  // Load connection status when tab is selected
   useEffect(() => {
     if (activeTab === 'connections' && !connStatus) {
       loadConnectionStatus()
@@ -237,9 +254,7 @@ export default function Settings() {
 
   const groupServices = (services: Record<string, ServiceStatus>) => {
     const groups: Record<string, [string, ServiceStatus][]> = {
-      data_source: [],
-      exchange: [],
-      notification: [],
+      data_source: [], exchange: [], notification: [],
     }
     for (const [key, svc] of Object.entries(services)) {
       const group = groups[svc.type]
@@ -287,8 +302,9 @@ export default function Settings() {
         ))}
       </div>
 
-      <div className="bg-gray-900 border border-gray-800 rounded-lg p-6 max-w-2xl">
-        {activeTab === 'trading' && (
+      {/* Trading Tab */}
+      {activeTab === 'trading' && (
+        <div className="bg-gray-900 border border-gray-800 rounded-lg p-6 max-w-2xl">
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div>
@@ -331,48 +347,70 @@ export default function Settings() {
               {t('settings.save')}
             </button>
           </div>
-        )}
+        </div>
+      )}
 
-        {activeTab === 'apiKeys' && (
-          <div className="space-y-6">
-            {/* Exchange selector (shared) */}
-            <div>
-              <label className="block text-sm text-gray-400 mb-1">Exchange</label>
-              <select value={selectedExchange} onChange={(e) => setSelectedExchange(e.target.value)}
-                className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded text-white">
-                {exchanges.map((ex) => (
-                  <option key={ex.name} value={ex.name}>{ex.display_name}</option>
-                ))}
-              </select>
-            </div>
+      {/* API Keys Tab — Per-Exchange Cards */}
+      {activeTab === 'apiKeys' && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
+          {exchanges.map((ex) => {
+            const conn = getConn(ex.name)
+            const form = getForm(ex.name)
+            const showPass = ex.requires_passphrase
 
-            <ApiKeySection
-              title={t('settings.liveApiKeys')}
-              configured={config?.api_keys_configured ?? false}
-              borderClass="border-gray-700"
-              badgeClass="bg-gray-800 text-gray-500 border border-gray-700"
-              badgeActiveClass="bg-green-900/40 text-green-400 border border-green-800"
-              keyValue={apiKey} secretValue={apiSecret} passphraseValue={passphrase}
-              onKeyChange={setApiKey} onSecretChange={setApiSecret} onPassphraseChange={setPassphrase}
-              onSave={saveLiveApiKeys} onTest={() => testConnection('live')}
-              saving={saving} t={t}
-            />
+            return (
+              <div key={ex.name} className="bg-gray-900 border border-gray-800 rounded-lg p-5 space-y-4">
+                {/* Exchange header */}
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-white font-semibold">{ex.display_name}</h3>
+                    <span className="text-xs text-gray-500">{ex.auth_type}</span>
+                  </div>
+                  {ex.supports_demo && <span className="text-xs text-green-500">Demo</span>}
+                </div>
 
-            <ApiKeySection
-              title={t('settings.demoApiKeys')}
-              configured={config?.demo_api_keys_configured ?? false}
-              borderClass="border-yellow-800/50"
-              badgeClass="bg-gray-800 text-gray-500 border border-gray-700"
-              badgeActiveClass="bg-yellow-900/40 text-yellow-400 border border-yellow-800"
-              keyValue={demoApiKey} secretValue={demoApiSecret} passphraseValue={demoPassphrase}
-              onKeyChange={setDemoApiKey} onSecretChange={setDemoApiSecret} onPassphraseChange={setDemoPassphrase}
-              onSave={saveDemoApiKeys} onTest={() => testConnection('demo')}
-              saving={saving} t={t}
-            />
-          </div>
-        )}
+                {/* Live Keys */}
+                <ApiKeySection
+                  title={t('settings.liveApiKeys')}
+                  configured={conn?.api_keys_configured ?? false}
+                  borderClass="border-gray-700"
+                  badgeClass="bg-gray-800 text-gray-500 border border-gray-700"
+                  badgeActiveClass="bg-green-900/40 text-green-400 border border-green-800"
+                  keyValue={form.apiKey} secretValue={form.apiSecret} passphraseValue={form.passphrase}
+                  onKeyChange={(v) => updateForm(ex.name, { apiKey: v })}
+                  onSecretChange={(v) => updateForm(ex.name, { apiSecret: v })}
+                  onPassphraseChange={(v) => updateForm(ex.name, { passphrase: v })}
+                  onSave={() => saveLiveKeys(ex.name)}
+                  onTest={() => testConnection(ex.name, 'live')}
+                  saving={saving} t={t} showPassphrase={showPass}
+                />
 
-        {activeTab === 'discord' && (
+                {/* Demo Keys */}
+                {ex.supports_demo && (
+                  <ApiKeySection
+                    title={t('settings.demoApiKeys')}
+                    configured={conn?.demo_api_keys_configured ?? false}
+                    borderClass="border-yellow-800/50"
+                    badgeClass="bg-gray-800 text-gray-500 border border-gray-700"
+                    badgeActiveClass="bg-yellow-900/40 text-yellow-400 border border-yellow-800"
+                    keyValue={form.demoApiKey} secretValue={form.demoApiSecret} passphraseValue={form.demoPassphrase}
+                    onKeyChange={(v) => updateForm(ex.name, { demoApiKey: v })}
+                    onSecretChange={(v) => updateForm(ex.name, { demoApiSecret: v })}
+                    onPassphraseChange={(v) => updateForm(ex.name, { demoPassphrase: v })}
+                    onSave={() => saveDemoKeys(ex.name)}
+                    onTest={() => testConnection(ex.name, 'demo')}
+                    saving={saving} t={t} showPassphrase={showPass}
+                  />
+                )}
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      {/* Discord Tab */}
+      {activeTab === 'discord' && (
+        <div className="bg-gray-900 border border-gray-800 rounded-lg p-6 max-w-2xl">
           <div className="space-y-4">
             <div>
               <label className="block text-sm text-gray-400 mb-1">Webhook URL</label>
@@ -391,9 +429,12 @@ export default function Settings() {
               </button>
             </div>
           </div>
-        )}
+        </div>
+      )}
 
-        {activeTab === 'connections' && (
+      {/* Connections Tab */}
+      {activeTab === 'connections' && (
+        <div className="bg-gray-900 border border-gray-800 rounded-lg p-6 max-w-2xl">
           <div className="space-y-6">
             <div className="flex items-center justify-between">
               <p className="text-sm text-gray-400">{t('settings.connectionsDesc')}</p>
@@ -429,9 +470,7 @@ export default function Settings() {
                               </div>
                               <div className="flex items-center gap-3 text-xs">
                                 {svc.latency_ms != null && (
-                                  <span className="text-gray-500">
-                                    {svc.latency_ms}ms
-                                  </span>
+                                  <span className="text-gray-500">{svc.latency_ms}ms</span>
                                 )}
                                 <span className={svc.reachable ? 'text-green-400' : 'text-red-400'}>
                                   {svc.reachable ? t('settings.online') : t('settings.offline')}
@@ -444,7 +483,6 @@ export default function Settings() {
                     )
                   })}
 
-                  {/* Circuit Breakers */}
                   {Object.keys(connStatus.circuit_breakers).length > 0 && (
                     <div>
                       <h3 className="text-sm font-medium text-gray-400 mb-3 uppercase tracking-wider">
@@ -481,42 +519,17 @@ export default function Settings() {
               </div>
             )}
           </div>
-        )}
+        </div>
+      )}
 
-        {activeTab === 'strategy' && (
+      {/* Strategy Tab */}
+      {activeTab === 'strategy' && (
+        <div className="bg-gray-900 border border-gray-800 rounded-lg p-6 max-w-2xl">
           <div className="text-gray-400 text-sm">
             Strategy settings are configured per preset. Go to Presets to edit.
           </div>
-        )}
-
-        {activeTab === 'exchange' && (
-          <div className="space-y-4">
-            <p className="text-sm text-gray-400">Active exchange: <span className="text-white font-medium">{config?.exchange_type || 'bitget'}</span></p>
-            <div className="grid grid-cols-3 gap-3">
-              {exchanges.map((ex) => (
-                <button
-                  key={ex.name}
-                  onClick={async () => {
-                    await api.put('/config/exchange', { exchange_type: ex.name })
-                    setConfig((c) => c ? { ...c, exchange_type: ex.name } : c)
-                    setSelectedExchange(ex.name)
-                    showMessage(`Exchange set to ${ex.display_name}`)
-                  }}
-                  className={`p-4 rounded-lg border text-left ${
-                    config?.exchange_type === ex.name
-                      ? 'border-primary-500 bg-primary-900/20'
-                      : 'border-gray-700 bg-gray-800 hover:border-gray-600'
-                  }`}
-                >
-                  <div className="font-medium text-white">{ex.display_name}</div>
-                  <div className="text-xs text-gray-400 mt-1">{ex.auth_type}</div>
-                  {ex.supports_demo && <div className="text-xs text-green-400 mt-1">Demo available</div>}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   )
 }

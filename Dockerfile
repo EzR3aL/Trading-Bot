@@ -1,4 +1,4 @@
-# Bitget Trading Bot - Production Dockerfile
+# Bitget Trading Bot v2.0 - Production Dockerfile
 # Multi-stage build: Frontend (Node) + Backend (Python)
 
 # Stage 1: Frontend Build
@@ -38,17 +38,17 @@ COPY --chown=botuser:botuser . .
 COPY --from=frontend /app/frontend/dist /app/static/frontend
 
 # Create data directories
-RUN mkdir -p data/risk data/backtest logs \
+RUN mkdir -p data logs \
     && chown -R botuser:botuser data logs static
 
 # Switch to non-root user
 USER botuser
 
 # Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
-    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8080/api/health')" || exit 1
+HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')" || exit 1
 
-EXPOSE 8080
+EXPOSE 8000
 
-# Default: run dashboard (new web app mode)
-CMD ["python", "main.py", "--dashboard"]
+# Run FastAPI backend (serves React frontend via StaticFiles)
+CMD ["python", "-m", "uvicorn", "src.api.main_app:app", "--host", "0.0.0.0", "--port", "8000"]

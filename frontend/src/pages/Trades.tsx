@@ -12,7 +12,15 @@ export default function Trades() {
   const [symbolFilter, setSymbolFilter] = useState('')
   const perPage = 25
 
+  const [synced, setSynced] = useState(false)
+
+  // Sync open trades with exchange on first load
   useEffect(() => {
+    api.post('/trades/sync').catch(() => {}).finally(() => setSynced(true))
+  }, [])
+
+  useEffect(() => {
+    if (!synced) return
     const load = async () => {
       const params = new URLSearchParams({ page: String(page), per_page: String(perPage) })
       if (statusFilter) params.set('status', statusFilter)
@@ -25,7 +33,7 @@ export default function Trades() {
       } catch { /* ignore */ }
     }
     load()
-  }, [page, statusFilter, symbolFilter])
+  }, [synced, page, statusFilter, symbolFilter])
 
   const totalPages = Math.ceil(total / perPage)
 
@@ -68,6 +76,7 @@ export default function Trades() {
               <th className="text-right p-3 text-gray-400">{t('trades.exitPrice')}</th>
               <th className="text-right p-3 text-gray-400">{t('trades.pnl')}</th>
               <th className="text-left p-3 text-gray-400">{t('trades.exchange')}</th>
+              <th className="text-left p-3 text-gray-400">{t('trades.mode')}</th>
               <th className="text-left p-3 text-gray-400">{t('trades.status')}</th>
             </tr>
           </thead>
@@ -93,6 +102,15 @@ export default function Trades() {
                   </span>
                 </td>
                 <td className="p-3 text-gray-400">{trade.exchange}</td>
+                <td className="p-3">
+                  <span className={`px-2 py-0.5 rounded text-xs ${
+                    trade.demo_mode
+                      ? 'bg-yellow-900/30 text-yellow-400 border border-yellow-800'
+                      : 'bg-green-900/30 text-green-400 border border-green-800'
+                  }`}>
+                    {trade.demo_mode ? t('common.demo') : t('common.live')}
+                  </span>
+                </td>
                 <td className="p-3">
                   <span className={`px-2 py-0.5 rounded text-xs ${
                     trade.status === 'open' ? 'bg-blue-900/30 text-blue-400' :

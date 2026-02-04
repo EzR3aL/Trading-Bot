@@ -26,7 +26,22 @@
     "openPositions": "Open Positions",
     "recentTrades": "Recent Trades",
     "noPositions": "No open positions",
-    "noTrades": "No trades yet"
+    "noTrades": "No trades yet",
+    "pnlOverTime": "PnL Over Time",
+    "winLoss": "Win / Loss",
+    "feesAndFunding": "Fees & Funding",
+    "cumulativePnl": "Cumulative PnL",
+    "dailyPnl": "Daily PnL",
+    "fees": "Fees",
+    "funding": "Funding",
+    "bestTrade": "Best Trade",
+    "worstTrade": "Worst Trade",
+    "period": "Period",
+    "days7": "7 Days",
+    "days14": "14 Days",
+    "days30": "30 Days",
+    "days90": "90 Days",
+    "noData": "No data available"
   },
   "trades": {
     "title": "Trade History",
@@ -43,7 +58,9 @@
     "short": "Short",
     "open": "Open",
     "closed": "Closed",
-    "cancelled": "Cancelled"
+    "cancelled": "Cancelled",
+    "mode": "Mode",
+    "allModes": "All Modes"
   },
   "settings": {
     "title": "Settings",
@@ -95,7 +112,10 @@
     "demoMode": "Demo Mode",
     "liveMode": "Live Mode",
     "selectExchange": "Select Exchange",
-    "selectPreset": "Select Preset"
+    "selectPreset": "Select Preset",
+    "stopAll": "Stop All",
+    "noKeysConfigured": "No API keys configured for this exchange.",
+    "configureKeys": "Configure API Keys"
   },
   "tax": {
     "title": "Tax Report",

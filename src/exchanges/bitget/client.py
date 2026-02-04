@@ -41,7 +41,7 @@ class BitgetExchangeClient(ExchangeClient):
     """
     Async client for Bitget Futures API implementing ExchangeClient ABC.
 
-    Supports demo trading via X-SIMULATED-TRADING header.
+    Supports demo trading via paptrading header.
     """
 
     def __init__(
@@ -108,7 +108,7 @@ class BitgetExchangeClient(ExchangeClient):
             "locale": "en-US",
         }
         if self.demo_mode:
-            headers["X-SIMULATED-TRADING"] = "1"
+            headers["paptrading"] = "1"
         return headers
 
     # ==================== HTTP ====================
@@ -233,14 +233,22 @@ class BitgetExchangeClient(ExchangeClient):
             "orderType": "market",
             "size": str(size),
         }
-        if take_profit is not None:
-            data["presetStopSurplusPrice"] = f"{take_profit:.1f}"
-        if stop_loss is not None:
-            data["presetStopLossPrice"] = f"{stop_loss:.1f}"
 
         result = await self._request("POST", ENDPOINTS["place_order"], data=data)
 
         order_id = result.get("orderId", result.get("data", {}).get("orderId", ""))
+
+        # Set Entire TP/SL via dedicated endpoint (covers full position)
+        if take_profit is not None or stop_loss is not None:
+            try:
+                await self._set_position_tpsl(
+                    symbol=symbol,
+                    hold_side=side,
+                    take_profit=take_profit,
+                    stop_loss=stop_loss,
+                )
+            except Exception as e:
+                logger.warning(f"Failed to set entire TP/SL for {symbol}: {e}")
 
         return Order(
             order_id=str(order_id),
@@ -254,6 +262,34 @@ class BitgetExchangeClient(ExchangeClient):
             take_profit=take_profit,
             stop_loss=stop_loss,
         )
+
+    async def _set_position_tpsl(
+        self,
+        symbol: str,
+        hold_side: str,
+        take_profit: Optional[float] = None,
+        stop_loss: Optional[float] = None,
+    ) -> None:
+        """Set Entire TP/SL for a position (covers full position size)."""
+        tpsl_data: Dict[str, str] = {
+            "symbol": symbol,
+            "productType": PRODUCT_TYPE_USDT,
+            "marginCoin": "USDT",
+            "holdSide": hold_side,
+        }
+        if take_profit is not None:
+            tpsl_data["stopSurplusTriggerPrice"] = f"{take_profit:.1f}"
+            tpsl_data["stopSurplusTriggerType"] = "fill_price"
+        if stop_loss is not None:
+            tpsl_data["stopLossTriggerPrice"] = f"{stop_loss:.1f}"
+            tpsl_data["stopLossTriggerType"] = "fill_price"
+
+        await self._request(
+            "POST",
+            "/api/v2/mix/order/place-pos-tpsl",
+            data=tpsl_data,
+        )
+        logger.info(f"Entire TP/SL set for {symbol} {hold_side}: TP={take_profit}, SL={stop_loss}")
 
     async def cancel_order(self, symbol: str, order_id: str) -> bool:
         data = {

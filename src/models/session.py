@@ -42,6 +42,16 @@ async def init_db() -> None:
             )
         await conn.run_sync(Base.metadata.create_all)
 
+        # Migration: add demo_mode column to existing tables
+        if "sqlite" in DATABASE_URL:
+            from sqlalchemy import text
+            try:
+                await conn.execute(
+                    text("ALTER TABLE trade_records ADD COLUMN demo_mode BOOLEAN NOT NULL DEFAULT 0")
+                )
+            except Exception:
+                pass  # Column already exists
+
 
 async def close_db() -> None:
     """Dispose engine. Call at application shutdown."""
