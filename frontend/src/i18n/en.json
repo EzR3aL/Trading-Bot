@@ -93,7 +93,10 @@
     "circuitHalfOpen": "Recovering",
     "refreshStatus": "Refresh",
     "refreshing": "Checking...",
-    "strategyHint": "Strategy settings are configured per preset. Go to Presets to edit."
+    "strategyHint": "Strategy settings are configured per preset. Go to Presets to edit.",
+    "llmKeys": "LLM Keys",
+    "llmKeysDescription": "Configure API keys for AI models used in trading strategies.",
+    "connectionSuccess": "Connection successful"
   },
   "presets": {
     "title": "Configuration Presets",
@@ -187,6 +190,12 @@
     "openTrades": "open",
     "lastAnalysis": "Last analysis",
     "totalPnl": "Total PnL",
+    "llmLastSignal": "Last Signal",
+    "confidence": "Confidence",
+    "accuracy": "Accuracy",
+    "predictions": "Predictions",
+    "viewReasoning": "View AI Reasoning",
+    "llmProvider": "AI Provider",
     "builder": {
       "title": "Create New Bot",
       "editTitle": "Edit Bot",
@@ -226,7 +235,9 @@
       "createAndStart": "Create & Start",
       "save": "Save Changes",
       "back": "Back",
-      "next": "Next"
+      "next": "Next",
+      "llmNote": "This bot uses AI for signal generation. Configure your API key in Settings → LLM Keys.",
+      "customPromptPlaceholder": "Leave empty for default prompt, or enter custom AI instructions..."
     }
   },
   "common": {

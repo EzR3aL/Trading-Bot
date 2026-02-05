@@ -9,6 +9,11 @@ interface Strategy {
   param_schema: Record<string, ParamDef>
 }
 
+interface ParamOption {
+  value: string
+  label: string
+}
+
 interface ParamDef {
   type: string
   label: string
@@ -16,7 +21,7 @@ interface ParamDef {
   default: number | string | boolean
   min?: number
   max?: number
-  options?: string[]
+  options?: (string | ParamOption)[]
 }
 
 interface BotBuilderProps {
@@ -271,12 +276,79 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
               </div>
             </div>
 
+            {/* LLM info banner */}
+            {strategyType === 'llm_signal' && (
+              <div className="bg-blue-900/20 border border-blue-800 rounded-lg p-3">
+                <p className="text-xs text-blue-300">{b.llmNote || 'This bot uses AI for signal generation. Configure your API key in Settings → LLM Keys.'}</p>
+              </div>
+            )}
+
             {selectedStrategy && Object.keys(selectedStrategy.param_schema).length > 0 && (
               <div>
                 <label className="block text-sm text-gray-400 mb-3">{b.strategyParams}</label>
                 <div className="grid grid-cols-2 gap-4">
                   {Object.entries(selectedStrategy.param_schema).map(([key, def]) => {
                     const d = def as ParamDef
+
+                    // Select dropdown (e.g. llm_provider)
+                    if (d.type === 'select' && d.options) {
+                      return (
+                        <div key={key}>
+                          <label className="block text-xs text-gray-500 mb-1" title={d.description}>{d.label}</label>
+                          <select
+                            value={strategyParams[key] ?? d.default}
+                            onChange={e => setStrategyParams(prev => ({ ...prev, [key]: e.target.value }))}
+                            className="w-full px-2 py-1.5 text-sm bg-gray-800 border border-gray-700 rounded text-white focus:border-primary-500 focus:outline-none"
+                          >
+                            {d.options.map(opt => {
+                              const val = typeof opt === 'string' ? opt : opt.value
+                              const label = typeof opt === 'string' ? opt : opt.label
+                              return <option key={val} value={val}>{label}</option>
+                            })}
+                          </select>
+                        </div>
+                      )
+                    }
+
+                    // Textarea (e.g. custom_prompt)
+                    if (d.type === 'textarea') {
+                      return (
+                        <div key={key} className="col-span-2">
+                          <label className="block text-xs text-gray-500 mb-1" title={d.description}>{d.label}</label>
+                          <textarea
+                            value={strategyParams[key] ?? ''}
+                            onChange={e => setStrategyParams(prev => ({ ...prev, [key]: e.target.value }))}
+                            rows={5}
+                            placeholder={b.customPromptPlaceholder || d.description}
+                            className="w-full px-2 py-1.5 text-sm bg-gray-800 border border-gray-700 rounded text-white font-mono focus:border-primary-500 focus:outline-none"
+                          />
+                        </div>
+                      )
+                    }
+
+                    // Float slider (e.g. temperature)
+                    if (d.type === 'float' && d.min !== undefined && d.max !== undefined && d.max <= 1) {
+                      const val = strategyParams[key] ?? d.default
+                      return (
+                        <div key={key}>
+                          <label className="block text-xs text-gray-500 mb-1" title={d.description}>
+                            {d.label}: {Number(val).toFixed(1)}
+                          </label>
+                          <input
+                            type="range"
+                            min={d.min}
+                            max={d.max}
+                            step={0.1}
+                            value={val}
+                            onChange={e => setStrategyParams(prev => ({ ...prev, [key]: parseFloat(e.target.value) }))}
+                            className="w-full accent-primary-500"
+                          />
+                          <p className="text-xs text-gray-600 mt-0.5">{d.description}</p>
+                        </div>
+                      )
+                    }
+
+                    // Default: number input
                     return (
                       <div key={key}>
                         <label className="block text-xs text-gray-500 mb-1" title={d.description}>{d.label}</label>

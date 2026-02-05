@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next'
 import api from '../api/client'
 import type { ConnectionsStatusResponse, ExchangeConnectionStatus, ExchangeInfo, ServiceStatus } from '../types'
 
-const TABS = ['trading', 'strategy', 'apiKeys', 'discord', 'connections'] as const
+const TABS = ['trading', 'strategy', 'apiKeys', 'llmKeys', 'discord', 'connections'] as const
 
 /* ------------------------------------------------------------------ */
 /*  Reusable API Key Section                                          */
@@ -123,6 +123,10 @@ export default function Settings() {
   // Discord form
   const [webhookUrl, setWebhookUrl] = useState('')
 
+  // LLM connections
+  const [llmConnections, setLlmConnections] = useState<{provider_type: string; api_key_configured: boolean; display_name: string; free_tier: boolean}[]>([])
+  const [llmKeyForms, setLlmKeyForms] = useState<Record<string, string>>({})
+
   // Connections status
   const [connStatus, setConnStatus] = useState<ConnectionsStatusResponse | null>(null)
   const [connLoading, setConnLoading] = useState(false)
@@ -130,13 +134,15 @@ export default function Settings() {
   useEffect(() => {
     const load = async () => {
       try {
-        const [configRes, exchRes, connRes] = await Promise.all([
+        const [configRes, exchRes, connRes, llmRes] = await Promise.all([
           api.get('/config'),
           api.get('/exchanges'),
           api.get('/config/exchange-connections'),
+          api.get('/config/llm-connections'),
         ])
         setExchanges(exchRes.data.exchanges)
         setConnections(connRes.data.connections || [])
+        setLlmConnections(llmRes.data.connections || [])
 
         if (configRes.data.discord?.webhook_url) {
           setWebhookUrl(configRes.data.discord.webhook_url)
@@ -237,6 +243,42 @@ export default function Settings() {
       await api.post('/config/discord/test')
       showMessage('Test message sent!')
     } catch { showMessage('Failed to send test') }
+  }
+
+  const saveLlmKey = async (provider: string) => {
+    const key = llmKeyForms[provider]
+    if (!key) return
+    setSaving(true)
+    try {
+      await api.put(`/config/llm-connections/${provider}`, { api_key: key })
+      const res = await api.get('/config/llm-connections')
+      setLlmConnections(res.data.connections || [])
+      setLlmKeyForms(prev => ({ ...prev, [provider]: '' }))
+      showMessage(t('settings.saved'))
+    } catch { showMessage(t('common.error')) }
+    setSaving(false)
+  }
+
+  const testLlmKey = async (provider: string) => {
+    setSaving(true)
+    try {
+      const res = await api.post(`/config/llm-connections/${provider}/test`)
+      showMessage(`${t('settings.connectionSuccess')}: ${res.data.display_name}`)
+    } catch (err: any) {
+      showMessage(err?.response?.data?.detail || t('common.error'))
+    }
+    setSaving(false)
+  }
+
+  const deleteLlmKey = async (provider: string) => {
+    setSaving(true)
+    try {
+      await api.delete(`/config/llm-connections/${provider}`)
+      const res = await api.get('/config/llm-connections')
+      setLlmConnections(res.data.connections || [])
+      showMessage(t('settings.saved'))
+    } catch { showMessage(t('common.error')) }
+    setSaving(false)
   }
 
   const loadConnectionStatus = async () => {
@@ -407,6 +449,54 @@ export default function Settings() {
               </div>
             )
           })}
+        </div>
+      )}
+
+      {/* LLM Keys Tab */}
+      {activeTab === 'llmKeys' && (
+        <div className="max-w-2xl">
+          <p className="text-sm text-gray-400 mb-4">{t('settings.llmKeysDescription')}</p>
+          <div className="space-y-3">
+            {llmConnections.map(({ provider_type, api_key_configured, display_name, free_tier }) => (
+              <div key={provider_type} className="bg-gray-900 border border-gray-800 rounded-lg p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <h4 className="text-white text-sm font-medium">{display_name}</h4>
+                    {free_tier && <span className="text-xs px-1.5 py-0.5 rounded bg-green-900/40 text-green-400 border border-green-800">Free</span>}
+                  </div>
+                  <span className={`text-xs px-2 py-0.5 rounded-full ${api_key_configured ? 'bg-green-900/40 text-green-400 border border-green-800' : 'bg-gray-800 text-gray-500 border border-gray-700'}`}>
+                    {api_key_configured ? t('settings.configured') : t('settings.notConfigured')}
+                  </span>
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">API Key</label>
+                  <input
+                    type="password"
+                    value={llmKeyForms[provider_type] || ''}
+                    onChange={(e) => setLlmKeyForms(prev => ({ ...prev, [provider_type]: e.target.value }))}
+                    placeholder={api_key_configured ? '****configured****' : ''}
+                    className="w-full px-3 py-1.5 bg-gray-800 border border-gray-700 rounded text-white text-sm"
+                  />
+                </div>
+                <div className="flex gap-2">
+                  <button onClick={() => saveLlmKey(provider_type)} disabled={saving}
+                    className="px-3 py-1.5 text-sm bg-primary-600 text-white rounded hover:bg-primary-700 disabled:opacity-50">
+                    {t('settings.save')}
+                  </button>
+                  <button onClick={() => testLlmKey(provider_type)} disabled={!api_key_configured || saving}
+                    className="px-3 py-1.5 text-sm bg-gray-700 text-white rounded hover:bg-gray-600 disabled:opacity-50">
+                    {t('settings.testConnection')}
+                  </button>
+                  {api_key_configured && (
+                    <button onClick={() => deleteLlmKey(provider_type)} disabled={saving}
+                      className="px-3 py-1.5 text-sm bg-red-900/50 text-red-400 rounded hover:bg-red-900 disabled:opacity-50">
+                      {t('presets.delete')}
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 

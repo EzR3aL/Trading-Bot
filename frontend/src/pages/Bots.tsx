@@ -30,6 +30,13 @@ interface BotStatus {
   total_trades: number
   total_pnl: number
   open_trades: number
+  // LLM-specific
+  llm_provider?: string | null
+  llm_last_direction?: string | null
+  llm_last_confidence?: number | null
+  llm_last_reasoning?: string | null
+  llm_accuracy?: number | null
+  llm_total_predictions?: number | null
 }
 
 const STATUS_COLORS: Record<string, string> = {
@@ -234,6 +241,70 @@ export default function Bots() {
                   <div className="text-sm text-white">{bot.open_trades}</div>
                 </div>
               </div>
+
+              {/* LLM Metrics */}
+              {bot.strategy_type === 'llm_signal' && (
+                <div className="mb-3 pt-2 border-t border-gray-700/50 space-y-2">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-gray-500">{t('bots.llmLastSignal')}</span>
+                    <div className="flex items-center gap-2">
+                      {bot.llm_last_direction && (
+                        <span className={`font-semibold ${bot.llm_last_direction === 'LONG' ? 'text-green-400' : 'text-red-400'}`}>
+                          {bot.llm_last_direction}
+                        </span>
+                      )}
+                      {bot.llm_provider && (
+                        <span className="text-gray-600">{bot.llm_provider}</span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Confidence bar */}
+                  {bot.llm_last_confidence != null && (
+                    <div>
+                      <div className="flex items-center justify-between text-xs mb-1">
+                        <span className="text-gray-500">{t('bots.confidence')}</span>
+                        <span className="text-gray-300">{bot.llm_last_confidence}%</span>
+                      </div>
+                      <div className="w-full bg-gray-800 rounded-full h-1.5">
+                        <div
+                          className={`h-1.5 rounded-full transition-all ${
+                            bot.llm_last_confidence >= 75 ? 'bg-green-500' :
+                            bot.llm_last_confidence >= 50 ? 'bg-yellow-500' : 'bg-red-500'
+                          }`}
+                          style={{ width: `${bot.llm_last_confidence}%` }}
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Accuracy & Predictions */}
+                  <div className="flex gap-4 text-xs">
+                    <div>
+                      <span className="text-gray-500">{t('bots.accuracy')}: </span>
+                      <span className="text-white font-medium">
+                        {bot.llm_accuracy != null ? `${bot.llm_accuracy.toFixed(1)}%` : 'N/A'}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-gray-500">{t('bots.predictions')}: </span>
+                      <span className="text-white font-medium">{bot.llm_total_predictions || 0}</span>
+                    </div>
+                  </div>
+
+                  {/* AI Reasoning (expandable) */}
+                  {bot.llm_last_reasoning && (
+                    <details className="text-xs">
+                      <summary className="text-gray-400 cursor-pointer hover:text-gray-300">
+                        {t('bots.viewReasoning')}
+                      </summary>
+                      <p className="text-gray-500 mt-1 italic leading-relaxed">
+                        &ldquo;{bot.llm_last_reasoning}&rdquo;
+                      </p>
+                    </details>
+                  )}
+                </div>
+              )}
 
               {/* Error message */}
               {bot.error_message && (

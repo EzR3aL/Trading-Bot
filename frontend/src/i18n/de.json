@@ -93,7 +93,10 @@
     "circuitHalfOpen": "Erholung",
     "refreshStatus": "Aktualisieren",
     "refreshing": "Pruefe...",
-    "strategyHint": "Strategie-Einstellungen werden pro Preset konfiguriert. Gehe zu Presets zum Bearbeiten."
+    "strategyHint": "Strategie-Einstellungen werden pro Preset konfiguriert. Gehe zu Presets zum Bearbeiten.",
+    "llmKeys": "LLM-Schluessel",
+    "llmKeysDescription": "API-Schluessel fuer KI-Modelle konfigurieren, die in Handelsstrategien verwendet werden.",
+    "connectionSuccess": "Verbindung erfolgreich"
   },
   "presets": {
     "title": "Konfigurations-Presets",
@@ -187,6 +190,12 @@
     "openTrades": "offen",
     "lastAnalysis": "Letzte Analyse",
     "totalPnl": "Gesamt-PnL",
+    "llmLastSignal": "Letztes Signal",
+    "confidence": "Konfidenz",
+    "accuracy": "Genauigkeit",
+    "predictions": "Vorhersagen",
+    "viewReasoning": "KI-Begruendung anzeigen",
+    "llmProvider": "KI-Anbieter",
     "builder": {
       "title": "Neuen Bot erstellen",
       "editTitle": "Bot bearbeiten",
@@ -226,7 +235,9 @@
       "createAndStart": "Erstellen & Starten",
       "save": "Aenderungen speichern",
       "back": "Zurueck",
-      "next": "Weiter"
+      "next": "Weiter",
+      "llmNote": "Dieser Bot nutzt KI zur Signalgenerierung. Konfigurieren Sie Ihren API-Schluessel unter Einstellungen → LLM-Schluessel.",
+      "customPromptPlaceholder": "Leer lassen fuer Standard-Prompt oder eigene KI-Anweisungen eingeben..."
     }
   },
   "common": {

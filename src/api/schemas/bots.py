@@ -95,6 +95,16 @@ class BotRuntimeStatus(BaseModel):
     total_pnl: float = 0.0
     open_trades: int = 0
 
+    # LLM-specific metrics (only populated for llm_signal strategy)
+    llm_provider: Optional[str] = None
+    llm_last_direction: Optional[str] = None  # "LONG" | "SHORT"
+    llm_last_confidence: Optional[int] = None  # 0-100
+    llm_last_reasoning: Optional[str] = None
+    llm_accuracy: Optional[float] = None  # Win rate %
+    llm_total_predictions: Optional[int] = None
+    llm_total_tokens_used: Optional[int] = None
+    llm_avg_tokens_per_call: Optional[float] = None
+
 
 class BotListResponse(BaseModel):
     """Response listing all bots for a user."""

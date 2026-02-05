@@ -87,3 +87,19 @@ class ConfigResponse(BaseModel):
     exchange_type: str = "bitget"
     api_keys_configured: bool = False
     demo_api_keys_configured: bool = False
+
+
+# ── LLM Connection Schemas ──────────────────────────────────
+
+
+class LLMConnectionUpdate(BaseModel):
+    """Request body for updating an LLM provider API key."""
+    api_key: str = Field(..., min_length=1)
+
+
+class LLMConnectionResponse(BaseModel):
+    """Response for LLM connection status."""
+    provider_type: str
+    api_key_configured: bool
+    display_name: str
+    free_tier: bool

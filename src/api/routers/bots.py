@@ -9,7 +9,7 @@ import json
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import func, select
+from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.schemas.bots import (
@@ -175,6 +175,86 @@ async def list_bots(
         )
         open_trades = open_result.scalar()
 
+        # LLM-specific metrics
+        llm_data = {}
+        if config.strategy_type == "llm_signal":
+            # Get last trade for latest signal info
+            last_trade_result = await db.execute(
+                select(TradeRecord)
+                .where(TradeRecord.bot_config_id == config.id)
+                .order_by(TradeRecord.entry_time.desc())
+                .limit(1)
+            )
+            last_trade = last_trade_result.scalar_one_or_none()
+
+            if last_trade:
+                llm_data["llm_last_direction"] = last_trade.side.upper() if last_trade.side else None
+                llm_data["llm_last_confidence"] = last_trade.confidence
+                if last_trade.metrics_snapshot:
+                    try:
+                        metrics = json.loads(last_trade.metrics_snapshot)
+                        llm_data["llm_last_reasoning"] = metrics.get("llm_reasoning", "")[:200]
+                        llm_data["llm_provider"] = metrics.get("llm_provider")
+                    except (json.JSONDecodeError, TypeError):
+                        pass
+
+            # Accuracy = winning / total closed trades
+            closed_result = await db.execute(
+                select(
+                    func.count(TradeRecord.id),
+                    func.sum(
+                        case(
+                            (TradeRecord.pnl > 0, 1),
+                            else_=0,
+                        )
+                    ),
+                ).where(
+                    TradeRecord.bot_config_id == config.id,
+                    TradeRecord.status == "closed",
+                )
+            )
+            closed_total, winners = closed_result.one()
+            if closed_total and closed_total > 0:
+                llm_data["llm_accuracy"] = round(
+                    (float(winners or 0) / closed_total) * 100, 1
+                )
+            llm_data["llm_total_predictions"] = total_trades
+
+            # Aggregate token usage from metrics_snapshot
+            try:
+                snapshots_result = await db.execute(
+                    select(TradeRecord.metrics_snapshot).where(
+                        TradeRecord.bot_config_id == config.id,
+                        TradeRecord.metrics_snapshot.isnot(None),
+                    )
+                )
+                total_tokens = 0
+                token_count = 0
+                for (snapshot_json,) in snapshots_result:
+                    try:
+                        snapshot = json.loads(snapshot_json)
+                        tokens = snapshot.get("llm_tokens_used", 0)
+                        if tokens and tokens > 0:
+                            total_tokens += tokens
+                            token_count += 1
+                    except (json.JSONDecodeError, TypeError):
+                        pass
+                if token_count > 0:
+                    llm_data["llm_total_tokens_used"] = total_tokens
+                    llm_data["llm_avg_tokens_per_call"] = round(
+                        total_tokens / token_count, 1
+                    )
+            except Exception:
+                pass  # Non-critical — don't break bot listing
+
+            # Get provider from strategy_params
+            if not llm_data.get("llm_provider") and config.strategy_params:
+                try:
+                    sp = json.loads(config.strategy_params)
+                    llm_data["llm_provider"] = sp.get("llm_provider")
+                except (json.JSONDecodeError, TypeError):
+                    pass
+
         bots.append(BotRuntimeStatus(
             bot_config_id=config.id,
             name=config.name,
@@ -191,6 +271,7 @@ async def list_bots(
             total_trades=total_trades,
             total_pnl=round(float(total_pnl), 2),
             open_trades=open_trades,
+            **llm_data,
         ))
 
     return BotListResponse(bots=bots)

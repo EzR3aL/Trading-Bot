@@ -49,6 +49,7 @@ class User(Base):
     funding_payments = relationship("FundingPayment", back_populates="user", cascade="all, delete-orphan")
     bot_instances = relationship("BotInstance", back_populates="user", cascade="all, delete-orphan")
     exchange_connections = relationship("ExchangeConnection", back_populates="user", cascade="all, delete-orphan")
+    llm_connections = relationship("LLMConnection", back_populates="user", cascade="all, delete-orphan")
     bot_configs = relationship("BotConfig", back_populates="user", cascade="all, delete-orphan")
 
 
@@ -226,6 +227,25 @@ class ExchangeConnection(Base):
 
     # Relationships
     user = relationship("User", back_populates="exchange_connections")
+
+
+class LLMConnection(Base):
+    """Per-LLM-provider API credentials for a user."""
+    __tablename__ = "llm_connections"
+    __table_args__ = (
+        UniqueConstraint("user_id", "provider_type", name="uq_user_llm_provider"),
+    )
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    provider_type = Column(String(50), nullable=False)  # groq|gemini|openai|anthropic|mistral|xai|perplexity
+    api_key_encrypted = Column(Text, nullable=False)
+
+    created_at = Column(DateTime, server_default=func.now())
+    updated_at = Column(DateTime, onupdate=func.now())
+
+    # Relationships
+    user = relationship("User", back_populates="llm_connections")
 
 
 class BotConfig(Base):

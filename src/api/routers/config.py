@@ -16,11 +16,13 @@ from src.api.schemas.config import (
     DiscordConfigUpdate,
     ExchangeConnectionResponse,
     ExchangeConnectionUpdate,
+    LLMConnectionResponse,
+    LLMConnectionUpdate,
     StrategyConfigUpdate,
     TradingConfigUpdate,
 )
 from src.auth.dependencies import get_current_user
-from src.models.database import ExchangeConnection, User, UserConfig
+from src.models.database import ExchangeConnection, LLMConnection, User, UserConfig
 from src.models.session import get_db
 from src.utils.circuit_breaker import circuit_registry
 from src.utils.encryption import decrypt_value, encrypt_value, mask_value
@@ -411,3 +413,127 @@ async def get_connections_status(
         "services": results,
         "circuit_breakers": circuit_registry.get_all_statuses(),
     }
+
+
+# ── LLM Connection CRUD ─────────────────────────────────────────
+
+VALID_LLM_PROVIDERS = "^(groq|gemini|openai|anthropic|mistral|xai|perplexity)$"
+
+
+@router.get("/llm-connections")
+async def get_llm_connections(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get all LLM connections for the user (shows all 7 providers)."""
+    from src.ai.providers import LLM_PROVIDERS_INFO
+
+    result = await db.execute(
+        select(LLMConnection).where(LLMConnection.user_id == user.id)
+    )
+    saved = {c.provider_type: c for c in result.scalars().all()}
+
+    connections = []
+    for provider_type, info in LLM_PROVIDERS_INFO.items():
+        conn = saved.get(provider_type)
+        connections.append(
+            LLMConnectionResponse(
+                provider_type=provider_type,
+                api_key_configured=bool(conn and conn.api_key_encrypted),
+                display_name=info["name"],
+                free_tier=info["free"],
+            )
+        )
+    return {"connections": connections}
+
+
+@router.put("/llm-connections/{provider_type}")
+async def upsert_llm_connection(
+    data: LLMConnectionUpdate,
+    provider_type: str = Path(pattern=VALID_LLM_PROVIDERS),
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Create or update API key for a specific LLM provider."""
+    from src.ai.providers import LLM_PROVIDERS_INFO
+
+    result = await db.execute(
+        select(LLMConnection).where(
+            LLMConnection.user_id == user.id,
+            LLMConnection.provider_type == provider_type,
+        )
+    )
+    conn = result.scalar_one_or_none()
+
+    if not conn:
+        conn = LLMConnection(user_id=user.id, provider_type=provider_type)
+        db.add(conn)
+
+    conn.api_key_encrypted = encrypt_value(data.api_key)
+
+    display = LLM_PROVIDERS_INFO.get(provider_type, {}).get("name", provider_type)
+    return {"status": "ok", "message": f"{display} API key updated"}
+
+
+@router.delete("/llm-connections/{provider_type}")
+async def delete_llm_connection(
+    provider_type: str = Path(pattern=VALID_LLM_PROVIDERS),
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Delete API key for a specific LLM provider."""
+    result = await db.execute(
+        select(LLMConnection).where(
+            LLMConnection.user_id == user.id,
+            LLMConnection.provider_type == provider_type,
+        )
+    )
+    conn = result.scalar_one_or_none()
+    if not conn:
+        raise HTTPException(status_code=404, detail=f"No connection for {provider_type}")
+
+    await db.delete(conn)
+    return {"status": "ok", "message": f"{provider_type} connection deleted"}
+
+
+@router.post("/llm-connections/{provider_type}/test")
+async def test_llm_connection(
+    provider_type: str = Path(pattern=VALID_LLM_PROVIDERS),
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Test connection for a specific LLM provider."""
+    result = await db.execute(
+        select(LLMConnection).where(
+            LLMConnection.user_id == user.id,
+            LLMConnection.provider_type == provider_type,
+        )
+    )
+    conn = result.scalar_one_or_none()
+    if not conn:
+        raise HTTPException(
+            status_code=400, detail=f"No API key configured for {provider_type}"
+        )
+
+    try:
+        from src.ai.providers import get_provider_class
+
+        provider_class = get_provider_class(provider_type)
+        api_key = decrypt_value(conn.api_key_encrypted)
+        provider = provider_class(api_key)
+
+        success = await provider.test_connection()
+
+        if success:
+            return {
+                "status": "ok",
+                "provider": provider_type,
+                "model": provider_class.get_model_name(),
+                "display_name": provider_class.get_display_name(),
+            }
+        else:
+            raise HTTPException(status_code=400, detail="Connection test failed")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Connection failed: {str(e)}")
