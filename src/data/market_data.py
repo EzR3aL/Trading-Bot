@@ -1,5 +1,5 @@
 """
-Market Data Fetcher for the Contrarian Liquidation Hunter Strategy.
+Market Data Fetcher for Trading Strategies.
 
 Fetches:
 - Fear & Greed Index (Alternative.me)
@@ -7,6 +7,9 @@ Fetches:
 - Funding Rates (Binance & Bitget)
 - 24h Ticker Data (Price trends)
 - Open Interest (Derivatives data)
+- News Sentiment (GDELT Project)
+- Kline/Candlestick Data (Binance Futures)
+- VWAP, Supertrend, Spot Volume Analysis (calculated from klines)
 """
 
 import asyncio
@@ -28,6 +31,7 @@ logger = get_logger(__name__)
 # Circuit breakers for external APIs
 _binance_breaker = circuit_registry.get("binance_api", fail_threshold=5, reset_timeout=60)
 _alternative_me_breaker = circuit_registry.get("alternative_me_api", fail_threshold=3, reset_timeout=120)
+_gdelt_breaker = circuit_registry.get("gdelt_api", fail_threshold=3, reset_timeout=120)
 
 
 class DataFetchError(Exception):
@@ -155,6 +159,7 @@ class MarketDataFetcher:
     FEAR_GREED_URL = "https://api.alternative.me/fng/"
     BINANCE_FUTURES_URL = "https://fapi.binance.com"
     COINGLASS_URL = "https://open-api.coinglass.com/public/v2"
+    GDELT_API_URL = "https://api.gdeltproject.org/api/v2/doc/doc"
 
     def __init__(self):
         """Initialize the market data fetcher."""
@@ -758,3 +763,329 @@ class MarketDataFetcher:
             logger.error(f"Error determining trend: {e}")
 
         return "neutral"
+
+    # ==================== News Sentiment (GDELT) ====================
+
+    async def get_news_sentiment(
+        self, query: str = "bitcoin", lookback_hours: int = 24, max_records: int = 250
+    ) -> Dict[str, Any]:
+        """
+        Fetch news sentiment from GDELT Project API.
+
+        Returns:
+            Dict with average_tone (-10 to +10), article_count
+        """
+        from datetime import timedelta
+
+        try:
+            now = datetime.utcnow()
+            start = now - timedelta(hours=lookback_hours)
+
+            params = {
+                "query": f'"{query}"',
+                "startdatetime": start.strftime("%Y%m%d%H%M%S"),
+                "enddatetime": now.strftime("%Y%m%d%H%M%S"),
+                "format": "json",
+                "mode": "tonechart",
+                "maxrecords": str(max_records),
+            }
+
+            async def _fetch():
+                return await self._get_with_retry(self.GDELT_API_URL, params)
+
+            data = await _gdelt_breaker.call(_fetch)
+
+            if data and "tonechart" in data:
+                tones = data["tonechart"]
+                if tones:
+                    tone_values = [float(t.get("tone", 0)) for t in tones if "tone" in t]
+                    if tone_values:
+                        avg_tone = sum(tone_values) / len(tone_values)
+                        logger.info(f"News Sentiment ({query}): tone={avg_tone:.2f}, articles={len(tone_values)}")
+                        return {"average_tone": avg_tone, "article_count": len(tone_values)}
+
+        except CircuitBreakerError as e:
+            logger.warning(f"GDELT API circuit open: {e}")
+        except Exception as e:
+            logger.error(f"Error fetching news sentiment: {e}")
+
+        return {"average_tone": 0.0, "article_count": 0}
+
+    # ==================== Kline / Candlestick Data ====================
+
+    async def get_binance_klines(
+        self, symbol: str = "BTCUSDT", interval: str = "1h", limit: int = 24
+    ) -> List[List]:
+        """
+        Fetch kline/candlestick data from Binance Futures.
+
+        Each kline: [open_time, open, high, low, close, volume, close_time,
+                     quote_volume, num_trades, taker_buy_base_vol,
+                     taker_buy_quote_vol, ignore]
+
+        Returns:
+            List of kline arrays, or empty list on failure.
+        """
+        try:
+            url = f"{self.BINANCE_FUTURES_URL}/fapi/v1/klines"
+            params = {"symbol": symbol, "interval": interval, "limit": limit}
+
+            async def _fetch():
+                return await self._get_with_retry(url, params)
+
+            data = await _binance_breaker.call(_fetch)
+            if data and isinstance(data, list):
+                logger.info(f"Klines ({symbol}, {interval}): fetched {len(data)} candles")
+                return data
+
+        except CircuitBreakerError as e:
+            logger.warning(f"Binance API circuit open for klines: {e}")
+        except Exception as e:
+            logger.error(f"Error fetching klines: {e}")
+
+        return []
+
+    # ==================== VWAP Calculation ====================
+
+    @staticmethod
+    def calculate_vwap(klines: List[List]) -> float:
+        """
+        Calculate Volume-Weighted Average Price from kline data.
+
+        VWAP = sum(typical_price * volume) / sum(volume)
+        typical_price = (high + low + close) / 3
+
+        Returns:
+            VWAP price, or 0.0 if no data.
+        """
+        if not klines:
+            return 0.0
+
+        total_tp_vol = 0.0
+        total_vol = 0.0
+
+        for k in klines:
+            try:
+                high = float(k[2])
+                low = float(k[3])
+                close = float(k[4])
+                volume = float(k[5])
+                typical_price = (high + low + close) / 3
+                total_tp_vol += typical_price * volume
+                total_vol += volume
+            except (IndexError, ValueError, TypeError):
+                continue
+
+        if total_vol == 0:
+            return 0.0
+
+        return total_tp_vol / total_vol
+
+    # ==================== Supertrend Indicator ====================
+
+    @staticmethod
+    def calculate_supertrend(
+        klines: List[List], atr_period: int = 10, multiplier: float = 3.0
+    ) -> Dict[str, Any]:
+        """
+        Calculate Supertrend indicator from kline data.
+
+        Uses ATR (Average True Range) for dynamic support/resistance.
+        Green = uptrend (price above lower band), Red = downtrend.
+
+        Returns:
+            {"direction": "bullish"|"bearish", "value": float, "atr": float}
+        """
+        if not klines or len(klines) < atr_period + 1:
+            return {"direction": "neutral", "value": 0.0, "atr": 0.0}
+
+        highs = []
+        lows = []
+        closes = []
+        for k in klines:
+            try:
+                highs.append(float(k[2]))
+                lows.append(float(k[3]))
+                closes.append(float(k[4]))
+            except (IndexError, ValueError, TypeError):
+                continue
+
+        if len(closes) < atr_period + 1:
+            return {"direction": "neutral", "value": 0.0, "atr": 0.0}
+
+        # Calculate True Range
+        true_ranges = [highs[0] - lows[0]]
+        for i in range(1, len(closes)):
+            tr = max(
+                highs[i] - lows[i],
+                abs(highs[i] - closes[i - 1]),
+                abs(lows[i] - closes[i - 1]),
+            )
+            true_ranges.append(tr)
+
+        # Calculate ATR using simple moving average
+        atr_values = []
+        for i in range(len(true_ranges)):
+            if i < atr_period - 1:
+                atr_values.append(0.0)
+            elif i == atr_period - 1:
+                atr_values.append(sum(true_ranges[:atr_period]) / atr_period)
+            else:
+                atr_values.append(
+                    (atr_values[-1] * (atr_period - 1) + true_ranges[i]) / atr_period
+                )
+
+        # Calculate Supertrend
+        supertrend = [0.0] * len(closes)
+        direction = [1] * len(closes)  # 1 = bullish, -1 = bearish
+
+        for i in range(atr_period, len(closes)):
+            hl2 = (highs[i] + lows[i]) / 2
+            upper_band = hl2 + multiplier * atr_values[i]
+            lower_band = hl2 - multiplier * atr_values[i]
+
+            if i == atr_period:
+                supertrend[i] = upper_band if closes[i] <= upper_band else lower_band
+                direction[i] = -1 if closes[i] <= upper_band else 1
+            else:
+                prev_st = supertrend[i - 1]
+                prev_dir = direction[i - 1]
+
+                if prev_dir == 1:  # was bullish
+                    lower_band = max(lower_band, prev_st)
+                    if closes[i] >= lower_band:
+                        supertrend[i] = lower_band
+                        direction[i] = 1
+                    else:
+                        supertrend[i] = upper_band
+                        direction[i] = -1
+                else:  # was bearish
+                    upper_band = min(upper_band, prev_st)
+                    if closes[i] <= upper_band:
+                        supertrend[i] = upper_band
+                        direction[i] = -1
+                    else:
+                        supertrend[i] = lower_band
+                        direction[i] = 1
+
+        current_dir = "bullish" if direction[-1] == 1 else "bearish"
+        return {
+            "direction": current_dir,
+            "value": supertrend[-1],
+            "atr": atr_values[-1],
+        }
+
+    # ==================== Spot Volume Analysis ====================
+
+    @staticmethod
+    def get_spot_volume_analysis(klines: List[List]) -> Dict[str, Any]:
+        """
+        Analyze buy/sell volume split from kline data.
+
+        kline[5] = total volume, kline[9] = taker buy base volume.
+        buy_ratio > 0.55 = accumulation, < 0.45 = distribution.
+
+        Returns:
+            {"buy_ratio": float, "sell_ratio": float, "total_volume": float,
+             "buy_volume": float, "sell_volume": float}
+        """
+        total_volume = 0.0
+        buy_volume = 0.0
+
+        for k in klines:
+            try:
+                vol = float(k[5])
+                buy_vol = float(k[9])
+                total_volume += vol
+                buy_volume += buy_vol
+            except (IndexError, ValueError, TypeError):
+                continue
+
+        if total_volume == 0:
+            return {
+                "buy_ratio": 0.5,
+                "sell_ratio": 0.5,
+                "total_volume": 0.0,
+                "buy_volume": 0.0,
+                "sell_volume": 0.0,
+            }
+
+        sell_volume = total_volume - buy_volume
+        buy_ratio = buy_volume / total_volume
+        return {
+            "buy_ratio": buy_ratio,
+            "sell_ratio": 1.0 - buy_ratio,
+            "total_volume": total_volume,
+            "buy_volume": buy_volume,
+            "sell_volume": sell_volume,
+        }
+
+    # ==================== OIWAP Calculation ====================
+
+    async def calculate_oiwap(
+        self, symbol: str = "BTCUSDT", klines: Optional[List[List]] = None, period_hours: int = 24
+    ) -> float:
+        """
+        Approximate OI-Weighted Average Price.
+
+        Uses OI history changes as weights: positions opened/closed at a price
+        contribute more to the weighted average.
+
+        OIWAP = sum(typical_price * abs(OI_change)) / sum(abs(OI_change))
+
+        Returns:
+            OIWAP price, or 0.0 if unavailable.
+        """
+        try:
+            if klines is None:
+                klines = await self.get_binance_klines(symbol, "1h", period_hours)
+            if not klines:
+                return 0.0
+
+            oi_history = await self.get_open_interest_history(symbol, "1h", period_hours)
+            if not oi_history or len(oi_history) < 2:
+                return 0.0
+
+            # Build timestamp -> OI map
+            oi_map = {}
+            for entry in oi_history:
+                ts = int(entry.get("timestamp", 0))
+                oi = float(entry.get("sumOpenInterest", 0))
+                oi_map[ts] = oi
+
+            total_weighted = 0.0
+            total_weight = 0.0
+
+            for i in range(len(klines)):
+                try:
+                    kline_ts = int(klines[i][0])
+                    high = float(klines[i][2])
+                    low = float(klines[i][3])
+                    close = float(klines[i][4])
+                    tp = (high + low + close) / 3
+
+                    # Find matching or closest OI entry
+                    oi_current = oi_map.get(kline_ts, 0)
+                    if i > 0:
+                        prev_ts = int(klines[i - 1][0])
+                        oi_prev = oi_map.get(prev_ts, oi_current)
+                    else:
+                        oi_prev = oi_current
+
+                    oi_change = abs(oi_current - oi_prev)
+                    if oi_change > 0:
+                        total_weighted += tp * oi_change
+                        total_weight += oi_change
+                except (IndexError, ValueError, TypeError):
+                    continue
+
+            if total_weight == 0:
+                return 0.0
+
+            oiwap = total_weighted / total_weight
+            logger.info(f"OIWAP ({symbol}): {oiwap:.2f}")
+            return oiwap
+
+        except Exception as e:
+            logger.error(f"Error calculating OIWAP: {e}")
+            return 0.0
