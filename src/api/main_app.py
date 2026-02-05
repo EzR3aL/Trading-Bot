@@ -22,6 +22,7 @@ from slowapi.errors import RateLimitExceeded
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from src.api.routers import (
+    assistant,
     auth,
     bot_control,
     bots,
@@ -79,6 +80,20 @@ async def lifespan(app: FastAPI):
 
     # Restore bots that were running before shutdown
     await orchestrator.restore_on_startup()
+
+    # Initialize AI assistant (optional — requires ANTHROPIC_API_KEY)
+    if os.getenv("ANTHROPIC_API_KEY"):
+        try:
+            from src.ai.assistant import TradingAssistant
+            from src.ai.llm_client import LLMClient
+            llm_client = LLMClient()
+            assistant_service = TradingAssistant(llm_client)
+            assistant.set_assistant(assistant_service)
+            logger.info("AI Trading Assistant initialized")
+        except Exception as e:
+            logger.warning(f"AI Assistant initialization failed: {e}")
+    else:
+        logger.info("AI Assistant disabled (ANTHROPIC_API_KEY not set)")
 
     logger.info("Application started successfully")
     yield
@@ -160,6 +175,7 @@ def create_app() -> FastAPI:
     app.include_router(bot_control.router)
     app.include_router(bots.router)
     app.include_router(tax_report.router)
+    app.include_router(assistant.router)
 
     # Serve frontend static files (built React app)
     frontend_dir = Path("static/frontend")

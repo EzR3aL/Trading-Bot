@@ -50,6 +50,7 @@ class User(Base):
     bot_instances = relationship("BotInstance", back_populates="user", cascade="all, delete-orphan")
     exchange_connections = relationship("ExchangeConnection", back_populates="user", cascade="all, delete-orphan")
     bot_configs = relationship("BotConfig", back_populates="user", cascade="all, delete-orphan")
+    conversations = relationship("Conversation", back_populates="user", cascade="all, delete-orphan")
 
 
 class UserConfig(Base):
@@ -269,6 +270,39 @@ class BotConfig(Base):
     # Relationships
     user = relationship("User", back_populates="bot_configs")
     trades = relationship("TradeRecord", back_populates="bot_config", foreign_keys="TradeRecord.bot_config_id")
+
+
+class Conversation(Base):
+    """Chat conversation between user and AI assistant."""
+    __tablename__ = "conversations"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    title = Column(String(200), nullable=True)
+    created_at = Column(DateTime, server_default=func.now())
+    updated_at = Column(DateTime, onupdate=func.now())
+
+    user = relationship("User", back_populates="conversations")
+    messages = relationship("Message", back_populates="conversation", cascade="all, delete-orphan",
+                            order_by="Message.created_at")
+
+
+class Message(Base):
+    """Individual message in a conversation."""
+    __tablename__ = "messages"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    conversation_id = Column(Integer, ForeignKey("conversations.id", ondelete="CASCADE"), nullable=False, index=True)
+    role = Column(String(20), nullable=False)  # user | assistant
+    content = Column(Text, nullable=False)
+    tool_calls = Column(Text, nullable=True)  # JSON
+    tool_results = Column(Text, nullable=True)  # JSON
+    input_tokens = Column(Integer, default=0)
+    output_tokens = Column(Integer, default=0)
+    model_used = Column(String(50), nullable=True)
+    created_at = Column(DateTime, server_default=func.now())
+
+    conversation = relationship("Conversation", back_populates="messages")
 
 
 class Exchange(Base):

@@ -147,6 +147,40 @@ export interface ServiceStatus {
   error?: string
 }
 
+export interface ChatMessage {
+  id?: number
+  role: 'user' | 'assistant'
+  content: string
+  toolCalls?: { name: string; input: Record<string, unknown>; result?: Record<string, unknown> }[]
+  botConfigPreview?: BotConfigPreviewData | null
+  isStreaming?: boolean
+  createdAt?: string
+}
+
+export interface BotConfigPreviewData {
+  name: string
+  strategy_type: string
+  exchange_type: string
+  mode: string
+  trading_pairs: string[]
+  leverage: number
+  position_size_percent: number
+  take_profit_percent: number
+  stop_loss_percent: number
+  max_trades_per_day: number
+  daily_loss_limit_percent?: number
+  strategy_params?: Record<string, unknown>
+  schedule_type?: string
+}
+
+export interface ConversationSummary {
+  id: number
+  title: string | null
+  created_at: string
+  message_count: number
+  last_message_preview: string | null
+}
+
 export interface ConnectionsStatusResponse {
   timestamp: string
   services: Record<string, ServiceStatus>

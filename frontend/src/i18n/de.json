@@ -229,6 +229,28 @@
       "next": "Weiter"
     }
   },
+  "assistant": {
+    "title": "Trading-Assistent",
+    "placeholder": "Frage zu deinen Trades, Strategien oder erstelle einen Bot...",
+    "send": "Senden",
+    "newChat": "Neuer Chat",
+    "history": "Verlauf",
+    "noHistory": "Noch keine Unterhaltungen",
+    "deleteChat": "Loeschen",
+    "typing": "Denkt nach...",
+    "fetchingData": "Daten werden geladen...",
+    "creatingBot": "Bot wird erstellt...",
+    "analyzingTrades": "Trades werden analysiert...",
+    "botConfigPreview": "Bot-Konfigurationsvorschau",
+    "createBot": "Bot erstellen",
+    "createAndStart": "Erstellen & Starten",
+    "modify": "Aendern",
+    "tokenUsage": "Token-Verbrauch",
+    "rateLimitError": "Zu viele Nachrichten. Bitte warte einen Moment.",
+    "budgetExceeded": "Taegliches Token-Budget erschoepft. Versuche es morgen erneut.",
+    "unavailable": "Assistent ist nicht verfuegbar.",
+    "connectionError": "Verbindungsfehler. Bitte versuche es erneut."
+  },
   "common": {
     "loading": "Laden...",
     "error": "Fehler",

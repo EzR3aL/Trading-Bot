@@ -1,6 +1,8 @@
 import { Link, useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '../../stores/authStore'
+import ChatButton from '../assistant/ChatButton'
+import ChatPanel from '../assistant/ChatPanel'
 import {
   LayoutDashboard,
   ArrowLeftRight,
@@ -101,6 +103,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
       {/* Main content */}
       <main className="ml-56 p-6">{children}</main>
+
+      {/* AI Assistant */}
+      <ChatButton />
+      <ChatPanel />
     </div>
   )
 }
