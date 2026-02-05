@@ -8,6 +8,7 @@ import Trades from './pages/Trades'
 import Settings from './pages/Settings'
 import Presets from './pages/Presets'
 import BotControl from './pages/BotControl'
+import Bots from './pages/Bots'
 import TaxReport from './pages/TaxReport'
 import AdminUsers from './pages/AdminUsers'
 import GettingStarted from './pages/GettingStarted'
@@ -47,6 +48,7 @@ export default function App() {
                 <Route path="/settings" element={<Settings />} />
                 <Route path="/presets" element={<Presets />} />
                 <Route path="/bot" element={<BotControl />} />
+                <Route path="/bots" element={<Bots />} />
                 <Route path="/tax-report" element={<TaxReport />} />
                 <Route path="/guide" element={<GettingStarted />} />
                 <Route

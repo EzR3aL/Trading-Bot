@@ -9,6 +9,85 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.0.0] - 2026-02-05
+
+### Multibot Orchestration System
+
+Komplettes Multibot-System mit Supervisor-Worker Architektur. Mehrere Bots koennen parallel auf verschiedenen Exchanges und Modi laufen, konfiguriert ueber ein Frontend-Wizard.
+
+#### Neue Architektur
+
+- **BotConfig** DB-Tabelle: Persistente Konfiguration pro Bot (Strategie, Exchange, Modus, Paare, Parameter, Schedule)
+- **BotWorker** (`src/bot/bot_worker.py`): Unabhaengiger asyncio Worker pro Bot mit eigenem APScheduler
+- **BotOrchestrator** (`src/bot/orchestrator.py`): Supervisor verwaltet alle BotWorker, Auto-Restore beim Server-Start
+- **Strategy Registry** (`src/strategy/base.py`): Pluggable Strategien via `BaseStrategy` ABC + `StrategyRegistry`
+- **Per-Bot Trade Isolation**: `bot_config_id` FK auf `TradeRecord` verknuepft jeden Trade mit seinem Bot
+
+#### Strategy System
+
+- **BaseStrategy** ABC mit `generate_signal()`, `should_trade()`, `get_param_schema()`, `get_description()`
+- **StrategyRegistry**: Register/Lookup/Create Pattern — neue Strategien automatisch im Frontend verfuegbar
+- **LiquidationHunter** refactored: Implementiert jetzt `BaseStrategy`, liest Parameter aus `self._p` Dict statt globaler Settings
+- **Dynamische Parameter**: Strategien definieren ihr `param_schema` (Typ, Label, Range, Default) — Frontend rendert Formulare automatisch
+
+#### Frontend
+
+- **Bot Builder** (`frontend/src/components/bots/BotBuilder.tsx`): 6-Schritt Wizard
+  - Schritt 1: Name & Beschreibung
+  - Schritt 2: Strategie-Auswahl + dynamische Parameter
+  - Schritt 3: Trading-Paare, Leverage, Position Size, TP/SL
+  - Schritt 4: Exchange + Modus (demo/live/both)
+  - Schritt 5: Schedule (Market Sessions / Interval / Custom)
+  - Schritt 6: Review & Erstellen
+- **Bot Overview** (`frontend/src/pages/Bots.tsx`): Card Grid mit Live-Status, PnL, Trade Count
+  - Start/Stop/Edit/Delete Aktionen pro Bot
+  - Running-Indikator mit Pulse-Animation
+  - Auto-Refresh alle 5 Sekunden
+  - Stop All Button
+
+#### API Endpoints
+
+| Endpoint | Beschreibung |
+|----------|-------------|
+| `GET /api/bots/strategies` | Verfuegbare Strategien mit Parameter-Schemas |
+| `POST /api/bots` | Bot erstellen |
+| `GET /api/bots` | Alle Bots mit Runtime-Status + Trade-Statistiken |
+| `GET /api/bots/{id}` | Bot-Details |
+| `PUT /api/bots/{id}` | Bot aktualisieren |
+| `DELETE /api/bots/{id}` | Bot loeschen (nur gestoppt) |
+| `POST /api/bots/{id}/start` | Bot starten |
+| `POST /api/bots/{id}/stop` | Bot stoppen |
+| `POST /api/bots/{id}/restart` | Bot neustarten |
+| `POST /api/bots/stop-all` | Alle Bots stoppen |
+
+#### Unterstuetzte Exchanges
+
+- **Bitget** (Demo + Live)
+- **Weex** (Demo + Live)
+- **Hyperliquid** (Demo + Live)
+
+### Geaendert
+
+| Datei | Aenderung |
+|-------|-----------|
+| `src/models/database.py` | `BotConfig` Modell, `bot_config_id` FK auf TradeRecord/BotInstance |
+| `src/models/session.py` | Migrations fuer neue Spalten |
+| `src/strategy/base.py` | NEU: BaseStrategy ABC + StrategyRegistry |
+| `src/strategy/liquidation_hunter.py` | Refactored auf BaseStrategy |
+| `src/strategy/__init__.py` | Neue Exports |
+| `src/bot/bot_worker.py` | NEU: BotWorker mit eigenem Scheduler |
+| `src/bot/orchestrator.py` | NEU: BotOrchestrator Supervisor |
+| `src/api/schemas/bots.py` | NEU: Pydantic Schemas |
+| `src/api/routers/bots.py` | NEU: CRUD + Lifecycle Router |
+| `src/api/main_app.py` | Orchestrator Integration, Version 3.0.0 |
+| `frontend/src/components/bots/BotBuilder.tsx` | NEU: 6-Schritt Wizard |
+| `frontend/src/pages/Bots.tsx` | NEU: Bot Overview |
+| `frontend/src/App.tsx` | `/bots` Route |
+| `frontend/src/components/layout/AppLayout.tsx` | "My Bots" Navigation |
+| `frontend/src/i18n/en.json` + `de.json` | Bots + Builder i18n Keys |
+
+---
+
 ## [2.2.0] - 2026-02-04
 
 ### Security Hardening

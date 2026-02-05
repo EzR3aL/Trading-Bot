@@ -42,17 +42,22 @@ async def init_db() -> None:
             )
         await conn.run_sync(Base.metadata.create_all)
 
-        # Migration: add demo_mode column to existing tables
+        # Migrations for existing SQLite databases
         if "sqlite" in DATABASE_URL:
             from sqlalchemy import text
-            try:
-                await conn.execute(
-                    text("ALTER TABLE trade_records ADD COLUMN demo_mode BOOLEAN NOT NULL DEFAULT 0")
-                )
-            except Exception as e:
-                if "duplicate column" not in str(e).lower():
-                    from src.utils.logger import get_logger
-                    get_logger(__name__).warning(f"Migration check: {e}")
+            migrations = [
+                "ALTER TABLE trade_records ADD COLUMN demo_mode BOOLEAN NOT NULL DEFAULT 0",
+                "ALTER TABLE trade_records ADD COLUMN bot_config_id INTEGER REFERENCES bot_configs(id) ON DELETE SET NULL",
+                "ALTER TABLE bot_instances ADD COLUMN bot_config_id INTEGER REFERENCES bot_configs(id) ON DELETE SET NULL",
+                "ALTER TABLE bot_instances ADD COLUMN error_message TEXT",
+            ]
+            for migration in migrations:
+                try:
+                    await conn.execute(text(migration))
+                except Exception as e:
+                    if "duplicate column" not in str(e).lower():
+                        from src.utils.logger import get_logger
+                        get_logger(__name__).warning(f"Migration check: {e}")
 
 
 async def close_db() -> None:

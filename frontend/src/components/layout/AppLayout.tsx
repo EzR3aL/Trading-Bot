@@ -7,6 +7,7 @@ import {
   Layers,
   Settings,
   Bot,
+  Cpu,
   FileText,
   Users,
   BookOpen,
@@ -15,6 +16,7 @@ import {
 
 const navItems: { path: string; key: string; icon: LucideIcon }[] = [
   { path: '/', key: 'dashboard', icon: LayoutDashboard },
+  { path: '/bots', key: 'myBots', icon: Cpu },
   { path: '/trades', key: 'trades', icon: ArrowLeftRight },
   { path: '/presets', key: 'presets', icon: Layers },
   { path: '/settings', key: 'settings', icon: Settings },

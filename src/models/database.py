@@ -49,6 +49,7 @@ class User(Base):
     funding_payments = relationship("FundingPayment", back_populates="user", cascade="all, delete-orphan")
     bot_instances = relationship("BotInstance", back_populates="user", cascade="all, delete-orphan")
     exchange_connections = relationship("ExchangeConnection", back_populates="user", cascade="all, delete-orphan")
+    bot_configs = relationship("BotConfig", back_populates="user", cascade="all, delete-orphan")
 
 
 class UserConfig(Base):
@@ -120,6 +121,7 @@ class TradeRecord(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    bot_config_id = Column(Integer, ForeignKey("bot_configs.id", ondelete="SET NULL"), nullable=True, index=True)
     exchange = Column(String(50), nullable=False, default="bitget")
 
     symbol = Column(String(50), nullable=False, index=True)
@@ -150,6 +152,7 @@ class TradeRecord(Base):
 
     # Relationships
     user = relationship("User", back_populates="trades")
+    bot_config = relationship("BotConfig", back_populates="trades", foreign_keys=[bot_config_id])
     funding_payments_rel = relationship("FundingPayment", back_populates="trade")
 
 
@@ -180,12 +183,14 @@ class BotInstance(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    bot_config_id = Column(Integer, ForeignKey("bot_configs.id", ondelete="SET NULL"), nullable=True, index=True)
     exchange_type = Column(String(50), nullable=False, default="bitget")
     is_running = Column(Boolean, default=False)
     demo_mode = Column(Boolean, default=True)
     active_preset_id = Column(Integer, ForeignKey("config_presets.id", ondelete="SET NULL"), nullable=True)
     started_at = Column(DateTime, nullable=True)
     stopped_at = Column(DateTime, nullable=True)
+    error_message = Column(Text, nullable=True)
 
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, onupdate=func.now())
@@ -221,6 +226,49 @@ class ExchangeConnection(Base):
 
     # Relationships
     user = relationship("User", back_populates="exchange_connections")
+
+
+class BotConfig(Base):
+    """Blueprint for a user-created bot."""
+    __tablename__ = "bot_configs"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    name = Column(String(100), nullable=False)
+    description = Column(Text, nullable=True)
+
+    # Strategy
+    strategy_type = Column(String(50), nullable=False)  # e.g. "liquidation_hunter"
+
+    # Exchange & mode
+    exchange_type = Column(String(50), nullable=False)  # bitget | weex | hyperliquid
+    mode = Column(String(10), nullable=False, default="demo")  # demo | live | both
+
+    # Trading parameters
+    trading_pairs = Column(Text, nullable=False, default='["BTCUSDT"]')  # JSON array
+    leverage = Column(Integer, nullable=False, default=4)
+    position_size_percent = Column(Float, nullable=False, default=7.5)
+    max_trades_per_day = Column(Integer, nullable=False, default=2)
+    take_profit_percent = Column(Float, nullable=False, default=4.0)
+    stop_loss_percent = Column(Float, nullable=False, default=1.5)
+    daily_loss_limit_percent = Column(Float, nullable=False, default=5.0)
+
+    # Strategy-specific parameters (JSON)
+    strategy_params = Column(Text, nullable=True)  # JSON: strategy-specific thresholds
+
+    # Schedule
+    schedule_type = Column(String(20), nullable=False, default="market_sessions")  # market_sessions | interval | custom_cron
+    schedule_config = Column(Text, nullable=True)  # JSON: {"hours": [1,8,14,21]} or {"interval_minutes": 60}
+
+    # State
+    is_enabled = Column(Boolean, default=False)
+
+    created_at = Column(DateTime, server_default=func.now())
+    updated_at = Column(DateTime, onupdate=func.now())
+
+    # Relationships
+    user = relationship("User", back_populates="bot_configs")
+    trades = relationship("TradeRecord", back_populates="bot_config", foreign_keys="TradeRecord.bot_config_id")
 
 
 class Exchange(Base):

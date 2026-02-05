@@ -24,6 +24,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from src.api.routers import (
     auth,
     bot_control,
+    bots,
     config,
     exchanges,
     funding,
@@ -64,17 +65,27 @@ async def lifespan(app: FastAPI):
     # Seed exchanges table
     await _seed_exchanges()
 
-    # Initialize bot manager
+    # Initialize legacy bot manager (kept for backward compat of /api/bot endpoints)
     from src.bot.bot_manager import BotManager
     bot_manager = BotManager()
     bot_control.set_bot_manager(bot_manager)
     app.state.bot_manager = bot_manager
+
+    # Initialize multibot orchestrator
+    from src.bot.orchestrator import BotOrchestrator
+    orchestrator = BotOrchestrator()
+    bots.set_orchestrator(orchestrator)
+    app.state.orchestrator = orchestrator
+
+    # Restore bots that were running before shutdown
+    await orchestrator.restore_on_startup()
 
     logger.info("Application started successfully")
     yield
 
     # Shutdown
     logger.info("Shutting down...")
+    await orchestrator.shutdown_all()
     await bot_manager.shutdown_all()
     await close_db()
     logger.info("Application shut down")
@@ -105,7 +116,7 @@ def create_app() -> FastAPI:
     app = FastAPI(
         title="Trading Bot API",
         description="Multi-Exchange Trading Bot with Web UI",
-        version="2.0.0",
+        version="3.0.0",
         lifespan=lifespan,
     )
 
@@ -147,6 +158,7 @@ def create_app() -> FastAPI:
     app.include_router(presets.router)
     app.include_router(exchanges.router)
     app.include_router(bot_control.router)
+    app.include_router(bots.router)
     app.include_router(tax_report.router)
 
     # Serve frontend static files (built React app)
