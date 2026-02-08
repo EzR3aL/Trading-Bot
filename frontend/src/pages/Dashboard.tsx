@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import api from '../api/client'
-import type { Statistics, Trade, BotStatus, DailyStats } from '../types'
+import type { Statistics, Trade, DailyStats } from '../types'
 import PnlChart from '../components/dashboard/PnlChart'
 import WinLossChart from '../components/dashboard/WinLossChart'
 import FeesChart from '../components/dashboard/FeesChart'
@@ -25,7 +25,6 @@ export default function Dashboard() {
   const [stats, setStats] = useState<Statistics | null>(null)
   const [dailyStats, setDailyStats] = useState<DailyStats[]>([])
   const [recentTrades, setRecentTrades] = useState<Trade[]>([])
-  const [botStatus, setBotStatus] = useState<BotStatus | null>(null)
   const [period, setPeriod] = useState<number>(30)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -37,16 +36,14 @@ export default function Dashboard() {
       try {
         await api.post('/trades/sync').catch(() => {})
 
-        const [statsRes, dailyRes, tradesRes, botRes] = await Promise.all([
+        const [statsRes, dailyRes, tradesRes] = await Promise.all([
           api.get(`/statistics?days=${period}`),
           api.get(`/statistics/daily?days=${period}`),
           api.get('/trades?per_page=10'),
-          api.get('/bot/status'),
         ])
         setStats(statsRes.data)
         setDailyStats(dailyRes.data.days)
         setRecentTrades(tradesRes.data.trades)
-        setBotStatus(botRes.data)
       } catch {
         setError(t('common.error'))
       } finally {
@@ -93,23 +90,6 @@ export default function Dashboard() {
               </button>
             ))}
           </div>
-          {/* Bot status */}
-          {botStatus && (
-            <span
-              className={`px-3 py-1.5 rounded-full text-sm font-medium ${
-                botStatus.is_running
-                  ? 'bg-green-900/30 text-green-400'
-                  : 'bg-gray-800 text-gray-400'
-              }`}
-            >
-              {botStatus.is_running ? t('bot.running') : t('bot.stopped')}
-              {botStatus.is_running && botStatus.exchange_type && (
-                <span className="ml-2 text-xs">
-                  ({botStatus.exchange_type} - {botStatus.demo_mode ? t('common.demo') : t('common.live')})
-                </span>
-              )}
-            </span>
-          )}
         </div>
       </div>
 
@@ -172,6 +152,7 @@ export default function Dashboard() {
             <thead>
               <tr className="border-b border-gray-800">
                 <th className="text-left p-3 text-gray-400">{t('trades.date')}</th>
+                <th className="text-left p-3 text-gray-400">{t('trades.bot')}</th>
                 <th className="text-left p-3 text-gray-400">{t('trades.symbol')}</th>
                 <th className="text-left p-3 text-gray-400">{t('trades.side')}</th>
                 <th className="text-right p-3 text-gray-400">{t('trades.entryPrice')}</th>
@@ -183,7 +164,7 @@ export default function Dashboard() {
             <tbody>
               {recentTrades.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="p-8 text-center text-gray-500">
+                  <td colSpan={8} className="p-8 text-center text-gray-500">
                     {t('dashboard.noTrades')}
                   </td>
                 </tr>
@@ -192,6 +173,16 @@ export default function Dashboard() {
                   <tr key={trade.id} className="border-b border-gray-800/50 hover:bg-gray-800/30">
                     <td className="p-3 text-gray-300">
                       {new Date(trade.entry_time).toLocaleDateString()}
+                    </td>
+                    <td className="p-3">
+                      {trade.bot_name ? (
+                        <div>
+                          <span className="text-white font-medium text-xs">{trade.bot_name}</span>
+                          <span className="text-gray-500 text-xs ml-1">({trade.bot_exchange || trade.exchange})</span>
+                        </div>
+                      ) : (
+                        <span className="text-gray-600">—</span>
+                      )}
                     </td>
                     <td className="p-3 text-white font-medium">{trade.symbol}</td>
                     <td className="p-3">

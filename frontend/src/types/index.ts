@@ -36,6 +36,8 @@ export interface Trade {
   exit_reason: string | null
   exchange: string
   demo_mode: boolean
+  bot_name: string | null
+  bot_exchange: string | null
 }
 
 export interface TradeListResponse {
@@ -101,15 +103,6 @@ export interface StrategyConfig {
   funding_rate_low: number
   high_confidence_min: number
   low_confidence_min: number
-}
-
-export interface BotStatus {
-  is_running: boolean
-  exchange_type: string | null
-  demo_mode: boolean
-  active_preset_id: number | null
-  active_preset_name: string | null
-  started_at: string | null
 }
 
 export interface ExchangeInfo {

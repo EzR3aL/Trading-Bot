@@ -1,25 +1,22 @@
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { ChevronDown } from 'lucide-react'
 import api from '../api/client'
 import type { ConnectionsStatusResponse, ExchangeConnectionStatus, ExchangeInfo, ServiceStatus } from '../types'
 
-const TABS = ['trading', 'strategy', 'apiKeys', 'llmKeys', 'discord', 'connections'] as const
+const TABS = ['trading', 'apiKeys', 'llmKeys', 'discord', 'connections'] as const
 
 /* ------------------------------------------------------------------ */
-/*  Reusable API Key Section                                          */
+/*  Inline Key Form (used inside accordion)                           */
 /* ------------------------------------------------------------------ */
 
-function ApiKeySection({
-  title, configured, borderClass, badgeClass, badgeActiveClass,
-  keyValue, secretValue, passphraseValue,
+function KeyForm({
+  label, configured, keyValue, secretValue, passphraseValue,
   onKeyChange, onSecretChange, onPassphraseChange,
-  onSave, onTest, saving, t, showPassphrase,
+  onSave, onTest, saving, t, showPassphrase, authType,
 }: {
-  title: string
+  label: string
   configured: boolean
-  borderClass: string
-  badgeClass: string
-  badgeActiveClass: string
   keyValue: string
   secretValue: string
   passphraseValue: string
@@ -31,33 +28,53 @@ function ApiKeySection({
   saving: boolean
   t: (key: string) => string
   showPassphrase?: boolean
+  authType?: string
 }) {
+  const isWallet = authType === 'eth_wallet'
+  const keyLabel = isWallet ? t('settings.walletAddress') : 'API Key'
+  const secretLabel = isWallet ? t('settings.privateKey') : 'API Secret'
+  const keyPlaceholder = configured ? '****configured****' : isWallet ? '0x... (Main Wallet)' : ''
+  const secretPlaceholder = isWallet ? '0x... (API Wallet Key)' : ''
+
+  // Inline validation for wallet addresses / private keys
+  const addrRegex = /^0x[0-9a-fA-F]{40}$/
+  const keyRegex = /^(0x)?[0-9a-fA-F]{64}$/
+  const addrError = isWallet && keyValue && !addrRegex.test(keyValue)
+    ? 'Must be 0x + 40 hex characters' : ''
+  const pkError = isWallet && secretValue && !keyRegex.test(secretValue)
+    ? 'Must be 64 hex characters (with or without 0x)' : ''
+
   return (
-    <div className={`border rounded-lg p-4 space-y-3 ${borderClass}`}>
-      <div className="flex items-center justify-between">
-        <h4 className="text-white text-sm font-medium">{title}</h4>
-        <span className={`text-xs px-2 py-0.5 rounded-full ${configured ? badgeActiveClass : badgeClass}`}>
-          {configured ? t('settings.configured') : t('settings.notConfigured')}
-        </span>
-      </div>
-      <div>
-        <label className="block text-xs text-gray-500 mb-1">API Key</label>
-        <input type="password" value={keyValue} onChange={(e) => onKeyChange(e.target.value)}
-          placeholder={configured ? '****configured****' : ''}
-          className="w-full px-3 py-1.5 bg-gray-800 border border-gray-700 rounded text-white text-sm" />
-      </div>
-      <div>
-        <label className="block text-xs text-gray-500 mb-1">API Secret</label>
-        <input type="password" value={secretValue} onChange={(e) => onSecretChange(e.target.value)}
-          className="w-full px-3 py-1.5 bg-gray-800 border border-gray-700 rounded text-white text-sm" />
-      </div>
-      {showPassphrase !== false && (
-        <div>
-          <label className="block text-xs text-gray-500 mb-1">Passphrase</label>
-          <input type="password" value={passphraseValue} onChange={(e) => onPassphraseChange(e.target.value)}
-            className="w-full px-3 py-1.5 bg-gray-800 border border-gray-700 rounded text-white text-sm" />
+    <div className="space-y-3">
+      <h4 className="text-xs font-medium text-gray-400 uppercase tracking-wider">{label}</h4>
+      {isWallet && (
+        <div className="p-2.5 bg-blue-900/20 border border-blue-800/40 rounded text-xs text-blue-300">
+          {t('settings.hyperliquidHint')}
         </div>
       )}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div>
+          <label className="block text-xs text-gray-500 mb-1">{keyLabel}</label>
+          <input type={isWallet ? 'text' : 'password'} value={keyValue} onChange={(e) => onKeyChange(e.target.value)}
+            placeholder={keyPlaceholder}
+            className={`w-full px-3 py-1.5 bg-gray-800 border rounded text-white text-sm font-mono ${addrError ? 'border-red-500' : 'border-gray-700'}`} />
+          {addrError && <p className="text-xs text-red-400 mt-1">{addrError}</p>}
+        </div>
+        <div>
+          <label className="block text-xs text-gray-500 mb-1">{secretLabel}</label>
+          <input type="password" value={secretValue} onChange={(e) => onSecretChange(e.target.value)}
+            placeholder={secretPlaceholder}
+            className={`w-full px-3 py-1.5 bg-gray-800 border rounded text-white text-sm ${pkError ? 'border-red-500' : 'border-gray-700'}`} />
+          {pkError && <p className="text-xs text-red-400 mt-1">{pkError}</p>}
+        </div>
+        {showPassphrase !== false && (
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Passphrase</label>
+            <input type="password" value={passphraseValue} onChange={(e) => onPassphraseChange(e.target.value)}
+              className="w-full px-3 py-1.5 bg-gray-800 border border-gray-700 rounded text-white text-sm" />
+          </div>
+        )}
+      </div>
       <div className="flex gap-2">
         <button onClick={onSave} disabled={saving}
           className="px-3 py-1.5 text-sm bg-primary-600 text-white rounded hover:bg-primary-700 disabled:opacity-50">
@@ -126,6 +143,10 @@ export default function Settings() {
   // LLM connections
   const [llmConnections, setLlmConnections] = useState<{provider_type: string; api_key_configured: boolean; display_name: string; free_tier: boolean}[]>([])
   const [llmKeyForms, setLlmKeyForms] = useState<Record<string, string>>({})
+
+  // Accordion state
+  const [openExchange, setOpenExchange] = useState<string | null>(null)
+  const [openLlm, setOpenLlm] = useState<string | null>(null)
 
   // Connections status
   const [connStatus, setConnStatus] = useState<ConnectionsStatusResponse | null>(null)
@@ -352,32 +373,32 @@ export default function Settings() {
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm text-gray-400 mb-1">Leverage (1-20x)</label>
+                <label className="block text-sm text-gray-400 mb-1">{t('settings.leverage')}</label>
                 <input type="number" value={leverage} onChange={(e) => setLeverage(Number(e.target.value))} min={1} max={20}
                   className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded text-white" />
               </div>
               <div>
-                <label className="block text-sm text-gray-400 mb-1">Position Size %</label>
+                <label className="block text-sm text-gray-400 mb-1">{t('settings.positionSize')}</label>
                 <input type="number" value={positionSize} onChange={(e) => setPositionSize(Number(e.target.value))} step={0.5}
                   className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded text-white" />
               </div>
               <div>
-                <label className="block text-sm text-gray-400 mb-1">Max Trades/Day</label>
+                <label className="block text-sm text-gray-400 mb-1">{t('settings.maxTrades')}</label>
                 <input type="number" value={maxTrades} onChange={(e) => setMaxTrades(Number(e.target.value))} min={1} max={10}
                   className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded text-white" />
               </div>
               <div>
-                <label className="block text-sm text-gray-400 mb-1">Daily Loss Limit %</label>
+                <label className="block text-sm text-gray-400 mb-1">{t('settings.dailyLossLimit')}</label>
                 <input type="number" value={lossLimit} onChange={(e) => setLossLimit(Number(e.target.value))} step={0.5}
                   className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded text-white" />
               </div>
               <div>
-                <label className="block text-sm text-gray-400 mb-1">Take Profit %</label>
+                <label className="block text-sm text-gray-400 mb-1">{t('settings.takeProfit')}</label>
                 <input type="number" value={takeProfit} onChange={(e) => setTakeProfit(Number(e.target.value))} step={0.5}
                   className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded text-white" />
               </div>
               <div>
-                <label className="block text-sm text-gray-400 mb-1">Stop Loss %</label>
+                <label className="block text-sm text-gray-400 mb-1">{t('settings.stopLoss')}</label>
                 <input type="number" value={stopLoss} onChange={(e) => setStopLoss(Number(e.target.value))} step={0.5}
                   className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded text-white" />
               </div>
@@ -394,57 +415,84 @@ export default function Settings() {
         </div>
       )}
 
-      {/* API Keys Tab — Per-Exchange Cards */}
+      {/* API Keys Tab — Accordion */}
       {activeTab === 'apiKeys' && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
+        <div className="max-w-2xl space-y-2">
           {exchanges.map((ex) => {
             const conn = getConn(ex.name)
             const form = getForm(ex.name)
             const showPass = ex.requires_passphrase
+            const isOpen = openExchange === ex.name
+            const liveOk = conn?.api_keys_configured ?? false
+            const demoOk = conn?.demo_api_keys_configured ?? false
 
             return (
-              <div key={ex.name} className="bg-gray-900 border border-gray-800 rounded-lg p-5 space-y-4">
-                {/* Exchange header */}
-                <div className="flex items-center justify-between">
-                  <div>
+              <div key={ex.name} className="bg-gray-900 border border-gray-800 rounded-lg overflow-hidden">
+                {/* Accordion Header */}
+                <button
+                  onClick={() => setOpenExchange(isOpen ? null : ex.name)}
+                  className="w-full flex items-center justify-between px-5 py-4 hover:bg-gray-800/50 transition-colors"
+                >
+                  <div className="flex items-center gap-3">
                     <h3 className="text-white font-semibold">{ex.display_name}</h3>
-                    <span className="text-xs text-gray-500">{ex.auth_type}</span>
                   </div>
-                  {ex.supports_demo && <span className="text-xs text-green-500">Demo</span>}
-                </div>
+                  <div className="flex items-center gap-2">
+                    {liveOk && (
+                      <span className="text-xs px-2 py-0.5 rounded-full bg-green-900/40 text-green-400 border border-green-800">
+                        Live
+                      </span>
+                    )}
+                    {demoOk && (
+                      <span className="text-xs px-2 py-0.5 rounded-full bg-yellow-900/40 text-yellow-400 border border-yellow-800">
+                        Demo
+                      </span>
+                    )}
+                    {!liveOk && !demoOk && (
+                      <span className="text-xs px-2 py-0.5 rounded-full bg-gray-800 text-gray-500 border border-gray-700">
+                        {t('settings.notConfigured')}
+                      </span>
+                    )}
+                    <ChevronDown size={16} className={`text-gray-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+                  </div>
+                </button>
 
-                {/* Live Keys */}
-                <ApiKeySection
-                  title={t('settings.liveApiKeys')}
-                  configured={conn?.api_keys_configured ?? false}
-                  borderClass="border-gray-700"
-                  badgeClass="bg-gray-800 text-gray-500 border border-gray-700"
-                  badgeActiveClass="bg-green-900/40 text-green-400 border border-green-800"
-                  keyValue={form.apiKey} secretValue={form.apiSecret} passphraseValue={form.passphrase}
-                  onKeyChange={(v) => updateForm(ex.name, { apiKey: v })}
-                  onSecretChange={(v) => updateForm(ex.name, { apiSecret: v })}
-                  onPassphraseChange={(v) => updateForm(ex.name, { passphrase: v })}
-                  onSave={() => saveLiveKeys(ex.name)}
-                  onTest={() => testConnection(ex.name, 'live')}
-                  saving={saving} t={t} showPassphrase={showPass}
-                />
+                {/* Accordion Content */}
+                {isOpen && (
+                  <div className="px-5 pb-5 pt-1 space-y-5 border-t border-gray-800">
+                    <KeyForm
+                      label={ex.auth_type === 'eth_wallet' ? 'Mainnet' : 'Live'}
+                      configured={liveOk}
+                      keyValue={form.apiKey} secretValue={form.apiSecret} passphraseValue={form.passphrase}
+                      onKeyChange={(v) => updateForm(ex.name, { apiKey: v })}
+                      onSecretChange={(v) => updateForm(ex.name, { apiSecret: v })}
+                      onPassphraseChange={(v) => updateForm(ex.name, { passphrase: v })}
+                      onSave={() => saveLiveKeys(ex.name)}
+                      onTest={() => testConnection(ex.name, 'live')}
+                      saving={saving} t={t} showPassphrase={showPass} authType={ex.auth_type}
+                    />
 
-                {/* Demo Keys */}
-                {ex.supports_demo && (
-                  <ApiKeySection
-                    title={t('settings.demoApiKeys')}
-                    configured={conn?.demo_api_keys_configured ?? false}
-                    borderClass="border-yellow-800/50"
-                    badgeClass="bg-gray-800 text-gray-500 border border-gray-700"
-                    badgeActiveClass="bg-yellow-900/40 text-yellow-400 border border-yellow-800"
-                    keyValue={form.demoApiKey} secretValue={form.demoApiSecret} passphraseValue={form.demoPassphrase}
-                    onKeyChange={(v) => updateForm(ex.name, { demoApiKey: v })}
-                    onSecretChange={(v) => updateForm(ex.name, { demoApiSecret: v })}
-                    onPassphraseChange={(v) => updateForm(ex.name, { demoPassphrase: v })}
-                    onSave={() => saveDemoKeys(ex.name)}
-                    onTest={() => testConnection(ex.name, 'demo')}
-                    saving={saving} t={t} showPassphrase={showPass}
-                  />
+                    {ex.supports_demo && (
+                      <>
+                        <div className="border-t border-gray-800" />
+                        <KeyForm
+                          label={ex.auth_type === 'eth_wallet' ? 'Testnet' : 'Demo'}
+                          configured={demoOk}
+                          keyValue={form.demoApiKey} secretValue={form.demoApiSecret} passphraseValue={form.demoPassphrase}
+                          onKeyChange={(v) => updateForm(ex.name, { demoApiKey: v })}
+                          onSecretChange={(v) => updateForm(ex.name, { demoApiSecret: v })}
+                          onPassphraseChange={(v) => updateForm(ex.name, { demoPassphrase: v })}
+                          onSave={() => saveDemoKeys(ex.name)}
+                          onTest={() => testConnection(ex.name, 'demo')}
+                          saving={saving} t={t} showPassphrase={showPass} authType={ex.auth_type}
+                        />
+                        {ex.auth_type === 'eth_wallet' && (
+                          <div className="p-2.5 bg-amber-900/20 border border-amber-800/40 rounded text-xs text-amber-300">
+                            {t('settings.hyperliquidTestnetNote')}
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
                 )}
               </div>
             )
@@ -452,50 +500,68 @@ export default function Settings() {
         </div>
       )}
 
-      {/* LLM Keys Tab */}
+      {/* LLM Keys Tab — Accordion */}
       {activeTab === 'llmKeys' && (
         <div className="max-w-2xl">
           <p className="text-sm text-gray-400 mb-4">{t('settings.llmKeysDescription')}</p>
-          <div className="space-y-3">
-            {llmConnections.map(({ provider_type, api_key_configured, display_name, free_tier }) => (
-              <div key={provider_type} className="bg-gray-900 border border-gray-800 rounded-lg p-4 space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <h4 className="text-white text-sm font-medium">{display_name}</h4>
-                    {free_tier && <span className="text-xs px-1.5 py-0.5 rounded bg-green-900/40 text-green-400 border border-green-800">Free</span>}
-                  </div>
-                  <span className={`text-xs px-2 py-0.5 rounded-full ${api_key_configured ? 'bg-green-900/40 text-green-400 border border-green-800' : 'bg-gray-800 text-gray-500 border border-gray-700'}`}>
-                    {api_key_configured ? t('settings.configured') : t('settings.notConfigured')}
-                  </span>
-                </div>
-                <div>
-                  <label className="block text-xs text-gray-500 mb-1">API Key</label>
-                  <input
-                    type="password"
-                    value={llmKeyForms[provider_type] || ''}
-                    onChange={(e) => setLlmKeyForms(prev => ({ ...prev, [provider_type]: e.target.value }))}
-                    placeholder={api_key_configured ? '****configured****' : ''}
-                    className="w-full px-3 py-1.5 bg-gray-800 border border-gray-700 rounded text-white text-sm"
-                  />
-                </div>
-                <div className="flex gap-2">
-                  <button onClick={() => saveLlmKey(provider_type)} disabled={saving}
-                    className="px-3 py-1.5 text-sm bg-primary-600 text-white rounded hover:bg-primary-700 disabled:opacity-50">
-                    {t('settings.save')}
+          <div className="space-y-2">
+            {llmConnections.map(({ provider_type, api_key_configured, display_name, free_tier }) => {
+              const isOpen = openLlm === provider_type
+              return (
+                <div key={provider_type} className="bg-gray-900 border border-gray-800 rounded-lg overflow-hidden">
+                  {/* Accordion Header */}
+                  <button
+                    onClick={() => setOpenLlm(isOpen ? null : provider_type)}
+                    className="w-full flex items-center justify-between px-5 py-4 hover:bg-gray-800/50 transition-colors"
+                  >
+                    <div className="flex items-center gap-2">
+                      <h4 className="text-white text-sm font-medium">{display_name}</h4>
+                      {free_tier && (
+                        <span className="text-xs px-1.5 py-0.5 rounded bg-blue-900/40 text-blue-400 border border-blue-800">Free</span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className={`text-xs px-2 py-0.5 rounded-full ${api_key_configured ? 'bg-green-900/40 text-green-400 border border-green-800' : 'bg-gray-800 text-gray-500 border border-gray-700'}`}>
+                        {api_key_configured ? t('settings.configured') : t('settings.notConfigured')}
+                      </span>
+                      <ChevronDown size={16} className={`text-gray-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+                    </div>
                   </button>
-                  <button onClick={() => testLlmKey(provider_type)} disabled={!api_key_configured || saving}
-                    className="px-3 py-1.5 text-sm bg-gray-700 text-white rounded hover:bg-gray-600 disabled:opacity-50">
-                    {t('settings.testConnection')}
-                  </button>
-                  {api_key_configured && (
-                    <button onClick={() => deleteLlmKey(provider_type)} disabled={saving}
-                      className="px-3 py-1.5 text-sm bg-red-900/50 text-red-400 rounded hover:bg-red-900 disabled:opacity-50">
-                      {t('presets.delete')}
-                    </button>
+
+                  {/* Accordion Content */}
+                  {isOpen && (
+                    <div className="px-5 pb-5 pt-1 space-y-3 border-t border-gray-800">
+                      <div>
+                        <label className="block text-xs text-gray-500 mb-1">API Key</label>
+                        <input
+                          type="password"
+                          value={llmKeyForms[provider_type] || ''}
+                          onChange={(e) => setLlmKeyForms(prev => ({ ...prev, [provider_type]: e.target.value }))}
+                          placeholder={api_key_configured ? '****configured****' : ''}
+                          className="w-full px-3 py-1.5 bg-gray-800 border border-gray-700 rounded text-white text-sm"
+                        />
+                      </div>
+                      <div className="flex gap-2">
+                        <button onClick={() => saveLlmKey(provider_type)} disabled={saving}
+                          className="px-3 py-1.5 text-sm bg-primary-600 text-white rounded hover:bg-primary-700 disabled:opacity-50">
+                          {t('settings.save')}
+                        </button>
+                        <button onClick={() => testLlmKey(provider_type)} disabled={!api_key_configured || saving}
+                          className="px-3 py-1.5 text-sm bg-gray-700 text-white rounded hover:bg-gray-600 disabled:opacity-50">
+                          {t('settings.testConnection')}
+                        </button>
+                        {api_key_configured && (
+                          <button onClick={() => deleteLlmKey(provider_type)} disabled={saving}
+                            className="px-3 py-1.5 text-sm bg-red-900/50 text-red-400 rounded hover:bg-red-900 disabled:opacity-50">
+                            {t('presets.delete')}
+                          </button>
+                        )}
+                      </div>
+                    </div>
                   )}
                 </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
         </div>
       )}
@@ -614,14 +680,6 @@ export default function Settings() {
         </div>
       )}
 
-      {/* Strategy Tab */}
-      {activeTab === 'strategy' && (
-        <div className="bg-gray-900 border border-gray-800 rounded-lg p-6 max-w-2xl">
-          <div className="text-gray-400 text-sm">
-            {t('settings.strategyHint')}
-          </div>
-        </div>
-      )}
     </div>
   )
 }

@@ -6,10 +6,10 @@ Replaces the old bot_control router for the new multibot system.
 """
 
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import case, func, select
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import case, cast, Date, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.schemas.bots import (
@@ -452,3 +452,203 @@ async def stop_all_bots(user: User = Depends(get_current_user)):
     orchestrator = _get_orchestrator()
     stopped = await orchestrator.stop_all_for_user(user.id)
     return {"status": "ok", "message": f"{stopped} bot(s) stopped"}
+
+
+# ─── Per-Bot Statistics ──────────────────────────────────────
+
+@router.get("/{bot_id}/statistics")
+async def get_bot_statistics(
+    bot_id: int,
+    days: int = Query(default=30, ge=1, le=365),
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get detailed statistics for a specific bot including daily PnL series."""
+    result = await db.execute(
+        select(BotConfig).where(BotConfig.id == bot_id, BotConfig.user_id == user.id)
+    )
+    config = result.scalar_one_or_none()
+    if not config:
+        raise HTTPException(status_code=404, detail="Bot not found")
+
+    since = datetime.utcnow() - timedelta(days=days)
+
+    # Daily PnL series (cumulative)
+    daily_result = await db.execute(
+        select(
+            cast(TradeRecord.exit_time, Date).label("date"),
+            func.sum(TradeRecord.pnl).label("pnl"),
+            func.count(TradeRecord.id).label("trades"),
+            func.sum(case((TradeRecord.pnl > 0, 1), else_=0)).label("wins"),
+        ).where(
+            TradeRecord.bot_config_id == bot_id,
+            TradeRecord.status == "closed",
+            TradeRecord.exit_time >= since,
+        ).group_by(
+            cast(TradeRecord.exit_time, Date)
+        ).order_by(
+            cast(TradeRecord.exit_time, Date)
+        )
+    )
+    daily_rows = daily_result.all()
+
+    cumulative = 0.0
+    daily_series = []
+    for row in daily_rows:
+        cumulative += float(row.pnl or 0)
+        daily_series.append({
+            "date": row.date.isoformat() if row.date else None,
+            "pnl": round(float(row.pnl or 0), 2),
+            "cumulative_pnl": round(cumulative, 2),
+            "trades": row.trades,
+            "wins": int(row.wins or 0),
+        })
+
+    # Overall stats
+    overall_result = await db.execute(
+        select(
+            func.count(TradeRecord.id).label("total"),
+            func.coalesce(func.sum(TradeRecord.pnl), 0).label("total_pnl"),
+            func.sum(case((TradeRecord.pnl > 0, 1), else_=0)).label("wins"),
+            func.sum(case((TradeRecord.pnl <= 0, 1), else_=0)).label("losses"),
+            func.coalesce(func.sum(TradeRecord.fees), 0).label("total_fees"),
+            func.avg(TradeRecord.pnl).label("avg_pnl"),
+            func.max(TradeRecord.pnl).label("best_trade"),
+            func.min(TradeRecord.pnl).label("worst_trade"),
+        ).where(
+            TradeRecord.bot_config_id == bot_id,
+            TradeRecord.status == "closed",
+        )
+    )
+    stats = overall_result.one()
+
+    total = stats.total or 0
+    wins = int(stats.wins or 0)
+    win_rate = round((wins / total) * 100, 1) if total > 0 else 0.0
+
+    # Recent trades
+    recent_result = await db.execute(
+        select(TradeRecord).where(
+            TradeRecord.bot_config_id == bot_id,
+        ).order_by(TradeRecord.entry_time.desc()).limit(20)
+    )
+    recent_trades = []
+    for trade in recent_result.scalars().all():
+        recent_trades.append({
+            "id": trade.id,
+            "symbol": trade.symbol,
+            "side": trade.side,
+            "entry_price": trade.entry_price,
+            "exit_price": trade.exit_price,
+            "pnl": round(float(trade.pnl or 0), 2),
+            "pnl_percent": round(float(trade.pnl_percent or 0), 2),
+            "confidence": trade.confidence,
+            "status": trade.status,
+            "demo_mode": trade.demo_mode,
+            "entry_time": trade.entry_time.isoformat() if trade.entry_time else None,
+            "exit_time": trade.exit_time.isoformat() if trade.exit_time else None,
+            "exit_reason": trade.exit_reason,
+        })
+
+    return {
+        "bot_id": bot_id,
+        "bot_name": config.name,
+        "strategy_type": config.strategy_type,
+        "exchange_type": config.exchange_type,
+        "mode": config.mode,
+        "days": days,
+        "summary": {
+            "total_trades": total,
+            "wins": wins,
+            "losses": int(stats.losses or 0),
+            "win_rate": win_rate,
+            "total_pnl": round(float(stats.total_pnl or 0), 2),
+            "total_fees": round(float(stats.total_fees or 0), 2),
+            "avg_pnl": round(float(stats.avg_pnl or 0), 2),
+            "best_trade": round(float(stats.best_trade or 0), 2),
+            "worst_trade": round(float(stats.worst_trade or 0), 2),
+        },
+        "daily_series": daily_series,
+        "recent_trades": recent_trades,
+    }
+
+
+@router.get("/compare/performance")
+async def compare_bots_performance(
+    days: int = Query(default=30, ge=1, le=365),
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get comparative performance data for all bots (for multi-line chart)."""
+    configs_result = await db.execute(
+        select(BotConfig).where(BotConfig.user_id == user.id).order_by(BotConfig.created_at)
+    )
+    configs = configs_result.scalars().all()
+
+    since = datetime.utcnow() - timedelta(days=days)
+    bots_data = []
+
+    for config in configs:
+        daily_result = await db.execute(
+            select(
+                cast(TradeRecord.exit_time, Date).label("date"),
+                func.sum(TradeRecord.pnl).label("pnl"),
+            ).where(
+                TradeRecord.bot_config_id == config.id,
+                TradeRecord.status == "closed",
+                TradeRecord.exit_time >= since,
+            ).group_by(
+                cast(TradeRecord.exit_time, Date)
+            ).order_by(
+                cast(TradeRecord.exit_time, Date)
+            )
+        )
+
+        cumulative = 0.0
+        series = []
+        for row in daily_result.all():
+            cumulative += float(row.pnl or 0)
+            series.append({
+                "date": row.date.isoformat() if row.date else None,
+                "cumulative_pnl": round(cumulative, 2),
+            })
+
+        # Overall stats for the summary table
+        stats_result = await db.execute(
+            select(
+                func.count(TradeRecord.id).label("total"),
+                func.coalesce(func.sum(TradeRecord.pnl), 0).label("pnl"),
+                func.sum(case((TradeRecord.pnl > 0, 1), else_=0)).label("wins"),
+            ).where(
+                TradeRecord.bot_config_id == config.id,
+                TradeRecord.status == "closed",
+            )
+        )
+        stats = stats_result.one()
+        total = stats.total or 0
+        wins = int(stats.wins or 0)
+
+        # Last trade for direction/confidence
+        last_result = await db.execute(
+            select(TradeRecord).where(
+                TradeRecord.bot_config_id == config.id,
+            ).order_by(TradeRecord.entry_time.desc()).limit(1)
+        )
+        last_trade = last_result.scalar_one_or_none()
+
+        bots_data.append({
+            "bot_id": config.id,
+            "name": config.name,
+            "strategy_type": config.strategy_type,
+            "exchange_type": config.exchange_type,
+            "mode": config.mode,
+            "total_trades": total,
+            "total_pnl": round(float(stats.pnl or 0), 2),
+            "win_rate": round((wins / total) * 100, 1) if total > 0 else 0.0,
+            "wins": wins,
+            "last_direction": last_trade.side.upper() if last_trade and last_trade.side else None,
+            "last_confidence": last_trade.confidence if last_trade else None,
+            "series": series,
+        })
+
+    return {"days": days, "bots": bots_data}

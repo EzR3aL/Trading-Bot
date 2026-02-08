@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.api.schemas.trade import TradeListResponse, TradeResponse
 from src.auth.dependencies import get_current_user
 from src.exchanges.factory import create_exchange_client
-from src.models.database import ExchangeConnection, TradeRecord, User, UserConfig
+from src.models.database import BotConfig, ExchangeConnection, TradeRecord, User, UserConfig
 from src.models.session import get_db
 from src.utils.encryption import decrypt_value
 from src.utils.logger import get_logger
@@ -32,7 +32,11 @@ async def list_trades(
     db: AsyncSession = Depends(get_db),
 ):
     """List trades for the current user with filters."""
-    query = select(TradeRecord).where(TradeRecord.user_id == user.id)
+    query = (
+        select(TradeRecord, BotConfig.name.label("bot_name"), BotConfig.exchange_type.label("bot_exchange"))
+        .outerjoin(BotConfig, TradeRecord.bot_config_id == BotConfig.id)
+        .where(TradeRecord.user_id == user.id)
+    )
 
     if status:
         query = query.where(TradeRecord.status == status)
@@ -42,7 +46,14 @@ async def list_trades(
         query = query.where(TradeRecord.exchange == exchange)
 
     # Count total
-    count_query = select(func.count()).select_from(query.subquery())
+    count_base = select(TradeRecord.id).where(TradeRecord.user_id == user.id)
+    if status:
+        count_base = count_base.where(TradeRecord.status == status)
+    if symbol:
+        count_base = count_base.where(TradeRecord.symbol == symbol)
+    if exchange:
+        count_base = count_base.where(TradeRecord.exchange == exchange)
+    count_query = select(func.count()).select_from(count_base.subquery())
     total = (await db.execute(count_query)).scalar() or 0
 
     # Paginate
@@ -50,7 +61,7 @@ async def list_trades(
     query = query.offset((page - 1) * per_page).limit(per_page)
 
     result = await db.execute(query)
-    trades = result.scalars().all()
+    rows = result.all()
 
     return TradeListResponse(
         trades=[
@@ -76,8 +87,10 @@ async def list_trades(
                 exit_reason=t.exit_reason,
                 exchange=t.exchange,
                 demo_mode=t.demo_mode,
+                bot_name=bot_name,
+                bot_exchange=bot_exchange,
             )
-            for t in trades
+            for t, bot_name, bot_exchange in rows
         ],
         total=total,
         page=page,
@@ -274,13 +287,15 @@ async def get_trade(
     from fastapi import HTTPException
 
     result = await db.execute(
-        select(TradeRecord).where(
-            TradeRecord.id == trade_id, TradeRecord.user_id == user.id
-        )
+        select(TradeRecord, BotConfig.name.label("bot_name"), BotConfig.exchange_type.label("bot_exchange"))
+        .outerjoin(BotConfig, TradeRecord.bot_config_id == BotConfig.id)
+        .where(TradeRecord.id == trade_id, TradeRecord.user_id == user.id)
     )
-    trade = result.scalar_one_or_none()
-    if not trade:
+    row = result.one_or_none()
+    if not row:
         raise HTTPException(status_code=404, detail="Trade not found")
+
+    trade, bot_name, bot_exchange = row
 
     return TradeResponse(
         id=trade.id,
@@ -304,4 +319,6 @@ async def get_trade(
         exit_reason=trade.exit_reason,
         exchange=trade.exchange,
         demo_mode=trade.demo_mode,
+        bot_name=bot_name,
+        bot_exchange=bot_exchange,
     )

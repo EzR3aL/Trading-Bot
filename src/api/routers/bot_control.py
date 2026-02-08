@@ -163,13 +163,17 @@ async def open_test_trade(
     )
 
     try:
-        ticker = await client.get_ticker("BTCUSDT")
+        # Hyperliquid uses coin names (BTC), others use pairs (BTCUSDT)
+        trade_symbol = "BTC" if exchange_type == "hyperliquid" else "BTCUSDT"
+        db_symbol = "BTCUSDC" if exchange_type == "hyperliquid" else "BTCUSDT"
+
+        ticker = await client.get_ticker(trade_symbol)
         price = ticker.last_price
         if price <= 0:
             raise HTTPException(status_code=502, detail="Could not get current BTC price")
 
         balance = await client.get_account_balance()
-        logger.info(f"Test trade: Balance={balance.available} USDT, BTC price={price}")
+        logger.info(f"Test trade: Balance={balance.available} {balance.currency}, BTC price={price}")
 
         leverage = 4
         notional = 50.0
@@ -181,7 +185,7 @@ async def open_test_trade(
         sl = float(f"{round(price * 0.99, 1):.1f}")
 
         order = await client.place_market_order(
-            symbol="BTCUSDT",
+            symbol=trade_symbol,
             side="long",
             size=size,
             leverage=leverage,
@@ -189,11 +193,14 @@ async def open_test_trade(
             stop_loss=sl,
         )
 
-        fill_price = price
+        fill_price = order.price if order.price > 0 else price
         if hasattr(client, 'get_fill_price') and order.order_id:
-            actual = await client.get_fill_price("BTCUSDT", order.order_id)
-            if actual:
-                fill_price = actual
+            try:
+                actual = await client.get_fill_price(trade_symbol, order.order_id)
+                if actual:
+                    fill_price = actual
+            except Exception:
+                pass
 
         # Send Discord notification
         if config and config.discord_webhook_url:
@@ -207,7 +214,7 @@ async def open_test_trade(
                 notifier = DiscordNotifier(webhook_url=webhook_url)
                 try:
                     await notifier.send_trade_entry(
-                        symbol="BTCUSDT",
+                        symbol=db_symbol,
                         side="long",
                         size=size,
                         entry_price=fill_price,
@@ -227,7 +234,7 @@ async def open_test_trade(
         trade = TradeRecord(
             user_id=user.id,
             exchange=exchange_type,
-            symbol="BTCUSDT",
+            symbol=db_symbol,
             side="long",
             size=size,
             entry_price=fill_price,
@@ -249,11 +256,11 @@ async def open_test_trade(
 
         return {
             "status": "ok",
-            "message": f"Demo test trade opened: BTCUSDT Long on {exchange_type}",
+            "message": f"Demo test trade opened: {db_symbol} Long on {exchange_type}",
             "trade": {
                 "id": trade.id,
                 "order_id": order.order_id,
-                "symbol": "BTCUSDT",
+                "symbol": db_symbol,
                 "side": "long",
                 "size": size,
                 "entry_price": fill_price,
@@ -343,9 +350,13 @@ async def close_trade(
         close_order = await client.close_position(trade.symbol, trade.side)
 
         exit_price = None
-        if close_order and close_order.order_id:
-            if hasattr(client, 'get_fill_price'):
+        if close_order and close_order.price and close_order.price > 0:
+            exit_price = close_order.price
+        elif close_order and close_order.order_id and hasattr(client, 'get_fill_price'):
+            try:
                 exit_price = await client.get_fill_price(trade.symbol, close_order.order_id)
+            except Exception:
+                pass
 
         if not exit_price:
             ticker = await client.get_ticker(trade.symbol)

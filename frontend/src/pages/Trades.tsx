@@ -90,6 +90,7 @@ export default function Trades() {
             <tr className="border-b border-gray-800">
               <th className="text-left p-3 text-gray-400">#</th>
               <th className="text-left p-3 text-gray-400">{t('trades.date')}</th>
+              <th className="text-left p-3 text-gray-400">{t('trades.bot')}</th>
               <th className="text-left p-3 text-gray-400">{t('trades.symbol')}</th>
               <th className="text-left p-3 text-gray-400">{t('trades.side')}</th>
               <th className="text-right p-3 text-gray-400">{t('trades.size')}</th>
@@ -104,7 +105,7 @@ export default function Trades() {
           <tbody>
             {trades.length === 0 ? (
               <tr>
-                <td colSpan={11} className="p-8 text-center text-gray-500">
+                <td colSpan={12} className="p-8 text-center text-gray-500">
                   {t('dashboard.noTrades')}
                 </td>
               </tr>
@@ -113,6 +114,16 @@ export default function Trades() {
               <tr key={trade.id} className="border-b border-gray-800/50 hover:bg-gray-800/30">
                 <td className="p-3 text-gray-500">{trade.id}</td>
                 <td className="p-3 text-gray-300">{new Date(trade.entry_time).toLocaleDateString()}</td>
+                <td className="p-3">
+                  {trade.bot_name ? (
+                    <div>
+                      <span className="text-white font-medium">{trade.bot_name}</span>
+                      <span className="text-gray-500 text-xs ml-1">({trade.bot_exchange || trade.exchange})</span>
+                    </div>
+                  ) : (
+                    <span className="text-gray-600">—</span>
+                  )}
+                </td>
                 <td className="p-3 text-white font-medium">{trade.symbol}</td>
                 <td className="p-3">
                   <span className={trade.side === 'long' ? 'text-profit' : 'text-loss'}>

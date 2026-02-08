@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import re
 import time
 from datetime import datetime
 from typing import Any, Dict, List, Literal, Optional
@@ -207,6 +208,29 @@ async def upsert_exchange_connection(
     db: AsyncSession = Depends(get_db),
 ):
     """Create or update API keys for a specific exchange."""
+    # Validate Hyperliquid wallet address / private key format
+    if exchange_type == "hyperliquid":
+        _HEX_ADDR = re.compile(r"^0x[0-9a-fA-F]{40}$")
+        _HEX_KEY = re.compile(r"^(0x)?[0-9a-fA-F]{64}$")
+        for addr_field, label in [
+            (data.api_key, "Wallet address"),
+            (data.demo_api_key, "Testnet wallet address"),
+        ]:
+            if addr_field and not _HEX_ADDR.match(addr_field):
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"{label} must be a valid Ethereum address (0x + 40 hex characters).",
+                )
+        for key_field, label in [
+            (data.api_secret, "Private key"),
+            (data.demo_api_secret, "Testnet private key"),
+        ]:
+            if key_field and not _HEX_KEY.match(key_field):
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"{label} must be 64 hex characters (with or without 0x prefix).",
+                )
+
     result = await db.execute(
         select(ExchangeConnection).where(
             ExchangeConnection.user_id == user.id,

@@ -27,6 +27,8 @@ class TradeResponse(BaseModel):
     exit_reason: Optional[str] = None
     exchange: str = "bitget"
     demo_mode: bool = False
+    bot_name: Optional[str] = None
+    bot_exchange: Optional[str] = None
 
     class Config:
         from_attributes = True

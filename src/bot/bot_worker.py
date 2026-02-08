@@ -17,8 +17,9 @@ from apscheduler.triggers.interval import IntervalTrigger
 
 from src.exchanges.base import ExchangeClient
 from src.exchanges.factory import create_exchange_client
-from src.models.database import BotConfig, ExchangeConnection, LLMConnection, TradeRecord
+from src.models.database import BotConfig, ExchangeConnection, LLMConnection, TradeRecord, UserConfig
 from src.models.session import get_session
+from src.notifications.discord_notifier import DiscordNotifier
 from src.risk.risk_manager import RiskManager
 from src.strategy.base import BaseStrategy, StrategyRegistry, TradeSignal
 from src.utils.encryption import decrypt_value
@@ -393,12 +394,15 @@ class BotWorker:
                 logger.error(f"{log_prefix} [{mode_str}] Failed to place order")
                 return
 
-            # Get fill price
-            fill_price = signal.entry_price
+            # Get fill price — prefer order.price (avgPx from exchange)
+            fill_price = order.price if order.price > 0 else signal.entry_price
             if hasattr(client, 'get_fill_price') and order.order_id:
-                actual = await client.get_fill_price(signal.symbol, order.order_id)
-                if actual:
-                    fill_price = actual
+                try:
+                    actual = await client.get_fill_price(signal.symbol, order.order_id)
+                    if actual:
+                        fill_price = actual
+                except Exception:
+                    pass
 
             # Record trade in database
             async with get_session() as session:
@@ -440,6 +444,27 @@ class BotWorker:
                 f"{log_prefix} [{mode_str}] Trade opened: {signal.direction.value.upper()} "
                 f"{signal.symbol} @ ${fill_price:,.2f} (conf: {signal.confidence}%)"
             )
+
+            # Send Discord notification
+            try:
+                notifier = await self._get_discord_notifier()
+                if notifier:
+                    async with notifier:
+                        await notifier.send_trade_entry(
+                            symbol=signal.symbol,
+                            side=signal.direction.value,
+                            size=position_size,
+                            entry_price=fill_price,
+                            leverage=self._config.leverage,
+                            take_profit=signal.target_price,
+                            stop_loss=signal.stop_loss,
+                            confidence=signal.confidence,
+                            reason=f"[{self._config.name}] {signal.reason}",
+                            order_id=order.order_id or "",
+                            demo_mode=demo_mode,
+                        )
+            except Exception as notify_err:
+                logger.warning(f"{log_prefix} Discord notification failed: {notify_err}")
 
         except Exception as e:
             logger.error(f"{log_prefix} [{mode_str}] Trade execution failed: {e}")
@@ -542,8 +567,51 @@ class BotWorker:
                 f"PnL: ${pnl:.2f} ({pnl_percent:+.2f}%)"
             )
 
+            # Send Discord notification
+            try:
+                notifier = await self._get_discord_notifier()
+                if notifier:
+                    duration_minutes = None
+                    if trade.entry_time:
+                        duration_minutes = int((datetime.utcnow() - trade.entry_time).total_seconds() / 60)
+                    async with notifier:
+                        await notifier.send_trade_exit(
+                            symbol=trade.symbol,
+                            side=trade.side,
+                            size=trade.size,
+                            entry_price=trade.entry_price,
+                            exit_price=exit_price,
+                            pnl=pnl,
+                            pnl_percent=pnl_percent,
+                            fees=trade.fees or 0,
+                            funding_paid=trade.funding_paid or 0,
+                            reason=exit_reason,
+                            order_id=trade.order_id or "",
+                            duration_minutes=duration_minutes,
+                            demo_mode=trade.demo_mode,
+                            strategy_reason=f"[{self._config.name}]",
+                        )
+            except Exception as notify_err:
+                logger.warning(f"{log_prefix} Discord notification failed: {notify_err}")
+
         except Exception as e:
             logger.error(f"{log_prefix} Handle closed position error: {e}")
+
+    async def _get_discord_notifier(self) -> Optional[DiscordNotifier]:
+        """Load user's Discord webhook and return a notifier if configured."""
+        try:
+            async with get_session() as session:
+                from sqlalchemy import select
+                result = await session.execute(
+                    select(UserConfig).where(UserConfig.user_id == self._config.user_id)
+                )
+                config = result.scalar_one_or_none()
+                if config and config.discord_webhook_url:
+                    webhook_url = decrypt_value(config.discord_webhook_url)
+                    return DiscordNotifier(webhook_url=webhook_url)
+        except Exception as e:
+            logger.warning(f"[Bot:{self.bot_config_id}] Could not load Discord config: {e}")
+        return None
 
     def get_status_dict(self) -> dict:
         """Return status info for API responses."""

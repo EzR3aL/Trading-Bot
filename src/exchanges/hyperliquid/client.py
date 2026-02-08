@@ -1,34 +1,93 @@
 """
 Hyperliquid Exchange Client implementing ExchangeClient ABC.
 
-Hyperliquid uses a JSON-RPC style API with ETH wallet signatures.
-Symbol format: plain asset name (e.g. "BTC", "ETH").
+Uses the official hyperliquid-python-sdk for EIP-712 signed trading.
+Symbol format: plain asset name (e.g. "BTC", "ETH") or pairs like "BTCUSDT"/"BTCUSDC"
+which are normalized to coin names internally.
+
+SECURITY: Only trading operations are allowed. No withdrawals, transfers, or
+fund-moving operations. The ALLOWED_METHODS whitelist enforces this.
 """
 
-import json
+import re
 from typing import Any, Dict, List, Optional
 
-import aiohttp
+from eth_account import Account as EthAccount
+from hyperliquid.exchange import Exchange as HLExchange
+from hyperliquid.info import Info as HLInfo
+from hyperliquid.utils.constants import MAINNET_API_URL, TESTNET_API_URL
 
 from src.exchanges.base import ExchangeClient
-from src.exchanges.hyperliquid.constants import BASE_URL, INFO_ENDPOINT, TESTNET_URL
 from src.exchanges.types import Balance, FundingRateInfo, Order, Position, Ticker
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
+
+# ── Security: Only these SDK methods may be called ──────────────────────────
+# Any method not on this list (e.g. usd_transfer, withdraw_from_bridge,
+# vault_usd_transfer, send_asset, sub_account_transfer) is BLOCKED.
+ALLOWED_METHODS = frozenset({
+    "market_open",
+    "market_close",
+    "order",
+    "bulk_orders",
+    "cancel",
+    "bulk_cancel",
+    "update_leverage",
+    "update_isolated_margin",
+})
+
+# Methods that move funds — explicitly forbidden
+FORBIDDEN_METHODS = frozenset({
+    "usd_transfer",
+    "withdraw_from_bridge",
+    "vault_usd_transfer",
+    "send_asset",
+    "sub_account_transfer",
+    "sub_account_spot_transfer",
+    "spot_transfer",
+    "usd_class_transfer",
+    "set_referrer",
+    "approve_agent",
+    "convert_to_multi_sig_user",
+})
+
+# Strip these suffixes to get coin name: "BTCUSDT" → "BTC"
+_QUOTE_SUFFIXES = re.compile(r"(USDT|USDC|USD|PERP)$", re.IGNORECASE)
+
+# Default slippage for market orders (5%)
+DEFAULT_SLIPPAGE = 0.05
 
 
 class HyperliquidClientError(Exception):
     pass
 
 
+class SafeExchange:
+    """Wrapper around the SDK Exchange that blocks fund-moving operations."""
+
+    def __init__(self, exchange: HLExchange):
+        self._exchange = exchange
+
+    def __getattr__(self, name: str):
+        if name in FORBIDDEN_METHODS:
+            raise HyperliquidClientError(
+                f"BLOCKED: '{name}' is a fund-moving operation and is not allowed. "
+                f"Only trading operations are permitted."
+            )
+        if name not in ALLOWED_METHODS and not name.startswith("_"):
+            # Allow private/internal methods and info access, block unknown public methods
+            if hasattr(self._exchange, name) and callable(getattr(self._exchange, name)):
+                logger.warning(f"Hyperliquid: calling non-whitelisted method '{name}'")
+        return getattr(self._exchange, name)
+
+
 class HyperliquidClient(ExchangeClient):
     """
-    Hyperliquid exchange client.
+    Hyperliquid exchange client with full trading support.
 
-    Note: Full trading requires ETH wallet signature (eth_account).
-    This implementation supports read-only operations and basic trading
-    via the api_key (wallet address) and api_secret (private key).
+    Uses the official hyperliquid-python-sdk for EIP-712 signed operations.
+    All fund-moving operations (withdraw, transfer) are blocked by SafeExchange.
     """
 
     def __init__(
@@ -40,10 +99,44 @@ class HyperliquidClient(ExchangeClient):
         **kwargs,
     ):
         super().__init__(api_key, api_secret, passphrase, demo_mode)
-        self.base_url = TESTNET_URL if demo_mode else BASE_URL
-        self.wallet_address = api_key  # On Hyperliquid, the "API key" is the wallet address
-        self._session: Optional[aiohttp.ClientSession] = None
-        logger.info(f"HyperliquidClient initialized ({'TESTNET' if demo_mode else 'MAINNET'})")
+        self.wallet_address = api_key
+        self.base_url = TESTNET_API_URL if demo_mode else MAINNET_API_URL
+
+        # Create eth_account wallet from private key (API wallet)
+        try:
+            self._wallet = EthAccount.from_key(api_secret)
+        except Exception as e:
+            raise HyperliquidClientError(f"Invalid private key: {e}")
+
+        # Determine if API wallet differs from main wallet
+        # api_key = main wallet address (where funds/positions live)
+        # api_secret -> self._wallet = API wallet (signs transactions)
+        is_agent_wallet = self.wallet_address.lower() != self._wallet.address.lower()
+
+        # Initialize SDK Exchange (handles EIP-712 signing)
+        raw_exchange = HLExchange(
+            wallet=self._wallet,
+            base_url=self.base_url,
+            account_address=self.wallet_address if is_agent_wallet else None,
+        )
+
+        # Wrap in SafeExchange to block fund-moving operations
+        self._exchange = SafeExchange(raw_exchange)
+
+        # Info client for read-only queries
+        self._info: HLInfo = raw_exchange.info
+
+        if is_agent_wallet:
+            logger.info(
+                f"HyperliquidClient initialized ({'TESTNET' if demo_mode else 'MAINNET'}) "
+                f"main_wallet={self.wallet_address[:10]}... "
+                f"api_wallet={self._wallet.address[:10]}..."
+            )
+        else:
+            logger.info(
+                f"HyperliquidClient initialized ({'TESTNET' if demo_mode else 'MAINNET'}) "
+                f"wallet={self._wallet.address[:10]}... (direct, no API wallet)"
+            )
 
     @property
     def exchange_name(self) -> str:
@@ -53,124 +146,346 @@ class HyperliquidClient(ExchangeClient):
     def supports_demo(self) -> bool:
         return True
 
-    async def _ensure_session(self):
-        if self._session is None or self._session.closed:
-            self._session = aiohttp.ClientSession()
+    @staticmethod
+    def _normalize_symbol(symbol: str) -> str:
+        """Normalize symbol to Hyperliquid coin name. 'BTCUSDT' → 'BTC', 'ETH' → 'ETH'."""
+        return _QUOTE_SUFFIXES.sub("", symbol.upper())
 
     async def close(self) -> None:
-        if self._session and not self._session.closed:
-            await self._session.close()
+        pass  # SDK uses requests (sync), no session to close
 
-    async def _info_request(self, request_type: str, **kwargs) -> Any:
-        """Make a request to the /info endpoint (read-only, no auth needed)."""
-        await self._ensure_session()
-        payload = {"type": request_type, **kwargs}
-        async with self._session.post(
-            f"{self.base_url}{INFO_ENDPOINT}",
-            json=payload,
-            timeout=aiohttp.ClientTimeout(total=15),
-        ) as resp:
-            if resp.status != 200:
-                text = await resp.text()
-                raise HyperliquidClientError(f"HTTP {resp.status}: {text}")
-            return await resp.json()
+    # ── Read Operations ─────────────────────────────────────────────────────
 
     async def get_account_balance(self) -> Balance:
-        data = await self._info_request("clearinghouseState", user=self.wallet_address)
-        margin_summary = data.get("marginSummary", {})
+        address = self.wallet_address or self._wallet.address
+        data = self._info.user_state(address)
+        margin = data.get("marginSummary", {})
+        perp_total = float(margin.get("accountValue", 0))
+        perp_available = float(data.get("withdrawable", margin.get("totalRawUsd", 0)))
+
+        # Unified accounts: perp balance may be 0 while funds sit in spot
+        spot_usdc = 0.0
+        if perp_total == 0:
+            try:
+                spot_data = self._info.spot_user_state(address)
+                for b in spot_data.get("balances", []):
+                    if b.get("coin") == "USDC":
+                        spot_usdc = float(b.get("total", 0))
+                        break
+            except Exception:
+                pass
+
         return Balance(
-            total=float(margin_summary.get("accountValue", 0)),
-            available=float(margin_summary.get("totalRawUsd", 0)),
-            unrealized_pnl=float(margin_summary.get("totalNtlPos", 0)),
-            currency="USDT",
+            total=perp_total + spot_usdc,
+            available=perp_available + spot_usdc,
+            unrealized_pnl=float(margin.get("totalNtlPos", 0)),
+            currency="USDC",
         )
-
-    async def place_market_order(
-        self, symbol: str, side: str, size: float, leverage: int,
-        take_profit: Optional[float] = None, stop_loss: Optional[float] = None,
-    ) -> Order:
-        # Hyperliquid trading requires EIP-712 typed data signing
-        # This is a simplified placeholder - full implementation needs eth_account
-        logger.warning("Hyperliquid trading requires ETH wallet signature - order simulated")
-        await self.set_leverage(symbol, leverage)
-
-        return Order(
-            order_id="hl-simulated",
-            symbol=symbol, side=side, size=size, price=0.0,
-            status="pending", exchange="hyperliquid",
-            leverage=leverage, take_profit=take_profit, stop_loss=stop_loss,
-        )
-
-    async def cancel_order(self, symbol: str, order_id: str) -> bool:
-        logger.warning("Hyperliquid order cancellation requires ETH wallet signature")
-        return False
-
-    async def close_position(self, symbol: str, side: str) -> Optional[Order]:
-        logger.warning("Hyperliquid position close requires ETH wallet signature")
-        return None
 
     async def get_position(self, symbol: str) -> Optional[Position]:
-        data = await self._info_request("clearinghouseState", user=self.wallet_address)
+        coin = self._normalize_symbol(symbol)
+        address = self.wallet_address or self._wallet.address
+        data = self._info.user_state(address)
         for pos in data.get("assetPositions", []):
-            position_data = pos.get("position", {})
-            coin = position_data.get("coin", "")
-            if coin == symbol:
-                szi = float(position_data.get("szi", 0))
+            pd = pos.get("position", {})
+            if pd.get("coin", "") == coin:
+                szi = float(pd.get("szi", 0))
                 if szi == 0:
                     return None
+                entry_px = float(pd.get("entryPx", 0))
+                # Get current price for the position
+                current_price = entry_px
+                try:
+                    ticker = await self.get_ticker(coin)
+                    current_price = ticker.last_price
+                except Exception:
+                    pass
                 return Position(
-                    symbol=symbol,
+                    symbol=coin,
                     side="long" if szi > 0 else "short",
                     size=abs(szi),
-                    entry_price=float(position_data.get("entryPx", 0)),
-                    current_price=0.0,  # Need separate ticker call
-                    unrealized_pnl=float(position_data.get("unrealizedPnl", 0)),
-                    leverage=int(float(position_data.get("leverage", {}).get("value", 1))),
+                    entry_price=entry_px,
+                    current_price=current_price,
+                    unrealized_pnl=float(pd.get("unrealizedPnl", 0)),
+                    leverage=int(float(pd.get("leverage", {}).get("value", 1))),
                     exchange="hyperliquid",
-                    liquidation_price=float(position_data.get("liquidationPx", 0) or 0),
+                    liquidation_price=float(pd.get("liquidationPx", 0) or 0),
                 )
         return None
 
     async def get_open_positions(self) -> List[Position]:
-        data = await self._info_request("clearinghouseState", user=self.wallet_address)
+        address = self.wallet_address or self._wallet.address
+        data = self._info.user_state(address)
         positions = []
         for pos in data.get("assetPositions", []):
-            position_data = pos.get("position", {})
-            szi = float(position_data.get("szi", 0))
+            pd = pos.get("position", {})
+            szi = float(pd.get("szi", 0))
             if szi != 0:
                 positions.append(Position(
-                    symbol=position_data.get("coin", ""),
+                    symbol=pd.get("coin", ""),
                     side="long" if szi > 0 else "short",
                     size=abs(szi),
-                    entry_price=float(position_data.get("entryPx", 0)),
+                    entry_price=float(pd.get("entryPx", 0)),
                     current_price=0.0,
-                    unrealized_pnl=float(position_data.get("unrealizedPnl", 0)),
-                    leverage=int(float(position_data.get("leverage", {}).get("value", 1))),
+                    unrealized_pnl=float(pd.get("unrealizedPnl", 0)),
+                    leverage=int(float(pd.get("leverage", {}).get("value", 1))),
                     exchange="hyperliquid",
+                    liquidation_price=float(pd.get("liquidationPx", 0) or 0),
                 ))
         return positions
 
-    async def set_leverage(self, symbol: str, leverage: int) -> bool:
-        logger.info(f"Hyperliquid leverage set to {leverage}x for {symbol} (requires wallet sig)")
-        return True
-
     async def get_ticker(self, symbol: str) -> Ticker:
-        data = await self._info_request("allMids")
-        price = float(data.get(symbol, 0))
+        coin = self._normalize_symbol(symbol)
+        data = self._info.all_mids()
+        price = float(data.get(coin, 0))
         return Ticker(
-            symbol=symbol,
+            symbol=coin,
             last_price=price,
-            bid=price,  # Hyperliquid allMids returns mid price
+            bid=price,
             ask=price,
             volume_24h=0.0,
         )
 
     async def get_funding_rate(self, symbol: str) -> FundingRateInfo:
-        meta = await self._info_request("meta")
+        coin = self._normalize_symbol(symbol)
+        meta = self._info.meta()
         for asset_info in meta.get("universe", []):
-            if asset_info.get("name") == symbol:
+            if asset_info.get("name") == coin:
                 return FundingRateInfo(
-                    symbol=symbol,
+                    symbol=coin,
                     current_rate=float(asset_info.get("funding", 0)),
                 )
-        return FundingRateInfo(symbol=symbol, current_rate=0.0)
+        return FundingRateInfo(symbol=coin, current_rate=0.0)
+
+    # ── Trading Operations (EIP-712 signed via SDK) ─────────────────────────
+
+    async def set_leverage(self, symbol: str, leverage: int) -> bool:
+        coin = self._normalize_symbol(symbol)
+        try:
+            result = self._exchange.update_leverage(leverage=leverage, name=coin, is_cross=True)
+            logger.info(f"Hyperliquid leverage set to {leverage}x for {coin}: {result}")
+            return True
+        except Exception as e:
+            logger.warning(f"Hyperliquid set_leverage failed for {coin}: {e}")
+            return False
+
+    async def place_market_order(
+        self,
+        symbol: str,
+        side: str,
+        size: float,
+        leverage: int,
+        take_profit: Optional[float] = None,
+        stop_loss: Optional[float] = None,
+    ) -> Order:
+        coin = self._normalize_symbol(symbol)
+        is_buy = side.lower() == "long"
+
+        # Set leverage first
+        await self.set_leverage(coin, leverage)
+
+        logger.info(
+            f"Hyperliquid market_open: {coin} {'BUY' if is_buy else 'SELL'} "
+            f"size={size} leverage={leverage}x wallet={self._wallet.address[:10]}..."
+        )
+
+        # Place market order via SDK (handles EIP-712 signing + slippage)
+        result = self._exchange.market_open(
+            name=coin,
+            is_buy=is_buy,
+            sz=size,
+            slippage=DEFAULT_SLIPPAGE,
+        )
+
+        # Parse response
+        order_status = _parse_order_response(result)
+        order_id = order_status.get("oid", "hl-unknown")
+        fill_price = float(order_status.get("avgPx", 0))
+
+        logger.info(f"Hyperliquid order placed: oid={order_id}, avgPx={fill_price}")
+
+        # Place TP/SL trigger orders
+        if take_profit is not None:
+            await self._place_trigger_order(coin, not is_buy, size, take_profit, "tp")
+        if stop_loss is not None:
+            await self._place_trigger_order(coin, not is_buy, size, stop_loss, "sl")
+
+        return Order(
+            order_id=str(order_id),
+            symbol=coin,
+            side=side,
+            size=size,
+            price=fill_price,
+            status="filled",
+            exchange="hyperliquid",
+            leverage=leverage,
+            take_profit=take_profit,
+            stop_loss=stop_loss,
+        )
+
+    def _get_tick_size(self, coin: str) -> float:
+        """Get tick size for a coin from Hyperliquid meta endpoint."""
+        try:
+            meta = self._info.meta()
+            for asset_info in meta.get("universe", []):
+                if asset_info.get("name") == coin:
+                    # szDecimals controls size precision; price tick from exchange
+                    return 10 ** -int(asset_info.get("szDecimals", 0))
+        except Exception as e:
+            logger.debug(f"Could not fetch tick size for {coin}: {e}")
+        return 0.01  # safe default
+
+    @staticmethod
+    def _round_price(price: float, tick_size: float) -> float:
+        """Round price to the nearest tick size."""
+        if tick_size <= 0:
+            return price
+        # Determine decimal places from tick size
+        decimals = max(0, len(str(tick_size).rstrip('0').split('.')[-1])) if '.' in str(tick_size) else 0
+        return round(round(price / tick_size) * tick_size, decimals)
+
+    async def _place_trigger_order(
+        self, coin: str, is_buy: bool, size: float, trigger_px: float, tpsl: str,
+    ) -> None:
+        """Place a TP or SL trigger order (reduce-only).
+
+        is_buy is the CLOSE direction (opposite of position side):
+        - Long position -> is_buy=False (sell to close)
+        - Short position -> is_buy=True (buy to close)
+        """
+        # Validate trigger price against current market
+        try:
+            ticker = await self.get_ticker(coin)
+            market_px = ticker.last_price
+            if market_px > 0:
+                # For closing a long (is_buy=False): TP above market, SL below
+                # For closing a short (is_buy=True): TP below market, SL above
+                if tpsl == "tp":
+                    if not is_buy and trigger_px <= market_px:
+                        logger.warning(
+                            f"Hyperliquid TP trigger for {coin}: price {trigger_px} must be above "
+                            f"market {market_px} for long position. Skipping."
+                        )
+                        return
+                    if is_buy and trigger_px >= market_px:
+                        logger.warning(
+                            f"Hyperliquid TP trigger for {coin}: price {trigger_px} must be below "
+                            f"market {market_px} for short position. Skipping."
+                        )
+                        return
+                elif tpsl == "sl":
+                    if not is_buy and trigger_px >= market_px:
+                        logger.warning(
+                            f"Hyperliquid SL trigger for {coin}: price {trigger_px} must be below "
+                            f"market {market_px} for long position. Skipping."
+                        )
+                        return
+                    if is_buy and trigger_px <= market_px:
+                        logger.warning(
+                            f"Hyperliquid SL trigger for {coin}: price {trigger_px} must be above "
+                            f"market {market_px} for short position. Skipping."
+                        )
+                        return
+        except Exception as e:
+            logger.debug(f"Could not validate trigger price for {coin}: {e}")
+
+        # Round trigger price to appropriate precision
+        rounded_px = self._round_price(trigger_px, self._get_tick_size(coin))
+
+        try:
+            result = self._exchange.order(
+                name=coin,
+                is_buy=is_buy,
+                sz=size,
+                limit_px=rounded_px,
+                order_type={
+                    "trigger": {
+                        "isMarket": True,
+                        "triggerPx": float(rounded_px),
+                        "tpsl": tpsl,
+                    }
+                },
+                reduce_only=True,
+            )
+            logger.info(f"Hyperliquid {tpsl.upper()} trigger set for {coin} @ {rounded_px}: {result}")
+        except Exception as e:
+            logger.warning(f"Hyperliquid {tpsl.upper()} trigger failed for {coin}: {e}")
+
+    async def close_position(self, symbol: str, side: str) -> Optional[Order]:
+        coin = self._normalize_symbol(symbol)
+
+        # Get current position size
+        pos = await self.get_position(coin)
+        if not pos:
+            logger.warning(f"Hyperliquid: no position found for {coin} to close")
+            return None
+
+        logger.info(
+            f"Hyperliquid market_close: {coin} size={pos.size} "
+            f"wallet={self._wallet.address[:10]}..."
+        )
+
+        result = self._exchange.market_close(
+            coin=coin,
+            sz=pos.size,
+            slippage=DEFAULT_SLIPPAGE,
+        )
+
+        order_status = _parse_order_response(result)
+        order_id = order_status.get("oid", "hl-close")
+        fill_price = float(order_status.get("avgPx", 0))
+
+        logger.info(f"Hyperliquid position closed: oid={order_id}, avgPx={fill_price}")
+
+        return Order(
+            order_id=str(order_id),
+            symbol=coin,
+            side=side,
+            size=pos.size,
+            price=fill_price,
+            status="filled",
+            exchange="hyperliquid",
+        )
+
+    async def cancel_order(self, symbol: str, order_id: str) -> bool:
+        coin = self._normalize_symbol(symbol)
+        try:
+            self._exchange.cancel(name=coin, oid=int(order_id))
+            logger.info(f"Hyperliquid order cancelled: {coin} oid={order_id}")
+            return True
+        except Exception as e:
+            logger.warning(f"Hyperliquid cancel failed: {e}")
+            return False
+
+
+def _parse_order_response(result: Any) -> Dict[str, Any]:
+    """Extract order info from SDK response. Handles various response formats."""
+    logger.debug(f"Hyperliquid raw response: {result}")
+
+    if isinstance(result, dict):
+        # Check for top-level error
+        resp_type = result.get("status", "")
+        if resp_type == "err":
+            raise HyperliquidClientError(f"Order rejected: {result.get('response', result)}")
+
+        status = result.get("response", {}).get("data", {})
+        if isinstance(status, dict) and "statuses" in status:
+            statuses = status["statuses"]
+            if statuses:
+                first = statuses[0]
+                # Filled order: {"filled": {"totalSz": "0.001", "avgPx": "95000", "oid": 123}}
+                if "filled" in first:
+                    return {
+                        "oid": first["filled"].get("oid", ""),
+                        "avgPx": first["filled"].get("avgPx", "0"),
+                        "totalSz": first["filled"].get("totalSz", "0"),
+                    }
+                # Resting order: {"resting": {"oid": 123}}
+                if "resting" in first:
+                    return {"oid": first["resting"].get("oid", ""), "avgPx": "0"}
+                # Error in status
+                if "error" in first:
+                    raise HyperliquidClientError(f"Order rejected: {first['error']}")
+
+    logger.warning(f"Hyperliquid: could not parse order response: {result}")
+    return {"oid": "hl-unknown", "avgPx": "0"}

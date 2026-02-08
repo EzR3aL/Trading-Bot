@@ -7,11 +7,11 @@ import Dashboard from './pages/Dashboard'
 import Trades from './pages/Trades'
 import Settings from './pages/Settings'
 import Presets from './pages/Presets'
-import BotControl from './pages/BotControl'
 import Bots from './pages/Bots'
 import TaxReport from './pages/TaxReport'
 import AdminUsers from './pages/AdminUsers'
 import GettingStarted from './pages/GettingStarted'
+import BotPerformance from './pages/BotPerformance'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated)
@@ -47,8 +47,8 @@ export default function App() {
                 <Route path="/trades" element={<Trades />} />
                 <Route path="/settings" element={<Settings />} />
                 <Route path="/presets" element={<Presets />} />
-                <Route path="/bot" element={<BotControl />} />
                 <Route path="/bots" element={<Bots />} />
+                <Route path="/performance" element={<BotPerformance />} />
                 <Route path="/tax-report" element={<TaxReport />} />
                 <Route path="/guide" element={<GettingStarted />} />
                 <Route

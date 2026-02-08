@@ -32,7 +32,8 @@ interface BotBuilderProps {
 
 const STEPS = ['step1', 'step2', 'step3', 'step4', 'step5', 'step6'] as const
 const EXCHANGES = ['bitget', 'weex', 'hyperliquid']
-const PAIRS = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'XRPUSDT', 'DOGEUSDT', 'AVAXUSDT']
+const PAIRS_CEX = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'XRPUSDT', 'DOGEUSDT', 'AVAXUSDT']
+const PAIRS_HL = ['BTC', 'ETH', 'SOL', 'XRP', 'DOGE', 'AVAX']
 
 export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps) {
   const { t } = useTranslation()
@@ -104,6 +105,9 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
     }
   }, [botId, isEdit])
 
+  const isHyperliquid = exchangeType === 'hyperliquid'
+  const activePairs = isHyperliquid ? PAIRS_HL : PAIRS_CEX
+
   const selectedStrategy = strategies.find(s => s.name === strategyType)
 
   const handleStrategyChange = (name: string) => {
@@ -117,6 +121,19 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
       setStrategyParams(defaults)
     }
   }
+
+  // Convert trading pairs when exchange type changes
+  useEffect(() => {
+    setTradingPairs(prev => prev.map(p => {
+      if (isHyperliquid) {
+        // Strip USDT/USDC suffix: "BTCUSDT" -> "BTC"
+        return p.replace(/(USDT|USDC)$/i, '')
+      } else {
+        // Add USDT suffix if missing: "BTC" -> "BTCUSDT"
+        return p.match(/(USDT|USDC)$/i) ? p : p + 'USDT'
+      }
+    }))
+  }, [exchangeType]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const togglePair = (pair: string) => {
     setTradingPairs(prev =>
@@ -376,7 +393,7 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
             <div>
               <label className="block text-sm text-gray-400 mb-2">{b.tradingPairs}</label>
               <div className="flex flex-wrap gap-2">
-                {PAIRS.map(pair => (
+                {activePairs.map(pair => (
                   <button
                     key={pair}
                     onClick={() => togglePair(pair)}
