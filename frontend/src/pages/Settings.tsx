@@ -4,7 +4,7 @@ import { ChevronDown } from 'lucide-react'
 import api from '../api/client'
 import type { ConnectionsStatusResponse, ExchangeConnectionStatus, ExchangeInfo, ServiceStatus } from '../types'
 
-const TABS = ['trading', 'apiKeys', 'llmKeys', 'discord', 'connections'] as const
+const TABS = ['apiKeys', 'llmKeys', 'discord', 'connections'] as const
 
 /* ------------------------------------------------------------------ */
 /*  Inline Key Form (used inside accordion)                           */
@@ -119,20 +119,11 @@ const emptyForm = (): ExchangeKeyForm => ({
 
 export default function Settings() {
   const { t } = useTranslation()
-  const [activeTab, setActiveTab] = useState<typeof TABS[number]>('trading')
+  const [activeTab, setActiveTab] = useState<typeof TABS[number]>('apiKeys')
   const [exchanges, setExchanges] = useState<ExchangeInfo[]>([])
   const [connections, setConnections] = useState<ExchangeConnectionStatus[]>([])
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState('')
-
-  // Trading form
-  const [leverage, setLeverage] = useState(4)
-  const [positionSize, setPositionSize] = useState(7.5)
-  const [maxTrades, setMaxTrades] = useState(3)
-  const [takeProfit, setTakeProfit] = useState(4.0)
-  const [stopLoss, setStopLoss] = useState(1.5)
-  const [lossLimit, setLossLimit] = useState(5.0)
-  const [demoMode, setDemoMode] = useState(true)
 
   // Per-exchange API key forms
   const [keyForms, setKeyForms] = useState<Record<string, ExchangeKeyForm>>({})
@@ -168,16 +159,6 @@ export default function Settings() {
         if (configRes.data.discord?.webhook_url) {
           setWebhookUrl(configRes.data.discord.webhook_url)
         }
-        if (configRes.data.trading) {
-          const tc = configRes.data.trading
-          setLeverage(tc.leverage)
-          setPositionSize(tc.position_size_percent)
-          setMaxTrades(tc.max_trades_per_day)
-          setTakeProfit(tc.take_profit_percent)
-          setStopLoss(tc.stop_loss_percent)
-          setLossLimit(tc.daily_loss_limit_percent)
-          setDemoMode(tc.demo_mode)
-        }
       } catch {
         setMessage(t('common.error'))
       }
@@ -197,20 +178,6 @@ export default function Settings() {
   const getConn = (ex: string) => connections.find((c) => c.exchange_type === ex)
 
   // ── Save Handlers ──
-
-  const saveTrading = async () => {
-    setSaving(true)
-    try {
-      await api.put('/config/trading', {
-        leverage, position_size_percent: positionSize,
-        max_trades_per_day: maxTrades, take_profit_percent: takeProfit,
-        stop_loss_percent: stopLoss, daily_loss_limit_percent: lossLimit,
-        trading_pairs: ['BTCUSDT', 'ETHUSDT'], demo_mode: demoMode,
-      })
-      showMessage(t('settings.saved'))
-    } catch { showMessage(t('common.error')) }
-    setSaving(false)
-  }
 
   const saveLiveKeys = async (exchangeType: string) => {
     const form = getForm(exchangeType)
@@ -366,54 +333,6 @@ export default function Settings() {
           </button>
         ))}
       </div>
-
-      {/* Trading Tab */}
-      {activeTab === 'trading' && (
-        <div className="bg-gray-900 border border-gray-800 rounded-lg p-6 max-w-2xl">
-          <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm text-gray-400 mb-1">{t('settings.leverage')}</label>
-                <input type="number" value={leverage} onChange={(e) => setLeverage(Number(e.target.value))} min={1} max={20}
-                  className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded text-white" />
-              </div>
-              <div>
-                <label className="block text-sm text-gray-400 mb-1">{t('settings.positionSize')}</label>
-                <input type="number" value={positionSize} onChange={(e) => setPositionSize(Number(e.target.value))} step={0.5}
-                  className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded text-white" />
-              </div>
-              <div>
-                <label className="block text-sm text-gray-400 mb-1">{t('settings.maxTrades')}</label>
-                <input type="number" value={maxTrades} onChange={(e) => setMaxTrades(Number(e.target.value))} min={1} max={10}
-                  className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded text-white" />
-              </div>
-              <div>
-                <label className="block text-sm text-gray-400 mb-1">{t('settings.dailyLossLimit')}</label>
-                <input type="number" value={lossLimit} onChange={(e) => setLossLimit(Number(e.target.value))} step={0.5}
-                  className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded text-white" />
-              </div>
-              <div>
-                <label className="block text-sm text-gray-400 mb-1">{t('settings.takeProfit')}</label>
-                <input type="number" value={takeProfit} onChange={(e) => setTakeProfit(Number(e.target.value))} step={0.5}
-                  className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded text-white" />
-              </div>
-              <div>
-                <label className="block text-sm text-gray-400 mb-1">{t('settings.stopLoss')}</label>
-                <input type="number" value={stopLoss} onChange={(e) => setStopLoss(Number(e.target.value))} step={0.5}
-                  className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded text-white" />
-              </div>
-            </div>
-            <label className="flex items-center gap-2 text-sm text-gray-300">
-              <input type="checkbox" checked={demoMode} onChange={(e) => setDemoMode(e.target.checked)} className="rounded" />
-              {t('bot.demoMode')}
-            </label>
-            <button onClick={saveTrading} disabled={saving}
-              className="px-4 py-2 bg-primary-600 text-white rounded hover:bg-primary-700 disabled:opacity-50">
-              {t('settings.save')}
-            </button>
-          </div>
-        </div>
-      )}
 
       {/* API Keys Tab — Accordion */}
       {activeTab === 'apiKeys' && (
