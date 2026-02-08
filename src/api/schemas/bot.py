@@ -11,6 +11,10 @@ class BotStartRequest(BaseModel):
     demo_mode: bool = True
 
 
+class TestTradeRequest(BaseModel):
+    strategy: Optional[str] = None  # e.g. "liquidation_hunter", "llm_signal", "sentiment_surfer"
+
+
 class BotStopRequest(BaseModel):
     exchange_type: str = Field(pattern="^(bitget|weex|hyperliquid)$")
 

@@ -12,11 +12,13 @@ from src.api.schemas.bot import (
     BotStatusResponse,
     BotStopRequest,
     MultiBotStatusResponse,
+    TestTradeRequest,
 )
 from src.auth.dependencies import get_current_user
 from src.exchanges.factory import create_exchange_client
 from src.models.database import ExchangeConnection, TradeRecord, User, UserConfig
 from src.models.session import get_db
+from src.strategy.base import StrategyRegistry
 from src.utils.encryption import decrypt_value, encrypt_value
 from src.utils.logger import get_logger
 
@@ -121,10 +123,11 @@ async def set_bot_mode(
 
 @router.post("/test-trade")
 async def open_test_trade(
+    body: TestTradeRequest = TestTradeRequest(),
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Open a small test trade in demo mode on the configured exchange."""
+    """Open a test trade in demo mode using a real strategy signal."""
     # Get user config for discord + general settings
     cfg_result = await db.execute(
         select(UserConfig).where(UserConfig.user_id == user.id)
@@ -175,18 +178,55 @@ async def open_test_trade(
         balance = await client.get_account_balance()
         logger.info(f"Test trade: Balance={balance.available} {balance.currency}, BTC price={price}")
 
+        # Generate real strategy signal to determine direction
+        strategy_name = body.strategy or "liquidation_hunter"
+        available = StrategyRegistry.list_available()
+        valid_names = [s["name"] for s in available]
+        if strategy_name not in valid_names:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Unknown strategy '{strategy_name}'. Available: {', '.join(valid_names)}",
+            )
+        try:
+            strategy = StrategyRegistry.create(strategy_name)
+            signal = await strategy.generate_signal(trade_symbol)
+            side = signal.direction.value  # "long" or "short"
+            confidence = signal.confidence
+            reason = signal.reason
+            tp = signal.target_price
+            sl = signal.stop_loss
+            logger.info(f"Test trade signal: {side} (confidence={confidence}, reason={reason})")
+            await strategy.close()
+        except Exception as e:
+            logger.warning(f"Strategy signal failed ({e}), falling back to market data")
+            # Fallback: use price momentum (24h change)
+            side = "long"
+            confidence = 50
+            reason = "Fallback: strategy unavailable"
+            tp = float(f"{round(price * 1.02, 1):.1f}")
+            sl = float(f"{round(price * 0.99, 1):.1f}")
+
         leverage = 4
         notional = 50.0
         size = round(notional / price, 6)
         if size < 0.001:
             size = 0.001
 
-        tp = float(f"{round(price * 1.02, 1):.1f}")
-        sl = float(f"{round(price * 0.99, 1):.1f}")
+        # Ensure TP/SL are on correct side for the direction
+        if side == "short":
+            if tp >= price:
+                tp = float(f"{round(price * 0.98, 1):.1f}")
+            if sl <= price:
+                sl = float(f"{round(price * 1.01, 1):.1f}")
+        else:
+            if tp <= price:
+                tp = float(f"{round(price * 1.02, 1):.1f}")
+            if sl >= price:
+                sl = float(f"{round(price * 0.99, 1):.1f}")
 
         order = await client.place_market_order(
             symbol=trade_symbol,
-            side="long",
+            side=side,
             size=size,
             leverage=leverage,
             take_profit=tp,
@@ -215,14 +255,14 @@ async def open_test_trade(
                 try:
                     await notifier.send_trade_entry(
                         symbol=db_symbol,
-                        side="long",
+                        side=side,
                         size=size,
                         entry_price=fill_price,
                         leverage=leverage,
                         take_profit=tp,
                         stop_loss=sl,
-                        confidence=75,
-                        reason="Test trade via API",
+                        confidence=confidence,
+                        reason=reason,
                         order_id=order.order_id,
                         demo_mode=True,
                     )
@@ -231,18 +271,19 @@ async def open_test_trade(
                 finally:
                     await notifier.close()
 
+        side_label = side.capitalize()
         trade = TradeRecord(
             user_id=user.id,
             exchange=exchange_type,
             symbol=db_symbol,
-            side="long",
+            side=side,
             size=size,
             entry_price=fill_price,
             take_profit=tp,
             stop_loss=sl,
             leverage=leverage,
-            confidence=75,
-            reason="Test trade via API",
+            confidence=confidence,
+            reason=reason,
             order_id=order.order_id,
             status="open",
             entry_time=datetime.utcnow(),
@@ -252,16 +293,16 @@ async def open_test_trade(
         await db.flush()
         await db.refresh(trade)
 
-        logger.info(f"Test trade opened: {order.order_id} @ {fill_price}")
+        logger.info(f"Test trade opened: {side} {order.order_id} @ {fill_price}")
 
         return {
             "status": "ok",
-            "message": f"Demo test trade opened: {db_symbol} Long on {exchange_type}",
+            "message": f"Demo test trade opened: {db_symbol} {side_label} on {exchange_type}",
             "trade": {
                 "id": trade.id,
                 "order_id": order.order_id,
                 "symbol": db_symbol,
-                "side": "long",
+                "side": side,
                 "size": size,
                 "entry_price": fill_price,
                 "leverage": leverage,
@@ -269,6 +310,8 @@ async def open_test_trade(
                 "stop_loss": sl,
                 "exchange": exchange_type,
                 "demo_mode": True,
+                "confidence": confidence,
+                "reason": reason,
             },
         }
 
