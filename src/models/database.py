@@ -39,18 +39,22 @@ class User(Base):
     role = Column(String(20), nullable=False, default="user")  # admin | user
     is_active = Column(Boolean, default=True)
     language = Column(String(10), default="de")  # de | en
+    is_deleted = Column(Boolean, default=False)
+    deleted_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, onupdate=func.now())
 
-    # Relationships
-    configs = relationship("UserConfig", back_populates="user", cascade="all, delete-orphan")
-    presets = relationship("ConfigPreset", back_populates="user", cascade="all, delete-orphan")
-    trades = relationship("TradeRecord", back_populates="user", cascade="all, delete-orphan")
-    funding_payments = relationship("FundingPayment", back_populates="user", cascade="all, delete-orphan")
-    bot_instances = relationship("BotInstance", back_populates="user", cascade="all, delete-orphan")
-    exchange_connections = relationship("ExchangeConnection", back_populates="user", cascade="all, delete-orphan")
-    llm_connections = relationship("LLMConnection", back_populates="user", cascade="all, delete-orphan")
-    bot_configs = relationship("BotConfig", back_populates="user", cascade="all, delete-orphan")
+    # Relationships — use "all" (not "all, delete-orphan") to prevent cascade
+    # deletes from wiping trade history and other important child records.
+    # Soft deletes (is_deleted + deleted_at) are used instead.
+    configs = relationship("UserConfig", back_populates="user", cascade="all")
+    presets = relationship("ConfigPreset", back_populates="user", cascade="all")
+    trades = relationship("TradeRecord", back_populates="user", cascade="all")
+    funding_payments = relationship("FundingPayment", back_populates="user", cascade="all")
+    bot_instances = relationship("BotInstance", back_populates="user", cascade="all")
+    exchange_connections = relationship("ExchangeConnection", back_populates="user", cascade="all")
+    llm_connections = relationship("LLMConnection", back_populates="user", cascade="all")
+    bot_configs = relationship("BotConfig", back_populates="user", cascade="all")
 
 
 class UserConfig(Base):
@@ -302,3 +306,17 @@ class Exchange(Base):
     config_schema = Column(Text, nullable=True)  # JSON schema for exchange-specific config
 
     created_at = Column(DateTime, server_default=func.now())
+
+
+class AuditLog(Base):
+    """Request audit log for security and compliance tracking."""
+    __tablename__ = "audit_logs"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, nullable=True, index=True)
+    method = Column(String(10), nullable=False)
+    path = Column(String(500), nullable=False)
+    status_code = Column(Integer, nullable=False)
+    response_time_ms = Column(Float, nullable=False)
+    client_ip = Column(String(45), nullable=False)
+    created_at = Column(DateTime, server_default=func.now(), index=True)

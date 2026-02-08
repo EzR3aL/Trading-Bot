@@ -13,8 +13,8 @@ import {
   Lightbulb,
   Gauge,
   Server,
-  Wallet,
 } from 'lucide-react'
+import { ExchangeIcon } from '../components/ui/ExchangeLogo'
 
 interface StepProps {
   number: number
@@ -85,8 +85,19 @@ function ExchangeComparisonTable() {
           <thead>
             <tr className="border-b border-gray-700">
               <th className="text-left py-2.5 px-3 text-gray-400 font-medium">{t('guide.exchangeCompField')}</th>
-              <th className="text-left py-2.5 px-3 text-yellow-400 font-medium">{t('guide.exchangeCompBitgetWeex')}</th>
-              <th className="text-left py-2.5 px-3 text-green-400 font-medium">{t('guide.exchangeCompHyperliquid')}</th>
+              <th className="text-left py-2.5 px-3 text-yellow-400 font-medium">
+                <span className="inline-flex items-center gap-2">
+                  <ExchangeIcon exchange="bitget" size={16} />
+                  <span>/</span>
+                  <ExchangeIcon exchange="weex" size={16} />
+                </span>
+              </th>
+              <th className="text-left py-2.5 px-3 text-green-400 font-medium">
+                <span className="inline-flex items-center gap-1.5">
+                  <ExchangeIcon exchange="hyperliquid" size={16} />
+                  <span>Hyperliquid</span>
+                </span>
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -261,7 +272,7 @@ export default function GettingStarted() {
   const exchangeSetups = [
     {
       title: t('guide.bitgetSetupTitle'),
-      icon: <span className="text-lg">🅱</span>,
+      icon: <ExchangeIcon exchange="bitget" size={20} />,
       borderColor: 'border-yellow-500/30',
       steps: [
         t('guide.bitgetSetup1'),
@@ -272,7 +283,7 @@ export default function GettingStarted() {
     },
     {
       title: t('guide.weexSetupTitle'),
-      icon: <span className="text-lg">W</span>,
+      icon: <ExchangeIcon exchange="weex" size={20} />,
       borderColor: 'border-blue-500/30',
       steps: [
         t('guide.weexSetup1'),
@@ -283,7 +294,7 @@ export default function GettingStarted() {
     },
     {
       title: t('guide.hyperliquidSetupTitle'),
-      icon: <Wallet size={18} className="text-green-400" />,
+      icon: <ExchangeIcon exchange="hyperliquid" size={20} />,
       borderColor: 'border-green-500/30',
       steps: [
         t('guide.hyperliquidSetup1'),
@@ -297,46 +308,49 @@ export default function GettingStarted() {
   ]
 
   return (
-    <div className="max-w-4xl">
+    <div>
       <h1 className="text-2xl font-bold text-white mb-2">{t('guide.title')}</h1>
       <p className="text-gray-400 mb-8">{t('guide.subtitle')}</p>
 
-      {/* Steps with timeline */}
-      <div className="mb-10">
-        {steps.map((step, i) => (
-          <Step key={step.number} {...step} isLast={i === steps.length - 1} />
-        ))}
-      </div>
+      {/* Two-column layout: Steps left, Reference right */}
+      <div className="grid grid-cols-1 xl:grid-cols-[1fr_1fr] gap-8 items-start">
 
-      {/* Exchange Comparison Table */}
-      <div className="mb-6">
-        <ExchangeComparisonTable />
-      </div>
-
-      {/* Per-Exchange Setup */}
-      <div className="mb-6">
-        <h2 className="text-lg font-semibold text-white mb-3 flex items-center gap-2">
-          <KeyRound size={18} className="text-yellow-400" />
-          {t('guide.exchangeSetupTitle')}
-        </h2>
-        <div className="space-y-3">
-          {exchangeSetups.map((setup) => (
-            <ExchangeSetupCard key={setup.title} {...setup} />
+        {/* Left Column: Steps Timeline */}
+        <div>
+          {steps.map((step, i) => (
+            <Step key={step.number} {...step} isLast={i === steps.length - 1} />
           ))}
         </div>
-      </div>
 
-      {/* Example Configuration */}
-      <div className="mb-6">
-        <ExampleConfig />
-      </div>
+        {/* Right Column: Reference Info (sticky on desktop) */}
+        <div className="xl:sticky xl:top-4 space-y-5">
+          {/* Exchange Comparison Table */}
+          <ExchangeComparisonTable />
 
-      {/* Tip Box */}
-      <div className="bg-gray-900 border border-primary-600/30 rounded-lg p-5 flex gap-3">
-        <Lightbulb size={20} className="flex-shrink-0 text-primary-400 mt-0.5" />
-        <div>
-          <h3 className="font-semibold text-primary-400 mb-1">{t('guide.tipTitle')}</h3>
-          <p className="text-gray-300 text-sm">{t('guide.tipText')}</p>
+          {/* Per-Exchange Setup */}
+          <div>
+            <h2 className="text-lg font-semibold text-white mb-3 flex items-center gap-2">
+              <KeyRound size={18} className="text-yellow-400" />
+              {t('guide.exchangeSetupTitle')}
+            </h2>
+            <div className="space-y-3">
+              {exchangeSetups.map((setup) => (
+                <ExchangeSetupCard key={setup.title} {...setup} />
+              ))}
+            </div>
+          </div>
+
+          {/* Example Configuration */}
+          <ExampleConfig />
+
+          {/* Tip Box */}
+          <div className="bg-gray-900 border border-primary-600/30 rounded-lg p-5 flex gap-3">
+            <Lightbulb size={20} className="flex-shrink-0 text-primary-400 mt-0.5" />
+            <div>
+              <h3 className="font-semibold text-primary-400 mb-1">{t('guide.tipTitle')}</h3>
+              <p className="text-gray-300 text-sm">{t('guide.tipText')}</p>
+            </div>
+          </div>
         </div>
       </div>
     </div>

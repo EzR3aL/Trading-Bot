@@ -50,6 +50,9 @@ async def init_db() -> None:
                 "ALTER TABLE trade_records ADD COLUMN bot_config_id INTEGER REFERENCES bot_configs(id) ON DELETE SET NULL",
                 "ALTER TABLE bot_instances ADD COLUMN bot_config_id INTEGER REFERENCES bot_configs(id) ON DELETE SET NULL",
                 "ALTER TABLE bot_instances ADD COLUMN error_message TEXT",
+                # Soft-delete columns for User model
+                "ALTER TABLE users ADD COLUMN is_deleted BOOLEAN DEFAULT 0",
+                "ALTER TABLE users ADD COLUMN deleted_at DATETIME",
             ]
             for migration in migrations:
                 try:

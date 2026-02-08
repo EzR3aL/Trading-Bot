@@ -8,7 +8,7 @@ from datetime import datetime
 from typing import Any, Dict, List, Literal, Optional
 
 import aiohttp
-from fastapi import APIRouter, Depends, HTTPException, Path
+from fastapi import APIRouter, Depends, HTTPException, Path, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -26,7 +26,11 @@ from src.auth.dependencies import get_current_user
 from src.models.database import ExchangeConnection, LLMConnection, User, UserConfig
 from src.models.session import get_db
 from src.utils.circuit_breaker import circuit_registry
+from src.api.routers.auth import limiter
 from src.utils.encryption import decrypt_value, encrypt_value, mask_value
+from src.utils.logger import get_logger
+
+_config_logger = get_logger(__name__)
 
 router = APIRouter(prefix="/api/config", tags=["config"])
 
@@ -201,7 +205,9 @@ async def get_exchange_connections(
 
 
 @router.put("/exchange-connections/{exchange_type}")
+@limiter.limit("5/minute")
 async def upsert_exchange_connection(
+    request: Request,
     data: ExchangeConnectionUpdate,
     exchange_type: str = Path(pattern="^(bitget|weex|hyperliquid)$"),
     user: User = Depends(get_current_user),

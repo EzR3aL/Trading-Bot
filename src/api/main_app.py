@@ -58,6 +58,18 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifecycle: startup and shutdown."""
+    # Validate JWT configuration before anything else
+    from src.auth.jwt_handler import validate_jwt_config
+    validate_jwt_config()
+
+    # Startup check: warn if running in production without explicit encryption key
+    environment = os.getenv("ENVIRONMENT", "development").lower()
+    if environment == "production" and not os.getenv("ENCRYPTION_KEY"):
+        logger.warning(
+            "SECURITY WARNING: Running in production without explicit ENCRYPTION_KEY. "
+            "Set ENCRYPTION_KEY env var to prevent auto-generation."
+        )
+
     # Startup
     logger.info("Initializing database...")
     await init_db()
@@ -120,19 +132,44 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
+    # Global exception handler — sanitizes error responses in production
+    from src.api.middleware.error_handler import global_exception_handler
+    app.add_exception_handler(Exception, global_exception_handler)
+
+    # Audit logging middleware
+    from src.api.middleware.audit_log import AuditLogMiddleware
+    app.add_middleware(AuditLogMiddleware)
+
     # Security headers
     app.add_middleware(SecurityHeadersMiddleware)
 
-    # CORS
+    # CORS — same-origin (localhost:8000) does not need CORS so it is excluded.
+    environment = os.getenv("ENVIRONMENT", "development").lower()
     allowed_origins = [
         "http://localhost:5173",
-        "http://localhost:8000",
         "http://127.0.0.1:5173",
-        "http://127.0.0.1:8000",
     ]
     extra_origins = os.getenv("CORS_ORIGINS", "")
     if extra_origins:
-        allowed_origins.extend(o.strip() for o in extra_origins.split(",") if o.strip())
+        for origin in extra_origins.split(","):
+            origin = origin.strip()
+            if not origin:
+                continue
+            # In production, only allow HTTPS origins
+            if environment == "production" and not origin.startswith("https://"):
+                logger.warning(
+                    "Rejecting non-HTTPS CORS origin in production: %s", origin
+                )
+                continue
+            allowed_origins.append(origin)
+
+    # In production, remove default HTTP dev origins — only CORS_ORIGINS apply
+    if environment == "production":
+        allowed_origins = [o for o in allowed_origins if o.startswith("https://")]
+        if not allowed_origins:
+            logger.warning("No CORS origins configured for production. Set CORS_ORIGINS env var.")
+
+    logger.info("CORS allowed origins: %s", allowed_origins)
 
     app.add_middleware(
         CORSMiddleware,

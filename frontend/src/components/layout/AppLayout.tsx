@@ -1,6 +1,8 @@
+import { useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '../../stores/authStore'
+import { useFilterStore, type DemoFilter } from '../../stores/filterStore'
 import {
   LayoutDashboard,
   ArrowLeftRight,
@@ -11,6 +13,8 @@ import {
   Users,
   BookOpen,
   TrendingUp,
+  Menu,
+  X,
   type LucideIcon,
 } from 'lucide-react'
 
@@ -29,6 +33,14 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const { t, i18n } = useTranslation()
   const location = useLocation()
   const { user, logout } = useAuthStore()
+  const { demoFilter, setDemoFilter } = useFilterStore()
+  const [mobileOpen, setMobileOpen] = useState(false)
+
+  const filterOptions: { value: DemoFilter; labelKey: string }[] = [
+    { value: 'all', labelKey: 'common.all' },
+    { value: 'demo', labelKey: 'common.demo' },
+    { value: 'live', labelKey: 'common.live' },
+  ]
 
   const toggleLang = () => {
     const next = i18n.language === 'de' ? 'en' : 'de'
@@ -36,71 +48,162 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     localStorage.setItem('language', next)
   }
 
-  return (
-    <div className="min-h-screen bg-gray-950">
-      {/* Sidebar */}
-      <aside className="fixed top-0 left-0 h-full w-56 bg-gray-900 border-r border-gray-800 flex flex-col">
-        <div className="p-4 border-b border-gray-800">
-          <h1 className="text-lg font-bold text-white">Trading Bot</h1>
-          <p className="text-xs text-gray-400">v2.0</p>
-        </div>
+  const closeMobile = () => setMobileOpen(false)
 
-        <nav className="flex-1 py-4">
-          {navItems.map((item) => {
-            const Icon = item.icon
-            return (
-              <Link
-                key={item.path}
-                to={item.path}
-                className={`flex items-center gap-3 px-4 py-2.5 text-sm transition-colors ${
-                  location.pathname === item.path
-                    ? 'bg-primary-600/20 text-primary-400 border-r-2 border-primary-400'
-                    : 'text-gray-400 hover:text-white hover:bg-gray-800'
-                }`}
-              >
-                <Icon size={18} />
-                {t(`nav.${item.key}`)}
-              </Link>
-            )
-          })}
-          {user?.role === 'admin' && (
+  const sidebarContent = (
+    <>
+      {/* Logo */}
+      <div className="px-5 py-5 border-b border-white/5">
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary-500 to-primary-700 flex items-center justify-center shadow-glow-sm">
+            <TrendingUp size={16} className="text-white" />
+          </div>
+          <div>
+            <h1 className="text-base font-bold text-white tracking-tight">Trading Bot</h1>
+            <p className="text-[10px] text-gray-500 font-medium">v2.0</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Navigation */}
+      <nav className="flex-1 py-3 px-2 space-y-0.5 overflow-y-auto">
+        {navItems.map((item) => {
+          const Icon = item.icon
+          const isActive = location.pathname === item.path
+          return (
             <Link
-              to="/admin/users"
-              className={`flex items-center gap-3 px-4 py-2.5 text-sm transition-colors ${
-                location.pathname === '/admin/users'
-                  ? 'bg-primary-600/20 text-primary-400 border-r-2 border-primary-400'
-                  : 'text-gray-400 hover:text-white hover:bg-gray-800'
+              key={item.path}
+              to={item.path}
+              onClick={closeMobile}
+              aria-label={t(`nav.${item.key}`)}
+              className={`flex items-center gap-3 px-3 py-2.5 text-sm rounded-xl transition-all duration-200 ${
+                isActive
+                  ? 'nav-item-active text-white font-medium'
+                  : 'text-gray-400 hover:text-white hover:bg-white/5'
               }`}
             >
-              <Users size={18} />
-              {t('nav.admin')}
+              <Icon size={18} className={isActive ? 'text-primary-400' : ''} />
+              <span>{t(`nav.${item.key}`)}</span>
             </Link>
-          )}
-        </nav>
+          )
+        })}
+        {user?.role === 'admin' && (
+          <Link
+            to="/admin/users"
+            onClick={closeMobile}
+            aria-label={t('nav.admin')}
+            className={`flex items-center gap-3 px-3 py-2.5 text-sm rounded-xl transition-all duration-200 ${
+              location.pathname === '/admin/users'
+                ? 'nav-item-active text-white font-medium'
+                : 'text-gray-400 hover:text-white hover:bg-white/5'
+            }`}
+          >
+            <Users size={18} className={location.pathname === '/admin/users' ? 'text-primary-400' : ''} />
+            <span>{t('nav.admin')}</span>
+          </Link>
+        )}
+      </nav>
 
-        <div className="p-4 border-t border-gray-800 space-y-2">
-          <div className="text-sm text-gray-400">
-            {user?.username} ({user?.role})
+      {/* Bottom controls */}
+      <div className="p-4 border-t border-white/5 space-y-3">
+        {/* User info */}
+        <div className="flex items-center gap-2">
+          <div className="w-7 h-7 rounded-full bg-gradient-to-br from-primary-600 to-primary-800 flex items-center justify-center text-xs font-bold text-white">
+            {user?.username?.charAt(0).toUpperCase() || '?'}
           </div>
-          <div className="flex gap-2">
-            <button
-              onClick={toggleLang}
-              className="px-2 py-1 text-xs bg-gray-800 text-gray-300 rounded hover:bg-gray-700"
-            >
-              {i18n.language === 'de' ? 'EN' : 'DE'}
-            </button>
-            <button
-              onClick={logout}
-              className="px-2 py-1 text-xs bg-red-900/50 text-red-400 rounded hover:bg-red-900"
-            >
-              {t('nav.logout')}
-            </button>
+          <div className="flex-1 min-w-0">
+            <div className="text-sm text-white font-medium truncate">{user?.username}</div>
+            <div className="text-[10px] text-gray-500 uppercase tracking-wider">{user?.role}</div>
           </div>
         </div>
+
+        {/* Demo/Live toggle - pill switch */}
+        <div>
+          <div className="text-[10px] text-gray-500 uppercase tracking-wider mb-1.5 font-medium">{t('common.demoLiveFilter')}</div>
+          <div className="flex bg-white/5 rounded-xl p-0.5 border border-white/5">
+            {filterOptions.map((opt) => (
+              <button
+                key={opt.value}
+                onClick={() => setDemoFilter(opt.value)}
+                aria-label={`${t('common.demoLiveFilter')}: ${t(opt.labelKey)}`}
+                className={`flex-1 px-2 py-1.5 text-xs font-medium rounded-lg transition-all duration-200 ${
+                  demoFilter === opt.value
+                    ? 'bg-gradient-to-r from-primary-600 to-primary-500 text-white shadow-glow-sm'
+                    : 'text-gray-400 hover:text-gray-200'
+                }`}
+              >
+                {t(opt.labelKey)}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Language & Logout */}
+        <div className="flex gap-2">
+          <button
+            onClick={toggleLang}
+            aria-label={`Switch language to ${i18n.language === 'de' ? 'English' : 'German'}`}
+            className="px-3 py-1.5 text-xs bg-white/5 text-gray-300 rounded-lg hover:bg-white/10 border border-white/5 transition-all duration-200 font-medium"
+          >
+            {i18n.language === 'de' ? 'EN' : 'DE'}
+          </button>
+          <button
+            onClick={logout}
+            aria-label={t('nav.logout')}
+            className="flex-1 px-3 py-1.5 text-xs bg-red-500/10 text-red-400 rounded-lg hover:bg-red-500/20 border border-red-500/10 transition-all duration-200 font-medium"
+          >
+            {t('nav.logout')}
+          </button>
+        </div>
+      </div>
+    </>
+  )
+
+  return (
+    <div className="min-h-screen bg-gradient-dark">
+      {/* Mobile hamburger */}
+      <div className="lg:hidden fixed top-0 left-0 right-0 z-40 bg-[#0a0e17]/90 backdrop-blur-xl border-b border-white/5 px-4 py-3 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-primary-500 to-primary-700 flex items-center justify-center">
+            <TrendingUp size={14} className="text-white" />
+          </div>
+          <span className="text-white font-bold text-sm">Trading Bot</span>
+        </div>
+        <button
+          onClick={() => setMobileOpen(!mobileOpen)}
+          aria-label={mobileOpen ? 'Close menu' : 'Open menu'}
+          className="p-2 text-gray-400 hover:text-white transition-colors"
+        >
+          {mobileOpen ? <X size={20} /> : <Menu size={20} />}
+        </button>
+      </div>
+
+      {/* Mobile overlay */}
+      {mobileOpen && (
+        <div
+          className="lg:hidden fixed inset-0 z-40 bg-black/60 backdrop-blur-sm overlay-fade"
+          onClick={closeMobile}
+        />
+      )}
+
+      {/* Mobile sidebar */}
+      <aside
+        className={`lg:hidden fixed top-0 left-0 h-full w-64 z-50 bg-gradient-sidebar flex flex-col border-r border-white/5 transition-transform duration-300 ${
+          mobileOpen ? 'translate-x-0' : '-translate-x-full'
+        }`}
+      >
+        {sidebarContent}
+      </aside>
+
+      {/* Desktop sidebar */}
+      <aside className="hidden lg:flex fixed top-0 left-0 h-full w-60 bg-gradient-sidebar border-r border-white/5 flex-col z-30">
+        {sidebarContent}
       </aside>
 
       {/* Main content */}
-      <main className="ml-56 p-6">{children}</main>
+      <main className="lg:ml-60 p-6 pt-20 lg:pt-6 min-h-screen">
+        {children}
+      </main>
     </div>
   )
 }

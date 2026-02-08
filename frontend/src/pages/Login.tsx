@@ -2,6 +2,7 @@ import { useState, FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '../stores/authStore'
+import { TrendingUp, Loader2 } from 'lucide-react'
 
 export default function Login() {
   const { t } = useTranslation()
@@ -23,54 +24,72 @@ export default function Login() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-950 flex items-center justify-center">
-      <div className="w-full max-w-sm">
-        <div className="bg-gray-900 border border-gray-800 rounded-lg p-8">
-          <h1 className="text-2xl font-bold text-white mb-6 text-center">
+    <div className="min-h-screen login-bg flex items-center justify-center px-4">
+      <div className="w-full max-w-sm animate-in">
+        <div className="glass-card rounded-2xl p-8 shadow-2xl">
+          {/* Logo */}
+          <div className="flex justify-center mb-6">
+            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-primary-500 to-primary-700 flex items-center justify-center shadow-glow">
+              <TrendingUp size={28} className="text-white" />
+            </div>
+          </div>
+
+          <h1 className="text-2xl font-bold text-white mb-1 text-center tracking-tight">
             Trading Bot
           </h1>
-          <h2 className="text-lg text-gray-300 mb-6 text-center">
+          <h2 className="text-sm text-gray-400 mb-8 text-center">
             {t('login.title')}
           </h2>
 
           {error && (
-            <div className="mb-4 p-3 bg-red-900/30 border border-red-800 rounded text-red-400 text-sm">
+            <div className="mb-6 p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-sm text-center">
               {error}
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-5">
             <div>
-              <label className="block text-sm text-gray-400 mb-1">
+              <label htmlFor="login-username" className="block text-xs text-gray-400 mb-1.5 font-medium uppercase tracking-wider">
                 {t('login.username')}
               </label>
               <input
+                id="login-username"
                 type="text"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded text-white focus:border-primary-500 focus:outline-none"
+                className="input-dark"
                 required
                 autoFocus
+                autoComplete="username"
               />
             </div>
             <div>
-              <label className="block text-sm text-gray-400 mb-1">
+              <label htmlFor="login-password" className="block text-xs text-gray-400 mb-1.5 font-medium uppercase tracking-wider">
                 {t('login.password')}
               </label>
               <input
+                id="login-password"
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded text-white focus:border-primary-500 focus:outline-none"
+                className="input-dark"
                 required
+                autoComplete="current-password"
               />
             </div>
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full py-2.5 bg-primary-600 text-white rounded font-medium hover:bg-primary-700 disabled:opacity-50 transition-colors"
+              className="btn-gradient w-full py-3 flex items-center justify-center gap-2"
             >
-              {isLoading ? t('common.loading') : t('login.submit')}
+              {isLoading ? (
+                <>
+                  <Loader2 size={16} className="animate-spin" />
+                  {t('common.loading')}
+                </>
+              ) : (
+                t('login.submit')
+              )}
             </button>
           </form>
         </div>

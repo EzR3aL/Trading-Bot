@@ -4,7 +4,6 @@
     "trades": "Trades",
     "settings": "Settings",
     "presets": "Presets",
-
     "myBots": "My Bots",
     "taxReport": "Tax Report",
     "guide": "Guide",
@@ -69,6 +68,8 @@
     "title": "Settings",
     "trading": "Parameters",
     "apiKeys": "API Keys",
+    "apiKey": "API Key",
+    "apiSecret": "API Secret",
     "discord": "Discord",
     "exchange": "Exchange",
     "profile": "Profile",
@@ -105,7 +106,8 @@
     "maxTrades": "Max Trades/Day",
     "dailyLossLimit": "Daily Loss Limit %",
     "takeProfit": "Take Profit %",
-    "stopLoss": "Stop Loss %"
+    "stopLoss": "Stop Loss %",
+    "hyperliquidTestnetNote": "Important: Testnet requires a one-time setup. 1) Deposit at least $5 USDC to your mainnet Hyperliquid account first. 2) Then go to app.hyperliquid-testnet.xyz/drip to claim 1,000 mock USDC. Without this, your testnet balance will be 0 and demo trades will fail."
   },
   "presets": {
     "title": "Configuration Presets",
@@ -138,7 +140,12 @@
     "totalPnl": "Total PnL",
     "totalFees": "Total Fees",
     "netPnl": "Net PnL",
-    "monthlyBreakdown": "Monthly Breakdown"
+    "monthlyBreakdown": "Monthly Breakdown",
+    "month": "Month",
+    "trades": "Trades",
+    "pnl": "PnL",
+    "fees": "Fees",
+    "net": "Net"
   },
   "guide": {
     "title": "Getting Started",
@@ -221,7 +228,6 @@
     "hyperliquidSetup4": "Copy the generated API Wallet Private Key. You also need your main Wallet Address.",
     "hyperliquidSetup5": "The API Wallet can trade but CANNOT withdraw — much safer than your main key.",
     "hyperliquidSetup6": "For testnet: Use app.hyperliquid-testnet.xyz with a testnet faucet for test funds.",
-    "hyperliquidTestnetNote": "Important: Testnet requires a one-time setup. 1) Deposit at least $5 USDC to your mainnet Hyperliquid account first. 2) Then go to app.hyperliquid-testnet.xyz/drip to claim 1,000 mock USDC. Without this, your testnet balance will be 0 and demo trades will fail.",
     "exampleTitle": "Example Configuration",
     "exampleDesc": "A conservative bot setup for beginners:",
     "exampleLeverage": "Leverage: 2x",
@@ -259,6 +265,9 @@
     "predictions": "Predictions",
     "viewReasoning": "View AI Reasoning",
     "llmProvider": "AI Provider",
+    "failedStart": "Failed to start bot",
+    "failedStop": "Failed to stop bot",
+    "failedDelete": "Failed to delete bot",
     "builder": {
       "title": "Create New Bot",
       "editTitle": "Edit Bot",
@@ -307,6 +316,7 @@
     "title": "Bot Performance",
     "noData": "No data yet. Start bots to see performance.",
     "cumulativePnl": "Cumulative PnL Over Time",
+    "cumulative": "Cumulative",
     "bot": "Bot",
     "direction": "Direction",
     "confidence": "Confidence",
@@ -318,15 +328,22 @@
     "totalPnl": "Total PnL",
     "bestTrade": "Best Trade",
     "worstTrade": "Worst Trade",
-    "recentTrades": "Recent Trades"
+    "recentTrades": "Recent Trades",
+    "loadError": "Failed to load performance data",
+    "detailError": "Failed to load bot details"
   },
   "common": {
     "loading": "Loading...",
-    "error": "Error",
+    "error": "Something went wrong. Please try again.",
+    "errorShort": "Error",
     "success": "Success",
     "cancel": "Cancel",
     "confirm": "Confirm",
     "demo": "Demo",
-    "live": "Live"
+    "live": "Live",
+    "all": "All",
+    "demoLiveFilter": "Mode",
+    "page": "Page",
+    "of": "of"
   }
 }

@@ -3,6 +3,7 @@
 import csv
 import io
 from datetime import datetime
+from typing import Optional
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import StreamingResponse
@@ -19,6 +20,7 @@ router = APIRouter(prefix="/api/tax-report", tags=["tax-report"])
 @router.get("")
 async def get_tax_report(
     year: int = Query(default=None, ge=2020, le=2030),
+    demo_mode: Optional[bool] = Query(None),
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -26,14 +28,18 @@ async def get_tax_report(
     if year is None:
         year = datetime.utcnow().year
 
+    filters = [
+        TradeRecord.user_id == user.id,
+        TradeRecord.status == "closed",
+        TradeRecord.entry_time >= datetime(year, 1, 1),
+        TradeRecord.entry_time < datetime(year + 1, 1, 1),
+    ]
+    if demo_mode is not None:
+        filters.append(TradeRecord.demo_mode == demo_mode)
+
     result = await db.execute(
         select(TradeRecord)
-        .where(
-            TradeRecord.user_id == user.id,
-            TradeRecord.status == "closed",
-            TradeRecord.entry_time >= datetime(year, 1, 1),
-            TradeRecord.entry_time < datetime(year + 1, 1, 1),
-        )
+        .where(*filters)
         .order_by(TradeRecord.entry_time)
     )
     trades = result.scalars().all()
@@ -70,6 +76,7 @@ async def get_tax_report(
 @router.get("/csv")
 async def download_tax_report_csv(
     year: int = Query(default=None, ge=2020, le=2030),
+    demo_mode: Optional[bool] = Query(None),
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -77,14 +84,18 @@ async def download_tax_report_csv(
     if year is None:
         year = datetime.utcnow().year
 
+    filters = [
+        TradeRecord.user_id == user.id,
+        TradeRecord.status == "closed",
+        TradeRecord.entry_time >= datetime(year, 1, 1),
+        TradeRecord.entry_time < datetime(year + 1, 1, 1),
+    ]
+    if demo_mode is not None:
+        filters.append(TradeRecord.demo_mode == demo_mode)
+
     result = await db.execute(
         select(TradeRecord)
-        .where(
-            TradeRecord.user_id == user.id,
-            TradeRecord.status == "closed",
-            TradeRecord.entry_time >= datetime(year, 1, 1),
-            TradeRecord.entry_time < datetime(year + 1, 1, 1),
-        )
+        .where(*filters)
         .order_by(TradeRecord.entry_time)
     )
     trades = result.scalars().all()

@@ -1,5 +1,7 @@
 """Statistics and performance endpoints (user-scoped)."""
 
+from typing import Optional
+
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func, select, case
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -14,6 +16,7 @@ router = APIRouter(prefix="/api/statistics", tags=["statistics"])
 @router.get("")
 async def get_statistics(
     days: int = Query(30, ge=1, le=365),
+    demo_mode: Optional[bool] = Query(None),
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -21,6 +24,14 @@ async def get_statistics(
     from datetime import datetime, timedelta
 
     since = datetime.utcnow() - timedelta(days=days)
+
+    filters = [
+        TradeRecord.user_id == user.id,
+        TradeRecord.status == "closed",
+        TradeRecord.entry_time >= since,
+    ]
+    if demo_mode is not None:
+        filters.append(TradeRecord.demo_mode == demo_mode)
 
     result = await db.execute(
         select(
@@ -34,11 +45,7 @@ async def get_statistics(
             func.max(TradeRecord.pnl).label("best_trade"),
             func.min(TradeRecord.pnl).label("worst_trade"),
         )
-        .where(
-            TradeRecord.user_id == user.id,
-            TradeRecord.status == "closed",
-            TradeRecord.entry_time >= since,
-        )
+        .where(*filters)
     )
     row = result.one()
 
@@ -67,6 +74,7 @@ async def get_statistics(
 @router.get("/daily")
 async def get_daily_stats(
     days: int = Query(30, ge=1, le=365),
+    demo_mode: Optional[bool] = Query(None),
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -74,6 +82,14 @@ async def get_daily_stats(
     from datetime import datetime, timedelta
 
     since = datetime.utcnow() - timedelta(days=days)
+
+    filters = [
+        TradeRecord.user_id == user.id,
+        TradeRecord.status == "closed",
+        TradeRecord.entry_time >= since,
+    ]
+    if demo_mode is not None:
+        filters.append(TradeRecord.demo_mode == demo_mode)
 
     result = await db.execute(
         select(
@@ -85,11 +101,7 @@ async def get_daily_stats(
             func.sum(case((TradeRecord.pnl > 0, 1), else_=0)).label("wins"),
             func.sum(case((TradeRecord.pnl <= 0, 1), else_=0)).label("losses"),
         )
-        .where(
-            TradeRecord.user_id == user.id,
-            TradeRecord.status == "closed",
-            TradeRecord.entry_time >= since,
-        )
+        .where(*filters)
         .group_by(func.date(TradeRecord.entry_time))
         .order_by(func.date(TradeRecord.entry_time))
     )

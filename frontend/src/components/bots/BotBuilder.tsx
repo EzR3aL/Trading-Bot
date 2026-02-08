@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import api from '../../api/client'
 import { ArrowLeft, ArrowRight, Check, Play } from 'lucide-react'
+import ExchangeLogo from '../ui/ExchangeLogo'
 
 interface Strategy {
   name: string
@@ -454,13 +455,13 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
                   <button
                     key={ex}
                     onClick={() => setExchangeType(ex)}
-                    className={`px-4 py-2 rounded border capitalize transition-colors ${
+                    className={`px-4 py-2 rounded border transition-colors ${
                       exchangeType === ex
                         ? 'border-primary-500 bg-primary-900/20 text-white'
                         : 'border-gray-700 bg-gray-800 text-gray-400 hover:border-gray-600'
                     }`}
                   >
-                    {ex}
+                    <ExchangeLogo exchange={ex} size={16} />
                   </button>
                 ))}
               </div>
@@ -547,7 +548,7 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
             <div className="grid grid-cols-2 gap-4 text-sm">
               <div><span className="text-gray-500">{b.name}:</span> <span className="text-white ml-2">{name}</span></div>
               <div><span className="text-gray-500">{b.strategy}:</span> <span className="text-white ml-2">{strategyType}</span></div>
-              <div><span className="text-gray-500">{b.exchange}:</span> <span className="text-white ml-2">{exchangeType}</span></div>
+              <div><span className="text-gray-500">{b.exchange}:</span> <span className="text-white ml-2"><ExchangeLogo exchange={exchangeType} size={14} /></span></div>
               <div><span className="text-gray-500">{b.mode}:</span> <span className="text-white ml-2">{mode}</span></div>
               <div><span className="text-gray-500">{b.tradingPairs}:</span> <span className="text-white ml-2">{tradingPairs.join(', ')}</span></div>
               <div><span className="text-gray-500">{b.leverage}:</span> <span className="text-white ml-2">{leverage}x</span></div>

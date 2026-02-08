@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { ChevronDown } from 'lucide-react'
 import api from '../api/client'
 import type { ConnectionsStatusResponse, ExchangeConnectionStatus, ExchangeInfo, ServiceStatus } from '../types'
+import { ExchangeIcon } from '../components/ui/ExchangeLogo'
 
 const TABS = ['apiKeys', 'llmKeys', 'discord', 'connections'] as const
 
@@ -31,8 +32,8 @@ function KeyForm({
   authType?: string
 }) {
   const isWallet = authType === 'eth_wallet'
-  const keyLabel = isWallet ? t('settings.walletAddress') : 'API Key'
-  const secretLabel = isWallet ? t('settings.privateKey') : 'API Secret'
+  const keyLabel = isWallet ? t('settings.walletAddress') : t('settings.apiKey')
+  const secretLabel = isWallet ? t('settings.privateKey') : t('settings.apiSecret')
   const keyPlaceholder = configured ? '****configured****' : isWallet ? '0x... (Main Wallet)' : ''
   const secretPlaceholder = isWallet ? '0x... (API Wallet Key)' : ''
 
@@ -44,6 +45,8 @@ function KeyForm({
   const pkError = isWallet && secretValue && !keyRegex.test(secretValue)
     ? 'Must be 64 hex characters (with or without 0x)' : ''
 
+  const formId = label.toLowerCase().replace(/\s+/g, '-')
+
   return (
     <div className="space-y-3">
       <h4 className="text-xs font-medium text-gray-400 uppercase tracking-wider">{label}</h4>
@@ -54,23 +57,23 @@ function KeyForm({
       )}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div>
-          <label className="block text-xs text-gray-500 mb-1">{keyLabel}</label>
-          <input type={isWallet ? 'text' : 'password'} value={keyValue} onChange={(e) => onKeyChange(e.target.value)}
+          <label htmlFor={`${formId}-key`} className="block text-xs text-gray-500 mb-1">{keyLabel}</label>
+          <input id={`${formId}-key`} type={isWallet ? 'text' : 'password'} value={keyValue} onChange={(e) => onKeyChange(e.target.value)}
             placeholder={keyPlaceholder}
             className={`w-full px-3 py-1.5 bg-gray-800 border rounded text-white text-sm font-mono ${addrError ? 'border-red-500' : 'border-gray-700'}`} />
           {addrError && <p className="text-xs text-red-400 mt-1">{addrError}</p>}
         </div>
         <div>
-          <label className="block text-xs text-gray-500 mb-1">{secretLabel}</label>
-          <input type="password" value={secretValue} onChange={(e) => onSecretChange(e.target.value)}
+          <label htmlFor={`${formId}-secret`} className="block text-xs text-gray-500 mb-1">{secretLabel}</label>
+          <input id={`${formId}-secret`} type="password" value={secretValue} onChange={(e) => onSecretChange(e.target.value)}
             placeholder={secretPlaceholder}
             className={`w-full px-3 py-1.5 bg-gray-800 border rounded text-white text-sm ${pkError ? 'border-red-500' : 'border-gray-700'}`} />
           {pkError && <p className="text-xs text-red-400 mt-1">{pkError}</p>}
         </div>
         {showPassphrase !== false && (
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Passphrase</label>
-            <input type="password" value={passphraseValue} onChange={(e) => onPassphraseChange(e.target.value)}
+            <label htmlFor={`${formId}-passphrase`} className="block text-xs text-gray-500 mb-1">Passphrase</label>
+            <input id={`${formId}-passphrase`} type="password" value={passphraseValue} onChange={(e) => onPassphraseChange(e.target.value)}
               className="w-full px-3 py-1.5 bg-gray-800 border border-gray-700 rounded text-white text-sm" />
           </div>
         )}
@@ -353,6 +356,7 @@ export default function Settings() {
                   className="w-full flex items-center justify-between px-5 py-4 hover:bg-gray-800/50 transition-colors"
                 >
                   <div className="flex items-center gap-3">
+                    <ExchangeIcon exchange={ex.name} size={20} />
                     <h3 className="text-white font-semibold">{ex.display_name}</h3>
                   </div>
                   <div className="flex items-center gap-2">
@@ -451,8 +455,9 @@ export default function Settings() {
                   {isOpen && (
                     <div className="px-5 pb-5 pt-1 space-y-3 border-t border-gray-800">
                       <div>
-                        <label className="block text-xs text-gray-500 mb-1">API Key</label>
+                        <label htmlFor={`llm-key-${provider_type}`} className="block text-xs text-gray-500 mb-1">{t('settings.apiKey')}</label>
                         <input
+                          id={`llm-key-${provider_type}`}
                           type="password"
                           value={llmKeyForms[provider_type] || ''}
                           onChange={(e) => setLlmKeyForms(prev => ({ ...prev, [provider_type]: e.target.value }))}
@@ -490,8 +495,8 @@ export default function Settings() {
         <div className="bg-gray-900 border border-gray-800 rounded-lg p-6 max-w-2xl">
           <div className="space-y-4">
             <div>
-              <label className="block text-sm text-gray-400 mb-1">Webhook URL</label>
-              <input type="text" value={webhookUrl} onChange={(e) => setWebhookUrl(e.target.value)}
+              <label htmlFor="discord-webhook-url" className="block text-sm text-gray-400 mb-1">Webhook URL</label>
+              <input id="discord-webhook-url" type="text" value={webhookUrl} onChange={(e) => setWebhookUrl(e.target.value)}
                 placeholder="https://discord.com/api/webhooks/..."
                 className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded text-white" />
             </div>

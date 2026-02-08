@@ -1,7 +1,15 @@
 """
 Fernet-based symmetric encryption for API keys and secrets.
 
-Uses ENCRYPTION_KEY from environment. Auto-generates on first use if missing.
+Uses ENCRYPTION_KEY from environment. Auto-generates on first use if missing
+in development mode only.
+
+SECURITY NOTE: In production (ENVIRONMENT=production), the ENCRYPTION_KEY
+environment variable MUST be explicitly set. Auto-generation is disabled
+in production to prevent accidental key rotation, which would render all
+previously encrypted API keys unreadable. If the key is lost or changed,
+all stored encrypted credentials (exchange API keys, webhook URLs, etc.)
+will become permanently inaccessible.
 """
 
 import os
@@ -9,14 +17,36 @@ from pathlib import Path
 
 from cryptography.fernet import Fernet, InvalidToken
 
+from src.utils.logger import get_logger
+
+_encryption_logger = get_logger(__name__)
+
 
 def _get_or_create_key() -> bytes:
-    """Get encryption key from env or generate and persist one."""
+    """Get encryption key from env or generate and persist one.
+
+    In production (ENVIRONMENT=production), the ENCRYPTION_KEY must be
+    explicitly provided. Auto-generation is only allowed in development.
+    """
     key = os.getenv("ENCRYPTION_KEY")
     if key:
         return key.encode()
 
-    # Auto-generate and append to .env
+    environment = os.getenv("ENVIRONMENT", "development").lower()
+
+    if environment == "production":
+        raise RuntimeError(
+            "FATAL: ENCRYPTION_KEY environment variable is not set and "
+            "auto-generation is disabled in production mode. "
+            "Generate one with: python -c \"from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())\" "
+            "Then add ENCRYPTION_KEY=<key> to your environment."
+        )
+
+    # Auto-generate and append to .env (development only)
+    _encryption_logger.warning(
+        "ENCRYPTION_KEY not set — auto-generating for development. "
+        "Set ENCRYPTION_KEY explicitly for production use."
+    )
     new_key = Fernet.generate_key()
     env_path = Path(".env")
     if env_path.exists():

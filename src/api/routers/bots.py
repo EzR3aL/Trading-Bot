@@ -7,9 +7,10 @@ Replaces the old bot_control router for the new multibot system.
 
 import json
 from datetime import datetime, timedelta
+from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import case, cast, Date, func, select
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.schemas.bots import (
@@ -25,6 +26,7 @@ from src.auth.dependencies import get_current_user
 from src.models.database import BotConfig, TradeRecord, User
 from src.models.session import get_db
 from src.strategy.base import StrategyRegistry
+from src.api.routers.auth import limiter
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -51,6 +53,24 @@ def _get_orchestrator():
 
 def _config_to_response(config: BotConfig) -> BotConfigResponse:
     """Convert a BotConfig ORM object to a response schema."""
+    try:
+        trading_pairs = json.loads(config.trading_pairs) if config.trading_pairs else []
+    except (json.JSONDecodeError, TypeError) as e:
+        logger.warning(f"Failed to parse trading_pairs for bot {config.id}: {e}")
+        trading_pairs = []
+
+    try:
+        strategy_params = json.loads(config.strategy_params) if config.strategy_params else None
+    except (json.JSONDecodeError, TypeError) as e:
+        logger.warning(f"Failed to parse strategy_params for bot {config.id}: {e}")
+        strategy_params = None
+
+    try:
+        schedule_config = json.loads(config.schedule_config) if config.schedule_config else None
+    except (json.JSONDecodeError, TypeError) as e:
+        logger.warning(f"Failed to parse schedule_config for bot {config.id}: {e}")
+        schedule_config = None
+
     return BotConfigResponse(
         id=config.id,
         name=config.name,
@@ -58,16 +78,16 @@ def _config_to_response(config: BotConfig) -> BotConfigResponse:
         strategy_type=config.strategy_type,
         exchange_type=config.exchange_type,
         mode=config.mode,
-        trading_pairs=json.loads(config.trading_pairs) if config.trading_pairs else [],
+        trading_pairs=trading_pairs,
         leverage=config.leverage,
         position_size_percent=config.position_size_percent,
         max_trades_per_day=config.max_trades_per_day,
         take_profit_percent=config.take_profit_percent,
         stop_loss_percent=config.stop_loss_percent,
         daily_loss_limit_percent=config.daily_loss_limit_percent,
-        strategy_params=json.loads(config.strategy_params) if config.strategy_params else None,
+        strategy_params=strategy_params,
         schedule_type=config.schedule_type,
-        schedule_config=json.loads(config.schedule_config) if config.schedule_config else None,
+        schedule_config=schedule_config,
         is_enabled=config.is_enabled,
         created_at=config.created_at.isoformat() if config.created_at else None,
         updated_at=config.updated_at.isoformat() if config.updated_at else None,
@@ -91,7 +111,9 @@ async def list_strategies(user: User = Depends(get_current_user)):
 # ─── CRUD ─────────────────────────────────────────────────────
 
 @router.post("", response_model=BotConfigResponse)
+@limiter.limit("10/minute")
 async def create_bot(
+    request: Request,
     body: BotConfigCreate,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -139,13 +161,20 @@ async def create_bot(
 
 @router.get("", response_model=BotListResponse)
 async def list_bots(
+    demo_mode: Optional[bool] = Query(None),
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """List all bots for the current user with runtime status."""
-    result = await db.execute(
-        select(BotConfig).where(BotConfig.user_id == user.id).order_by(BotConfig.created_at.desc())
-    )
+    # Filter bots by mode when demo_mode is set
+    bot_query = select(BotConfig).where(BotConfig.user_id == user.id)
+    if demo_mode is True:
+        bot_query = bot_query.where(BotConfig.mode.in_(["demo", "both"]))
+    elif demo_mode is False:
+        bot_query = bot_query.where(BotConfig.mode.in_(["live", "both"]))
+    bot_query = bot_query.order_by(BotConfig.created_at.desc())
+
+    result = await db.execute(bot_query)
     configs = result.scalars().all()
 
     orchestrator = _get_orchestrator()
@@ -156,32 +185,42 @@ async def list_bots(
         runtime = orchestrator.get_bot_status(config.id)
         trading_pairs = json.loads(config.trading_pairs) if config.trading_pairs else []
 
-        # Get trade stats from DB
+        # Get trade stats from DB (filtered by demo_mode)
+        trade_filters = [TradeRecord.bot_config_id == config.id]
+        if demo_mode is not None:
+            trade_filters.append(TradeRecord.demo_mode == demo_mode)
+
         stats_result = await db.execute(
             select(
                 func.count(TradeRecord.id),
                 func.coalesce(func.sum(TradeRecord.pnl), 0),
-            ).where(
-                TradeRecord.bot_config_id == config.id,
-            )
+            ).where(*trade_filters)
         )
         total_trades, total_pnl = stats_result.one()
 
+        open_filters = [
+            TradeRecord.bot_config_id == config.id,
+            TradeRecord.status == "open",
+        ]
+        if demo_mode is not None:
+            open_filters.append(TradeRecord.demo_mode == demo_mode)
+
         open_result = await db.execute(
-            select(func.count(TradeRecord.id)).where(
-                TradeRecord.bot_config_id == config.id,
-                TradeRecord.status == "open",
-            )
+            select(func.count(TradeRecord.id)).where(*open_filters)
         )
         open_trades = open_result.scalar()
 
         # LLM-specific metrics
         llm_data = {}
         if config.strategy_type == "llm_signal":
-            # Get last trade for latest signal info
+            # Get last trade for latest signal info (filtered)
+            last_trade_filters = [TradeRecord.bot_config_id == config.id]
+            if demo_mode is not None:
+                last_trade_filters.append(TradeRecord.demo_mode == demo_mode)
+
             last_trade_result = await db.execute(
                 select(TradeRecord)
-                .where(TradeRecord.bot_config_id == config.id)
+                .where(*last_trade_filters)
                 .order_by(TradeRecord.entry_time.desc())
                 .limit(1)
             )
@@ -195,10 +234,17 @@ async def list_bots(
                         metrics = json.loads(last_trade.metrics_snapshot)
                         llm_data["llm_last_reasoning"] = metrics.get("llm_reasoning", "")[:200]
                         llm_data["llm_provider"] = metrics.get("llm_provider")
-                    except (json.JSONDecodeError, TypeError):
-                        pass
+                    except (json.JSONDecodeError, TypeError) as e:
+                        logger.warning(f"Failed to parse metrics_snapshot for trade #{last_trade.id}: {e}")
 
-            # Accuracy = winning / total closed trades
+            # Accuracy = winning / total closed trades (filtered)
+            closed_filters = [
+                TradeRecord.bot_config_id == config.id,
+                TradeRecord.status == "closed",
+            ]
+            if demo_mode is not None:
+                closed_filters.append(TradeRecord.demo_mode == demo_mode)
+
             closed_result = await db.execute(
                 select(
                     func.count(TradeRecord.id),
@@ -208,10 +254,7 @@ async def list_bots(
                             else_=0,
                         )
                     ),
-                ).where(
-                    TradeRecord.bot_config_id == config.id,
-                    TradeRecord.status == "closed",
-                )
+                ).where(*closed_filters)
             )
             closed_total, winners = closed_result.one()
             if closed_total and closed_total > 0:
@@ -220,13 +263,17 @@ async def list_bots(
                 )
             llm_data["llm_total_predictions"] = total_trades
 
-            # Aggregate token usage from metrics_snapshot
+            # Aggregate token usage from metrics_snapshot (filtered)
             try:
+                snapshot_filters = [
+                    TradeRecord.bot_config_id == config.id,
+                    TradeRecord.metrics_snapshot.isnot(None),
+                ]
+                if demo_mode is not None:
+                    snapshot_filters.append(TradeRecord.demo_mode == demo_mode)
+
                 snapshots_result = await db.execute(
-                    select(TradeRecord.metrics_snapshot).where(
-                        TradeRecord.bot_config_id == config.id,
-                        TradeRecord.metrics_snapshot.isnot(None),
-                    )
+                    select(TradeRecord.metrics_snapshot).where(*snapshot_filters)
                 )
                 total_tokens = 0
                 token_count = 0
@@ -237,23 +284,23 @@ async def list_bots(
                         if tokens and tokens > 0:
                             total_tokens += tokens
                             token_count += 1
-                    except (json.JSONDecodeError, TypeError):
-                        pass
+                    except (json.JSONDecodeError, TypeError) as e:
+                        logger.debug(f"Failed to parse metrics_snapshot JSON: {e}")
                 if token_count > 0:
                     llm_data["llm_total_tokens_used"] = total_tokens
                     llm_data["llm_avg_tokens_per_call"] = round(
                         total_tokens / token_count, 1
                     )
-            except Exception:
-                pass  # Non-critical — don't break bot listing
+            except Exception as e:
+                logger.warning(f"Failed to aggregate LLM token usage for bot {config.id}: {e}")
 
             # Get provider from strategy_params
             if not llm_data.get("llm_provider") and config.strategy_params:
                 try:
                     sp = json.loads(config.strategy_params)
                     llm_data["llm_provider"] = sp.get("llm_provider")
-                except (json.JSONDecodeError, TypeError):
-                    pass
+                except (json.JSONDecodeError, TypeError) as e:
+                    logger.warning(f"Failed to parse strategy_params for bot {config.id}: {e}")
 
         bots.append(BotRuntimeStatus(
             bot_config_id=config.id,
@@ -366,7 +413,9 @@ async def delete_bot(
 # ─── Lifecycle ────────────────────────────────────────────────
 
 @router.post("/{bot_id}/start")
+@limiter.limit("20/minute")
 async def start_bot(
+    request: Request,
     bot_id: int,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -394,7 +443,9 @@ async def start_bot(
 
 
 @router.post("/{bot_id}/stop")
+@limiter.limit("20/minute")
 async def stop_bot(
+    request: Request,
     bot_id: int,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -420,7 +471,9 @@ async def stop_bot(
 
 
 @router.post("/{bot_id}/restart")
+@limiter.limit("20/minute")
 async def restart_bot(
+    request: Request,
     bot_id: int,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -460,6 +513,7 @@ async def stop_all_bots(user: User = Depends(get_current_user)):
 async def get_bot_statistics(
     bot_id: int,
     days: int = Query(default=30, ge=1, le=365),
+    demo_mode: Optional[bool] = Query(None),
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -474,20 +528,26 @@ async def get_bot_statistics(
     since = datetime.utcnow() - timedelta(days=days)
 
     # Daily PnL series (cumulative)
+    daily_filters = [
+        TradeRecord.bot_config_id == bot_id,
+        TradeRecord.status == "closed",
+        TradeRecord.exit_time >= since,
+    ]
+    if demo_mode is not None:
+        daily_filters.append(TradeRecord.demo_mode == demo_mode)
+
     daily_result = await db.execute(
         select(
-            cast(TradeRecord.exit_time, Date).label("date"),
+            func.date(TradeRecord.exit_time).label("date"),
             func.sum(TradeRecord.pnl).label("pnl"),
             func.count(TradeRecord.id).label("trades"),
             func.sum(case((TradeRecord.pnl > 0, 1), else_=0)).label("wins"),
         ).where(
-            TradeRecord.bot_config_id == bot_id,
-            TradeRecord.status == "closed",
-            TradeRecord.exit_time >= since,
+            *daily_filters
         ).group_by(
-            cast(TradeRecord.exit_time, Date)
+            func.date(TradeRecord.exit_time)
         ).order_by(
-            cast(TradeRecord.exit_time, Date)
+            func.date(TradeRecord.exit_time)
         )
     )
     daily_rows = daily_result.all()
@@ -497,7 +557,7 @@ async def get_bot_statistics(
     for row in daily_rows:
         cumulative += float(row.pnl or 0)
         daily_series.append({
-            "date": row.date.isoformat() if row.date else None,
+            "date": str(row.date) if row.date else None,
             "pnl": round(float(row.pnl or 0), 2),
             "cumulative_pnl": round(cumulative, 2),
             "trades": row.trades,
@@ -505,6 +565,13 @@ async def get_bot_statistics(
         })
 
     # Overall stats
+    overall_filters = [
+        TradeRecord.bot_config_id == bot_id,
+        TradeRecord.status == "closed",
+    ]
+    if demo_mode is not None:
+        overall_filters.append(TradeRecord.demo_mode == demo_mode)
+
     overall_result = await db.execute(
         select(
             func.count(TradeRecord.id).label("total"),
@@ -515,10 +582,7 @@ async def get_bot_statistics(
             func.avg(TradeRecord.pnl).label("avg_pnl"),
             func.max(TradeRecord.pnl).label("best_trade"),
             func.min(TradeRecord.pnl).label("worst_trade"),
-        ).where(
-            TradeRecord.bot_config_id == bot_id,
-            TradeRecord.status == "closed",
-        )
+        ).where(*overall_filters)
     )
     stats = overall_result.one()
 
@@ -527,9 +591,13 @@ async def get_bot_statistics(
     win_rate = round((wins / total) * 100, 1) if total > 0 else 0.0
 
     # Recent trades
+    recent_filters = [TradeRecord.bot_config_id == bot_id]
+    if demo_mode is not None:
+        recent_filters.append(TradeRecord.demo_mode == demo_mode)
+
     recent_result = await db.execute(
         select(TradeRecord).where(
-            TradeRecord.bot_config_id == bot_id,
+            *recent_filters
         ).order_by(TradeRecord.entry_time.desc()).limit(20)
     )
     recent_trades = []
@@ -576,31 +644,43 @@ async def get_bot_statistics(
 @router.get("/compare/performance")
 async def compare_bots_performance(
     days: int = Query(default=30, ge=1, le=365),
+    demo_mode: Optional[bool] = Query(None),
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """Get comparative performance data for all bots (for multi-line chart)."""
-    configs_result = await db.execute(
-        select(BotConfig).where(BotConfig.user_id == user.id).order_by(BotConfig.created_at)
-    )
+    bot_query = select(BotConfig).where(BotConfig.user_id == user.id)
+    if demo_mode is True:
+        bot_query = bot_query.where(BotConfig.mode.in_(["demo", "both"]))
+    elif demo_mode is False:
+        bot_query = bot_query.where(BotConfig.mode.in_(["live", "both"]))
+    bot_query = bot_query.order_by(BotConfig.created_at)
+
+    configs_result = await db.execute(bot_query)
     configs = configs_result.scalars().all()
 
     since = datetime.utcnow() - timedelta(days=days)
     bots_data = []
 
     for config in configs:
+        compare_daily_filters = [
+            TradeRecord.bot_config_id == config.id,
+            TradeRecord.status == "closed",
+            TradeRecord.exit_time >= since,
+        ]
+        if demo_mode is not None:
+            compare_daily_filters.append(TradeRecord.demo_mode == demo_mode)
+
         daily_result = await db.execute(
             select(
-                cast(TradeRecord.exit_time, Date).label("date"),
+                func.date(TradeRecord.exit_time).label("date"),
                 func.sum(TradeRecord.pnl).label("pnl"),
             ).where(
-                TradeRecord.bot_config_id == config.id,
-                TradeRecord.status == "closed",
-                TradeRecord.exit_time >= since,
+                *compare_daily_filters
             ).group_by(
-                cast(TradeRecord.exit_time, Date)
+                func.date(TradeRecord.exit_time)
             ).order_by(
-                cast(TradeRecord.exit_time, Date)
+                func.date(TradeRecord.exit_time)
             )
         )
 
@@ -609,29 +689,37 @@ async def compare_bots_performance(
         for row in daily_result.all():
             cumulative += float(row.pnl or 0)
             series.append({
-                "date": row.date.isoformat() if row.date else None,
+                "date": str(row.date) if row.date else None,
                 "cumulative_pnl": round(cumulative, 2),
             })
 
         # Overall stats for the summary table
+        compare_stats_filters = [
+            TradeRecord.bot_config_id == config.id,
+            TradeRecord.status == "closed",
+        ]
+        if demo_mode is not None:
+            compare_stats_filters.append(TradeRecord.demo_mode == demo_mode)
+
         stats_result = await db.execute(
             select(
                 func.count(TradeRecord.id).label("total"),
                 func.coalesce(func.sum(TradeRecord.pnl), 0).label("pnl"),
                 func.sum(case((TradeRecord.pnl > 0, 1), else_=0)).label("wins"),
-            ).where(
-                TradeRecord.bot_config_id == config.id,
-                TradeRecord.status == "closed",
-            )
+            ).where(*compare_stats_filters)
         )
         stats = stats_result.one()
         total = stats.total or 0
         wins = int(stats.wins or 0)
 
-        # Last trade for direction/confidence
+        # Last trade for direction/confidence (filtered)
+        last_trade_filters = [TradeRecord.bot_config_id == config.id]
+        if demo_mode is not None:
+            last_trade_filters.append(TradeRecord.demo_mode == demo_mode)
+
         last_result = await db.execute(
             select(TradeRecord).where(
-                TradeRecord.bot_config_id == config.id,
+                *last_trade_filters
             ).order_by(TradeRecord.entry_time.desc()).limit(1)
         )
         last_trade = last_result.scalar_one_or_none()

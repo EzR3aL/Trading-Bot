@@ -4,7 +4,7 @@ from collections import defaultdict
 from datetime import datetime
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -14,6 +14,7 @@ from src.exchanges.factory import create_exchange_client
 from src.models.database import BotConfig, ExchangeConnection, TradeRecord, User, UserConfig
 from src.models.session import get_db
 from src.utils.encryption import decrypt_value
+from src.api.routers.auth import limiter
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -26,6 +27,7 @@ async def list_trades(
     status: Optional[str] = Query(None, pattern="^(open|closed|cancelled)$"),
     symbol: Optional[str] = None,
     exchange: Optional[str] = None,
+    demo_mode: Optional[bool] = Query(None),
     page: int = Query(1, ge=1),
     per_page: int = Query(50, ge=1, le=200),
     user: User = Depends(get_current_user),
@@ -44,6 +46,8 @@ async def list_trades(
         query = query.where(TradeRecord.symbol == symbol)
     if exchange:
         query = query.where(TradeRecord.exchange == exchange)
+    if demo_mode is not None:
+        query = query.where(TradeRecord.demo_mode == demo_mode)
 
     # Count total
     count_base = select(TradeRecord.id).where(TradeRecord.user_id == user.id)
@@ -53,6 +57,8 @@ async def list_trades(
         count_base = count_base.where(TradeRecord.symbol == symbol)
     if exchange:
         count_base = count_base.where(TradeRecord.exchange == exchange)
+    if demo_mode is not None:
+        count_base = count_base.where(TradeRecord.demo_mode == demo_mode)
     count_query = select(func.count()).select_from(count_base.subquery())
     total = (await db.execute(count_query)).scalar() or 0
 
@@ -99,7 +105,9 @@ async def list_trades(
 
 
 @router.post("/sync")
+@limiter.limit("5/minute")
 async def sync_trades(
+    request: Request,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import api from '../api/client'
 import type { Preset } from '../types'
+import { ExchangeIcon } from '../components/ui/ExchangeLogo'
 
 export default function Presets() {
   const { t } = useTranslation()
@@ -120,6 +121,7 @@ export default function Presets() {
                   <option value="bitget">Bitget</option>
                   <option value="weex">Weex</option>
                   <option value="hyperliquid">Hyperliquid</option>
+                  {/* Logos shown in preset cards, not in native <option> */}
                 </select>
               </div>
             </div>
@@ -176,8 +178,8 @@ export default function Presets() {
               <div>
                 <div className="flex items-center gap-2">
                   <span className="text-white font-medium">{preset.name}</span>
-                  <span className="text-xs text-gray-400 bg-gray-800 px-2 py-0.5 rounded">
-                    {preset.exchange_type}
+                  <span className="text-xs text-gray-400 bg-gray-800 px-2 py-0.5 rounded inline-flex items-center gap-1">
+                    <ExchangeIcon exchange={preset.exchange_type} size={14} />
                   </span>
                   {preset.is_active && (
                     <span className="text-xs text-primary-400 bg-primary-900/30 px-2 py-0.5 rounded font-medium">

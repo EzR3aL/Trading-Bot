@@ -1,7 +1,11 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import api from '../api/client'
+import { useFilterStore } from '../stores/filterStore'
+import { useToastStore } from '../stores/toastStore'
+import { ExchangeIcon } from '../components/ui/ExchangeLogo'
 import BotBuilder from '../components/bots/BotBuilder'
+import { SkeletonBotCard } from '../components/ui/Skeleton'
 import {
   Plus,
   Play,
@@ -30,7 +34,6 @@ interface BotStatus {
   total_trades: number
   total_pnl: number
   open_trades: number
-  // LLM-specific
   llm_provider?: string | null
   llm_last_direction?: string | null
   llm_last_confidence?: number | null
@@ -39,40 +42,62 @@ interface BotStatus {
   llm_total_predictions?: number | null
 }
 
-const STATUS_COLORS: Record<string, string> = {
-  running: 'text-green-400',
-  stopped: 'text-gray-400',
-  idle: 'text-gray-500',
-  error: 'text-red-400',
-  starting: 'text-yellow-400',
+const STATUS_STYLES: Record<string, { text: string; card: string; dot: string }> = {
+  running: {
+    text: 'text-emerald-400',
+    card: 'border-emerald-500/20 hover:border-emerald-500/30',
+    dot: 'bg-emerald-500',
+  },
+  stopped: {
+    text: 'text-gray-400',
+    card: 'border-white/5 hover:border-white/10',
+    dot: 'bg-gray-500',
+  },
+  idle: {
+    text: 'text-gray-500',
+    card: 'border-white/5 hover:border-white/10',
+    dot: 'bg-gray-600',
+  },
+  error: {
+    text: 'text-red-400',
+    card: 'border-red-500/20 hover:border-red-500/30',
+    dot: 'bg-red-500',
+  },
+  starting: {
+    text: 'text-amber-400',
+    card: 'border-amber-500/20 hover:border-amber-500/30',
+    dot: 'bg-amber-500',
+  },
 }
 
-const STATUS_BG: Record<string, string> = {
-  running: 'bg-green-900/30 border-green-800',
-  stopped: 'bg-gray-800/50 border-gray-700',
-  idle: 'bg-gray-800/50 border-gray-700',
-  error: 'bg-red-900/30 border-red-800',
-  starting: 'bg-yellow-900/30 border-yellow-800',
+function formatPnl(value: number): string {
+  const prefix = value >= 0 ? '+' : ''
+  return `${prefix}$${value.toFixed(2)}`
 }
 
 export default function Bots() {
   const { t } = useTranslation()
+  const { demoFilter } = useFilterStore()
+  const { addToast } = useToastStore()
   const [bots, setBots] = useState<BotStatus[]>([])
   const [loading, setLoading] = useState(true)
   const [showBuilder, setShowBuilder] = useState(false)
   const [editBotId, setEditBotId] = useState<number | null>(null)
   const [actionLoading, setActionLoading] = useState<number | null>(null)
+  const [error, setError] = useState('')
 
   const fetchBots = useCallback(async () => {
     try {
-      const res = await api.get('/bots')
+      const demoParam = demoFilter === 'demo' ? '?demo_mode=true' : demoFilter === 'live' ? '?demo_mode=false' : ''
+      const res = await api.get(`/bots${demoParam}`)
       setBots(res.data.bots)
+      setError('')
     } catch {
-      // ignore
+      setError(t('common.error'))
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [demoFilter])
 
   useEffect(() => {
     fetchBots()
@@ -85,8 +110,9 @@ export default function Bots() {
     try {
       await api.post(`/bots/${id}/start`)
       await fetchBots()
+      addToast('success', t('bots.start') + ' - OK')
     } catch (err: any) {
-      alert(err.response?.data?.detail || 'Failed to start bot')
+      addToast('error', err.response?.data?.detail || t('bots.failedStart'))
     }
     setActionLoading(null)
   }
@@ -96,8 +122,9 @@ export default function Bots() {
     try {
       await api.post(`/bots/${id}/stop`)
       await fetchBots()
+      addToast('info', t('bots.stop') + ' - OK')
     } catch (err: any) {
-      alert(err.response?.data?.detail || 'Failed to stop bot')
+      addToast('error', err.response?.data?.detail || t('bots.failedStop'))
     }
     setActionLoading(null)
   }
@@ -107,8 +134,9 @@ export default function Bots() {
     try {
       await api.delete(`/bots/${id}`)
       await fetchBots()
+      addToast('success', `${name} deleted`)
     } catch (err: any) {
-      alert(err.response?.data?.detail || 'Failed to delete bot')
+      addToast('error', err.response?.data?.detail || t('bots.failedDelete'))
     }
   }
 
@@ -116,8 +144,9 @@ export default function Bots() {
     try {
       await api.post('/bots/stop-all')
       await fetchBots()
+      addToast('info', t('bots.stopAll') + ' - OK')
     } catch {
-      // ignore
+      addToast('error', t('common.error'))
     }
   }
 
@@ -139,23 +168,27 @@ export default function Bots() {
     )
   }
 
+  const getStatusStyle = (status: string) => STATUS_STYLES[status] || STATUS_STYLES.idle
+
   return (
-    <div>
+    <div className="animate-in">
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-white">{t('bots.title')}</h1>
+        <h1 className="text-2xl font-bold text-white tracking-tight">{t('bots.title')}</h1>
         <div className="flex gap-2">
           {runningCount > 1 && (
             <button
               onClick={handleStopAll}
-              className="px-3 py-2 text-sm bg-red-900/50 text-red-400 rounded hover:bg-red-900 transition-colors"
+              aria-label={t('bots.stopAll')}
+              className="px-4 py-2 text-sm bg-red-500/10 text-red-400 rounded-xl border border-red-500/10 hover:bg-red-500/20 transition-all duration-200 font-medium"
             >
               {t('bots.stopAll')} ({runningCount})
             </button>
           )}
           <button
             onClick={() => setShowBuilder(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded font-medium hover:bg-primary-700 transition-colors"
+            aria-label={t('bots.newBot')}
+            className="btn-gradient flex items-center gap-2"
           >
             <Plus size={18} />
             {t('bots.newBot')}
@@ -163,14 +196,25 @@ export default function Bots() {
         </div>
       </div>
 
+      {/* Error */}
+      {error && (
+        <div className="mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-sm">
+          {error}
+        </div>
+      )}
+
       {/* Loading */}
       {loading && (
-        <div className="text-gray-400 text-center py-12">{t('common.loading')}</div>
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <SkeletonBotCard key={i} />
+          ))}
+        </div>
       )}
 
       {/* Empty state */}
       {!loading && bots.length === 0 && (
-        <div className="text-center py-16">
+        <div className="glass-card rounded-xl text-center py-16">
           <Activity className="mx-auto mb-4 text-gray-600" size={48} />
           <p className="text-gray-400">{t('bots.noBots')}</p>
         </div>
@@ -179,193 +223,193 @@ export default function Bots() {
       {/* Bot Grid */}
       {!loading && bots.length > 0 && (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-          {bots.map((bot) => (
-            <div
-              key={bot.bot_config_id}
-              className={`rounded-lg border p-4 ${STATUS_BG[bot.status] || STATUS_BG.idle}`}
-            >
-              {/* Header row */}
-              <div className="flex items-start justify-between mb-3">
-                <div>
-                  <h3 className="text-white font-semibold text-lg">{bot.name}</h3>
-                  <div className="flex items-center gap-2 mt-1">
-                    <span className="text-xs px-2 py-0.5 bg-gray-800 text-gray-300 rounded">
-                      {bot.exchange_type}
-                    </span>
-                    <span className={`text-xs px-2 py-0.5 rounded ${
-                      bot.mode === 'demo' ? 'bg-blue-900/50 text-blue-400' :
-                      bot.mode === 'live' ? 'bg-orange-900/50 text-orange-400' :
-                      'bg-purple-900/50 text-purple-400'
-                    }`}>
-                      {bot.mode}
-                    </span>
-                    <span className="text-xs text-gray-500">{bot.strategy_type}</span>
-                  </div>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  {bot.status === 'running' && (
-                    <span className="relative flex h-2.5 w-2.5">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-                      <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-green-500"></span>
-                    </span>
-                  )}
-                  <span className={`text-sm font-medium ${STATUS_COLORS[bot.status] || 'text-gray-400'}`}>
-                    {t(`bots.${bot.status}`)}
-                  </span>
-                </div>
-              </div>
-
-              {/* Pairs */}
-              <div className="flex flex-wrap gap-1 mb-3">
-                {bot.trading_pairs.map(pair => (
-                  <span key={pair} className="text-xs px-1.5 py-0.5 bg-gray-800/80 text-gray-300 rounded">
-                    {pair}
-                  </span>
-                ))}
-              </div>
-
-              {/* Stats row */}
-              <div className="grid grid-cols-3 gap-2 mb-3 text-center">
-                <div>
-                  <div className="text-xs text-gray-500">{t('bots.totalPnl')}</div>
-                  <div className={`text-sm font-mono ${bot.total_pnl >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                    ${bot.total_pnl.toFixed(2)}
-                  </div>
-                </div>
-                <div>
-                  <div className="text-xs text-gray-500">{t('bots.trades')}</div>
-                  <div className="text-sm text-white">{bot.total_trades}</div>
-                </div>
-                <div>
-                  <div className="text-xs text-gray-500">{t('bots.openTrades')}</div>
-                  <div className="text-sm text-white">{bot.open_trades}</div>
-                </div>
-              </div>
-
-              {/* LLM Metrics */}
-              {bot.strategy_type === 'llm_signal' && (
-                <div className="mb-3 pt-2 border-t border-gray-700/50 space-y-2">
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="text-gray-500">{t('bots.llmLastSignal')}</span>
-                    <div className="flex items-center gap-2">
-                      {bot.llm_last_direction && (
-                        <span className={`font-semibold ${bot.llm_last_direction === 'LONG' ? 'text-green-400' : 'text-red-400'}`}>
-                          {bot.llm_last_direction}
-                        </span>
-                      )}
-                      {bot.llm_provider && (
-                        <span className="text-gray-600">{bot.llm_provider}</span>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Confidence bar */}
-                  {bot.llm_last_confidence != null && (
-                    <div>
-                      <div className="flex items-center justify-between text-xs mb-1">
-                        <span className="text-gray-500">{t('bots.confidence')}</span>
-                        <span className="text-gray-300">{bot.llm_last_confidence}%</span>
-                      </div>
-                      <div className="w-full bg-gray-800 rounded-full h-1.5">
-                        <div
-                          className={`h-1.5 rounded-full transition-all ${
-                            bot.llm_last_confidence >= 75 ? 'bg-green-500' :
-                            bot.llm_last_confidence >= 50 ? 'bg-yellow-500' : 'bg-red-500'
-                          }`}
-                          style={{ width: `${bot.llm_last_confidence}%` }}
-                        />
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Accuracy & Predictions */}
-                  <div className="flex gap-4 text-xs">
-                    <div>
-                      <span className="text-gray-500">{t('bots.accuracy')}: </span>
-                      <span className="text-white font-medium">
-                        {bot.llm_accuracy != null ? `${bot.llm_accuracy.toFixed(1)}%` : 'N/A'}
+          {bots.map((bot) => {
+            const style = getStatusStyle(bot.status)
+            return (
+              <div
+                key={bot.bot_config_id}
+                className={`glass-card rounded-xl p-5 border transition-all duration-300 ${style.card}`}
+              >
+                {/* Header row */}
+                <div className="flex items-start justify-between mb-3">
+                  <div>
+                    <h3 className="text-white font-semibold text-lg">{bot.name}</h3>
+                    <div className="flex items-center gap-2 mt-1.5">
+                      <span className="badge-neutral text-[10px] inline-flex items-center gap-1">
+                        <ExchangeIcon exchange={bot.exchange_type} size={14} />
                       </span>
-                    </div>
-                    <div>
-                      <span className="text-gray-500">{t('bots.predictions')}: </span>
-                      <span className="text-white font-medium">{bot.llm_total_predictions || 0}</span>
+                      <span className={bot.mode === 'demo' ? 'badge-demo text-[10px]' : bot.mode === 'live' ? 'badge-live text-[10px]' : 'badge-open text-[10px]'}>
+                        {bot.mode}
+                      </span>
+                      <span className="text-[10px] text-gray-500">{bot.strategy_type}</span>
                     </div>
                   </div>
-
-                  {/* AI Reasoning (expandable) */}
-                  {bot.llm_last_reasoning && (
-                    <details className="text-xs">
-                      <summary className="text-gray-400 cursor-pointer hover:text-gray-300">
-                        {t('bots.viewReasoning')}
-                      </summary>
-                      <p className="text-gray-500 mt-1 italic leading-relaxed">
-                        &ldquo;{bot.llm_last_reasoning}&rdquo;
-                      </p>
-                    </details>
-                  )}
-                </div>
-              )}
-
-              {/* Error message */}
-              {bot.error_message && (
-                <div className="flex items-center gap-1 mb-3 text-xs text-red-400">
-                  <AlertCircle size={12} />
-                  <span className="truncate">{bot.error_message}</span>
-                </div>
-              )}
-
-              {/* Last analysis */}
-              {bot.last_analysis && (
-                <div className="flex items-center gap-1 mb-3 text-xs text-gray-500">
-                  <Clock size={12} />
-                  {t('bots.lastAnalysis')}: {new Date(bot.last_analysis).toLocaleTimeString()}
-                </div>
-              )}
-
-              {/* Actions */}
-              <div className="flex items-center gap-2 pt-2 border-t border-gray-700/50">
-                {bot.status === 'running' ? (
-                  <button
-                    onClick={() => handleStop(bot.bot_config_id)}
-                    disabled={actionLoading === bot.bot_config_id}
-                    className="flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 text-sm bg-red-900/50 text-red-400 rounded hover:bg-red-900 disabled:opacity-50 transition-colors"
-                  >
-                    <Square size={14} />
-                    {t('bots.stop')}
-                  </button>
-                ) : (
-                  <button
-                    onClick={() => handleStart(bot.bot_config_id)}
-                    disabled={actionLoading === bot.bot_config_id}
-                    className="flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 text-sm bg-green-900/50 text-green-400 rounded hover:bg-green-900 disabled:opacity-50 transition-colors"
-                  >
-                    {actionLoading === bot.bot_config_id ? (
-                      <RefreshCw size={14} className="animate-spin" />
-                    ) : (
-                      <Play size={14} />
+                  <div className="flex items-center gap-1.5">
+                    {bot.status === 'running' && (
+                      <span className="relative flex h-2.5 w-2.5">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+                      </span>
                     )}
-                    {t('bots.start')}
-                  </button>
+                    <span className={`text-sm font-medium ${style.text}`}>
+                      {t(`bots.${bot.status}`)}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Pairs */}
+                <div className="flex flex-wrap gap-1 mb-3">
+                  {bot.trading_pairs.map(pair => (
+                    <span key={pair} className="text-[10px] px-1.5 py-0.5 bg-white/5 text-gray-300 rounded-md border border-white/5">
+                      {pair}
+                    </span>
+                  ))}
+                </div>
+
+                {/* Stats row */}
+                <div className="grid grid-cols-3 gap-2 mb-3 text-center">
+                  <div>
+                    <div className="text-[10px] text-gray-500 uppercase tracking-wider">{t('bots.totalPnl')}</div>
+                    <div className={`text-sm font-mono font-medium ${bot.total_pnl >= 0 ? 'text-profit' : 'text-loss'}`}>
+                      {formatPnl(bot.total_pnl)}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-[10px] text-gray-500 uppercase tracking-wider">{t('bots.trades')}</div>
+                    <div className="text-sm text-white font-medium">{bot.total_trades}</div>
+                  </div>
+                  <div>
+                    <div className="text-[10px] text-gray-500 uppercase tracking-wider">{t('bots.openTrades')}</div>
+                    <div className="text-sm text-white font-medium">{bot.open_trades}</div>
+                  </div>
+                </div>
+
+                {/* LLM Metrics */}
+                {bot.strategy_type === 'llm_signal' && (
+                  <div className="mb-3 pt-3 border-t border-white/5 space-y-2">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-gray-500">{t('bots.llmLastSignal')}</span>
+                      <div className="flex items-center gap-2">
+                        {bot.llm_last_direction && (
+                          <span className={`font-semibold ${bot.llm_last_direction === 'LONG' ? 'text-profit' : 'text-loss'}`}>
+                            {bot.llm_last_direction === 'LONG' ? '+' : '-'} {bot.llm_last_direction}
+                          </span>
+                        )}
+                        {bot.llm_provider && (
+                          <span className="text-gray-600">{bot.llm_provider}</span>
+                        )}
+                      </div>
+                    </div>
+
+                    {bot.llm_last_confidence != null && (
+                      <div>
+                        <div className="flex items-center justify-between text-xs mb-1">
+                          <span className="text-gray-500">{t('bots.confidence')}</span>
+                          <span className="text-gray-300">{bot.llm_last_confidence}%</span>
+                        </div>
+                        <div className="w-full bg-white/5 rounded-full h-1.5">
+                          <div
+                            className={`h-1.5 rounded-full transition-all ${
+                              bot.llm_last_confidence >= 75 ? 'bg-emerald-500' :
+                              bot.llm_last_confidence >= 50 ? 'bg-amber-500' : 'bg-red-500'
+                            }`}
+                            style={{ width: `${bot.llm_last_confidence}%` }}
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="flex gap-4 text-xs">
+                      <div>
+                        <span className="text-gray-500">{t('bots.accuracy')}: </span>
+                        <span className="text-white font-medium">
+                          {bot.llm_accuracy != null ? `${bot.llm_accuracy.toFixed(1)}%` : 'N/A'}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-gray-500">{t('bots.predictions')}: </span>
+                        <span className="text-white font-medium">{bot.llm_total_predictions || 0}</span>
+                      </div>
+                    </div>
+
+                    {bot.llm_last_reasoning && (
+                      <details className="text-xs">
+                        <summary className="text-gray-400 cursor-pointer hover:text-gray-300 transition-colors">
+                          {t('bots.viewReasoning')}
+                        </summary>
+                        <p className="text-gray-500 mt-1 italic leading-relaxed p-2 bg-white/5 rounded-lg mt-1.5">
+                          &ldquo;{bot.llm_last_reasoning}&rdquo;
+                        </p>
+                      </details>
+                    )}
+                  </div>
                 )}
-                <button
-                  onClick={() => setEditBotId(bot.bot_config_id)}
-                  disabled={bot.status === 'running'}
-                  className="p-1.5 text-gray-400 hover:text-white disabled:opacity-30 transition-colors"
-                  title={t('bots.edit')}
-                >
-                  <Pencil size={14} />
-                </button>
-                <button
-                  onClick={() => handleDelete(bot.bot_config_id, bot.name)}
-                  disabled={bot.status === 'running'}
-                  className="p-1.5 text-gray-400 hover:text-red-400 disabled:opacity-30 transition-colors"
-                  title={t('bots.delete')}
-                >
-                  <Trash2 size={14} />
-                </button>
+
+                {/* Error message */}
+                {bot.error_message && (
+                  <div className="flex items-center gap-1.5 mb-3 text-xs text-red-400 bg-red-500/5 rounded-lg px-2 py-1.5">
+                    <AlertCircle size={12} />
+                    <span className="truncate">{bot.error_message}</span>
+                  </div>
+                )}
+
+                {/* Last analysis */}
+                {bot.last_analysis && (
+                  <div className="flex items-center gap-1 mb-3 text-xs text-gray-500">
+                    <Clock size={12} />
+                    {t('bots.lastAnalysis')}: {new Date(bot.last_analysis).toLocaleTimeString()}
+                  </div>
+                )}
+
+                {/* Actions */}
+                <div className="flex items-center gap-2 pt-3 border-t border-white/5">
+                  {bot.status === 'running' ? (
+                    <button
+                      onClick={() => handleStop(bot.bot_config_id)}
+                      disabled={actionLoading === bot.bot_config_id}
+                      aria-label={`${t('bots.stop')} ${bot.name}`}
+                      className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 text-sm bg-red-500/10 text-red-400 rounded-xl border border-red-500/10 hover:bg-red-500/20 disabled:opacity-50 transition-all duration-200"
+                    >
+                      <Square size={14} />
+                      {t('bots.stop')}
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => handleStart(bot.bot_config_id)}
+                      disabled={actionLoading === bot.bot_config_id}
+                      aria-label={`${t('bots.start')} ${bot.name}`}
+                      className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 text-sm bg-emerald-500/10 text-emerald-400 rounded-xl border border-emerald-500/10 hover:bg-emerald-500/20 disabled:opacity-50 transition-all duration-200"
+                    >
+                      {actionLoading === bot.bot_config_id ? (
+                        <RefreshCw size={14} className="animate-spin" />
+                      ) : (
+                        <Play size={14} />
+                      )}
+                      {t('bots.start')}
+                    </button>
+                  )}
+                  <button
+                    onClick={() => setEditBotId(bot.bot_config_id)}
+                    disabled={bot.status === 'running'}
+                    aria-label={`${t('bots.edit')} ${bot.name}`}
+                    className="p-2 text-gray-400 hover:text-white disabled:opacity-30 transition-all duration-200 rounded-lg hover:bg-white/5"
+                    title={t('bots.edit')}
+                  >
+                    <Pencil size={14} />
+                  </button>
+                  <button
+                    onClick={() => handleDelete(bot.bot_config_id, bot.name)}
+                    disabled={bot.status === 'running'}
+                    aria-label={`${t('bots.delete')} ${bot.name}`}
+                    className="p-2 text-gray-400 hover:text-red-400 disabled:opacity-30 transition-all duration-200 rounded-lg hover:bg-red-500/5"
+                    title={t('bots.delete')}
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
               </div>
-            </div>
-          ))}
+            )
+          })}
         </div>
       )}
     </div>

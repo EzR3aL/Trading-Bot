@@ -239,14 +239,15 @@ async def open_test_trade(
                 actual = await client.get_fill_price(trade_symbol, order.order_id)
                 if actual:
                     fill_price = actual
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning(f"Failed to get fill price for {trade_symbol} order {order.order_id}: {e}")
 
         # Send Discord notification
         if config and config.discord_webhook_url:
             try:
                 webhook_url = decrypt_value(config.discord_webhook_url)
-            except (ValueError, Exception):
+            except (ValueError, Exception) as e:
+                logger.warning(f"Failed to decrypt Discord webhook URL: {e}")
                 webhook_url = None
 
             if webhook_url:
@@ -398,8 +399,8 @@ async def close_trade(
         elif close_order and close_order.order_id and hasattr(client, 'get_fill_price'):
             try:
                 exit_price = await client.get_fill_price(trade.symbol, close_order.order_id)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning(f"Failed to get fill price for close order {close_order.order_id}: {e}")
 
         if not exit_price:
             ticker = await client.get_ticker(trade.symbol)
@@ -438,7 +439,8 @@ async def close_trade(
         if config and config.discord_webhook_url:
             try:
                 close_webhook_url = decrypt_value(config.discord_webhook_url)
-            except (ValueError, Exception):
+            except (ValueError, Exception) as e:
+                logger.warning(f"Failed to decrypt Discord webhook URL for trade close: {e}")
                 close_webhook_url = None
 
             if close_webhook_url:

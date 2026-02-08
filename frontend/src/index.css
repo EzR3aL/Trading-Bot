@@ -2,8 +2,282 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ── Base Styles ─────────────────────────────────────────── */
+
 body {
   margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
     'Ubuntu', 'Cantarell', sans-serif;
+  background: linear-gradient(135deg, #0a0e17 0%, #111827 50%, #0f172a 100%);
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ── Glassmorphism Card ──────────────────────────────────── */
+
+@layer components {
+  .glass-card {
+    @apply backdrop-blur-xl border shadow-card;
+    background: linear-gradient(135deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.02) 100%);
+    border-color: rgba(255, 255, 255, 0.08);
+  }
+
+  .glass-card-hover {
+    @apply glass-card transition-all duration-300;
+  }
+
+  .glass-card-hover:hover {
+    background: linear-gradient(135deg, rgba(255,255,255,0.07) 0%, rgba(255,255,255,0.04) 100%);
+    border-color: rgba(255, 255, 255, 0.12);
+    box-shadow: 0 4px 40px rgba(0, 0, 0, 0.4);
+  }
+
+  /* Accent pill button */
+  .pill-btn {
+    @apply px-4 py-1.5 text-sm font-medium rounded-full transition-all duration-200;
+  }
+
+  .pill-btn-active {
+    @apply pill-btn bg-gradient-to-r from-primary-600 to-primary-500 text-white shadow-glow-sm;
+  }
+
+  .pill-btn-inactive {
+    @apply pill-btn text-gray-400 hover:text-white hover:bg-white/5;
+  }
+
+  /* Gradient button */
+  .btn-gradient {
+    @apply px-4 py-2 rounded-xl font-medium text-white transition-all duration-200;
+    background: linear-gradient(135deg, #2563eb 0%, #3b82f6 100%);
+  }
+
+  .btn-gradient:hover {
+    background: linear-gradient(135deg, #1d4ed8 0%, #2563eb 100%);
+    box-shadow: 0 0 20px rgba(37, 99, 235, 0.3);
+  }
+
+  .btn-gradient:disabled {
+    @apply opacity-50 cursor-not-allowed;
+    box-shadow: none;
+  }
+
+  /* Status badge */
+  .badge {
+    @apply px-2.5 py-0.5 rounded-full text-xs font-medium border;
+  }
+
+  .badge-profit {
+    @apply badge bg-emerald-500/10 text-emerald-400 border-emerald-500/20;
+  }
+
+  .badge-loss {
+    @apply badge bg-red-500/10 text-red-400 border-red-500/20;
+  }
+
+  .badge-demo {
+    @apply badge bg-amber-500/10 text-amber-400 border-amber-500/20;
+  }
+
+  .badge-live {
+    @apply badge bg-emerald-500/10 text-emerald-400 border-emerald-500/20;
+  }
+
+  .badge-open {
+    @apply badge bg-blue-500/10 text-blue-400 border-blue-500/20;
+  }
+
+  .badge-neutral {
+    @apply badge bg-white/5 text-gray-400 border-white/10;
+  }
+
+  /* PnL text with indicator */
+  .pnl-positive {
+    @apply text-profit font-medium;
+  }
+
+  .pnl-negative {
+    @apply text-loss font-medium;
+  }
+
+  /* Input styling */
+  .input-dark {
+    @apply w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white
+           placeholder-gray-500 transition-all duration-200
+           focus:border-primary-500/50 focus:bg-white/[0.07] focus:outline-none focus:ring-1 focus:ring-primary-500/30;
+  }
+
+  /* Animate in */
+  .animate-in {
+    animation: fadeIn 0.3s ease-out;
+  }
+}
+
+/* ── Skeleton Animation ──────────────────────────────────── */
+
+.skeleton-pulse {
+  animation: skeletonPulse 1.5s ease-in-out infinite;
+}
+
+@keyframes skeletonPulse {
+  0% {
+    opacity: 0.4;
+  }
+  50% {
+    opacity: 0.8;
+  }
+  100% {
+    opacity: 0.4;
+  }
+}
+
+/* ── Scrollbar Styling ───────────────────────────────────── */
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+/* Firefox */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.1) transparent;
+}
+
+/* ── Table Styling ───────────────────────────────────────── */
+
+.table-premium {
+  @apply w-full text-sm;
+}
+
+.table-premium thead {
+  @apply sticky top-0 z-10;
+  background: rgba(17, 24, 39, 0.95);
+  backdrop-filter: blur(10px);
+}
+
+.table-premium thead th {
+  @apply text-left px-4 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wider border-b border-white/5;
+}
+
+.table-premium tbody tr {
+  @apply border-b border-white/5 transition-colors duration-150;
+}
+
+.table-premium tbody tr:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.table-premium tbody tr:nth-child(even) {
+  background: rgba(255, 255, 255, 0.01);
+}
+
+.table-premium tbody tr:nth-child(even):hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.table-premium tbody td {
+  @apply px-4 py-3;
+}
+
+/* ── Login Background Animation ──────────────────────────── */
+
+@keyframes gradientShift {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+.login-bg {
+  background: linear-gradient(-45deg, #0a0e17, #111827, #0f172a, #1e1b4b, #0a0e17);
+  background-size: 400% 400%;
+  animation: gradientShift 15s ease infinite;
+}
+
+/* ── Sidebar Active Glow ─────────────────────────────────── */
+
+.nav-item-active {
+  position: relative;
+  background: rgba(37, 99, 235, 0.08);
+}
+
+.nav-item-active::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: linear-gradient(180deg, #3b82f6, #2563eb);
+  border-radius: 0 2px 2px 0;
+}
+
+/* ── Number Counter Animation ────────────────────────────── */
+
+@keyframes countUp {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.count-up {
+  animation: countUp 0.5s ease-out forwards;
+}
+
+/* ── Slide-in panel ──────────────────────────────────────── */
+
+@keyframes slideInPanel {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.slide-in-panel {
+  animation: slideInPanel 0.3s ease-out forwards;
+}
+
+/* ── Mobile sidebar overlay ──────────────────────────────── */
+
+@keyframes fadeOverlay {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.overlay-fade {
+  animation: fadeOverlay 0.2s ease-out;
+}
+
+/* ── Transition utilities ────────────────────────────────── */
+
+.transition-smooth {
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
