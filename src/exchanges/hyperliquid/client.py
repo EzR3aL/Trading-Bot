@@ -9,6 +9,7 @@ SECURITY: Only trading operations are allowed. No withdrawals, transfers, or
 fund-moving operations. The ALLOWED_METHODS whitelist enforces this.
 """
 
+import os
 import re
 from typing import Any, Dict, List, Optional
 
@@ -18,6 +19,7 @@ from hyperliquid.info import Info as HLInfo
 from hyperliquid.utils.constants import MAINNET_API_URL, TESTNET_API_URL
 
 from src.exchanges.base import ExchangeClient
+from src.exchanges.hyperliquid.constants import DEFAULT_BUILDER_FEE
 from src.exchanges.types import Balance, FundingRateInfo, Order, Position, Ticker
 from src.utils.logger import get_logger
 
@@ -35,6 +37,7 @@ ALLOWED_METHODS = frozenset({
     "bulk_cancel",
     "update_leverage",
     "update_isolated_margin",
+    "approve_builder_fee",
 })
 
 # Methods that move funds — explicitly forbidden
@@ -125,6 +128,25 @@ class HyperliquidClient(ExchangeClient):
 
         # Info client for read-only queries
         self._info: HLInfo = raw_exchange.info
+
+        # ── Builder Code config ──────────────────────────────────────────
+        # Earns a small fee on every order (100% to builder, no cap).
+        # Set HL_BUILDER_ADDRESS in .env to enable.
+        builder_address = os.environ.get("HL_BUILDER_ADDRESS", "").strip()
+        builder_fee = int(os.environ.get("HL_BUILDER_FEE", str(DEFAULT_BUILDER_FEE)))
+        if builder_address and 1 <= builder_fee <= 100:
+            self._builder = {"b": builder_address.lower(), "f": builder_fee}
+            logger.info(
+                f"Builder code enabled: {builder_address[:10]}... "
+                f"fee={builder_fee} ({builder_fee / 10:.1f} bp = {builder_fee / 1000:.3f}%)"
+            )
+        else:
+            self._builder = None
+            if builder_address and not (1 <= builder_fee <= 100):
+                logger.warning(
+                    f"HL_BUILDER_FEE={builder_fee} out of range (1-100). "
+                    f"Builder code disabled."
+                )
 
         if is_agent_wallet:
             logger.info(
@@ -290,11 +312,13 @@ class HyperliquidClient(ExchangeClient):
         )
 
         # Place market order via SDK (handles EIP-712 signing + slippage)
+        builder_kwargs = {"builder": self._builder} if self._builder else {}
         result = self._exchange.market_open(
             name=coin,
             is_buy=is_buy,
             sz=size,
             slippage=DEFAULT_SLIPPAGE,
+            **builder_kwargs,
         )
 
         # Parse response
@@ -393,6 +417,7 @@ class HyperliquidClient(ExchangeClient):
         rounded_px = self._round_price(trigger_px, self._get_tick_size(coin))
 
         try:
+            builder_kwargs = {"builder": self._builder} if self._builder else {}
             result = self._exchange.order(
                 name=coin,
                 is_buy=is_buy,
@@ -406,6 +431,7 @@ class HyperliquidClient(ExchangeClient):
                     }
                 },
                 reduce_only=True,
+                **builder_kwargs,
             )
             logger.info(f"Hyperliquid {tpsl.upper()} trigger set for {coin} @ {rounded_px}: {result}")
         except Exception as e:
@@ -425,10 +451,12 @@ class HyperliquidClient(ExchangeClient):
             f"wallet={self._wallet.address[:10]}..."
         )
 
+        builder_kwargs = {"builder": self._builder} if self._builder else {}
         result = self._exchange.market_close(
             coin=coin,
             sz=pos.size,
             slippage=DEFAULT_SLIPPAGE,
+            **builder_kwargs,
         )
 
         order_status = _parse_order_response(result)
