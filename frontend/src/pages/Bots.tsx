@@ -40,6 +40,8 @@ interface BotStatus {
   llm_last_reasoning?: string | null
   llm_accuracy?: number | null
   llm_total_predictions?: number | null
+  llm_total_tokens_used?: number | null
+  llm_avg_tokens_per_call?: number | null
 }
 
 const STATUS_STYLES: Record<string, { text: string; card: string; dot: string }> = {
@@ -331,6 +333,23 @@ export default function Bots() {
                         <span className="text-white font-medium">{bot.llm_total_predictions || 0}</span>
                       </div>
                     </div>
+
+                    {(bot.llm_total_tokens_used != null || bot.llm_avg_tokens_per_call != null) && (
+                      <div className="flex gap-4 text-xs">
+                        <div>
+                          <span className="text-gray-500">{t('bots.totalTokens')}: </span>
+                          <span className="text-white font-medium">
+                            {bot.llm_total_tokens_used != null ? bot.llm_total_tokens_used.toLocaleString() : 'N/A'}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-gray-500">{t('bots.avgTokensPerCall')}: </span>
+                          <span className="text-white font-medium">
+                            {bot.llm_avg_tokens_per_call != null ? bot.llm_avg_tokens_per_call.toLocaleString() : 'N/A'}
+                          </span>
+                        </div>
+                      </div>
+                    )}
 
                     {bot.llm_last_reasoning && (
                       <details className="text-xs">
