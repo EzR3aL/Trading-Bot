@@ -475,6 +475,78 @@ class HyperliquidClient(ExchangeClient):
             exchange="hyperliquid",
         )
 
+    # ── Builder Code & Referral Queries ──────────────────────────────────
+
+    async def check_builder_fee_approval(self, user_address: str = None) -> Optional[int]:
+        """Check if user has approved builder fee for the configured builder.
+
+        Returns the max approved fee rate (int), or None if not approved.
+        """
+        if not self._builder:
+            return None
+
+        addr = (user_address or self.wallet_address).lower()
+        try:
+            result = self._info.post(
+                "/info",
+                {"type": "maxBuilderFee", "user": addr, "builder": self._builder["b"]},
+            )
+            if result is not None and int(result) > 0:
+                return int(result)
+            return None
+        except Exception as e:
+            logger.warning(f"Failed to check builder fee approval: {e}")
+            return None
+
+    async def approve_builder_fee(self, max_fee_rate: int = None) -> bool:
+        """Approve builder fee for the configured builder address.
+
+        Must be called once per user before builder fees can be charged.
+        Uses the SDK's approve_builder_fee (EIP-712 signed).
+        """
+        if not self._builder:
+            logger.warning("No builder code configured, cannot approve")
+            return False
+
+        fee = max_fee_rate or self._builder["f"]
+        try:
+            self._exchange.approve_builder_fee(
+                builder=self._builder["b"],
+                max_fee_rate=fee,
+            )
+            logger.info(
+                f"Builder fee approved: builder={self._builder['b'][:10]}... maxFee={fee}"
+            )
+            return True
+        except Exception as e:
+            logger.error(f"Failed to approve builder fee: {e}")
+            return False
+
+    async def get_referral_info(self, user_address: str = None) -> Optional[dict]:
+        """Get referral state for a user (referred_by, referral_code, etc.)."""
+        addr = (user_address or self.wallet_address).lower()
+        try:
+            result = self._info.query_referral_state(addr)
+            return result if isinstance(result, dict) else None
+        except Exception as e:
+            logger.warning(f"Failed to get referral info: {e}")
+            return None
+
+    async def get_user_fees(self, user_address: str = None) -> Optional[dict]:
+        """Get user fee/volume tier info (includes trading volume data)."""
+        addr = (user_address or self.wallet_address).lower()
+        try:
+            result = self._info.user_fees(addr)
+            return result if isinstance(result, dict) else None
+        except Exception as e:
+            logger.warning(f"Failed to get user fees: {e}")
+            return None
+
+    @property
+    def builder_config(self) -> Optional[dict]:
+        """Return current builder config or None."""
+        return self._builder
+
     async def cancel_order(self, symbol: str, order_id: str) -> bool:
         coin = self._normalize_symbol(symbol)
         try:

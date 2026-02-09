@@ -8,6 +8,7 @@ Managed by the BotOrchestrator.
 
 import asyncio
 import json
+import os
 from datetime import datetime
 from typing import Optional
 
@@ -170,6 +171,13 @@ class BotWorker:
                     position_size_percent=self._config.position_size_percent,
                     data_dir=f"data/risk/bot_{self.bot_config_id}",
                 )
+
+            # ── Hyperliquid pre-start checks ──────────────────────────
+            if self._config.exchange_type == "hyperliquid":
+                await self._check_builder_approval(self._client)
+                referral_ok = await self._check_referral_gate(self._client)
+                if not referral_ok:
+                    return False
 
             # Initialize daily session with balance
             try:
@@ -612,6 +620,73 @@ class BotWorker:
         except Exception as e:
             logger.warning(f"[Bot:{self.bot_config_id}] Could not load Discord config: {e}")
         return None
+
+    async def _check_referral_gate(self, client: ExchangeClient) -> bool:
+        """If HL_REQUIRE_REFERRAL=true, block bot start unless user is referred.
+
+        Returns True if OK to proceed, False if blocked.
+        """
+        require = os.environ.get("HL_REQUIRE_REFERRAL", "false").strip().lower()
+        if require not in ("true", "1", "yes"):
+            return True
+
+        referral_code = os.environ.get("HL_REFERRAL_CODE", "").strip()
+        log_prefix = f"[Bot:{self.bot_config_id}]"
+
+        try:
+            from src.exchanges.hyperliquid.client import HyperliquidClient
+
+            if not isinstance(client, HyperliquidClient):
+                return True
+
+            info = await client.get_referral_info()
+            referred_by = None
+            if info:
+                referred_by = info.get("referredBy") or info.get("referred_by")
+
+            if referred_by:
+                logger.info(f"{log_prefix} User is referred (by {referred_by})")
+                return True
+
+            link = f"https://app.hyperliquid.xyz/join/{referral_code}" if referral_code else "https://app.hyperliquid.xyz"
+            self.error_message = (
+                f"Referral required: Please register via {link} before using Hyperliquid bots."
+            )
+            self.status = "error"
+            logger.warning(f"{log_prefix} {self.error_message}")
+            return False
+        except Exception as e:
+            logger.debug(f"{log_prefix} Referral check skipped: {e}")
+            return True  # Don't block on errors
+
+    async def _check_builder_approval(self, client: ExchangeClient):
+        """Soft check: warn if builder fee is configured but user hasn't approved."""
+        log_prefix = f"[Bot:{self.bot_config_id}]"
+        try:
+            from src.exchanges.hyperliquid.client import HyperliquidClient
+
+            if not isinstance(client, HyperliquidClient):
+                return
+            if not client.builder_config:
+                return
+
+            approved = await client.check_builder_fee_approval()
+            if approved is None:
+                logger.warning(
+                    f"{log_prefix} Builder fee NOT approved by user. "
+                    f"Orders will be placed WITHOUT builder fee until user approves. "
+                    f"Use POST /api/config/hyperliquid/approve-builder-fee to approve."
+                )
+            elif approved < client.builder_config["f"]:
+                logger.warning(
+                    f"{log_prefix} Builder fee partially approved "
+                    f"(approved={approved}, required={client.builder_config['f']}). "
+                    f"Orders may fail if fee exceeds approved max."
+                )
+            else:
+                logger.info(f"{log_prefix} Builder fee approved (max={approved})")
+        except Exception as e:
+            logger.debug(f"{log_prefix} Builder approval check skipped: {e}")
 
     def get_status_dict(self) -> dict:
         """Return status info for API responses."""

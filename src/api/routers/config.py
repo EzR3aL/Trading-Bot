@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import os
 import re
 import time
 from datetime import datetime
@@ -567,3 +568,221 @@ async def test_llm_connection(
         raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Connection failed: {str(e)}")
+
+
+# ── Hyperliquid Builder Code & Referral ────────────────────────────
+
+
+def _create_hl_client(conn: ExchangeConnection, use_demo: bool):
+    """Helper: create a temporary HyperliquidClient from stored credentials."""
+    from src.exchanges.factory import create_exchange_client
+
+    if use_demo:
+        if not conn.demo_api_key_encrypted:
+            raise HTTPException(status_code=400, detail="No demo API keys for Hyperliquid")
+        return create_exchange_client(
+            exchange_type="hyperliquid",
+            api_key=decrypt_value(conn.demo_api_key_encrypted),
+            api_secret=decrypt_value(conn.demo_api_secret_encrypted),
+            demo_mode=True,
+        )
+    else:
+        if not conn.api_key_encrypted:
+            raise HTTPException(status_code=400, detail="No live API keys for Hyperliquid")
+        return create_exchange_client(
+            exchange_type="hyperliquid",
+            api_key=decrypt_value(conn.api_key_encrypted),
+            api_secret=decrypt_value(conn.api_secret_encrypted),
+            demo_mode=False,
+        )
+
+
+@router.get("/hyperliquid/builder-status")
+async def get_builder_status(
+    mode: Optional[Literal["live", "demo"]] = None,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Check builder fee approval status for the user's Hyperliquid account."""
+    result = await db.execute(
+        select(ExchangeConnection).where(
+            ExchangeConnection.user_id == user.id,
+            ExchangeConnection.exchange_type == "hyperliquid",
+        )
+    )
+    conn = result.scalar_one_or_none()
+    if not conn:
+        raise HTTPException(status_code=400, detail="No Hyperliquid connection configured")
+
+    builder_address = os.environ.get("HL_BUILDER_ADDRESS", "").strip()
+    if not builder_address:
+        return {"builder_configured": False, "message": "No builder code configured on server"}
+
+    from src.exchanges.hyperliquid.constants import DEFAULT_BUILDER_FEE
+
+    builder_fee = int(os.environ.get("HL_BUILDER_FEE", str(DEFAULT_BUILDER_FEE)))
+    use_demo = mode == "demo" if mode else bool(conn.demo_api_key_encrypted)
+
+    try:
+        client = _create_hl_client(conn, use_demo)
+        approved_fee = await client.check_builder_fee_approval()
+        await client.close()
+
+        return {
+            "builder_configured": True,
+            "builder_address": builder_address[:10] + "...",
+            "builder_fee": builder_fee,
+            "user_approved": approved_fee is not None,
+            "approved_max_fee": approved_fee,
+            "needs_approval": approved_fee is None or approved_fee < builder_fee,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to check builder status: {str(e)}")
+
+
+@router.post("/hyperliquid/approve-builder-fee")
+async def approve_builder_fee(
+    mode: Optional[Literal["live", "demo"]] = None,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Approve builder fee for the user's Hyperliquid account (EIP-712 signed)."""
+    result = await db.execute(
+        select(ExchangeConnection).where(
+            ExchangeConnection.user_id == user.id,
+            ExchangeConnection.exchange_type == "hyperliquid",
+        )
+    )
+    conn = result.scalar_one_or_none()
+    if not conn:
+        raise HTTPException(status_code=400, detail="No Hyperliquid connection configured")
+
+    builder_address = os.environ.get("HL_BUILDER_ADDRESS", "").strip()
+    if not builder_address:
+        raise HTTPException(status_code=400, detail="No builder code configured on server")
+
+    use_demo = mode == "demo" if mode else bool(conn.demo_api_key_encrypted)
+
+    try:
+        client = _create_hl_client(conn, use_demo)
+        success = await client.approve_builder_fee()
+        await client.close()
+
+        if success:
+            return {"status": "ok", "message": "Builder fee approved successfully"}
+        raise HTTPException(status_code=400, detail="Builder fee approval failed")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Approval failed: {str(e)}")
+
+
+@router.get("/hyperliquid/referral-status")
+async def get_referral_status(
+    mode: Optional[Literal["live", "demo"]] = None,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Check referral status for the user's Hyperliquid account."""
+    result = await db.execute(
+        select(ExchangeConnection).where(
+            ExchangeConnection.user_id == user.id,
+            ExchangeConnection.exchange_type == "hyperliquid",
+        )
+    )
+    conn = result.scalar_one_or_none()
+    if not conn:
+        raise HTTPException(status_code=400, detail="No Hyperliquid connection configured")
+
+    referral_code = os.environ.get("HL_REFERRAL_CODE", "").strip()
+    use_demo = mode == "demo" if mode else bool(conn.demo_api_key_encrypted)
+
+    try:
+        client = _create_hl_client(conn, use_demo)
+        referral_info = await client.get_referral_info()
+        await client.close()
+
+        referred_by = None
+        if referral_info:
+            referred_by = referral_info.get("referredBy") or referral_info.get("referred_by")
+
+        return {
+            "referral_code_configured": bool(referral_code),
+            "referral_code": referral_code if referral_code else None,
+            "user_referred": referred_by is not None,
+            "referred_by": referred_by,
+            "referral_link": f"https://app.hyperliquid.xyz/join/{referral_code}" if referral_code else None,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to check referral: {str(e)}")
+
+
+@router.get("/hyperliquid/revenue-summary")
+async def get_revenue_summary(
+    mode: Optional[Literal["live", "demo"]] = None,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get combined builder code + referral revenue overview."""
+    result = await db.execute(
+        select(ExchangeConnection).where(
+            ExchangeConnection.user_id == user.id,
+            ExchangeConnection.exchange_type == "hyperliquid",
+        )
+    )
+    conn = result.scalar_one_or_none()
+    if not conn:
+        raise HTTPException(status_code=400, detail="No Hyperliquid connection configured")
+
+    builder_address = os.environ.get("HL_BUILDER_ADDRESS", "").strip()
+    referral_code = os.environ.get("HL_REFERRAL_CODE", "").strip()
+    use_demo = mode == "demo" if mode else bool(conn.demo_api_key_encrypted)
+
+    try:
+        client = _create_hl_client(conn, use_demo)
+
+        # Gather builder status, referral info, and fee tier in parallel
+        approved_fee, referral_info, user_fees = await asyncio.gather(
+            client.check_builder_fee_approval() if builder_address else _async_none(),
+            client.get_referral_info(),
+            client.get_user_fees(),
+        )
+        await client.close()
+
+        from src.exchanges.hyperliquid.constants import DEFAULT_BUILDER_FEE
+
+        builder_fee = int(os.environ.get("HL_BUILDER_FEE", str(DEFAULT_BUILDER_FEE)))
+
+        referred_by = None
+        if referral_info:
+            referred_by = referral_info.get("referredBy") or referral_info.get("referred_by")
+
+        return {
+            "builder": {
+                "configured": bool(builder_address),
+                "address": builder_address[:10] + "..." if builder_address else None,
+                "fee_rate": builder_fee,
+                "fee_percent": f"{builder_fee / 1000:.3f}%",
+                "user_approved": approved_fee is not None if builder_address else None,
+            },
+            "referral": {
+                "configured": bool(referral_code),
+                "code": referral_code or None,
+                "user_referred": referred_by is not None,
+                "link": f"https://app.hyperliquid.xyz/join/{referral_code}" if referral_code else None,
+            },
+            "user_fees": user_fees,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to get revenue summary: {str(e)}")
+
+
+async def _async_none():
+    """Helper that returns None for asyncio.gather when a task is skipped."""
+    return None

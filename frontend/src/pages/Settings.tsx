@@ -5,7 +5,7 @@ import api from '../api/client'
 import type { ConnectionsStatusResponse, ExchangeConnectionStatus, ExchangeInfo, ServiceStatus } from '../types'
 import { ExchangeIcon } from '../components/ui/ExchangeLogo'
 
-const TABS = ['apiKeys', 'llmKeys', 'discord', 'connections'] as const
+const TABS = ['apiKeys', 'llmKeys', 'discord', 'connections', 'hyperliquid'] as const
 
 /* ------------------------------------------------------------------ */
 /*  Inline Key Form (used inside accordion)                           */
@@ -146,6 +146,11 @@ export default function Settings() {
   const [connStatus, setConnStatus] = useState<ConnectionsStatusResponse | null>(null)
   const [connLoading, setConnLoading] = useState(false)
 
+  // Hyperliquid revenue
+  const [hlRevenue, setHlRevenue] = useState<any>(null)
+  const [hlLoading, setHlLoading] = useState(false)
+  const [hlApproving, setHlApproving] = useState(false)
+
   useEffect(() => {
     const load = async () => {
       try {
@@ -281,9 +286,31 @@ export default function Settings() {
     setConnLoading(false)
   }
 
+  const loadHlRevenue = async () => {
+    setHlLoading(true)
+    try {
+      const res = await api.get('/config/hyperliquid/revenue-summary')
+      setHlRevenue(res.data)
+    } catch { /* HL not configured - OK */ }
+    setHlLoading(false)
+  }
+
+  const approveBuilderFee = async () => {
+    setHlApproving(true)
+    try {
+      await api.post('/config/hyperliquid/approve-builder-fee')
+      showMessage('Builder fee approved!')
+      loadHlRevenue()
+    } catch { showMessage(t('common.error')) }
+    setHlApproving(false)
+  }
+
   useEffect(() => {
     if (activeTab === 'connections' && !connStatus) {
       loadConnectionStatus()
+    }
+    if (activeTab === 'hyperliquid' && !hlRevenue) {
+      loadHlRevenue()
     }
   }, [activeTab])
 
@@ -511,6 +538,108 @@ export default function Settings() {
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Hyperliquid Tab */}
+      {activeTab === 'hyperliquid' && (
+        <div className="bg-gray-900 border border-gray-800 rounded-lg p-6 max-w-2xl space-y-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-white font-medium">Hyperliquid Revenue</h3>
+              <p className="text-sm text-gray-400 mt-1">Builder Code & Referral status</p>
+            </div>
+            <button onClick={loadHlRevenue} disabled={hlLoading}
+              className="px-3 py-1.5 text-sm bg-gray-800 text-gray-300 rounded hover:bg-gray-700 disabled:opacity-50">
+              {hlLoading ? t('settings.refreshing') : t('settings.refreshStatus')}
+            </button>
+          </div>
+
+          {hlRevenue ? (
+            <>
+              {/* Builder Code Section */}
+              <div>
+                <h4 className="text-sm font-medium text-gray-400 mb-3 uppercase tracking-wider">Builder Code</h4>
+                {hlRevenue.builder?.configured ? (
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between p-3 bg-gray-800 rounded-lg">
+                      <span className="text-sm text-gray-300">Builder Address</span>
+                      <span className="text-sm text-white font-mono">{hlRevenue.builder.address}</span>
+                    </div>
+                    <div className="flex items-center justify-between p-3 bg-gray-800 rounded-lg">
+                      <span className="text-sm text-gray-300">Fee Rate</span>
+                      <span className="text-sm text-white">{hlRevenue.builder.fee_percent}</span>
+                    </div>
+                    <div className="flex items-center justify-between p-3 bg-gray-800 rounded-lg">
+                      <span className="text-sm text-gray-300">User Approved</span>
+                      <div className="flex items-center gap-2">
+                        <span className={`inline-block w-2.5 h-2.5 rounded-full ${hlRevenue.builder.user_approved ? 'bg-green-400' : 'bg-red-400'}`} />
+                        <span className={`text-sm ${hlRevenue.builder.user_approved ? 'text-green-400' : 'text-red-400'}`}>
+                          {hlRevenue.builder.user_approved ? 'Approved' : 'Not Approved'}
+                        </span>
+                      </div>
+                    </div>
+                    {!hlRevenue.builder.user_approved && (
+                      <button onClick={approveBuilderFee} disabled={hlApproving}
+                        className="w-full mt-2 px-4 py-2 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50">
+                        {hlApproving ? 'Approving...' : 'Approve Builder Fee'}
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  <div className="p-3 bg-gray-800 rounded-lg text-sm text-gray-500">
+                    Not configured. Set HL_BUILDER_ADDRESS in .env to enable.
+                  </div>
+                )}
+              </div>
+
+              {/* Referral Section */}
+              <div>
+                <h4 className="text-sm font-medium text-gray-400 mb-3 uppercase tracking-wider">Referral</h4>
+                {hlRevenue.referral?.configured ? (
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between p-3 bg-gray-800 rounded-lg">
+                      <span className="text-sm text-gray-300">Referral Code</span>
+                      <span className="text-sm text-white font-mono">{hlRevenue.referral.code}</span>
+                    </div>
+                    <div className="flex items-center justify-between p-3 bg-gray-800 rounded-lg">
+                      <span className="text-sm text-gray-300">User Referred</span>
+                      <div className="flex items-center gap-2">
+                        <span className={`inline-block w-2.5 h-2.5 rounded-full ${hlRevenue.referral.user_referred ? 'bg-green-400' : 'bg-yellow-400'}`} />
+                        <span className={`text-sm ${hlRevenue.referral.user_referred ? 'text-green-400' : 'text-yellow-400'}`}>
+                          {hlRevenue.referral.user_referred ? 'Referred' : 'Not Referred'}
+                        </span>
+                      </div>
+                    </div>
+                    {!hlRevenue.referral.user_referred && hlRevenue.referral.link && (
+                      <a href={hlRevenue.referral.link} target="_blank" rel="noopener noreferrer"
+                        className="block mt-2 px-4 py-2 text-sm text-center bg-blue-600/20 text-blue-400 rounded-lg border border-blue-600/30 hover:bg-blue-600/30">
+                        Register via Referral Link
+                      </a>
+                    )}
+                  </div>
+                ) : (
+                  <div className="p-3 bg-gray-800 rounded-lg text-sm text-gray-500">
+                    Not configured. Set HL_REFERRAL_CODE in .env to enable.
+                  </div>
+                )}
+              </div>
+
+              {/* Fee Tier Info */}
+              {hlRevenue.user_fees && (
+                <div>
+                  <h4 className="text-sm font-medium text-gray-400 mb-3 uppercase tracking-wider">Fee Tier</h4>
+                  <div className="p-3 bg-gray-800 rounded-lg text-sm text-gray-300">
+                    <pre className="whitespace-pre-wrap text-xs">{JSON.stringify(hlRevenue.user_fees, null, 2)}</pre>
+                  </div>
+                </div>
+              )}
+            </>
+          ) : (
+            <div className="text-center text-gray-500 py-8">
+              {hlLoading ? t('settings.refreshing') : 'No Hyperliquid connection configured'}
+            </div>
+          )}
         </div>
       )}
 

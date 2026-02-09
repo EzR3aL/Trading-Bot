@@ -107,7 +107,8 @@
     "dailyLossLimit": "Tägliches Verlustlimit %",
     "takeProfit": "Take Profit %",
     "stopLoss": "Stop Loss %",
-    "hyperliquidTestnetNote": "Wichtig: Das Testnet erfordert eine einmalige Einrichtung. 1) Zahle zuerst mindestens $5 USDC auf dein Mainnet-Hyperliquid-Konto ein. 2) Gehe dann zu app.hyperliquid-testnet.xyz/drip, um 1.000 Test-USDC zu erhalten. Ohne dies ist dein Testnet-Guthaben 0 und Demo-Trades schlagen fehl."
+    "hyperliquidTestnetNote": "Wichtig: Das Testnet erfordert eine einmalige Einrichtung. 1) Zahle zuerst mindestens $5 USDC auf dein Mainnet-Hyperliquid-Konto ein. 2) Gehe dann zu app.hyperliquid-testnet.xyz/drip, um 1.000 Test-USDC zu erhalten. Ohne dies ist dein Testnet-Guthaben 0 und Demo-Trades schlagen fehl.",
+    "hyperliquid": "Hyperliquid"
   },
   "presets": {
     "title": "Konfigurations-Presets",
@@ -271,6 +272,18 @@
     "failedStart": "Bot konnte nicht gestartet werden",
     "failedStop": "Bot konnte nicht gestoppt werden",
     "failedDelete": "Bot konnte nicht gelöscht werden",
+    "tradeHistory": "Trade-Historie",
+    "showTrades": "Trades anzeigen",
+    "hideTrades": "Trades ausblenden",
+    "result": "Ergebnis",
+    "reasoning": "Begründung",
+    "details": "Details",
+    "entryPrice": "Einstieg",
+    "exitPrice": "Ausstieg",
+    "winRate": "Gewinnrate",
+    "noTrades": "Noch keine Trades vorhanden",
+    "latestTrade": "Letzter Trade",
+    "pending": "Offen",
     "builder": {
       "title": "Neuen Bot erstellen",
       "editTitle": "Bot bearbeiten",
