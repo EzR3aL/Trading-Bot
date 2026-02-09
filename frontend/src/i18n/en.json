@@ -265,6 +265,8 @@
     "predictions": "Predictions",
     "viewReasoning": "View AI Reasoning",
     "llmProvider": "AI Provider",
+    "totalTokens": "Total Tokens",
+    "avgTokensPerCall": "Avg Tokens/Call",
     "failedStart": "Failed to start bot",
     "failedStop": "Failed to stop bot",
     "failedDelete": "Failed to delete bot",
