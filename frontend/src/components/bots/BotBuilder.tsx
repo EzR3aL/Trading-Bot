@@ -65,6 +65,7 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
   const [strategies, setStrategies] = useState<Strategy[]>([])
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const [validationErrors, setValidationErrors] = useState<string[]>([])
 
   // Data sources catalog
   const [dataSources, setDataSources] = useState<DataSource[]>([])
@@ -90,6 +91,7 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
   const [customHours, setCustomHours] = useState<number[]>([1, 8, 14, 21])
   const [rotationEnabled, setRotationEnabled] = useState(false)
   const [rotationMinutes, setRotationMinutes] = useState(60)
+  const [rotationStartTime, setRotationStartTime] = useState('08:00')
 
   // Whether current strategy uses market data
   const usesData = DATA_STRATEGIES.includes(strategyType)
@@ -165,6 +167,7 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
         }
         if (d.rotation_enabled) setRotationEnabled(true)
         if (d.rotation_interval_minutes) setRotationMinutes(d.rotation_interval_minutes)
+        if (d.rotation_start_time) setRotationStartTime(d.rotation_start_time)
         // Restore selected data sources from strategy_params
         if (d.strategy_params?.data_sources) {
           setSelectedSources(d.strategy_params.data_sources)
@@ -232,6 +235,7 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
   }
 
   const buildPayload = () => {
+    const isRotationOnly = scheduleType === 'rotation_only'
     const scheduleConfig = scheduleType === 'interval'
       ? { interval_minutes: intervalMinutes }
       : scheduleType === 'custom_cron'
@@ -242,6 +246,8 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
     const params = usesData
       ? { ...strategyParams, data_sources: selectedSources }
       : strategyParams
+
+    const effectiveRotation = rotationEnabled || isRotationOnly
 
     return {
       name,
@@ -258,15 +264,26 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
       daily_loss_limit_percent: dailyLossLimit,
       strategy_params: params,
       schedule_type: scheduleType,
-      schedule_config: scheduleConfig,
-      rotation_enabled: rotationEnabled,
-      rotation_interval_minutes: rotationEnabled ? rotationMinutes : null,
+      schedule_config: isRotationOnly ? null : scheduleConfig,
+      rotation_enabled: effectiveRotation,
+      rotation_interval_minutes: effectiveRotation ? rotationMinutes : null,
+      rotation_start_time: effectiveRotation ? rotationStartTime : null,
     }
   }
 
   const handleSave = async (andStart = false) => {
+    // Validate all steps before saving
+    for (let i = 0; i < steps.length - 1; i++) {
+      const errors = getStepErrors(steps[i])
+      if (errors.length > 0) {
+        setStep(i)
+        setValidationErrors(errors)
+        return
+      }
+    }
     setSaving(true)
     setError('')
+    setValidationErrors([])
     try {
       let newId: number
       if (isEdit) {
@@ -286,15 +303,33 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
     setSaving(false)
   }
 
-  const canGoNext = () => {
-    const stepKey = steps[step]
-    if (stepKey === 'step1') return name.trim().length > 0
-    if (stepKey === 'step2') return strategyType.length > 0
-    if (stepKey === 'step2b') return selectedSources.length > 0
-    if (stepKey === 'step3') return tradingPairs.length > 0
-    if (stepKey === 'step4') return true
-    if (stepKey === 'step5') return scheduleType === 'interval' ? intervalMinutes >= 5 : true
-    return true
+  const getStepErrors = (stepKey: string): string[] => {
+    const errors: string[] = []
+    if (stepKey === 'step1' && !name.trim()) errors.push(t('bots.builder.errors.nameRequired'))
+    if (stepKey === 'step2' && !strategyType) errors.push(t('bots.builder.errors.strategyRequired'))
+    if (stepKey === 'step2b' && selectedSources.length === 0) errors.push(t('bots.builder.errors.dataSourcesRequired'))
+    if (stepKey === 'step3' && tradingPairs.length === 0) errors.push(t('bots.builder.errors.pairsRequired'))
+    if (stepKey === 'step5') {
+      if (scheduleType === 'custom_cron' && customHours.length === 0) errors.push(t('bots.builder.errors.hoursRequired'))
+      if (scheduleType === 'interval' && intervalMinutes < 5) errors.push(t('bots.builder.errors.intervalMinimum'))
+      if ((scheduleType === 'rotation_only' || rotationEnabled) && rotationMinutes < 5) errors.push(t('bots.builder.errors.rotationMinimum'))
+    }
+    return errors
+  }
+
+  const handleNext = () => {
+    const errors = getStepErrors(steps[step])
+    if (errors.length > 0) {
+      setValidationErrors(errors)
+      return
+    }
+    setValidationErrors([])
+    setStep(step + 1)
+  }
+
+  const handleStepClick = (targetStep: number) => {
+    setValidationErrors([])
+    setStep(targetStep)
   }
 
   const b = t('bots.builder', { returnObjects: true }) as Record<string, string>
@@ -317,11 +352,11 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
         {steps.map((s, i) => (
           <div key={s} className="flex items-center">
             <button
-              onClick={() => i <= step && setStep(i)}
-              className={`px-3 py-1 text-sm rounded ${
+              onClick={() => handleStepClick(i)}
+              className={`px-3 py-1 text-sm rounded cursor-pointer transition-colors ${
                 i === step ? 'bg-primary-600 text-white' :
-                i < step ? 'bg-primary-900/50 text-primary-400' :
-                'bg-gray-800 text-gray-500'
+                i < step ? 'bg-primary-900/50 text-primary-400 hover:bg-primary-800/60' :
+                'bg-gray-800 text-gray-500 hover:bg-gray-700 hover:text-gray-300'
               }`}
             >
               {b[s]}
@@ -654,19 +689,37 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
           <div className="space-y-4">
             <label className="block text-sm text-gray-400 mb-2">{b.schedule}</label>
             <div className="space-y-3">
-              {(['market_sessions', 'interval', 'custom_cron'] as const).map(st => (
-                <button
-                  key={st}
-                  onClick={() => setScheduleType(st)}
-                  className={`block w-full text-left p-3 rounded border transition-colors ${
-                    scheduleType === st
-                      ? 'border-primary-500 bg-primary-900/20'
-                      : 'border-gray-700 bg-gray-800 hover:border-gray-600'
-                  }`}
-                >
-                  <div className="text-white text-sm">{b[st === 'market_sessions' ? 'marketSessions' : st === 'interval' ? 'interval' : 'customCron']}</div>
-                </button>
-              ))}
+              {(['rotation_only', 'market_sessions', 'interval', 'custom_cron'] as const).map(st => {
+                const labelMap: Record<string, string> = {
+                  rotation_only: b.rotationOnly || 'Trade Rotation Only',
+                  market_sessions: b.marketSessions,
+                  interval: b.interval,
+                  custom_cron: b.customCron,
+                }
+                const descMap: Record<string, string> = {
+                  rotation_only: b.rotationOnlyDesc || 'Opens a trade on start, then auto-closes and reopens at fixed intervals',
+                  market_sessions: '',
+                  interval: '',
+                  custom_cron: '',
+                }
+                return (
+                  <button
+                    key={st}
+                    onClick={() => {
+                      setScheduleType(st)
+                      if (st === 'rotation_only') setRotationEnabled(true)
+                    }}
+                    className={`block w-full text-left p-3 rounded border transition-colors ${
+                      scheduleType === st
+                        ? 'border-primary-500 bg-primary-900/20'
+                        : 'border-gray-700 bg-gray-800 hover:border-gray-600'
+                    }`}
+                  >
+                    <div className="text-white text-sm">{labelMap[st]}</div>
+                    {descMap[st] && <div className="text-xs text-gray-500 mt-0.5">{descMap[st]}</div>}
+                  </button>
+                )
+              })}
             </div>
 
             {scheduleType === 'interval' && (
@@ -698,50 +751,59 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
               </div>
             )}
 
-            {/* Trade Rotation */}
-            <div className="mt-6 pt-5 border-t border-gray-800">
-              <div className="flex items-center justify-between mb-3">
-                <div>
-                  <span className="text-sm text-gray-300">{b.tradeRotation || 'Trade Rotation'}</span>
-                  <p className="text-xs text-gray-500 mt-0.5">{b.tradeRotationDesc || 'Auto-close and reopen trades at fixed intervals'}</p>
-                </div>
-                <button
-                  onClick={() => setRotationEnabled(!rotationEnabled)}
-                  className={`relative w-11 h-6 rounded-full transition-colors ${
-                    rotationEnabled ? 'bg-primary-600' : 'bg-gray-700'
-                  }`}
-                >
-                  <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform ${
-                    rotationEnabled ? 'translate-x-5' : ''
-                  }`} />
-                </button>
-              </div>
-
-              {rotationEnabled && (
-                <div className="space-y-3">
-                  <div className="flex flex-wrap gap-1.5">
-                    {[
-                      { label: '15m', value: 15 },
-                      { label: '30m', value: 30 },
-                      { label: '1h', value: 60 },
-                      { label: '4h', value: 240 },
-                      { label: '8h', value: 480 },
-                      { label: '12h', value: 720 },
-                      { label: '24h', value: 1440 },
-                    ].map(preset => (
-                      <button
-                        key={preset.value}
-                        onClick={() => setRotationMinutes(preset.value)}
-                        className={`px-3 py-1.5 text-xs rounded border transition-colors ${
-                          rotationMinutes === preset.value
-                            ? 'border-primary-500 bg-primary-900/30 text-primary-400'
-                            : 'border-gray-700 bg-gray-800 text-gray-500 hover:border-gray-600'
-                        }`}
-                      >
-                        {preset.label}
-                      </button>
-                    ))}
+            {/* Trade Rotation — shown as standalone section for non-rotation_only modes */}
+            {scheduleType !== 'rotation_only' && (
+              <div className="mt-6 pt-5 border-t border-gray-800">
+                <div className="flex items-center justify-between mb-3">
+                  <div>
+                    <span className="text-sm text-gray-300">{b.tradeRotation || 'Trade Rotation'}</span>
+                    <p className="text-xs text-gray-500 mt-0.5">{b.tradeRotationDesc || 'Auto-close and reopen trades at fixed intervals'}</p>
                   </div>
+                  <button
+                    onClick={() => setRotationEnabled(!rotationEnabled)}
+                    className={`relative w-11 h-6 rounded-full transition-colors ${
+                      rotationEnabled ? 'bg-primary-600' : 'bg-gray-700'
+                    }`}
+                  >
+                    <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform ${
+                      rotationEnabled ? 'translate-x-5' : ''
+                    }`} />
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Rotation settings — for rotation_only always shown, otherwise only when toggle on */}
+            {(scheduleType === 'rotation_only' || rotationEnabled) && (
+              <div className="space-y-4 mt-4">
+                {/* Interval presets */}
+                <div className="flex flex-wrap gap-1.5">
+                  {[
+                    { label: '5m', value: 5 },
+                    { label: '15m', value: 15 },
+                    { label: '30m', value: 30 },
+                    { label: '1h', value: 60 },
+                    { label: '4h', value: 240 },
+                    { label: '8h', value: 480 },
+                    { label: '12h', value: 720 },
+                    { label: '24h', value: 1440 },
+                  ].map(preset => (
+                    <button
+                      key={preset.value}
+                      onClick={() => setRotationMinutes(preset.value)}
+                      className={`px-3 py-1.5 text-xs rounded border transition-colors ${
+                        rotationMinutes === preset.value
+                          ? 'border-primary-500 bg-primary-900/30 text-primary-400'
+                          : 'border-gray-700 bg-gray-800 text-gray-500 hover:border-gray-600'
+                      }`}
+                    >
+                      {preset.label}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="flex gap-4">
+                  {/* Custom minutes */}
                   <div>
                     <label className="block text-xs text-gray-500 mb-1">{b.customMinutes || 'Custom (minutes)'}</label>
                     <input
@@ -753,9 +815,20 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
                       className="w-32 px-2 py-1.5 text-sm bg-gray-800 border border-gray-700 rounded text-white focus:border-primary-500 focus:outline-none"
                     />
                   </div>
+
+                  {/* Start time (UTC) */}
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">{b.rotationStartTime || 'Start Time (UTC)'}</label>
+                    <input
+                      type="time"
+                      value={rotationStartTime}
+                      onChange={e => setRotationStartTime(e.target.value)}
+                      className="w-32 px-2 py-1.5 text-sm bg-gray-800 border border-gray-700 rounded text-white focus:border-primary-500 focus:outline-none"
+                    />
+                  </div>
                 </div>
-              )}
-            </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -778,19 +851,27 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
                 <div><span className="text-gray-500">{b.dataSources || 'Data Sources'}:</span> <span className="text-white ml-2">{selectedSources.length} {b.sourcesSelected || 'selected'}</span></div>
               )}
               <div><span className="text-gray-500">{b.schedule}:</span> <span className="text-white ml-2">
-                {scheduleType === 'interval' ? `Every ${intervalMinutes}min` :
+                {scheduleType === 'rotation_only' ? (b.rotationOnly || 'Rotation Only') :
+                 scheduleType === 'interval' ? `Every ${intervalMinutes}min` :
                  scheduleType === 'custom_cron' ? customHours.map(h => `${h}:00`).join(', ') :
                  '01:00, 08:00, 14:00, 21:00 UTC'}
               </span></div>
-              {rotationEnabled && (
+              {(rotationEnabled || scheduleType === 'rotation_only') && (
                 <div><span className="text-gray-500">{b.tradeRotation || 'Rotation'}:</span> <span className="text-white ml-2">
                   {rotationMinutes >= 60 ? `${rotationMinutes / 60}h` : `${rotationMinutes}min`}
+                  {rotationStartTime ? ` (${b.rotationStartTime || 'Start'}: ${rotationStartTime} UTC)` : ''}
                 </span></div>
               )}
             </div>
           </div>
         )}
       </div>
+
+      {validationErrors.length > 0 && (
+        <div className="mb-4 p-3 bg-amber-900/30 border border-amber-800 rounded text-amber-400 text-sm space-y-1">
+          {validationErrors.map((err, i) => <div key={i}>{err}</div>)}
+        </div>
+      )}
 
       {/* Navigation */}
       <div className="flex items-center justify-between">
@@ -805,9 +886,8 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
         <div className="flex gap-2">
           {step < steps.length - 1 ? (
             <button
-              onClick={() => setStep(step + 1)}
-              disabled={!canGoNext()}
-              className="flex items-center gap-1 px-4 py-2 text-sm bg-primary-600 text-white rounded font-medium hover:bg-primary-700 disabled:opacity-50 transition-colors"
+              onClick={handleNext}
+              className="flex items-center gap-1 px-4 py-2 text-sm bg-primary-600 text-white rounded font-medium hover:bg-primary-700 transition-colors"
             >
               {b.next}
               <ArrowRight size={16} />

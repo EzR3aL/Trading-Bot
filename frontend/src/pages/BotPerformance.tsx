@@ -411,7 +411,7 @@ export default function BotPerformance() {
                             {trade.status}
                           </span>
                         </td>
-                        <td className="text-gray-500 text-xs">
+                        <td className="text-gray-500 text-xs cursor-default" title={trade.entry_time ? new Date(trade.entry_time).toLocaleTimeString('de-DE', { timeZone: 'UTC', hour: '2-digit', minute: '2-digit' }) + ' UTC' : undefined}>
                           {trade.entry_time ? new Date(trade.entry_time).toLocaleDateString() : '--'}
                         </td>
                       </tr>

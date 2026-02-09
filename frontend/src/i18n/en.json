@@ -62,7 +62,8 @@
     "cancelled": "Cancelled",
     "bot": "Bot",
     "mode": "Mode",
-    "allModes": "All Modes"
+    "allModes": "All Modes",
+    "fees": "Transaction Fee"
   },
   "settings": {
     "title": "Settings",
@@ -333,9 +334,12 @@
       "customCron": "Custom Hours",
       "intervalMinutes": "Interval (minutes)",
       "customHours": "Hours (UTC)",
+      "rotationOnly": "Trade Rotation Only",
+      "rotationOnlyDesc": "Opens a trade on start, then auto-closes and reopens at fixed intervals",
       "tradeRotation": "Trade Rotation",
-      "tradeRotationDesc": "Automatically close and reopen trades at fixed intervals",
+      "tradeRotationDesc": "Additionally auto-close and reopen trades at fixed intervals",
       "customMinutes": "Custom (minutes)",
+      "rotationStartTime": "Start Time (UTC)",
       "review": "Review",
       "create": "Create Bot",
       "createAndStart": "Create & Start",
@@ -355,7 +359,16 @@
       "options": "Options Data",
       "spot": "Spot Market",
       "technical": "Technical Indicators",
-      "tradfi": "TradFi / CME"
+      "tradfi": "TradFi / CME",
+      "errors": {
+        "nameRequired": "Please enter a bot name",
+        "strategyRequired": "Please select a strategy",
+        "dataSourcesRequired": "Please select at least one data source",
+        "pairsRequired": "Please select at least one trading pair",
+        "rotationMinimum": "Rotation interval must be at least 5 minutes",
+        "intervalMinimum": "Interval must be at least 5 minutes",
+        "hoursRequired": "Please select at least one hour"
+      }
     }
   },
   "performance": {

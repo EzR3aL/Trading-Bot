@@ -141,7 +141,7 @@ export default function Trades() {
                   trades.map((trade) => (
                     <tr key={trade.id}>
                       <td className="text-gray-500 text-xs">{trade.id}</td>
-                      <td className="text-gray-300">{new Date(trade.entry_time).toLocaleDateString()}</td>
+                      <td className="text-gray-300 cursor-default" title={new Date(trade.entry_time).toLocaleTimeString('de-DE', { timeZone: 'UTC', hour: '2-digit', minute: '2-digit' }) + ' UTC'}>{new Date(trade.entry_time).toLocaleDateString()}</td>
                       <td>
                         {trade.bot_name ? (
                           <span className="text-white font-medium">{trade.bot_name}</span>

@@ -395,7 +395,7 @@ function BotTradeHistoryModal({ bot, onClose, t }: { bot: BotStatus; onClose: ()
                           {latestClosed.side === 'long' ? '+ LONG' : '- SHORT'}
                         </span>
                       </div>
-                      <span className="text-xs text-gray-500">{new Date(latestClosed.entry_time).toLocaleDateString()}</span>
+                      <span className="text-xs text-gray-500 cursor-default" title={new Date(latestClosed.entry_time).toLocaleTimeString('de-DE', { timeZone: 'UTC', hour: '2-digit', minute: '2-digit' }) + ' UTC'}>{new Date(latestClosed.entry_time).toLocaleDateString()}</span>
                     </div>
 
                     {/* 4-column grid: PnL | Einstieg | Ausstieg | Konfidenz */}
@@ -463,7 +463,7 @@ function BotTradeHistoryModal({ bot, onClose, t }: { bot: BotStatus; onClose: ()
                   <tbody>
                     {stats.recent_trades.map((trade) => (
                       <tr key={trade.id} className="border-b border-white/5 hover:bg-white/[0.02] transition-colors">
-                        <td className="px-6 py-3.5 text-sm text-gray-300">
+                        <td className="px-6 py-3.5 text-sm text-gray-300 cursor-default" title={new Date(trade.entry_time).toLocaleTimeString('de-DE', { timeZone: 'UTC', hour: '2-digit', minute: '2-digit' }) + ' UTC'}>
                           {new Date(trade.entry_time).toLocaleDateString()}
                         </td>
                         <td className="px-4 py-3.5 text-sm text-white font-semibold">{trade.symbol}</td>

@@ -90,6 +90,7 @@ def _config_to_response(config: BotConfig) -> BotConfigResponse:
         schedule_config=schedule_config,
         rotation_enabled=config.rotation_enabled or False,
         rotation_interval_minutes=config.rotation_interval_minutes,
+        rotation_start_time=config.rotation_start_time,
         is_enabled=config.is_enabled,
         created_at=config.created_at.isoformat() if config.created_at else None,
         updated_at=config.updated_at.isoformat() if config.updated_at else None,
@@ -169,6 +170,7 @@ async def create_bot(
         schedule_config=json.dumps(body.schedule_config) if body.schedule_config else None,
         rotation_enabled=body.rotation_enabled,
         rotation_interval_minutes=body.rotation_interval_minutes,
+        rotation_start_time=body.rotation_start_time,
         is_enabled=False,
     )
     db.add(config)

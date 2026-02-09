@@ -293,6 +293,7 @@ class BotConfig(Base):
     # Trade rotation (auto-close & reopen at fixed intervals)
     rotation_enabled = Column(Boolean, default=False)
     rotation_interval_minutes = Column(Integer, nullable=True)  # e.g. 60 = close & reopen every hour
+    rotation_start_time = Column(String(5), nullable=True)  # UTC start time "HH:MM" for rotation anchor
 
     # State
     is_enabled = Column(Boolean, default=False)

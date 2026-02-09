@@ -9,7 +9,7 @@ Managed by the BotOrchestrator.
 import asyncio
 import json
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -212,7 +212,12 @@ class BotWorker:
         if self._config.schedule_config:
             schedule_config = json.loads(self._config.schedule_config)
 
-        if schedule_type == "interval":
+        if schedule_type == "rotation_only":
+            # Rotation-only mode: no regular analysis schedule.
+            # The bot opens its first trade on start, then the rotation
+            # checker handles closing + re-opening on the configured interval.
+            logger.info(f"[Bot:{self.bot_config_id}] Rotation-only mode — no regular schedule")
+        elif schedule_type == "interval":
             minutes = schedule_config.get("interval_minutes", 60)
             self._scheduler.add_job(
                 self._analyze_and_trade_safe,
@@ -253,7 +258,10 @@ class BotWorker:
         )
 
         # Trade rotation (auto-close & reopen) — check every minute if enabled
-        if getattr(self._config, "rotation_enabled", False) and getattr(self._config, "rotation_interval_minutes", None):
+        # Automatically enabled for rotation_only schedule type
+        rotation_on = getattr(self._config, "rotation_enabled", False) or schedule_type == "rotation_only"
+        rotation_mins = getattr(self._config, "rotation_interval_minutes", None)
+        if rotation_on and rotation_mins:
             self._scheduler.add_job(
                 self._check_rotation_safe,
                 IntervalTrigger(minutes=1),
@@ -261,9 +269,10 @@ class BotWorker:
                 name=f"Bot {self.bot_config_id} Trade Rotation",
                 replace_existing=True,
             )
+            start_time = getattr(self._config, "rotation_start_time", None) or "now"
             logger.info(
                 f"[Bot:{self.bot_config_id}] Trade rotation enabled: "
-                f"every {self._config.rotation_interval_minutes}min"
+                f"every {rotation_mins}min (anchor: {start_time} UTC)"
             )
 
     async def start(self):
@@ -659,7 +668,12 @@ class BotWorker:
             logger.error(f"[Bot:{self.bot_config_id}] Rotation check error: {e}")
 
     async def _check_rotation(self):
-        """Check if any open trades have exceeded their rotation interval and need closing."""
+        """Check if any open trades have exceeded their rotation interval and need closing.
+
+        If rotation_start_time is set (e.g. "08:00"), rotation windows are anchored
+        to that UTC time. Otherwise, elapsed time since entry_time is used.
+        In rotation_only mode with no open trades, triggers a new analysis.
+        """
         rotation_minutes = getattr(self._config, "rotation_interval_minutes", None)
         if not rotation_minutes:
             return
@@ -678,16 +692,56 @@ class BotWorker:
             open_trades = result.scalars().all()
 
             if not open_trades:
+                # In rotation_only mode, if no open trades exist, open one now
+                if self._config.schedule_type == "rotation_only":
+                    logger.info(f"{log_prefix} ROTATION: No open trades — triggering analysis")
+                    pairs = json.loads(self._config.trading_pairs) if isinstance(self._config.trading_pairs, str) else self._config.trading_pairs
+                    for symbol in pairs:
+                        try:
+                            await self._analyze_symbol(symbol, force=True)
+                        except Exception as e:
+                            logger.error(f"{log_prefix} ROTATION: Analysis failed for {symbol}: {e}")
                 return
+
+            # Determine if we use anchored rotation (start_time) or elapsed-based
+            start_time_str = getattr(self._config, "rotation_start_time", None)
 
             for trade in open_trades:
                 if not trade.entry_time:
                     continue
 
-                elapsed = (now - trade.entry_time).total_seconds() / 60
-                if elapsed < rotation_minutes:
+                should_rotate = False
+                if start_time_str:
+                    # Anchored rotation: calculate next rotation boundary from start_time
+                    try:
+                        sh, sm = int(start_time_str[:2]), int(start_time_str[3:5])
+                        # Build today's anchor at start_time UTC
+                        anchor = now.replace(hour=sh, minute=sm, second=0, microsecond=0)
+                        # If anchor is in the future, go back one day
+                        if anchor > now:
+                            anchor = anchor - timedelta(days=1)
+                        # How many intervals since anchor?
+                        elapsed_since_anchor = (now - anchor).total_seconds() / 60
+                        # Find the last rotation boundary
+                        intervals_passed = int(elapsed_since_anchor // rotation_minutes)
+                        last_boundary = anchor + timedelta(minutes=intervals_passed * rotation_minutes)
+                        # Trade should rotate if it was opened before the last boundary
+                        if trade.entry_time < last_boundary:
+                            should_rotate = True
+                            elapsed = (now - trade.entry_time).total_seconds() / 60
+                    except (ValueError, IndexError):
+                        # Fall back to elapsed-based
+                        elapsed = (now - trade.entry_time).total_seconds() / 60
+                        should_rotate = elapsed >= rotation_minutes
+                else:
+                    # Simple elapsed-based rotation
+                    elapsed = (now - trade.entry_time).total_seconds() / 60
+                    should_rotate = elapsed >= rotation_minutes
+
+                if not should_rotate:
                     continue
 
+                elapsed = (now - trade.entry_time).total_seconds() / 60
                 logger.info(
                     f"{log_prefix} ROTATION: Trade #{trade.id} {trade.symbol} "
                     f"open for {elapsed:.0f}min (limit: {rotation_minutes}min) — closing"

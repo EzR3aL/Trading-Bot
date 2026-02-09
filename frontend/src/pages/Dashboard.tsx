@@ -219,7 +219,7 @@ export default function Dashboard() {
               ) : (
                 recentTrades.map((trade) => (
                   <tr key={trade.id}>
-                    <td className="text-gray-300">
+                    <td className="text-gray-300 cursor-default" title={new Date(trade.entry_time).toLocaleTimeString('de-DE', { timeZone: 'UTC', hour: '2-digit', minute: '2-digit' }) + ' UTC'}>
                       {new Date(trade.entry_time).toLocaleDateString()}
                     </td>
                     <td>
