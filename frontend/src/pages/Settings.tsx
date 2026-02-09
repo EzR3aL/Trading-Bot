@@ -1,11 +1,13 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ChevronDown } from 'lucide-react'
 import api from '../api/client'
+import { useAuthStore } from '../stores/authStore'
 import type { ConnectionsStatusResponse, ExchangeConnectionStatus, ExchangeInfo, ServiceStatus } from '../types'
 import { ExchangeIcon } from '../components/ui/ExchangeLogo'
 
-const TABS = ['apiKeys', 'llmKeys', 'discord', 'connections', 'hyperliquid'] as const
+const BASE_TABS = ['apiKeys', 'llmKeys', 'discord', 'connections'] as const
+const ADMIN_TABS = [...BASE_TABS, 'hyperliquid'] as const
 
 /* ------------------------------------------------------------------ */
 /*  Inline Key Form (used inside accordion)                           */
@@ -122,7 +124,10 @@ const emptyForm = (): ExchangeKeyForm => ({
 
 export default function Settings() {
   const { t } = useTranslation()
-  const [activeTab, setActiveTab] = useState<typeof TABS[number]>('apiKeys')
+  const user = useAuthStore((s) => s.user)
+  const isAdmin = user?.role === 'admin'
+  const TABS = useMemo(() => isAdmin ? ADMIN_TABS : BASE_TABS, [isAdmin])
+  const [activeTab, setActiveTab] = useState<typeof ADMIN_TABS[number]>('apiKeys')
   const [exchanges, setExchanges] = useState<ExchangeInfo[]>([])
   const [connections, setConnections] = useState<ExchangeConnectionStatus[]>([])
   const [saving, setSaving] = useState(false)

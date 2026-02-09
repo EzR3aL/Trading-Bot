@@ -23,7 +23,7 @@ from src.api.schemas.config import (
     StrategyConfigUpdate,
     TradingConfigUpdate,
 )
-from src.auth.dependencies import get_current_user
+from src.auth.dependencies import get_current_admin, get_current_user
 from src.models.database import ExchangeConnection, LLMConnection, User, UserConfig
 from src.models.session import get_db
 from src.utils.circuit_breaker import circuit_registry
@@ -600,10 +600,10 @@ def _create_hl_client(conn: ExchangeConnection, use_demo: bool):
 @router.get("/hyperliquid/builder-status")
 async def get_builder_status(
     mode: Optional[Literal["live", "demo"]] = None,
-    user: User = Depends(get_current_user),
+    user: User = Depends(get_current_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    """Check builder fee approval status for the user's Hyperliquid account."""
+    """Check builder fee approval status (admin only)."""
     result = await db.execute(
         select(ExchangeConnection).where(
             ExchangeConnection.user_id == user.id,
@@ -645,10 +645,10 @@ async def get_builder_status(
 @router.post("/hyperliquid/approve-builder-fee")
 async def approve_builder_fee(
     mode: Optional[Literal["live", "demo"]] = None,
-    user: User = Depends(get_current_user),
+    user: User = Depends(get_current_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    """Approve builder fee for the user's Hyperliquid account (EIP-712 signed)."""
+    """Approve builder fee (admin only, EIP-712 signed)."""
     result = await db.execute(
         select(ExchangeConnection).where(
             ExchangeConnection.user_id == user.id,
@@ -682,10 +682,10 @@ async def approve_builder_fee(
 @router.get("/hyperliquid/referral-status")
 async def get_referral_status(
     mode: Optional[Literal["live", "demo"]] = None,
-    user: User = Depends(get_current_user),
+    user: User = Depends(get_current_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    """Check referral status for the user's Hyperliquid account."""
+    """Check referral status (admin only)."""
     result = await db.execute(
         select(ExchangeConnection).where(
             ExchangeConnection.user_id == user.id,
@@ -724,10 +724,10 @@ async def get_referral_status(
 @router.get("/hyperliquid/revenue-summary")
 async def get_revenue_summary(
     mode: Optional[Literal["live", "demo"]] = None,
-    user: User = Depends(get_current_user),
+    user: User = Depends(get_current_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    """Get combined builder code + referral revenue overview."""
+    """Get combined builder code + referral revenue overview (admin only)."""
     result = await db.execute(
         select(ExchangeConnection).where(
             ExchangeConnection.user_id == user.id,
