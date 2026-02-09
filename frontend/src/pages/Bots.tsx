@@ -666,16 +666,26 @@ export default function Bots() {
                       <span className="text-[10px] text-gray-500">{bot.strategy_type}</span>
                     </div>
                   </div>
-                  <div className="flex items-center gap-1.5">
-                    {bot.status === 'running' && (
-                      <span className="relative flex h-2.5 w-2.5">
-                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                        <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+                  <div className="text-right">
+                    <div className="flex items-center justify-end gap-1.5">
+                      {bot.status === 'running' && (
+                        <span className="relative flex h-2.5 w-2.5">
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                          <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+                        </span>
+                      )}
+                      <span className={`text-sm font-medium ${style.text}`}>
+                        {t(`bots.${bot.status}`)}
                       </span>
+                    </div>
+                    {bot.llm_provider && (
+                      <div className="mt-1 text-[10px] text-gray-500 leading-tight">
+                        <span className="capitalize">{bot.llm_provider}</span>
+                        {bot.llm_model && (
+                          <div className="text-gray-400 font-medium">{bot.llm_model}</div>
+                        )}
+                      </div>
                     )}
-                    <span className={`text-sm font-medium ${style.text}`}>
-                      {t(`bots.${bot.status}`)}
-                    </span>
                   </div>
                 </div>
 
@@ -709,25 +719,20 @@ export default function Bots() {
                 {/* LLM Metrics */}
                 {bot.strategy_type === 'llm_signal' && (
                   <div className="mb-3 pt-3 border-t border-white/5 space-y-2">
-                    <div className="flex items-center justify-between text-xs">
+                    <div className="flex items-center gap-2 text-xs">
                       <span className="text-gray-500">{t('bots.llmLastSignal')}</span>
-                      <div className="flex items-center gap-2">
-                        {bot.llm_last_direction && (
-                          <span className={`font-semibold ${bot.llm_last_direction === 'LONG' ? 'text-profit' : 'text-loss'}`}>
-                            {bot.llm_last_direction === 'LONG' ? '+' : '-'} {bot.llm_last_direction}
-                          </span>
-                        )}
-                        {bot.llm_provider && (
-                          <span className="text-gray-600">{bot.llm_provider}</span>
-                        )}
-                      </div>
+                      {bot.llm_last_direction && (
+                        <span className={`font-semibold ${bot.llm_last_direction === 'LONG' ? 'text-profit' : 'text-loss'}`}>
+                          {bot.llm_last_direction === 'LONG' ? '+' : '-'} {bot.llm_last_direction}
+                        </span>
+                      )}
                     </div>
 
                     {bot.llm_last_confidence != null && (
                       <div>
                         <div className="flex items-center justify-between text-xs mb-1">
                           <span className="text-gray-500">{t('bots.confidence')}</span>
-                          <span className="text-gray-300">{bot.llm_last_confidence}%</span>
+                          <span className={`font-medium ${confidenceColor(bot.llm_last_confidence)}`}>{bot.llm_last_confidence}%</span>
                         </div>
                         <div className="w-full bg-white/5 rounded-full h-1.5">
                           <div
@@ -741,17 +746,11 @@ export default function Bots() {
                       </div>
                     )}
 
-                    <div className="flex gap-4 text-xs">
-                      <div>
-                        <span className="text-gray-500">{t('bots.accuracy')}: </span>
-                        <span className="text-white font-medium">
-                          {bot.llm_accuracy != null ? `${bot.llm_accuracy.toFixed(1)}%` : 'N/A'}
-                        </span>
-                      </div>
-                      <div>
-                        <span className="text-gray-500">{t('bots.predictions')}: </span>
-                        <span className="text-white font-medium">{bot.llm_total_predictions || 0}</span>
-                      </div>
+                    <div className="text-xs">
+                      <span className="text-gray-500">{t('bots.accuracy')}: </span>
+                      <span className="text-white font-medium">
+                        {bot.llm_accuracy != null ? `${bot.llm_accuracy.toFixed(1)}%` : 'N/A'}
+                      </span>
                     </div>
 
                     {(bot.llm_total_tokens_used != null || bot.llm_avg_tokens_per_call != null) && (

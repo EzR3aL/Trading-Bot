@@ -95,16 +95,6 @@ function KeyForm({
 }
 
 /* ------------------------------------------------------------------ */
-/*  Connection Status Indicator                                       */
-/* ------------------------------------------------------------------ */
-
-function StatusDot({ reachable }: { reachable: boolean }) {
-  return (
-    <span className={`inline-block w-2.5 h-2.5 rounded-full ${reachable ? 'bg-green-400' : 'bg-red-400'}`} />
-  )
-}
-
-/* ------------------------------------------------------------------ */
 /*  Per-Exchange Key Form State                                       */
 /* ------------------------------------------------------------------ */
 
@@ -779,103 +769,109 @@ export default function Settings() {
 
       {/* Connections Tab */}
       {activeTab === 'connections' && (
-        <div className="bg-gray-900 border border-gray-800 rounded-lg p-6 max-w-2xl">
-          <div className="space-y-6">
-            <div className="flex items-center justify-between">
-              <p className="text-sm text-gray-400">{t('settings.connectionsDesc')}</p>
-              <button onClick={loadConnectionStatus} disabled={connLoading}
-                className="px-3 py-1.5 text-sm bg-gray-800 text-gray-300 rounded hover:bg-gray-700 disabled:opacity-50">
-                {connLoading ? t('settings.refreshing') : t('settings.refreshStatus')}
-              </button>
-            </div>
+        <div className="space-y-5">
+          <div className="flex items-center justify-between">
+            <p className="text-sm text-gray-400">{t('settings.connectionsDesc')}</p>
+            <button onClick={loadConnectionStatus} disabled={connLoading}
+              className="px-3 py-1.5 text-sm bg-gray-800 text-gray-300 rounded hover:bg-gray-700 disabled:opacity-50">
+              {connLoading ? t('settings.refreshing') : t('settings.refreshStatus')}
+            </button>
+          </div>
 
-            {connStatus ? (() => {
-              const groups = groupServices(connStatus.services)
-              const sectionLabels: Record<string, string> = {
-                data_source: t('settings.dataSources'),
-                exchange: t('settings.exchangeApi'),
-                notification: t('settings.notifications'),
-              }
-              // Category labels for data source sub-groups
-              const catLabels: Record<string, string> = {
-                sentiment: t('settings.sentimentNews', 'Sentiment & News'),
-                futures: t('settings.futuresData', 'Futures Data'),
-                options: t('settings.optionsData', 'Options Data'),
-                spot: t('settings.spotMarket', 'Spot Market'),
-                technical: t('settings.technicalIndicators', 'Technical Indicators'),
-                tradfi: t('settings.tradfiCme', 'TradFi / CME'),
-              }
-              const catOrder = ['sentiment', 'futures', 'options', 'spot', 'technical', 'tradfi']
-              return (
-                <>
-                  {(['data_source', 'exchange', 'notification'] as const).map((groupKey) => {
+          {connStatus ? (() => {
+            const groups = groupServices(connStatus.services)
+            const catLabels: Record<string, string> = {
+              sentiment: t('settings.sentimentNews', 'Sentiment & News'),
+              futures: t('settings.futuresData', 'Futures Data'),
+              options: t('settings.optionsData', 'Options Data'),
+              spot: t('settings.spotMarket', 'Spot Market'),
+              technical: t('settings.technicalIndicators', 'Technical Indicators'),
+              tradfi: t('settings.tradfiCme', 'TradFi / CME'),
+            }
+            const catOrder = ['sentiment', 'futures', 'options', 'spot', 'technical', 'tradfi']
+            const dsItems = groups['data_source'] || []
+            const dsOnline = dsItems.filter(([, s]) => s.reachable).length
+
+            return (
+              <>
+                {/* ── Data Sources — compact grid ── */}
+                {dsItems.length > 0 && (() => {
+                  const byCategory: Record<string, [string, ServiceStatus][]> = {}
+                  for (const [key, svc] of dsItems) {
+                    const cat = (svc as any).category || 'other'
+                    if (!byCategory[cat]) byCategory[cat] = []
+                    byCategory[cat].push([key, svc])
+                  }
+                  return (
+                    <div>
+                      <div className="flex items-center gap-3 mb-3">
+                        <h3 className="text-sm font-medium text-gray-400 uppercase tracking-wider">
+                          {t('settings.dataSources')}
+                        </h3>
+                        <span className="text-xs text-gray-600">
+                          {dsOnline}/{dsItems.length} online
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+                        {catOrder.map(cat => {
+                          const catItems = byCategory[cat]
+                          if (!catItems || catItems.length === 0) return null
+                          const allUp = catItems.every(([, s]) => s.reachable)
+                          return (
+                            <div key={cat} className="bg-gray-900 border border-gray-800 rounded-lg p-3">
+                              <div className="flex items-center justify-between mb-2">
+                                <span className="text-[11px] font-medium text-gray-500 uppercase tracking-wider">
+                                  {catLabels[cat] || cat}
+                                </span>
+                                <span className={`w-2 h-2 rounded-full ${allUp ? 'bg-green-400' : 'bg-red-400'}`} />
+                              </div>
+                              <div className="space-y-0.5">
+                                {catItems.map(([key, svc]) => (
+                                  <div key={key} className="flex items-center justify-between py-1 px-1.5 rounded hover:bg-gray-800/60">
+                                    <div className="flex items-center gap-2 min-w-0">
+                                      <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${svc.reachable ? 'bg-green-400' : 'bg-red-400'}`} />
+                                      <span className="text-white text-xs truncate">{svc.label}</span>
+                                    </div>
+                                    <div className="flex items-center gap-1.5 flex-shrink-0 ml-2">
+                                      {(svc as any).provider && (svc as any).provider !== 'Calculated' && (
+                                        <span className="text-gray-600 text-[10px]">{(svc as any).provider}</span>
+                                      )}
+                                      {svc.latency_ms != null && svc.latency_ms > 0 && (
+                                        <span className="text-gray-600 text-[10px] tabular-nums w-8 text-right">{svc.latency_ms}ms</span>
+                                      )}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )
+                })()}
+
+                {/* ── Exchanges & Notifications — side by side ── */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {(['exchange', 'notification'] as const).map((groupKey) => {
                     const items = groups[groupKey]
                     if (!items || items.length === 0) return null
-
-                    // For data sources, sub-group by category
-                    if (groupKey === 'data_source') {
-                      const byCategory: Record<string, [string, ServiceStatus][]> = {}
-                      for (const [key, svc] of items) {
-                        const cat = (svc as any).category || 'other'
-                        if (!byCategory[cat]) byCategory[cat] = []
-                        byCategory[cat].push([key, svc])
-                      }
-                      return (
-                        <div key={groupKey}>
-                          <h3 className="text-sm font-medium text-gray-400 mb-3 uppercase tracking-wider">
-                            {sectionLabels[groupKey]}
-                          </h3>
-                          {catOrder.map(cat => {
-                            const catItems = byCategory[cat]
-                            if (!catItems || catItems.length === 0) return null
-                            return (
-                              <div key={cat} className="mb-4">
-                                <p className="text-xs text-gray-500 mb-2 ml-1">{catLabels[cat] || cat}</p>
-                                <div className="space-y-1.5">
-                                  {catItems.map(([key, svc]) => (
-                                    <div key={key} className="flex items-center justify-between p-2.5 bg-gray-800 rounded-lg">
-                                      <div className="flex items-center gap-3">
-                                        <StatusDot reachable={svc.reachable} />
-                                        <div>
-                                          <span className="text-white text-sm">{svc.label}</span>
-                                          {(svc as any).provider && (
-                                            <span className="text-gray-600 text-[10px] ml-2">{(svc as any).provider}</span>
-                                          )}
-                                        </div>
-                                      </div>
-                                      <div className="flex items-center gap-3 text-xs">
-                                        {svc.latency_ms != null && svc.latency_ms > 0 && (
-                                          <span className="text-gray-500">{svc.latency_ms}ms</span>
-                                        )}
-                                        <span className={svc.reachable ? 'text-green-400' : 'text-red-400'}>
-                                          {svc.reachable ? t('settings.online') : t('settings.offline')}
-                                        </span>
-                                      </div>
-                                    </div>
-                                  ))}
-                                </div>
-                              </div>
-                            )
-                          })}
-                        </div>
-                      )
-                    }
-
+                    const label = groupKey === 'exchange' ? t('settings.exchangeApi') : t('settings.notifications')
                     return (
-                      <div key={groupKey}>
-                        <h3 className="text-sm font-medium text-gray-400 mb-3 uppercase tracking-wider">
-                          {sectionLabels[groupKey]}
+                      <div key={groupKey} className="bg-gray-900 border border-gray-800 rounded-lg p-3">
+                        <h3 className="text-[11px] font-medium text-gray-500 mb-2 uppercase tracking-wider">
+                          {label}
                         </h3>
-                        <div className="space-y-2">
+                        <div className="space-y-0.5">
                           {items.map(([key, svc]) => (
-                            <div key={key} className="flex items-center justify-between p-3 bg-gray-800 rounded-lg">
-                              <div className="flex items-center gap-3">
-                                <StatusDot reachable={svc.reachable} />
-                                <span className="text-white text-sm">{svc.label}</span>
+                            <div key={key} className="flex items-center justify-between py-1 px-1.5 rounded hover:bg-gray-800/60">
+                              <div className="flex items-center gap-2">
+                                <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${svc.reachable ? 'bg-green-400' : 'bg-red-400'}`} />
+                                <span className="text-white text-xs">{svc.label}</span>
                               </div>
-                              <div className="flex items-center gap-3 text-xs">
+                              <div className="flex items-center gap-1.5 text-[10px]">
                                 {svc.latency_ms != null && (
-                                  <span className="text-gray-500">{svc.latency_ms}ms</span>
+                                  <span className="text-gray-600 tabular-nums">{svc.latency_ms}ms</span>
                                 )}
                                 <span className={svc.reachable ? 'text-green-400' : 'text-red-400'}>
                                   {svc.reachable ? t('settings.online') : t('settings.offline')}
@@ -887,43 +883,39 @@ export default function Settings() {
                       </div>
                     )
                   })}
+                </div>
 
-                  {Object.keys(connStatus.circuit_breakers).length > 0 && (
-                    <div>
-                      <h3 className="text-sm font-medium text-gray-400 mb-3 uppercase tracking-wider">
-                        {t('settings.circuitBreakers')}
-                      </h3>
-                      <div className="space-y-2">
-                        {Object.entries(connStatus.circuit_breakers).map(([name, cb]) => (
-                          <div key={name} className="flex items-center justify-between p-3 bg-gray-800 rounded-lg">
-                            <div className="flex items-center gap-3">
-                              <span className={`inline-block w-2.5 h-2.5 rounded-full ${
-                                cb.state === 'closed' ? 'bg-green-400' :
-                                cb.state === 'open' ? 'bg-red-400' : 'bg-yellow-400'
-                              }`} />
-                              <span className="text-white text-sm">{cb.name}</span>
-                            </div>
-                            <div className="flex items-center gap-4 text-xs">
-                              <span className="text-gray-500">
-                                {cb.stats.successful_calls}/{cb.stats.total_calls}
-                              </span>
-                              <span className={circuitColor(cb.state)}>
-                                {circuitLabel(cb.state)}
-                              </span>
-                            </div>
+                {/* ── Circuit Breakers — compact grid ── */}
+                {Object.keys(connStatus.circuit_breakers).length > 0 && (
+                  <div className="bg-gray-900 border border-gray-800 rounded-lg p-3">
+                    <h3 className="text-[11px] font-medium text-gray-500 mb-2 uppercase tracking-wider">
+                      {t('settings.circuitBreakers')}
+                    </h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-0.5">
+                      {Object.entries(connStatus.circuit_breakers).map(([name, cb]) => (
+                        <div key={name} className="flex items-center justify-between py-1 px-1.5 rounded hover:bg-gray-800/60">
+                          <div className="flex items-center gap-2">
+                            <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
+                              cb.state === 'closed' ? 'bg-green-400' :
+                              cb.state === 'open' ? 'bg-red-400' : 'bg-yellow-400'
+                            }`} />
+                            <span className="text-white text-xs">{cb.name}</span>
                           </div>
-                        ))}
-                      </div>
+                          <span className={`text-[10px] ${circuitColor(cb.state)}`}>
+                            {circuitLabel(cb.state)}
+                          </span>
+                        </div>
+                      ))}
                     </div>
-                  )}
-                </>
-              )
-            })() : (
-              <div className="text-center text-gray-500 py-8">
-                {connLoading ? t('settings.refreshing') : t('common.loading')}
-              </div>
-            )}
-          </div>
+                  </div>
+                )}
+              </>
+            )
+          })() : (
+            <div className="text-center text-gray-500 py-8">
+              {connLoading ? t('settings.refreshing') : t('common.loading')}
+            </div>
+          )}
         </div>
       )}
 
