@@ -196,13 +196,13 @@ export default function BotPerformance() {
             <table className="table-premium">
               <thead>
                 <tr>
-                  <th>{t('performance.bot')}</th>
-                  <th>{t('performance.direction')}</th>
-                  <th>{t('performance.confidence')}</th>
-                  <th>{t('performance.winRate')}</th>
-                  <th>{t('performance.trades')}</th>
-                  <th>{t('performance.pnl')}</th>
-                  <th>{t('performance.strategy')}</th>
+                  <th className="text-left">{t('performance.bot')}</th>
+                  <th className="text-left">{t('performance.direction')}</th>
+                  <th className="text-left">{t('performance.confidence')}</th>
+                  <th className="text-left">{t('performance.winRate')}</th>
+                  <th className="text-left">{t('performance.trades')}</th>
+                  <th className="text-left">{t('performance.pnl')}</th>
+                  <th className="text-left">{t('performance.strategy')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -356,13 +356,13 @@ export default function BotPerformance() {
                 <table className="table-premium">
                   <thead>
                     <tr>
-                      <th>{t('trades.symbol')}</th>
-                      <th>{t('trades.side')}</th>
-                      <th>{t('trades.entryPrice')}</th>
-                      <th>{t('trades.exitPrice')}</th>
-                      <th>{t('trades.pnl')}</th>
-                      <th>{t('trades.status')}</th>
-                      <th>{t('trades.date')}</th>
+                      <th className="text-left">{t('trades.symbol')}</th>
+                      <th className="text-left">{t('trades.side')}</th>
+                      <th className="text-left">{t('trades.entryPrice')}</th>
+                      <th className="text-left">{t('trades.exitPrice')}</th>
+                      <th className="text-left">{t('trades.pnl')}</th>
+                      <th className="text-left">{t('trades.status')}</th>
+                      <th className="text-left">{t('trades.date')}</th>
                     </tr>
                   </thead>
                   <tbody>

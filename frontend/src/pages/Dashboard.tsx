@@ -8,6 +8,7 @@ import WinLossChart from '../components/dashboard/WinLossChart'
 import FeesChart from '../components/dashboard/FeesChart'
 import { DashboardSkeleton } from '../components/ui/Skeleton'
 import { ArrowUpRight, ArrowDownRight } from 'lucide-react'
+import { ExchangeIcon } from '../components/ui/ExchangeLogo'
 
 /* ── Animated Number ─────────────────────────────────────── */
 
@@ -203,20 +204,21 @@ export default function Dashboard() {
           <table className="table-premium">
             <thead>
               <tr>
-                <th>{t('trades.date')}</th>
-                <th>{t('trades.bot')}</th>
-                <th>{t('trades.symbol')}</th>
-                <th>{t('trades.side')}</th>
+                <th className="text-left">{t('trades.date')}</th>
+                <th className="text-left">{t('trades.bot')}</th>
+                <th className="text-center">{t('trades.exchange')}</th>
+                <th className="text-left">{t('trades.symbol')}</th>
+                <th className="text-center">{t('trades.side')}</th>
                 <th className="text-right">{t('trades.entryPrice')}</th>
                 <th className="text-right">{t('trades.pnl')}</th>
-                <th>{t('trades.mode')}</th>
-                <th>{t('trades.status')}</th>
+                <th className="text-center">{t('trades.mode')}</th>
+                <th className="text-center">{t('trades.status')}</th>
               </tr>
             </thead>
             <tbody>
               {recentTrades.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="p-8 text-center text-gray-500">
+                  <td colSpan={9} className="p-8 text-center text-gray-500">
                     {t('dashboard.noTrades')}
                   </td>
                 </tr>
@@ -228,16 +230,18 @@ export default function Dashboard() {
                     </td>
                     <td>
                       {trade.bot_name ? (
-                        <div>
-                          <span className="text-white font-medium text-xs">{trade.bot_name}</span>
-                          <span className="text-gray-500 text-xs ml-1">({trade.bot_exchange || trade.exchange})</span>
-                        </div>
+                        <span className="text-white font-medium text-xs">{trade.bot_name}</span>
                       ) : (
                         <span className="text-gray-600">--</span>
                       )}
                     </td>
+                    <td className="text-center">
+                      <span className="inline-flex justify-center">
+                        <ExchangeIcon exchange={trade.bot_exchange || trade.exchange} size={18} />
+                      </span>
+                    </td>
                     <td className="text-white font-medium">{trade.symbol}</td>
-                    <td>
+                    <td className="text-center">
                       <span className={trade.side === 'long' ? 'text-profit' : 'text-loss'}>
                         {trade.side === 'long' ? '+' : '-'} {trade.side.toUpperCase()}
                       </span>
@@ -250,12 +254,12 @@ export default function Dashboard() {
                         {formatPnl(trade.pnl)}
                       </span>
                     </td>
-                    <td>
+                    <td className="text-center">
                       <span className={trade.demo_mode ? 'badge-demo' : 'badge-live'}>
                         {trade.demo_mode ? t('common.demo') : t('common.live')}
                       </span>
                     </td>
-                    <td>
+                    <td className="text-center">
                       <span className={
                         trade.status === 'open' ? 'badge-open' :
                         trade.status === 'closed' ? 'badge-neutral' :

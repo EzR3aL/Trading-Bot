@@ -170,7 +170,7 @@ body {
 }
 
 .table-premium thead th {
-  @apply text-left px-4 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wider border-b border-white/5;
+  @apply px-4 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wider border-b border-white/5;
 }
 
 .table-premium tbody tr {

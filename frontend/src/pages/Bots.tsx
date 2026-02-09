@@ -16,6 +16,11 @@ import {
   RefreshCw,
   Activity,
   Clock,
+  TrendingUp,
+  FileText,
+  X,
+  ArrowUpRight,
+  ArrowDownRight,
 } from 'lucide-react'
 
 interface BotStatus {
@@ -42,6 +47,43 @@ interface BotStatus {
   llm_total_predictions?: number | null
   llm_total_tokens_used?: number | null
   llm_avg_tokens_per_call?: number | null
+}
+
+interface BotTrade {
+  id: number
+  symbol: string
+  side: string
+  size: number
+  entry_price: number
+  exit_price: number | null
+  pnl: number
+  pnl_percent: number
+  confidence: number
+  reason: string
+  status: string
+  demo_mode: boolean
+  entry_time: string
+  exit_time: string | null
+  exit_reason: string | null
+}
+
+interface BotStatistics {
+  bot_id: number
+  bot_name: string
+  strategy_type: string
+  exchange_type: string
+  summary: {
+    total_trades: number
+    wins: number
+    losses: number
+    win_rate: number
+    total_pnl: number
+    total_fees: number
+    avg_pnl: number
+    best_trade: number
+    worst_trade: number
+  }
+  recent_trades: BotTrade[]
 }
 
 const STATUS_STYLES: Record<string, { text: string; card: string; dot: string }> = {
@@ -77,6 +119,321 @@ function formatPnl(value: number): string {
   return `${prefix}$${value.toFixed(2)}`
 }
 
+function formatPnlPercent(value: number): string {
+  const prefix = value >= 0 ? '+' : ''
+  return `${prefix}${value.toFixed(2)}%`
+}
+
+/* ── Trade Detail Modal ──────────────────────────────────── */
+
+function TradeDetailModal({ trade, onClose, t }: { trade: BotTrade; onClose: () => void; t: (key: string) => string }) {
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 backdrop-blur-md" onClick={onClose}>
+      <div
+        className="bg-[#0f1420] rounded-2xl p-7 max-w-lg w-full mx-4 border border-white/10 shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between mb-5">
+          <div className="flex items-center gap-3">
+            <h3 className="text-xl font-bold text-white">{trade.symbol}</h3>
+            <span className={`px-3 py-1 rounded-lg text-xs font-bold ${
+              trade.side === 'long' ? 'bg-emerald-500/15 text-profit border border-emerald-500/20' : 'bg-red-500/15 text-loss border border-red-500/20'
+            }`}>
+              {trade.side === 'long' ? '+ LONG' : '- SHORT'}
+            </span>
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-white/5 transition-all" aria-label="Close">
+            <X size={20} />
+          </button>
+        </div>
+
+        {/* Result - Hero */}
+        <div className="text-center py-6 mb-5 bg-white/[0.02] rounded-xl border border-white/5">
+          <div className="text-xs text-gray-500 uppercase tracking-wider mb-2">{t('bots.result')}</div>
+          <div className={`text-5xl font-bold tracking-tight ${trade.pnl_percent >= 0 ? 'text-profit' : 'text-loss'}`}>
+            {formatPnlPercent(trade.pnl_percent)}
+          </div>
+          <div className={`text-lg font-semibold mt-1 ${trade.pnl >= 0 ? 'text-profit/70' : 'text-loss/70'}`}>
+            {formatPnl(trade.pnl)}
+          </div>
+        </div>
+
+        {/* Entry / Exit Price */}
+        <div className="grid grid-cols-2 gap-3 mb-5">
+          <div className="bg-white/[0.03] rounded-xl p-4 border border-white/5">
+            <div className="text-xs text-gray-500 mb-1.5">{t('bots.entryPrice')}</div>
+            <div className="text-white font-semibold text-lg">${trade.entry_price.toLocaleString()}</div>
+          </div>
+          <div className="bg-white/[0.03] rounded-xl p-4 border border-white/5">
+            <div className="text-xs text-gray-500 mb-1.5">{t('bots.exitPrice')}</div>
+            <div className="text-white font-semibold text-lg">
+              {trade.exit_price ? `$${trade.exit_price.toLocaleString()}` : '--'}
+            </div>
+          </div>
+        </div>
+
+        {/* Confidence */}
+        <div className="flex items-center justify-between mb-5 bg-white/[0.03] rounded-xl p-4 border border-white/5">
+          <span className="text-sm text-gray-400">{t('bots.confidence')}</span>
+          <span className="text-white font-bold text-lg">{trade.confidence}%</span>
+        </div>
+
+        {/* Reasoning */}
+        {trade.reason && (
+          <div className="mb-5">
+            <div className="text-xs text-gray-500 uppercase tracking-wider mb-2">{t('bots.reasoning')}</div>
+            <p className="text-sm text-gray-300 leading-relaxed bg-white/[0.03] rounded-xl p-4 border border-white/5">
+              {trade.reason}
+            </p>
+          </div>
+        )}
+
+        {/* Footer info */}
+        <div className="flex items-center justify-between text-sm text-gray-500 pt-4 border-t border-white/5">
+          <span>{new Date(trade.entry_time).toLocaleString()}</span>
+          <span className={trade.status === 'open' ? 'text-amber-400 font-medium' : 'text-gray-500'}>
+            {trade.status === 'open' ? t('bots.pending') : trade.exit_reason || trade.status}
+          </span>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/* ── Bot Trade History Modal ─────────────────────────────── */
+
+function BotTradeHistoryModal({ bot, onClose, t }: { bot: BotStatus; onClose: () => void; t: (key: string) => string }) {
+  const [stats, setStats] = useState<BotStatistics | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [selectedTrade, setSelectedTrade] = useState<BotTrade | null>(null)
+
+  useEffect(() => {
+    const load = async () => {
+      setLoading(true)
+      try {
+        const res = await api.get(`/bots/${bot.bot_config_id}/statistics?days=365`)
+        setStats(res.data)
+      } catch { /* ignore */ }
+      setLoading(false)
+    }
+    load()
+  }, [bot.bot_config_id])
+
+  const latestClosed = stats?.recent_trades.find(tr => tr.status === 'closed')
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-md" onClick={onClose}>
+      <div
+        className="bg-[#0b0f19] rounded-2xl max-w-5xl w-full mx-4 my-8 max-h-[90vh] flex flex-col border border-white/10 shadow-2xl overflow-hidden"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Modal Header */}
+        <div className="flex items-center justify-between px-7 py-5 border-b border-white/5 shrink-0">
+          <div className="flex items-center gap-4">
+            <div className="p-2 rounded-xl bg-white/5">
+              <ExchangeIcon exchange={bot.exchange_type} size={22} />
+            </div>
+            <div>
+              <h2 className="text-xl font-bold text-white">{bot.name}</h2>
+              <div className="flex items-center gap-2 mt-0.5">
+                <span className="text-xs text-gray-500">{bot.strategy_type}</span>
+                <span className="text-gray-700">|</span>
+                <span className={`text-xs font-medium ${bot.mode === 'demo' ? 'text-blue-400' : 'text-amber-400'}`}>
+                  {bot.mode.toUpperCase()}
+                </span>
+              </div>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-2 rounded-xl text-gray-400 hover:text-white hover:bg-white/5 transition-all"
+            aria-label="Close"
+          >
+            <X size={22} />
+          </button>
+        </div>
+
+        {/* Content - Scrollable */}
+        <div className="flex-1 overflow-y-auto">
+          {loading ? (
+            <div className="flex items-center justify-center py-20">
+              <RefreshCw size={24} className="animate-spin text-gray-500" />
+            </div>
+          ) : !stats || stats.recent_trades.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-20 text-gray-500">
+              <Activity size={40} className="mb-3 opacity-30" />
+              <p className="text-sm">{t('bots.noTrades')}</p>
+            </div>
+          ) : (
+            <>
+              {/* Summary Stats Bar */}
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-px bg-white/5">
+                <div className="bg-[#0b0f19] px-5 py-4 text-center">
+                  <div className="text-xs text-gray-500 uppercase tracking-wider mb-1">Gesamt-PnL</div>
+                  <div className={`text-xl font-bold font-mono ${stats.summary.total_pnl >= 0 ? 'text-profit' : 'text-loss'}`}>
+                    {formatPnl(stats.summary.total_pnl)}
+                  </div>
+                </div>
+                <div className="bg-[#0b0f19] px-5 py-4 text-center">
+                  <div className="text-xs text-gray-500 uppercase tracking-wider mb-1">{t('bots.winRate')}</div>
+                  <div className="text-xl font-bold text-white">{stats.summary.win_rate}%</div>
+                </div>
+                <div className="bg-[#0b0f19] px-5 py-4 text-center">
+                  <div className="text-xs text-gray-500 uppercase tracking-wider mb-1">{t('bots.trades')}</div>
+                  <div className="text-xl font-bold text-white">
+                    {stats.summary.total_trades}
+                    <span className="text-xs font-normal text-gray-500 ml-1.5">
+                      ({stats.summary.wins}W / {stats.summary.losses}L)
+                    </span>
+                  </div>
+                </div>
+                <div className="bg-[#0b0f19] px-5 py-4 text-center">
+                  <div className="text-xs text-gray-500 uppercase tracking-wider mb-1 flex items-center justify-center gap-1">
+                    <ArrowUpRight size={12} className="text-profit" /> Best
+                  </div>
+                  <div className="text-xl font-bold text-profit font-mono">{formatPnl(stats.summary.best_trade)}</div>
+                </div>
+                <div className="bg-[#0b0f19] px-5 py-4 text-center">
+                  <div className="text-xs text-gray-500 uppercase tracking-wider mb-1 flex items-center justify-center gap-1">
+                    <ArrowDownRight size={12} className="text-loss" /> Worst
+                  </div>
+                  <div className="text-xl font-bold text-loss font-mono">{formatPnl(stats.summary.worst_trade)}</div>
+                </div>
+              </div>
+
+              {/* Latest Trade Hero Card */}
+              {latestClosed && (
+                <div className="mx-6 mt-5 mb-2">
+                  <div className="text-xs text-gray-500 uppercase tracking-wider mb-3 font-semibold">{t('bots.latestTrade')}</div>
+                  <div
+                    className="bg-white/[0.02] rounded-xl p-5 border border-white/5 cursor-pointer hover:border-white/10 transition-all"
+                    onClick={() => setSelectedTrade(latestClosed)}
+                  >
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="flex items-center gap-3">
+                        <span className="text-white font-bold text-lg">{latestClosed.symbol}</span>
+                        <span className={`px-2.5 py-1 rounded-lg text-xs font-bold ${
+                          latestClosed.side === 'long' ? 'bg-emerald-500/15 text-profit border border-emerald-500/20' : 'bg-red-500/15 text-loss border border-red-500/20'
+                        }`}>
+                          {latestClosed.side === 'long' ? '+ LONG' : '- SHORT'}
+                        </span>
+                      </div>
+                      <span className="text-xs text-gray-500">{new Date(latestClosed.entry_time).toLocaleDateString()}</span>
+                    </div>
+
+                    <div className="flex items-end justify-between">
+                      {/* Result large */}
+                      <div>
+                        <div className={`text-4xl font-bold tracking-tight ${latestClosed.pnl_percent >= 0 ? 'text-profit' : 'text-loss'}`}>
+                          {formatPnlPercent(latestClosed.pnl_percent)}
+                        </div>
+                        <div className={`text-sm font-medium mt-0.5 ${latestClosed.pnl >= 0 ? 'text-profit/60' : 'text-loss/60'}`}>
+                          {formatPnl(latestClosed.pnl)}
+                        </div>
+                      </div>
+
+                      {/* Quick stats */}
+                      <div className="flex gap-6 text-right">
+                        <div>
+                          <div className="text-[10px] text-gray-500 uppercase">{t('bots.entryPrice')}</div>
+                          <div className="text-sm text-white font-medium">${latestClosed.entry_price.toLocaleString()}</div>
+                        </div>
+                        <div>
+                          <div className="text-[10px] text-gray-500 uppercase">{t('bots.exitPrice')}</div>
+                          <div className="text-sm text-white font-medium">
+                            {latestClosed.exit_price ? `$${latestClosed.exit_price.toLocaleString()}` : '--'}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-[10px] text-gray-500 uppercase">{t('bots.confidence')}</div>
+                          <div className="text-sm text-white font-medium">{latestClosed.confidence}%</div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Trade History Table */}
+              <div className="px-6 py-4">
+                <div className="text-xs text-gray-500 uppercase tracking-wider mb-3 font-semibold">{t('bots.tradeHistory')}</div>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-t border-b border-white/5 bg-white/[0.02]">
+                      <th className="text-left px-6 py-3 text-xs text-gray-500 uppercase font-semibold tracking-wider">{t('trades.date')}</th>
+                      <th className="text-left px-4 py-3 text-xs text-gray-500 uppercase font-semibold tracking-wider">{t('trades.symbol')}</th>
+                      <th className="text-center px-4 py-3 text-xs text-gray-500 uppercase font-semibold tracking-wider">{t('trades.side')}</th>
+                      <th className="text-center px-4 py-3 text-xs text-gray-500 uppercase font-semibold tracking-wider">{t('bots.confidence')}</th>
+                      <th className="text-center px-4 py-3 text-xs text-gray-500 uppercase font-semibold tracking-wider">{t('bots.result')}</th>
+                      <th className="text-left px-4 py-3 text-xs text-gray-500 uppercase font-semibold tracking-wider">{t('bots.reasoning')}</th>
+                      <th className="text-center px-4 py-3 text-xs text-gray-500 uppercase font-semibold tracking-wider">{t('bots.details')}</th>
+                      <th className="text-right px-6 py-3 text-xs text-gray-500 uppercase font-semibold tracking-wider">PnL</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {stats.recent_trades.map((trade) => (
+                      <tr key={trade.id} className="border-b border-white/5 hover:bg-white/[0.02] transition-colors">
+                        <td className="px-6 py-3.5 text-sm text-gray-300">
+                          {new Date(trade.entry_time).toLocaleDateString()}
+                        </td>
+                        <td className="px-4 py-3.5 text-sm text-white font-semibold">{trade.symbol}</td>
+                        <td className="px-4 py-3.5 text-center">
+                          <span className={`inline-block px-2.5 py-1 rounded-lg text-xs font-bold ${
+                            trade.side === 'long' ? 'bg-emerald-500/15 text-profit' : 'bg-red-500/15 text-loss'
+                          }`}>
+                            {trade.side.toUpperCase()}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3.5 text-center text-sm text-gray-300">{trade.confidence}%</td>
+                        <td className="px-4 py-3.5 text-center">
+                          <span className={`text-sm font-semibold ${
+                            trade.status === 'open' ? 'text-amber-400' :
+                            trade.pnl_percent >= 0 ? 'text-profit' : 'text-loss'
+                          }`}>
+                            {trade.status === 'open' ? t('bots.pending') : formatPnlPercent(trade.pnl_percent)}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3.5 text-sm text-gray-400 max-w-[280px] truncate" title={trade.reason}>
+                          {trade.reason || '--'}
+                        </td>
+                        <td className="px-4 py-3.5 text-center">
+                          <button
+                            onClick={() => setSelectedTrade(trade)}
+                            className="p-1.5 text-gray-400 hover:text-white transition-colors rounded-lg hover:bg-white/5"
+                            aria-label={t('bots.details')}
+                          >
+                            <FileText size={16} />
+                          </button>
+                        </td>
+                        <td className="px-6 py-3.5 text-right">
+                          <span className={`text-sm font-semibold font-mono ${
+                            trade.status === 'open' ? 'text-gray-500' :
+                            trade.pnl >= 0 ? 'text-profit' : 'text-loss'
+                          }`}>
+                            {trade.status === 'open' ? '--' : formatPnl(trade.pnl)}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* Trade Detail Modal (nested, higher z-index) */}
+      {selectedTrade && (
+        <TradeDetailModal trade={selectedTrade} onClose={() => setSelectedTrade(null)} t={t} />
+      )}
+    </div>
+  )
+}
+
 export default function Bots() {
   const { t } = useTranslation()
   const { demoFilter } = useFilterStore()
@@ -87,6 +444,7 @@ export default function Bots() {
   const [editBotId, setEditBotId] = useState<number | null>(null)
   const [actionLoading, setActionLoading] = useState<number | null>(null)
   const [error, setError] = useState('')
+  const [historyBot, setHistoryBot] = useState<BotStatus | null>(null)
 
   const fetchBots = useCallback(async () => {
     try {
@@ -408,6 +766,14 @@ export default function Bots() {
                     </button>
                   )}
                   <button
+                    onClick={() => setHistoryBot(bot)}
+                    aria-label={t('bots.showTrades')}
+                    className="p-2 text-gray-400 hover:text-primary-400 hover:bg-primary-500/10 transition-all duration-200 rounded-lg"
+                    title={t('bots.tradeHistory')}
+                  >
+                    <TrendingUp size={14} />
+                  </button>
+                  <button
                     onClick={() => setEditBotId(bot.bot_config_id)}
                     disabled={bot.status === 'running'}
                     aria-label={`${t('bots.edit')} ${bot.name}`}
@@ -430,6 +796,11 @@ export default function Bots() {
             )
           })}
         </div>
+      )}
+
+      {/* Trade History Modal */}
+      {historyBot && (
+        <BotTradeHistoryModal bot={historyBot} onClose={() => setHistoryBot(null)} t={t} />
       )}
     </div>
   )
