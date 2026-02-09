@@ -409,8 +409,8 @@ class BotWorker:
                 leverage=self._config.leverage,
             )
 
-            if position_usdt < 10:
-                logger.warning(f"{log_prefix} [{mode_str}] Position too small: ${position_usdt:.2f}")
+            if position_usdt < 5:
+                logger.warning(f"{log_prefix} [{mode_str}] Position too small: ${position_usdt:.2f} (min 5 USDT)")
                 return
 
             # Set leverage
@@ -504,7 +504,11 @@ class BotWorker:
                 logger.warning(f"{log_prefix} Discord notification failed: {notify_err}")
 
         except Exception as e:
-            logger.error(f"{log_prefix} [{mode_str}] Trade execution failed: {e}")
+            err_msg = str(e).lower()
+            if "minimum amount" in err_msg or "minimum order" in err_msg:
+                logger.warning(f"{log_prefix} [{mode_str}] Order below exchange minimum: {e}")
+            else:
+                logger.error(f"{log_prefix} [{mode_str}] Trade execution failed: {e}")
 
     async def _monitor_positions_safe(self):
         """Wrapper with error handling for position monitoring."""
