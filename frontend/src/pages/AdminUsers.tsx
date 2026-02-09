@@ -1,10 +1,13 @@
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { Shield, ShieldOff } from 'lucide-react'
 import api from '../api/client'
+import { useAuthStore } from '../stores/authStore'
 import type { User } from '../types'
 
 export default function AdminUsers() {
   const { t } = useTranslation()
+  const currentUser = useAuthStore((s) => s.user)
   const [users, setUsers] = useState<User[]>([])
   const [showForm, setShowForm] = useState(false)
   const [username, setUsername] = useState('')
@@ -35,8 +38,19 @@ export default function AdminUsers() {
     loadUsers()
   }
 
+  const toggleRole = async (user: User) => {
+    if (user.id === currentUser?.id) {
+      alert(t('admin.cannotDemoteSelf'))
+      return
+    }
+    if (!confirm(t('admin.confirmRoleChange'))) return
+    const newRole = user.role === 'admin' ? 'user' : 'admin'
+    await api.put(`/users/${user.id}`, { role: newRole })
+    loadUsers()
+  }
+
   const deleteUser = async (id: number) => {
-    if (!confirm('Delete user?')) return
+    if (!confirm(t('admin.deleteUser'))) return
     await api.delete(`/users/${id}`)
     loadUsers()
   }
@@ -44,12 +58,12 @@ export default function AdminUsers() {
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-white">{t('nav.admin')} - Users</h1>
+        <h1 className="text-2xl font-bold text-white">{t('nav.admin')} - {t('admin.users')}</h1>
         <button
           onClick={() => setShowForm(!showForm)}
           className="px-4 py-2 bg-primary-600 text-white rounded hover:bg-primary-700"
         >
-          + New User
+          + {t('admin.newUser')}
         </button>
       </div>
 
@@ -113,18 +127,31 @@ export default function AdminUsers() {
                   <span className={`px-2 py-0.5 rounded text-xs ${
                     user.is_active ? 'bg-green-900/30 text-green-400' : 'bg-red-900/30 text-red-400'
                   }`}>
-                    {user.is_active ? 'Active' : 'Inactive'}
+                    {user.is_active ? t('admin.active') : t('admin.inactive')}
                   </span>
                 </td>
                 <td className="p-3 text-right">
                   <div className="flex gap-2 justify-end">
+                    <button
+                      onClick={() => toggleRole(user)}
+                      disabled={user.id === currentUser?.id}
+                      className={`inline-flex items-center gap-1 px-2 py-1 text-xs rounded transition-colors ${
+                        user.role === 'admin'
+                          ? 'bg-purple-900/20 text-purple-400 hover:bg-purple-900/30'
+                          : 'bg-blue-900/20 text-blue-400 hover:bg-blue-900/30'
+                      } disabled:opacity-30 disabled:cursor-not-allowed`}
+                      title={user.id === currentUser?.id ? t('admin.cannotDemoteSelf') : ''}
+                    >
+                      {user.role === 'admin' ? <ShieldOff size={12} /> : <Shield size={12} />}
+                      {user.role === 'admin' ? t('admin.makeUser') : t('admin.makeAdmin')}
+                    </button>
                     <button onClick={() => toggleActive(user)}
                       className="px-2 py-1 text-xs bg-gray-800 text-gray-300 rounded hover:bg-gray-700">
-                      {user.is_active ? 'Deactivate' : 'Activate'}
+                      {user.is_active ? t('admin.deactivate') : t('admin.activate')}
                     </button>
                     <button onClick={() => deleteUser(user.id)}
                       className="px-2 py-1 text-xs bg-red-900/20 text-red-400 rounded hover:bg-red-900/30">
-                      Delete
+                      {t('bots.delete')}
                     </button>
                   </div>
                 </td>

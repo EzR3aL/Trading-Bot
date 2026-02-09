@@ -95,6 +95,12 @@
     "circuitHalfOpen": "Erholung",
     "refreshStatus": "Aktualisieren",
     "refreshing": "Prüfe...",
+    "sentimentNews": "Sentiment & News",
+    "futuresData": "Futures-Daten",
+    "optionsData": "Optionsdaten",
+    "spotMarket": "Spot-Markt",
+    "technicalIndicators": "Technische Indikatoren",
+    "tradfiCme": "TradFi / CME",
     "llmKeys": "LLM-Schlüssel",
     "llmKeysDescription": "API-Schlüssel für KI-Modelle konfigurieren, die in Handelsstrategien verwendet werden.",
     "connectionSuccess": "Verbindung erfolgreich",
@@ -108,7 +114,12 @@
     "takeProfit": "Take Profit %",
     "stopLoss": "Stop Loss %",
     "hyperliquidTestnetNote": "Wichtig: Das Testnet erfordert eine einmalige Einrichtung. 1) Zahle zuerst mindestens $5 USDC auf dein Mainnet-Hyperliquid-Konto ein. 2) Gehe dann zu app.hyperliquid-testnet.xyz/drip, um 1.000 Test-USDC zu erhalten. Ohne dies ist dein Testnet-Guthaben 0 und Demo-Trades schlagen fehl.",
-    "hyperliquid": "Hyperliquid"
+    "hyperliquid": "Hyperliquid",
+    "affiliateLinks": "Affiliate-Links",
+    "affiliateLinksDesc": "Affiliate-Links pro Exchange konfigurieren. Diese werden in Trade-Screenshots angezeigt.",
+    "affiliateUrl": "Affiliate-URL",
+    "affiliateLabel": "Label (optional)",
+    "affiliateActive": "Aktiv"
   },
   "presets": {
     "title": "Konfigurations-Presets",
@@ -284,6 +295,11 @@
     "noTrades": "Noch keine Trades vorhanden",
     "latestTrade": "Letzter Trade",
     "pending": "Offen",
+    "bestTrade": "Bester Trade",
+    "worstTrade": "Schlechtester Trade",
+    "copyImage": "Bild kopieren",
+    "copied": "Kopiert!",
+    "affiliateLink": "Affiliate-Link",
     "builder": {
       "title": "Neuen Bot erstellen",
       "editTitle": "Bot bearbeiten",
@@ -325,7 +341,19 @@
       "back": "Zurück",
       "next": "Weiter",
       "llmNote": "Dieser Bot nutzt KI zur Signalgenerierung. Konfiguriere deinen API-Schlüssel unter Einstellungen → LLM-Schlüssel.",
-      "customPromptPlaceholder": "Leer lassen für Standard-Prompt oder eigene KI-Anweisungen eingeben..."
+      "customPromptPlaceholder": "Leer lassen für Standard-Prompt oder eigene KI-Anweisungen eingeben...",
+      "step2b": "Daten",
+      "dataSources": "Datenquellen",
+      "dataSourcesDesc": "Wähle welche Marktdaten dein Bot analysieren soll",
+      "selectAll": "Alle auswählen",
+      "clearAll": "Leeren",
+      "sourcesSelected": "Quellen ausgewählt",
+      "sentiment": "Sentiment & News",
+      "futures": "Futures-Daten",
+      "options": "Optionsdaten",
+      "spot": "Spot-Markt",
+      "technical": "Technische Indikatoren",
+      "tradfi": "TradFi / CME"
     }
   },
   "performance": {
@@ -361,5 +389,18 @@
     "demoLiveFilter": "Modus",
     "page": "Seite",
     "of": "von"
+  },
+  "admin": {
+    "users": "Benutzer",
+    "newUser": "Neuer Benutzer",
+    "makeAdmin": "Zum Admin machen",
+    "makeUser": "Zum User machen",
+    "confirmRoleChange": "Rolle wirklich ändern?",
+    "cannotDemoteSelf": "Du kannst dich nicht selbst herabstufen",
+    "active": "Aktiv",
+    "inactive": "Inaktiv",
+    "deactivate": "Deaktivieren",
+    "activate": "Aktivieren",
+    "deleteUser": "Benutzer löschen?"
   }
 }

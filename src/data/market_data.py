@@ -32,6 +32,8 @@ logger = get_logger(__name__)
 _binance_breaker = circuit_registry.get("binance_api", fail_threshold=5, reset_timeout=60)
 _alternative_me_breaker = circuit_registry.get("alternative_me_api", fail_threshold=3, reset_timeout=120)
 _gdelt_breaker = circuit_registry.get("gdelt_api", fail_threshold=3, reset_timeout=120)
+_deribit_breaker = circuit_registry.get("deribit_api", fail_threshold=3, reset_timeout=120)
+_coingecko_breaker = circuit_registry.get("coingecko_api", fail_threshold=3, reset_timeout=120)
 
 
 class DataFetchError(Exception):
@@ -160,6 +162,8 @@ class MarketDataFetcher:
     BINANCE_FUTURES_URL = "https://fapi.binance.com"
     COINGLASS_URL = "https://open-api.coinglass.com/public/v2"
     GDELT_API_URL = "https://api.gdeltproject.org/api/v2/doc/doc"
+    DERIBIT_URL = "https://www.deribit.com/api/v2"
+    COINGECKO_URL = "https://api.coingecko.com/api/v3"
 
     def __init__(self):
         """Initialize the market data fetcher."""
@@ -1089,3 +1093,365 @@ class MarketDataFetcher:
         except Exception as e:
             logger.error(f"Error calculating OIWAP: {e}")
             return 0.0
+
+    # ==================== Deribit Options Data ====================
+
+    async def get_options_oi_deribit(self, currency: str = "BTC") -> Dict[str, Any]:
+        """
+        Fetch total options open interest from Deribit (public, no auth).
+
+        Returns:
+            Dict with total_oi, num_instruments
+        """
+        try:
+            url = f"{self.DERIBIT_URL}/public/get_book_summary_by_currency"
+            params = {"currency": currency, "kind": "option"}
+
+            async def _fetch():
+                return await self._get_with_retry(url, params)
+
+            data = await _deribit_breaker.call(_fetch)
+
+            if data and "result" in data:
+                instruments = data["result"]
+                total_oi = sum(float(i.get("open_interest", 0)) for i in instruments)
+                logger.info(f"Deribit Options OI ({currency}): {total_oi:.2f} across {len(instruments)} instruments")
+                return {
+                    "total_oi": total_oi,
+                    "num_instruments": len(instruments),
+                    "currency": currency,
+                }
+
+        except CircuitBreakerError as e:
+            logger.warning(f"Deribit API circuit open: {e}")
+        except Exception as e:
+            logger.error(f"Error fetching Deribit options OI: {e}")
+
+        return {"total_oi": 0.0, "num_instruments": 0, "currency": currency}
+
+    async def get_max_pain(self, currency: str = "BTC") -> Dict[str, Any]:
+        """
+        Calculate the max pain price from Deribit options data.
+
+        Max pain = strike price where the most options expire worthless.
+
+        Returns:
+            Dict with max_pain_price, nearest_expiry
+        """
+        try:
+            # Get active option instruments
+            url = f"{self.DERIBIT_URL}/public/get_instruments"
+            params = {"currency": currency, "kind": "option", "expired": "false"}
+
+            async def _fetch():
+                return await self._get_with_retry(url, params)
+
+            data = await _deribit_breaker.call(_fetch)
+
+            if not data or "result" not in data:
+                return {"max_pain_price": 0.0, "nearest_expiry": ""}
+
+            instruments = data["result"]
+            if not instruments:
+                return {"max_pain_price": 0.0, "nearest_expiry": ""}
+
+            # Find nearest expiry
+            now_ms = datetime.now().timestamp() * 1000
+            expiries = sorted(set(
+                i["expiration_timestamp"] for i in instruments
+                if i["expiration_timestamp"] > now_ms
+            ))
+            if not expiries:
+                return {"max_pain_price": 0.0, "nearest_expiry": ""}
+
+            nearest_exp = expiries[0]
+            nearest_instruments = [
+                i for i in instruments
+                if i["expiration_timestamp"] == nearest_exp
+            ]
+
+            # Group by strike
+            strikes: Dict[float, Dict[str, float]] = {}
+            for inst in nearest_instruments:
+                strike = float(inst["strike"])
+                if strike not in strikes:
+                    strikes[strike] = {"call_oi": 0.0, "put_oi": 0.0}
+                oi = float(inst.get("open_interest", 0) or 0)
+                if inst["option_type"] == "call":
+                    strikes[strike]["call_oi"] += oi
+                else:
+                    strikes[strike]["put_oi"] += oi
+
+            # Calculate pain at each strike
+            if not strikes:
+                return {"max_pain_price": 0.0, "nearest_expiry": ""}
+
+            strike_list = sorted(strikes.keys())
+            min_pain = float("inf")
+            max_pain_strike = 0.0
+
+            for test_price in strike_list:
+                total_pain = 0.0
+                for strike, oi_data in strikes.items():
+                    # Call holders lose when price < strike
+                    if test_price > strike:
+                        total_pain += (test_price - strike) * oi_data["call_oi"]
+                    # Put holders lose when price > strike
+                    if test_price < strike:
+                        total_pain += (strike - test_price) * oi_data["put_oi"]
+                if total_pain < min_pain:
+                    min_pain = total_pain
+                    max_pain_strike = test_price
+
+            expiry_dt = datetime.fromtimestamp(nearest_exp / 1000)
+            logger.info(f"Max Pain ({currency}): ${max_pain_strike:,.0f} (expiry {expiry_dt.date()})")
+            return {
+                "max_pain_price": max_pain_strike,
+                "nearest_expiry": expiry_dt.isoformat(),
+            }
+
+        except CircuitBreakerError as e:
+            logger.warning(f"Deribit API circuit open for max pain: {e}")
+        except Exception as e:
+            logger.error(f"Error calculating max pain: {e}")
+
+        return {"max_pain_price": 0.0, "nearest_expiry": ""}
+
+    async def get_put_call_ratio(self, currency: str = "BTC") -> Dict[str, Any]:
+        """
+        Calculate put/call ratio from Deribit options open interest.
+
+        Ratio > 1 = more puts (bearish), < 1 = more calls (bullish).
+
+        Returns:
+            Dict with ratio, total_puts, total_calls
+        """
+        try:
+            url = f"{self.DERIBIT_URL}/public/get_book_summary_by_currency"
+            params = {"currency": currency, "kind": "option"}
+
+            async def _fetch():
+                return await self._get_with_retry(url, params)
+
+            data = await _deribit_breaker.call(_fetch)
+
+            if data and "result" in data:
+                instruments = data["result"]
+                total_puts = 0.0
+                total_calls = 0.0
+                for inst in instruments:
+                    name = inst.get("instrument_name", "")
+                    oi = float(inst.get("open_interest", 0) or 0)
+                    if "-P" in name:
+                        total_puts += oi
+                    elif "-C" in name:
+                        total_calls += oi
+
+                ratio = total_puts / total_calls if total_calls > 0 else 0.0
+                logger.info(f"Put/Call Ratio ({currency}): {ratio:.3f} (puts={total_puts:.0f}, calls={total_calls:.0f})")
+                return {
+                    "ratio": ratio,
+                    "total_puts": total_puts,
+                    "total_calls": total_calls,
+                }
+
+        except CircuitBreakerError as e:
+            logger.warning(f"Deribit API circuit open for P/C ratio: {e}")
+        except Exception as e:
+            logger.error(f"Error fetching put/call ratio: {e}")
+
+        return {"ratio": 0.0, "total_puts": 0.0, "total_calls": 0.0}
+
+    # ==================== CoinGecko Market Data ====================
+
+    async def get_coingecko_market(self) -> Dict[str, Any]:
+        """
+        Fetch global crypto market data from CoinGecko (free tier).
+
+        Returns:
+            Dict with total_market_cap, btc_dominance, active_cryptocurrencies
+        """
+        try:
+            url = f"{self.COINGECKO_URL}/global"
+
+            async def _fetch():
+                return await self._get_with_retry(url)
+
+            data = await _coingecko_breaker.call(_fetch)
+
+            if data and "data" in data:
+                d = data["data"]
+                market_cap = d.get("total_market_cap", {}).get("usd", 0)
+                btc_dom = d.get("market_cap_percentage", {}).get("btc", 0)
+                active = d.get("active_cryptocurrencies", 0)
+                logger.info(f"CoinGecko Global: MCap=${market_cap/1e9:.1f}B, BTC Dom={btc_dom:.1f}%")
+                return {
+                    "total_market_cap_usd": market_cap,
+                    "btc_dominance_pct": btc_dom,
+                    "active_cryptocurrencies": active,
+                    "market_cap_change_24h_pct": d.get("market_cap_change_percentage_24h_usd", 0),
+                }
+
+        except CircuitBreakerError as e:
+            logger.warning(f"CoinGecko API circuit open: {e}")
+        except Exception as e:
+            logger.error(f"Error fetching CoinGecko market data: {e}")
+
+        return {
+            "total_market_cap_usd": 0,
+            "btc_dominance_pct": 0,
+            "active_cryptocurrencies": 0,
+            "market_cap_change_24h_pct": 0,
+        }
+
+    # ==================== CME Gap Detection ====================
+
+    async def get_cme_gap(self, symbol: str = "BTCUSDT") -> Dict[str, Any]:
+        """
+        Detect CME gap by comparing Friday 21:00 UTC close with current price.
+
+        CME BTC futures trade Mon-Fri. Weekend gaps often get filled.
+
+        Returns:
+            Dict with gap_pct, friday_close, current_price, gap_direction
+        """
+        try:
+            # Fetch 7 days of 4h candles to find Friday close
+            klines = await self.get_binance_klines(symbol, "4h", 42)
+            if not klines:
+                return {"gap_pct": 0.0, "friday_close": 0.0, "current_price": 0.0, "gap_direction": "none"}
+
+            # Find the last Friday 20:00-00:00 UTC candle (CME close ~21:00 UTC)
+            friday_close = 0.0
+            for k in reversed(klines):
+                ts = datetime.fromtimestamp(int(k[0]) / 1000)
+                if ts.weekday() == 4 and ts.hour >= 20:  # Friday, after 20:00
+                    friday_close = float(k[4])  # close price
+                    break
+
+            if friday_close == 0:
+                return {"gap_pct": 0.0, "friday_close": 0.0, "current_price": 0.0, "gap_direction": "none"}
+
+            current_price = float(klines[-1][4])
+            gap_pct = ((current_price - friday_close) / friday_close) * 100
+            direction = "up" if gap_pct > 0.5 else "down" if gap_pct < -0.5 else "none"
+
+            logger.info(f"CME Gap ({symbol}): {gap_pct:.2f}% (Fri close=${friday_close:,.0f}, now=${current_price:,.0f})")
+            return {
+                "gap_pct": gap_pct,
+                "friday_close": friday_close,
+                "current_price": current_price,
+                "gap_direction": direction,
+            }
+
+        except Exception as e:
+            logger.error(f"Error detecting CME gap: {e}")
+
+        return {"gap_pct": 0.0, "friday_close": 0.0, "current_price": 0.0, "gap_direction": "none"}
+
+    # ==================== Selective Fetching ====================
+
+    async def fetch_selected_metrics(
+        self, sources: List[str], symbol: str = "BTCUSDT"
+    ) -> Dict[str, Any]:
+        """
+        Fetch only the selected data sources in parallel.
+
+        Args:
+            sources: List of data source IDs (from data_source_registry)
+            symbol: Trading pair for symbol-specific data
+
+        Returns:
+            Dict keyed by source ID with fetched data. Failed sources are omitted.
+        """
+        await self._ensure_session()
+
+        # Map source IDs to coroutines
+        dispatch: Dict[str, Any] = {}
+        # Technical indicators need klines — track if we need them
+        needs_klines = any(s in sources for s in ("vwap", "supertrend", "spot_volume", "oiwap"))
+
+        for src_id in sources:
+            if src_id == "fear_greed":
+                dispatch[src_id] = self.get_fear_greed_index()
+            elif src_id == "news_sentiment":
+                dispatch[src_id] = self.get_news_sentiment()
+            elif src_id == "long_short_ratio":
+                dispatch[src_id] = self.get_long_short_ratio(symbol)
+            elif src_id == "top_trader_ls_ratio":
+                dispatch[src_id] = self.get_top_trader_long_short_ratio(symbol)
+            elif src_id == "funding_rate":
+                dispatch[src_id] = self.get_funding_rate_binance(symbol)
+            elif src_id == "predicted_funding":
+                dispatch[src_id] = self.get_predicted_funding_rate(symbol)
+            elif src_id == "open_interest":
+                dispatch[src_id] = self.get_open_interest(symbol)
+            elif src_id == "oi_history":
+                dispatch[src_id] = self.get_open_interest_history(symbol)
+            elif src_id == "liquidations":
+                dispatch[src_id] = self.get_recent_liquidations(symbol)
+            elif src_id == "options_oi":
+                currency = symbol.replace("USDT", "").replace("USD", "")
+                dispatch[src_id] = self.get_options_oi_deribit(currency)
+            elif src_id == "max_pain":
+                currency = symbol.replace("USDT", "").replace("USD", "")
+                dispatch[src_id] = self.get_max_pain(currency)
+            elif src_id == "put_call_ratio":
+                currency = symbol.replace("USDT", "").replace("USD", "")
+                dispatch[src_id] = self.get_put_call_ratio(currency)
+            elif src_id == "spot_price":
+                dispatch[src_id] = self.get_24h_ticker(symbol)
+            elif src_id == "coingecko_market":
+                dispatch[src_id] = self.get_coingecko_market()
+            elif src_id == "volatility":
+                dispatch[src_id] = self.get_price_volatility(symbol)
+            elif src_id == "trend_sma":
+                dispatch[src_id] = self.get_trend_direction(symbol)
+            elif src_id == "cme_gap":
+                dispatch[src_id] = self.get_cme_gap(symbol)
+            # Technical indicators computed from klines are handled below
+
+        # Fetch klines if needed for calculated indicators
+        klines = []
+        if needs_klines:
+            try:
+                klines = await self.get_binance_klines(symbol, "1h", 24)
+            except Exception as e:
+                logger.warning(f"Klines fetch failed for calculated indicators: {e}")
+
+        # Run all dispatched fetches in parallel
+        if dispatch:
+            keys = list(dispatch.keys())
+            coros = list(dispatch.values())
+            raw_results = await asyncio.gather(*coros, return_exceptions=True)
+        else:
+            keys = []
+            raw_results = []
+
+        # Build result dict, skipping failures
+        result: Dict[str, Any] = {}
+        for key, val in zip(keys, raw_results):
+            if isinstance(val, Exception):
+                logger.warning(f"Data source '{key}' failed: {val}")
+            else:
+                result[key] = val
+
+        # Compute kline-based indicators
+        if klines:
+            if "vwap" in sources:
+                result["vwap"] = self.calculate_vwap(klines)
+            if "supertrend" in sources:
+                result["supertrend"] = self.calculate_supertrend(klines)
+            if "spot_volume" in sources:
+                result["spot_volume"] = self.get_spot_volume_analysis(klines)
+            if "oiwap" in sources:
+                try:
+                    result["oiwap"] = await self.calculate_oiwap(symbol, klines=klines)
+                except Exception as e:
+                    logger.warning(f"OIWAP calculation failed: {e}")
+
+        logger.info(
+            f"Selective fetch: {len(result)}/{len(sources)} sources succeeded "
+            f"[{', '.join(result.keys())}]"
+        )
+        return result

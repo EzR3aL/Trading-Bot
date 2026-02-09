@@ -1,5 +1,6 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
+import { toBlob } from 'html-to-image'
 import api from '../api/client'
 import { useFilterStore } from '../stores/filterStore'
 import { useToastStore } from '../stores/toastStore'
@@ -21,6 +22,7 @@ import {
   X,
   ArrowUpRight,
   ArrowDownRight,
+  Copy,
 } from 'lucide-react'
 
 interface BotStatus {
@@ -40,6 +42,7 @@ interface BotStatus {
   total_pnl: number
   open_trades: number
   llm_provider?: string | null
+  llm_model?: string | null
   llm_last_direction?: string | null
   llm_last_confidence?: number | null
   llm_last_reasoning?: string | null
@@ -124,6 +127,12 @@ function formatPnlPercent(value: number): string {
   return `${prefix}${value.toFixed(2)}%`
 }
 
+function confidenceColor(value: number): string {
+  if (value >= 75) return 'text-emerald-400'
+  if (value >= 50) return 'text-amber-400'
+  return 'text-red-400'
+}
+
 /* ── Trade Detail Modal ──────────────────────────────────── */
 
 function TradeDetailModal({ trade, onClose, t }: { trade: BotTrade; onClose: () => void; t: (key: string) => string }) {
@@ -176,7 +185,7 @@ function TradeDetailModal({ trade, onClose, t }: { trade: BotTrade; onClose: () 
         {/* Confidence */}
         <div className="flex items-center justify-between mb-5 bg-white/[0.03] rounded-xl p-4 border border-white/5">
           <span className="text-sm text-gray-400">{t('bots.confidence')}</span>
-          <span className="text-white font-bold text-lg">{trade.confidence}%</span>
+          <span className={`font-bold text-lg ${confidenceColor(trade.confidence)}`}>{trade.confidence}%</span>
         </div>
 
         {/* Reasoning */}
@@ -203,22 +212,54 @@ function TradeDetailModal({ trade, onClose, t }: { trade: BotTrade; onClose: () 
 
 /* ── Bot Trade History Modal ─────────────────────────────── */
 
+interface AffiliateLink {
+  exchange_type: string
+  affiliate_url: string
+  label: string | null
+}
+
 function BotTradeHistoryModal({ bot, onClose, t }: { bot: BotStatus; onClose: () => void; t: (key: string) => string }) {
   const [stats, setStats] = useState<BotStatistics | null>(null)
   const [loading, setLoading] = useState(true)
   const [selectedTrade, setSelectedTrade] = useState<BotTrade | null>(null)
+  const [affiliateLink, setAffiliateLink] = useState<AffiliateLink | null>(null)
+  const latestCardRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     const load = async () => {
       setLoading(true)
       try {
-        const res = await api.get(`/bots/${bot.bot_config_id}/statistics?days=365`)
-        setStats(res.data)
+        const [statsRes, affRes] = await Promise.all([
+          api.get(`/bots/${bot.bot_config_id}/statistics?days=365`),
+          api.get('/affiliate-links'),
+        ])
+        setStats(statsRes.data)
+        const links: AffiliateLink[] = affRes.data
+        const match = links.find(l => l.exchange_type === bot.exchange_type)
+        if (match) setAffiliateLink(match)
       } catch { /* ignore */ }
       setLoading(false)
     }
     load()
-  }, [bot.bot_config_id])
+  }, [bot.bot_config_id, bot.exchange_type])
+
+  const [copied, setCopied] = useState(false)
+
+  const handleCopyImage = async () => {
+    if (!latestCardRef.current) return
+    try {
+      const blob = await toBlob(latestCardRef.current, {
+        pixelRatio: 2,
+        backgroundColor: '#0b0f19',
+      })
+      if (!blob) return
+      await navigator.clipboard.write([
+        new ClipboardItem({ 'image/png': blob }),
+      ])
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch { /* ignore */ }
+  }
 
   const latestClosed = stats?.recent_trades.find(tr => tr.status === 'closed')
 
@@ -270,7 +311,7 @@ function BotTradeHistoryModal({ bot, onClose, t }: { bot: BotStatus; onClose: ()
               {/* Summary Stats Bar */}
               <div className="grid grid-cols-2 md:grid-cols-5 gap-px bg-white/5">
                 <div className="bg-[#0b0f19] px-5 py-4 text-center">
-                  <div className="text-xs text-gray-500 uppercase tracking-wider mb-1">Gesamt-PnL</div>
+                  <div className="text-xs text-gray-500 uppercase tracking-wider mb-1">{t('bots.totalPnl')}</div>
                   <div className={`text-xl font-bold font-mono ${stats.summary.total_pnl >= 0 ? 'text-profit' : 'text-loss'}`}>
                     {formatPnl(stats.summary.total_pnl)}
                   </div>
@@ -290,13 +331,13 @@ function BotTradeHistoryModal({ bot, onClose, t }: { bot: BotStatus; onClose: ()
                 </div>
                 <div className="bg-[#0b0f19] px-5 py-4 text-center">
                   <div className="text-xs text-gray-500 uppercase tracking-wider mb-1 flex items-center justify-center gap-1">
-                    <ArrowUpRight size={12} className="text-profit" /> Best
+                    <ArrowUpRight size={12} className="text-profit" /> {t('bots.bestTrade')}
                   </div>
                   <div className="text-xl font-bold text-profit font-mono">{formatPnl(stats.summary.best_trade)}</div>
                 </div>
                 <div className="bg-[#0b0f19] px-5 py-4 text-center">
                   <div className="text-xs text-gray-500 uppercase tracking-wider mb-1 flex items-center justify-center gap-1">
-                    <ArrowDownRight size={12} className="text-loss" /> Worst
+                    <ArrowDownRight size={12} className="text-loss" /> {t('bots.worstTrade')}
                   </div>
                   <div className="text-xl font-bold text-loss font-mono">{formatPnl(stats.summary.worst_trade)}</div>
                 </div>
@@ -305,11 +346,27 @@ function BotTradeHistoryModal({ bot, onClose, t }: { bot: BotStatus; onClose: ()
               {/* Latest Trade Hero Card */}
               {latestClosed && (
                 <div className="mx-6 mt-5 mb-2">
-                  <div className="text-xs text-gray-500 uppercase tracking-wider mb-3 font-semibold">{t('bots.latestTrade')}</div>
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="text-xs text-gray-500 uppercase tracking-wider font-semibold">{t('bots.latestTrade')}</div>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); handleCopyImage() }}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg transition-all border ${
+                        copied
+                          ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20'
+                          : 'text-gray-400 hover:text-white bg-white/5 hover:bg-white/10 border-white/5'
+                      }`}
+                      title={t('bots.copyImage')}
+                    >
+                      <Copy size={14} />
+                      {copied ? t('bots.copied') : t('bots.copyImage')}
+                    </button>
+                  </div>
                   <div
+                    ref={latestCardRef}
                     className="bg-white/[0.02] rounded-xl p-5 border border-white/5 cursor-pointer hover:border-white/10 transition-all"
                     onClick={() => setSelectedTrade(latestClosed)}
                   >
+                    {/* Header: Symbol + Side + Date */}
                     <div className="flex items-center justify-between mb-4">
                       <div className="flex items-center gap-3">
                         <span className="text-white font-bold text-lg">{latestClosed.symbol}</span>
@@ -322,35 +379,40 @@ function BotTradeHistoryModal({ bot, onClose, t }: { bot: BotStatus; onClose: ()
                       <span className="text-xs text-gray-500">{new Date(latestClosed.entry_time).toLocaleDateString()}</span>
                     </div>
 
-                    <div className="flex items-end justify-between">
-                      {/* Result large */}
+                    {/* 4-column grid: PnL | Einstieg | Ausstieg | Konfidenz */}
+                    <div className="grid grid-cols-4 gap-4">
                       <div>
-                        <div className={`text-4xl font-bold tracking-tight ${latestClosed.pnl_percent >= 0 ? 'text-profit' : 'text-loss'}`}>
+                        <div className="text-xs text-gray-500 uppercase tracking-wider mb-1">{t('bots.result')}</div>
+                        <div className={`text-3xl font-bold tracking-tight ${latestClosed.pnl_percent >= 0 ? 'text-profit' : 'text-loss'}`}>
                           {formatPnlPercent(latestClosed.pnl_percent)}
                         </div>
                         <div className={`text-sm font-medium mt-0.5 ${latestClosed.pnl >= 0 ? 'text-profit/60' : 'text-loss/60'}`}>
                           {formatPnl(latestClosed.pnl)}
                         </div>
                       </div>
-
-                      {/* Quick stats */}
-                      <div className="flex gap-6 text-right">
-                        <div>
-                          <div className="text-[10px] text-gray-500 uppercase">{t('bots.entryPrice')}</div>
-                          <div className="text-sm text-white font-medium">${latestClosed.entry_price.toLocaleString()}</div>
-                        </div>
-                        <div>
-                          <div className="text-[10px] text-gray-500 uppercase">{t('bots.exitPrice')}</div>
-                          <div className="text-sm text-white font-medium">
-                            {latestClosed.exit_price ? `$${latestClosed.exit_price.toLocaleString()}` : '--'}
-                          </div>
-                        </div>
-                        <div>
-                          <div className="text-[10px] text-gray-500 uppercase">{t('bots.confidence')}</div>
-                          <div className="text-sm text-white font-medium">{latestClosed.confidence}%</div>
+                      <div>
+                        <div className="text-xs text-gray-500 uppercase tracking-wider mb-1">{t('bots.entryPrice')}</div>
+                        <div className="text-xl font-bold text-white">${latestClosed.entry_price.toLocaleString()}</div>
+                      </div>
+                      <div>
+                        <div className="text-xs text-gray-500 uppercase tracking-wider mb-1">{t('bots.exitPrice')}</div>
+                        <div className="text-xl font-bold text-white">
+                          {latestClosed.exit_price ? `$${latestClosed.exit_price.toLocaleString()}` : '--'}
                         </div>
                       </div>
+                      <div>
+                        <div className="text-xs text-gray-500 uppercase tracking-wider mb-1">{t('bots.confidence')}</div>
+                        <div className={`text-xl font-bold ${confidenceColor(latestClosed.confidence)}`}>{latestClosed.confidence}%</div>
+                      </div>
                     </div>
+
+                    {/* Affiliate Link (inside card for screenshot capture) */}
+                    {affiliateLink && (
+                      <div className="mt-4 pt-3 border-t border-white/5 flex items-center justify-between">
+                        <span className="text-xs text-gray-500">{affiliateLink.label || t('bots.affiliateLink')}</span>
+                        <span className="text-xs text-primary-400 font-medium">{affiliateLink.affiliate_url}</span>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
@@ -387,7 +449,7 @@ function BotTradeHistoryModal({ bot, onClose, t }: { bot: BotStatus; onClose: ()
                             {trade.side.toUpperCase()}
                           </span>
                         </td>
-                        <td className="px-4 py-3.5 text-center text-sm text-gray-300">{trade.confidence}%</td>
+                        <td className={`px-4 py-3.5 text-center text-sm font-medium ${confidenceColor(trade.confidence)}`}>{trade.confidence}%</td>
                         <td className="px-4 py-3.5 text-center">
                           <span className={`text-sm font-semibold ${
                             trade.status === 'open' ? 'text-amber-400' :

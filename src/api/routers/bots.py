@@ -108,6 +108,17 @@ async def list_strategies(user: User = Depends(get_current_user)):
     )
 
 
+@router.get("/data-sources")
+async def list_data_sources(user: User = Depends(get_current_user)):
+    """Return the catalog of all available market data sources."""
+    from src.data.data_source_registry import DATA_SOURCES, DEFAULT_SOURCES
+
+    return {
+        "sources": [ds.to_dict() for ds in DATA_SOURCES],
+        "defaults": DEFAULT_SOURCES,
+    }
+
+
 # ─── CRUD ─────────────────────────────────────────────────────
 
 @router.post("", response_model=BotConfigResponse)
@@ -234,6 +245,7 @@ async def list_bots(
                         metrics = json.loads(last_trade.metrics_snapshot)
                         llm_data["llm_last_reasoning"] = metrics.get("llm_reasoning", "")[:200]
                         llm_data["llm_provider"] = metrics.get("llm_provider")
+                        llm_data["llm_model"] = metrics.get("llm_model")
                     except (json.JSONDecodeError, TypeError) as e:
                         logger.warning(f"Failed to parse metrics_snapshot for trade #{last_trade.id}: {e}")
 
@@ -294,11 +306,14 @@ async def list_bots(
             except Exception as e:
                 logger.warning(f"Failed to aggregate LLM token usage for bot {config.id}: {e}")
 
-            # Get provider from strategy_params
-            if not llm_data.get("llm_provider") and config.strategy_params:
+            # Get provider/model from strategy_params as fallback
+            if (not llm_data.get("llm_provider") or not llm_data.get("llm_model")) and config.strategy_params:
                 try:
                     sp = json.loads(config.strategy_params)
-                    llm_data["llm_provider"] = sp.get("llm_provider")
+                    if not llm_data.get("llm_provider"):
+                        llm_data["llm_provider"] = sp.get("llm_provider")
+                    if not llm_data.get("llm_model"):
+                        llm_data["llm_model"] = sp.get("llm_model")
                 except (json.JSONDecodeError, TypeError) as e:
                     logger.warning(f"Failed to parse strategy_params for bot {config.id}: {e}")
 

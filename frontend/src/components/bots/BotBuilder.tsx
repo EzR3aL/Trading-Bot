@@ -1,7 +1,7 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import api from '../../api/client'
-import { ArrowLeft, ArrowRight, Check, Play } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Check, Play, Brain, TrendingUp, BarChart3, DollarSign, Activity, Building } from 'lucide-react'
 import ExchangeLogo from '../ui/ExchangeLogo'
 
 interface Strategy {
@@ -25,13 +25,35 @@ interface ParamDef {
   options?: (string | ParamOption)[]
 }
 
+interface DataSource {
+  id: string
+  name: string
+  description: string
+  category: string
+  provider: string
+  free: boolean
+  default: boolean
+}
+
 interface BotBuilderProps {
   botId?: number | null
   onDone: () => void
   onCancel: () => void
 }
 
-const STEPS = ['step1', 'step2', 'step3', 'step4', 'step5', 'step6'] as const
+// Strategies that use market data and should show the data sources step
+const DATA_STRATEGIES = ['llm_signal', 'sentiment_surfer', 'liquidation_hunter']
+
+const CATEGORY_ORDER = ['sentiment', 'futures', 'options', 'spot', 'technical', 'tradfi']
+const CATEGORY_ICONS: Record<string, typeof Brain> = {
+  sentiment: Brain,
+  futures: TrendingUp,
+  options: BarChart3,
+  spot: DollarSign,
+  technical: Activity,
+  tradfi: Building,
+}
+
 const EXCHANGES = ['bitget', 'weex', 'hyperliquid']
 const PAIRS_CEX = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'XRPUSDT', 'DOGEUSDT', 'AVAXUSDT']
 const PAIRS_HL = ['BTC', 'ETH', 'SOL', 'XRP', 'DOGE', 'AVAX']
@@ -43,6 +65,11 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
   const [strategies, setStrategies] = useState<Strategy[]>([])
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+
+  // Data sources catalog
+  const [dataSources, setDataSources] = useState<DataSource[]>([])
+  const [defaultSourceIds, setDefaultSourceIds] = useState<string[]>([])
+  const [selectedSources, setSelectedSources] = useState<string[]>([])
 
   // Form state
   const [name, setName] = useState('')
@@ -62,6 +89,27 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
   const [intervalMinutes, setIntervalMinutes] = useState(60)
   const [customHours, setCustomHours] = useState<number[]>([1, 8, 14, 21])
 
+  // Whether current strategy uses market data
+  const usesData = DATA_STRATEGIES.includes(strategyType)
+
+  // Dynamic steps: insert data sources step after strategy for data-using strategies
+  const steps = useMemo(() => {
+    if (usesData) {
+      return ['step1', 'step2', 'step2b', 'step3', 'step4', 'step5', 'step6'] as const
+    }
+    return ['step1', 'step2', 'step3', 'step4', 'step5', 'step6'] as const
+  }, [usesData])
+
+  // Group data sources by category
+  const sourcesByCategory = useMemo(() => {
+    const groups: Record<string, DataSource[]> = {}
+    for (const cat of CATEGORY_ORDER) {
+      const items = dataSources.filter(ds => ds.category === cat)
+      if (items.length > 0) groups[cat] = items
+    }
+    return groups
+  }, [dataSources])
+
   // Load strategies
   useEffect(() => {
     api.get('/bots/strategies').then(res => {
@@ -69,7 +117,6 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
       if (res.data.strategies.length > 0 && !strategyType) {
         const first = res.data.strategies[0]
         setStrategyType(first.name)
-        // Set default params
         const defaults: Record<string, any> = {}
         Object.entries(first.param_schema).forEach(([key, def]) => {
           defaults[key] = (def as ParamDef).default
@@ -78,6 +125,18 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
       }
     })
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Load data sources catalog
+  useEffect(() => {
+    api.get('/bots/data-sources').then(res => {
+      setDataSources(res.data.sources)
+      setDefaultSourceIds(res.data.defaults)
+      // Only set defaults if not editing (editing loads from bot config)
+      if (!isEdit) {
+        setSelectedSources(res.data.defaults)
+      }
+    }).catch(() => {})
+  }, [isEdit])
 
   // Load existing bot if editing
   useEffect(() => {
@@ -102,9 +161,15 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
           if (d.schedule_config.interval_minutes) setIntervalMinutes(d.schedule_config.interval_minutes)
           if (d.schedule_config.hours) setCustomHours(d.schedule_config.hours)
         }
+        // Restore selected data sources from strategy_params
+        if (d.strategy_params?.data_sources) {
+          setSelectedSources(d.strategy_params.data_sources)
+        } else if (defaultSourceIds.length > 0) {
+          setSelectedSources(defaultSourceIds)
+        }
       })
     }
-  }, [botId, isEdit])
+  }, [botId, isEdit, defaultSourceIds])
 
   const isHyperliquid = exchangeType === 'hyperliquid'
   const activePairs = isHyperliquid ? PAIRS_HL : PAIRS_CEX
@@ -127,10 +192,8 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
   useEffect(() => {
     setTradingPairs(prev => prev.map(p => {
       if (isHyperliquid) {
-        // Strip USDT/USDC suffix: "BTCUSDT" -> "BTC"
         return p.replace(/(USDT|USDC)$/i, '')
       } else {
-        // Add USDT suffix if missing: "BTC" -> "BTCUSDT"
         return p.match(/(USDT|USDC)$/i) ? p : p + 'USDT'
       }
     }))
@@ -148,12 +211,33 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
     )
   }
 
+  const toggleSource = (id: string) => {
+    setSelectedSources(prev =>
+      prev.includes(id) ? prev.filter(s => s !== id) : [...prev, id]
+    )
+  }
+
+  const selectAllInCategory = (category: string) => {
+    const ids = (sourcesByCategory[category] || []).map(ds => ds.id)
+    setSelectedSources(prev => [...new Set([...prev, ...ids])])
+  }
+
+  const clearCategory = (category: string) => {
+    const ids = new Set((sourcesByCategory[category] || []).map(ds => ds.id))
+    setSelectedSources(prev => prev.filter(s => !ids.has(s)))
+  }
+
   const buildPayload = () => {
     const scheduleConfig = scheduleType === 'interval'
       ? { interval_minutes: intervalMinutes }
       : scheduleType === 'custom_cron'
         ? { hours: customHours }
         : { hours: [1, 8, 14, 21] }
+
+    // Include data_sources in strategy_params for data-using strategies
+    const params = usesData
+      ? { ...strategyParams, data_sources: selectedSources }
+      : strategyParams
 
     return {
       name,
@@ -168,7 +252,7 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
       take_profit_percent: takeProfit,
       stop_loss_percent: stopLoss,
       daily_loss_limit_percent: dailyLossLimit,
-      strategy_params: strategyParams,
+      strategy_params: params,
       schedule_type: scheduleType,
       schedule_config: scheduleConfig,
     }
@@ -197,15 +281,18 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
   }
 
   const canGoNext = () => {
-    if (step === 0) return name.trim().length > 0
-    if (step === 1) return strategyType.length > 0
-    if (step === 2) return tradingPairs.length > 0
-    if (step === 3) return true
-    if (step === 4) return scheduleType === 'interval' ? intervalMinutes >= 5 : true
+    const stepKey = steps[step]
+    if (stepKey === 'step1') return name.trim().length > 0
+    if (stepKey === 'step2') return strategyType.length > 0
+    if (stepKey === 'step2b') return selectedSources.length > 0
+    if (stepKey === 'step3') return tradingPairs.length > 0
+    if (stepKey === 'step4') return true
+    if (stepKey === 'step5') return scheduleType === 'interval' ? intervalMinutes >= 5 : true
     return true
   }
 
   const b = t('bots.builder', { returnObjects: true }) as Record<string, string>
+  const currentStepKey = steps[step]
 
   return (
     <div>
@@ -221,7 +308,7 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
 
       {/* Step indicator */}
       <div className="flex items-center gap-1 mb-8">
-        {STEPS.map((s, i) => (
+        {steps.map((s, i) => (
           <div key={s} className="flex items-center">
             <button
               onClick={() => i <= step && setStep(i)}
@@ -233,7 +320,7 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
             >
               {b[s]}
             </button>
-            {i < STEPS.length - 1 && <div className="w-4 h-px bg-gray-700 mx-1" />}
+            {i < steps.length - 1 && <div className="w-4 h-px bg-gray-700 mx-1" />}
           </div>
         ))}
       </div>
@@ -245,7 +332,7 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
       {/* Step content */}
       <div className="bg-gray-900 border border-gray-800 rounded-lg p-6 mb-6">
         {/* Step 1: Name */}
-        {step === 0 && (
+        {currentStepKey === 'step1' && (
           <div className="space-y-4 max-w-md">
             <div>
               <label className="block text-sm text-gray-400 mb-1">{b.name}</label>
@@ -272,7 +359,7 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
         )}
 
         {/* Step 2: Strategy */}
-        {step === 1 && (
+        {currentStepKey === 'step2' && (
           <div className="space-y-6">
             <div>
               <label className="block text-sm text-gray-400 mb-2">{b.selectStrategy}</label>
@@ -308,7 +395,6 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
                   {Object.entries(selectedStrategy.param_schema).map(([key, def]) => {
                     const d = def as ParamDef
 
-                    // Select dropdown (e.g. llm_provider)
                     if (d.type === 'select' && d.options) {
                       return (
                         <div key={key}>
@@ -328,7 +414,6 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
                       )
                     }
 
-                    // Textarea (e.g. custom_prompt)
                     if (d.type === 'textarea') {
                       return (
                         <div key={key} className="col-span-2">
@@ -344,7 +429,6 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
                       )
                     }
 
-                    // Float slider (e.g. temperature)
                     if (d.type === 'float' && d.min !== undefined && d.max !== undefined && d.max <= 1) {
                       const val = strategyParams[key] ?? d.default
                       return (
@@ -366,7 +450,6 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
                       )
                     }
 
-                    // Default: number input
                     return (
                       <div key={key}>
                         <label className="block text-xs text-gray-500 mb-1" title={d.description}>{d.label}</label>
@@ -388,8 +471,78 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
           </div>
         )}
 
+        {/* Step 2b: Data Sources */}
+        {currentStepKey === 'step2b' && (
+          <div className="space-y-6">
+            <div>
+              <label className="block text-sm text-gray-400 mb-1">{b.dataSources || 'Data Sources'}</label>
+              <p className="text-xs text-gray-500 mb-4">{b.dataSourcesDesc || 'Select which market data your bot should analyze'}</p>
+              <div className="text-xs text-gray-400 mb-4">
+                {selectedSources.length} {b.sourcesSelected || 'sources selected'}
+              </div>
+            </div>
+
+            {CATEGORY_ORDER.map(cat => {
+              const sources = sourcesByCategory[cat]
+              if (!sources) return null
+              const Icon = CATEGORY_ICONS[cat] || Activity
+              const catLabel = b[cat] || cat
+              const allSelected = sources.every(s => selectedSources.includes(s.id))
+
+              return (
+                <div key={cat}>
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <Icon size={16} className="text-gray-400" />
+                      <span className="text-sm font-medium text-gray-300">{catLabel}</span>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => selectAllInCategory(cat)}
+                        className={`text-[10px] px-2 py-0.5 rounded ${allSelected ? 'text-gray-600' : 'text-primary-400 hover:text-primary-300'}`}
+                        disabled={allSelected}
+                      >
+                        {b.selectAll || 'Select All'}
+                      </button>
+                      <button
+                        onClick={() => clearCategory(cat)}
+                        className="text-[10px] px-2 py-0.5 rounded text-gray-500 hover:text-gray-400"
+                      >
+                        {b.clearAll || 'Clear'}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 mb-4">
+                    {sources.map(src => {
+                      const isSelected = selectedSources.includes(src.id)
+                      return (
+                        <button
+                          key={src.id}
+                          onClick={() => toggleSource(src.id)}
+                          className={`text-left p-3 rounded-lg border transition-all duration-200 ${
+                            isSelected
+                              ? 'border-green-400/70 bg-green-950/30 shadow-[0_0_15px_rgba(74,222,128,0.15)]'
+                              : 'border-gray-700 bg-gray-800/50 hover:border-gray-600'
+                          }`}
+                        >
+                          <div className={`text-sm font-medium ${isSelected ? 'text-green-300' : 'text-white'}`}>
+                            {src.name}
+                          </div>
+                          <div className="text-[11px] text-gray-400 mt-1 line-clamp-2">{src.description}</div>
+                          <div className="text-[10px] text-gray-500 mt-1.5">{src.provider}</div>
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
+
         {/* Step 3: Trading Parameters */}
-        {step === 2 && (
+        {currentStepKey === 'step3' && (
           <div className="space-y-6">
             <div>
               <label className="block text-sm text-gray-400 mb-2">{b.tradingPairs}</label>
@@ -446,7 +599,7 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
         )}
 
         {/* Step 4: Exchange & Mode */}
-        {step === 3 && (
+        {currentStepKey === 'step4' && (
           <div className="space-y-6">
             <div>
               <label className="block text-sm text-gray-400 mb-2">{b.exchange}</label>
@@ -491,7 +644,7 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
         )}
 
         {/* Step 5: Schedule */}
-        {step === 4 && (
+        {currentStepKey === 'step5' && (
           <div className="space-y-4">
             <label className="block text-sm text-gray-400 mb-2">{b.schedule}</label>
             <div className="space-y-3">
@@ -542,7 +695,7 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
         )}
 
         {/* Step 6: Review */}
-        {step === 5 && (
+        {currentStepKey === 'step6' && (
           <div className="space-y-4">
             <h3 className="text-white font-medium mb-4">{b.review}</h3>
             <div className="grid grid-cols-2 gap-4 text-sm">
@@ -556,6 +709,9 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
               <div><span className="text-gray-500">{b.maxTrades}:</span> <span className="text-white ml-2">{maxTrades}</span></div>
               <div><span className="text-gray-500">{b.takeProfit}:</span> <span className="text-white ml-2">{takeProfit}%</span></div>
               <div><span className="text-gray-500">{b.stopLoss}:</span> <span className="text-white ml-2">{stopLoss}%</span></div>
+              {usesData && (
+                <div><span className="text-gray-500">{b.dataSources || 'Data Sources'}:</span> <span className="text-white ml-2">{selectedSources.length} {b.sourcesSelected || 'selected'}</span></div>
+              )}
               <div><span className="text-gray-500">{b.schedule}:</span> <span className="text-white ml-2">
                 {scheduleType === 'interval' ? `Every ${intervalMinutes}min` :
                  scheduleType === 'custom_cron' ? customHours.map(h => `${h}:00`).join(', ') :
@@ -577,7 +733,7 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
         </button>
 
         <div className="flex gap-2">
-          {step < STEPS.length - 1 ? (
+          {step < steps.length - 1 ? (
             <button
               onClick={() => setStep(step + 1)}
               disabled={!canGoNext()}

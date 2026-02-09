@@ -95,6 +95,12 @@
     "circuitHalfOpen": "Recovering",
     "refreshStatus": "Refresh",
     "refreshing": "Checking...",
+    "sentimentNews": "Sentiment & News",
+    "futuresData": "Futures Data",
+    "optionsData": "Options Data",
+    "spotMarket": "Spot Market",
+    "technicalIndicators": "Technical Indicators",
+    "tradfiCme": "TradFi / CME",
     "llmKeys": "LLM Keys",
     "llmKeysDescription": "Configure API keys for AI models used in trading strategies.",
     "connectionSuccess": "Connection successful",
@@ -108,7 +114,12 @@
     "takeProfit": "Take Profit %",
     "stopLoss": "Stop Loss %",
     "hyperliquidTestnetNote": "Important: Testnet requires a one-time setup. 1) Deposit at least $5 USDC to your mainnet Hyperliquid account first. 2) Then go to app.hyperliquid-testnet.xyz/drip to claim 1,000 mock USDC. Without this, your testnet balance will be 0 and demo trades will fail.",
-    "hyperliquid": "Hyperliquid"
+    "hyperliquid": "Hyperliquid",
+    "affiliateLinks": "Affiliate Links",
+    "affiliateLinksDesc": "Configure affiliate links per exchange. These will be shown in trade screenshots.",
+    "affiliateUrl": "Affiliate URL",
+    "affiliateLabel": "Label (optional)",
+    "affiliateActive": "Active"
   },
   "presets": {
     "title": "Configuration Presets",
@@ -283,6 +294,11 @@
     "noTrades": "No trades yet",
     "latestTrade": "Latest Trade",
     "pending": "Pending",
+    "bestTrade": "Best Trade",
+    "worstTrade": "Worst Trade",
+    "copyImage": "Copy Image",
+    "copied": "Copied!",
+    "affiliateLink": "Affiliate Link",
     "builder": {
       "title": "Create New Bot",
       "editTitle": "Edit Bot",
@@ -324,7 +340,19 @@
       "back": "Back",
       "next": "Next",
       "llmNote": "This bot uses AI for signal generation. Configure your API key in Settings → LLM Keys.",
-      "customPromptPlaceholder": "Leave empty for default prompt, or enter custom AI instructions..."
+      "customPromptPlaceholder": "Leave empty for default prompt, or enter custom AI instructions...",
+      "step2b": "Data",
+      "dataSources": "Data Sources",
+      "dataSourcesDesc": "Select which market data your bot should analyze",
+      "selectAll": "Select All",
+      "clearAll": "Clear",
+      "sourcesSelected": "sources selected",
+      "sentiment": "Sentiment & News",
+      "futures": "Futures Data",
+      "options": "Options Data",
+      "spot": "Spot Market",
+      "technical": "Technical Indicators",
+      "tradfi": "TradFi / CME"
     }
   },
   "performance": {
@@ -360,5 +388,18 @@
     "demoLiveFilter": "Mode",
     "page": "Page",
     "of": "of"
+  },
+  "admin": {
+    "users": "Users",
+    "newUser": "New User",
+    "makeAdmin": "Make Admin",
+    "makeUser": "Make User",
+    "confirmRoleChange": "Change role?",
+    "cannotDemoteSelf": "You cannot demote yourself",
+    "active": "Active",
+    "inactive": "Inactive",
+    "deactivate": "Deactivate",
+    "activate": "Activate",
+    "deleteUser": "Delete user?"
   }
 }

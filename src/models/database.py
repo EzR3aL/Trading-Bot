@@ -308,6 +308,20 @@ class Exchange(Base):
     created_at = Column(DateTime, server_default=func.now())
 
 
+class AffiliateLink(Base):
+    """Global affiliate links per exchange (admin-managed)."""
+    __tablename__ = "affiliate_links"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    exchange_type = Column(String(50), unique=True, nullable=False)  # bitget | weex | hyperliquid
+    affiliate_url = Column(Text, nullable=False)
+    label = Column(String(200), nullable=True)
+    is_active = Column(Boolean, default=True)
+
+    created_at = Column(DateTime, server_default=func.now())
+    updated_at = Column(DateTime, onupdate=func.now())
+
+
 class AuditLog(Base):
     """Request audit log for security and compliance tracking."""
     __tablename__ = "audit_logs"

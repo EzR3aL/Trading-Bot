@@ -387,16 +387,41 @@ async def get_connections_status(
     config = await _get_or_create_config(user, db)
     user_connections = await _get_user_connections(user.id, db)
 
-    services: Dict[str, Dict[str, Any]] = {
-        "binance_futures": {
-            "label": "Binance Futures", "type": "data_source",
-            "url": "https://fapi.binance.com/fapi/v1/ping",
-        },
-        "alternative_me": {
-            "label": "Alternative.me (Fear & Greed)", "type": "data_source",
-            "url": "https://api.alternative.me/fng/?limit=1",
-        },
-    }
+    # Build data source services dynamically from registry
+    from src.data.data_source_registry import DATA_SOURCES, PROVIDER_HEALTH_URLS
+
+    services: Dict[str, Dict[str, Any]] = {}
+
+    # One ping per unique external provider (avoid redundant requests)
+    pinged_providers: Dict[str, str] = {}  # provider -> service key
+    for ds in DATA_SOURCES:
+        if ds.provider == "Calculated":
+            # No external dependency — always reachable
+            services[f"ds_{ds.id}"] = {
+                "label": ds.name, "type": "data_source",
+                "category": ds.category, "provider": ds.provider,
+                "url": None, "shared_with": None,
+            }
+            continue
+
+        health_url = PROVIDER_HEALTH_URLS.get(ds.provider)
+        if not health_url:
+            continue
+
+        if ds.provider in pinged_providers:
+            # Share ping result with the first source from this provider
+            services[f"ds_{ds.id}"] = {
+                "label": ds.name, "type": "data_source",
+                "category": ds.category, "provider": ds.provider,
+                "url": health_url, "shared_with": pinged_providers[ds.provider],
+            }
+        else:
+            pinged_providers[ds.provider] = f"ds_{ds.id}"
+            services[f"ds_{ds.id}"] = {
+                "label": ds.name, "type": "data_source",
+                "category": ds.category, "provider": ds.provider,
+                "url": health_url, "shared_with": None,
+            }
 
     # Add exchange pings for all configured exchanges
     configured_exchanges = {c.exchange_type for c in user_connections}
@@ -419,23 +444,48 @@ async def get_connections_status(
         except (ValueError, Exception):
             has_discord = False
 
+    # Collect services that need actual pinging (unique URLs only)
+    services_to_ping = [
+        n for n in services
+        if services[n].get("url") and not services[n].get("shared_with")
+    ]
+
     # Ping all in parallel
-    service_names = list(services.keys())
     async with aiohttp.ClientSession() as http:
         coros = [
             _ping_service(http, services[n]["url"], method=services[n].get("method", "GET"), json_body=services[n].get("json_body"))
-            for n in service_names
+            for n in services_to_ping
         ]
         pings = await asyncio.gather(*coros, return_exceptions=True)
 
-    results: Dict[str, Any] = {}
-    for name, ping_result in zip(service_names, pings):
-        svc = services[name]
+    # Store ping results by service key
+    ping_results_map: Dict[str, Dict[str, Any]] = {}
+    for svc_name, ping_result in zip(services_to_ping, pings):
         if isinstance(ping_result, Exception):
-            ping_data: Dict[str, Any] = {"reachable": False, "error": str(ping_result)}
+            ping_results_map[svc_name] = {"reachable": False, "error": str(ping_result)}
         else:
-            ping_data = ping_result
-        results[name] = {"label": svc["label"], "type": svc["type"], **ping_data}
+            ping_results_map[svc_name] = ping_result
+
+    results: Dict[str, Any] = {}
+    for svc_name in services:
+        svc = services[svc_name]
+
+        if svc.get("url") is None:
+            # Calculated sources — always reachable
+            ping_data: Dict[str, Any] = {"reachable": True, "latency_ms": 0}
+        elif svc.get("shared_with"):
+            # Reuse ping from the first source of the same provider
+            ping_data = ping_results_map.get(svc["shared_with"], {"reachable": False, "error": "no ping"})
+        else:
+            ping_data = ping_results_map.get(svc_name, {"reachable": False, "error": "no ping"})
+
+        results[svc_name] = {
+            "label": svc["label"],
+            "type": svc["type"],
+            "category": svc.get("category", ""),
+            "provider": svc.get("provider", ""),
+            **ping_data,
+        }
 
     results["discord"] = {"label": "Discord Webhook", "type": "notification", "configured": has_discord, "reachable": has_discord}
 

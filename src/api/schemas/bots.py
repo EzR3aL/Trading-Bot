@@ -97,6 +97,7 @@ class BotRuntimeStatus(BaseModel):
 
     # LLM-specific metrics (only populated for llm_signal strategy)
     llm_provider: Optional[str] = None
+    llm_model: Optional[str] = None
     llm_last_direction: Optional[str] = None  # "LONG" | "SHORT"
     llm_last_confidence: Optional[int] = None  # 0-100
     llm_last_reasoning: Optional[str] = None

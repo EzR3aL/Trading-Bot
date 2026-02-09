@@ -14,10 +14,11 @@ Based on the myquant.gg approach: stateless, no learning, prompt-driven.
 
 import asyncio
 from datetime import datetime
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from src.ai.providers import get_provider_class
 from src.ai.providers.base import LLMResponse, sanitize_error, sanitize_text
+from src.data.data_source_registry import DEFAULT_SOURCES
 from src.data.market_data import MarketDataFetcher
 from src.strategy.base import BaseStrategy, SignalDirection, StrategyRegistry, TradeSignal
 from src.utils.logger import get_logger
@@ -66,6 +67,9 @@ class LLMSignalStrategy(BaseStrategy):
         self.take_profit_percent = float(self.params.get("take_profit_percent", 4.0))
         self.stop_loss_percent = float(self.params.get("stop_loss_percent", 1.5))
 
+        # Data sources selection (from Bot Builder cards)
+        self.selected_sources: List[str] = self.params.get("data_sources", DEFAULT_SOURCES)
+
         if not self.llm_api_key:
             raise ValueError(
                 f"No API key provided for LLM provider '{self.llm_provider_name}'. "
@@ -88,74 +92,89 @@ class LLMSignalStrategy(BaseStrategy):
         await self._ensure_fetcher()
 
         logger.info(
-            f"[LLM:{self.llm_provider_name}] Fetching market data for {symbol}..."
+            f"[LLM:{self.llm_provider_name}] Fetching {len(self.selected_sources)} "
+            f"data sources for {symbol}..."
         )
 
-        # Fetch market data in parallel
+        # Fetch only selected data sources
         try:
-            metrics, klines = await asyncio.gather(
-                self.data_fetcher.fetch_all_metrics(require_reliable=False),
-                self.data_fetcher.get_binance_klines(symbol, "1h", 24),
-                return_exceptions=True,
+            fetched = await self.data_fetcher.fetch_selected_metrics(
+                self.selected_sources, symbol
             )
         except Exception as e:
             logger.error(f"[LLM:{self.llm_provider_name}] Data fetch error: {e}")
             raise
 
-        # Handle partial failures
-        if isinstance(metrics, Exception):
-            logger.warning(f"[LLM:{self.llm_provider_name}] Metrics fetch failed: {metrics}")
-            metrics = None
-        if isinstance(klines, Exception):
-            logger.warning(f"[LLM:{self.llm_provider_name}] Klines fetch failed: {klines}")
-            klines = []
-
-        # Compute technical indicators from klines
-        vwap = 0.0
-        supertrend_dir = "unknown"
-        buy_ratio = 0.5
+        # Build market data dict for LLM from fetched results
+        market_data: Dict[str, Any] = {"symbol": symbol}
         current_price = 0.0
 
-        if klines:
-            vwap = MarketDataFetcher.calculate_vwap(klines)
-            supertrend = MarketDataFetcher.calculate_supertrend(klines)
-            supertrend_dir = supertrend.get("direction", "unknown")
-            volume_analysis = MarketDataFetcher.get_spot_volume_analysis(klines)
-            buy_ratio = volume_analysis.get("buy_ratio", 0.5)
+        # Extract current price from spot_price ticker if available
+        if "spot_price" in fetched and isinstance(fetched["spot_price"], dict):
+            ticker = fetched["spot_price"]
+            current_price = ticker.get("price", 0)
+            market_data["current_price"] = round(current_price, 2)
+            market_data["price_change_24h_pct"] = round(ticker.get("price_change_percent", 0), 2)
+            market_data["volume_24h"] = ticker.get("quote_volume_24h", 0)
 
-        # Get current price
-        if metrics and not isinstance(metrics, Exception):
-            if "BTC" in symbol.upper():
-                current_price = metrics.btc_price
-            elif "ETH" in symbol.upper():
-                current_price = metrics.eth_price
-
-        # Fallback: get price from last kline
-        if current_price == 0 and klines:
-            current_price = float(klines[-1][4])  # close price
-
-        # Build market data dict for LLM
-        market_data = {"symbol": symbol}
-
-        if metrics and not isinstance(metrics, Exception):
-            market_data.update({
-                "current_price": round(current_price, 2),
-                "fear_greed_index": metrics.fear_greed_index,
-                "fear_greed_label": metrics.fear_greed_classification,
-                "long_short_ratio": round(metrics.long_short_ratio, 3),
-                "funding_rate_btc": round(metrics.funding_rate_btc, 6),
-                "btc_24h_change_percent": round(metrics.btc_24h_change_percent, 2),
-                "eth_24h_change_percent": round(metrics.eth_24h_change_percent, 2),
-                "btc_open_interest": round(metrics.btc_open_interest, 0),
-            })
-
-        if klines:
-            market_data.update({
-                "vwap_24h": round(vwap, 2),
-                "supertrend_direction": supertrend_dir,
-                "volume_buy_ratio": round(buy_ratio, 3),
-                "price_vs_vwap": "above" if current_price > vwap else "below",
-            })
+        # Map each source to market_data keys
+        if "fear_greed" in fetched:
+            fg = fetched["fear_greed"]
+            if isinstance(fg, tuple) and len(fg) == 2:
+                market_data["fear_greed_index"] = fg[0]
+                market_data["fear_greed_label"] = fg[1]
+        if "long_short_ratio" in fetched:
+            market_data["long_short_ratio"] = round(float(fetched["long_short_ratio"]), 3)
+        if "top_trader_ls_ratio" in fetched:
+            market_data["top_trader_long_short_ratio"] = round(float(fetched["top_trader_ls_ratio"]), 3)
+        if "funding_rate" in fetched:
+            market_data["funding_rate"] = round(float(fetched["funding_rate"]), 6)
+        if "predicted_funding" in fetched:
+            market_data["predicted_funding_rate"] = round(float(fetched["predicted_funding"]), 6)
+        if "open_interest" in fetched:
+            market_data["open_interest"] = round(float(fetched["open_interest"]), 0)
+        if "oi_history" in fetched and fetched["oi_history"]:
+            oi_hist = fetched["oi_history"]
+            if len(oi_hist) >= 2:
+                first_oi = float(oi_hist[0].get("sumOpenInterest", 0))
+                last_oi = float(oi_hist[-1].get("sumOpenInterest", 0))
+                if first_oi > 0:
+                    market_data["oi_change_24h_pct"] = round(((last_oi - first_oi) / first_oi) * 100, 2)
+        if "liquidations" in fetched and fetched["liquidations"]:
+            liqs = fetched["liquidations"]
+            market_data["recent_liquidations_count"] = len(liqs)
+        if "news_sentiment" in fetched and isinstance(fetched["news_sentiment"], dict):
+            market_data["news_sentiment_tone"] = round(fetched["news_sentiment"].get("average_tone", 0), 2)
+            market_data["news_article_count"] = fetched["news_sentiment"].get("article_count", 0)
+        if "options_oi" in fetched and isinstance(fetched["options_oi"], dict):
+            market_data["options_open_interest"] = fetched["options_oi"].get("total_oi", 0)
+        if "max_pain" in fetched and isinstance(fetched["max_pain"], dict):
+            market_data["max_pain_price"] = fetched["max_pain"].get("max_pain_price", 0)
+        if "put_call_ratio" in fetched and isinstance(fetched["put_call_ratio"], dict):
+            market_data["put_call_ratio"] = round(fetched["put_call_ratio"].get("ratio", 0), 3)
+        if "coingecko_market" in fetched and isinstance(fetched["coingecko_market"], dict):
+            cg = fetched["coingecko_market"]
+            market_data["btc_dominance_pct"] = round(cg.get("btc_dominance_pct", 0), 1)
+            market_data["total_market_cap_usd"] = cg.get("total_market_cap_usd", 0)
+        if "vwap" in fetched:
+            vwap_val = float(fetched["vwap"])
+            market_data["vwap_24h"] = round(vwap_val, 2)
+            if current_price > 0:
+                market_data["price_vs_vwap"] = "above" if current_price > vwap_val else "below"
+        if "supertrend" in fetched and isinstance(fetched["supertrend"], dict):
+            market_data["supertrend_direction"] = fetched["supertrend"].get("direction", "unknown")
+        if "spot_volume" in fetched and isinstance(fetched["spot_volume"], dict):
+            market_data["volume_buy_ratio"] = round(fetched["spot_volume"].get("buy_ratio", 0.5), 3)
+        if "oiwap" in fetched:
+            market_data["oiwap"] = round(float(fetched["oiwap"]), 2)
+        if "volatility" in fetched:
+            market_data["volatility_24h_pct"] = round(float(fetched["volatility"]), 2)
+        if "trend_sma" in fetched:
+            market_data["trend_direction"] = fetched["trend_sma"]
+        if "cme_gap" in fetched and isinstance(fetched["cme_gap"], dict):
+            cme = fetched["cme_gap"]
+            market_data["cme_gap_pct"] = round(cme.get("gap_pct", 0), 2)
+            market_data["cme_gap_direction"] = cme.get("gap_direction", "none")
 
         # Call LLM
         logger.info(
@@ -211,26 +230,15 @@ class LLMSignalStrategy(BaseStrategy):
         safe_reasoning = sanitize_text(llm_response.reasoning, max_length=400)
         reason = f"[{self.provider.get_display_name()}] {safe_reasoning}"
 
-        # Store LLM metadata in metrics_snapshot
-        metrics_dict = {}
-        if metrics and not isinstance(metrics, Exception):
-            metrics_dict = {
-                "fear_greed_index": metrics.fear_greed_index,
-                "long_short_ratio": metrics.long_short_ratio,
-                "funding_rate_btc": metrics.funding_rate_btc,
-                "btc_24h_change": metrics.btc_24h_change_percent,
-            }
-
+        # Store LLM metadata + all fetched data in metrics_snapshot
         metrics_snapshot = {
-            **metrics_dict,
+            **{k: v for k, v in market_data.items() if k != "symbol"},
             "llm_provider": self.llm_provider_name,
             "llm_model": llm_response.model_used,
             "llm_reasoning": sanitize_text(llm_response.reasoning, max_length=500),
             "llm_tokens_used": llm_response.tokens_used,
             "llm_temperature": self.temperature,
-            "vwap": vwap,
-            "supertrend": supertrend_dir,
-            "buy_ratio": buy_ratio,
+            "data_sources_used": list(fetched.keys()),
         }
 
         signal = TradeSignal(

@@ -7,7 +7,7 @@ import type { ConnectionsStatusResponse, ExchangeConnectionStatus, ExchangeInfo,
 import { ExchangeIcon } from '../components/ui/ExchangeLogo'
 
 const BASE_TABS = ['apiKeys', 'llmKeys', 'discord', 'connections'] as const
-const ADMIN_TABS = [...BASE_TABS, 'hyperliquid'] as const
+const ADMIN_TABS = [...BASE_TABS, 'affiliateLinks', 'hyperliquid'] as const
 
 /* ------------------------------------------------------------------ */
 /*  Inline Key Form (used inside accordion)                           */
@@ -155,6 +155,11 @@ export default function Settings() {
   const [hlRevenue, setHlRevenue] = useState<any>(null)
   const [hlLoading, setHlLoading] = useState(false)
   const [hlApproving, setHlApproving] = useState(false)
+
+  // Affiliate links (admin)
+  const [affiliateLinks, setAffiliateLinks] = useState<Record<string, { affiliate_url: string; label: string; is_active: boolean }>>({})
+  const [affiliateForms, setAffiliateForms] = useState<Record<string, { url: string; label: string; active: boolean }>>({})
+  const [affiliateLoaded, setAffiliateLoaded] = useState(false)
 
   useEffect(() => {
     const load = async () => {
@@ -310,12 +315,60 @@ export default function Settings() {
     setHlApproving(false)
   }
 
+  const loadAffiliateLinks = async () => {
+    try {
+      const res = await api.get('/affiliate-links')
+      const map: typeof affiliateLinks = {}
+      for (const link of res.data) {
+        map[link.exchange_type] = { affiliate_url: link.affiliate_url, label: link.label || '', is_active: link.is_active }
+      }
+      setAffiliateLinks(map)
+      // Pre-fill forms
+      const forms: typeof affiliateForms = {}
+      for (const ex of ['bitget', 'weex', 'hyperliquid']) {
+        const existing = map[ex]
+        forms[ex] = { url: existing?.affiliate_url || '', label: existing?.label || '', active: existing?.is_active ?? true }
+      }
+      setAffiliateForms(forms)
+      setAffiliateLoaded(true)
+    } catch { /* ignore */ }
+  }
+
+  const saveAffiliateLink = async (exchange: string) => {
+    const form = affiliateForms[exchange]
+    if (!form?.url) return
+    setSaving(true)
+    try {
+      await api.put(`/affiliate-links/${exchange}`, {
+        affiliate_url: form.url,
+        label: form.label || null,
+        is_active: form.active,
+      })
+      showMessage(t('settings.saved'))
+      loadAffiliateLinks()
+    } catch { showMessage(t('common.error')) }
+    setSaving(false)
+  }
+
+  const deleteAffiliateLink = async (exchange: string) => {
+    setSaving(true)
+    try {
+      await api.delete(`/affiliate-links/${exchange}`)
+      showMessage(t('settings.saved'))
+      loadAffiliateLinks()
+    } catch { showMessage(t('common.error')) }
+    setSaving(false)
+  }
+
   useEffect(() => {
     if (activeTab === 'connections' && !connStatus) {
       loadConnectionStatus()
     }
     if (activeTab === 'hyperliquid' && !hlRevenue) {
       loadHlRevenue()
+    }
+    if (activeTab === 'affiliateLinks' && !affiliateLoaded) {
+      loadAffiliateLinks()
     }
   }, [activeTab])
 
@@ -546,6 +599,82 @@ export default function Settings() {
         </div>
       )}
 
+      {/* Affiliate Links Tab (admin only) */}
+      {activeTab === 'affiliateLinks' && (
+        <div className="max-w-2xl">
+          <p className="text-sm text-gray-400 mb-4">{t('settings.affiliateLinksDesc')}</p>
+          <div className="space-y-4">
+            {['bitget', 'weex', 'hyperliquid'].map((ex) => {
+              const form = affiliateForms[ex] || { url: '', label: '', active: true }
+              const hasExisting = !!affiliateLinks[ex]
+              return (
+                <div key={ex} className="bg-gray-900 border border-gray-800 rounded-lg p-5">
+                  <div className="flex items-center gap-3 mb-4">
+                    <ExchangeIcon exchange={ex} size={20} />
+                    <h3 className="text-white font-semibold capitalize">{ex}</h3>
+                    {hasExisting && (
+                      <span className="text-xs px-2 py-0.5 rounded-full bg-green-900/40 text-green-400 border border-green-800">
+                        {t('settings.configured')}
+                      </span>
+                    )}
+                  </div>
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-xs text-gray-500 mb-1">{t('settings.affiliateUrl')}</label>
+                      <input
+                        type="text"
+                        value={form.url}
+                        onChange={(e) => setAffiliateForms(prev => ({ ...prev, [ex]: { ...form, url: e.target.value } }))}
+                        placeholder="https://..."
+                        className="w-full px-3 py-1.5 bg-gray-800 border border-gray-700 rounded text-white text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-gray-500 mb-1">{t('settings.affiliateLabel')}</label>
+                      <input
+                        type="text"
+                        value={form.label}
+                        onChange={(e) => setAffiliateForms(prev => ({ ...prev, [ex]: { ...form, label: e.target.value } }))}
+                        placeholder="z.B. 10% Rabatt auf Gebühren"
+                        className="w-full px-3 py-1.5 bg-gray-800 border border-gray-700 rounded text-white text-sm"
+                      />
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        id={`aff-active-${ex}`}
+                        checked={form.active}
+                        onChange={(e) => setAffiliateForms(prev => ({ ...prev, [ex]: { ...form, active: e.target.checked } }))}
+                        className="rounded border-gray-700 bg-gray-800 text-primary-600"
+                      />
+                      <label htmlFor={`aff-active-${ex}`} className="text-sm text-gray-400">{t('settings.affiliateActive')}</label>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => saveAffiliateLink(ex)}
+                        disabled={saving || !form.url}
+                        className="px-3 py-1.5 text-sm bg-primary-600 text-white rounded hover:bg-primary-700 disabled:opacity-50"
+                      >
+                        {t('settings.save')}
+                      </button>
+                      {hasExisting && (
+                        <button
+                          onClick={() => deleteAffiliateLink(ex)}
+                          disabled={saving}
+                          className="px-3 py-1.5 text-sm bg-red-900/50 text-red-400 rounded hover:bg-red-900 disabled:opacity-50"
+                        >
+                          {t('presets.delete')}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Hyperliquid Tab */}
       {activeTab === 'hyperliquid' && (
         <div className="bg-gray-900 border border-gray-800 rounded-lg p-6 max-w-2xl space-y-6">
@@ -667,11 +796,71 @@ export default function Settings() {
                 exchange: t('settings.exchangeApi'),
                 notification: t('settings.notifications'),
               }
+              // Category labels for data source sub-groups
+              const catLabels: Record<string, string> = {
+                sentiment: t('settings.sentimentNews', 'Sentiment & News'),
+                futures: t('settings.futuresData', 'Futures Data'),
+                options: t('settings.optionsData', 'Options Data'),
+                spot: t('settings.spotMarket', 'Spot Market'),
+                technical: t('settings.technicalIndicators', 'Technical Indicators'),
+                tradfi: t('settings.tradfiCme', 'TradFi / CME'),
+              }
+              const catOrder = ['sentiment', 'futures', 'options', 'spot', 'technical', 'tradfi']
               return (
                 <>
                   {(['data_source', 'exchange', 'notification'] as const).map((groupKey) => {
                     const items = groups[groupKey]
                     if (!items || items.length === 0) return null
+
+                    // For data sources, sub-group by category
+                    if (groupKey === 'data_source') {
+                      const byCategory: Record<string, [string, ServiceStatus][]> = {}
+                      for (const [key, svc] of items) {
+                        const cat = (svc as any).category || 'other'
+                        if (!byCategory[cat]) byCategory[cat] = []
+                        byCategory[cat].push([key, svc])
+                      }
+                      return (
+                        <div key={groupKey}>
+                          <h3 className="text-sm font-medium text-gray-400 mb-3 uppercase tracking-wider">
+                            {sectionLabels[groupKey]}
+                          </h3>
+                          {catOrder.map(cat => {
+                            const catItems = byCategory[cat]
+                            if (!catItems || catItems.length === 0) return null
+                            return (
+                              <div key={cat} className="mb-4">
+                                <p className="text-xs text-gray-500 mb-2 ml-1">{catLabels[cat] || cat}</p>
+                                <div className="space-y-1.5">
+                                  {catItems.map(([key, svc]) => (
+                                    <div key={key} className="flex items-center justify-between p-2.5 bg-gray-800 rounded-lg">
+                                      <div className="flex items-center gap-3">
+                                        <StatusDot reachable={svc.reachable} />
+                                        <div>
+                                          <span className="text-white text-sm">{svc.label}</span>
+                                          {(svc as any).provider && (
+                                            <span className="text-gray-600 text-[10px] ml-2">{(svc as any).provider}</span>
+                                          )}
+                                        </div>
+                                      </div>
+                                      <div className="flex items-center gap-3 text-xs">
+                                        {svc.latency_ms != null && svc.latency_ms > 0 && (
+                                          <span className="text-gray-500">{svc.latency_ms}ms</span>
+                                        )}
+                                        <span className={svc.reachable ? 'text-green-400' : 'text-red-400'}>
+                                          {svc.reachable ? t('settings.online') : t('settings.offline')}
+                                        </span>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      )
+                    }
+
                     return (
                       <div key={groupKey}>
                         <h3 className="text-sm font-medium text-gray-400 mb-3 uppercase tracking-wider">
