@@ -7,6 +7,7 @@ import PnlChart from '../components/dashboard/PnlChart'
 import WinLossChart from '../components/dashboard/WinLossChart'
 import FeesChart from '../components/dashboard/FeesChart'
 import { DashboardSkeleton } from '../components/ui/Skeleton'
+import PnlCell from '../components/ui/PnlCell'
 import { ArrowUpRight, ArrowDownRight } from 'lucide-react'
 import { ExchangeIcon } from '../components/ui/ExchangeLogo'
 
@@ -63,13 +64,6 @@ function StatCard({ label, value, numericValue, color, sub, isPositive }: {
   )
 }
 
-/* ── Format PnL with indicator ───────────────────────────── */
-
-function formatPnl(value: number | null): string {
-  if (value === null) return '--'
-  const prefix = value >= 0 ? '+' : ''
-  return `${prefix}$${value.toFixed(2)}`
-}
 
 const PERIODS = [7, 14, 30, 90] as const
 
@@ -250,9 +244,13 @@ export default function Dashboard() {
                       ${trade.entry_price.toLocaleString()}
                     </td>
                     <td className="text-right">
-                      <span className={trade.pnl && trade.pnl >= 0 ? 'pnl-positive' : 'pnl-negative'}>
-                        {formatPnl(trade.pnl)}
-                      </span>
+                      <PnlCell
+                        pnl={trade.pnl}
+                        fees={trade.fees}
+                        fundingPaid={trade.funding_paid}
+                        status={trade.status}
+                        className={trade.pnl && trade.pnl >= 0 ? 'pnl-positive' : 'pnl-negative'}
+                      />
                     </td>
                     <td className="text-center">
                       <span className={trade.demo_mode ? 'badge-demo' : 'badge-live'}>

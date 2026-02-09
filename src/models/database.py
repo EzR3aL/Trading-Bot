@@ -253,7 +253,13 @@ class LLMConnection(Base):
 
 
 class BotConfig(Base):
-    """Blueprint for a user-created bot."""
+    """Blueprint for a user-created bot.
+
+    Stores strategy, exchange, risk, schedule, and trade rotation settings.
+    The optional rotation feature (rotation_enabled + rotation_interval_minutes)
+    auto-closes open trades after a fixed duration and re-analyzes for a new trade.
+    Data source selection is stored in strategy_params["data_sources"].
+    """
     __tablename__ = "bot_configs"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
@@ -283,6 +289,10 @@ class BotConfig(Base):
     # Schedule
     schedule_type = Column(String(20), nullable=False, default="market_sessions")  # market_sessions | interval | custom_cron
     schedule_config = Column(Text, nullable=True)  # JSON: {"hours": [1,8,14,21]} or {"interval_minutes": 60}
+
+    # Trade rotation (auto-close & reopen at fixed intervals)
+    rotation_enabled = Column(Boolean, default=False)
+    rotation_interval_minutes = Column(Integer, nullable=True)  # e.g. 60 = close & reopen every hour
 
     # State
     is_enabled = Column(Boolean, default=False)

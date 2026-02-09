@@ -156,7 +156,7 @@
     "month": "Month",
     "trades": "Trades",
     "pnl": "PnL",
-    "fees": "Fees",
+    "fees": "Transaction Fee",
     "net": "Net"
   },
   "guide": {
@@ -333,6 +333,9 @@
       "customCron": "Custom Hours",
       "intervalMinutes": "Interval (minutes)",
       "customHours": "Hours (UTC)",
+      "tradeRotation": "Trade Rotation",
+      "tradeRotationDesc": "Automatically close and reopen trades at fixed intervals",
+      "customMinutes": "Custom (minutes)",
       "review": "Review",
       "create": "Create Bot",
       "createAndStart": "Create & Start",
@@ -387,7 +390,10 @@
     "all": "All",
     "demoLiveFilter": "Mode",
     "page": "Page",
-    "of": "of"
+    "of": "of",
+    "lightMode": "Light",
+    "darkMode": "Dark",
+    "total": "Total"
   },
   "admin": {
     "users": "Users",

@@ -88,6 +88,8 @@ def _config_to_response(config: BotConfig) -> BotConfigResponse:
         strategy_params=strategy_params,
         schedule_type=config.schedule_type,
         schedule_config=schedule_config,
+        rotation_enabled=config.rotation_enabled or False,
+        rotation_interval_minutes=config.rotation_interval_minutes,
         is_enabled=config.is_enabled,
         created_at=config.created_at.isoformat() if config.created_at else None,
         updated_at=config.updated_at.isoformat() if config.updated_at else None,
@@ -110,7 +112,12 @@ async def list_strategies(user: User = Depends(get_current_user)):
 
 @router.get("/data-sources")
 async def list_data_sources(user: User = Depends(get_current_user)):
-    """Return the catalog of all available market data sources."""
+    """Return the catalog of all available market data sources.
+
+    Returns {sources: [...], defaults: [...]} where each source has
+    id, name, description, category, provider, free, default fields.
+    Used by the Bot Builder to render selectable data source cards.
+    """
     from src.data.data_source_registry import DATA_SOURCES, DEFAULT_SOURCES
 
     return {
@@ -160,6 +167,8 @@ async def create_bot(
         strategy_params=json.dumps(body.strategy_params) if body.strategy_params else None,
         schedule_type=body.schedule_type,
         schedule_config=json.dumps(body.schedule_config) if body.schedule_config else None,
+        rotation_enabled=body.rotation_enabled,
+        rotation_interval_minutes=body.rotation_interval_minutes,
         is_enabled=False,
     )
     db.add(config)
@@ -205,9 +214,11 @@ async def list_bots(
             select(
                 func.count(TradeRecord.id),
                 func.coalesce(func.sum(TradeRecord.pnl), 0),
+                func.coalesce(func.sum(TradeRecord.fees), 0),
+                func.coalesce(func.sum(TradeRecord.funding_paid), 0),
             ).where(*trade_filters)
         )
-        total_trades, total_pnl = stats_result.one()
+        total_trades, total_pnl, total_fees, total_funding = stats_result.one()
 
         open_filters = [
             TradeRecord.bot_config_id == config.id,
@@ -332,6 +343,8 @@ async def list_bots(
             is_enabled=config.is_enabled,
             total_trades=total_trades,
             total_pnl=round(float(total_pnl), 2),
+            total_fees=round(float(total_fees), 2),
+            total_funding=round(float(total_funding), 2),
             open_trades=open_trades,
             **llm_data,
         ))
@@ -594,6 +607,7 @@ async def get_bot_statistics(
             func.sum(case((TradeRecord.pnl > 0, 1), else_=0)).label("wins"),
             func.sum(case((TradeRecord.pnl <= 0, 1), else_=0)).label("losses"),
             func.coalesce(func.sum(TradeRecord.fees), 0).label("total_fees"),
+            func.coalesce(func.sum(TradeRecord.funding_paid), 0).label("total_funding"),
             func.avg(TradeRecord.pnl).label("avg_pnl"),
             func.max(TradeRecord.pnl).label("best_trade"),
             func.min(TradeRecord.pnl).label("worst_trade"),
@@ -633,6 +647,8 @@ async def get_bot_statistics(
             "entry_time": trade.entry_time.isoformat() if trade.entry_time else None,
             "exit_time": trade.exit_time.isoformat() if trade.exit_time else None,
             "exit_reason": trade.exit_reason,
+            "fees": round(float(trade.fees or 0), 4),
+            "funding_paid": round(float(trade.funding_paid or 0), 4),
         })
 
     return {
@@ -649,6 +665,7 @@ async def get_bot_statistics(
             "win_rate": win_rate,
             "total_pnl": round(float(stats.total_pnl or 0), 2),
             "total_fees": round(float(stats.total_fees or 0), 2),
+            "total_funding": round(float(stats.total_funding or 0), 2),
             "avg_pnl": round(float(stats.avg_pnl or 0), 2),
             "best_trade": round(float(stats.best_trade or 0), 2),
             "worst_trade": round(float(stats.worst_trade or 0), 2),
@@ -723,6 +740,8 @@ async def compare_bots_performance(
                 func.count(TradeRecord.id).label("total"),
                 func.coalesce(func.sum(TradeRecord.pnl), 0).label("pnl"),
                 func.sum(case((TradeRecord.pnl > 0, 1), else_=0)).label("wins"),
+                func.coalesce(func.sum(TradeRecord.fees), 0).label("total_fees"),
+                func.coalesce(func.sum(TradeRecord.funding_paid), 0).label("total_funding"),
             ).where(*compare_stats_filters)
         )
         stats = stats_result.one()
@@ -749,6 +768,8 @@ async def compare_bots_performance(
             "mode": config.mode,
             "total_trades": total,
             "total_pnl": round(float(stats.pnl or 0), 2),
+            "total_fees": round(float(stats.total_fees or 0), 2),
+            "total_funding": round(float(stats.total_funding or 0), 2),
             "win_rate": round((wins / total) * 100, 1) if total > 0 else 0.0,
             "wins": wins,
             "last_direction": last_trade.side.upper() if last_trade and last_trade.side else None,

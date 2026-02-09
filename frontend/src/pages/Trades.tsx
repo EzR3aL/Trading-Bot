@@ -5,13 +5,8 @@ import { useFilterStore } from '../stores/filterStore'
 import type { Trade } from '../types'
 import { ExchangeIcon } from '../components/ui/ExchangeLogo'
 import { SkeletonTable } from '../components/ui/Skeleton'
+import PnlCell from '../components/ui/PnlCell'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
-
-function formatPnl(value: number | null): string {
-  if (value === null) return '--'
-  const prefix = value >= 0 ? '+' : ''
-  return `${prefix}$${value.toFixed(2)}`
-}
 
 export default function Trades() {
   const { t } = useTranslation()
@@ -171,9 +166,13 @@ export default function Trades() {
                         {trade.exit_price ? `$${trade.exit_price.toLocaleString()}` : '--'}
                       </td>
                       <td className="text-right">
-                        <span className={trade.pnl && trade.pnl >= 0 ? 'pnl-positive' : 'pnl-negative'}>
-                          {formatPnl(trade.pnl)}
-                        </span>
+                        <PnlCell
+                          pnl={trade.pnl}
+                          fees={trade.fees}
+                          fundingPaid={trade.funding_paid}
+                          status={trade.status}
+                          className={trade.pnl && trade.pnl >= 0 ? 'pnl-positive' : 'pnl-negative'}
+                        />
                       </td>
                       <td className="text-center">
                         <span className={trade.demo_mode ? 'badge-demo' : 'badge-live'}>

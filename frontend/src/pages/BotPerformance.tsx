@@ -3,7 +3,9 @@ import { useTranslation } from 'react-i18next'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, Area, AreaChart } from 'recharts'
 import api from '../api/client'
 import { useFilterStore } from '../stores/filterStore'
+import { useThemeStore } from '../stores/themeStore'
 import { SkeletonChart, SkeletonTable } from '../components/ui/Skeleton'
+import PnlCell from '../components/ui/PnlCell'
 
 /* ── Color palette for bot lines ─────────────────────────── */
 const BOT_COLORS = [
@@ -19,6 +21,8 @@ interface BotCompareData {
   mode: string
   total_trades: number
   total_pnl: number
+  total_fees: number
+  total_funding: number
   win_rate: number
   wins: number
   last_direction: string | null
@@ -36,6 +40,7 @@ interface BotDetailStats {
     win_rate: number
     total_pnl: number
     total_fees: number
+    total_funding: number
     avg_pnl: number
     best_trade: number
     worst_trade: number
@@ -44,6 +49,7 @@ interface BotDetailStats {
   recent_trades: {
     id: number; symbol: string; side: string; entry_price: number; exit_price: number | null
     pnl: number; pnl_percent: number; confidence: number; status: string
+    fees: number; funding_paid: number
     demo_mode: boolean; entry_time: string | null; exit_time: string | null; exit_reason: string | null
   }[]
 }
@@ -56,6 +62,12 @@ function formatPnl(value: number): string {
 export default function BotPerformance() {
   const { t } = useTranslation()
   const { demoFilter } = useFilterStore()
+  const theme = useThemeStore((s) => s.theme)
+  const chartGridColor = theme === 'light' ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,255,0.05)'
+  const chartTickColor = theme === 'light' ? '#64748b' : '#6b7280'
+  const tooltipBg = theme === 'light' ? 'rgba(255,255,255,0.95)' : 'rgba(17, 24, 39, 0.95)'
+  const tooltipBorder = theme === 'light' ? '1px solid rgba(0,0,0,0.08)' : '1px solid rgba(255,255,255,0.1)'
+  const tooltipLabelColor = theme === 'light' ? '#475569' : '#9ca3af'
   const [days, setDays] = useState(30)
   const [compareData, setCompareData] = useState<BotCompareData[]>([])
   const [selectedBot, setSelectedBot] = useState<number | null>(null)
@@ -156,17 +168,17 @@ export default function BotPerformance() {
             <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-4">{t('performance.cumulativePnl')}</h2>
             <ResponsiveContainer width="100%" height={350}>
               <LineChart data={chartData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
-                <XAxis dataKey="date" tick={{ fill: '#6b7280', fontSize: 11 }} tickLine={false} />
-                <YAxis tick={{ fill: '#6b7280', fontSize: 11 }} tickLine={false} tickFormatter={(v) => `$${v}`} />
+                <CartesianGrid strokeDasharray="3 3" stroke={chartGridColor} />
+                <XAxis dataKey="date" tick={{ fill: chartTickColor, fontSize: 11 }} tickLine={false} />
+                <YAxis tick={{ fill: chartTickColor, fontSize: 11 }} tickLine={false} tickFormatter={(v) => `$${v}`} />
                 <Tooltip
                   contentStyle={{
-                    backgroundColor: 'rgba(17, 24, 39, 0.95)',
-                    border: '1px solid rgba(255,255,255,0.1)',
+                    backgroundColor: tooltipBg,
+                    border: tooltipBorder,
                     borderRadius: 12,
                     backdropFilter: 'blur(10px)',
                   }}
-                  labelStyle={{ color: '#9ca3af' }}
+                  labelStyle={{ color: tooltipLabelColor }}
                   formatter={(value: number, name: string) => {
                     const bot = compareData.find(b => `bot_${b.bot_id}` === name)
                     return [formatPnl(value), bot?.name || name]
@@ -255,9 +267,12 @@ export default function BotPerformance() {
                       {bot.wins} / {bot.total_trades}
                     </td>
                     <td>
-                      <span className={bot.total_pnl >= 0 ? 'pnl-positive' : 'pnl-negative'}>
-                        {formatPnl(bot.total_pnl)}
-                      </span>
+                      <PnlCell
+                        pnl={bot.total_pnl}
+                        fees={bot.total_fees ?? 0}
+                        fundingPaid={bot.total_funding ?? 0}
+                        className={bot.total_pnl >= 0 ? 'pnl-positive' : 'pnl-negative'}
+                      />
                     </td>
                     <td className="text-gray-500 text-xs">{bot.strategy_type}</td>
                   </tr>
@@ -280,12 +295,18 @@ export default function BotPerformance() {
 
               {/* Summary Cards */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
+                <div className="bg-white/5 rounded-xl p-3 border border-white/5">
+                  <div className="text-[10px] text-gray-500 mb-1 uppercase tracking-wider font-medium">{t('performance.totalPnl')}</div>
+                  <div className={`text-lg font-bold ${botDetail.summary.total_pnl >= 0 ? 'text-profit' : 'text-loss'}`}>
+                    <PnlCell
+                      pnl={botDetail.summary.total_pnl}
+                      fees={botDetail.summary.total_fees ?? 0}
+                      fundingPaid={botDetail.summary.total_funding ?? 0}
+                      className={`text-lg font-bold ${botDetail.summary.total_pnl >= 0 ? 'text-profit' : 'text-loss'}`}
+                    />
+                  </div>
+                </div>
                 {[
-                  {
-                    label: t('performance.totalPnl'),
-                    value: formatPnl(botDetail.summary.total_pnl),
-                    color: botDetail.summary.total_pnl >= 0 ? 'text-profit' : 'text-loss',
-                  },
                   {
                     label: t('performance.winRate'),
                     value: `${botDetail.summary.win_rate}%`,
@@ -320,13 +341,13 @@ export default function BotPerformance() {
                           <stop offset="95%" stopColor="#00e676" stopOpacity={0} />
                         </linearGradient>
                       </defs>
-                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
-                      <XAxis dataKey="date" tick={{ fill: '#6b7280', fontSize: 10 }} tickLine={false} />
-                      <YAxis tick={{ fill: '#6b7280', fontSize: 10 }} tickLine={false} tickFormatter={(v) => `$${v}`} />
+                      <CartesianGrid strokeDasharray="3 3" stroke={chartGridColor} />
+                      <XAxis dataKey="date" tick={{ fill: chartTickColor, fontSize: 10 }} tickLine={false} />
+                      <YAxis tick={{ fill: chartTickColor, fontSize: 10 }} tickLine={false} tickFormatter={(v) => `$${v}`} />
                       <Tooltip
                         contentStyle={{
-                          backgroundColor: 'rgba(17, 24, 39, 0.95)',
-                          border: '1px solid rgba(255,255,255,0.1)',
+                          backgroundColor: tooltipBg,
+                          border: tooltipBorder,
                           borderRadius: 12,
                         }}
                         formatter={(value: number, name: string) => {
@@ -377,9 +398,13 @@ export default function BotPerformance() {
                         <td className="text-gray-300">${trade.entry_price.toFixed(2)}</td>
                         <td className="text-gray-300">{trade.exit_price ? `$${trade.exit_price.toFixed(2)}` : '--'}</td>
                         <td>
-                          <span className={trade.pnl >= 0 ? 'pnl-positive' : 'pnl-negative'}>
-                            {formatPnl(trade.pnl)}
-                          </span>
+                          <PnlCell
+                            pnl={trade.pnl}
+                            fees={trade.fees ?? 0}
+                            fundingPaid={trade.funding_paid ?? 0}
+                            status={trade.status}
+                            className={trade.pnl >= 0 ? 'pnl-positive' : 'pnl-negative'}
+                          />
                         </td>
                         <td>
                           <span className={trade.status === 'open' ? 'badge-open' : 'badge-neutral'}>

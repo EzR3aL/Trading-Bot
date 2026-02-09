@@ -107,6 +107,12 @@ body {
            focus:border-primary-500/50 focus:bg-white/[0.07] focus:outline-none focus:ring-1 focus:ring-primary-500/30;
   }
 
+  /* Dark dropdown options for all <select> elements */
+  select option {
+    background-color: #1a1f2e;
+    color: #ffffff;
+  }
+
   /* Animate in */
   .animate-in {
     animation: fadeIn 0.3s ease-out;
@@ -280,4 +286,474 @@ body {
 
 .transition-smooth {
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ═══════════════════════════════════════════════════════════════ */
+/*  LIGHT THEME OVERRIDES                                         */
+/*  Applied when <html class="light"> is set                      */
+/* ═══════════════════════════════════════════════════════════════ */
+
+/* ── Smooth theme transition ────────────────────────────────── */
+
+html.light *,
+html.dark * {
+  transition-property: color, background-color, border-color, box-shadow;
+  transition-duration: 200ms;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Exclude animated elements from theme transition */
+html .animate-spin,
+html .animate-ping,
+html .animate-pulse,
+html .skeleton-pulse {
+  transition: none !important;
+}
+
+/* ── Base / Body ────────────────────────────────────────────── */
+
+html.light {
+  color-scheme: light;
+}
+
+html.light body {
+  background: linear-gradient(135deg, #f0f4f8 0%, #f8fafc 50%, #eef2f7 100%);
+  color: #0f172a;
+}
+
+/* ── Glassmorphism Cards ────────────────────────────────────── */
+
+html.light .glass-card {
+  background: #ffffff;
+  border-color: rgba(0, 0, 0, 0.06);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05), 0 1px 2px rgba(0, 0, 0, 0.03);
+  backdrop-filter: none;
+}
+
+html.light .glass-card-hover:hover {
+  background: #ffffff;
+  border-color: rgba(0, 0, 0, 0.1);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+/* ── Input Styling ──────────────────────────────────────────── */
+
+html.light .input-dark {
+  background: #f1f5f9;
+  border-color: #e2e8f0;
+  color: #0f172a;
+}
+
+html.light .input-dark::placeholder {
+  color: #94a3b8;
+}
+
+html.light .input-dark:focus {
+  background: #ffffff;
+  border-color: rgba(37, 99, 235, 0.4);
+}
+
+/* ── Select Options ─────────────────────────────────────────── */
+
+html.light select option {
+  background-color: #ffffff;
+  color: #0f172a;
+}
+
+/* ── Pill Buttons ───────────────────────────────────────────── */
+
+html.light .pill-btn-inactive {
+  color: #475569;
+}
+
+html.light .pill-btn-inactive:hover {
+  color: #0f172a;
+  background: rgba(0, 0, 0, 0.04);
+}
+
+/* ── Badges ─────────────────────────────────────────────────── */
+
+html.light .badge-neutral {
+  background: #f1f5f9;
+  color: #475569;
+  border-color: #e2e8f0;
+}
+
+/* ── Table ──────────────────────────────────────────────────── */
+
+html.light .table-premium thead {
+  background: rgba(248, 250, 252, 0.95);
+  backdrop-filter: none;
+}
+
+html.light .table-premium thead th {
+  color: #475569;
+  border-bottom-color: #e2e8f0;
+}
+
+html.light .table-premium tbody tr {
+  border-bottom-color: #f1f5f9;
+}
+
+html.light .table-premium tbody tr:hover {
+  background: #f8fafc;
+}
+
+html.light .table-premium tbody tr:nth-child(even) {
+  background: #fafbfc;
+}
+
+html.light .table-premium tbody tr:nth-child(even):hover {
+  background: #f1f5f9;
+}
+
+/* ── Scrollbar ──────────────────────────────────────────────── */
+
+html.light ::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.15);
+}
+
+html.light ::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.25);
+}
+
+html.light * {
+  scrollbar-color: rgba(0, 0, 0, 0.15) transparent;
+}
+
+/* ── Sidebar Active ─────────────────────────────────────────── */
+
+html.light .nav-item-active {
+  background: rgba(37, 99, 235, 0.06);
+}
+
+/* ── Login Background ───────────────────────────────────────── */
+
+html.light .login-bg {
+  background: linear-gradient(-45deg, #e0e7ef, #f0f4f8, #e8eef5, #dfe5ed, #f0f4f8);
+  background-size: 400% 400%;
+}
+
+/* ── Skeleton ───────────────────────────────────────────────── */
+
+html.light .skeleton-pulse {
+  background: rgba(0, 0, 0, 0.06) !important;
+}
+
+/* ═══════════════════════════════════════════════════════════════ */
+/*  Tailwind Utility Overrides for Light Mode                     */
+/* ═══════════════════════════════════════════════════════════════ */
+
+/* ── Text Colors ────────────────────────────────────────────── */
+
+html.light .text-white {
+  color: #0f172a;
+}
+
+html.light .text-gray-200 {
+  color: #1e293b;
+}
+
+html.light .text-gray-300 {
+  color: #334155;
+}
+
+html.light .text-gray-400 {
+  color: #475569;
+}
+
+html.light .text-gray-500 {
+  color: #64748b;
+}
+
+/* ── Background Colors ──────────────────────────────────────── */
+
+html.light .bg-gray-700 {
+  background-color: #e2e8f0;
+}
+
+html.light .bg-gray-800 {
+  background-color: #f1f5f9;
+}
+
+html.light .bg-gray-900 {
+  background-color: #f8fafc;
+}
+
+html.light .bg-gray-950 {
+  background-color: #f0f4f8;
+}
+
+html.light .bg-gray-800\/50 {
+  background-color: rgba(241, 245, 249, 0.5);
+}
+
+html.light .bg-white\/5 {
+  background-color: rgba(0, 0, 0, 0.03);
+}
+
+html.light .bg-white\/\[0\.02\] {
+  background-color: rgba(0, 0, 0, 0.015);
+}
+
+html.light .bg-white\/\[0\.03\] {
+  background-color: rgba(0, 0, 0, 0.02);
+}
+
+html.light .bg-white\/\[0\.05\] {
+  background-color: rgba(0, 0, 0, 0.04);
+}
+
+html.light .bg-white\/10 {
+  background-color: rgba(0, 0, 0, 0.06);
+}
+
+/* ── Hover Background ───────────────────────────────────────── */
+
+html.light .hover\:bg-white\/5:hover {
+  background-color: rgba(0, 0, 0, 0.04);
+}
+
+html.light .hover\:bg-white\/10:hover {
+  background-color: rgba(0, 0, 0, 0.06);
+}
+
+html.light .hover\:bg-gray-700:hover {
+  background-color: #e2e8f0;
+}
+
+html.light .hover\:bg-gray-800:hover {
+  background-color: #f1f5f9;
+}
+
+html.light .hover\:bg-gray-800\/50:hover {
+  background-color: rgba(241, 245, 249, 0.5);
+}
+
+html.light .hover\:bg-gray-800\/60:hover {
+  background-color: rgba(241, 245, 249, 0.6);
+}
+
+html.light .hover\:bg-gray-600:hover {
+  background-color: #e2e8f0;
+}
+
+html.light .hover\:border-gray-600:hover {
+  border-color: #cbd5e1;
+}
+
+html.light .bg-gray-800\/30 {
+  background-color: rgba(241, 245, 249, 0.3);
+}
+
+html.light .bg-green-900\/40 {
+  background-color: rgba(34, 197, 94, 0.1);
+}
+
+html.light .border-green-800 {
+  border-color: rgba(34, 197, 94, 0.3);
+}
+
+html.light .bg-purple-900\/30 {
+  background-color: rgba(168, 85, 247, 0.08);
+}
+
+/* ── Border Colors ──────────────────────────────────────────── */
+
+html.light .border-white\/5 {
+  border-color: rgba(0, 0, 0, 0.06);
+}
+
+html.light .border-white\/10 {
+  border-color: rgba(0, 0, 0, 0.08);
+}
+
+html.light .border-white\/\[0\.08\] {
+  border-color: rgba(0, 0, 0, 0.08);
+}
+
+html.light .border-gray-700 {
+  border-color: #e2e8f0;
+}
+
+html.light .border-gray-800 {
+  border-color: #e2e8f0;
+}
+
+html.light .hover\:border-white\/10:hover {
+  border-color: rgba(0, 0, 0, 0.1);
+}
+
+html.light .hover\:border-white\/20:hover {
+  border-color: rgba(0, 0, 0, 0.12);
+}
+
+/* ── Gradient Backgrounds ───────────────────────────────────── */
+
+html.light .bg-gradient-dark {
+  background: linear-gradient(135deg, #f0f4f8 0%, #f8fafc 50%, #eef2f7 100%);
+}
+
+html.light .bg-gradient-sidebar {
+  background: linear-gradient(180deg, #ffffff 0%, #f8fafc 50%, #f0f4f8 100%);
+}
+
+html.light .bg-gradient-card {
+  background: #ffffff;
+}
+
+/* ── Shadow Overrides ───────────────────────────────────────── */
+
+html.light .shadow-card {
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+html.light .shadow-2xl {
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.12);
+}
+
+html.light .shadow-glow {
+  box-shadow: 0 0 20px rgba(37, 99, 235, 0.08);
+}
+
+html.light .shadow-glow-sm {
+  box-shadow: 0 0 10px rgba(37, 99, 235, 0.06);
+}
+
+/* ── Surface Colors ─────────────────────────────────────────── */
+
+html.light .bg-surface {
+  background-color: rgba(0, 0, 0, 0.02);
+}
+
+html.light .bg-surface-hover {
+  background-color: rgba(0, 0, 0, 0.04);
+}
+
+html.light .bg-surface-active {
+  background-color: rgba(0, 0, 0, 0.06);
+}
+
+/* ── Hardcoded Hex Backgrounds (Modals) ─────────────────────── */
+
+html.light .bg-\[\#0a0e17\]\/90 {
+  background-color: rgba(255, 255, 255, 0.95) !important;
+}
+
+html.light .bg-\[\#0f1420\] {
+  background-color: #ffffff !important;
+}
+
+html.light .bg-\[\#0b0f19\] {
+  background-color: #f8fafc !important;
+}
+
+html.light .bg-\[\#141a26\] {
+  background-color: #f8fafc !important;
+}
+
+html.light .bg-\[\#0d1117\] {
+  background-color: #f8fafc !important;
+}
+
+/* ── Hover Text ─────────────────────────────────────────────── */
+
+html.light .hover\:text-white:hover {
+  color: #0f172a;
+}
+
+html.light .hover\:text-gray-200:hover {
+  color: #1e293b;
+}
+
+html.light .hover\:text-gray-300:hover {
+  color: #334155;
+}
+
+/* ── Dividers / Separators ──────────────────────────────────── */
+
+html.light .divide-white\/5 > :not([hidden]) ~ :not([hidden]) {
+  border-color: rgba(0, 0, 0, 0.06);
+}
+
+/* ── Ring Colors ────────────────────────────────────────────── */
+
+html.light .ring-white\/10 {
+  --tw-ring-color: rgba(0, 0, 0, 0.08);
+}
+
+/* ═══════════════════════════════════════════════════════════════ */
+/*  Exceptions: Keep White Text on Colored Backgrounds            */
+/* ═══════════════════════════════════════════════════════════════ */
+
+html.light .btn-gradient,
+html.light .pill-btn-active,
+html.light .bg-primary-600,
+html.light .bg-primary-500,
+html.light .bg-red-600,
+html.light .bg-red-500,
+html.light .bg-emerald-600,
+html.light .bg-emerald-500 {
+  color: #ffffff !important;
+}
+
+/* Keep white text inside gradient icon containers (logo, etc.) */
+html.light .bg-gradient-to-br.from-primary-500 .text-white,
+html.light .bg-gradient-to-br.from-primary-600 .text-white {
+  color: #ffffff !important;
+}
+
+/* Keep colored badge text */
+html.light .badge-profit,
+html.light .badge-loss,
+html.light .badge-demo,
+html.light .badge-live,
+html.light .badge-open {
+  color: inherit;
+}
+
+/* Gradient accent buttons keep white text */
+html.light .bg-gradient-to-r.from-primary-600 {
+  color: #ffffff !important;
+}
+
+/* Red buttons (logout, delete, stop) keep their colors */
+html.light .bg-red-500\/10 {
+  background-color: rgba(239, 68, 68, 0.1);
+}
+
+html.light .text-red-400 {
+  color: #f87171;
+}
+
+html.light .hover\:bg-red-500\/20:hover {
+  background-color: rgba(239, 68, 68, 0.2);
+}
+
+/* Emerald buttons (start, activate) keep their colors */
+html.light .bg-emerald-500\/10 {
+  background-color: rgba(16, 185, 129, 0.08);
+}
+
+html.light .text-emerald-400 {
+  color: #34d399;
+}
+
+html.light .hover\:bg-emerald-500\/20:hover {
+  background-color: rgba(16, 185, 129, 0.2);
+}
+
+/* Amber badges/text keep color */
+html.light .text-amber-400 {
+  color: #fbbf24;
+}
+
+/* Blue badges/text keep color */
+html.light .text-blue-400 {
+  color: #60a5fa;
+}
+
+/* Primary accent text keeps color */
+html.light .text-primary-400 {
+  color: #60a5fa;
 }

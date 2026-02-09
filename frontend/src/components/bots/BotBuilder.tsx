@@ -88,6 +88,8 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
   const [scheduleType, setScheduleType] = useState('market_sessions')
   const [intervalMinutes, setIntervalMinutes] = useState(60)
   const [customHours, setCustomHours] = useState<number[]>([1, 8, 14, 21])
+  const [rotationEnabled, setRotationEnabled] = useState(false)
+  const [rotationMinutes, setRotationMinutes] = useState(60)
 
   // Whether current strategy uses market data
   const usesData = DATA_STRATEGIES.includes(strategyType)
@@ -161,6 +163,8 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
           if (d.schedule_config.interval_minutes) setIntervalMinutes(d.schedule_config.interval_minutes)
           if (d.schedule_config.hours) setCustomHours(d.schedule_config.hours)
         }
+        if (d.rotation_enabled) setRotationEnabled(true)
+        if (d.rotation_interval_minutes) setRotationMinutes(d.rotation_interval_minutes)
         // Restore selected data sources from strategy_params
         if (d.strategy_params?.data_sources) {
           setSelectedSources(d.strategy_params.data_sources)
@@ -255,6 +259,8 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
       strategy_params: params,
       schedule_type: scheduleType,
       schedule_config: scheduleConfig,
+      rotation_enabled: rotationEnabled,
+      rotation_interval_minutes: rotationEnabled ? rotationMinutes : null,
     }
   }
 
@@ -691,6 +697,65 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
                 </div>
               </div>
             )}
+
+            {/* Trade Rotation */}
+            <div className="mt-6 pt-5 border-t border-gray-800">
+              <div className="flex items-center justify-between mb-3">
+                <div>
+                  <span className="text-sm text-gray-300">{b.tradeRotation || 'Trade Rotation'}</span>
+                  <p className="text-xs text-gray-500 mt-0.5">{b.tradeRotationDesc || 'Auto-close and reopen trades at fixed intervals'}</p>
+                </div>
+                <button
+                  onClick={() => setRotationEnabled(!rotationEnabled)}
+                  className={`relative w-11 h-6 rounded-full transition-colors ${
+                    rotationEnabled ? 'bg-primary-600' : 'bg-gray-700'
+                  }`}
+                >
+                  <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform ${
+                    rotationEnabled ? 'translate-x-5' : ''
+                  }`} />
+                </button>
+              </div>
+
+              {rotationEnabled && (
+                <div className="space-y-3">
+                  <div className="flex flex-wrap gap-1.5">
+                    {[
+                      { label: '15m', value: 15 },
+                      { label: '30m', value: 30 },
+                      { label: '1h', value: 60 },
+                      { label: '4h', value: 240 },
+                      { label: '8h', value: 480 },
+                      { label: '12h', value: 720 },
+                      { label: '24h', value: 1440 },
+                    ].map(preset => (
+                      <button
+                        key={preset.value}
+                        onClick={() => setRotationMinutes(preset.value)}
+                        className={`px-3 py-1.5 text-xs rounded border transition-colors ${
+                          rotationMinutes === preset.value
+                            ? 'border-primary-500 bg-primary-900/30 text-primary-400'
+                            : 'border-gray-700 bg-gray-800 text-gray-500 hover:border-gray-600'
+                        }`}
+                      >
+                        {preset.label}
+                      </button>
+                    ))}
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">{b.customMinutes || 'Custom (minutes)'}</label>
+                    <input
+                      type="number"
+                      value={rotationMinutes}
+                      onChange={e => setRotationMinutes(Math.max(5, parseInt(e.target.value) || 5))}
+                      min={5}
+                      max={10080}
+                      className="w-32 px-2 py-1.5 text-sm bg-gray-800 border border-gray-700 rounded text-white focus:border-primary-500 focus:outline-none"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         )}
 
@@ -717,6 +782,11 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
                  scheduleType === 'custom_cron' ? customHours.map(h => `${h}:00`).join(', ') :
                  '01:00, 08:00, 14:00, 21:00 UTC'}
               </span></div>
+              {rotationEnabled && (
+                <div><span className="text-gray-500">{b.tradeRotation || 'Rotation'}:</span> <span className="text-white ml-2">
+                  {rotationMinutes >= 60 ? `${rotationMinutes / 60}h` : `${rotationMinutes}min`}
+                </span></div>
+              )}
             </div>
           </div>
         )}

@@ -85,6 +85,22 @@ class ExchangeClient(ABC):
         """Close HTTP session and clean up resources."""
         ...
 
+    async def get_order_fees(self, symbol: str, order_id: str) -> float:
+        """Get fees for a single order. Override in exchange-specific client."""
+        return 0.0
+
+    async def get_trade_total_fees(
+        self, symbol: str, entry_order_id: str, close_order_id: Optional[str] = None
+    ) -> float:
+        """Get total fees (entry + exit) for a complete trade. Override in exchange-specific client."""
+        return 0.0
+
+    async def get_funding_fees(
+        self, symbol: str, start_time_ms: int, end_time_ms: int
+    ) -> float:
+        """Get total funding fees for a symbol between two timestamps. Override in exchange-specific client."""
+        return 0.0
+
     @property
     @abstractmethod
     def exchange_name(self) -> str:

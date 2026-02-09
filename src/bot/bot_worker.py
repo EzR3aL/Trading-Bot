@@ -252,6 +252,20 @@ class BotWorker:
             replace_existing=True,
         )
 
+        # Trade rotation (auto-close & reopen) — check every minute if enabled
+        if getattr(self._config, "rotation_enabled", False) and getattr(self._config, "rotation_interval_minutes", None):
+            self._scheduler.add_job(
+                self._check_rotation_safe,
+                IntervalTrigger(minutes=1),
+                id=f"bot_{self.bot_config_id}_rotation",
+                name=f"Bot {self.bot_config_id} Trade Rotation",
+                replace_existing=True,
+            )
+            logger.info(
+                f"[Bot:{self.bot_config_id}] Trade rotation enabled: "
+                f"every {self._config.rotation_interval_minutes}min"
+            )
+
     async def start(self):
         """Start the bot's strategy loop."""
         if self.status == "running":
@@ -328,23 +342,29 @@ class BotWorker:
 
         self.last_analysis = datetime.utcnow()
 
-    async def _analyze_symbol(self, symbol: str):
-        """Analyze a single symbol and potentially trade it."""
+    async def _analyze_symbol(self, symbol: str, force: bool = False):
+        """Analyze a single symbol and potentially trade it.
+
+        Args:
+            symbol: Trading pair to analyze
+            force: If True, skip the open-position check (used after rotation close)
+        """
         log_prefix = f"[Bot:{self.bot_config_id}]"
 
-        # Check for existing open positions (per bot)
-        async with get_session() as session:
-            from sqlalchemy import select
-            result = await session.execute(
-                select(TradeRecord).where(
-                    TradeRecord.bot_config_id == self.bot_config_id,
-                    TradeRecord.symbol == symbol,
-                    TradeRecord.status == "open",
+        # Check for existing open positions (per bot) — skip when force-rotating
+        if not force:
+            async with get_session() as session:
+                from sqlalchemy import select
+                result = await session.execute(
+                    select(TradeRecord).where(
+                        TradeRecord.bot_config_id == self.bot_config_id,
+                        TradeRecord.symbol == symbol,
+                        TradeRecord.status == "open",
+                    )
                 )
-            )
-            if result.scalar_one_or_none():
-                logger.info(f"{log_prefix} Already have open position in {symbol}")
-                return
+                if result.scalar_one_or_none():
+                    logger.info(f"{log_prefix} Already have open position in {symbol}")
+                    return
 
         # Generate signal
         signal = await self._strategy.generate_signal(symbol)
@@ -549,6 +569,30 @@ class BotWorker:
             else:
                 exit_reason = "EXTERNAL_CLOSE"
 
+            # Fetch trading fees from exchange (entry + exit via orders-history)
+            try:
+                if trade.order_id:
+                    trade.fees = await client.get_trade_total_fees(
+                        symbol=trade.symbol,
+                        entry_order_id=trade.order_id,
+                        close_order_id=trade.close_order_id,
+                    )
+            except Exception:
+                trade.fees = 0
+
+            # Fetch funding fees (charged every 8h while position was open)
+            try:
+                if trade.entry_time:
+                    entry_ms = int(trade.entry_time.timestamp() * 1000)
+                    exit_ms = int(datetime.utcnow().timestamp() * 1000)
+                    trade.funding_paid = await client.get_funding_fees(
+                        symbol=trade.symbol,
+                        start_time_ms=entry_ms,
+                        end_time_ms=exit_ms,
+                    )
+            except Exception:
+                trade.funding_paid = 0
+
             # Update trade record
             trade.exit_price = exit_price
             trade.pnl = pnl
@@ -604,6 +648,152 @@ class BotWorker:
 
         except Exception as e:
             logger.error(f"{log_prefix} Handle closed position error: {e}")
+
+    # ── Trade Rotation ───────────────────────────────────────────
+
+    async def _check_rotation_safe(self):
+        """Wrapper with error handling for rotation check."""
+        try:
+            await self._check_rotation()
+        except Exception as e:
+            logger.error(f"[Bot:{self.bot_config_id}] Rotation check error: {e}")
+
+    async def _check_rotation(self):
+        """Check if any open trades have exceeded their rotation interval and need closing."""
+        rotation_minutes = getattr(self._config, "rotation_interval_minutes", None)
+        if not rotation_minutes:
+            return
+
+        log_prefix = f"[Bot:{self.bot_config_id}]"
+        now = datetime.utcnow()
+
+        async with get_session() as session:
+            from sqlalchemy import select
+            result = await session.execute(
+                select(TradeRecord).where(
+                    TradeRecord.bot_config_id == self.bot_config_id,
+                    TradeRecord.status == "open",
+                )
+            )
+            open_trades = result.scalars().all()
+
+            if not open_trades:
+                return
+
+            for trade in open_trades:
+                if not trade.entry_time:
+                    continue
+
+                elapsed = (now - trade.entry_time).total_seconds() / 60
+                if elapsed < rotation_minutes:
+                    continue
+
+                logger.info(
+                    f"{log_prefix} ROTATION: Trade #{trade.id} {trade.symbol} "
+                    f"open for {elapsed:.0f}min (limit: {rotation_minutes}min) — closing"
+                )
+
+                # Force-close the trade
+                client = self._demo_client if trade.demo_mode else self._live_client
+                if not client:
+                    continue
+
+                closed = await self._force_close_trade(trade, client, session)
+
+                if closed:
+                    # Re-analyze and open a new trade for this symbol
+                    logger.info(f"{log_prefix} ROTATION: Re-analyzing {trade.symbol}...")
+                    try:
+                        await self._analyze_symbol(trade.symbol, force=True)
+                    except Exception as e:
+                        logger.error(f"{log_prefix} ROTATION: Re-analysis failed for {trade.symbol}: {e}")
+
+    async def _force_close_trade(
+        self, trade: TradeRecord, client: ExchangeClient, session
+    ) -> bool:
+        """Force-close an open trade via the exchange. Returns True on success."""
+        log_prefix = f"[Bot:{self.bot_config_id}]"
+        mode_str = "DEMO" if trade.demo_mode else "LIVE"
+
+        try:
+            # Close position via exchange client
+            order = await client.close_position(trade.symbol, trade.side)
+
+            # Get exit price
+            exit_price = trade.entry_price
+            if order and order.price and order.price > 0:
+                exit_price = order.price
+            else:
+                try:
+                    ticker = await client.get_ticker(trade.symbol)
+                    if ticker:
+                        exit_price = ticker.last_price
+                except Exception:
+                    pass
+
+            # Calculate PnL
+            if trade.side == "long":
+                pnl = (exit_price - trade.entry_price) * trade.size
+            else:
+                pnl = (trade.entry_price - exit_price) * trade.size
+            pnl_percent = (pnl / (trade.entry_price * trade.size)) * 100
+
+            # Update trade record
+            trade.exit_price = exit_price
+            trade.pnl = pnl
+            trade.pnl_percent = pnl_percent
+            trade.exit_time = datetime.utcnow()
+            trade.exit_reason = "ROTATION"
+            trade.status = "closed"
+
+            # Record in risk manager
+            self._risk_manager.record_trade_exit(
+                symbol=trade.symbol,
+                side=trade.side,
+                size=trade.size,
+                entry_price=trade.entry_price,
+                exit_price=exit_price,
+                fees=trade.fees or 0,
+                funding_paid=trade.funding_paid or 0,
+                reason="ROTATION",
+                order_id=trade.order_id,
+            )
+
+            logger.info(
+                f"{log_prefix} [{mode_str}] ROTATION closed trade #{trade.id}: "
+                f"{trade.side.upper()} {trade.symbol} | PnL: ${pnl:.2f} ({pnl_percent:+.2f}%)"
+            )
+
+            # Send Discord notification
+            try:
+                notifier = await self._get_discord_notifier()
+                if notifier:
+                    duration_minutes = int((datetime.utcnow() - trade.entry_time).total_seconds() / 60) if trade.entry_time else None
+                    async with notifier:
+                        await notifier.send_trade_exit(
+                            symbol=trade.symbol,
+                            side=trade.side,
+                            size=trade.size,
+                            entry_price=trade.entry_price,
+                            exit_price=exit_price,
+                            pnl=pnl,
+                            pnl_percent=pnl_percent,
+                            fees=trade.fees or 0,
+                            funding_paid=trade.funding_paid or 0,
+                            reason="ROTATION",
+                            order_id=trade.order_id or "",
+                            duration_minutes=duration_minutes,
+                            demo_mode=trade.demo_mode,
+                            strategy_reason=f"[{self._config.name}] Auto-rotation ({self._config.rotation_interval_minutes}min)",
+                        )
+            except Exception as notify_err:
+                logger.warning(f"{log_prefix} Discord notification failed: {notify_err}")
+
+            return True
+
+        except Exception as e:
+            logger.error(f"{log_prefix} [{mode_str}] ROTATION close failed for trade #{trade.id}: {e}")
+            return False
 
     async def _get_discord_notifier(self) -> Optional[DiscordNotifier]:
         """Load user's Discord webhook and return a notifier if configured."""

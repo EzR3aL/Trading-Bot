@@ -3,10 +3,12 @@ import { useTranslation } from 'react-i18next'
 import { toBlob } from 'html-to-image'
 import api from '../api/client'
 import { useFilterStore } from '../stores/filterStore'
+import { useThemeStore } from '../stores/themeStore'
 import { useToastStore } from '../stores/toastStore'
 import { ExchangeIcon } from '../components/ui/ExchangeLogo'
 import BotBuilder from '../components/bots/BotBuilder'
 import { SkeletonBotCard } from '../components/ui/Skeleton'
+import PnlCell from '../components/ui/PnlCell'
 import {
   Plus,
   Play,
@@ -40,6 +42,8 @@ interface BotStatus {
   is_enabled: boolean
   total_trades: number
   total_pnl: number
+  total_fees: number
+  total_funding: number
   open_trades: number
   llm_provider?: string | null
   llm_model?: string | null
@@ -68,6 +72,8 @@ interface BotTrade {
   entry_time: string
   exit_time: string | null
   exit_reason: string | null
+  fees: number
+  funding_paid: number
 }
 
 interface BotStatistics {
@@ -82,6 +88,7 @@ interface BotStatistics {
     win_rate: number
     total_pnl: number
     total_fees: number
+    total_funding: number
     avg_pnl: number
     best_trade: number
     worst_trade: number
@@ -164,7 +171,13 @@ function TradeDetailModal({ trade, onClose, t }: { trade: BotTrade; onClose: () 
             {formatPnlPercent(trade.pnl_percent)}
           </div>
           <div className={`text-lg font-semibold mt-1 ${trade.pnl >= 0 ? 'text-profit/70' : 'text-loss/70'}`}>
-            {formatPnl(trade.pnl)}
+            <PnlCell
+              pnl={trade.pnl}
+              fees={trade.fees ?? 0}
+              fundingPaid={trade.funding_paid ?? 0}
+              status={trade.status}
+              className={`text-lg font-semibold ${trade.pnl >= 0 ? 'text-profit/70' : 'text-loss/70'}`}
+            />
           </div>
         </div>
 
@@ -224,6 +237,7 @@ function BotTradeHistoryModal({ bot, onClose, t }: { bot: BotStatus; onClose: ()
   const [selectedTrade, setSelectedTrade] = useState<BotTrade | null>(null)
   const [affiliateLink, setAffiliateLink] = useState<AffiliateLink | null>(null)
   const latestCardRef = useRef<HTMLDivElement>(null)
+  const theme = useThemeStore((s) => s.theme)
 
   useEffect(() => {
     const load = async () => {
@@ -250,7 +264,7 @@ function BotTradeHistoryModal({ bot, onClose, t }: { bot: BotStatus; onClose: ()
     try {
       const blob = await toBlob(latestCardRef.current, {
         pixelRatio: 2,
-        backgroundColor: '#0b0f19',
+        backgroundColor: theme === 'light' ? '#f8fafc' : '#0b0f19',
       })
       if (!blob) return
       await navigator.clipboard.write([
@@ -313,7 +327,12 @@ function BotTradeHistoryModal({ bot, onClose, t }: { bot: BotStatus; onClose: ()
                 <div className="bg-[#0b0f19] px-5 py-4 text-center">
                   <div className="text-xs text-gray-500 uppercase tracking-wider mb-1">{t('bots.totalPnl')}</div>
                   <div className={`text-xl font-bold font-mono ${stats.summary.total_pnl >= 0 ? 'text-profit' : 'text-loss'}`}>
-                    {formatPnl(stats.summary.total_pnl)}
+                    <PnlCell
+                      pnl={stats.summary.total_pnl}
+                      fees={stats.summary.total_fees}
+                      fundingPaid={stats.summary.total_funding ?? 0}
+                      className={`text-xl font-bold font-mono ${stats.summary.total_pnl >= 0 ? 'text-profit' : 'text-loss'}`}
+                    />
                   </div>
                 </div>
                 <div className="bg-[#0b0f19] px-5 py-4 text-center">
@@ -387,7 +406,13 @@ function BotTradeHistoryModal({ bot, onClose, t }: { bot: BotStatus; onClose: ()
                           {formatPnlPercent(latestClosed.pnl_percent)}
                         </div>
                         <div className={`text-sm font-medium mt-0.5 ${latestClosed.pnl >= 0 ? 'text-profit/60' : 'text-loss/60'}`}>
-                          {formatPnl(latestClosed.pnl)}
+                          <PnlCell
+                            pnl={latestClosed.pnl}
+                            fees={latestClosed.fees ?? 0}
+                            fundingPaid={latestClosed.funding_paid ?? 0}
+                            status={latestClosed.status}
+                            className={`text-sm font-medium ${latestClosed.pnl >= 0 ? 'text-profit/60' : 'text-loss/60'}`}
+                          />
                         </div>
                       </div>
                       <div>
@@ -471,12 +496,16 @@ function BotTradeHistoryModal({ bot, onClose, t }: { bot: BotStatus; onClose: ()
                           </button>
                         </td>
                         <td className="px-6 py-3.5 text-right">
-                          <span className={`text-sm font-semibold font-mono ${
-                            trade.status === 'open' ? 'text-gray-500' :
-                            trade.pnl >= 0 ? 'text-profit' : 'text-loss'
-                          }`}>
-                            {trade.status === 'open' ? '--' : formatPnl(trade.pnl)}
-                          </span>
+                          <PnlCell
+                            pnl={trade.pnl}
+                            fees={trade.fees ?? 0}
+                            fundingPaid={trade.funding_paid ?? 0}
+                            status={trade.status}
+                            className={`text-sm font-semibold font-mono ${
+                              trade.status === 'open' ? 'text-gray-500' :
+                              trade.pnl >= 0 ? 'text-profit' : 'text-loss'
+                            }`}
+                          />
                         </td>
                       </tr>
                     ))}
@@ -703,7 +732,12 @@ export default function Bots() {
                   <div>
                     <div className="text-[10px] text-gray-500 uppercase tracking-wider">{t('bots.totalPnl')}</div>
                     <div className={`text-sm font-mono font-medium ${bot.total_pnl >= 0 ? 'text-profit' : 'text-loss'}`}>
-                      {formatPnl(bot.total_pnl)}
+                      <PnlCell
+                        pnl={bot.total_pnl}
+                        fees={bot.total_fees ?? 0}
+                        fundingPaid={bot.total_funding ?? 0}
+                        className={`text-sm font-mono font-medium ${bot.total_pnl >= 0 ? 'text-profit' : 'text-loss'}`}
+                      />
                     </div>
                   </div>
                   <div>

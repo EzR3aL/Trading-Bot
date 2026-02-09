@@ -29,9 +29,16 @@ class BotConfigCreate(BaseModel):
     schedule_type: str = Field(default="market_sessions", pattern="^(market_sessions|interval|custom_cron)$")
     schedule_config: Optional[Dict[str, Any]] = None
 
+    # Trade rotation: auto-close & reopen trades at fixed intervals
+    rotation_enabled: bool = Field(default=False, description="Enable automatic trade rotation")
+    rotation_interval_minutes: Optional[int] = Field(
+        default=None, ge=5, le=10080,
+        description="Close & reopen trades after this many minutes (5min to 7 days)",
+    )
+
 
 class BotConfigUpdate(BaseModel):
-    """Request to update a bot config."""
+    """Request to update a bot config. Only provided fields are updated."""
     name: Optional[str] = Field(None, min_length=1, max_length=100)
     description: Optional[str] = None
     strategy_type: Optional[str] = None
@@ -50,6 +57,11 @@ class BotConfigUpdate(BaseModel):
 
     schedule_type: Optional[str] = Field(None, pattern="^(market_sessions|interval|custom_cron)$")
     schedule_config: Optional[Dict[str, Any]] = None
+
+    rotation_enabled: Optional[bool] = Field(None, description="Enable automatic trade rotation")
+    rotation_interval_minutes: Optional[int] = Field(
+        None, ge=5, le=10080, description="Rotation interval in minutes (5min to 7 days)",
+    )
 
 
 class BotConfigResponse(BaseModel):
@@ -70,6 +82,8 @@ class BotConfigResponse(BaseModel):
     strategy_params: Optional[Dict[str, Any]] = None
     schedule_type: str
     schedule_config: Optional[Dict[str, Any]] = None
+    rotation_enabled: bool = False
+    rotation_interval_minutes: Optional[int] = None
     is_enabled: bool
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
@@ -93,6 +107,8 @@ class BotRuntimeStatus(BaseModel):
     # Summary metrics (from DB)
     total_trades: int = 0
     total_pnl: float = 0.0
+    total_fees: float = 0.0
+    total_funding: float = 0.0
     open_trades: int = 0
 
     # LLM-specific metrics (only populated for llm_signal strategy)
