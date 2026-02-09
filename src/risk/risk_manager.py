@@ -140,6 +140,9 @@ class RiskManager:
             try:
                 with open(stats_file, "r") as f:
                     data = json.load(f)
+                    # Remove computed properties that are not dataclass fields
+                    for key in ("net_pnl", "return_percent", "win_rate"):
+                        data.pop(key, None)
                     self._daily_stats = DailyStats(**data)
                     logger.info(f"Loaded daily stats: {self._daily_stats.trades_executed} trades, "
                                f"PnL: ${self._daily_stats.net_pnl:.2f}")
