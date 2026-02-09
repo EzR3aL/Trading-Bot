@@ -1,5 +1,6 @@
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts'
 import { useTranslation } from 'react-i18next'
+import { useThemeStore } from '../../stores/themeStore'
 
 interface Props {
   wins: number
@@ -11,6 +12,7 @@ const COLORS = { wins: '#22c55e', losses: '#ef4444' }
 
 export default function WinLossChart({ wins, losses, winRate }: Props) {
   const { t } = useTranslation()
+  const theme = useThemeStore((s) => s.theme)
   const total = wins + losses
 
   if (total === 0) {
@@ -44,10 +46,10 @@ export default function WinLossChart({ wins, losses, winRate }: Props) {
           </Pie>
           <Tooltip
             contentStyle={{
-              backgroundColor: '#1f2937',
-              border: '1px solid #374151',
+              backgroundColor: theme === 'light' ? '#ffffff' : '#1f2937',
+              border: `1px solid ${theme === 'light' ? '#e2e8f0' : '#374151'}`,
               borderRadius: '8px',
-              color: '#e5e7eb',
+              color: theme === 'light' ? '#334155' : '#e5e7eb',
               fontSize: '13px',
             }}
             formatter={(value: number, name: string) => [`${value} trades`, name]}

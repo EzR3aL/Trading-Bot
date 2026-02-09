@@ -27,6 +27,8 @@ ENDPOINTS = {
     "order_detail": "/api/v2/mix/order/detail",
     "orders_pending": "/api/v2/mix/order/orders-pending",
     "orders_history": "/api/v2/mix/order/orders-history",
+    "order_fills": "/api/v2/mix/order/fills",
+    "account_bill": "/api/v2/mix/account/bill",
 }
 
 # Bitget success code

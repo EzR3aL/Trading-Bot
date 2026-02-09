@@ -26,12 +26,23 @@ class BotConfigCreate(BaseModel):
     strategy_params: Optional[Dict[str, Any]] = None
 
     # Schedule
-    schedule_type: str = Field(default="market_sessions", pattern="^(market_sessions|interval|custom_cron)$")
+    schedule_type: str = Field(default="market_sessions", pattern="^(market_sessions|interval|custom_cron|rotation_only)$")
     schedule_config: Optional[Dict[str, Any]] = None
+
+    # Trade rotation: auto-close & reopen trades at fixed intervals
+    rotation_enabled: bool = Field(default=False, description="Enable automatic trade rotation")
+    rotation_interval_minutes: Optional[int] = Field(
+        default=None, ge=5, le=10080,
+        description="Close & reopen trades after this many minutes (5min to 7 days)",
+    )
+    rotation_start_time: Optional[str] = Field(
+        default=None, pattern=r"^\d{2}:\d{2}$",
+        description="UTC start time for rotation intervals (HH:MM format, e.g. '08:00')",
+    )
 
 
 class BotConfigUpdate(BaseModel):
-    """Request to update a bot config."""
+    """Request to update a bot config. Only provided fields are updated."""
     name: Optional[str] = Field(None, min_length=1, max_length=100)
     description: Optional[str] = None
     strategy_type: Optional[str] = None
@@ -48,8 +59,17 @@ class BotConfigUpdate(BaseModel):
 
     strategy_params: Optional[Dict[str, Any]] = None
 
-    schedule_type: Optional[str] = Field(None, pattern="^(market_sessions|interval|custom_cron)$")
+    schedule_type: Optional[str] = Field(None, pattern="^(market_sessions|interval|custom_cron|rotation_only)$")
     schedule_config: Optional[Dict[str, Any]] = None
+
+    rotation_enabled: Optional[bool] = Field(None, description="Enable automatic trade rotation")
+    rotation_interval_minutes: Optional[int] = Field(
+        None, ge=5, le=10080, description="Rotation interval in minutes (5min to 7 days)",
+    )
+    rotation_start_time: Optional[str] = Field(
+        None, pattern=r"^\d{2}:\d{2}$",
+        description="UTC start time for rotation intervals (HH:MM format)",
+    )
 
 
 class BotConfigResponse(BaseModel):
@@ -70,6 +90,9 @@ class BotConfigResponse(BaseModel):
     strategy_params: Optional[Dict[str, Any]] = None
     schedule_type: str
     schedule_config: Optional[Dict[str, Any]] = None
+    rotation_enabled: bool = False
+    rotation_interval_minutes: Optional[int] = None
+    rotation_start_time: Optional[str] = None
     is_enabled: bool
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
@@ -93,10 +116,13 @@ class BotRuntimeStatus(BaseModel):
     # Summary metrics (from DB)
     total_trades: int = 0
     total_pnl: float = 0.0
+    total_fees: float = 0.0
+    total_funding: float = 0.0
     open_trades: int = 0
 
     # LLM-specific metrics (only populated for llm_signal strategy)
     llm_provider: Optional[str] = None
+    llm_model: Optional[str] = None
     llm_last_direction: Optional[str] = None  # "LONG" | "SHORT"
     llm_last_confidence: Optional[int] = None  # 0-100
     llm_last_reasoning: Optional[str] = None

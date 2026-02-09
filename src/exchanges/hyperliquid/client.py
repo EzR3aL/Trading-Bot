@@ -9,6 +9,7 @@ SECURITY: Only trading operations are allowed. No withdrawals, transfers, or
 fund-moving operations. The ALLOWED_METHODS whitelist enforces this.
 """
 
+import os
 import re
 from typing import Any, Dict, List, Optional
 
@@ -18,6 +19,7 @@ from hyperliquid.info import Info as HLInfo
 from hyperliquid.utils.constants import MAINNET_API_URL, TESTNET_API_URL
 
 from src.exchanges.base import ExchangeClient
+from src.exchanges.hyperliquid.constants import DEFAULT_BUILDER_FEE
 from src.exchanges.types import Balance, FundingRateInfo, Order, Position, Ticker
 from src.utils.logger import get_logger
 
@@ -35,6 +37,7 @@ ALLOWED_METHODS = frozenset({
     "bulk_cancel",
     "update_leverage",
     "update_isolated_margin",
+    "approve_builder_fee",
 })
 
 # Methods that move funds — explicitly forbidden
@@ -125,6 +128,25 @@ class HyperliquidClient(ExchangeClient):
 
         # Info client for read-only queries
         self._info: HLInfo = raw_exchange.info
+
+        # ── Builder Code config ──────────────────────────────────────────
+        # Earns a small fee on every order (100% to builder, no cap).
+        # Set HL_BUILDER_ADDRESS in .env to enable.
+        builder_address = os.environ.get("HL_BUILDER_ADDRESS", "").strip()
+        builder_fee = int(os.environ.get("HL_BUILDER_FEE", str(DEFAULT_BUILDER_FEE)))
+        if builder_address and 1 <= builder_fee <= 100:
+            self._builder = {"b": builder_address.lower(), "f": builder_fee}
+            logger.info(
+                f"Builder code enabled: {builder_address[:10]}... "
+                f"fee={builder_fee} ({builder_fee / 10:.1f} bp = {builder_fee / 1000:.3f}%)"
+            )
+        else:
+            self._builder = None
+            if builder_address and not (1 <= builder_fee <= 100):
+                logger.warning(
+                    f"HL_BUILDER_FEE={builder_fee} out of range (1-100). "
+                    f"Builder code disabled."
+                )
 
         if is_agent_wallet:
             logger.info(
@@ -290,11 +312,13 @@ class HyperliquidClient(ExchangeClient):
         )
 
         # Place market order via SDK (handles EIP-712 signing + slippage)
+        builder_kwargs = {"builder": self._builder} if self._builder else {}
         result = self._exchange.market_open(
             name=coin,
             is_buy=is_buy,
             sz=size,
             slippage=DEFAULT_SLIPPAGE,
+            **builder_kwargs,
         )
 
         # Parse response
@@ -393,6 +417,7 @@ class HyperliquidClient(ExchangeClient):
         rounded_px = self._round_price(trigger_px, self._get_tick_size(coin))
 
         try:
+            builder_kwargs = {"builder": self._builder} if self._builder else {}
             result = self._exchange.order(
                 name=coin,
                 is_buy=is_buy,
@@ -406,6 +431,7 @@ class HyperliquidClient(ExchangeClient):
                     }
                 },
                 reduce_only=True,
+                **builder_kwargs,
             )
             logger.info(f"Hyperliquid {tpsl.upper()} trigger set for {coin} @ {rounded_px}: {result}")
         except Exception as e:
@@ -425,10 +451,12 @@ class HyperliquidClient(ExchangeClient):
             f"wallet={self._wallet.address[:10]}..."
         )
 
+        builder_kwargs = {"builder": self._builder} if self._builder else {}
         result = self._exchange.market_close(
             coin=coin,
             sz=pos.size,
             slippage=DEFAULT_SLIPPAGE,
+            **builder_kwargs,
         )
 
         order_status = _parse_order_response(result)
@@ -446,6 +474,78 @@ class HyperliquidClient(ExchangeClient):
             status="filled",
             exchange="hyperliquid",
         )
+
+    # ── Builder Code & Referral Queries ──────────────────────────────────
+
+    async def check_builder_fee_approval(self, user_address: str = None) -> Optional[int]:
+        """Check if user has approved builder fee for the configured builder.
+
+        Returns the max approved fee rate (int), or None if not approved.
+        """
+        if not self._builder:
+            return None
+
+        addr = (user_address or self.wallet_address).lower()
+        try:
+            result = self._info.post(
+                "/info",
+                {"type": "maxBuilderFee", "user": addr, "builder": self._builder["b"]},
+            )
+            if result is not None and int(result) > 0:
+                return int(result)
+            return None
+        except Exception as e:
+            logger.warning(f"Failed to check builder fee approval: {e}")
+            return None
+
+    async def approve_builder_fee(self, max_fee_rate: int = None) -> bool:
+        """Approve builder fee for the configured builder address.
+
+        Must be called once per user before builder fees can be charged.
+        Uses the SDK's approve_builder_fee (EIP-712 signed).
+        """
+        if not self._builder:
+            logger.warning("No builder code configured, cannot approve")
+            return False
+
+        fee = max_fee_rate or self._builder["f"]
+        try:
+            self._exchange.approve_builder_fee(
+                builder=self._builder["b"],
+                max_fee_rate=fee,
+            )
+            logger.info(
+                f"Builder fee approved: builder={self._builder['b'][:10]}... maxFee={fee}"
+            )
+            return True
+        except Exception as e:
+            logger.error(f"Failed to approve builder fee: {e}")
+            return False
+
+    async def get_referral_info(self, user_address: str = None) -> Optional[dict]:
+        """Get referral state for a user (referred_by, referral_code, etc.)."""
+        addr = (user_address or self.wallet_address).lower()
+        try:
+            result = self._info.query_referral_state(addr)
+            return result if isinstance(result, dict) else None
+        except Exception as e:
+            logger.warning(f"Failed to get referral info: {e}")
+            return None
+
+    async def get_user_fees(self, user_address: str = None) -> Optional[dict]:
+        """Get user fee/volume tier info (includes trading volume data)."""
+        addr = (user_address or self.wallet_address).lower()
+        try:
+            result = self._info.user_fees(addr)
+            return result if isinstance(result, dict) else None
+        except Exception as e:
+            logger.warning(f"Failed to get user fees: {e}")
+            return None
+
+    @property
+    def builder_config(self) -> Optional[dict]:
+        """Return current builder config or None."""
+        return self._builder
 
     async def cancel_order(self, symbol: str, order_id: str) -> bool:
         coin = self._normalize_symbol(symbol)

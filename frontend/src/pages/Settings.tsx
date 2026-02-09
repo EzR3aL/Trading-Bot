@@ -1,11 +1,13 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ChevronDown } from 'lucide-react'
 import api from '../api/client'
+import { useAuthStore } from '../stores/authStore'
 import type { ConnectionsStatusResponse, ExchangeConnectionStatus, ExchangeInfo, ServiceStatus } from '../types'
 import { ExchangeIcon } from '../components/ui/ExchangeLogo'
 
-const TABS = ['apiKeys', 'llmKeys', 'discord', 'connections'] as const
+const BASE_TABS = ['apiKeys', 'llmKeys', 'discord', 'connections'] as const
+const ADMIN_TABS = [...BASE_TABS, 'affiliateLinks', 'hyperliquid'] as const
 
 /* ------------------------------------------------------------------ */
 /*  Inline Key Form (used inside accordion)                           */
@@ -93,16 +95,6 @@ function KeyForm({
 }
 
 /* ------------------------------------------------------------------ */
-/*  Connection Status Indicator                                       */
-/* ------------------------------------------------------------------ */
-
-function StatusDot({ reachable }: { reachable: boolean }) {
-  return (
-    <span className={`inline-block w-2.5 h-2.5 rounded-full ${reachable ? 'bg-green-400' : 'bg-red-400'}`} />
-  )
-}
-
-/* ------------------------------------------------------------------ */
 /*  Per-Exchange Key Form State                                       */
 /* ------------------------------------------------------------------ */
 
@@ -122,7 +114,10 @@ const emptyForm = (): ExchangeKeyForm => ({
 
 export default function Settings() {
   const { t } = useTranslation()
-  const [activeTab, setActiveTab] = useState<typeof TABS[number]>('apiKeys')
+  const user = useAuthStore((s) => s.user)
+  const isAdmin = user?.role === 'admin'
+  const TABS = useMemo(() => isAdmin ? ADMIN_TABS : BASE_TABS, [isAdmin])
+  const [activeTab, setActiveTab] = useState<typeof ADMIN_TABS[number]>('apiKeys')
   const [exchanges, setExchanges] = useState<ExchangeInfo[]>([])
   const [connections, setConnections] = useState<ExchangeConnectionStatus[]>([])
   const [saving, setSaving] = useState(false)
@@ -145,6 +140,16 @@ export default function Settings() {
   // Connections status
   const [connStatus, setConnStatus] = useState<ConnectionsStatusResponse | null>(null)
   const [connLoading, setConnLoading] = useState(false)
+
+  // Hyperliquid revenue
+  const [hlRevenue, setHlRevenue] = useState<any>(null)
+  const [hlLoading, setHlLoading] = useState(false)
+  const [hlApproving, setHlApproving] = useState(false)
+
+  // Affiliate links (admin)
+  const [affiliateLinks, setAffiliateLinks] = useState<Record<string, { affiliate_url: string; label: string; is_active: boolean }>>({})
+  const [affiliateForms, setAffiliateForms] = useState<Record<string, { url: string; label: string; active: boolean }>>({})
+  const [affiliateLoaded, setAffiliateLoaded] = useState(false)
 
   useEffect(() => {
     const load = async () => {
@@ -281,9 +286,79 @@ export default function Settings() {
     setConnLoading(false)
   }
 
+  const loadHlRevenue = async () => {
+    setHlLoading(true)
+    try {
+      const res = await api.get('/config/hyperliquid/revenue-summary')
+      setHlRevenue(res.data)
+    } catch { /* HL not configured - OK */ }
+    setHlLoading(false)
+  }
+
+  const approveBuilderFee = async () => {
+    setHlApproving(true)
+    try {
+      await api.post('/config/hyperliquid/approve-builder-fee')
+      showMessage('Builder fee approved!')
+      loadHlRevenue()
+    } catch { showMessage(t('common.error')) }
+    setHlApproving(false)
+  }
+
+  const loadAffiliateLinks = async () => {
+    try {
+      const res = await api.get('/affiliate-links')
+      const map: typeof affiliateLinks = {}
+      for (const link of res.data) {
+        map[link.exchange_type] = { affiliate_url: link.affiliate_url, label: link.label || '', is_active: link.is_active }
+      }
+      setAffiliateLinks(map)
+      // Pre-fill forms
+      const forms: typeof affiliateForms = {}
+      for (const ex of ['bitget', 'weex', 'hyperliquid']) {
+        const existing = map[ex]
+        forms[ex] = { url: existing?.affiliate_url || '', label: existing?.label || '', active: existing?.is_active ?? true }
+      }
+      setAffiliateForms(forms)
+      setAffiliateLoaded(true)
+    } catch { /* ignore */ }
+  }
+
+  const saveAffiliateLink = async (exchange: string) => {
+    const form = affiliateForms[exchange]
+    if (!form?.url) return
+    setSaving(true)
+    try {
+      await api.put(`/affiliate-links/${exchange}`, {
+        affiliate_url: form.url,
+        label: form.label || null,
+        is_active: form.active,
+      })
+      showMessage(t('settings.saved'))
+      loadAffiliateLinks()
+    } catch { showMessage(t('common.error')) }
+    setSaving(false)
+  }
+
+  const deleteAffiliateLink = async (exchange: string) => {
+    setSaving(true)
+    try {
+      await api.delete(`/affiliate-links/${exchange}`)
+      showMessage(t('settings.saved'))
+      loadAffiliateLinks()
+    } catch { showMessage(t('common.error')) }
+    setSaving(false)
+  }
+
   useEffect(() => {
     if (activeTab === 'connections' && !connStatus) {
       loadConnectionStatus()
+    }
+    if (activeTab === 'hyperliquid' && !hlRevenue) {
+      loadHlRevenue()
+    }
+    if (activeTab === 'affiliateLinks' && !affiliateLoaded) {
+      loadAffiliateLinks()
     }
   }, [activeTab])
 
@@ -514,45 +589,289 @@ export default function Settings() {
         </div>
       )}
 
+      {/* Affiliate Links Tab (admin only) */}
+      {activeTab === 'affiliateLinks' && (
+        <div className="max-w-2xl">
+          <p className="text-sm text-gray-400 mb-4">{t('settings.affiliateLinksDesc')}</p>
+          <div className="space-y-4">
+            {['bitget', 'weex', 'hyperliquid'].map((ex) => {
+              const form = affiliateForms[ex] || { url: '', label: '', active: true }
+              const hasExisting = !!affiliateLinks[ex]
+              return (
+                <div key={ex} className="bg-gray-900 border border-gray-800 rounded-lg p-5">
+                  <div className="flex items-center gap-3 mb-4">
+                    <ExchangeIcon exchange={ex} size={20} />
+                    <h3 className="text-white font-semibold capitalize">{ex}</h3>
+                    {hasExisting && (
+                      <span className="text-xs px-2 py-0.5 rounded-full bg-green-900/40 text-green-400 border border-green-800">
+                        {t('settings.configured')}
+                      </span>
+                    )}
+                  </div>
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-xs text-gray-500 mb-1">{t('settings.affiliateUrl')}</label>
+                      <input
+                        type="text"
+                        value={form.url}
+                        onChange={(e) => setAffiliateForms(prev => ({ ...prev, [ex]: { ...form, url: e.target.value } }))}
+                        placeholder="https://..."
+                        className="w-full px-3 py-1.5 bg-gray-800 border border-gray-700 rounded text-white text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-gray-500 mb-1">{t('settings.affiliateLabel')}</label>
+                      <input
+                        type="text"
+                        value={form.label}
+                        onChange={(e) => setAffiliateForms(prev => ({ ...prev, [ex]: { ...form, label: e.target.value } }))}
+                        placeholder="z.B. 10% Rabatt auf Gebühren"
+                        className="w-full px-3 py-1.5 bg-gray-800 border border-gray-700 rounded text-white text-sm"
+                      />
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        id={`aff-active-${ex}`}
+                        checked={form.active}
+                        onChange={(e) => setAffiliateForms(prev => ({ ...prev, [ex]: { ...form, active: e.target.checked } }))}
+                        className="rounded border-gray-700 bg-gray-800 text-primary-600"
+                      />
+                      <label htmlFor={`aff-active-${ex}`} className="text-sm text-gray-400">{t('settings.affiliateActive')}</label>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => saveAffiliateLink(ex)}
+                        disabled={saving || !form.url}
+                        className="px-3 py-1.5 text-sm bg-primary-600 text-white rounded hover:bg-primary-700 disabled:opacity-50"
+                      >
+                        {t('settings.save')}
+                      </button>
+                      {hasExisting && (
+                        <button
+                          onClick={() => deleteAffiliateLink(ex)}
+                          disabled={saving}
+                          className="px-3 py-1.5 text-sm bg-red-900/50 text-red-400 rounded hover:bg-red-900 disabled:opacity-50"
+                        >
+                          {t('presets.delete')}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Hyperliquid Tab */}
+      {activeTab === 'hyperliquid' && (
+        <div className="bg-gray-900 border border-gray-800 rounded-lg p-6 max-w-2xl space-y-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-white font-medium">Hyperliquid Revenue</h3>
+              <p className="text-sm text-gray-400 mt-1">Builder Code & Referral status</p>
+            </div>
+            <button onClick={loadHlRevenue} disabled={hlLoading}
+              className="px-3 py-1.5 text-sm bg-gray-800 text-gray-300 rounded hover:bg-gray-700 disabled:opacity-50">
+              {hlLoading ? t('settings.refreshing') : t('settings.refreshStatus')}
+            </button>
+          </div>
+
+          {hlRevenue ? (
+            <>
+              {/* Builder Code Section */}
+              <div>
+                <h4 className="text-sm font-medium text-gray-400 mb-3 uppercase tracking-wider">Builder Code</h4>
+                {hlRevenue.builder?.configured ? (
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between p-3 bg-gray-800 rounded-lg">
+                      <span className="text-sm text-gray-300">Builder Address</span>
+                      <span className="text-sm text-white font-mono">{hlRevenue.builder.address}</span>
+                    </div>
+                    <div className="flex items-center justify-between p-3 bg-gray-800 rounded-lg">
+                      <span className="text-sm text-gray-300">Fee Rate</span>
+                      <span className="text-sm text-white">{hlRevenue.builder.fee_percent}</span>
+                    </div>
+                    <div className="flex items-center justify-between p-3 bg-gray-800 rounded-lg">
+                      <span className="text-sm text-gray-300">User Approved</span>
+                      <div className="flex items-center gap-2">
+                        <span className={`inline-block w-2.5 h-2.5 rounded-full ${hlRevenue.builder.user_approved ? 'bg-green-400' : 'bg-red-400'}`} />
+                        <span className={`text-sm ${hlRevenue.builder.user_approved ? 'text-green-400' : 'text-red-400'}`}>
+                          {hlRevenue.builder.user_approved ? 'Approved' : 'Not Approved'}
+                        </span>
+                      </div>
+                    </div>
+                    {!hlRevenue.builder.user_approved && (
+                      <button onClick={approveBuilderFee} disabled={hlApproving}
+                        className="w-full mt-2 px-4 py-2 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50">
+                        {hlApproving ? 'Approving...' : 'Approve Builder Fee'}
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  <div className="p-3 bg-gray-800 rounded-lg text-sm text-gray-500">
+                    Not configured. Set HL_BUILDER_ADDRESS in .env to enable.
+                  </div>
+                )}
+              </div>
+
+              {/* Referral Section */}
+              <div>
+                <h4 className="text-sm font-medium text-gray-400 mb-3 uppercase tracking-wider">Referral</h4>
+                {hlRevenue.referral?.configured ? (
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between p-3 bg-gray-800 rounded-lg">
+                      <span className="text-sm text-gray-300">Referral Code</span>
+                      <span className="text-sm text-white font-mono">{hlRevenue.referral.code}</span>
+                    </div>
+                    <div className="flex items-center justify-between p-3 bg-gray-800 rounded-lg">
+                      <span className="text-sm text-gray-300">User Referred</span>
+                      <div className="flex items-center gap-2">
+                        <span className={`inline-block w-2.5 h-2.5 rounded-full ${hlRevenue.referral.user_referred ? 'bg-green-400' : 'bg-yellow-400'}`} />
+                        <span className={`text-sm ${hlRevenue.referral.user_referred ? 'text-green-400' : 'text-yellow-400'}`}>
+                          {hlRevenue.referral.user_referred ? 'Referred' : 'Not Referred'}
+                        </span>
+                      </div>
+                    </div>
+                    {!hlRevenue.referral.user_referred && hlRevenue.referral.link && (
+                      <a href={hlRevenue.referral.link} target="_blank" rel="noopener noreferrer"
+                        className="block mt-2 px-4 py-2 text-sm text-center bg-blue-600/20 text-blue-400 rounded-lg border border-blue-600/30 hover:bg-blue-600/30">
+                        Register via Referral Link
+                      </a>
+                    )}
+                  </div>
+                ) : (
+                  <div className="p-3 bg-gray-800 rounded-lg text-sm text-gray-500">
+                    Not configured. Set HL_REFERRAL_CODE in .env to enable.
+                  </div>
+                )}
+              </div>
+
+              {/* Fee Tier Info */}
+              {hlRevenue.user_fees && (
+                <div>
+                  <h4 className="text-sm font-medium text-gray-400 mb-3 uppercase tracking-wider">Fee Tier</h4>
+                  <div className="p-3 bg-gray-800 rounded-lg text-sm text-gray-300">
+                    <pre className="whitespace-pre-wrap text-xs">{JSON.stringify(hlRevenue.user_fees, null, 2)}</pre>
+                  </div>
+                </div>
+              )}
+            </>
+          ) : (
+            <div className="text-center text-gray-500 py-8">
+              {hlLoading ? t('settings.refreshing') : 'No Hyperliquid connection configured'}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Connections Tab */}
       {activeTab === 'connections' && (
-        <div className="bg-gray-900 border border-gray-800 rounded-lg p-6 max-w-2xl">
-          <div className="space-y-6">
-            <div className="flex items-center justify-between">
-              <p className="text-sm text-gray-400">{t('settings.connectionsDesc')}</p>
-              <button onClick={loadConnectionStatus} disabled={connLoading}
-                className="px-3 py-1.5 text-sm bg-gray-800 text-gray-300 rounded hover:bg-gray-700 disabled:opacity-50">
-                {connLoading ? t('settings.refreshing') : t('settings.refreshStatus')}
-              </button>
-            </div>
+        <div className="space-y-5">
+          <div className="flex items-center justify-between">
+            <p className="text-sm text-gray-400">{t('settings.connectionsDesc')}</p>
+            <button onClick={loadConnectionStatus} disabled={connLoading}
+              className="px-3 py-1.5 text-sm bg-gray-800 text-gray-300 rounded hover:bg-gray-700 disabled:opacity-50">
+              {connLoading ? t('settings.refreshing') : t('settings.refreshStatus')}
+            </button>
+          </div>
 
-            {connStatus ? (() => {
-              const groups = groupServices(connStatus.services)
-              const sectionLabels: Record<string, string> = {
-                data_source: t('settings.dataSources'),
-                exchange: t('settings.exchangeApi'),
-                notification: t('settings.notifications'),
-              }
-              return (
-                <>
-                  {(['data_source', 'exchange', 'notification'] as const).map((groupKey) => {
+          {connStatus ? (() => {
+            const groups = groupServices(connStatus.services)
+            const catLabels: Record<string, string> = {
+              sentiment: t('settings.sentimentNews', 'Sentiment & News'),
+              futures: t('settings.futuresData', 'Futures Data'),
+              options: t('settings.optionsData', 'Options Data'),
+              spot: t('settings.spotMarket', 'Spot Market'),
+              technical: t('settings.technicalIndicators', 'Technical Indicators'),
+              tradfi: t('settings.tradfiCme', 'TradFi / CME'),
+            }
+            const catOrder = ['sentiment', 'futures', 'options', 'spot', 'technical', 'tradfi']
+            const dsItems = groups['data_source'] || []
+            const dsOnline = dsItems.filter(([, s]) => s.reachable).length
+
+            return (
+              <>
+                {/* ── Data Sources — compact grid ── */}
+                {dsItems.length > 0 && (() => {
+                  const byCategory: Record<string, [string, ServiceStatus][]> = {}
+                  for (const [key, svc] of dsItems) {
+                    const cat = (svc as any).category || 'other'
+                    if (!byCategory[cat]) byCategory[cat] = []
+                    byCategory[cat].push([key, svc])
+                  }
+                  return (
+                    <div>
+                      <div className="flex items-center gap-3 mb-3">
+                        <h3 className="text-sm font-medium text-gray-400 uppercase tracking-wider">
+                          {t('settings.dataSources')}
+                        </h3>
+                        <span className="text-xs text-gray-600">
+                          {dsOnline}/{dsItems.length} online
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+                        {catOrder.map(cat => {
+                          const catItems = byCategory[cat]
+                          if (!catItems || catItems.length === 0) return null
+                          const allUp = catItems.every(([, s]) => s.reachable)
+                          return (
+                            <div key={cat} className="bg-gray-900 border border-gray-800 rounded-lg p-3">
+                              <div className="flex items-center justify-between mb-2">
+                                <span className="text-[11px] font-medium text-gray-500 uppercase tracking-wider">
+                                  {catLabels[cat] || cat}
+                                </span>
+                                <span className={`w-2 h-2 rounded-full ${allUp ? 'bg-green-400' : 'bg-red-400'}`} />
+                              </div>
+                              <div className="space-y-0.5">
+                                {catItems.map(([key, svc]) => (
+                                  <div key={key} className="flex items-center justify-between py-1 px-1.5 rounded hover:bg-gray-800/60">
+                                    <div className="flex items-center gap-2 min-w-0">
+                                      <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${svc.reachable ? 'bg-green-400' : 'bg-red-400'}`} />
+                                      <span className="text-white text-xs truncate">{svc.label}</span>
+                                    </div>
+                                    <div className="flex items-center gap-1.5 flex-shrink-0 ml-2">
+                                      {(svc as any).provider && (svc as any).provider !== 'Calculated' && (
+                                        <span className="text-gray-600 text-[10px]">{(svc as any).provider}</span>
+                                      )}
+                                      {svc.latency_ms != null && svc.latency_ms > 0 && (
+                                        <span className="text-gray-600 text-[10px] tabular-nums w-8 text-right">{svc.latency_ms}ms</span>
+                                      )}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )
+                })()}
+
+                {/* ── Exchanges & Notifications — side by side ── */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {(['exchange', 'notification'] as const).map((groupKey) => {
                     const items = groups[groupKey]
                     if (!items || items.length === 0) return null
+                    const label = groupKey === 'exchange' ? t('settings.exchangeApi') : t('settings.notifications')
                     return (
-                      <div key={groupKey}>
-                        <h3 className="text-sm font-medium text-gray-400 mb-3 uppercase tracking-wider">
-                          {sectionLabels[groupKey]}
+                      <div key={groupKey} className="bg-gray-900 border border-gray-800 rounded-lg p-3">
+                        <h3 className="text-[11px] font-medium text-gray-500 mb-2 uppercase tracking-wider">
+                          {label}
                         </h3>
-                        <div className="space-y-2">
+                        <div className="space-y-0.5">
                           {items.map(([key, svc]) => (
-                            <div key={key} className="flex items-center justify-between p-3 bg-gray-800 rounded-lg">
-                              <div className="flex items-center gap-3">
-                                <StatusDot reachable={svc.reachable} />
-                                <span className="text-white text-sm">{svc.label}</span>
+                            <div key={key} className="flex items-center justify-between py-1 px-1.5 rounded hover:bg-gray-800/60">
+                              <div className="flex items-center gap-2">
+                                <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${svc.reachable ? 'bg-green-400' : 'bg-red-400'}`} />
+                                <span className="text-white text-xs">{svc.label}</span>
                               </div>
-                              <div className="flex items-center gap-3 text-xs">
+                              <div className="flex items-center gap-1.5 text-[10px]">
                                 {svc.latency_ms != null && (
-                                  <span className="text-gray-500">{svc.latency_ms}ms</span>
+                                  <span className="text-gray-600 tabular-nums">{svc.latency_ms}ms</span>
                                 )}
                                 <span className={svc.reachable ? 'text-green-400' : 'text-red-400'}>
                                   {svc.reachable ? t('settings.online') : t('settings.offline')}
@@ -564,43 +883,39 @@ export default function Settings() {
                       </div>
                     )
                   })}
+                </div>
 
-                  {Object.keys(connStatus.circuit_breakers).length > 0 && (
-                    <div>
-                      <h3 className="text-sm font-medium text-gray-400 mb-3 uppercase tracking-wider">
-                        {t('settings.circuitBreakers')}
-                      </h3>
-                      <div className="space-y-2">
-                        {Object.entries(connStatus.circuit_breakers).map(([name, cb]) => (
-                          <div key={name} className="flex items-center justify-between p-3 bg-gray-800 rounded-lg">
-                            <div className="flex items-center gap-3">
-                              <span className={`inline-block w-2.5 h-2.5 rounded-full ${
-                                cb.state === 'closed' ? 'bg-green-400' :
-                                cb.state === 'open' ? 'bg-red-400' : 'bg-yellow-400'
-                              }`} />
-                              <span className="text-white text-sm">{cb.name}</span>
-                            </div>
-                            <div className="flex items-center gap-4 text-xs">
-                              <span className="text-gray-500">
-                                {cb.stats.successful_calls}/{cb.stats.total_calls}
-                              </span>
-                              <span className={circuitColor(cb.state)}>
-                                {circuitLabel(cb.state)}
-                              </span>
-                            </div>
+                {/* ── Circuit Breakers — compact grid ── */}
+                {Object.keys(connStatus.circuit_breakers).length > 0 && (
+                  <div className="bg-gray-900 border border-gray-800 rounded-lg p-3">
+                    <h3 className="text-[11px] font-medium text-gray-500 mb-2 uppercase tracking-wider">
+                      {t('settings.circuitBreakers')}
+                    </h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-0.5">
+                      {Object.entries(connStatus.circuit_breakers).map(([name, cb]) => (
+                        <div key={name} className="flex items-center justify-between py-1 px-1.5 rounded hover:bg-gray-800/60">
+                          <div className="flex items-center gap-2">
+                            <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
+                              cb.state === 'closed' ? 'bg-green-400' :
+                              cb.state === 'open' ? 'bg-red-400' : 'bg-yellow-400'
+                            }`} />
+                            <span className="text-white text-xs">{cb.name}</span>
                           </div>
-                        ))}
-                      </div>
+                          <span className={`text-[10px] ${circuitColor(cb.state)}`}>
+                            {circuitLabel(cb.state)}
+                          </span>
+                        </div>
+                      ))}
                     </div>
-                  )}
-                </>
-              )
-            })() : (
-              <div className="text-center text-gray-500 py-8">
-                {connLoading ? t('settings.refreshing') : t('common.loading')}
-              </div>
-            )}
-          </div>
+                  </div>
+                )}
+              </>
+            )
+          })() : (
+            <div className="text-center text-gray-500 py-8">
+              {connLoading ? t('settings.refreshing') : t('common.loading')}
+            </div>
+          )}
         </div>
       )}
 

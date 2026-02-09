@@ -133,7 +133,7 @@ export default function TaxReport() {
               <table className="table-premium">
                 <thead>
                   <tr>
-                    <th>{t('tax.month')}</th>
+                    <th className="text-left">{t('tax.month')}</th>
                     <th className="text-right">{t('tax.trades')}</th>
                     <th className="text-right">{t('tax.pnl')}</th>
                     <th className="text-right">{t('tax.fees')}</th>

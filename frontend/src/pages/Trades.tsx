@@ -5,13 +5,8 @@ import { useFilterStore } from '../stores/filterStore'
 import type { Trade } from '../types'
 import { ExchangeIcon } from '../components/ui/ExchangeLogo'
 import { SkeletonTable } from '../components/ui/Skeleton'
+import PnlCell from '../components/ui/PnlCell'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
-
-function formatPnl(value: number | null): string {
-  if (value === null) return '--'
-  const prefix = value >= 0 ? '+' : ''
-  return `${prefix}$${value.toFixed(2)}`
-}
 
 export default function Trades() {
   const { t } = useTranslation()
@@ -121,18 +116,18 @@ export default function Trades() {
             <table className="table-premium">
               <thead>
                 <tr>
-                  <th>#</th>
-                  <th>{t('trades.date')}</th>
-                  <th>{t('trades.bot')}</th>
-                  <th>{t('trades.symbol')}</th>
-                  <th>{t('trades.side')}</th>
+                  <th className="text-left">#</th>
+                  <th className="text-left">{t('trades.date')}</th>
+                  <th className="text-left">{t('trades.bot')}</th>
+                  <th className="text-center">{t('trades.exchange')}</th>
+                  <th className="text-left">{t('trades.symbol')}</th>
+                  <th className="text-center">{t('trades.side')}</th>
                   <th className="text-right">{t('trades.size')}</th>
                   <th className="text-right">{t('trades.entryPrice')}</th>
                   <th className="text-right">{t('trades.exitPrice')}</th>
                   <th className="text-right">{t('trades.pnl')}</th>
-                  <th>{t('trades.exchange')}</th>
-                  <th>{t('trades.mode')}</th>
-                  <th>{t('trades.status')}</th>
+                  <th className="text-center">{t('trades.mode')}</th>
+                  <th className="text-center">{t('trades.status')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -146,19 +141,21 @@ export default function Trades() {
                   trades.map((trade) => (
                     <tr key={trade.id}>
                       <td className="text-gray-500 text-xs">{trade.id}</td>
-                      <td className="text-gray-300">{new Date(trade.entry_time).toLocaleDateString()}</td>
+                      <td className="text-gray-300 cursor-default" title={new Date(trade.entry_time).toLocaleTimeString('de-DE', { timeZone: 'UTC', hour: '2-digit', minute: '2-digit' }) + ' UTC'}>{new Date(trade.entry_time).toLocaleDateString()}</td>
                       <td>
                         {trade.bot_name ? (
-                          <div>
-                            <span className="text-white font-medium">{trade.bot_name}</span>
-                            <span className="text-gray-500 text-xs ml-1.5 inline-flex items-center"><ExchangeIcon exchange={trade.bot_exchange || trade.exchange} size={14} /></span>
-                          </div>
+                          <span className="text-white font-medium">{trade.bot_name}</span>
                         ) : (
                           <span className="text-gray-600">--</span>
                         )}
                       </td>
+                      <td className="text-center">
+                        <span className="inline-flex justify-center">
+                          <ExchangeIcon exchange={trade.bot_exchange || trade.exchange} size={18} />
+                        </span>
+                      </td>
                       <td className="text-white font-medium">{trade.symbol}</td>
-                      <td>
+                      <td className="text-center">
                         <span className={trade.side === 'long' ? 'text-profit' : 'text-loss'}>
                           {trade.side === 'long' ? '+' : '-'} {trade.side.toUpperCase()}
                         </span>
@@ -169,17 +166,20 @@ export default function Trades() {
                         {trade.exit_price ? `$${trade.exit_price.toLocaleString()}` : '--'}
                       </td>
                       <td className="text-right">
-                        <span className={trade.pnl && trade.pnl >= 0 ? 'pnl-positive' : 'pnl-negative'}>
-                          {formatPnl(trade.pnl)}
-                        </span>
+                        <PnlCell
+                          pnl={trade.pnl}
+                          fees={trade.fees}
+                          fundingPaid={trade.funding_paid}
+                          status={trade.status}
+                          className={trade.pnl && trade.pnl >= 0 ? 'pnl-positive' : 'pnl-negative'}
+                        />
                       </td>
-                      <td className="text-gray-400 text-xs"><ExchangeIcon exchange={trade.exchange} size={16} /></td>
-                      <td>
+                      <td className="text-center">
                         <span className={trade.demo_mode ? 'badge-demo' : 'badge-live'}>
                           {trade.demo_mode ? t('common.demo') : t('common.live')}
                         </span>
                       </td>
-                      <td>
+                      <td className="text-center">
                         <span className={
                           trade.status === 'open' ? 'badge-open' :
                           trade.status === 'closed' ? 'badge-neutral' :

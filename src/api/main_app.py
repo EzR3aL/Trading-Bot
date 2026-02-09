@@ -22,6 +22,7 @@ from slowapi.errors import RateLimitExceeded
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from src.api.routers import (
+    affiliate,
     auth,
     bot_control,
     bots,
@@ -197,6 +198,7 @@ def create_app() -> FastAPI:
     app.include_router(bot_control.router)
     app.include_router(bots.router)
     app.include_router(tax_report.router)
+    app.include_router(affiliate.router)
 
     # Serve frontend static files (built React app)
     frontend_dir = Path("static/frontend")

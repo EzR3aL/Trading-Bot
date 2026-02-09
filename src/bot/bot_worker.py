@@ -8,7 +8,8 @@ Managed by the BotOrchestrator.
 
 import asyncio
 import json
-from datetime import datetime
+import os
+from datetime import datetime, timedelta
 from typing import Optional
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -171,6 +172,13 @@ class BotWorker:
                     data_dir=f"data/risk/bot_{self.bot_config_id}",
                 )
 
+            # ── Hyperliquid pre-start checks ──────────────────────────
+            if self._config.exchange_type == "hyperliquid":
+                await self._check_builder_approval(self._client)
+                referral_ok = await self._check_referral_gate(self._client)
+                if not referral_ok:
+                    return False
+
             # Initialize daily session with balance
             try:
                 balance = await self._client.get_account_balance()
@@ -204,7 +212,12 @@ class BotWorker:
         if self._config.schedule_config:
             schedule_config = json.loads(self._config.schedule_config)
 
-        if schedule_type == "interval":
+        if schedule_type == "rotation_only":
+            # Rotation-only mode: no regular analysis schedule.
+            # The bot opens its first trade on start, then the rotation
+            # checker handles closing + re-opening on the configured interval.
+            logger.info(f"[Bot:{self.bot_config_id}] Rotation-only mode — no regular schedule")
+        elif schedule_type == "interval":
             minutes = schedule_config.get("interval_minutes", 60)
             self._scheduler.add_job(
                 self._analyze_and_trade_safe,
@@ -243,6 +256,24 @@ class BotWorker:
             name=f"Bot {self.bot_config_id} Position Monitor",
             replace_existing=True,
         )
+
+        # Trade rotation (auto-close & reopen) — check every minute if enabled
+        # Automatically enabled for rotation_only schedule type
+        rotation_on = getattr(self._config, "rotation_enabled", False) or schedule_type == "rotation_only"
+        rotation_mins = getattr(self._config, "rotation_interval_minutes", None)
+        if rotation_on and rotation_mins:
+            self._scheduler.add_job(
+                self._check_rotation_safe,
+                IntervalTrigger(minutes=1),
+                id=f"bot_{self.bot_config_id}_rotation",
+                name=f"Bot {self.bot_config_id} Trade Rotation",
+                replace_existing=True,
+            )
+            start_time = getattr(self._config, "rotation_start_time", None) or "now"
+            logger.info(
+                f"[Bot:{self.bot_config_id}] Trade rotation enabled: "
+                f"every {rotation_mins}min (anchor: {start_time} UTC)"
+            )
 
     async def start(self):
         """Start the bot's strategy loop."""
@@ -320,23 +351,29 @@ class BotWorker:
 
         self.last_analysis = datetime.utcnow()
 
-    async def _analyze_symbol(self, symbol: str):
-        """Analyze a single symbol and potentially trade it."""
+    async def _analyze_symbol(self, symbol: str, force: bool = False):
+        """Analyze a single symbol and potentially trade it.
+
+        Args:
+            symbol: Trading pair to analyze
+            force: If True, skip the open-position check (used after rotation close)
+        """
         log_prefix = f"[Bot:{self.bot_config_id}]"
 
-        # Check for existing open positions (per bot)
-        async with get_session() as session:
-            from sqlalchemy import select
-            result = await session.execute(
-                select(TradeRecord).where(
-                    TradeRecord.bot_config_id == self.bot_config_id,
-                    TradeRecord.symbol == symbol,
-                    TradeRecord.status == "open",
+        # Check for existing open positions (per bot) — skip when force-rotating
+        if not force:
+            async with get_session() as session:
+                from sqlalchemy import select
+                result = await session.execute(
+                    select(TradeRecord).where(
+                        TradeRecord.bot_config_id == self.bot_config_id,
+                        TradeRecord.symbol == symbol,
+                        TradeRecord.status == "open",
+                    )
                 )
-            )
-            if result.scalar_one_or_none():
-                logger.info(f"{log_prefix} Already have open position in {symbol}")
-                return
+                if result.scalar_one_or_none():
+                    logger.info(f"{log_prefix} Already have open position in {symbol}")
+                    return
 
         # Generate signal
         signal = await self._strategy.generate_signal(symbol)
@@ -541,6 +578,30 @@ class BotWorker:
             else:
                 exit_reason = "EXTERNAL_CLOSE"
 
+            # Fetch trading fees from exchange (entry + exit via orders-history)
+            try:
+                if trade.order_id:
+                    trade.fees = await client.get_trade_total_fees(
+                        symbol=trade.symbol,
+                        entry_order_id=trade.order_id,
+                        close_order_id=trade.close_order_id,
+                    )
+            except Exception:
+                trade.fees = 0
+
+            # Fetch funding fees (charged every 8h while position was open)
+            try:
+                if trade.entry_time:
+                    entry_ms = int(trade.entry_time.timestamp() * 1000)
+                    exit_ms = int(datetime.utcnow().timestamp() * 1000)
+                    trade.funding_paid = await client.get_funding_fees(
+                        symbol=trade.symbol,
+                        start_time_ms=entry_ms,
+                        end_time_ms=exit_ms,
+                    )
+            except Exception:
+                trade.funding_paid = 0
+
             # Update trade record
             trade.exit_price = exit_price
             trade.pnl = pnl
@@ -597,6 +658,197 @@ class BotWorker:
         except Exception as e:
             logger.error(f"{log_prefix} Handle closed position error: {e}")
 
+    # ── Trade Rotation ───────────────────────────────────────────
+
+    async def _check_rotation_safe(self):
+        """Wrapper with error handling for rotation check."""
+        try:
+            await self._check_rotation()
+        except Exception as e:
+            logger.error(f"[Bot:{self.bot_config_id}] Rotation check error: {e}")
+
+    async def _check_rotation(self):
+        """Check if any open trades have exceeded their rotation interval and need closing.
+
+        If rotation_start_time is set (e.g. "08:00"), rotation windows are anchored
+        to that UTC time. Otherwise, elapsed time since entry_time is used.
+        In rotation_only mode with no open trades, triggers a new analysis.
+        """
+        rotation_minutes = getattr(self._config, "rotation_interval_minutes", None)
+        if not rotation_minutes:
+            return
+
+        log_prefix = f"[Bot:{self.bot_config_id}]"
+        now = datetime.utcnow()
+
+        async with get_session() as session:
+            from sqlalchemy import select
+            result = await session.execute(
+                select(TradeRecord).where(
+                    TradeRecord.bot_config_id == self.bot_config_id,
+                    TradeRecord.status == "open",
+                )
+            )
+            open_trades = result.scalars().all()
+
+            if not open_trades:
+                # In rotation_only mode, if no open trades exist, open one now
+                if self._config.schedule_type == "rotation_only":
+                    logger.info(f"{log_prefix} ROTATION: No open trades — triggering analysis")
+                    pairs = json.loads(self._config.trading_pairs) if isinstance(self._config.trading_pairs, str) else self._config.trading_pairs
+                    for symbol in pairs:
+                        try:
+                            await self._analyze_symbol(symbol, force=True)
+                        except Exception as e:
+                            logger.error(f"{log_prefix} ROTATION: Analysis failed for {symbol}: {e}")
+                return
+
+            # Determine if we use anchored rotation (start_time) or elapsed-based
+            start_time_str = getattr(self._config, "rotation_start_time", None)
+
+            for trade in open_trades:
+                if not trade.entry_time:
+                    continue
+
+                should_rotate = False
+                if start_time_str:
+                    # Anchored rotation: calculate next rotation boundary from start_time
+                    try:
+                        sh, sm = int(start_time_str[:2]), int(start_time_str[3:5])
+                        # Build today's anchor at start_time UTC
+                        anchor = now.replace(hour=sh, minute=sm, second=0, microsecond=0)
+                        # If anchor is in the future, go back one day
+                        if anchor > now:
+                            anchor = anchor - timedelta(days=1)
+                        # How many intervals since anchor?
+                        elapsed_since_anchor = (now - anchor).total_seconds() / 60
+                        # Find the last rotation boundary
+                        intervals_passed = int(elapsed_since_anchor // rotation_minutes)
+                        last_boundary = anchor + timedelta(minutes=intervals_passed * rotation_minutes)
+                        # Trade should rotate if it was opened before the last boundary
+                        if trade.entry_time < last_boundary:
+                            should_rotate = True
+                            elapsed = (now - trade.entry_time).total_seconds() / 60
+                    except (ValueError, IndexError):
+                        # Fall back to elapsed-based
+                        elapsed = (now - trade.entry_time).total_seconds() / 60
+                        should_rotate = elapsed >= rotation_minutes
+                else:
+                    # Simple elapsed-based rotation
+                    elapsed = (now - trade.entry_time).total_seconds() / 60
+                    should_rotate = elapsed >= rotation_minutes
+
+                if not should_rotate:
+                    continue
+
+                elapsed = (now - trade.entry_time).total_seconds() / 60
+                logger.info(
+                    f"{log_prefix} ROTATION: Trade #{trade.id} {trade.symbol} "
+                    f"open for {elapsed:.0f}min (limit: {rotation_minutes}min) — closing"
+                )
+
+                # Force-close the trade
+                client = self._demo_client if trade.demo_mode else self._live_client
+                if not client:
+                    continue
+
+                closed = await self._force_close_trade(trade, client, session)
+
+                if closed:
+                    # Re-analyze and open a new trade for this symbol
+                    logger.info(f"{log_prefix} ROTATION: Re-analyzing {trade.symbol}...")
+                    try:
+                        await self._analyze_symbol(trade.symbol, force=True)
+                    except Exception as e:
+                        logger.error(f"{log_prefix} ROTATION: Re-analysis failed for {trade.symbol}: {e}")
+
+    async def _force_close_trade(
+        self, trade: TradeRecord, client: ExchangeClient, session
+    ) -> bool:
+        """Force-close an open trade via the exchange. Returns True on success."""
+        log_prefix = f"[Bot:{self.bot_config_id}]"
+        mode_str = "DEMO" if trade.demo_mode else "LIVE"
+
+        try:
+            # Close position via exchange client
+            order = await client.close_position(trade.symbol, trade.side)
+
+            # Get exit price
+            exit_price = trade.entry_price
+            if order and order.price and order.price > 0:
+                exit_price = order.price
+            else:
+                try:
+                    ticker = await client.get_ticker(trade.symbol)
+                    if ticker:
+                        exit_price = ticker.last_price
+                except Exception:
+                    pass
+
+            # Calculate PnL
+            if trade.side == "long":
+                pnl = (exit_price - trade.entry_price) * trade.size
+            else:
+                pnl = (trade.entry_price - exit_price) * trade.size
+            pnl_percent = (pnl / (trade.entry_price * trade.size)) * 100
+
+            # Update trade record
+            trade.exit_price = exit_price
+            trade.pnl = pnl
+            trade.pnl_percent = pnl_percent
+            trade.exit_time = datetime.utcnow()
+            trade.exit_reason = "ROTATION"
+            trade.status = "closed"
+
+            # Record in risk manager
+            self._risk_manager.record_trade_exit(
+                symbol=trade.symbol,
+                side=trade.side,
+                size=trade.size,
+                entry_price=trade.entry_price,
+                exit_price=exit_price,
+                fees=trade.fees or 0,
+                funding_paid=trade.funding_paid or 0,
+                reason="ROTATION",
+                order_id=trade.order_id,
+            )
+
+            logger.info(
+                f"{log_prefix} [{mode_str}] ROTATION closed trade #{trade.id}: "
+                f"{trade.side.upper()} {trade.symbol} | PnL: ${pnl:.2f} ({pnl_percent:+.2f}%)"
+            )
+
+            # Send Discord notification
+            try:
+                notifier = await self._get_discord_notifier()
+                if notifier:
+                    duration_minutes = int((datetime.utcnow() - trade.entry_time).total_seconds() / 60) if trade.entry_time else None
+                    async with notifier:
+                        await notifier.send_trade_exit(
+                            symbol=trade.symbol,
+                            side=trade.side,
+                            size=trade.size,
+                            entry_price=trade.entry_price,
+                            exit_price=exit_price,
+                            pnl=pnl,
+                            pnl_percent=pnl_percent,
+                            fees=trade.fees or 0,
+                            funding_paid=trade.funding_paid or 0,
+                            reason="ROTATION",
+                            order_id=trade.order_id or "",
+                            duration_minutes=duration_minutes,
+                            demo_mode=trade.demo_mode,
+                            strategy_reason=f"[{self._config.name}] Auto-rotation ({self._config.rotation_interval_minutes}min)",
+                        )
+            except Exception as notify_err:
+                logger.warning(f"{log_prefix} Discord notification failed: {notify_err}")
+
+            return True
+
+        except Exception as e:
+            logger.error(f"{log_prefix} [{mode_str}] ROTATION close failed for trade #{trade.id}: {e}")
+            return False
+
     async def _get_discord_notifier(self) -> Optional[DiscordNotifier]:
         """Load user's Discord webhook and return a notifier if configured."""
         try:
@@ -612,6 +864,73 @@ class BotWorker:
         except Exception as e:
             logger.warning(f"[Bot:{self.bot_config_id}] Could not load Discord config: {e}")
         return None
+
+    async def _check_referral_gate(self, client: ExchangeClient) -> bool:
+        """If HL_REQUIRE_REFERRAL=true, block bot start unless user is referred.
+
+        Returns True if OK to proceed, False if blocked.
+        """
+        require = os.environ.get("HL_REQUIRE_REFERRAL", "false").strip().lower()
+        if require not in ("true", "1", "yes"):
+            return True
+
+        referral_code = os.environ.get("HL_REFERRAL_CODE", "").strip()
+        log_prefix = f"[Bot:{self.bot_config_id}]"
+
+        try:
+            from src.exchanges.hyperliquid.client import HyperliquidClient
+
+            if not isinstance(client, HyperliquidClient):
+                return True
+
+            info = await client.get_referral_info()
+            referred_by = None
+            if info:
+                referred_by = info.get("referredBy") or info.get("referred_by")
+
+            if referred_by:
+                logger.info(f"{log_prefix} User is referred (by {referred_by})")
+                return True
+
+            link = f"https://app.hyperliquid.xyz/join/{referral_code}" if referral_code else "https://app.hyperliquid.xyz"
+            self.error_message = (
+                f"Referral required: Please register via {link} before using Hyperliquid bots."
+            )
+            self.status = "error"
+            logger.warning(f"{log_prefix} {self.error_message}")
+            return False
+        except Exception as e:
+            logger.debug(f"{log_prefix} Referral check skipped: {e}")
+            return True  # Don't block on errors
+
+    async def _check_builder_approval(self, client: ExchangeClient):
+        """Soft check: warn if builder fee is configured but user hasn't approved."""
+        log_prefix = f"[Bot:{self.bot_config_id}]"
+        try:
+            from src.exchanges.hyperliquid.client import HyperliquidClient
+
+            if not isinstance(client, HyperliquidClient):
+                return
+            if not client.builder_config:
+                return
+
+            approved = await client.check_builder_fee_approval()
+            if approved is None:
+                logger.warning(
+                    f"{log_prefix} Builder fee NOT approved by user. "
+                    f"Orders will be placed WITHOUT builder fee until user approves. "
+                    f"Use POST /api/config/hyperliquid/approve-builder-fee to approve."
+                )
+            elif approved < client.builder_config["f"]:
+                logger.warning(
+                    f"{log_prefix} Builder fee partially approved "
+                    f"(approved={approved}, required={client.builder_config['f']}). "
+                    f"Orders may fail if fee exceeds approved max."
+                )
+            else:
+                logger.info(f"{log_prefix} Builder fee approved (max={approved})")
+        except Exception as e:
+            logger.debug(f"{log_prefix} Builder approval check skipped: {e}")
 
     def get_status_dict(self) -> dict:
         """Return status info for API responses."""

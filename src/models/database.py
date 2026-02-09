@@ -253,7 +253,13 @@ class LLMConnection(Base):
 
 
 class BotConfig(Base):
-    """Blueprint for a user-created bot."""
+    """Blueprint for a user-created bot.
+
+    Stores strategy, exchange, risk, schedule, and trade rotation settings.
+    The optional rotation feature (rotation_enabled + rotation_interval_minutes)
+    auto-closes open trades after a fixed duration and re-analyzes for a new trade.
+    Data source selection is stored in strategy_params["data_sources"].
+    """
     __tablename__ = "bot_configs"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
@@ -284,6 +290,11 @@ class BotConfig(Base):
     schedule_type = Column(String(20), nullable=False, default="market_sessions")  # market_sessions | interval | custom_cron
     schedule_config = Column(Text, nullable=True)  # JSON: {"hours": [1,8,14,21]} or {"interval_minutes": 60}
 
+    # Trade rotation (auto-close & reopen at fixed intervals)
+    rotation_enabled = Column(Boolean, default=False)
+    rotation_interval_minutes = Column(Integer, nullable=True)  # e.g. 60 = close & reopen every hour
+    rotation_start_time = Column(String(5), nullable=True)  # UTC start time "HH:MM" for rotation anchor
+
     # State
     is_enabled = Column(Boolean, default=False)
 
@@ -306,6 +317,20 @@ class Exchange(Base):
     config_schema = Column(Text, nullable=True)  # JSON schema for exchange-specific config
 
     created_at = Column(DateTime, server_default=func.now())
+
+
+class AffiliateLink(Base):
+    """Global affiliate links per exchange (admin-managed)."""
+    __tablename__ = "affiliate_links"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    exchange_type = Column(String(50), unique=True, nullable=False)  # bitget | weex | hyperliquid
+    affiliate_url = Column(Text, nullable=False)
+    label = Column(String(200), nullable=True)
+    is_active = Column(Boolean, default=True)
+
+    created_at = Column(DateTime, server_default=func.now())
+    updated_at = Column(DateTime, onupdate=func.now())
 
 
 class AuditLog(Base):

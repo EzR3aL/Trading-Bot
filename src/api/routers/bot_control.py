@@ -427,6 +427,30 @@ async def close_trade(
             duration = datetime.utcnow() - trade.entry_time
             duration_minutes = int(duration.total_seconds() / 60)
 
+        # Fetch trading fees from exchange (entry + exit)
+        try:
+            close_oid = close_order.order_id if close_order and close_order.order_id else None
+            trade.fees = await client.get_trade_total_fees(
+                symbol=trade.symbol,
+                entry_order_id=trade.order_id or "",
+                close_order_id=close_oid,
+            )
+        except Exception:
+            trade.fees = 0
+
+        # Fetch funding fees (charged every 8h while position was open)
+        try:
+            if trade.entry_time:
+                entry_ms = int(trade.entry_time.timestamp() * 1000)
+                exit_ms = int(datetime.utcnow().timestamp() * 1000)
+                trade.funding_paid = await client.get_funding_fees(
+                    symbol=trade.symbol,
+                    start_time_ms=entry_ms,
+                    end_time_ms=exit_ms,
+                )
+        except Exception:
+            trade.funding_paid = 0
+
         trade.exit_price = exit_price
         trade.pnl = pnl
         trade.pnl_percent = pnl_percent

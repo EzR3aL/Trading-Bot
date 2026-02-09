@@ -4,6 +4,7 @@ import {
   Tooltip, ResponsiveContainer, ReferenceLine,
 } from 'recharts'
 import { useTranslation } from 'react-i18next'
+import { useThemeStore } from '../../stores/themeStore'
 import type { DailyStats } from '../../types'
 import ChartTooltip from './ChartTooltip'
 
@@ -13,6 +14,10 @@ interface Props {
 
 export default function PnlChart({ data }: Props) {
   const { t } = useTranslation()
+  const theme = useThemeStore((s) => s.theme)
+  const gridColor = theme === 'light' ? '#e2e8f0' : '#374151'
+  const tickColor = theme === 'light' ? '#64748b' : '#9ca3af'
+  const refColor = theme === 'light' ? '#cbd5e1' : '#6b7280'
 
   const chartData = useMemo(() => {
     let cumulative = 0
@@ -47,11 +52,11 @@ export default function PnlChart({ data }: Props) {
             <stop offset="95%" stopColor="#ef4444" stopOpacity={0} />
           </linearGradient>
         </defs>
-        <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-        <XAxis dataKey="date" tick={{ fill: '#9ca3af', fontSize: 11 }} tickLine={false} />
-        <YAxis tick={{ fill: '#9ca3af', fontSize: 11 }} tickLine={false} tickFormatter={(v) => `$${v}`} />
+        <CartesianGrid strokeDasharray="3 3" stroke={gridColor} />
+        <XAxis dataKey="date" tick={{ fill: tickColor, fontSize: 11 }} tickLine={false} />
+        <YAxis tick={{ fill: tickColor, fontSize: 11 }} tickLine={false} tickFormatter={(v) => `$${v}`} />
         <Tooltip content={<ChartTooltip />} />
-        <ReferenceLine y={0} stroke="#6b7280" strokeDasharray="3 3" />
+        <ReferenceLine y={0} stroke={refColor} strokeDasharray="3 3" />
         <Area
           type="monotone"
           dataKey="cumulativePnl"

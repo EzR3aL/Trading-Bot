@@ -62,7 +62,8 @@
     "cancelled": "Cancelled",
     "bot": "Bot",
     "mode": "Mode",
-    "allModes": "All Modes"
+    "allModes": "All Modes",
+    "fees": "Transaction Fee"
   },
   "settings": {
     "title": "Settings",
@@ -95,6 +96,12 @@
     "circuitHalfOpen": "Recovering",
     "refreshStatus": "Refresh",
     "refreshing": "Checking...",
+    "sentimentNews": "Sentiment & News",
+    "futuresData": "Futures Data",
+    "optionsData": "Options Data",
+    "spotMarket": "Spot Market",
+    "technicalIndicators": "Technical Indicators",
+    "tradfiCme": "TradFi / CME",
     "llmKeys": "LLM Keys",
     "llmKeysDescription": "Configure API keys for AI models used in trading strategies.",
     "connectionSuccess": "Connection successful",
@@ -107,7 +114,13 @@
     "dailyLossLimit": "Daily Loss Limit %",
     "takeProfit": "Take Profit %",
     "stopLoss": "Stop Loss %",
-    "hyperliquidTestnetNote": "Important: Testnet requires a one-time setup. 1) Deposit at least $5 USDC to your mainnet Hyperliquid account first. 2) Then go to app.hyperliquid-testnet.xyz/drip to claim 1,000 mock USDC. Without this, your testnet balance will be 0 and demo trades will fail."
+    "hyperliquidTestnetNote": "Important: Testnet requires a one-time setup. 1) Deposit at least $5 USDC to your mainnet Hyperliquid account first. 2) Then go to app.hyperliquid-testnet.xyz/drip to claim 1,000 mock USDC. Without this, your testnet balance will be 0 and demo trades will fail.",
+    "hyperliquid": "Hyperliquid",
+    "affiliateLinks": "Affiliate Links",
+    "affiliateLinksDesc": "Configure affiliate links per exchange. These will be shown in trade screenshots.",
+    "affiliateUrl": "Affiliate URL",
+    "affiliateLabel": "Label (optional)",
+    "affiliateActive": "Active"
   },
   "presets": {
     "title": "Configuration Presets",
@@ -144,7 +157,7 @@
     "month": "Month",
     "trades": "Trades",
     "pnl": "PnL",
-    "fees": "Fees",
+    "fees": "Transaction Fee",
     "net": "Net"
   },
   "guide": {
@@ -270,6 +283,23 @@
     "failedStart": "Failed to start bot",
     "failedStop": "Failed to stop bot",
     "failedDelete": "Failed to delete bot",
+    "tradeHistory": "Trade History",
+    "showTrades": "Show trades",
+    "hideTrades": "Hide trades",
+    "result": "Result",
+    "reasoning": "Reasoning",
+    "details": "Details",
+    "entryPrice": "Entry Price",
+    "exitPrice": "Exit Price",
+    "winRate": "Win Rate",
+    "noTrades": "No trades yet",
+    "latestTrade": "Latest Trade",
+    "pending": "Pending",
+    "bestTrade": "Best Trade",
+    "worstTrade": "Worst Trade",
+    "copyImage": "Copy Image",
+    "copied": "Copied!",
+    "affiliateLink": "Affiliate Link",
     "builder": {
       "title": "Create New Bot",
       "editTitle": "Edit Bot",
@@ -304,6 +334,12 @@
       "customCron": "Custom Hours",
       "intervalMinutes": "Interval (minutes)",
       "customHours": "Hours (UTC)",
+      "rotationOnly": "Trade Rotation Only",
+      "rotationOnlyDesc": "Opens a trade on start, then auto-closes and reopens at fixed intervals",
+      "tradeRotation": "Trade Rotation",
+      "tradeRotationDesc": "Additionally auto-close and reopen trades at fixed intervals",
+      "customMinutes": "Custom (minutes)",
+      "rotationStartTime": "Start Time (UTC)",
       "review": "Review",
       "create": "Create Bot",
       "createAndStart": "Create & Start",
@@ -311,7 +347,28 @@
       "back": "Back",
       "next": "Next",
       "llmNote": "This bot uses AI for signal generation. Configure your API key in Settings → LLM Keys.",
-      "customPromptPlaceholder": "Leave empty for default prompt, or enter custom AI instructions..."
+      "customPromptPlaceholder": "Leave empty for default prompt, or enter custom AI instructions...",
+      "step2b": "Data",
+      "dataSources": "Data Sources",
+      "dataSourcesDesc": "Select which market data your bot should analyze",
+      "selectAll": "Select All",
+      "clearAll": "Clear",
+      "sourcesSelected": "sources selected",
+      "sentiment": "Sentiment & News",
+      "futures": "Futures Data",
+      "options": "Options Data",
+      "spot": "Spot Market",
+      "technical": "Technical Indicators",
+      "tradfi": "TradFi / CME",
+      "errors": {
+        "nameRequired": "Please enter a bot name",
+        "strategyRequired": "Please select a strategy",
+        "dataSourcesRequired": "Please select at least one data source",
+        "pairsRequired": "Please select at least one trading pair",
+        "rotationMinimum": "Rotation interval must be at least 5 minutes",
+        "intervalMinimum": "Interval must be at least 5 minutes",
+        "hoursRequired": "Please select at least one hour"
+      }
     }
   },
   "performance": {
@@ -346,6 +403,22 @@
     "all": "All",
     "demoLiveFilter": "Mode",
     "page": "Page",
-    "of": "of"
+    "of": "of",
+    "lightMode": "Light",
+    "darkMode": "Dark",
+    "total": "Total"
+  },
+  "admin": {
+    "users": "Users",
+    "newUser": "New User",
+    "makeAdmin": "Make Admin",
+    "makeUser": "Make User",
+    "confirmRoleChange": "Change role?",
+    "cannotDemoteSelf": "You cannot demote yourself",
+    "active": "Active",
+    "inactive": "Inactive",
+    "deactivate": "Deactivate",
+    "activate": "Activate",
+    "deleteUser": "Delete user?"
   }
 }

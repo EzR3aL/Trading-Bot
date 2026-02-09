@@ -15,8 +15,11 @@ import {
   TrendingUp,
   Menu,
   X,
+  Sun,
+  Moon,
   type LucideIcon,
 } from 'lucide-react'
+import { useThemeStore } from '../../stores/themeStore'
 
 const navItems: { path: string; key: string; icon: LucideIcon }[] = [
   { path: '/', key: 'dashboard', icon: LayoutDashboard },
@@ -34,6 +37,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const location = useLocation()
   const { user, logout } = useAuthStore()
   const { demoFilter, setDemoFilter } = useFilterStore()
+  const { theme, toggleTheme } = useThemeStore()
   const [mobileOpen, setMobileOpen] = useState(false)
 
   const filterOptions: { value: DemoFilter; labelKey: string }[] = [
@@ -138,8 +142,15 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           </div>
         </div>
 
-        {/* Language & Logout */}
+        {/* Theme, Language & Logout */}
         <div className="flex gap-2">
+          <button
+            onClick={toggleTheme}
+            aria-label={theme === 'dark' ? t('common.lightMode') : t('common.darkMode')}
+            className="px-2.5 py-1.5 text-xs bg-white/5 text-gray-300 rounded-lg hover:bg-white/10 border border-white/5 transition-all duration-200"
+          >
+            {theme === 'dark' ? <Sun size={14} /> : <Moon size={14} />}
+          </button>
           <button
             onClick={toggleLang}
             aria-label={`Switch language to ${i18n.language === 'de' ? 'English' : 'German'}`}

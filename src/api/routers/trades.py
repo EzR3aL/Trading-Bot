@@ -202,6 +202,30 @@ async def sync_trades(
                         pnl = (trade.entry_price - exit_price) * trade.size
                     pnl_percent = (pnl / (trade.entry_price * trade.size)) * 100
 
+                    # Fetch trading fees from exchange (entry + exit via orders-history)
+                    try:
+                        if trade.order_id:
+                            trade.fees = await client.get_trade_total_fees(
+                                symbol=trade.symbol,
+                                entry_order_id=trade.order_id,
+                                close_order_id=trade.close_order_id,
+                            )
+                    except Exception:
+                        pass
+
+                    # Fetch funding fees (charged every 8h while position was open)
+                    try:
+                        if trade.entry_time:
+                            entry_ms = int(trade.entry_time.timestamp() * 1000)
+                            exit_ms = int(datetime.utcnow().timestamp() * 1000)
+                            trade.funding_paid = await client.get_funding_fees(
+                                symbol=trade.symbol,
+                                start_time_ms=entry_ms,
+                                end_time_ms=exit_ms,
+                            )
+                    except Exception:
+                        pass
+
                     # Update trade record
                     trade.status = "closed"
                     trade.exit_price = exit_price

@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import os
 import re
 import time
 from datetime import datetime
@@ -22,7 +23,7 @@ from src.api.schemas.config import (
     StrategyConfigUpdate,
     TradingConfigUpdate,
 )
-from src.auth.dependencies import get_current_user
+from src.auth.dependencies import get_current_admin, get_current_user
 from src.models.database import ExchangeConnection, LLMConnection, User, UserConfig
 from src.models.session import get_db
 from src.utils.circuit_breaker import circuit_registry
@@ -386,16 +387,41 @@ async def get_connections_status(
     config = await _get_or_create_config(user, db)
     user_connections = await _get_user_connections(user.id, db)
 
-    services: Dict[str, Dict[str, Any]] = {
-        "binance_futures": {
-            "label": "Binance Futures", "type": "data_source",
-            "url": "https://fapi.binance.com/fapi/v1/ping",
-        },
-        "alternative_me": {
-            "label": "Alternative.me (Fear & Greed)", "type": "data_source",
-            "url": "https://api.alternative.me/fng/?limit=1",
-        },
-    }
+    # Build data source services dynamically from registry
+    from src.data.data_source_registry import DATA_SOURCES, PROVIDER_HEALTH_URLS
+
+    services: Dict[str, Dict[str, Any]] = {}
+
+    # One ping per unique external provider (avoid redundant requests)
+    pinged_providers: Dict[str, str] = {}  # provider -> service key
+    for ds in DATA_SOURCES:
+        if ds.provider == "Calculated":
+            # No external dependency — always reachable
+            services[f"ds_{ds.id}"] = {
+                "label": ds.name, "type": "data_source",
+                "category": ds.category, "provider": ds.provider,
+                "url": None, "shared_with": None,
+            }
+            continue
+
+        health_url = PROVIDER_HEALTH_URLS.get(ds.provider)
+        if not health_url:
+            continue
+
+        if ds.provider in pinged_providers:
+            # Share ping result with the first source from this provider
+            services[f"ds_{ds.id}"] = {
+                "label": ds.name, "type": "data_source",
+                "category": ds.category, "provider": ds.provider,
+                "url": health_url, "shared_with": pinged_providers[ds.provider],
+            }
+        else:
+            pinged_providers[ds.provider] = f"ds_{ds.id}"
+            services[f"ds_{ds.id}"] = {
+                "label": ds.name, "type": "data_source",
+                "category": ds.category, "provider": ds.provider,
+                "url": health_url, "shared_with": None,
+            }
 
     # Add exchange pings for all configured exchanges
     configured_exchanges = {c.exchange_type for c in user_connections}
@@ -418,23 +444,48 @@ async def get_connections_status(
         except (ValueError, Exception):
             has_discord = False
 
+    # Collect services that need actual pinging (unique URLs only)
+    services_to_ping = [
+        n for n in services
+        if services[n].get("url") and not services[n].get("shared_with")
+    ]
+
     # Ping all in parallel
-    service_names = list(services.keys())
     async with aiohttp.ClientSession() as http:
         coros = [
             _ping_service(http, services[n]["url"], method=services[n].get("method", "GET"), json_body=services[n].get("json_body"))
-            for n in service_names
+            for n in services_to_ping
         ]
         pings = await asyncio.gather(*coros, return_exceptions=True)
 
-    results: Dict[str, Any] = {}
-    for name, ping_result in zip(service_names, pings):
-        svc = services[name]
+    # Store ping results by service key
+    ping_results_map: Dict[str, Dict[str, Any]] = {}
+    for svc_name, ping_result in zip(services_to_ping, pings):
         if isinstance(ping_result, Exception):
-            ping_data: Dict[str, Any] = {"reachable": False, "error": str(ping_result)}
+            ping_results_map[svc_name] = {"reachable": False, "error": str(ping_result)}
         else:
-            ping_data = ping_result
-        results[name] = {"label": svc["label"], "type": svc["type"], **ping_data}
+            ping_results_map[svc_name] = ping_result
+
+    results: Dict[str, Any] = {}
+    for svc_name in services:
+        svc = services[svc_name]
+
+        if svc.get("url") is None:
+            # Calculated sources — always reachable
+            ping_data: Dict[str, Any] = {"reachable": True, "latency_ms": 0}
+        elif svc.get("shared_with"):
+            # Reuse ping from the first source of the same provider
+            ping_data = ping_results_map.get(svc["shared_with"], {"reachable": False, "error": "no ping"})
+        else:
+            ping_data = ping_results_map.get(svc_name, {"reachable": False, "error": "no ping"})
+
+        results[svc_name] = {
+            "label": svc["label"],
+            "type": svc["type"],
+            "category": svc.get("category", ""),
+            "provider": svc.get("provider", ""),
+            **ping_data,
+        }
 
     results["discord"] = {"label": "Discord Webhook", "type": "notification", "configured": has_discord, "reachable": has_discord}
 
@@ -567,3 +618,221 @@ async def test_llm_connection(
         raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Connection failed: {str(e)}")
+
+
+# ── Hyperliquid Builder Code & Referral ────────────────────────────
+
+
+def _create_hl_client(conn: ExchangeConnection, use_demo: bool):
+    """Helper: create a temporary HyperliquidClient from stored credentials."""
+    from src.exchanges.factory import create_exchange_client
+
+    if use_demo:
+        if not conn.demo_api_key_encrypted:
+            raise HTTPException(status_code=400, detail="No demo API keys for Hyperliquid")
+        return create_exchange_client(
+            exchange_type="hyperliquid",
+            api_key=decrypt_value(conn.demo_api_key_encrypted),
+            api_secret=decrypt_value(conn.demo_api_secret_encrypted),
+            demo_mode=True,
+        )
+    else:
+        if not conn.api_key_encrypted:
+            raise HTTPException(status_code=400, detail="No live API keys for Hyperliquid")
+        return create_exchange_client(
+            exchange_type="hyperliquid",
+            api_key=decrypt_value(conn.api_key_encrypted),
+            api_secret=decrypt_value(conn.api_secret_encrypted),
+            demo_mode=False,
+        )
+
+
+@router.get("/hyperliquid/builder-status")
+async def get_builder_status(
+    mode: Optional[Literal["live", "demo"]] = None,
+    user: User = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Check builder fee approval status (admin only)."""
+    result = await db.execute(
+        select(ExchangeConnection).where(
+            ExchangeConnection.user_id == user.id,
+            ExchangeConnection.exchange_type == "hyperliquid",
+        )
+    )
+    conn = result.scalar_one_or_none()
+    if not conn:
+        raise HTTPException(status_code=400, detail="No Hyperliquid connection configured")
+
+    builder_address = os.environ.get("HL_BUILDER_ADDRESS", "").strip()
+    if not builder_address:
+        return {"builder_configured": False, "message": "No builder code configured on server"}
+
+    from src.exchanges.hyperliquid.constants import DEFAULT_BUILDER_FEE
+
+    builder_fee = int(os.environ.get("HL_BUILDER_FEE", str(DEFAULT_BUILDER_FEE)))
+    use_demo = mode == "demo" if mode else bool(conn.demo_api_key_encrypted)
+
+    try:
+        client = _create_hl_client(conn, use_demo)
+        approved_fee = await client.check_builder_fee_approval()
+        await client.close()
+
+        return {
+            "builder_configured": True,
+            "builder_address": builder_address[:10] + "...",
+            "builder_fee": builder_fee,
+            "user_approved": approved_fee is not None,
+            "approved_max_fee": approved_fee,
+            "needs_approval": approved_fee is None or approved_fee < builder_fee,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to check builder status: {str(e)}")
+
+
+@router.post("/hyperliquid/approve-builder-fee")
+async def approve_builder_fee(
+    mode: Optional[Literal["live", "demo"]] = None,
+    user: User = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Approve builder fee (admin only, EIP-712 signed)."""
+    result = await db.execute(
+        select(ExchangeConnection).where(
+            ExchangeConnection.user_id == user.id,
+            ExchangeConnection.exchange_type == "hyperliquid",
+        )
+    )
+    conn = result.scalar_one_or_none()
+    if not conn:
+        raise HTTPException(status_code=400, detail="No Hyperliquid connection configured")
+
+    builder_address = os.environ.get("HL_BUILDER_ADDRESS", "").strip()
+    if not builder_address:
+        raise HTTPException(status_code=400, detail="No builder code configured on server")
+
+    use_demo = mode == "demo" if mode else bool(conn.demo_api_key_encrypted)
+
+    try:
+        client = _create_hl_client(conn, use_demo)
+        success = await client.approve_builder_fee()
+        await client.close()
+
+        if success:
+            return {"status": "ok", "message": "Builder fee approved successfully"}
+        raise HTTPException(status_code=400, detail="Builder fee approval failed")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Approval failed: {str(e)}")
+
+
+@router.get("/hyperliquid/referral-status")
+async def get_referral_status(
+    mode: Optional[Literal["live", "demo"]] = None,
+    user: User = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Check referral status (admin only)."""
+    result = await db.execute(
+        select(ExchangeConnection).where(
+            ExchangeConnection.user_id == user.id,
+            ExchangeConnection.exchange_type == "hyperliquid",
+        )
+    )
+    conn = result.scalar_one_or_none()
+    if not conn:
+        raise HTTPException(status_code=400, detail="No Hyperliquid connection configured")
+
+    referral_code = os.environ.get("HL_REFERRAL_CODE", "").strip()
+    use_demo = mode == "demo" if mode else bool(conn.demo_api_key_encrypted)
+
+    try:
+        client = _create_hl_client(conn, use_demo)
+        referral_info = await client.get_referral_info()
+        await client.close()
+
+        referred_by = None
+        if referral_info:
+            referred_by = referral_info.get("referredBy") or referral_info.get("referred_by")
+
+        return {
+            "referral_code_configured": bool(referral_code),
+            "referral_code": referral_code if referral_code else None,
+            "user_referred": referred_by is not None,
+            "referred_by": referred_by,
+            "referral_link": f"https://app.hyperliquid.xyz/join/{referral_code}" if referral_code else None,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to check referral: {str(e)}")
+
+
+@router.get("/hyperliquid/revenue-summary")
+async def get_revenue_summary(
+    mode: Optional[Literal["live", "demo"]] = None,
+    user: User = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get combined builder code + referral revenue overview (admin only)."""
+    result = await db.execute(
+        select(ExchangeConnection).where(
+            ExchangeConnection.user_id == user.id,
+            ExchangeConnection.exchange_type == "hyperliquid",
+        )
+    )
+    conn = result.scalar_one_or_none()
+    if not conn:
+        raise HTTPException(status_code=400, detail="No Hyperliquid connection configured")
+
+    builder_address = os.environ.get("HL_BUILDER_ADDRESS", "").strip()
+    referral_code = os.environ.get("HL_REFERRAL_CODE", "").strip()
+    use_demo = mode == "demo" if mode else bool(conn.demo_api_key_encrypted)
+
+    try:
+        client = _create_hl_client(conn, use_demo)
+
+        # Gather builder status, referral info, and fee tier in parallel
+        approved_fee, referral_info, user_fees = await asyncio.gather(
+            client.check_builder_fee_approval() if builder_address else _async_none(),
+            client.get_referral_info(),
+            client.get_user_fees(),
+        )
+        await client.close()
+
+        from src.exchanges.hyperliquid.constants import DEFAULT_BUILDER_FEE
+
+        builder_fee = int(os.environ.get("HL_BUILDER_FEE", str(DEFAULT_BUILDER_FEE)))
+
+        referred_by = None
+        if referral_info:
+            referred_by = referral_info.get("referredBy") or referral_info.get("referred_by")
+
+        return {
+            "builder": {
+                "configured": bool(builder_address),
+                "address": builder_address[:10] + "..." if builder_address else None,
+                "fee_rate": builder_fee,
+                "fee_percent": f"{builder_fee / 1000:.3f}%",
+                "user_approved": approved_fee is not None if builder_address else None,
+            },
+            "referral": {
+                "configured": bool(referral_code),
+                "code": referral_code or None,
+                "user_referred": referred_by is not None,
+                "link": f"https://app.hyperliquid.xyz/join/{referral_code}" if referral_code else None,
+            },
+            "user_fees": user_fees,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to get revenue summary: {str(e)}")
+
+
+async def _async_none():
+    """Helper that returns None for asyncio.gather when a task is skipped."""
+    return None
