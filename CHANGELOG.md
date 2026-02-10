@@ -9,6 +9,18 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.0.1] - 2026-02-10
+
+### CodeAssist Integration & Projektstruktur
+
+- **CodeAssist Konfiguration** hinzugefuegt (`.claude/`): 70+ Slash-Commands, 6 Regelsaetze (Security, Testing, Git-Workflow, Coding-Style, Agents, Issue-First)
+- **MCP-Konfiguration** (`.mcp.json`) fuer MCP-Server-Anbindung
+- **Anleitungen-Verzeichnis** erstellt: Alle Dokumentationen werden ab sofort unter `Anleitungen/` gesammelt
+- Bestehende Anleitung nach `Anleitungen/` verschoben
+- `.gitignore` aktualisiert: `.claude/` wird getrackt, `settings.local.json` bleibt privat
+
+---
+
 ## [3.0.0] - 2026-02-05
 
 ### Multibot Orchestration System
