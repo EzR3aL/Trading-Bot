@@ -86,4 +86,6 @@ static/frontend/
 *.pem
 *.key
 credentials.json
-.claude/
+
+# Claude - keep settings.local.json private
+.claude/settings.local.json

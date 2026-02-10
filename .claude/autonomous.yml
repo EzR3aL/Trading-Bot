@@ -1,0 +1,92 @@
+# Autonomous Development Configuration
+# See: skills/workflow/autonomous-development/SKILL.md
+
+target_score: 95
+max_iterations: 15
+iteration_delay: 5
+
+# Provider configuration
+providers:
+  default: claude
+
+  ollama:
+    enabled: true
+    base_url: http://100.114.54.54:11434
+    model: qwen3-coder  # Default model (30.5B, coding-optimized)
+
+  # Gate providers - using Claude for all gates until Issue #14 is resolved
+  # (Claude Code CLI doesn't support model override for Ollama)
+  # TODO: Re-enable Ollama gates after fixing model name issue
+  gate_providers:
+    test: claude
+    security: claude
+    mentor: claude
+    build: claude
+    review: claude
+    ux: claude
+    architect: claude
+    devops: claude
+
+  # FUTURE: Hybrid mode with per-gate model optimization
+  # Uncomment after Issue #14 is resolved:
+  # gate_providers:
+  #   test: claude
+  #   security: claude
+  #   mentor: claude
+  #   build:
+  #     provider: ollama
+  #     model: qwen2.5-coder:32b
+  #   review:
+  #     provider: ollama
+  #     model: qwen3-coder
+  #   ux:
+  #     provider: ollama
+  #     model: qwen3-coder
+  #   architect:
+  #     provider: ollama
+  #     model: qwq:32b
+  #   devops:
+  #     provider: ollama
+  #     model: qwen2.5-coder:32b
+
+# Recommended models for RTX 3090 (24GB):
+# ollama pull qwen3-coder          # 18GB - agentic coding
+# ollama pull qwen2.5-coder:32b    # 18GB - fast completion
+# ollama pull qwq:32b              # 20GB - reasoning + coding
+# ollama pull deepseek-coder-v2:16b # 10GB - GPT-4 level
+# ollama pull codestral:22b        # 13GB - IDE/FIM tasks
+
+# Gate configuration
+gates:
+  test:
+    weight: 25
+    required: true
+    auto_fix: true
+  security:
+    weight: 25
+    required: true
+    auto_fix: true
+  build:
+    weight: 15
+    required: true
+    auto_fix: true
+  review:
+    weight: 20
+    required: false
+    auto_fix: true
+  mentor:
+    weight: 10
+    required: false
+    auto_fix: false
+  ux:
+    weight: 5
+    required: false
+    auto_fix: false
+  architect:
+    weight: 0
+    required: false
+    auto_fix: false
+  devops:
+    weight: 0
+    required: false
+    auto_fix: false
