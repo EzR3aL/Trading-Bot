@@ -9,6 +9,16 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.1.1] - 2026-02-10
+
+### Test-Fixes & CodeAssist-Update
+
+- **Integration Tests**: Rate Limiter in Test-Conftest deaktiviert (`limiter.enabled = False`)
+- **Integration Tests**: 307-Redirect als akzeptierten Status-Code in Auth-Assertions aufgenommen
+- **CodeAssist**: Skills, Templates und Commands aktualisiert (neue Version)
+
+---
+
 ## [3.1.0] - 2026-02-10
 
 ### Hyperliquid Revenue Analytics
