@@ -180,7 +180,6 @@ Sessions are stored in `.claude/sessions/` with unique names, allowing multiple 
 | `/guide` | Help with what to do next |
 | `/feedback [message]` | Submit feedback or report issues |
 | `/agent-select [task]` | Get agent recommendation |
-| `/doctor [--fix]` | Health check for CodeAssist installation |
 
 ## Setup Commands
 
@@ -276,7 +275,6 @@ Rules are always-enforced guidelines in `rules/`. Unlike skills (situational), r
 | `git-workflow` | Branch naming, commit format, PR standards |
 | `coding-style` | Naming conventions, code organization, immutability |
 | `agents` | When and how to delegate to specialized agents |
-| `issue-first` | All code changes must start with a GitHub/GitLab issue |
 
 **Install:** Copy `rules/` to `~/.claude/rules/` or project `.claude/rules/`
 

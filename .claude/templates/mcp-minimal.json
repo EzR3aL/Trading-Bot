@@ -1,0 +1,18 @@
+{
+  "_comment": "CodeAssist MCP Preset: Minimal (Quick Start)",
+  "_usage": "Copy to your project as .mcp.json",
+
+  "mcpServers": {
+    "github": {
+      "command": "npx",
+      "args": ["-y", "@anthropic/mcp-github"],
+      "env": {
+        "GITHUB_TOKEN": "${GITHUB_TOKEN}"
+      }
+    },
+    "sequential-thinking": {
+      "command": "npx",
+      "args": ["-y", "@anthropic/mcp-sequential-thinking"]
+    }
+  }
+}
