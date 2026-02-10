@@ -542,6 +542,62 @@ class HyperliquidClient(ExchangeClient):
             logger.warning(f"Failed to get user fees: {e}")
             return None
 
+    # ── Fee Tracking Methods ─────────────────────────────────────────────
+
+    async def get_trade_total_fees(
+        self, symbol: str, entry_order_id: str, close_order_id: Optional[str] = None
+    ) -> float:
+        """Get total trading fees (entry + exit) from fills history."""
+        coin = self._normalize_symbol(symbol)
+        address = (self.wallet_address or self._wallet.address).lower()
+        total_fees = 0.0
+        try:
+            fills = self._info.user_fills(address)
+            target_oids = {str(entry_order_id)}
+            if close_order_id:
+                target_oids.add(str(close_order_id))
+            for fill in fills:
+                if str(fill.get("oid", "")) in target_oids and fill.get("coin") == coin:
+                    total_fees += abs(float(fill.get("fee", 0)))
+        except Exception as e:
+            logger.warning(f"Failed to get trade total fees for {symbol}: {e}")
+        return round(total_fees, 6)
+
+    async def get_funding_fees(
+        self, symbol: str, start_time_ms: int, end_time_ms: int
+    ) -> float:
+        """Get total funding fees for a symbol between two timestamps."""
+        coin = self._normalize_symbol(symbol)
+        address = (self.wallet_address or self._wallet.address).lower()
+        total_funding = 0.0
+        try:
+            history = self._info.user_funding_history(
+                user=address,
+                startTime=start_time_ms,
+                endTime=end_time_ms,
+            )
+            if isinstance(history, list):
+                for entry in history:
+                    if entry.get("coin") == coin or entry.get("asset") == coin:
+                        total_funding += abs(float(entry.get("delta", 0)))
+        except Exception as e:
+            logger.warning(f"Failed to get funding fees for {symbol}: {e}")
+        return round(total_funding, 6)
+
+    def calculate_builder_fee(
+        self, entry_price: float, exit_price: float, size: float
+    ) -> float:
+        """Calculate builder fee earned for a round-trip trade.
+
+        Both entry and exit orders carry the builder fee.
+        fee = (entry_value + exit_value) * (builder_fee_rate / 1_000_000)
+        """
+        if not self._builder:
+            return 0.0
+        fee_rate = self._builder["f"]
+        total_value = (entry_price * size) + (exit_price * size)
+        return round(total_value * (fee_rate / 1_000_000), 6)
+
     @property
     def builder_config(self) -> Optional[dict]:
         """Return current builder config or None."""

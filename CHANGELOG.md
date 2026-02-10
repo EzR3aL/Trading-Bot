@@ -9,6 +9,33 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.1.0] - 2026-02-10
+
+### Hyperliquid Revenue Analytics
+
+Vollstaendiges Tracking und Visualisierung von Builder-Fee-Einnahmen auf Hyperliquid.
+
+#### Backend
+
+- **Neue DB-Spalte** `builder_fee` auf `TradeRecord` — speichert berechnete Builder-Fee pro Trade
+- **Automatische Migration** + Backfill fuer bestehende geschlossene HL-Trades
+- **Hyperliquid Client**: `get_trade_total_fees()` und `get_funding_fees()` implementiert (vorher immer 0)
+- **Neue Methode** `calculate_builder_fee()` — berechnet Builder-Fee aus Entry/Exit-Value und Fee-Rate
+- **Builder-Fee-Berechnung** automatisch bei jedem Trade-Close im BotWorker
+- **Neuer API-Endpoint** `GET /api/statistics/revenue` — dedizierte Revenue-Analytik mit Daily-Breakdown und Monthly-Estimate
+- **Erweiterte Endpoints**: `/api/statistics` und `/api/statistics/daily` geben jetzt `total_builder_fees` / `builder_fees` zurueck
+- **Revenue-Summary** (`/api/config/hyperliquid/revenue-summary`) zeigt jetzt `earnings`-Objekt mit 30-Tage-Totals
+
+#### Frontend
+
+- **Neue Komponente** `RevenueChart.tsx` — BarChart (Emerald) fuer taegliche Builder-Fee-Einnahmen
+- **Dashboard**: Revenue-Widget mit Total + Monthly-Estimate erscheint automatisch wenn Builder-Fees vorhanden
+- **Settings > Hyperliquid**: Neue Earnings-Sektion (verdiente Fees, Trades, monatliche Schaetzung)
+- **TypeScript-Types** erweitert: `builder_fee` auf Trade, `builder_fees` auf DailyStats, `total_builder_fees` auf Statistics
+- **i18n**: Neue Uebersetzungsschluessel (DE + EN) fuer Revenue-Analytik
+
+---
+
 ## [3.0.1] - 2026-02-10
 
 ### CodeAssist Integration & Projektstruktur

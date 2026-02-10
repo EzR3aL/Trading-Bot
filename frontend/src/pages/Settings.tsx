@@ -758,6 +758,33 @@ export default function Settings() {
                   </div>
                 </div>
               )}
+
+              {/* Earnings Summary */}
+              {hlRevenue?.earnings && (
+                <div>
+                  <h4 className="text-sm font-medium text-gray-400 mb-3 uppercase tracking-wider">
+                    {t('settings.hlEarnings')}
+                  </h4>
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between p-3 bg-gray-800 rounded-lg">
+                      <span className="text-sm text-gray-300">{t('settings.hlBuilderFees30d')}</span>
+                      <span className="text-sm text-emerald-400 font-medium">
+                        ${(hlRevenue.earnings.total_builder_fees_30d || 0).toFixed(4)}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between p-3 bg-gray-800 rounded-lg">
+                      <span className="text-sm text-gray-300">{t('settings.hlTradesWithFee')}</span>
+                      <span className="text-sm text-white">{hlRevenue.earnings.trades_with_builder_fee || 0}</span>
+                    </div>
+                    <div className="flex items-center justify-between p-3 bg-gray-800 rounded-lg">
+                      <span className="text-sm text-gray-300">{t('settings.hlMonthlyEstimate')}</span>
+                      <span className="text-sm text-emerald-400 font-medium">
+                        ${(hlRevenue.earnings.monthly_estimate || 0).toFixed(2)}/mo
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              )}
             </>
           ) : (
             <div className="text-center text-gray-500 py-8">

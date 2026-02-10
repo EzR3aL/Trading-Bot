@@ -53,6 +53,8 @@ async def init_db() -> None:
                 # Soft-delete columns for User model
                 "ALTER TABLE users ADD COLUMN is_deleted BOOLEAN DEFAULT 0",
                 "ALTER TABLE users ADD COLUMN deleted_at DATETIME",
+                # Revenue analytics: builder fee tracking
+                "ALTER TABLE trade_records ADD COLUMN builder_fee FLOAT DEFAULT 0",
             ]
             for migration in migrations:
                 try:
@@ -61,6 +63,24 @@ async def init_db() -> None:
                     if "duplicate column" not in str(e).lower():
                         from src.utils.logger import get_logger
                         get_logger(__name__).warning(f"Migration check: {e}")
+
+            # Backfill builder_fee for existing closed Hyperliquid trades
+            try:
+                builder_fee_rate = int(os.environ.get("HL_BUILDER_FEE", "0"))
+                if 1 <= builder_fee_rate <= 100:
+                    await conn.execute(text(
+                        f"""
+                        UPDATE trade_records
+                        SET builder_fee = (entry_price * size + exit_price * size)
+                            * ({builder_fee_rate} / 1000000.0)
+                        WHERE exchange = 'hyperliquid'
+                          AND status = 'closed'
+                          AND (builder_fee IS NULL OR builder_fee = 0)
+                          AND exit_price IS NOT NULL
+                        """
+                    ))
+            except Exception:
+                pass
 
 
 async def close_db() -> None:

@@ -42,7 +42,11 @@
     "days14": "14 Days",
     "days30": "30 Days",
     "days90": "90 Days",
-    "noData": "No data available"
+    "noData": "No data available",
+    "revenueTitle": "Builder Fee Revenue",
+    "builderFees": "Builder Fees",
+    "totalBuilderFees": "Total Builder Fees",
+    "monthlyEstimate": "Est. Monthly"
   },
   "trades": {
     "title": "Trade History",
@@ -120,7 +124,11 @@
     "affiliateLinksDesc": "Configure affiliate links per exchange. These will be shown in trade screenshots.",
     "affiliateUrl": "Affiliate URL",
     "affiliateLabel": "Label (optional)",
-    "affiliateActive": "Active"
+    "affiliateActive": "Active",
+    "hlEarnings": "Earnings (Last 30 Days)",
+    "hlBuilderFees30d": "Builder Fees Earned",
+    "hlTradesWithFee": "Trades with Builder Fee",
+    "hlMonthlyEstimate": "Monthly Estimate"
   },
   "presets": {
     "title": "Configuration Presets",

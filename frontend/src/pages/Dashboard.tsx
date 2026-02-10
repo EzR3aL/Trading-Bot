@@ -6,6 +6,7 @@ import type { Statistics, Trade, DailyStats } from '../types'
 import PnlChart from '../components/dashboard/PnlChart'
 import WinLossChart from '../components/dashboard/WinLossChart'
 import FeesChart from '../components/dashboard/FeesChart'
+import RevenueChart from '../components/dashboard/RevenueChart'
 import { DashboardSkeleton } from '../components/ui/Skeleton'
 import PnlCell from '../components/ui/PnlCell'
 import { ArrowUpRight, ArrowDownRight } from 'lucide-react'
@@ -186,6 +187,28 @@ export default function Dashboard() {
         <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-4">{t('dashboard.feesAndFunding')}</h3>
         <FeesChart data={dailyStats} />
       </div>
+
+      {/* Revenue Section (Builder Fees) */}
+      {dailyStats.some(d => (d.builder_fees || 0) > 0) && (
+        <div className="glass-card rounded-xl p-5 mb-6">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
+              {t('dashboard.revenueTitle')}
+            </h3>
+            {stats && (stats.total_builder_fees || 0) > 0 && (
+              <div className="flex items-center gap-4 text-xs">
+                <span className="text-gray-400">
+                  {t('dashboard.totalBuilderFees')}: <span className="text-emerald-400 font-medium">${stats.total_builder_fees.toFixed(4)}</span>
+                </span>
+                <span className="text-gray-400">
+                  {t('dashboard.monthlyEstimate')}: <span className="text-emerald-400 font-medium">${((stats.total_builder_fees / period) * 30).toFixed(2)}/mo</span>
+                </span>
+              </div>
+            )}
+          </div>
+          <RevenueChart data={dailyStats} />
+        </div>
+      )}
 
       {/* Recent trades */}
       <div className="glass-card rounded-xl overflow-hidden">

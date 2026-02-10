@@ -24,7 +24,7 @@ from src.api.schemas.config import (
     TradingConfigUpdate,
 )
 from src.auth.dependencies import get_current_admin, get_current_user
-from src.models.database import ExchangeConnection, LLMConnection, User, UserConfig
+from src.models.database import ExchangeConnection, LLMConnection, TradeRecord, User, UserConfig
 from src.models.session import get_db
 from src.utils.circuit_breaker import circuit_registry
 from src.api.routers.auth import limiter
@@ -811,6 +811,24 @@ async def get_revenue_summary(
         if referral_info:
             referred_by = referral_info.get("referredBy") or referral_info.get("referred_by")
 
+        # Query trade-based builder fee earnings from DB
+        from datetime import datetime, timedelta
+        from sqlalchemy import func as sqlfunc
+
+        since_30d = datetime.utcnow() - timedelta(days=30)
+        trade_stats = await db.execute(
+            select(
+                sqlfunc.count().label("total_trades"),
+                sqlfunc.sum(TradeRecord.builder_fee).label("total_builder_fees"),
+            ).where(
+                TradeRecord.user_id == user.id,
+                TradeRecord.status == "closed",
+                TradeRecord.exchange == "hyperliquid",
+                TradeRecord.entry_time >= since_30d,
+            )
+        )
+        stats_row = trade_stats.one()
+
         return {
             "builder": {
                 "configured": bool(builder_address),
@@ -826,6 +844,11 @@ async def get_revenue_summary(
                 "link": f"https://app.hyperliquid.xyz/join/{referral_code}" if referral_code else None,
             },
             "user_fees": user_fees,
+            "earnings": {
+                "total_builder_fees_30d": stats_row.total_builder_fees or 0,
+                "trades_with_builder_fee": stats_row.total_trades or 0,
+                "monthly_estimate": stats_row.total_builder_fees or 0,
+            },
         }
     except HTTPException:
         raise

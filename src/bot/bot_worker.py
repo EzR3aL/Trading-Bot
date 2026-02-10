@@ -606,6 +606,19 @@ class BotWorker:
             except Exception:
                 trade.funding_paid = 0
 
+            # Calculate builder fee revenue (Hyperliquid only)
+            try:
+                if hasattr(client, 'calculate_builder_fee'):
+                    trade.builder_fee = client.calculate_builder_fee(
+                        entry_price=trade.entry_price,
+                        exit_price=exit_price,
+                        size=trade.size,
+                    )
+                else:
+                    trade.builder_fee = 0
+            except Exception:
+                trade.builder_fee = 0
+
             # Update trade record
             trade.exit_price = exit_price
             trade.pnl = pnl

@@ -146,6 +146,7 @@ class TradeRecord(Base):
     pnl_percent = Column(Float, nullable=True)
     fees = Column(Float, default=0)
     funding_paid = Column(Float, default=0)
+    builder_fee = Column(Float, default=0)
     entry_time = Column(DateTime, nullable=False, index=True)
     exit_time = Column(DateTime, nullable=True)
     exit_reason = Column(String(50), nullable=True)

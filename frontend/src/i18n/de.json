@@ -42,7 +42,11 @@
     "days14": "14 Tage",
     "days30": "30 Tage",
     "days90": "90 Tage",
-    "noData": "Keine Daten vorhanden"
+    "noData": "Keine Daten vorhanden",
+    "revenueTitle": "Builder-Fee Einnahmen",
+    "builderFees": "Builder-Gebühren",
+    "totalBuilderFees": "Gesamt Builder-Gebühren",
+    "monthlyEstimate": "Gesch. Monatlich"
   },
   "trades": {
     "title": "Trade-Verlauf",
@@ -120,7 +124,11 @@
     "affiliateLinksDesc": "Affiliate-Links pro Exchange konfigurieren. Diese werden in Trade-Screenshots angezeigt.",
     "affiliateUrl": "Affiliate-URL",
     "affiliateLabel": "Label (optional)",
-    "affiliateActive": "Aktiv"
+    "affiliateActive": "Aktiv",
+    "hlEarnings": "Einnahmen (Letzte 30 Tage)",
+    "hlBuilderFees30d": "Verdiente Builder-Gebühren",
+    "hlTradesWithFee": "Trades mit Builder-Gebühr",
+    "hlMonthlyEstimate": "Monatliche Schätzung"
   },
   "presets": {
     "title": "Konfigurations-Presets",

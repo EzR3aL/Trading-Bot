@@ -31,6 +31,7 @@ export interface Trade {
   pnl_percent: number | null
   fees: number
   funding_paid: number
+  builder_fee: number
   entry_time: string
   exit_time: string | null
   exit_reason: string | null
@@ -56,6 +57,7 @@ export interface Statistics {
   total_pnl: number
   total_fees: number
   total_funding: number
+  total_builder_fees: number
   net_pnl: number
   avg_pnl_percent: number
   best_trade: number
@@ -68,6 +70,7 @@ export interface DailyStats {
   pnl: number
   fees: number
   funding: number
+  builder_fees: number
   wins: number
   losses: number
 }
