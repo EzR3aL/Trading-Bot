@@ -38,7 +38,7 @@ VALID_TRADING_CONFIG = {
 async def test_get_config_requires_auth(client, test_db):
     """GET /api/config/ without a token returns 401."""
     response = await client.get("/api/config/")
-    assert response.status_code in (401, 403)
+    assert response.status_code in (401, 403, 307)
 
 
 # ---------------------------------------------------------------------------

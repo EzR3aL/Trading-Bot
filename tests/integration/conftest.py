@@ -76,8 +76,12 @@ async def test_app(test_db, monkeypatch):
     monkeypatch.setattr(session_module, "DATABASE_URL", TEST_DATABASE_URL)
 
     from src.api.main_app import create_app
+    from src.api.routers.auth import limiter
 
     app = create_app()
+
+    # Disable rate limiting during integration tests
+    limiter.enabled = False
 
     yield app
 

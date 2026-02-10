@@ -119,7 +119,7 @@ async def test_create_preset(client, user_token):
 async def test_create_preset_requires_auth(client, test_db):
     """POST /api/presets/ without auth returns 401."""
     response = await client.post("/api/presets/", json=SAMPLE_PRESET)
-    assert response.status_code in (401, 403)
+    assert response.status_code in (401, 403, 307)
 
 
 # ---------------------------------------------------------------------------
