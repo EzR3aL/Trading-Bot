@@ -44,7 +44,8 @@ async def login(request: Request, body: LoginRequest, db: AsyncSession = Depends
             detail="Account is disabled",
         )
 
-    token_data = {"sub": str(user.id), "role": user.role}
+    tv = getattr(user, "token_version", 0) or 0
+    token_data = {"sub": str(user.id), "role": user.role, "tv": tv}
     access_token = create_access_token(token_data)
     refresh_token = create_refresh_token(token_data)
 
@@ -74,7 +75,16 @@ async def refresh_token(request: RefreshRequest, db: AsyncSession = Depends(get_
             detail="User not found or inactive",
         )
 
-    token_data = {"sub": str(user.id), "role": user.role}
+    # Reject refresh tokens issued before a token revocation
+    token_tv = payload.get("tv")
+    user_tv = getattr(user, "token_version", 0) or 0
+    if token_tv is not None and token_tv < user_tv:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token revoked — please log in again",
+        )
+
+    token_data = {"sub": str(user.id), "role": user.role, "tv": user_tv}
     access_token = create_access_token(token_data)
     refresh_token = create_refresh_token(token_data)
 

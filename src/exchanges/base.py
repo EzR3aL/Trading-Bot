@@ -95,6 +95,12 @@ class ExchangeClient(ABC):
         """Get total fees (entry + exit) for a complete trade. Override in exchange-specific client."""
         return 0.0
 
+    async def get_fill_price(
+        self, symbol: str, order_id: str, **kwargs
+    ) -> Optional[float]:
+        """Get actual fill price for a completed order. Override in exchange-specific client."""
+        return None
+
     async def get_funding_fees(
         self, symbol: str, start_time_ms: int, end_time_ms: int
     ) -> float:

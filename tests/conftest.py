@@ -96,12 +96,6 @@ def mock_orchestrator():
     return orch
 
 
-@pytest.fixture
-def mock_bot_manager():
-    """Create a mock BotManager."""
-    bm = MagicMock()
-    bm.shutdown_all = AsyncMock()
-    return bm
 
 
 # ---------------------------------------------------------------------------
@@ -109,7 +103,7 @@ def mock_bot_manager():
 # ---------------------------------------------------------------------------
 
 @pytest_asyncio.fixture
-async def app(test_engine, mock_orchestrator, mock_bot_manager):
+async def app(test_engine, mock_orchestrator):
     """Create a FastAPI application with test database and mocked services."""
     session_factory = async_sessionmaker(
         test_engine, class_=AsyncSession, expire_on_commit=False
@@ -127,11 +121,9 @@ async def app(test_engine, mock_orchestrator, mock_bot_manager):
 
     # Import routers AFTER setting env vars
     from src.api.routers import bots as bots_router
-    from src.api.routers import bot_control as bot_control_router
 
     # Inject mocks into router globals
     bots_router.set_orchestrator(mock_orchestrator)
-    bot_control_router.set_bot_manager(mock_bot_manager)
 
     # We must register a test strategy so bot creation works
     _register_test_strategy()
@@ -144,7 +136,6 @@ async def app(test_engine, mock_orchestrator, mock_bot_manager):
     from src.api.routers import (
         auth,
         bots,
-        bot_control,
         config,
         exchanges,
         funding,
@@ -174,7 +165,6 @@ async def app(test_engine, mock_orchestrator, mock_bot_manager):
     test_app.include_router(config.router)
     test_app.include_router(presets.router)
     test_app.include_router(exchanges.router)
-    test_app.include_router(bot_control.router)
     test_app.include_router(bots.router)
     test_app.include_router(tax_report.router)
 

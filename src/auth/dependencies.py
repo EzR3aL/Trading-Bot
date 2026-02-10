@@ -1,6 +1,5 @@
 """FastAPI authentication dependencies."""
 
-import os
 from typing import Optional
 
 from fastapi import Depends, HTTPException, status
@@ -46,6 +45,9 @@ async def get_current_user(
             detail="Invalid token payload",
         )
 
+    # Check token_version to support token revocation
+    token_version = payload.get("tv")
+
     result = await db.execute(select(User).where(User.id == int(user_id)))
     user = result.scalar_one_or_none()
 
@@ -54,6 +56,15 @@ async def get_current_user(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="User not found or inactive",
         )
+
+    # Reject tokens issued before a password change / forced logout
+    if token_version is not None and hasattr(user, "token_version"):
+        if user.token_version is not None and token_version < user.token_version:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Token revoked — please log in again",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
 
     return user
 
@@ -68,36 +79,3 @@ async def get_current_admin(
             detail="Admin access required",
         )
     return user
-
-
-async def get_current_user_or_legacy(
-    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
-    db: AsyncSession = Depends(get_db),
-) -> Optional[User]:
-    """
-    Backward-compatible auth: try JWT first, then fall back to legacy X-API-Key.
-
-    Returns User if authenticated via JWT, or None if legacy API key mode.
-    Raises 401 if neither auth method succeeds and dev mode is off.
-    """
-    # Try JWT first
-    if credentials:
-        payload = decode_token(credentials.credentials)
-        if payload and payload.get("type") == "access":
-            user_id = payload.get("sub")
-            if user_id:
-                result = await db.execute(select(User).where(User.id == int(user_id)))
-                user = result.scalar_one_or_none()
-                if user and user.is_active:
-                    return user
-
-    # Legacy mode: check if dev mode is on (for backward compat)
-    dev_mode = os.getenv("DASHBOARD_DEV_MODE", "false").lower() == "true"
-    if dev_mode:
-        return None
-
-    raise HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Not authenticated",
-        headers={"WWW-Authenticate": "Bearer"},
-    )

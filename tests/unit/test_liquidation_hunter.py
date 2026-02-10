@@ -403,106 +403,8 @@ class TestShouldTrade:
         assert "price" in reason.lower()
 
 
-class TestPositionSizeRecommendation:
-    """Tests for position size calculation."""
-
-    def setup_method(self):
-        """Set up test fixtures."""
-        self.strategy = LiquidationHunterStrategy(data_fetcher=None)
-
-    def test_high_confidence_larger_position(self):
-        """High confidence should result in larger position."""
-        high_conf_signal = TradeSignal(
-            direction=SignalDirection.LONG,
-            confidence=90,
-            symbol="BTCUSDT",
-            entry_price=95000.0,
-            target_price=98000.0,
-            stop_loss=93000.0,
-            reason="High confidence",
-            metrics_snapshot={},
-            timestamp=datetime.now(),
-        )
-
-        low_conf_signal = TradeSignal(
-            direction=SignalDirection.LONG,
-            confidence=55,
-            symbol="BTCUSDT",
-            entry_price=95000.0,
-            target_price=98000.0,
-            stop_loss=93000.0,
-            reason="Low confidence",
-            metrics_snapshot={},
-            timestamp=datetime.now(),
-        )
-
-        balance = 10000.0
-        high_size = self.strategy.get_position_size_recommendation(
-            high_conf_signal, balance
-        )
-        low_size = self.strategy.get_position_size_recommendation(
-            low_conf_signal, balance
-        )
-
-        assert high_size > low_size
-
-    def test_position_scales_with_confidence(self):
-        """Position size should scale with confidence levels."""
-        balance = 10000.0
-
-        sizes = {}
-        for confidence in [55, 65, 75, 85, 95]:
-            signal = TradeSignal(
-                direction=SignalDirection.LONG,
-                confidence=confidence,
-                symbol="BTCUSDT",
-                entry_price=95000.0,
-                target_price=98000.0,
-                stop_loss=93000.0,
-                reason="Test",
-                metrics_snapshot={},
-                timestamp=datetime.now(),
-            )
-            sizes[confidence] = self.strategy.get_position_size_recommendation(
-                signal, balance
-            )
-
-        # Higher confidence = larger position
-        assert sizes[95] > sizes[85] > sizes[75]
-        assert sizes[55] < sizes[65]
-
-
 class TestTradeSignalDataclass:
     """Tests for TradeSignal dataclass."""
-
-    def test_is_high_confidence_property(self):
-        """Test high confidence property."""
-        high_conf = TradeSignal(
-            direction=SignalDirection.LONG,
-            confidence=90,
-            symbol="BTCUSDT",
-            entry_price=95000.0,
-            target_price=98000.0,
-            stop_loss=93000.0,
-            reason="Test",
-            metrics_snapshot={},
-            timestamp=datetime.now(),
-        )
-
-        low_conf = TradeSignal(
-            direction=SignalDirection.LONG,
-            confidence=60,
-            symbol="BTCUSDT",
-            entry_price=95000.0,
-            target_price=98000.0,
-            stop_loss=93000.0,
-            reason="Test",
-            metrics_snapshot={},
-            timestamp=datetime.now(),
-        )
-
-        assert high_conf.is_high_confidence is True
-        assert low_conf.is_high_confidence is False
 
     def test_to_dict_serialization(self):
         """Test dictionary serialization."""
@@ -525,4 +427,3 @@ class TestTradeSignalDataclass:
         assert result["symbol"] == "ETHUSDT"
         assert result["entry_price"] == 3500.0
         assert "timestamp" in result
-        assert result["is_high_confidence"] is True

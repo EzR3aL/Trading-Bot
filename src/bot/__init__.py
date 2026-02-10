@@ -1,5 +1,6 @@
 """Bot orchestration module."""
 
-from .trading_bot import TradingBot
+from .bot_worker import BotWorker
+from .orchestrator import BotOrchestrator
 
-__all__ = ["TradingBot"]
+__all__ = ["BotOrchestrator", "BotWorker"]

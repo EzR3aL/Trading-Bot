@@ -55,6 +55,8 @@ async def init_db() -> None:
                 "ALTER TABLE users ADD COLUMN deleted_at DATETIME",
                 # Revenue analytics: builder fee tracking
                 "ALTER TABLE trade_records ADD COLUMN builder_fee FLOAT DEFAULT 0",
+                # Token revocation support
+                "ALTER TABLE users ADD COLUMN token_version INTEGER NOT NULL DEFAULT 0",
             ]
             for migration in migrations:
                 try:

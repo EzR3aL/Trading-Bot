@@ -58,6 +58,9 @@ class BotWorker:
         self.last_analysis: Optional[datetime] = None
         self.trades_today: int = 0
 
+        # Per-symbol lock to prevent duplicate position opening
+        self._symbol_locks: dict[str, asyncio.Lock] = {}
+
         # Per-mode clients for "both" mode
         self._demo_client: Optional[ExchangeClient] = None
         self._live_client: Optional[ExchangeClient] = None
@@ -351,6 +354,12 @@ class BotWorker:
 
         self.last_analysis = datetime.utcnow()
 
+    def _get_symbol_lock(self, symbol: str) -> asyncio.Lock:
+        """Get or create a per-symbol lock to prevent duplicate position opening."""
+        if symbol not in self._symbol_locks:
+            self._symbol_locks[symbol] = asyncio.Lock()
+        return self._symbol_locks[symbol]
+
     async def _analyze_symbol(self, symbol: str, force: bool = False):
         """Analyze a single symbol and potentially trade it.
 
@@ -358,6 +367,11 @@ class BotWorker:
             symbol: Trading pair to analyze
             force: If True, skip the open-position check (used after rotation close)
         """
+        async with self._get_symbol_lock(symbol):
+            await self._analyze_symbol_locked(symbol, force)
+
+    async def _analyze_symbol_locked(self, symbol: str, force: bool = False):
+        """Internal: analyze symbol while holding per-symbol lock."""
         log_prefix = f"[Bot:{self.bot_config_id}]"
 
         # Check for existing open positions (per bot) — skip when force-rotating
@@ -433,7 +447,7 @@ class BotWorker:
 
             # Get fill price — prefer order.price (avgPx from exchange)
             fill_price = order.price if order.price > 0 else signal.entry_price
-            if hasattr(client, 'get_fill_price') and order.order_id:
+            if order.order_id:
                 try:
                     actual = await client.get_fill_price(signal.symbol, order.order_id)
                     if actual:
@@ -782,7 +796,11 @@ class BotWorker:
     async def _force_close_trade(
         self, trade: TradeRecord, client: ExchangeClient, session
     ) -> bool:
-        """Force-close an open trade via the exchange. Returns True on success."""
+        """Force-close an open trade via the exchange. Returns True on success.
+
+        Handles the case where the position was already closed (TP/SL hit)
+        by marking the trade as ROTATION_ALREADY_CLOSED instead of retrying.
+        """
         log_prefix = f"[Bot:{self.bot_config_id}]"
         mode_str = "DEMO" if trade.demo_mode else "LIVE"
 
@@ -790,9 +808,45 @@ class BotWorker:
             # Close position via exchange client
             order = await client.close_position(trade.symbol, trade.side)
 
-            # Get exit price
+            if order is None:
+                # Position already closed (TP/SL triggered before rotation)
+                logger.info(
+                    f"{log_prefix} [{mode_str}] ROTATION: Trade #{trade.id} {trade.symbol} "
+                    f"already closed on exchange (TP/SL hit). Marking as ROTATION_ALREADY_CLOSED."
+                )
+                # Get current price for approximate PnL
+                exit_price = trade.entry_price
+                try:
+                    ticker = await client.get_ticker(trade.symbol)
+                    if ticker:
+                        exit_price = ticker.last_price
+                except Exception:
+                    pass
+
+                if trade.side == "long":
+                    pnl = (exit_price - trade.entry_price) * trade.size
+                else:
+                    pnl = (trade.entry_price - exit_price) * trade.size
+                pnl_percent = (pnl / (trade.entry_price * trade.size)) * 100
+
+                trade.exit_price = exit_price
+                trade.pnl = pnl
+                trade.pnl_percent = pnl_percent
+                trade.exit_time = datetime.utcnow()
+                trade.exit_reason = "ROTATION_ALREADY_CLOSED"
+                trade.status = "closed"
+
+                self._risk_manager.record_trade_exit(
+                    symbol=trade.symbol, side=trade.side, size=trade.size,
+                    entry_price=trade.entry_price, exit_price=exit_price,
+                    fees=trade.fees or 0, funding_paid=trade.funding_paid or 0,
+                    reason="ROTATION_ALREADY_CLOSED", order_id=trade.order_id,
+                )
+                return True
+
+            # Get exit price from the close order
             exit_price = trade.entry_price
-            if order and order.price and order.price > 0:
+            if order.price and order.price > 0:
                 exit_price = order.price
             else:
                 try:
@@ -819,15 +873,10 @@ class BotWorker:
 
             # Record in risk manager
             self._risk_manager.record_trade_exit(
-                symbol=trade.symbol,
-                side=trade.side,
-                size=trade.size,
-                entry_price=trade.entry_price,
-                exit_price=exit_price,
-                fees=trade.fees or 0,
-                funding_paid=trade.funding_paid or 0,
-                reason="ROTATION",
-                order_id=trade.order_id,
+                symbol=trade.symbol, side=trade.side, size=trade.size,
+                entry_price=trade.entry_price, exit_price=exit_price,
+                fees=trade.fees or 0, funding_paid=trade.funding_paid or 0,
+                reason="ROTATION", order_id=trade.order_id,
             )
 
             logger.info(
@@ -842,19 +891,12 @@ class BotWorker:
                     duration_minutes = int((datetime.utcnow() - trade.entry_time).total_seconds() / 60) if trade.entry_time else None
                     async with notifier:
                         await notifier.send_trade_exit(
-                            symbol=trade.symbol,
-                            side=trade.side,
-                            size=trade.size,
-                            entry_price=trade.entry_price,
-                            exit_price=exit_price,
-                            pnl=pnl,
-                            pnl_percent=pnl_percent,
-                            fees=trade.fees or 0,
-                            funding_paid=trade.funding_paid or 0,
-                            reason="ROTATION",
-                            order_id=trade.order_id or "",
-                            duration_minutes=duration_minutes,
-                            demo_mode=trade.demo_mode,
+                            symbol=trade.symbol, side=trade.side, size=trade.size,
+                            entry_price=trade.entry_price, exit_price=exit_price,
+                            pnl=pnl, pnl_percent=pnl_percent,
+                            fees=trade.fees or 0, funding_paid=trade.funding_paid or 0,
+                            reason="ROTATION", order_id=trade.order_id or "",
+                            duration_minutes=duration_minutes, demo_mode=trade.demo_mode,
                             strategy_reason=f"[{self._config.name}] Auto-rotation ({self._config.rotation_interval_minutes}min)",
                         )
             except Exception as notify_err:
@@ -863,6 +905,27 @@ class BotWorker:
             return True
 
         except Exception as e:
+            err_msg = str(e).lower()
+            # Handle "no position" errors from exchange API explicitly
+            if any(phrase in err_msg for phrase in ("no position", "position not exist", "does not exist")):
+                logger.info(
+                    f"{log_prefix} [{mode_str}] ROTATION: Trade #{trade.id} {trade.symbol} "
+                    f"position not found on exchange. Marking as ROTATION_ALREADY_CLOSED."
+                )
+                trade.exit_price = trade.entry_price
+                trade.pnl = 0
+                trade.pnl_percent = 0
+                trade.exit_time = datetime.utcnow()
+                trade.exit_reason = "ROTATION_ALREADY_CLOSED"
+                trade.status = "closed"
+                self._risk_manager.record_trade_exit(
+                    symbol=trade.symbol, side=trade.side, size=trade.size,
+                    entry_price=trade.entry_price, exit_price=trade.entry_price,
+                    fees=trade.fees or 0, funding_paid=trade.funding_paid or 0,
+                    reason="ROTATION_ALREADY_CLOSED", order_id=trade.order_id,
+                )
+                return True
+
             logger.error(f"{log_prefix} [{mode_str}] ROTATION close failed for trade #{trade.id}: {e}")
             return False
 

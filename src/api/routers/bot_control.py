@@ -234,7 +234,7 @@ async def open_test_trade(
         )
 
         fill_price = order.price if order.price > 0 else price
-        if hasattr(client, 'get_fill_price') and order.order_id:
+        if order.order_id:
             try:
                 actual = await client.get_fill_price(trade_symbol, order.order_id)
                 if actual:
@@ -396,7 +396,7 @@ async def close_trade(
         exit_price = None
         if close_order and close_order.price and close_order.price > 0:
             exit_price = close_order.price
-        elif close_order and close_order.order_id and hasattr(client, 'get_fill_price'):
+        elif close_order and close_order.order_id:
             try:
                 exit_price = await client.get_fill_price(trade.symbol, close_order.order_id)
             except Exception as e:

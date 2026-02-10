@@ -156,14 +156,28 @@ class LiquidationHunterStrategy(BaseStrategy):
 
         metrics = await self.data_fetcher.fetch_all_metrics()
 
+        # Fetch symbol-specific data (funding rate, price) for the actual traded symbol.
+        # fetch_all_metrics only has BTC/ETH — for other symbols we need direct lookups.
         if "BTC" in symbol:
             funding_rate = metrics.funding_rate_btc
             current_price = metrics.btc_price
             price_change = metrics.btc_24h_change_percent
-        else:
+        elif "ETH" in symbol:
             funding_rate = metrics.funding_rate_eth
             current_price = metrics.eth_price
             price_change = metrics.eth_24h_change_percent
+        else:
+            try:
+                funding_rate = await self.data_fetcher.get_funding_rate_binance(symbol) or 0.0
+            except Exception:
+                funding_rate = 0.0
+            try:
+                ticker = await self.data_fetcher.get_24h_ticker(symbol) or {}
+                current_price = ticker.get("price", 0)
+                price_change = ticker.get("price_change_percent", 0)
+            except Exception:
+                current_price = 0
+                price_change = 0
 
         reasons = []
         confidence = 50
@@ -255,6 +269,21 @@ class LiquidationHunterStrategy(BaseStrategy):
 
         if signal.entry_price <= 0:
             return False, "Invalid entry price"
+
+        if signal.target_price <= 0 or signal.stop_loss <= 0:
+            return False, "Invalid TP/SL targets"
+
+        # Validate TP/SL direction makes sense
+        if signal.direction == SignalDirection.LONG:
+            if signal.target_price <= signal.entry_price:
+                return False, f"TP ({signal.target_price}) must be above entry ({signal.entry_price}) for LONG"
+            if signal.stop_loss >= signal.entry_price:
+                return False, f"SL ({signal.stop_loss}) must be below entry ({signal.entry_price}) for LONG"
+        else:
+            if signal.target_price >= signal.entry_price:
+                return False, f"TP ({signal.target_price}) must be below entry ({signal.entry_price}) for SHORT"
+            if signal.stop_loss <= signal.entry_price:
+                return False, f"SL ({signal.stop_loss}) must be above entry ({signal.entry_price}) for SHORT"
 
         return True, f"Signal approved with {signal.confidence}% confidence"
 

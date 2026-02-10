@@ -38,6 +38,7 @@ class User(Base):
     password_hash = Column(String(255), nullable=False)
     role = Column(String(20), nullable=False, default="user")  # admin | user
     is_active = Column(Boolean, default=True)
+    token_version = Column(Integer, default=0, nullable=False, server_default="0")
     language = Column(String(10), default="de")  # de | en
     is_deleted = Column(Boolean, default=False)
     deleted_at = Column(DateTime, nullable=True)

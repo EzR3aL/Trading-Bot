@@ -1,18 +1,30 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
-import { useEffect } from 'react'
+import { lazy, Suspense, useEffect } from 'react'
 import { useAuthStore } from './stores/authStore'
 import AppLayout from './components/layout/AppLayout'
 import ToastContainer from './components/ui/Toast'
+import ErrorBoundary from './components/ui/ErrorBoundary'
 import Login from './pages/Login'
-import Dashboard from './pages/Dashboard'
-import Trades from './pages/Trades'
-import Settings from './pages/Settings'
-import Presets from './pages/Presets'
-import Bots from './pages/Bots'
-import TaxReport from './pages/TaxReport'
-import AdminUsers from './pages/AdminUsers'
-import GettingStarted from './pages/GettingStarted'
-import BotPerformance from './pages/BotPerformance'
+
+// Lazy-loaded page components for code splitting
+const Dashboard = lazy(() => import('./pages/Dashboard'))
+const Trades = lazy(() => import('./pages/Trades'))
+const Settings = lazy(() => import('./pages/Settings'))
+const Presets = lazy(() => import('./pages/Presets'))
+const Bots = lazy(() => import('./pages/Bots'))
+const BotPerformance = lazy(() => import('./pages/BotPerformance'))
+const TaxReport = lazy(() => import('./pages/TaxReport'))
+const GettingStarted = lazy(() => import('./pages/GettingStarted'))
+const AdminUsers = lazy(() => import('./pages/AdminUsers'))
+const NotFound = lazy(() => import('./pages/NotFound'))
+
+function PageLoader() {
+  return (
+    <div className="flex items-center justify-center min-h-[40vh]">
+      <div className="w-8 h-8 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+    </div>
+  )
+}
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated)
@@ -36,7 +48,7 @@ export default function App() {
   }, [isAuthenticated, fetchUser])
 
   return (
-    <>
+    <ErrorBoundary>
       <ToastContainer />
       <Routes>
         <Route path="/login" element={<Login />} />
@@ -45,29 +57,32 @@ export default function App() {
           element={
             <ProtectedRoute>
               <AppLayout>
-                <Routes>
-                  <Route path="/" element={<Dashboard />} />
-                  <Route path="/trades" element={<Trades />} />
-                  <Route path="/settings" element={<Settings />} />
-                  <Route path="/presets" element={<Presets />} />
-                  <Route path="/bots" element={<Bots />} />
-                  <Route path="/performance" element={<BotPerformance />} />
-                  <Route path="/tax-report" element={<TaxReport />} />
-                  <Route path="/guide" element={<GettingStarted />} />
-                  <Route
-                    path="/admin/users"
-                    element={
-                      <AdminRoute>
-                        <AdminUsers />
-                      </AdminRoute>
-                    }
-                  />
-                </Routes>
+                <Suspense fallback={<PageLoader />}>
+                  <Routes>
+                    <Route path="/" element={<Dashboard />} />
+                    <Route path="/trades" element={<Trades />} />
+                    <Route path="/settings" element={<Settings />} />
+                    <Route path="/presets" element={<Presets />} />
+                    <Route path="/bots" element={<Bots />} />
+                    <Route path="/performance" element={<BotPerformance />} />
+                    <Route path="/tax-report" element={<TaxReport />} />
+                    <Route path="/guide" element={<GettingStarted />} />
+                    <Route
+                      path="/admin/users"
+                      element={
+                        <AdminRoute>
+                          <AdminUsers />
+                        </AdminRoute>
+                      }
+                    />
+                    <Route path="*" element={<NotFound />} />
+                  </Routes>
+                </Suspense>
               </AppLayout>
             </ProtectedRoute>
           }
         />
       </Routes>
-    </>
+    </ErrorBoundary>
   )
 }
