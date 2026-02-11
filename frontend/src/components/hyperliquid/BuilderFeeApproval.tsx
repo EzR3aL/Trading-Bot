@@ -173,7 +173,7 @@ function BuilderFeeApprovalInner({ onApproved, onClose }: BuilderFeeApprovalProp
     return (
       <div className="bg-gray-800 rounded-xl border border-gray-700 p-6 max-w-lg mx-auto">
         <div className="flex items-center justify-center gap-3 py-8">
-          <Loader2 className="w-6 h-6 animate-spin text-indigo-400" />
+          <Loader2 className="w-6 h-6 animate-spin text-emerald-400" />
           <span className="text-gray-300">{t('common.loading')}</span>
         </div>
       </div>
@@ -200,7 +200,7 @@ function BuilderFeeApprovalInner({ onApproved, onClose }: BuilderFeeApprovalProp
     return (
       <div className="bg-gray-800 rounded-xl border border-gray-700 p-6 max-w-lg mx-auto">
         <h3 className="text-lg font-semibold text-white mb-2 flex items-center gap-2">
-          <Wallet className="w-5 h-5 text-indigo-400" /> {t('builderFee.title')}
+          <Wallet className="w-5 h-5 text-emerald-400" /> {t('builderFee.title')}
         </h3>
         <p className="text-gray-300 text-sm mb-4">{t('builderFee.notConfigured')}</p>
         {onClose && (
@@ -217,7 +217,7 @@ function BuilderFeeApprovalInner({ onApproved, onClose }: BuilderFeeApprovalProp
       {/* Header */}
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-lg font-semibold text-white flex items-center gap-2">
-          <Wallet className="w-5 h-5 text-indigo-400" />
+          <Wallet className="w-5 h-5 text-emerald-400" />
           {t('builderFee.title')}
         </h3>
         {onClose && (
@@ -232,24 +232,24 @@ function BuilderFeeApprovalInner({ onApproved, onClose }: BuilderFeeApprovalProp
         {[1, 2, 3].map((s) => (
           <div key={s} className="flex items-center gap-2 flex-1">
             <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${
-              step >= s ? 'bg-indigo-500 text-white' : 'bg-gray-700 text-gray-400'
+              step >= s ? 'bg-emerald-500 text-white' : 'bg-gray-700 text-gray-400'
             }`}>
               {step > s ? <CheckCircle className="w-4 h-4" /> : s}
             </div>
-            {s < 3 && <div className={`flex-1 h-0.5 ${step > s ? 'bg-indigo-500' : 'bg-gray-700'}`} />}
+            {s < 3 && <div className={`flex-1 h-0.5 ${step > s ? 'bg-emerald-500' : 'bg-gray-700'}`} />}
           </div>
         ))}
       </div>
 
       {/* Affiliate link */}
       {config.referral_code && step < 3 && (
-        <div className="bg-indigo-900/30 border border-indigo-700/50 rounded-lg p-3 mb-4 text-sm">
-          <p className="text-indigo-300">{t('builderFee.affiliateHint')}</p>
+        <div className="bg-emerald-900/30 border border-emerald-700/50 rounded-lg p-3 mb-4 text-sm">
+          <p className="text-emerald-300">{t('builderFee.affiliateHint')}</p>
           <a
             href={`https://app.hyperliquid.xyz/join/${config.referral_code}`}
             target="_blank"
             rel="noopener noreferrer"
-            className="text-indigo-400 hover:text-indigo-300 font-medium inline-flex items-center gap-1 mt-1 break-all"
+            className="text-emerald-400 hover:text-emerald-300 font-medium inline-flex items-center gap-1 mt-1 break-all"
           >
             {`https://app.hyperliquid.xyz/join/${config.referral_code}`} <ExternalLink className="w-3 h-3 shrink-0" />
           </a>
@@ -279,7 +279,7 @@ function BuilderFeeApprovalInner({ onApproved, onClose }: BuilderFeeApprovalProp
             </div>
             <ConnectButton.Custom>
               {({ openAccountModal }) => (
-                <button onClick={openAccountModal} className="text-xs text-indigo-400 hover:text-indigo-300">
+                <button onClick={openAccountModal} className="text-xs text-emerald-400 hover:text-emerald-300">
                   {t('common.change')}
                 </button>
               )}
@@ -292,7 +292,7 @@ function BuilderFeeApprovalInner({ onApproved, onClose }: BuilderFeeApprovalProp
           <button
             onClick={handleSign}
             disabled={isSigning || submitting}
-            className="w-full py-3 bg-indigo-600 hover:bg-indigo-500 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
+            className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
           >
             {isSigning || submitting ? (
               <><Loader2 className="w-4 h-4 animate-spin" /> {t('builderFee.approving')}</>
@@ -345,8 +345,8 @@ class WalletErrorBoundary extends Component<
             {this.state.error}
           </pre>
           <p className="text-gray-400 text-xs mb-3">
-            Set <code className="text-indigo-400">VITE_WALLETCONNECT_PROJECT_ID</code> in your <code>.env</code> file.
-            Get a free ID at <a href="https://cloud.reown.com" target="_blank" rel="noopener noreferrer" className="text-indigo-400 underline">cloud.reown.com</a>
+            Set <code className="text-emerald-400">VITE_WALLETCONNECT_PROJECT_ID</code> in your <code>.env</code> file.
+            Get a free ID at <a href="https://cloud.reown.com" target="_blank" rel="noopener noreferrer" className="text-emerald-400 underline">cloud.reown.com</a>
           </p>
           {this.props.onClose && (
             <button onClick={this.props.onClose} className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg text-sm">
@@ -367,7 +367,7 @@ export default function BuilderFeeApproval(props: BuilderFeeApprovalProps) {
       <WagmiProvider config={walletConfig}>
         <QueryClientProvider client={queryClient}>
           <RainbowKitProvider theme={darkTheme({
-            accentColor: '#6366f1',
+            accentColor: '#10b981',
             borderRadius: 'medium',
           })}>
             <BuilderFeeApprovalInner {...props} />

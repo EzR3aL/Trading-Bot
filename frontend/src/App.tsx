@@ -14,6 +14,7 @@ const Presets = lazy(() => import('./pages/Presets'))
 const Bots = lazy(() => import('./pages/Bots'))
 const BotDetail = lazy(() => import('./pages/BotDetail'))
 const BotPerformance = lazy(() => import('./pages/BotPerformance'))
+const Backtest = lazy(() => import('./pages/Backtest'))
 const TaxReport = lazy(() => import('./pages/TaxReport'))
 const GettingStarted = lazy(() => import('./pages/GettingStarted'))
 const AdminUsers = lazy(() => import('./pages/AdminUsers'))
@@ -22,7 +23,7 @@ const NotFound = lazy(() => import('./pages/NotFound'))
 function PageLoader() {
   return (
     <div className="flex items-center justify-center min-h-[40vh]">
-      <div className="w-8 h-8 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+      <div className="w-8 h-8 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
     </div>
   )
 }
@@ -67,6 +68,7 @@ export default function App() {
                     <Route path="/bots" element={<Bots />} />
                     <Route path="/bots/:botId" element={<BotDetail />} />
                     <Route path="/performance" element={<BotPerformance />} />
+                    <Route path="/backtest" element={<Backtest />} />
                     <Route path="/tax-report" element={<TaxReport />} />
                     <Route path="/guide" element={<GettingStarted />} />
                     <Route

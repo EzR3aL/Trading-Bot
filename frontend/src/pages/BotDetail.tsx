@@ -7,7 +7,7 @@ import {
 } from 'recharts'
 import {
   ArrowLeft, Play, Square, Settings, TrendingUp, TrendingDown,
-  Activity, AlertCircle, CheckCircle,
+  Activity, AlertCircle, CheckCircle, Bot,
 } from 'lucide-react'
 import api from '../api/client'
 import { useFilterStore } from '../stores/filterStore'
@@ -177,7 +177,7 @@ export default function BotDetail() {
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[40vh]">
-        <div className="w-8 h-8 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+        <div className="w-8 h-8 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
       </div>
     )
   }
@@ -230,7 +230,10 @@ export default function BotDetail() {
                 {config.mode.toUpperCase()}
               </span>
               <span className="text-gray-600">·</span>
-              <span>{config.strategy_type.replace(/_/g, ' ')}</span>
+              <span>{config.strategy_type === 'llm_signal' ? 'KI-Companion' : config.strategy_type.replace(/_/g, ' ')}</span>
+              {config.strategy_type === 'llm_signal' && (
+                <Bot size={15} className="text-emerald-400" />
+              )}
             </div>
           </div>
 
@@ -257,7 +260,7 @@ export default function BotDetail() {
       {/* Stat Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard icon={<TrendingUp size={16} />} label={d('totalPnl')} value={`$${s.total_pnl.toFixed(2)}`} color={s.total_pnl >= 0 ? 'text-emerald-400' : 'text-red-400'} />
-        <StatCard icon={<Activity size={16} />} label={d('winRate')} value={`${s.win_rate}%`} color={s.win_rate >= 50 ? 'text-emerald-400' : 'text-yellow-400'} />
+        <StatCard icon={<Activity size={16} />} label={d('winRate')} value={`${s.win_rate}%`} color={s.win_rate >= 60 ? 'text-emerald-400' : s.win_rate >= 40 ? 'text-yellow-400' : 'text-red-400'} />
         <StatCard icon={<CheckCircle size={16} />} label={d('totalTrades')} value={`${s.total_trades}`} color="text-blue-400" sub={`${s.wins}W / ${s.losses}L`} />
         <StatCard icon={<TrendingDown size={16} />} label={d('bestTrade')} value={`$${s.best_trade.toFixed(2)}`} color="text-emerald-400" sub={`${d('worstTrade')}: $${s.worst_trade.toFixed(2)}`} />
       </div>

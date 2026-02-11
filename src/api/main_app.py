@@ -23,6 +23,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from src.api.routers import (
     affiliate,
     auth,
+    backtest,
     bots,
     config,
     exchanges,
@@ -189,6 +190,7 @@ def create_app() -> FastAPI:
     app.include_router(bots.router)
     app.include_router(tax_report.router)
     app.include_router(affiliate.router)
+    app.include_router(backtest.router)
 
     # Serve frontend static files (built React app)
     frontend_dir = Path("static/frontend")

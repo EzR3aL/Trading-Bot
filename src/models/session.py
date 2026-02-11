@@ -78,6 +78,8 @@ async def init_db() -> None:
                 "ALTER TABLE exchange_connections ADD COLUMN affiliate_verified_at DATETIME",
                 # Affiliate link UID requirement flag
                 "ALTER TABLE affiliate_links ADD COLUMN uid_required BOOLEAN NOT NULL DEFAULT 0",
+                # Backtest runs table
+                "CREATE TABLE IF NOT EXISTS backtest_runs (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, strategy_type VARCHAR(50) NOT NULL, symbol VARCHAR(50) NOT NULL DEFAULT 'BTCUSDT', timeframe VARCHAR(10) NOT NULL DEFAULT '1d', start_date DATETIME NOT NULL, end_date DATETIME NOT NULL, initial_capital FLOAT NOT NULL DEFAULT 10000.0, strategy_params TEXT, status VARCHAR(20) NOT NULL DEFAULT 'pending', error_message TEXT, result_metrics TEXT, equity_curve TEXT, trades TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, completed_at DATETIME)",
             ]
             for migration in migrations:
                 try:

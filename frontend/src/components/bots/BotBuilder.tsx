@@ -54,6 +54,18 @@ interface BotBuilderProps {
 // Strategies that use market data and should show the data sources step
 const DATA_STRATEGIES = ['llm_signal', 'sentiment_surfer', 'liquidation_hunter']
 
+const STRATEGY_DISPLAY_NAMES: Record<string, string> = {
+  llm_signal: 'KI-Companion',
+}
+
+const STRATEGY_DESCRIPTIONS_DE: Record<string, string> = {
+  llm_signal: 'KI-gestützte Signalgenerierung mittels Large Language Models. Die KI analysiert Marktdaten in jedem Zyklus und liefert LONG/SHORT-Empfehlungen mit Konfidenzbewertung.',
+}
+
+function getStrategyDisplayName(name: string): string {
+  return STRATEGY_DISPLAY_NAMES[name] || name.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
+}
+
 const CATEGORY_ORDER = ['sentiment', 'futures', 'options', 'spot', 'technical', 'tradfi']
 const CATEGORY_ICONS: Record<string, typeof Brain> = {
   sentiment: Brain,
@@ -500,8 +512,8 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
                         : 'border-gray-700 bg-gray-800 hover:border-gray-600'
                     }`}
                   >
-                    <div className="text-white font-medium">{s.name.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}</div>
-                    <div className="text-sm text-gray-400 mt-1">{s.description}</div>
+                    <div className="text-white font-medium">{getStrategyDisplayName(s.name)}</div>
+                    <div className="text-sm text-gray-400 mt-1">{STRATEGY_DESCRIPTIONS_DE[s.name] || s.description}</div>
                   </button>
                 ))}
               </div>

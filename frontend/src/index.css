@@ -49,12 +49,12 @@ body {
   /* Gradient button */
   .btn-gradient {
     @apply px-4 py-2 rounded-xl font-medium text-white transition-all duration-200;
-    background: linear-gradient(135deg, #2563eb 0%, #3b82f6 100%);
+    background: linear-gradient(135deg, #059669 0%, #10b981 100%);
   }
 
   .btn-gradient:hover {
-    background: linear-gradient(135deg, #1d4ed8 0%, #2563eb 100%);
-    box-shadow: 0 0 20px rgba(37, 99, 235, 0.3);
+    background: linear-gradient(135deg, #047857 0%, #059669 100%);
+    box-shadow: 0 0 20px rgba(16, 185, 129, 0.3);
   }
 
   .btn-gradient:disabled {
@@ -104,7 +104,20 @@ body {
   .input-dark {
     @apply w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white
            placeholder-gray-500 transition-all duration-200
-           focus:border-primary-500/50 focus:bg-white/[0.07] focus:outline-none focus:ring-1 focus:ring-primary-500/30;
+           focus:border-emerald-500/50 focus:bg-white/[0.07] focus:outline-none focus:ring-1 focus:ring-emerald-500/30;
+  }
+
+  /* Filter controls – uniform height, centered text */
+  .filter-select {
+    @apply h-9 px-3.5 text-sm bg-white/5 border border-white/10 rounded-xl text-white
+           placeholder-gray-500 transition-all duration-200
+           focus:border-emerald-500/50 focus:bg-white/[0.07] focus:outline-none focus:ring-1 focus:ring-emerald-500/30;
+  }
+
+  .filter-reset {
+    @apply h-9 inline-flex items-center gap-1.5 px-3 text-xs font-medium text-gray-400
+           bg-white/5 border border-white/10 rounded-xl transition-all duration-200
+           hover:text-white hover:bg-white/10 hover:border-white/15;
   }
 
   /* Dark dropdown options for all <select> elements */
@@ -214,7 +227,7 @@ body {
 }
 
 .login-bg {
-  background: linear-gradient(-45deg, #0a0e17, #111827, #0f172a, #1e1b4b, #0a0e17);
+  background: linear-gradient(-45deg, #0a0e17, #111827, #0f172a, #064e3b, #0a0e17);
   background-size: 400% 400%;
   animation: gradientShift 15s ease infinite;
 }
@@ -223,7 +236,7 @@ body {
 
 .nav-item-active {
   position: relative;
-  background: rgba(37, 99, 235, 0.08);
+  background: rgba(16, 185, 129, 0.08);
 }
 
 .nav-item-active::before {
@@ -233,7 +246,7 @@ body {
   top: 0;
   bottom: 0;
   width: 3px;
-  background: linear-gradient(180deg, #3b82f6, #2563eb);
+  background: linear-gradient(180deg, #34d399, #059669);
   border-radius: 0 2px 2px 0;
 }
 
@@ -350,7 +363,33 @@ html.light .input-dark::placeholder {
 
 html.light .input-dark:focus {
   background: #ffffff;
-  border-color: rgba(37, 99, 235, 0.4);
+  border-color: rgba(16, 185, 129, 0.4);
+}
+
+html.light .filter-select {
+  background: #f1f5f9;
+  border-color: #e2e8f0;
+  color: #0f172a;
+}
+
+html.light .filter-select::placeholder {
+  color: #94a3b8;
+}
+
+html.light .filter-select:focus {
+  background: #ffffff;
+  border-color: rgba(16, 185, 129, 0.4);
+}
+
+html.light .filter-reset {
+  background: #f1f5f9;
+  border-color: #e2e8f0;
+  color: #64748b;
+}
+
+html.light .filter-reset:hover {
+  background: #e2e8f0;
+  color: #0f172a;
 }
 
 /* ── Select Options ─────────────────────────────────────────── */
@@ -424,7 +463,7 @@ html.light * {
 /* ── Sidebar Active ─────────────────────────────────────────── */
 
 html.light .nav-item-active {
-  background: rgba(37, 99, 235, 0.06);
+  background: rgba(16, 185, 129, 0.06);
 }
 
 /* ── Login Background ───────────────────────────────────────── */
@@ -613,11 +652,11 @@ html.light .shadow-2xl {
 }
 
 html.light .shadow-glow {
-  box-shadow: 0 0 20px rgba(37, 99, 235, 0.08);
+  box-shadow: 0 0 20px rgba(16, 185, 129, 0.08);
 }
 
 html.light .shadow-glow-sm {
-  box-shadow: 0 0 10px rgba(37, 99, 235, 0.06);
+  box-shadow: 0 0 10px rgba(16, 185, 129, 0.06);
 }
 
 /* ── Surface Colors ─────────────────────────────────────────── */
@@ -690,10 +729,10 @@ html.light .btn-gradient,
 html.light .pill-btn-active,
 html.light .bg-primary-600,
 html.light .bg-primary-500,
-html.light .bg-red-600,
-html.light .bg-red-500,
 html.light .bg-emerald-600,
-html.light .bg-emerald-500 {
+html.light .bg-emerald-500,
+html.light .bg-red-600,
+html.light .bg-red-500 {
   color: #ffffff !important;
 }
 
@@ -713,7 +752,8 @@ html.light .badge-open {
 }
 
 /* Gradient accent buttons keep white text */
-html.light .bg-gradient-to-r.from-primary-600 {
+html.light .bg-gradient-to-r.from-primary-600,
+html.light .bg-gradient-to-r.from-emerald-600 {
   color: #ffffff !important;
 }
 

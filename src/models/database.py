@@ -56,6 +56,7 @@ class User(Base):
     exchange_connections = relationship("ExchangeConnection", back_populates="user", cascade="all")
     llm_connections = relationship("LLMConnection", back_populates="user", cascade="all")
     bot_configs = relationship("BotConfig", back_populates="user", cascade="all")
+    backtest_runs = relationship("BacktestRun", back_populates="user", cascade="all")
 
 
 class UserConfig(Base):
@@ -367,6 +368,38 @@ class AffiliateLink(Base):
 
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, onupdate=func.now())
+
+
+class BacktestRun(Base):
+    """Stores backtest runs and their results."""
+    __tablename__ = "backtest_runs"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+
+    # Configuration
+    strategy_type = Column(String(50), nullable=False)
+    symbol = Column(String(50), nullable=False, default="BTCUSDT")
+    timeframe = Column(String(10), nullable=False, default="1d")
+    start_date = Column(DateTime, nullable=False)
+    end_date = Column(DateTime, nullable=False)
+    initial_capital = Column(Float, nullable=False, default=10000.0)
+    strategy_params = Column(Text, nullable=True)  # JSON: custom_prompt, thresholds, etc.
+
+    # Status
+    status = Column(String(20), nullable=False, default="pending")  # pending|running|completed|failed
+    error_message = Column(Text, nullable=True)
+
+    # Results (stored as JSON in Text columns)
+    result_metrics = Column(Text, nullable=True)   # JSON: {win_rate, total_return, max_drawdown, ...}
+    equity_curve = Column(Text, nullable=True)      # JSON: [{timestamp, equity}, ...]
+    trades = Column(Text, nullable=True)            # JSON: [{entry_date, exit_date, ...}, ...]
+
+    created_at = Column(DateTime, server_default=func.now())
+    completed_at = Column(DateTime, nullable=True)
+
+    # Relationships
+    user = relationship("User", back_populates="backtest_runs")
 
 
 class AuditLog(Base):

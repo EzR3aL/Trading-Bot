@@ -58,7 +58,7 @@ export default function WinLossChart({ wins, losses, winRate }: Props) {
       </ResponsiveContainer>
       {/* Center label */}
       <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-        <span className="text-2xl font-bold text-white">{winRate.toFixed(0)}%</span>
+        <span className={`text-2xl font-bold ${winRate >= 60 ? 'text-profit' : winRate >= 40 ? 'text-yellow-400' : 'text-loss'}`}>{winRate.toFixed(0)}%</span>
         <span className="text-xs text-gray-400">{total} trades</span>
       </div>
       {/* Legend */}

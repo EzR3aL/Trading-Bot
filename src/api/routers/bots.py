@@ -854,6 +854,8 @@ async def get_bot_statistics(
             func.sum(TradeRecord.pnl).label("pnl"),
             func.count(TradeRecord.id).label("trades"),
             func.sum(case((TradeRecord.pnl > 0, 1), else_=0)).label("wins"),
+            func.coalesce(func.sum(TradeRecord.fees), 0).label("fees"),
+            func.coalesce(func.sum(TradeRecord.funding_paid), 0).label("funding"),
         ).where(
             *daily_filters
         ).group_by(
@@ -874,6 +876,8 @@ async def get_bot_statistics(
             "cumulative_pnl": round(cumulative, 2),
             "trades": row.trades,
             "wins": int(row.wins or 0),
+            "fees": round(float(row.fees or 0), 4),
+            "funding": round(float(row.funding or 0), 4),
         })
 
     # Overall stats

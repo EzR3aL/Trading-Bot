@@ -29,7 +29,11 @@ import {
   Copy,
   ChevronDown,
   Layers,
+  Bot,
 } from 'lucide-react'
+
+const STRATEGY_DISPLAY: Record<string, string> = { llm_signal: 'KI-Companion' }
+function strategyLabel(name: string) { return STRATEGY_DISPLAY[name] || name }
 
 interface BotStatus {
   bot_config_id: number
@@ -306,7 +310,10 @@ function BotTradeHistoryModal({ bot, onClose, t }: { bot: BotStatus; onClose: ()
             <div>
               <h2 className="text-xl font-bold text-white">{bot.name}</h2>
               <div className="flex items-center gap-2 mt-0.5">
-                <span className="text-xs text-gray-500">{bot.strategy_type}</span>
+                <span className="text-xs text-gray-500">{strategyLabel(bot.strategy_type)}</span>
+                {bot.strategy_type === 'llm_signal' && (
+                  <Bot size={13} className="text-emerald-400" />
+                )}
                 <span className="text-gray-700">|</span>
                 <span className={`text-xs font-medium ${bot.mode === 'demo' ? 'text-blue-400' : 'text-amber-400'}`}>
                   {bot.mode.toUpperCase()}
@@ -351,7 +358,7 @@ function BotTradeHistoryModal({ bot, onClose, t }: { bot: BotStatus; onClose: ()
                 </div>
                 <div className="bg-[#0b0f19] px-5 py-4 text-center">
                   <div className="text-xs text-gray-500 uppercase tracking-wider mb-1">{t('bots.winRate')}</div>
-                  <div className="text-xl font-bold text-white">{stats.summary.win_rate}%</div>
+                  <div className={`text-xl font-bold ${stats.summary.win_rate >= 60 ? 'text-profit' : stats.summary.win_rate >= 40 ? 'text-yellow-400' : 'text-loss'}`}>{stats.summary.win_rate}%</div>
                 </div>
                 <div className="bg-[#0b0f19] px-5 py-4 text-center">
                   <div className="text-xs text-gray-500 uppercase tracking-wider mb-1">{t('bots.trades')}</div>
@@ -761,9 +768,12 @@ export default function Bots() {
                         <ExchangeIcon exchange={bot.exchange_type} size={14} />
                       </span>
                       <span className={bot.mode === 'demo' ? 'badge-demo text-[10px]' : bot.mode === 'live' ? 'badge-live text-[10px]' : 'badge-open text-[10px]'}>
-                        {bot.mode}
+                        {bot.mode.toUpperCase()}
                       </span>
-                      <span className="text-[10px] text-gray-500">{bot.strategy_type}</span>
+                      <span className="text-[10px] text-gray-500">{strategyLabel(bot.strategy_type)}</span>
+                      {bot.strategy_type === 'llm_signal' && (
+                        <Bot size={14} className="text-emerald-400" />
+                      )}
                     </div>
                   </div>
                   <div className="text-right">

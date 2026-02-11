@@ -27,6 +27,9 @@ async def list_trades(
     status: Optional[str] = Query(None, pattern="^(open|closed|cancelled)$"),
     symbol: Optional[str] = None,
     exchange: Optional[str] = None,
+    bot_name: Optional[str] = None,
+    date_from: Optional[str] = Query(None, description="ISO date YYYY-MM-DD"),
+    date_to: Optional[str] = Query(None, description="ISO date YYYY-MM-DD"),
     demo_mode: Optional[bool] = Query(None),
     page: int = Query(1, ge=1),
     per_page: int = Query(50, ge=1, le=200),
@@ -43,20 +46,36 @@ async def list_trades(
     if status:
         query = query.where(TradeRecord.status == status)
     if symbol:
-        query = query.where(TradeRecord.symbol == symbol)
+        query = query.where(TradeRecord.symbol.ilike(f"%{symbol}%"))
     if exchange:
-        query = query.where(TradeRecord.exchange == exchange)
+        query = query.where(BotConfig.exchange_type == exchange)
+    if bot_name:
+        query = query.where(BotConfig.name == bot_name)
+    if date_from:
+        query = query.where(TradeRecord.entry_time >= datetime.fromisoformat(date_from))
+    if date_to:
+        query = query.where(TradeRecord.entry_time < datetime.fromisoformat(date_to + "T23:59:59"))
     if demo_mode is not None:
         query = query.where(TradeRecord.demo_mode == demo_mode)
 
     # Count total
-    count_base = select(TradeRecord.id).where(TradeRecord.user_id == user.id)
+    count_base = (
+        select(TradeRecord.id)
+        .outerjoin(BotConfig, TradeRecord.bot_config_id == BotConfig.id)
+        .where(TradeRecord.user_id == user.id)
+    )
     if status:
         count_base = count_base.where(TradeRecord.status == status)
     if symbol:
-        count_base = count_base.where(TradeRecord.symbol == symbol)
+        count_base = count_base.where(TradeRecord.symbol.ilike(f"%{symbol}%"))
     if exchange:
-        count_base = count_base.where(TradeRecord.exchange == exchange)
+        count_base = count_base.where(BotConfig.exchange_type == exchange)
+    if bot_name:
+        count_base = count_base.where(BotConfig.name == bot_name)
+    if date_from:
+        count_base = count_base.where(TradeRecord.entry_time >= datetime.fromisoformat(date_from))
+    if date_to:
+        count_base = count_base.where(TradeRecord.entry_time < datetime.fromisoformat(date_to + "T23:59:59"))
     if demo_mode is not None:
         count_base = count_base.where(TradeRecord.demo_mode == demo_mode)
     count_query = select(func.count()).select_from(count_base.subquery())

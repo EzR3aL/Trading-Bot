@@ -25,7 +25,7 @@ from typing import Optional, List
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 
-from src.api.bitget_client import BitgetClient, BitgetClientError
+from src.exchanges.bitget.client import BitgetExchangeClient as BitgetClient, BitgetClientError
 from src.data.market_data import MarketDataFetcher, DataFetchError
 from src.strategy.liquidation_hunter import LiquidationHunterStrategy, TradeSignal, SignalDirection
 from src.risk.risk_manager import RiskManager

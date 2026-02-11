@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import api from '../api/client'
 import type { Preset } from '../types'
-import { ExchangeIcon } from '../components/ui/ExchangeLogo'
 
 export default function Presets() {
   const { t } = useTranslation()
@@ -11,7 +10,6 @@ export default function Presets() {
   const [editId, setEditId] = useState<number | null>(null)
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
-  const [exchange, setExchange] = useState('any')
   const [leverage, setLeverage] = useState(4)
   const [positionSize, setPositionSize] = useState(7.5)
   const [stopLoss, setStopLoss] = useState(1.5)
@@ -27,14 +25,14 @@ export default function Presets() {
   useEffect(() => { loadPresets() }, [])
 
   const resetForm = () => {
-    setName(''); setDescription(''); setExchange('any')
+    setName(''); setDescription('')
     setLeverage(4); setPositionSize(7.5); setStopLoss(1.5); setTakeProfit(4.0)
     setEditId(null); setShowForm(false)
   }
 
   const savePreset = async () => {
     const data = {
-      name, description, exchange_type: exchange,
+      name, description, exchange_type: 'any',
       trading_config: {
         leverage, position_size_percent: positionSize,
         take_profit_percent: takeProfit, stop_loss_percent: stopLoss,
@@ -79,7 +77,6 @@ export default function Presets() {
     setEditId(preset.id)
     setName(preset.name)
     setDescription(preset.description || '')
-    setExchange(preset.exchange_type)
     if (preset.trading_config) {
       setLeverage(preset.trading_config.leverage)
       setPositionSize(preset.trading_config.position_size_percent)
@@ -108,22 +105,10 @@ export default function Presets() {
             {editId ? t('presets.edit') : t('presets.create')}
           </h2>
           <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm text-gray-400 mb-1">Name</label>
-                <input type="text" value={name} onChange={(e) => setName(e.target.value)}
-                  className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded text-white" />
-              </div>
-              <div>
-                <label className="block text-sm text-gray-400 mb-1">Exchange</label>
-                <select value={exchange} onChange={(e) => setExchange(e.target.value)}
-                  className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded text-white">
-                  <option value="any">{t('presets.allExchanges')}</option>
-                  <option value="bitget">Bitget</option>
-                  <option value="weex">Weex</option>
-                  <option value="hyperliquid">Hyperliquid</option>
-                </select>
-              </div>
+            <div>
+              <label className="block text-sm text-gray-400 mb-1">Name</label>
+              <input type="text" value={name} onChange={(e) => setName(e.target.value)}
+                className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded text-white" />
             </div>
             <div>
               <label className="block text-sm text-gray-400 mb-1">Description</label>
@@ -178,11 +163,6 @@ export default function Presets() {
               <div>
                 <div className="flex items-center gap-2">
                   <span className="text-white font-medium">{preset.name}</span>
-                  <span className="text-xs text-gray-400 bg-gray-800 px-2 py-0.5 rounded inline-flex items-center gap-1">
-                    {preset.exchange_type === 'any'
-                      ? t('presets.allExchanges')
-                      : <ExchangeIcon exchange={preset.exchange_type} size={14} />}
-                  </span>
                   {preset.is_active && (
                     <span className="text-xs text-primary-400 bg-primary-900/30 px-2 py-0.5 rounded font-medium">
                       {t('presets.active')}

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import api from '../api/client'
 import { useFilterStore } from '../stores/filterStore'
@@ -6,7 +6,9 @@ import type { Trade } from '../types'
 import { ExchangeIcon } from '../components/ui/ExchangeLogo'
 import { SkeletonTable } from '../components/ui/Skeleton'
 import PnlCell from '../components/ui/PnlCell'
-import { ChevronLeft, ChevronRight } from 'lucide-react'
+import { ChevronLeft, ChevronRight, X } from 'lucide-react'
+import DatePicker from '../components/ui/DatePicker'
+import FilterDropdown from '../components/ui/FilterDropdown'
 
 export default function Trades() {
   const { t } = useTranslation()
@@ -16,15 +18,44 @@ export default function Trades() {
   const [page, setPage] = useState(1)
   const [statusFilter, setStatusFilter] = useState('')
   const [symbolFilter, setSymbolFilter] = useState('')
+  const [exchangeFilter, setExchangeFilter] = useState('')
+  const [botFilter, setBotFilter] = useState('')
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo] = useState('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const perPage = 25
 
   const [synced, setSynced] = useState(false)
+  const [allTrades, setAllTrades] = useState<Trade[]>([])
 
   useEffect(() => {
     api.post('/trades/sync').catch(() => {}).finally(() => setSynced(true))
   }, [])
+
+  // Fetch a larger set once to extract unique exchanges/bots
+  useEffect(() => {
+    if (!synced) return
+    const params = new URLSearchParams({ page: '1', per_page: '200' })
+    if (demoFilter === 'demo') params.set('demo_mode', 'true')
+    else if (demoFilter === 'live') params.set('demo_mode', 'false')
+    api.get(`/trades?${params}`).then(res => setAllTrades(res.data.trades)).catch(() => {})
+  }, [synced, demoFilter])
+
+  const uniqueExchanges = useMemo(() => {
+    const set = new Set<string>()
+    allTrades.forEach(t => {
+      const ex = t.bot_exchange || t.exchange
+      if (ex) set.add(ex)
+    })
+    return Array.from(set).sort()
+  }, [allTrades])
+
+  const uniqueBots = useMemo(() => {
+    const set = new Set<string>()
+    allTrades.forEach(t => { if (t.bot_name) set.add(t.bot_name) })
+    return Array.from(set).sort()
+  }, [allTrades])
 
   useEffect(() => {
     setPage(1)
@@ -38,6 +69,10 @@ export default function Trades() {
       const params = new URLSearchParams({ page: String(page), per_page: String(perPage) })
       if (statusFilter) params.set('status', statusFilter)
       if (symbolFilter) params.set('symbol', symbolFilter)
+      if (exchangeFilter) params.set('exchange', exchangeFilter)
+      if (botFilter) params.set('bot_name', botFilter)
+      if (dateFrom) params.set('date_from', dateFrom)
+      if (dateTo) params.set('date_to', dateTo)
       if (demoFilter === 'demo') params.set('demo_mode', 'true')
       else if (demoFilter === 'live') params.set('demo_mode', 'false')
 
@@ -52,11 +87,22 @@ export default function Trades() {
       }
     }
     load()
-  }, [synced, page, statusFilter, symbolFilter, demoFilter])
+  }, [synced, page, statusFilter, symbolFilter, exchangeFilter, botFilter, dateFrom, dateTo, demoFilter])
 
   const totalPages = Math.ceil(total / perPage)
 
-  // Generate page numbers for pagination
+  const hasActiveFilters = statusFilter || symbolFilter || exchangeFilter || botFilter || dateFrom || dateTo
+
+  const clearAllFilters = () => {
+    setStatusFilter('')
+    setSymbolFilter('')
+    setExchangeFilter('')
+    setBotFilter('')
+    setDateFrom('')
+    setDateTo('')
+    setPage(1)
+  }
+
   const getPageNumbers = () => {
     const pages: (number | '...')[] = []
     if (totalPages <= 7) {
@@ -84,26 +130,71 @@ export default function Trades() {
       )}
 
       {/* Filters */}
-      <div className="flex gap-3 mb-5">
-        <select
+      <div className="flex flex-wrap items-center gap-2.5 mb-5">
+        <FilterDropdown
           value={statusFilter}
-          onChange={(e) => { setStatusFilter(e.target.value); setPage(1) }}
-          aria-label={t('trades.status')}
-          className="input-dark w-auto py-2"
-        >
-          <option value="">{t('trades.allModes')}</option>
-          <option value="open">{t('trades.open')}</option>
-          <option value="closed">{t('trades.closed')}</option>
-          <option value="cancelled">{t('trades.cancelled')}</option>
-        </select>
+          onChange={(v) => { setStatusFilter(v); setPage(1) }}
+          ariaLabel={t('trades.status')}
+          options={[
+            { value: '', label: t('trades.allStatuses') },
+            { value: 'open', label: t('trades.open') },
+            { value: 'closed', label: t('trades.closed') },
+            { value: 'cancelled', label: t('trades.cancelled') },
+          ]}
+        />
+
         <input
           type="text"
-          placeholder="Symbol..."
+          placeholder={`${t('trades.symbol')}...`}
           value={symbolFilter}
           onChange={(e) => { setSymbolFilter(e.target.value.toUpperCase()); setPage(1) }}
           aria-label={t('trades.symbol')}
-          className="input-dark w-40 py-2"
+          className="filter-select w-32"
         />
+
+        <FilterDropdown
+          value={exchangeFilter}
+          onChange={(v) => { setExchangeFilter(v); setPage(1) }}
+          ariaLabel={t('trades.exchange')}
+          options={[
+            { value: '', label: t('trades.allExchanges') },
+            ...uniqueExchanges.map(ex => ({ value: ex, label: ex.charAt(0).toUpperCase() + ex.slice(1) })),
+          ]}
+        />
+
+        <FilterDropdown
+          value={botFilter}
+          onChange={(v) => { setBotFilter(v); setPage(1) }}
+          ariaLabel={t('trades.bot')}
+          options={[
+            { value: '', label: t('trades.allBots') },
+            ...uniqueBots.map(name => ({ value: name, label: name })),
+          ]}
+        />
+
+        <DatePicker
+          value={dateFrom}
+          onChange={(v) => { setDateFrom(v); setPage(1) }}
+          label={t('trades.dateFrom')}
+          placeholder={t('trades.dateFrom') + '...'}
+        />
+
+        <DatePicker
+          value={dateTo}
+          onChange={(v) => { setDateTo(v); setPage(1) }}
+          label={t('trades.dateTo')}
+          placeholder={t('trades.dateTo') + '...'}
+        />
+
+        {hasActiveFilters && (
+          <button
+            onClick={clearAllFilters}
+            className="filter-reset"
+          >
+            <X size={12} />
+            Reset
+          </button>
+        )}
       </div>
 
       {/* Loading */}
@@ -160,7 +251,7 @@ export default function Trades() {
                           {trade.side === 'long' ? '+' : '-'} {trade.side.toUpperCase()}
                         </span>
                       </td>
-                      <td className="text-right text-gray-300">{trade.size}</td>
+                      <td className="text-right text-gray-300">{Number(trade.size).toFixed(4)}</td>
                       <td className="text-right text-gray-300">${trade.entry_price.toLocaleString()}</td>
                       <td className="text-right text-gray-300">
                         {trade.exit_price ? `$${trade.exit_price.toLocaleString()}` : '--'}

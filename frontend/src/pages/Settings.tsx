@@ -566,10 +566,10 @@ export default function Settings() {
                         <h4 className="text-sm font-medium text-white mb-2">{t('affiliate.uid')}</h4>
                         <p className="text-gray-400 text-xs mb-3">{t('affiliate.uidHint')}</p>
                         {userAffiliateLinks[ex.name]?.affiliate_url && (
-                          <div className="mb-3 p-2.5 bg-indigo-900/20 border border-indigo-800/30 rounded">
+                          <div className="mb-3 p-2.5 bg-emerald-900/20 border border-emerald-800/30 rounded">
                             <p className="text-gray-400 text-xs mb-1">{userAffiliateLinks[ex.name]?.label || 'Affiliate Link'}</p>
                             <a href={userAffiliateLinks[ex.name].affiliate_url} target="_blank" rel="noopener noreferrer"
-                               className="text-indigo-400 hover:text-indigo-300 break-all text-sm font-medium">
+                               className="text-emerald-400 hover:text-emerald-300 break-all text-sm font-medium">
                               {userAffiliateLinks[ex.name].affiliate_url}
                             </a>
                           </div>

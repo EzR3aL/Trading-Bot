@@ -5,7 +5,6 @@ import { useFilterStore } from '../stores/filterStore'
 import type { Statistics, Trade, DailyStats } from '../types'
 import PnlChart from '../components/dashboard/PnlChart'
 import WinLossChart from '../components/dashboard/WinLossChart'
-import FeesChart from '../components/dashboard/FeesChart'
 import RevenueChart from '../components/dashboard/RevenueChart'
 import { DashboardSkeleton } from '../components/ui/Skeleton'
 import PnlCell from '../components/ui/PnlCell'
@@ -49,9 +48,9 @@ function StatCard({ label, value, numericValue, color, sub, isPositive }: {
   label: string; value: string; numericValue?: number; color?: string; sub?: string; isPositive?: boolean | null
 }) {
   return (
-    <div className="glass-card rounded-xl p-5 group hover:border-white/10 transition-all duration-300">
+    <div className="glass-card rounded-xl p-5 group hover:border-white/10 transition-all duration-300 text-center">
       <div className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-2">{label}</div>
-      <div className={`text-2xl font-bold mt-1 count-up flex items-center gap-1.5 ${color || 'text-white'}`}>
+      <div className={`text-2xl font-bold mt-1 count-up flex items-center justify-center gap-1.5 ${color || 'text-white'}`}>
         {numericValue !== undefined ? (
           <AnimatedNumber value={numericValue} prefix="$" />
         ) : (
@@ -150,6 +149,7 @@ export default function Dashboard() {
         <StatCard
           label={t('dashboard.winRate')}
           value={stats ? `${stats.win_rate.toFixed(1)}%` : '--'}
+          color={stats ? (stats.win_rate >= 60 ? 'text-profit' : stats.win_rate >= 40 ? 'text-yellow-400' : 'text-loss') : undefined}
           sub={stats ? `${stats.winning_trades}W / ${stats.losing_trades}L` : undefined}
         />
         <StatCard
@@ -180,12 +180,6 @@ export default function Dashboard() {
             winRate={stats?.win_rate || 0}
           />
         </div>
-      </div>
-
-      {/* Charts Row 2: Fees & Funding */}
-      <div className="glass-card rounded-xl p-5 mb-6">
-        <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-4">{t('dashboard.feesAndFunding')}</h3>
-        <FeesChart data={dailyStats} />
       </div>
 
       {/* Revenue Section (Builder Fees) */}
