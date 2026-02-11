@@ -1,4 +1,8 @@
 """
+DEPRECATED: Legacy standalone bot. Use BotOrchestrator + BotWorker for the
+multibot system (v3.0.0+). This class is retained only for CLI backward
+compatibility (main.py --test, --status, --backtest).
+
 Main Trading Bot Orchestrator.
 
 Coordinates all components:

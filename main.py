@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
 """
+DEPRECATED CLI entry point. The web UI uses BotOrchestrator + BotWorker (v3.0.0+).
+This file is kept for standalone CLI usage only (--test, --status, --backtest).
+
 Bitget Trading Bot - Main Entry Point
 
 Contrarian Liquidation Hunter Strategy

@@ -10,6 +10,8 @@
     "lint": "eslint . --ext ts,tsx"
   },
   "dependencies": {
+    "@rainbow-me/rainbowkit": "^2.2.10",
+    "@tanstack/react-query": "^5.90.21",
     "axios": "^1.6.7",
     "clsx": "^2.1.0",
     "html-to-image": "^1.11.13",
@@ -21,6 +23,8 @@
     "react-router-dom": "^6.22.0",
     "recharts": "^2.12.0",
     "tailwind-merge": "^2.2.1",
+    "viem": "^2.45.3",
+    "wagmi": "^2.19.5",
     "zustand": "^4.5.0"
   },
   "devDependencies": {

@@ -9,6 +9,74 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.3.0] - 2026-02-11
+
+### Hyperliquid Builder Fee Wallet-Gate
+
+### Hinzugefuegt
+- **Hyperliquid Builder Fee Wallet-Gate** — Browser-basierte EIP-712 Signatur
+  - Multi-Wallet Support via RainbowKit (MetaMask, WalletConnect, Coinbase, Ledger, Trust, 300+ Wallets)
+  - `BuilderFeeApproval` Komponente mit 3-Step Wizard (Wallet verbinden → Signieren → Bestaetigung)
+  - `GET /config/hyperliquid/builder-config` — Public Endpoint fuer Builder-Konfiguration (ersetzt admin-only)
+  - `POST /config/hyperliquid/confirm-builder-approval` — On-Chain Verifizierung + DB-Tracking
+  - Hard-Gate: Hyperliquid Bots starten nur nach Builder Fee Approval
+  - DB-Tracking: `builder_fee_approved` + `builder_fee_approved_at` auf ExchangeConnection
+  - `builder_fee_approved` Feld in Bot-API-Response
+  - Affiliate-Link Integration im Approval-Flow
+  - Anleitung: `Anleitungen/Hyperliquid Builder Fee genehmigen.md`
+  - Neue Dependencies: `@rainbow-me/rainbowkit`, `wagmi`, `viem`, `@tanstack/react-query`
+  - i18n: `builderFee` Namespace in DE + EN
+
+### Entfernt
+- Server-side `POST /config/hyperliquid/approve-builder-fee` (war broken fuer separate API Wallets)
+
+### Geaendert
+- `bot_worker.py`: Builder-Check von Soft-Warning zu Hard-Gate (blockiert Bot-Start)
+- Builder-Status Endpoint von admin-only zu public (alle authentifizierten User)
+
+---
+
+## [3.2.0] - 2026-02-11
+
+### Notifications Refactor + Preset-Integration im Bot Builder
+
+#### Entfernt
+- **Globaler Discord-Webhook** aus User-Settings entfernt — per-Bot Webhook bleibt bestehen
+- Discord-Tab in Settings-Seite entfernt
+- API-Endpoints `PUT /config/discord` und `POST /config/discord/test` entfernt
+- `DiscordConfigUpdate` Schema und `DISCORD_WEBHOOK_PATTERN` entfernt
+- User-Level Fallback in `bot_worker._get_discord_notifier()` entfernt (nur noch Bot-spezifisch)
+
+#### Hinzugefügt
+- **Telegram-Benachrichtigungen** (per Bot, optional)
+  - Neuer `TelegramNotifier` (`src/notifications/telegram_notifier.py`) — nutzt Telegram Bot API via aiohttp
+  - DB-Spalten: `telegram_bot_token` (verschlüsselt) + `telegram_chat_id` auf `BotConfig`
+  - Bot-Token + Chat-ID Felder im Bot Builder (Step 4: Exchange & Modus)
+  - Test-Endpoint: `POST /api/bots/{id}/test-telegram`
+  - Anleitung: `Anleitungen/Telegram Benachrichtigungen einrichten.md`
+- **Preset-Auswahl im Bot Builder**
+  - "Von Preset laden" Dropdown in Step 1 (Name)
+  - Automatisches Befüllen aller Felder aus gewähltem Preset
+  - Exchange-übergreifende Presets (`exchange_type` = "any", Standard)
+  - Automatische Trading-Pair-Konvertierung (BTCUSDT ↔ BTC je nach Exchange)
+  - Anleitung: `Anleitungen/Presets im Bot Builder verwenden.md`
+- **Preset-Umschaltung für bestehende Bots**
+  - Preset-Dropdown auf "Meine Bots"-Seite pro Bot-Card
+  - `POST /api/bots/{id}/apply-preset/{preset_id}` — Preset auf bestehenden Bot anwenden
+  - `active_preset_id` + `active_preset_name` in Bot-API-Response
+  - Nur möglich wenn Bot gestoppt ist
+- **Multi-Notifier System** in `bot_worker.py` — Discord + Telegram gleichzeitig pro Bot
+- **Projekt-CLAUDE.md** — Konventionen für Anleitungen, Issues und Changelog
+- GitHub Issues: #30 (Discord entfernen), #31 (Telegram), #32 (Presets)
+
+#### Geändert
+- `BotConfig` Model: Neue Spalten `telegram_bot_token`, `telegram_chat_id`
+- `ConfigPreset.exchange_type`: Default "any" (alle Exchanges), `PresetCreate` akzeptiert "any|bitget|weex|hyperliquid"
+- `Presets.tsx`: "Alle Exchanges" als Standard-Option bei Preset-Erstellung
+- i18n (EN + DE): Neue Keys für Telegram, Presets, Bot Builder
+
+---
+
 ## [3.1.1] - 2026-02-10
 
 ### Test-Fixes & CodeAssist-Update

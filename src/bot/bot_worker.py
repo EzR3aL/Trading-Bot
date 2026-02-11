@@ -18,7 +18,7 @@ from apscheduler.triggers.interval import IntervalTrigger
 
 from src.exchanges.base import ExchangeClient
 from src.exchanges.factory import create_exchange_client
-from src.models.database import BotConfig, ExchangeConnection, LLMConnection, TradeRecord, UserConfig
+from src.models.database import BotConfig, ExchangeConnection, LLMConnection, TradeRecord
 from src.models.session import get_session
 from src.notifications.discord_notifier import DiscordNotifier
 from src.risk.risk_manager import RiskManager
@@ -107,6 +107,16 @@ class BotWorker:
                     return False
 
                 # Create exchange client(s) based on mode
+                # For Hyperliquid: load builder config from DB (admin-managed)
+                extra_kwargs = {}
+                if self._config.exchange_type == "hyperliquid":
+                    from src.utils.settings import get_hl_config
+                    hl_cfg = await get_hl_config()
+                    extra_kwargs = {
+                        "builder_address": hl_cfg["builder_address"],
+                        "builder_fee": hl_cfg["builder_fee"],
+                    }
+
                 mode = self._config.mode
                 if mode in ("demo", "both"):
                     if not conn.demo_api_key_encrypted:
@@ -119,6 +129,7 @@ class BotWorker:
                         api_secret=decrypt_value(conn.demo_api_secret_encrypted),
                         passphrase=decrypt_value(conn.demo_passphrase_encrypted) if conn.demo_passphrase_encrypted else "",
                         demo_mode=True,
+                        **extra_kwargs,
                     )
 
                 if mode in ("live", "both"):
@@ -132,6 +143,7 @@ class BotWorker:
                         api_secret=decrypt_value(conn.api_secret_encrypted),
                         passphrase=decrypt_value(conn.passphrase_encrypted) if conn.passphrase_encrypted else "",
                         demo_mode=False,
+                        **extra_kwargs,
                     )
 
                 # Primary client for data fetching
@@ -177,10 +189,13 @@ class BotWorker:
 
             # ── Hyperliquid pre-start checks ──────────────────────────
             if self._config.exchange_type == "hyperliquid":
-                await self._check_builder_approval(self._client)
-                referral_ok = await self._check_referral_gate(self._client)
-                if not referral_ok:
-                    return False
+                async with get_session() as hl_session:
+                    builder_ok = await self._check_builder_approval(self._client, hl_session)
+                    if not builder_ok:
+                        return False
+                    referral_ok = await self._check_referral_gate(self._client, hl_session)
+                    if not referral_ok:
+                        return False
 
             # Initialize daily session with balance
             try:
@@ -496,26 +511,28 @@ class BotWorker:
                 f"{signal.symbol} @ ${fill_price:,.2f} (conf: {signal.confidence}%)"
             )
 
-            # Send Discord notification
+            # Send notifications (Discord + Telegram)
             try:
-                notifier = await self._get_discord_notifier()
-                if notifier:
-                    async with notifier:
-                        await notifier.send_trade_entry(
-                            symbol=signal.symbol,
-                            side=signal.direction.value,
-                            size=position_size,
-                            entry_price=fill_price,
-                            leverage=self._config.leverage,
-                            take_profit=signal.target_price,
-                            stop_loss=signal.stop_loss,
-                            confidence=signal.confidence,
-                            reason=f"[{self._config.name}] {signal.reason}",
-                            order_id=order.order_id or "",
-                            demo_mode=demo_mode,
-                        )
+                for notifier in await self._get_notifiers():
+                    try:
+                        async with notifier:
+                            await notifier.send_trade_entry(
+                                symbol=signal.symbol,
+                                side=signal.direction.value,
+                                size=position_size,
+                                entry_price=fill_price,
+                                leverage=self._config.leverage,
+                                take_profit=signal.target_price,
+                                stop_loss=signal.stop_loss,
+                                confidence=signal.confidence,
+                                reason=f"[{self._config.name}] {signal.reason}",
+                                order_id=order.order_id or "",
+                                demo_mode=demo_mode,
+                            )
+                    except Exception as ne:
+                        logger.warning(f"{log_prefix} Notification failed: {ne}")
             except Exception as notify_err:
-                logger.warning(f"{log_prefix} Discord notification failed: {notify_err}")
+                logger.warning(f"{log_prefix} Notifier setup failed: {notify_err}")
 
         except Exception as e:
             err_msg = str(e).lower()
@@ -659,32 +676,34 @@ class BotWorker:
                 f"PnL: ${pnl:.2f} ({pnl_percent:+.2f}%)"
             )
 
-            # Send Discord notification
+            # Send notifications (Discord + Telegram)
             try:
-                notifier = await self._get_discord_notifier()
-                if notifier:
-                    duration_minutes = None
-                    if trade.entry_time:
-                        duration_minutes = int((datetime.utcnow() - trade.entry_time).total_seconds() / 60)
-                    async with notifier:
-                        await notifier.send_trade_exit(
-                            symbol=trade.symbol,
-                            side=trade.side,
-                            size=trade.size,
-                            entry_price=trade.entry_price,
-                            exit_price=exit_price,
-                            pnl=pnl,
-                            pnl_percent=pnl_percent,
-                            fees=trade.fees or 0,
-                            funding_paid=trade.funding_paid or 0,
-                            reason=exit_reason,
-                            order_id=trade.order_id or "",
-                            duration_minutes=duration_minutes,
-                            demo_mode=trade.demo_mode,
-                            strategy_reason=f"[{self._config.name}]",
-                        )
+                duration_minutes = None
+                if trade.entry_time:
+                    duration_minutes = int((datetime.utcnow() - trade.entry_time).total_seconds() / 60)
+                for notifier in await self._get_notifiers():
+                    try:
+                        async with notifier:
+                            await notifier.send_trade_exit(
+                                symbol=trade.symbol,
+                                side=trade.side,
+                                size=trade.size,
+                                entry_price=trade.entry_price,
+                                exit_price=exit_price,
+                                pnl=pnl,
+                                pnl_percent=pnl_percent,
+                                fees=trade.fees or 0,
+                                funding_paid=trade.funding_paid or 0,
+                                reason=exit_reason,
+                                order_id=trade.order_id or "",
+                                duration_minutes=duration_minutes,
+                                demo_mode=trade.demo_mode,
+                                strategy_reason=f"[{self._config.name}]",
+                            )
+                    except Exception as ne:
+                        logger.warning(f"{log_prefix} Notification failed: {ne}")
             except Exception as notify_err:
-                logger.warning(f"{log_prefix} Discord notification failed: {notify_err}")
+                logger.warning(f"{log_prefix} Notifier setup failed: {notify_err}")
 
         except Exception as e:
             logger.error(f"{log_prefix} Handle closed position error: {e}")
@@ -884,23 +903,25 @@ class BotWorker:
                 f"{trade.side.upper()} {trade.symbol} | PnL: ${pnl:.2f} ({pnl_percent:+.2f}%)"
             )
 
-            # Send Discord notification
+            # Send notifications (Discord + Telegram)
             try:
-                notifier = await self._get_discord_notifier()
-                if notifier:
-                    duration_minutes = int((datetime.utcnow() - trade.entry_time).total_seconds() / 60) if trade.entry_time else None
-                    async with notifier:
-                        await notifier.send_trade_exit(
-                            symbol=trade.symbol, side=trade.side, size=trade.size,
-                            entry_price=trade.entry_price, exit_price=exit_price,
-                            pnl=pnl, pnl_percent=pnl_percent,
-                            fees=trade.fees or 0, funding_paid=trade.funding_paid or 0,
-                            reason="ROTATION", order_id=trade.order_id or "",
-                            duration_minutes=duration_minutes, demo_mode=trade.demo_mode,
-                            strategy_reason=f"[{self._config.name}] Auto-rotation ({self._config.rotation_interval_minutes}min)",
-                        )
+                duration_minutes = int((datetime.utcnow() - trade.entry_time).total_seconds() / 60) if trade.entry_time else None
+                for notifier in await self._get_notifiers():
+                    try:
+                        async with notifier:
+                            await notifier.send_trade_exit(
+                                symbol=trade.symbol, side=trade.side, size=trade.size,
+                                entry_price=trade.entry_price, exit_price=exit_price,
+                                pnl=pnl, pnl_percent=pnl_percent,
+                                fees=trade.fees or 0, funding_paid=trade.funding_paid or 0,
+                                reason="ROTATION", order_id=trade.order_id or "",
+                                duration_minutes=duration_minutes, demo_mode=trade.demo_mode,
+                                strategy_reason=f"[{self._config.name}] Auto-rotation ({self._config.rotation_interval_minutes}min)",
+                            )
+                    except Exception as ne:
+                        logger.warning(f"{log_prefix} Notification failed: {ne}")
             except Exception as notify_err:
-                logger.warning(f"{log_prefix} Discord notification failed: {notify_err}")
+                logger.warning(f"{log_prefix} Notifier setup failed: {notify_err}")
 
             return True
 
@@ -930,31 +951,45 @@ class BotWorker:
             return False
 
     async def _get_discord_notifier(self) -> Optional[DiscordNotifier]:
-        """Load user's Discord webhook and return a notifier if configured."""
+        """Load Discord webhook from bot-specific config only."""
         try:
-            async with get_session() as session:
-                from sqlalchemy import select
-                result = await session.execute(
-                    select(UserConfig).where(UserConfig.user_id == self._config.user_id)
-                )
-                config = result.scalar_one_or_none()
-                if config and config.discord_webhook_url:
-                    webhook_url = decrypt_value(config.discord_webhook_url)
-                    return DiscordNotifier(webhook_url=webhook_url)
+            if self._config and self._config.discord_webhook_url:
+                webhook_url = decrypt_value(self._config.discord_webhook_url)
+                return DiscordNotifier(webhook_url=webhook_url)
         except Exception as e:
             logger.warning(f"[Bot:{self.bot_config_id}] Could not load Discord config: {e}")
         return None
 
-    async def _check_referral_gate(self, client: ExchangeClient) -> bool:
-        """If HL_REQUIRE_REFERRAL=true, block bot start unless user is referred.
+    async def _get_notifiers(self) -> list:
+        """Return all configured notifiers (Discord + Telegram)."""
+        notifiers = []
+        discord = await self._get_discord_notifier()
+        if discord:
+            notifiers.append(discord)
+        try:
+            if self._config and self._config.telegram_bot_token and self._config.telegram_chat_id:
+                from src.notifications.telegram_notifier import TelegramNotifier
+                notifiers.append(TelegramNotifier(
+                    bot_token=decrypt_value(self._config.telegram_bot_token),
+                    chat_id=self._config.telegram_chat_id,
+                ))
+        except Exception as e:
+            logger.warning(f"[Bot:{self.bot_config_id}] Could not load Telegram config: {e}")
+        return notifiers
 
+    async def _check_referral_gate(self, client: ExchangeClient, db) -> bool:
+        """HARD gate: block bot start unless user is referred via our affiliate link.
+
+        Always enforced when HL_REFERRAL_CODE is set.
+        Checks DB flag first (fast path), then live HL API, saves result to DB.
         Returns True if OK to proceed, False if blocked.
         """
-        require = os.environ.get("HL_REQUIRE_REFERRAL", "false").strip().lower()
-        if require not in ("true", "1", "yes"):
+        from src.utils.settings import get_hl_config
+        hl_cfg = await get_hl_config()
+        referral_code = hl_cfg["referral_code"]
+        if not referral_code:
             return True
 
-        referral_code = os.environ.get("HL_REFERRAL_CODE", "").strip()
         log_prefix = f"[Bot:{self.bot_config_id}]"
 
         try:
@@ -963,54 +998,108 @@ class BotWorker:
             if not isinstance(client, HyperliquidClient):
                 return True
 
+            # Check DB flag first (fast path)
+            from src.models.database import ExchangeConnection
+            from sqlalchemy import select as sa_select
+            result = await db.execute(
+                sa_select(ExchangeConnection).where(
+                    ExchangeConnection.user_id == self._config.user_id,
+                    ExchangeConnection.exchange_type == "hyperliquid",
+                )
+            )
+            conn = result.scalar_one_or_none()
+
+            if conn and conn.referral_verified:
+                logger.info(f"{log_prefix} Referral verified (DB flag)")
+                return True
+
+            # Live check via HL API
             info = await client.get_referral_info()
             referred_by = None
             if info:
                 referred_by = info.get("referredBy") or info.get("referred_by")
 
             if referred_by:
-                logger.info(f"{log_prefix} User is referred (by {referred_by})")
+                # Save to DB so API-level checks work
+                if conn:
+                    conn.referral_verified = True
+                    conn.referral_verified_at = datetime.utcnow()
+                    await db.commit()
+                logger.info(f"{log_prefix} User is referred (by {referred_by}), saved to DB")
                 return True
 
-            link = f"https://app.hyperliquid.xyz/join/{referral_code}" if referral_code else "https://app.hyperliquid.xyz"
+            link = f"https://app.hyperliquid.xyz/join/{referral_code}"
             self.error_message = (
-                f"Referral required: Please register via {link} before using Hyperliquid bots."
+                f"Referral erforderlich: Bitte registriere dich ueber {link} "
+                f"bevor du Hyperliquid Bots nutzen kannst."
             )
             self.status = "error"
             logger.warning(f"{log_prefix} {self.error_message}")
             return False
         except Exception as e:
-            logger.debug(f"{log_prefix} Referral check skipped: {e}")
-            return True  # Don't block on errors
+            # On error: BLOCK to be safe (no silent bypass)
+            logger.warning(f"{log_prefix} Referral check failed: {e}")
+            self.error_message = (
+                f"Referral-Pruefung fehlgeschlagen. Bitte versuche es erneut. "
+                f"Falls das Problem bestehen bleibt, registriere dich ueber "
+                f"https://app.hyperliquid.xyz/join/{referral_code}"
+            )
+            self.status = "error"
+            return False
 
-    async def _check_builder_approval(self, client: ExchangeClient):
-        """Soft check: warn if builder fee is configured but user hasn't approved."""
+    async def _check_builder_approval(self, client: ExchangeClient, db) -> bool:
+        """HARD gate: block bot start if builder fee not approved.
+
+        Returns True if OK to proceed, False if blocked.
+        """
         log_prefix = f"[Bot:{self.bot_config_id}]"
         try:
             from src.exchanges.hyperliquid.client import HyperliquidClient
 
             if not isinstance(client, HyperliquidClient):
-                return
+                return True
             if not client.builder_config:
-                return
+                return True
 
+            # Check DB flag first (fast path)
+            from src.models.database import ExchangeConnection
+            from sqlalchemy import select as sa_select
+            result = await db.execute(
+                sa_select(ExchangeConnection).where(
+                    ExchangeConnection.user_id == self._config.user_id,
+                    ExchangeConnection.exchange_type == "hyperliquid",
+                )
+            )
+            conn = result.scalar_one_or_none()
+
+            if conn and conn.builder_fee_approved:
+                logger.info(f"{log_prefix} Builder fee approved (DB flag)")
+                return True
+
+            # Fallback: verify on-chain
             approved = await client.check_builder_fee_approval()
-            if approved is None:
-                logger.warning(
-                    f"{log_prefix} Builder fee NOT approved by user. "
-                    f"Orders will be placed WITHOUT builder fee until user approves. "
-                    f"Use POST /api/config/hyperliquid/approve-builder-fee to approve."
-                )
-            elif approved < client.builder_config["f"]:
-                logger.warning(
-                    f"{log_prefix} Builder fee partially approved "
-                    f"(approved={approved}, required={client.builder_config['f']}). "
-                    f"Orders may fail if fee exceeds approved max."
-                )
-            else:
-                logger.info(f"{log_prefix} Builder fee approved (max={approved})")
+            if approved is not None and approved >= client.builder_config["f"]:
+                if conn:
+                    conn.builder_fee_approved = True
+                    conn.builder_fee_approved_at = datetime.utcnow()
+                    await db.commit()
+                logger.info(f"{log_prefix} Builder fee approved (on-chain verified)")
+                return True
+
+            # NOT APPROVED — block bot start
+            self.error_message = (
+                "Builder Fee nicht genehmigt. Bitte genehmige die Builder Fee "
+                "auf der Website unter 'Meine Bots' bevor du einen Hyperliquid Bot starten kannst."
+            )
+            self.status = "error"
+            logger.warning(f"{log_prefix} Builder fee NOT approved — bot start blocked")
+            return False
+
         except Exception as e:
-            logger.debug(f"{log_prefix} Builder approval check skipped: {e}")
+            logger.warning(f"{log_prefix} Builder approval check failed: {e}")
+            self.error_message = f"Builder Fee Pruefung fehlgeschlagen: {e}"
+            self.status = "error"
+            return False
 
     def get_status_dict(self) -> dict:
         """Return status info for API responses."""

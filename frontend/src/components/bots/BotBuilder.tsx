@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
+import { Link } from 'react-router-dom'
 import api from '../../api/client'
 import { ArrowLeft, ArrowRight, Check, Play, Brain, TrendingUp, BarChart3, DollarSign, Activity, Building } from 'lucide-react'
 import ExchangeLogo from '../ui/ExchangeLogo'
@@ -33,6 +34,15 @@ interface DataSource {
   provider: string
   free: boolean
   default: boolean
+}
+
+interface Preset {
+  id: number
+  name: string
+  exchange_type: string
+  trading_config: Record<string, any>
+  strategy_config: Record<string, any>
+  trading_pairs: string[]
 }
 
 interface BotBuilderProps {
@@ -92,6 +102,13 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
   const [rotationEnabled, setRotationEnabled] = useState(false)
   const [rotationMinutes, setRotationMinutes] = useState(60)
   const [rotationStartTime, setRotationStartTime] = useState('08:00')
+  const [discordWebhookUrl, setDiscordWebhookUrl] = useState('')
+  const [telegramBotToken, setTelegramBotToken] = useState('')
+  const [telegramChatId, setTelegramChatId] = useState('')
+
+  // Presets
+  const [presets, setPresets] = useState<Preset[]>([])
+  const [selectedPresetId, setSelectedPresetId] = useState<number | null>(null)
 
   // Whether current strategy uses market data
   const usesData = DATA_STRATEGIES.includes(strategyType)
@@ -113,6 +130,40 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
     }
     return groups
   }, [dataSources])
+
+  // Load presets
+  useEffect(() => {
+    if (!isEdit) {
+      api.get('/presets').then(res => {
+        setPresets(res.data || [])
+      }).catch(() => {})
+    }
+  }, [isEdit])
+
+  const applyPreset = (presetId: number) => {
+    const preset = presets.find(p => p.id === presetId)
+    if (!preset) return
+    setSelectedPresetId(presetId)
+    const tc = preset.trading_config || {}
+    if (tc.leverage) setLeverage(tc.leverage)
+    if (tc.position_size_percent) setPositionSize(tc.position_size_percent)
+    if (tc.max_trades_per_day) setMaxTrades(tc.max_trades_per_day)
+    if (tc.take_profit_percent) setTakeProfit(tc.take_profit_percent)
+    if (tc.stop_loss_percent) setStopLoss(tc.stop_loss_percent)
+    if (tc.daily_loss_limit_percent) setDailyLossLimit(tc.daily_loss_limit_percent)
+    // Apply strategy params
+    if (preset.strategy_config && Object.keys(preset.strategy_config).length > 0) {
+      setStrategyParams(prev => ({ ...prev, ...preset.strategy_config }))
+    }
+    // Apply trading pairs (convert based on current exchange)
+    if (preset.trading_pairs && preset.trading_pairs.length > 0) {
+      const converted = preset.trading_pairs.map(p => {
+        const base = p.replace(/(USDT|USDC)$/i, '')
+        return isHyperliquid ? base : (base.match(/(USDT|USDC)$/i) ? base : base + 'USDT')
+      })
+      setTradingPairs(converted)
+    }
+  }
 
   // Load strategies
   useEffect(() => {
@@ -268,6 +319,9 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
       rotation_enabled: effectiveRotation,
       rotation_interval_minutes: effectiveRotation ? rotationMinutes : null,
       rotation_start_time: effectiveRotation ? rotationStartTime : null,
+      discord_webhook_url: discordWebhookUrl || undefined,
+      telegram_bot_token: telegramBotToken || undefined,
+      telegram_chat_id: telegramChatId || undefined,
     }
   }
 
@@ -396,6 +450,37 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
                 className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded text-white focus:border-primary-500 focus:outline-none"
               />
             </div>
+
+            {/* Preset selection */}
+            {!isEdit && (
+              <div className="pt-2 border-t border-gray-800">
+                <label className="block text-sm text-gray-400 mb-1">{t('bots.builder.loadFromPreset')}</label>
+                {presets.length > 0 ? (
+                  <>
+                    <select
+                      value={selectedPresetId ?? ''}
+                      onChange={e => {
+                        const id = parseInt(e.target.value)
+                        if (id) applyPreset(id)
+                      }}
+                      className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded text-white focus:border-primary-500 focus:outline-none"
+                    >
+                      <option value="">{t('bots.builder.selectPreset')}</option>
+                      {presets.map(p => (
+                        <option key={p.id} value={p.id}>{p.name} {p.exchange_type !== 'any' ? `(${p.exchange_type})` : ''}</option>
+                      ))}
+                    </select>
+                    {selectedPresetId && (
+                      <p className="text-xs text-green-400 mt-1">{t('bots.builder.presetLoaded')}</p>
+                    )}
+                  </>
+                ) : (
+                  <div className="text-sm text-gray-500">
+                    {t('bots.builder.noPresets')} — <Link to="/presets" className="text-primary-400 hover:text-primary-300">{t('bots.builder.createPreset')}</Link>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
 
@@ -679,6 +764,51 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
                     {b[m]}
                   </button>
                 ))}
+              </div>
+            </div>
+
+            {/* Notifications section */}
+            <div className="pt-2 border-t border-gray-800">
+              <label className="block text-sm text-gray-400 mb-3">{t('settings.notifications')}</label>
+
+              {/* Discord */}
+              <div className="mb-4">
+                <label className="block text-xs text-gray-500 mb-1">{t('bots.builder.discordWebhook')}</label>
+                <input
+                  type="url"
+                  value={discordWebhookUrl}
+                  onChange={e => setDiscordWebhookUrl(e.target.value)}
+                  placeholder="https://discord.com/api/webhooks/..."
+                  className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-white placeholder-gray-500 focus:border-primary-500 focus:outline-none"
+                />
+                <p className="text-xs text-gray-500 mt-1">{t('bots.builder.discordWebhookHint')}</p>
+              </div>
+
+              {/* Telegram */}
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">{t('bots.builder.telegramToken')}</label>
+                  <input
+                    type="password"
+                    value={telegramBotToken}
+                    onChange={e => setTelegramBotToken(e.target.value)}
+                    placeholder="6123456789:ABCdef..."
+                    className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-white placeholder-gray-500 focus:border-primary-500 focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">{t('bots.builder.telegramChatId')}</label>
+                  <input
+                    type="text"
+                    value={telegramChatId}
+                    onChange={e => setTelegramChatId(e.target.value)}
+                    placeholder="123456789"
+                    className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-white placeholder-gray-500 focus:border-primary-500 focus:outline-none"
+                  />
+                </div>
+                <div className="bg-blue-900/20 border border-blue-800/50 rounded p-2.5">
+                  <p className="text-xs text-blue-300">{t('bots.builder.telegramHint')}</p>
+                </div>
               </div>
             </div>
           </div>

@@ -131,9 +131,9 @@ class HyperliquidClient(ExchangeClient):
 
         # ── Builder Code config ──────────────────────────────────────────
         # Earns a small fee on every order (100% to builder, no cap).
-        # Set HL_BUILDER_ADDRESS in .env to enable.
-        builder_address = os.environ.get("HL_BUILDER_ADDRESS", "").strip()
-        builder_fee = int(os.environ.get("HL_BUILDER_FEE", str(DEFAULT_BUILDER_FEE)))
+        # Accepts kwargs from caller (DB-first) or falls back to ENV.
+        builder_address = (kwargs.get("builder_address") or os.environ.get("HL_BUILDER_ADDRESS", "")).strip()
+        builder_fee = int(kwargs.get("builder_fee") or os.environ.get("HL_BUILDER_FEE", str(DEFAULT_BUILDER_FEE)))
         if builder_address and 1 <= builder_fee <= 100:
             self._builder = {"b": builder_address.lower(), "f": builder_fee}
             logger.info(

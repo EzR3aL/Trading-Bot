@@ -11,7 +11,7 @@ export default function Presets() {
   const [editId, setEditId] = useState<number | null>(null)
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
-  const [exchange, setExchange] = useState('bitget')
+  const [exchange, setExchange] = useState('any')
   const [leverage, setLeverage] = useState(4)
   const [positionSize, setPositionSize] = useState(7.5)
   const [stopLoss, setStopLoss] = useState(1.5)
@@ -27,7 +27,7 @@ export default function Presets() {
   useEffect(() => { loadPresets() }, [])
 
   const resetForm = () => {
-    setName(''); setDescription(''); setExchange('bitget')
+    setName(''); setDescription(''); setExchange('any')
     setLeverage(4); setPositionSize(7.5); setStopLoss(1.5); setTakeProfit(4.0)
     setEditId(null); setShowForm(false)
   }
@@ -118,10 +118,10 @@ export default function Presets() {
                 <label className="block text-sm text-gray-400 mb-1">Exchange</label>
                 <select value={exchange} onChange={(e) => setExchange(e.target.value)}
                   className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded text-white">
+                  <option value="any">{t('presets.allExchanges')}</option>
                   <option value="bitget">Bitget</option>
                   <option value="weex">Weex</option>
                   <option value="hyperliquid">Hyperliquid</option>
-                  {/* Logos shown in preset cards, not in native <option> */}
                 </select>
               </div>
             </div>
@@ -179,7 +179,9 @@ export default function Presets() {
                 <div className="flex items-center gap-2">
                   <span className="text-white font-medium">{preset.name}</span>
                   <span className="text-xs text-gray-400 bg-gray-800 px-2 py-0.5 rounded inline-flex items-center gap-1">
-                    <ExchangeIcon exchange={preset.exchange_type} size={14} />
+                    {preset.exchange_type === 'any'
+                      ? t('presets.allExchanges')
+                      : <ExchangeIcon exchange={preset.exchange_type} size={14} />}
                   </span>
                   {preset.is_active && (
                     <span className="text-xs text-primary-400 bg-primary-900/30 px-2 py-0.5 rounded font-medium">

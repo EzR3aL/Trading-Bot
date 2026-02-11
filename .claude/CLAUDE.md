@@ -473,6 +473,23 @@ Persistent memory system for Claude Code by [@thedotmack](https://github.com/the
 
 Community marketplace with 32,000+ agent skills using the open SKILL.md format. Browse skills compatible with Claude Code, OpenAI Codex CLI, and GitHub Copilot.
 
+## Projektkonventionen (Bitget-Trading-Bot)
+
+### Anleitungen
+- Fuer jedes neue Feature das eine Benutzeranleitung benoetigt, wird eine Markdown-Datei
+  im Ordner `Anleitungen/` abgelegt.
+- Stil: Deutsch, Einsteiger-freundlich, Schritt-fuer-Schritt mit Beispielen
+- Bestehendes Beispiel: `Anleitungen/Anleitung für den Bot & Notification.md`
+
+### Issues
+- Jedes neue Feature und jeder Bugfix wird als GitHub Issue angelegt BEVOR Code geschrieben wird.
+- Branch-Name enthaelt immer die Issue-Nummer: `feature/123-beschreibung`
+- Commits referenzieren die Issue-Nummer: `feat: add telegram (#123)`
+
+### Changelog
+- CHANGELOG.md wird bei jedem Release/Sprint aktualisiert.
+- Format: Keep a Changelog + Semantic Versioning
+
 ## Version
 
 Check: `cat .claude/VERSION`

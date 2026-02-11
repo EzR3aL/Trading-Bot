@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 """
+DEPRECATED: Uses legacy TradingBot. For multibot system, use the web UI.
+
 Execute a single trade signal manually.
 This script runs the bot's analysis and executes the trade if a signal is generated.
 """
