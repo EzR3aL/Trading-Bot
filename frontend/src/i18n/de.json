@@ -138,7 +138,8 @@
     "duplicate": "Duplizieren",
     "delete": "Löschen",
     "active": "AKTIV",
-    "confirmDelete": "Preset wirklich löschen?"
+    "confirmDelete": "Preset wirklich löschen?",
+    "allExchanges": "Alle Exchanges"
   },
   "bot": {
     "title": "Bot-Steuerung",
@@ -309,6 +310,12 @@
     "copyImage": "Bild kopieren",
     "copied": "Kopiert!",
     "affiliateLink": "Affiliate-Link",
+    "activePreset": "Preset",
+    "noPreset": "Kein Preset",
+    "switchPreset": "Preset wechseln",
+    "presetApplied": "Preset angewendet",
+    "presetSwitchFailed": "Preset konnte nicht angewendet werden",
+    "stopBotFirst": "Stoppe den Bot zuerst",
     "builder": {
       "title": "Neuen Bot erstellen",
       "editTitle": "Bot bearbeiten",
@@ -369,6 +376,16 @@
       "spot": "Spot-Markt",
       "technical": "Technische Indikatoren",
       "tradfi": "TradFi / CME",
+      "discordWebhook": "Discord Webhook (optional)",
+      "discordWebhookHint": "Discord-Benachrichtigungen für diesen Bot",
+      "telegramToken": "Telegram Bot Token (optional)",
+      "telegramChatId": "Telegram Chat-ID",
+      "telegramHint": "Erstelle einen Bot via @BotFather auf Telegram, starte ihn in deinem Chat und trage Token + Chat-ID hier ein.",
+      "loadFromPreset": "Von Preset laden",
+      "selectPreset": "Preset auswählen...",
+      "noPresets": "Noch keine Presets vorhanden",
+      "createPreset": "Preset erstellen",
+      "presetLoaded": "Preset geladen — Einstellungen nach Bedarf anpassen",
       "errors": {
         "nameRequired": "Bitte gib einen Bot-Namen ein",
         "strategyRequired": "Bitte wähle eine Strategie",
@@ -379,6 +396,38 @@
         "hoursRequired": "Bitte wähle mindestens eine Uhrzeit"
       }
     }
+  },
+  "botDetail": {
+    "title": "Bot-Details",
+    "back": "Zurück zu Bots",
+    "config": "Konfiguration",
+    "strategy": "Strategie",
+    "pairs": "Trading-Paare",
+    "schedule": "Zeitplan",
+    "recentTrades": "Letzte Trades",
+    "performance": "Performance",
+    "noTrades": "Noch keine Trades",
+    "totalPnl": "Gesamt-PnL",
+    "winRate": "Gewinnrate",
+    "totalTrades": "Trades gesamt",
+    "bestTrade": "Bester Trade",
+    "worstTrade": "Schlechtester Trade",
+    "avgPnl": "Ø PnL",
+    "fees": "Gebühren",
+    "funding": "Funding",
+    "leverage": "Hebel",
+    "positionSize": "Positionsgröße",
+    "takeProfit": "Take Profit",
+    "stopLoss": "Stop Loss",
+    "dailyLoss": "Tägliches Verlustlimit",
+    "maxTrades": "Max Trades/Tag",
+    "discordConfigured": "Discord konfiguriert",
+    "telegramConfigured": "Telegram konfiguriert",
+    "testTelegram": "Telegram testen",
+    "created": "Erstellt",
+    "pnlChart": "PnL-Verlauf",
+    "dailyPnl": "Täglicher PnL",
+    "cumulativePnl": "Kumulativer PnL"
   },
   "performance": {
     "title": "Bot-Performance",
@@ -400,6 +449,21 @@
     "loadError": "Performance-Daten konnten nicht geladen werden",
     "detailError": "Bot-Details konnten nicht geladen werden"
   },
+  "builderFee": {
+    "title": "Hyperliquid Aktivierung",
+    "description": "Um Hyperliquid Bots nutzen zu können, ist eine einmalige Bestätigung mit deiner Wallet erforderlich. Verbinde deine Hyperliquid Main Wallet und bestätige die Transaktion.",
+    "walletConnected": "Wallet verbunden",
+    "signHint": "Bestätige die Transaktion in deiner Wallet. Dies ist eine einmalige Aktion — danach kannst du alle Hyperliquid Bots ohne erneute Abfrage nutzen.",
+    "approve": "Transaktion bestätigen",
+    "approving": "Bestätige...",
+    "approved": "Aktivierung erfolgreich!",
+    "approvedHint": "Du kannst ab sofort alle Hyperliquid Bots nutzen. Diese Bestätigung wird nicht erneut abgefragt.",
+    "required": "Einmalige Aktivierung erforderlich, bevor Hyperliquid Bots gestartet werden können.",
+    "signFailed": "Bestätigung fehlgeschlagen. Bitte erneut versuchen.",
+    "affiliateHint": "Noch kein Hyperliquid-Konto? Registriere dich über unseren Link:",
+    "loadError": "Konfiguration konnte nicht geladen werden.",
+    "notConfigured": "Hyperliquid ist auf diesem Server nicht konfiguriert."
+  },
   "common": {
     "loading": "Laden...",
     "error": "Etwas ist schiefgelaufen. Bitte versuche es erneut.",
@@ -407,6 +471,7 @@
     "success": "Erfolgreich",
     "cancel": "Abbrechen",
     "confirm": "Bestätigen",
+    "change": "Ändern",
     "demo": "Demo",
     "live": "Live",
     "all": "Alle",
@@ -429,5 +494,21 @@
     "deactivate": "Deaktivieren",
     "activate": "Aktivieren",
     "deleteUser": "Benutzer löschen?"
+  },
+  "affiliate": {
+    "uid": "Exchange UID",
+    "uidPlaceholder": "Deine Exchange UID eingeben",
+    "uidSaved": "UID gespeichert. Verifizierung ausstehend.",
+    "uidVerified": "UID verifiziert!",
+    "uidPending": "Verifizierung ausstehend",
+    "uidNotSubmitted": "Nicht eingereicht",
+    "uidRequired": "Bitte trage deine Exchange UID in den Einstellungen ein.",
+    "uidRequiredToggle": "UID-Pflicht aktiv",
+    "verifyUid": "Verifizieren",
+    "rejectUid": "Ablehnen",
+    "noUids": "Keine UIDs eingereicht",
+    "submitUid": "UID speichern",
+    "affiliateUids": "Affiliate UIDs",
+    "uidHint": "Bitte melde dich über den untenstehenden Affiliate-Link bei der Exchange an. Anschließend findest du deine UID in deinem Exchange-Profil. Trage sie hier ein und speichere."
   }
 }

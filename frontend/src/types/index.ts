@@ -120,6 +120,8 @@ export interface ExchangeConnectionStatus {
   exchange_type: string
   api_keys_configured: boolean
   demo_api_keys_configured: boolean
+  affiliate_uid?: string | null
+  affiliate_verified?: boolean | null
 }
 
 export interface ConfigResponse {

@@ -81,7 +81,7 @@ class UserConfig(Base):
     # Strategy config (JSON stored as text)
     strategy_config = Column(Text, nullable=True)  # JSON: fear_greed thresholds, funding rate, etc.
 
-    # Discord config
+    # DEPRECATED: moved to per-bot BotConfig.discord_webhook_url
     discord_webhook_url = Column(Text, nullable=True)
 
     created_at = Column(DateTime, server_default=func.now())
@@ -98,7 +98,7 @@ class ConfigPreset(Base):
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     name = Column(String(100), nullable=False)
     description = Column(Text, nullable=True)
-    exchange_type = Column(String(50), nullable=False)  # bitget | weex | hyperliquid
+    exchange_type = Column(String(50), nullable=False, default="any")  # any | bitget | weex | hyperliquid
     is_active = Column(Boolean, default=False)
 
     # Trading Config (JSON stored as text)
@@ -228,11 +228,33 @@ class ExchangeConnection(Base):
     demo_api_secret_encrypted = Column(Text, nullable=True)
     demo_passphrase_encrypted = Column(Text, nullable=True)
 
+    # Builder fee approval tracking (Hyperliquid)
+    builder_fee_approved = Column(Boolean, default=False, nullable=False, server_default="0")
+    builder_fee_approved_at = Column(DateTime, nullable=True)
+
+    # Referral verification tracking (Hyperliquid)
+    referral_verified = Column(Boolean, default=False, nullable=False, server_default="0")
+    referral_verified_at = Column(DateTime, nullable=True)
+
+    # Affiliate UID verification (Bitget / Weex)
+    affiliate_uid = Column(String(100), nullable=True)
+    affiliate_verified = Column(Boolean, default=False, nullable=False, server_default="0")
+    affiliate_verified_at = Column(DateTime, nullable=True)
+
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, onupdate=func.now())
 
     # Relationships
     user = relationship("User", back_populates="exchange_connections")
+
+
+class SystemSetting(Base):
+    """Global key-value settings (admin-managed, replaces .env for runtime config)."""
+    __tablename__ = "system_settings"
+
+    key = Column(String(100), primary_key=True)
+    value = Column(Text, nullable=True)
+    updated_at = Column(DateTime, onupdate=func.now())
 
 
 class LLMConnection(Base):
@@ -297,6 +319,16 @@ class BotConfig(Base):
     rotation_interval_minutes = Column(Integer, nullable=True)  # e.g. 60 = close & reopen every hour
     rotation_start_time = Column(String(5), nullable=True)  # UTC start time "HH:MM" for rotation anchor
 
+    # Per-bot Discord webhook (encrypted, optional — overrides user-level)
+    discord_webhook_url = Column(Text, nullable=True)
+
+    # Per-bot Telegram notifications (optional)
+    telegram_bot_token = Column(Text, nullable=True)   # Encrypted
+    telegram_chat_id = Column(String(50), nullable=True)
+
+    # Active preset (FK to config_presets, tracks which preset was last applied)
+    active_preset_id = Column(Integer, ForeignKey("config_presets.id", ondelete="SET NULL"), nullable=True)
+
     # State
     is_enabled = Column(Boolean, default=False)
 
@@ -306,6 +338,7 @@ class BotConfig(Base):
     # Relationships
     user = relationship("User", back_populates="bot_configs")
     trades = relationship("TradeRecord", back_populates="bot_config", foreign_keys="TradeRecord.bot_config_id")
+    active_preset = relationship("ConfigPreset", foreign_keys=[active_preset_id])
 
 
 class Exchange(Base):
@@ -330,6 +363,7 @@ class AffiliateLink(Base):
     affiliate_url = Column(Text, nullable=False)
     label = Column(String(200), nullable=True)
     is_active = Column(Boolean, default=True)
+    uid_required = Column(Boolean, default=False, nullable=False, server_default="0")
 
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, onupdate=func.now())

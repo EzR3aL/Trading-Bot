@@ -63,8 +63,21 @@ function ToastItem({ toast }: { toast: ToastType }) {
       role="alert"
       aria-live="polite"
     >
-      <Icon size={18} className={ICON_STYLES[toast.type]} />
-      <span className="text-sm font-medium flex-1">{toast.message}</span>
+      <Icon size={18} className={`${ICON_STYLES[toast.type]} shrink-0 mt-0.5`} />
+      <div className="text-sm font-medium flex-1 space-y-1">
+        {toast.message.split('\n').map((line, li) => (
+          <p key={li}>
+            {line.split(/(https?:\/\/\S+)/g).map((part, i) =>
+              /^https?:\/\//.test(part) ? (
+                <a key={i} href={part} target="_blank" rel="noopener noreferrer"
+                   className="underline hover:opacity-80 break-all font-semibold">
+                  {part}
+                </a>
+              ) : part
+            )}
+          </p>
+        ))}
+      </div>
       <button
         onClick={handleDismiss}
         className="p-1 rounded-lg hover:bg-white/10 transition-colors"

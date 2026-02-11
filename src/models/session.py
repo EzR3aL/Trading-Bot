@@ -57,6 +57,27 @@ async def init_db() -> None:
                 "ALTER TABLE trade_records ADD COLUMN builder_fee FLOAT DEFAULT 0",
                 # Token revocation support
                 "ALTER TABLE users ADD COLUMN token_version INTEGER NOT NULL DEFAULT 0",
+                # Per-bot Discord webhook override
+                "ALTER TABLE bot_configs ADD COLUMN discord_webhook_url TEXT",
+                # Per-bot Telegram notifications
+                "ALTER TABLE bot_configs ADD COLUMN telegram_bot_token TEXT",
+                "ALTER TABLE bot_configs ADD COLUMN telegram_chat_id VARCHAR(50)",
+                # Active preset tracking
+                "ALTER TABLE bot_configs ADD COLUMN active_preset_id INTEGER REFERENCES config_presets(id) ON DELETE SET NULL",
+                # Builder fee approval tracking
+                "ALTER TABLE exchange_connections ADD COLUMN builder_fee_approved BOOLEAN NOT NULL DEFAULT 0",
+                "ALTER TABLE exchange_connections ADD COLUMN builder_fee_approved_at DATETIME",
+                # Referral verification tracking
+                "ALTER TABLE exchange_connections ADD COLUMN referral_verified BOOLEAN NOT NULL DEFAULT 0",
+                "ALTER TABLE exchange_connections ADD COLUMN referral_verified_at DATETIME",
+                # System settings (admin-managed key-value store)
+                "CREATE TABLE IF NOT EXISTS system_settings (key VARCHAR(100) PRIMARY KEY, value TEXT, updated_at DATETIME)",
+                # Affiliate UID verification (Bitget / Weex)
+                "ALTER TABLE exchange_connections ADD COLUMN affiliate_uid VARCHAR(100)",
+                "ALTER TABLE exchange_connections ADD COLUMN affiliate_verified BOOLEAN NOT NULL DEFAULT 0",
+                "ALTER TABLE exchange_connections ADD COLUMN affiliate_verified_at DATETIME",
+                # Affiliate link UID requirement flag
+                "ALTER TABLE affiliate_links ADD COLUMN uid_required BOOLEAN NOT NULL DEFAULT 0",
             ]
             for migration in migrations:
                 try:

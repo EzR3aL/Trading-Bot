@@ -40,6 +40,16 @@ class BotConfigCreate(BaseModel):
         description="UTC start time for rotation intervals (HH:MM format, e.g. '08:00')",
     )
 
+    # Per-bot Discord webhook (optional, overrides user-level)
+    discord_webhook_url: Optional[str] = Field(
+        default=None,
+        description="Discord webhook URL for this bot (overrides user-level setting)",
+    )
+
+    # Per-bot Telegram notifications (optional)
+    telegram_bot_token: Optional[str] = None
+    telegram_chat_id: Optional[str] = None
+
 
 class BotConfigUpdate(BaseModel):
     """Request to update a bot config. Only provided fields are updated."""
@@ -71,6 +81,16 @@ class BotConfigUpdate(BaseModel):
         description="UTC start time for rotation intervals (HH:MM format)",
     )
 
+    # Per-bot Discord webhook (optional, overrides user-level)
+    discord_webhook_url: Optional[str] = Field(
+        default=None,
+        description="Discord webhook URL for this bot (empty string clears it)",
+    )
+
+    # Per-bot Telegram notifications (optional)
+    telegram_bot_token: Optional[str] = None
+    telegram_chat_id: Optional[str] = None
+
 
 class BotConfigResponse(BaseModel):
     """Bot configuration response."""
@@ -94,6 +114,10 @@ class BotConfigResponse(BaseModel):
     rotation_interval_minutes: Optional[int] = None
     rotation_start_time: Optional[str] = None
     is_enabled: bool
+    discord_webhook_configured: bool = False
+    telegram_configured: bool = False
+    active_preset_id: Optional[int] = None
+    active_preset_name: Optional[str] = None
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
 
@@ -119,6 +143,18 @@ class BotRuntimeStatus(BaseModel):
     total_fees: float = 0.0
     total_funding: float = 0.0
     open_trades: int = 0
+    discord_webhook_configured: bool = False
+    telegram_configured: bool = False
+    active_preset_id: Optional[int] = None
+    active_preset_name: Optional[str] = None
+
+    # Hyperliquid revenue gates
+    builder_fee_approved: Optional[bool] = None
+    referral_verified: Optional[bool] = None
+
+    # Affiliate UID (Bitget / Weex)
+    affiliate_uid: Optional[str] = None
+    affiliate_verified: Optional[bool] = None
 
     # LLM-specific metrics (only populated for llm_signal strategy)
     llm_provider: Optional[str] = None

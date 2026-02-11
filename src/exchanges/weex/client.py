@@ -235,6 +235,24 @@ class WeexClient(ExchangeClient):
             volume_24h=float(data.get("baseVolume", 0)),
         )
 
+    async def check_affiliate_uid(self, uid: str) -> bool:
+        """Check if a UID is in our affiliate referral list via Weex Rebate API."""
+        try:
+            result = await self._request(
+                "GET",
+                "/api/v2/rebate/affiliate/getChannelUserTradeAndAsset",
+                params={"uid": str(uid), "pageSize": "10"},
+            )
+            records = result if isinstance(result, list) else result.get("records", [])
+            for item in records:
+                if str(item.get("uid", "")) == str(uid):
+                    return True
+            return False
+        except Exception as e:
+            from src.utils.logger import get_logger
+            get_logger(__name__).warning(f"Affiliate UID check failed for {uid}: {e}")
+            return False
+
     async def get_funding_rate(self, symbol: str) -> FundingRateInfo:
         data = await self._request("GET", "/api/v2/mix/market/current-fund-rate", params={
             "symbol": symbol, "productType": "USDT-FUTURES",

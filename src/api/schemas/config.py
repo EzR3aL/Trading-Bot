@@ -1,9 +1,8 @@
 """Configuration and settings schemas."""
 
-import re
 from typing import List, Optional
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field
 
 
 class TradingConfigUpdate(BaseModel):
@@ -28,27 +27,6 @@ class StrategyConfigUpdate(BaseModel):
     low_confidence_min: int = Field(ge=50, le=100, default=60)
 
 
-DISCORD_WEBHOOK_PATTERN = re.compile(
-    r"^https://discord\.com/api/webhooks/\d+/[\w-]+$"
-)
-
-
-class DiscordConfigUpdate(BaseModel):
-    webhook_url: Optional[str] = None
-
-    @field_validator("webhook_url")
-    @classmethod
-    def validate_webhook_url(cls, v: Optional[str]) -> Optional[str]:
-        if v is None or v == "":
-            return None
-        if not DISCORD_WEBHOOK_PATTERN.match(v):
-            raise ValueError(
-                "Invalid Discord webhook URL. "
-                "Must match: https://discord.com/api/webhooks/<id>/<token>"
-            )
-        return v
-
-
 class ApiKeysUpdate(BaseModel):
     exchange_type: str = Field(pattern="^(bitget|weex|hyperliquid)$")
     api_key: str = ""
@@ -67,6 +45,8 @@ class ExchangeConnectionResponse(BaseModel):
     exchange_type: str
     api_keys_configured: bool = False
     demo_api_keys_configured: bool = False
+    affiliate_uid: Optional[str] = None
+    affiliate_verified: Optional[bool] = None
 
 
 class ExchangeConnectionUpdate(BaseModel):
@@ -81,7 +61,6 @@ class ExchangeConnectionUpdate(BaseModel):
 class ConfigResponse(BaseModel):
     trading: Optional[TradingConfigUpdate] = None
     strategy: Optional[StrategyConfigUpdate] = None
-    discord: Optional[DiscordConfigUpdate] = None
     connections: List[ExchangeConnectionResponse] = []
     # Deprecated: kept for backward compatibility
     exchange_type: str = "bitget"

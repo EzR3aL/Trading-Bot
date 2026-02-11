@@ -6,7 +6,7 @@ import { useAuthStore } from '../stores/authStore'
 import type { ConnectionsStatusResponse, ExchangeConnectionStatus, ExchangeInfo, ServiceStatus } from '../types'
 import { ExchangeIcon } from '../components/ui/ExchangeLogo'
 
-const BASE_TABS = ['apiKeys', 'llmKeys', 'discord', 'connections'] as const
+const BASE_TABS = ['apiKeys', 'llmKeys', 'connections'] as const
 const ADMIN_TABS = [...BASE_TABS, 'affiliateLinks', 'hyperliquid'] as const
 
 /* ------------------------------------------------------------------ */
@@ -126,9 +126,6 @@ export default function Settings() {
   // Per-exchange API key forms
   const [keyForms, setKeyForms] = useState<Record<string, ExchangeKeyForm>>({})
 
-  // Discord form
-  const [webhookUrl, setWebhookUrl] = useState('')
-
   // LLM connections
   const [llmConnections, setLlmConnections] = useState<{provider_type: string; api_key_configured: boolean; display_name: string; free_tier: boolean}[]>([])
   const [llmKeyForms, setLlmKeyForms] = useState<Record<string, string>>({})
@@ -146,27 +143,46 @@ export default function Settings() {
   const [hlLoading, setHlLoading] = useState(false)
   const [hlApproving, setHlApproving] = useState(false)
 
+  // Hyperliquid admin settings
+  const [hlAdminSettings, setHlAdminSettings] = useState<{
+    builder_address: string; builder_fee: number; referral_code: string;
+    sources: Record<string, string>;
+  } | null>(null)
+  const [hlAdminForm, setHlAdminForm] = useState({ builder_address: '', builder_fee: 10, referral_code: '' })
+  const [hlAdminSaving, setHlAdminSaving] = useState(false)
+
   // Affiliate links (admin)
   const [affiliateLinks, setAffiliateLinks] = useState<Record<string, { affiliate_url: string; label: string; is_active: boolean }>>({})
-  const [affiliateForms, setAffiliateForms] = useState<Record<string, { url: string; label: string; active: boolean }>>({})
+  const [affiliateForms, setAffiliateForms] = useState<Record<string, { url: string; label: string; active: boolean; uidRequired: boolean }>>({})
   const [affiliateLoaded, setAffiliateLoaded] = useState(false)
+
+  // Affiliate UID (user-facing)
+  const [userAffiliateLinks, setUserAffiliateLinks] = useState<Record<string, { affiliate_url: string; label: string | null; uid_required: boolean }>>({})
+  const [uidForms, setUidForms] = useState<Record<string, string>>({})
+
+  // Admin UID management
+  const [adminUids, setAdminUids] = useState<any[]>([])
 
   useEffect(() => {
     const load = async () => {
       try {
-        const [configRes, exchRes, connRes, llmRes] = await Promise.all([
+        const [, exchRes, connRes, llmRes, affRes] = await Promise.all([
           api.get('/config'),
           api.get('/exchanges'),
           api.get('/config/exchange-connections'),
           api.get('/config/llm-connections'),
+          api.get('/affiliate-links'),
         ])
         setExchanges(exchRes.data.exchanges)
         setConnections(connRes.data.connections || [])
         setLlmConnections(llmRes.data.connections || [])
 
-        if (configRes.data.discord?.webhook_url) {
-          setWebhookUrl(configRes.data.discord.webhook_url)
+        const affMap: Record<string, { affiliate_url: string; label: string | null; uid_required: boolean }> = {}
+        for (const link of affRes.data) {
+          affMap[link.exchange_type] = link
         }
+        setUserAffiliateLinks(affMap)
+
       } catch {
         setMessage(t('common.error'))
       }
@@ -223,22 +239,6 @@ export default function Settings() {
       const label = mode === 'demo' ? 'Demo' : 'Live'
       showMessage(`${label} ${exchangeType} connected! Balance: $${res.data.balance}`)
     } catch { showMessage('Connection failed') }
-  }
-
-  const saveDiscord = async () => {
-    setSaving(true)
-    try {
-      await api.put('/config/discord', { webhook_url: webhookUrl })
-      showMessage(t('settings.saved'))
-    } catch { showMessage(t('common.error')) }
-    setSaving(false)
-  }
-
-  const testWebhook = async () => {
-    try {
-      await api.post('/config/discord/test')
-      showMessage('Test message sent!')
-    } catch { showMessage('Failed to send test') }
   }
 
   const saveLlmKey = async (provider: string) => {
@@ -305,6 +305,32 @@ export default function Settings() {
     setHlApproving(false)
   }
 
+  const loadHlAdminSettings = async () => {
+    try {
+      const res = await api.get('/config/hyperliquid/admin-settings')
+      setHlAdminSettings(res.data)
+      setHlAdminForm({
+        builder_address: res.data.builder_address || '',
+        builder_fee: res.data.builder_fee || 10,
+        referral_code: res.data.referral_code || '',
+      })
+    } catch { /* not admin or not available */ }
+  }
+
+  const saveHlAdminSettings = async () => {
+    setHlAdminSaving(true)
+    try {
+      await api.put('/config/hyperliquid/admin-settings', hlAdminForm)
+      showMessage('Hyperliquid settings saved')
+      await loadHlAdminSettings()
+      // Refresh revenue view too
+      loadHlRevenue()
+    } catch (err: any) {
+      showMessage(err?.response?.data?.detail || 'Failed to save settings')
+    }
+    setHlAdminSaving(false)
+  }
+
   const loadAffiliateLinks = async () => {
     try {
       const res = await api.get('/affiliate-links')
@@ -317,7 +343,8 @@ export default function Settings() {
       const forms: typeof affiliateForms = {}
       for (const ex of ['bitget', 'weex', 'hyperliquid']) {
         const existing = map[ex]
-        forms[ex] = { url: existing?.affiliate_url || '', label: existing?.label || '', active: existing?.is_active ?? true }
+        const existingRaw = res.data.find((l: any) => l.exchange_type === ex)
+        forms[ex] = { url: existing?.affiliate_url || '', label: existing?.label || '', active: existing?.is_active ?? true, uidRequired: existingRaw?.uid_required || false }
       }
       setAffiliateForms(forms)
       setAffiliateLoaded(true)
@@ -333,6 +360,7 @@ export default function Settings() {
         affiliate_url: form.url,
         label: form.label || null,
         is_active: form.active,
+        uid_required: form.uidRequired,
       })
       showMessage(t('settings.saved'))
       loadAffiliateLinks()
@@ -350,6 +378,39 @@ export default function Settings() {
     setSaving(false)
   }
 
+  const saveAffiliateUid = async (exchangeType: string) => {
+    const uid = uidForms[exchangeType]?.trim()
+    if (!uid) return
+    setSaving(true)
+    try {
+      const res = await api.put(`/config/exchange-connections/${exchangeType}/affiliate-uid`, { uid })
+      const connRes = await api.get('/config/exchange-connections')
+      setConnections(connRes.data.connections || [])
+      setUidForms(prev => ({ ...prev, [exchangeType]: '' }))
+      showMessage(res.data.verified ? t('affiliate.uidVerified') : t('affiliate.uidSaved'))
+    } catch (err: any) {
+      showMessage(err.response?.data?.detail || t('common.error'))
+    }
+    setSaving(false)
+  }
+
+  const loadAdminUids = async () => {
+    try {
+      const res = await api.get('/config/admin/affiliate-uids')
+      setAdminUids(res.data)
+    } catch {}
+  }
+
+  const verifyAdminUid = async (connectionId: number, verified: boolean) => {
+    try {
+      await api.put(`/config/admin/affiliate-uids/${connectionId}/verify`, { verified })
+      await loadAdminUids()
+      showMessage(verified ? t('affiliate.uidVerified') : 'UID abgelehnt')
+    } catch (err: any) {
+      showMessage(err.response?.data?.detail || t('common.error'))
+    }
+  }
+
   useEffect(() => {
     if (activeTab === 'connections' && !connStatus) {
       loadConnectionStatus()
@@ -359,6 +420,14 @@ export default function Settings() {
     }
     if (activeTab === 'affiliateLinks' && !affiliateLoaded) {
       loadAffiliateLinks()
+      loadAdminUids()
+    }
+  }, [activeTab])
+
+  useEffect(() => {
+    if (activeTab === 'hyperliquid' && isAdmin) {
+      loadHlAdminSettings()
+      loadHlRevenue()
     }
   }, [activeTab])
 
@@ -490,6 +559,54 @@ export default function Settings() {
                         )}
                       </>
                     )}
+
+                    {/* Affiliate UID (Bitget/Weex only) */}
+                    {(ex.name === 'bitget' || ex.name === 'weex') && userAffiliateLinks[ex.name]?.uid_required && (
+                      <div className="mt-4 pt-4 border-t border-gray-800">
+                        <h4 className="text-sm font-medium text-white mb-2">{t('affiliate.uid')}</h4>
+                        <p className="text-gray-400 text-xs mb-3">{t('affiliate.uidHint')}</p>
+                        {userAffiliateLinks[ex.name]?.affiliate_url && (
+                          <div className="mb-3 p-2.5 bg-indigo-900/20 border border-indigo-800/30 rounded">
+                            <p className="text-gray-400 text-xs mb-1">{userAffiliateLinks[ex.name]?.label || 'Affiliate Link'}</p>
+                            <a href={userAffiliateLinks[ex.name].affiliate_url} target="_blank" rel="noopener noreferrer"
+                               className="text-indigo-400 hover:text-indigo-300 break-all text-sm font-medium">
+                              {userAffiliateLinks[ex.name].affiliate_url}
+                            </a>
+                          </div>
+                        )}
+                        <div className="flex gap-2 items-end">
+                          <div className="flex-1">
+                            <input
+                              type="text"
+                              value={uidForms[ex.name] ?? getConn(ex.name)?.affiliate_uid ?? ''}
+                              onChange={(e) => setUidForms(prev => ({ ...prev, [ex.name]: e.target.value }))}
+                              placeholder={t('affiliate.uidPlaceholder')}
+                              className="w-full px-3 py-1.5 bg-gray-800 border border-gray-700 rounded text-white text-sm"
+                            />
+                          </div>
+                          <button
+                            onClick={() => saveAffiliateUid(ex.name)}
+                            disabled={saving || !uidForms[ex.name]?.trim()}
+                            className="px-3 py-1.5 text-sm bg-primary-600 text-white rounded hover:bg-primary-700 disabled:opacity-50"
+                          >
+                            {t('affiliate.submitUid')}
+                          </button>
+                        </div>
+                        {getConn(ex.name)?.affiliate_uid && (
+                          <div className="mt-2">
+                            {getConn(ex.name)?.affiliate_verified ? (
+                              <span className="text-xs px-2 py-0.5 rounded-full bg-green-900/40 text-green-400 border border-green-800">
+                                {t('affiliate.uidVerified')}
+                              </span>
+                            ) : (
+                              <span className="text-xs px-2 py-0.5 rounded-full bg-yellow-900/40 text-yellow-400 border border-yellow-800">
+                                {t('affiliate.uidPending')}
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -565,30 +682,6 @@ export default function Settings() {
         </div>
       )}
 
-      {/* Discord Tab */}
-      {activeTab === 'discord' && (
-        <div className="bg-gray-900 border border-gray-800 rounded-lg p-6 max-w-2xl">
-          <div className="space-y-4">
-            <div>
-              <label htmlFor="discord-webhook-url" className="block text-sm text-gray-400 mb-1">Webhook URL</label>
-              <input id="discord-webhook-url" type="text" value={webhookUrl} onChange={(e) => setWebhookUrl(e.target.value)}
-                placeholder="https://discord.com/api/webhooks/..."
-                className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded text-white" />
-            </div>
-            <div className="flex gap-2">
-              <button onClick={saveDiscord} disabled={saving}
-                className="px-4 py-2 bg-primary-600 text-white rounded hover:bg-primary-700 disabled:opacity-50">
-                {t('settings.save')}
-              </button>
-              <button onClick={testWebhook}
-                className="px-4 py-2 bg-gray-700 text-white rounded hover:bg-gray-600">
-                {t('settings.testWebhook')}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Affiliate Links Tab (admin only) */}
       {activeTab === 'affiliateLinks' && (
         <div className="max-w-2xl">
@@ -639,6 +732,18 @@ export default function Settings() {
                       />
                       <label htmlFor={`aff-active-${ex}`} className="text-sm text-gray-400">{t('settings.affiliateActive')}</label>
                     </div>
+                    {(ex === 'bitget' || ex === 'weex') && (
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          id={`aff-uid-${ex}`}
+                          checked={form.uidRequired}
+                          onChange={(e) => setAffiliateForms(prev => ({ ...prev, [ex]: { ...form, uidRequired: e.target.checked } }))}
+                          className="rounded border-gray-700 bg-gray-800 text-primary-600"
+                        />
+                        <label htmlFor={`aff-uid-${ex}`} className="text-sm text-gray-400">{t('affiliate.uidRequiredToggle')}</label>
+                      </div>
+                    )}
                     <div className="flex gap-2">
                       <button
                         onClick={() => saveAffiliateLink(ex)}
@@ -662,135 +767,263 @@ export default function Settings() {
               )
             })}
           </div>
+
+          {/* Admin: Affiliate UID Management */}
+          <div className="bg-gray-900 border border-gray-800 rounded-lg p-4 mt-4">
+            <h3 className="text-white font-medium mb-3">{t('affiliate.affiliateUids')}</h3>
+            {adminUids.length === 0 ? (
+              <p className="text-gray-500 text-sm">{t('affiliate.noUids')}</p>
+            ) : (
+              <div className="space-y-2">
+                {adminUids.map((item: any) => (
+                  <div key={item.connection_id} className="flex items-center justify-between bg-gray-800 rounded p-3">
+                    <div>
+                      <span className="text-white text-sm font-medium">{item.username}</span>
+                      <span className="text-gray-500 text-xs ml-2">{item.exchange_type}</span>
+                      <span className="text-gray-400 text-sm ml-3 font-mono">{item.affiliate_uid}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {item.affiliate_verified ? (
+                        <>
+                          <span className="text-xs px-2 py-0.5 rounded-full bg-green-900/40 text-green-400 border border-green-800">
+                            {t('affiliate.uidVerified')}
+                          </span>
+                          <button
+                            onClick={() => verifyAdminUid(item.connection_id, false)}
+                            className="px-2 py-1 text-xs bg-red-900/50 text-red-400 rounded hover:bg-red-900"
+                          >
+                            {t('affiliate.rejectUid')}
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <span className="text-xs px-2 py-0.5 rounded-full bg-yellow-900/40 text-yellow-400 border border-yellow-800">
+                            {t('affiliate.uidPending')}
+                          </span>
+                          <button
+                            onClick={() => verifyAdminUid(item.connection_id, true)}
+                            className="px-2 py-1 text-xs bg-green-900/50 text-green-400 rounded hover:bg-green-900"
+                          >
+                            {t('affiliate.verifyUid')}
+                          </button>
+                          <button
+                            onClick={() => verifyAdminUid(item.connection_id, false)}
+                            className="px-2 py-1 text-xs bg-red-900/50 text-red-400 rounded hover:bg-red-900"
+                          >
+                            {t('affiliate.rejectUid')}
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       )}
 
       {/* Hyperliquid Tab */}
       {activeTab === 'hyperliquid' && (
-        <div className="bg-gray-900 border border-gray-800 rounded-lg p-6 max-w-2xl space-y-6">
-          <div className="flex items-center justify-between">
+        <div className="space-y-6 max-w-2xl">
+          {/* Admin Builder Config */}
+          <div className="bg-gray-900 border border-gray-800 rounded-lg p-6 space-y-4">
             <div>
-              <h3 className="text-white font-medium">Hyperliquid Revenue</h3>
-              <p className="text-sm text-gray-400 mt-1">Builder Code & Referral status</p>
+              <h3 className="text-white font-medium">Hyperliquid Builder Config</h3>
+              <p className="text-sm text-gray-400 mt-1">Configure builder address, fee rate, and referral code</p>
             </div>
-            <button onClick={loadHlRevenue} disabled={hlLoading}
-              className="px-3 py-1.5 text-sm bg-gray-800 text-gray-300 rounded hover:bg-gray-700 disabled:opacity-50">
-              {hlLoading ? t('settings.refreshing') : t('settings.refreshStatus')}
+
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Builder Wallet Address</label>
+                <input
+                  type="text"
+                  value={hlAdminForm.builder_address}
+                  onChange={(e) => setHlAdminForm(prev => ({ ...prev, builder_address: e.target.value }))}
+                  placeholder="0x..."
+                  className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded text-white text-sm font-mono"
+                />
+                {hlAdminSettings?.sources?.builder_address && (
+                  <p className="text-xs text-gray-600 mt-1">
+                    Source: {hlAdminSettings.sources.builder_address === 'db' ? 'Database' : hlAdminSettings.sources.builder_address === 'env' ? '.env fallback' : 'Not set'}
+                  </p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Builder Fee (1-100, in 0.001% units)</label>
+                <select
+                  value={hlAdminForm.builder_fee}
+                  onChange={(e) => setHlAdminForm(prev => ({ ...prev, builder_fee: parseInt(e.target.value) }))}
+                  className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded text-white text-sm"
+                >
+                  <option value={0}>0 - Disabled</option>
+                  <option value={1}>1 (0.001%)</option>
+                  <option value={5}>5 (0.005%)</option>
+                  <option value={10}>10 (0.01%) - Default</option>
+                  <option value={25}>25 (0.025%)</option>
+                  <option value={50}>50 (0.05%)</option>
+                  <option value={100}>100 (0.1%)</option>
+                </select>
+                {hlAdminSettings?.sources?.builder_fee && (
+                  <p className="text-xs text-gray-600 mt-1">
+                    Source: {hlAdminSettings.sources.builder_fee === 'db' ? 'Database' : hlAdminSettings.sources.builder_fee === 'env' ? '.env fallback' : 'Not set'}
+                  </p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Referral Code</label>
+                <input
+                  type="text"
+                  value={hlAdminForm.referral_code}
+                  onChange={(e) => setHlAdminForm(prev => ({ ...prev, referral_code: e.target.value }))}
+                  placeholder="e.g. MYCODE"
+                  className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded text-white text-sm"
+                />
+                {hlAdminSettings?.sources?.referral_code && (
+                  <p className="text-xs text-gray-600 mt-1">
+                    Source: {hlAdminSettings.sources.referral_code === 'db' ? 'Database' : hlAdminSettings.sources.referral_code === 'env' ? '.env fallback' : 'Not set'}
+                  </p>
+                )}
+              </div>
+            </div>
+
+            <button
+              onClick={saveHlAdminSettings}
+              disabled={hlAdminSaving}
+              className="px-4 py-2 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50"
+            >
+              {hlAdminSaving ? 'Saving...' : 'Save Settings'}
             </button>
           </div>
 
-          {hlRevenue ? (
-            <>
-              {/* Builder Code Section */}
+          {/* Revenue Display (existing) */}
+          <div className="bg-gray-900 border border-gray-800 rounded-lg p-6 space-y-6">
+            <div className="flex items-center justify-between">
               <div>
-                <h4 className="text-sm font-medium text-gray-400 mb-3 uppercase tracking-wider">Builder Code</h4>
-                {hlRevenue.builder?.configured ? (
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between p-3 bg-gray-800 rounded-lg">
-                      <span className="text-sm text-gray-300">Builder Address</span>
-                      <span className="text-sm text-white font-mono">{hlRevenue.builder.address}</span>
-                    </div>
-                    <div className="flex items-center justify-between p-3 bg-gray-800 rounded-lg">
-                      <span className="text-sm text-gray-300">Fee Rate</span>
-                      <span className="text-sm text-white">{hlRevenue.builder.fee_percent}</span>
-                    </div>
-                    <div className="flex items-center justify-between p-3 bg-gray-800 rounded-lg">
-                      <span className="text-sm text-gray-300">User Approved</span>
-                      <div className="flex items-center gap-2">
-                        <span className={`inline-block w-2.5 h-2.5 rounded-full ${hlRevenue.builder.user_approved ? 'bg-green-400' : 'bg-red-400'}`} />
-                        <span className={`text-sm ${hlRevenue.builder.user_approved ? 'text-green-400' : 'text-red-400'}`}>
-                          {hlRevenue.builder.user_approved ? 'Approved' : 'Not Approved'}
-                        </span>
-                      </div>
-                    </div>
-                    {!hlRevenue.builder.user_approved && (
-                      <button onClick={approveBuilderFee} disabled={hlApproving}
-                        className="w-full mt-2 px-4 py-2 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50">
-                        {hlApproving ? 'Approving...' : 'Approve Builder Fee'}
-                      </button>
-                    )}
-                  </div>
-                ) : (
-                  <div className="p-3 bg-gray-800 rounded-lg text-sm text-gray-500">
-                    Not configured. Set HL_BUILDER_ADDRESS in .env to enable.
-                  </div>
-                )}
+                <h3 className="text-white font-medium">Hyperliquid Revenue</h3>
+                <p className="text-sm text-gray-400 mt-1">Builder Code & Referral status</p>
               </div>
-
-              {/* Referral Section */}
-              <div>
-                <h4 className="text-sm font-medium text-gray-400 mb-3 uppercase tracking-wider">Referral</h4>
-                {hlRevenue.referral?.configured ? (
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between p-3 bg-gray-800 rounded-lg">
-                      <span className="text-sm text-gray-300">Referral Code</span>
-                      <span className="text-sm text-white font-mono">{hlRevenue.referral.code}</span>
-                    </div>
-                    <div className="flex items-center justify-between p-3 bg-gray-800 rounded-lg">
-                      <span className="text-sm text-gray-300">User Referred</span>
-                      <div className="flex items-center gap-2">
-                        <span className={`inline-block w-2.5 h-2.5 rounded-full ${hlRevenue.referral.user_referred ? 'bg-green-400' : 'bg-yellow-400'}`} />
-                        <span className={`text-sm ${hlRevenue.referral.user_referred ? 'text-green-400' : 'text-yellow-400'}`}>
-                          {hlRevenue.referral.user_referred ? 'Referred' : 'Not Referred'}
-                        </span>
-                      </div>
-                    </div>
-                    {!hlRevenue.referral.user_referred && hlRevenue.referral.link && (
-                      <a href={hlRevenue.referral.link} target="_blank" rel="noopener noreferrer"
-                        className="block mt-2 px-4 py-2 text-sm text-center bg-blue-600/20 text-blue-400 rounded-lg border border-blue-600/30 hover:bg-blue-600/30">
-                        Register via Referral Link
-                      </a>
-                    )}
-                  </div>
-                ) : (
-                  <div className="p-3 bg-gray-800 rounded-lg text-sm text-gray-500">
-                    Not configured. Set HL_REFERRAL_CODE in .env to enable.
-                  </div>
-                )}
-              </div>
-
-              {/* Fee Tier Info */}
-              {hlRevenue.user_fees && (
-                <div>
-                  <h4 className="text-sm font-medium text-gray-400 mb-3 uppercase tracking-wider">Fee Tier</h4>
-                  <div className="p-3 bg-gray-800 rounded-lg text-sm text-gray-300">
-                    <pre className="whitespace-pre-wrap text-xs">{JSON.stringify(hlRevenue.user_fees, null, 2)}</pre>
-                  </div>
-                </div>
-              )}
-
-              {/* Earnings Summary */}
-              {hlRevenue?.earnings && (
-                <div>
-                  <h4 className="text-sm font-medium text-gray-400 mb-3 uppercase tracking-wider">
-                    {t('settings.hlEarnings')}
-                  </h4>
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between p-3 bg-gray-800 rounded-lg">
-                      <span className="text-sm text-gray-300">{t('settings.hlBuilderFees30d')}</span>
-                      <span className="text-sm text-emerald-400 font-medium">
-                        ${(hlRevenue.earnings.total_builder_fees_30d || 0).toFixed(4)}
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between p-3 bg-gray-800 rounded-lg">
-                      <span className="text-sm text-gray-300">{t('settings.hlTradesWithFee')}</span>
-                      <span className="text-sm text-white">{hlRevenue.earnings.trades_with_builder_fee || 0}</span>
-                    </div>
-                    <div className="flex items-center justify-between p-3 bg-gray-800 rounded-lg">
-                      <span className="text-sm text-gray-300">{t('settings.hlMonthlyEstimate')}</span>
-                      <span className="text-sm text-emerald-400 font-medium">
-                        ${(hlRevenue.earnings.monthly_estimate || 0).toFixed(2)}/mo
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </>
-          ) : (
-            <div className="text-center text-gray-500 py-8">
-              {hlLoading ? t('settings.refreshing') : 'No Hyperliquid connection configured'}
+              <button onClick={loadHlRevenue} disabled={hlLoading}
+                className="px-3 py-1.5 text-sm bg-gray-800 text-gray-300 rounded hover:bg-gray-700 disabled:opacity-50">
+                {hlLoading ? t('settings.refreshing') : t('settings.refreshStatus')}
+              </button>
             </div>
-          )}
+
+            {hlRevenue ? (
+              <>
+                {/* Builder Code Section */}
+                <div>
+                  <h4 className="text-sm font-medium text-gray-400 mb-3 uppercase tracking-wider">Builder Code</h4>
+                  {hlRevenue.builder?.configured ? (
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between p-3 bg-gray-800 rounded-lg">
+                        <span className="text-sm text-gray-300">Builder Address</span>
+                        <span className="text-sm text-white font-mono">{hlRevenue.builder.address}</span>
+                      </div>
+                      <div className="flex items-center justify-between p-3 bg-gray-800 rounded-lg">
+                        <span className="text-sm text-gray-300">Fee Rate</span>
+                        <span className="text-sm text-white">{hlRevenue.builder.fee_percent}</span>
+                      </div>
+                      <div className="flex items-center justify-between p-3 bg-gray-800 rounded-lg">
+                        <span className="text-sm text-gray-300">User Approved</span>
+                        <div className="flex items-center gap-2">
+                          <span className={`inline-block w-2.5 h-2.5 rounded-full ${hlRevenue.builder.user_approved ? 'bg-green-400' : 'bg-red-400'}`} />
+                          <span className={`text-sm ${hlRevenue.builder.user_approved ? 'text-green-400' : 'text-red-400'}`}>
+                            {hlRevenue.builder.user_approved ? 'Approved' : 'Not Approved'}
+                          </span>
+                        </div>
+                      </div>
+                      {!hlRevenue.builder.user_approved && (
+                        <button onClick={approveBuilderFee} disabled={hlApproving}
+                          className="w-full mt-2 px-4 py-2 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50">
+                          {hlApproving ? 'Approving...' : 'Approve Builder Fee'}
+                        </button>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="p-3 bg-gray-800 rounded-lg text-sm text-gray-500">
+                      Not configured. Set HL_BUILDER_ADDRESS in .env to enable.
+                    </div>
+                  )}
+                </div>
+
+                {/* Referral Section */}
+                <div>
+                  <h4 className="text-sm font-medium text-gray-400 mb-3 uppercase tracking-wider">Referral</h4>
+                  {hlRevenue.referral?.configured ? (
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between p-3 bg-gray-800 rounded-lg">
+                        <span className="text-sm text-gray-300">Referral Code</span>
+                        <span className="text-sm text-white font-mono">{hlRevenue.referral.code}</span>
+                      </div>
+                      <div className="flex items-center justify-between p-3 bg-gray-800 rounded-lg">
+                        <span className="text-sm text-gray-300">User Referred</span>
+                        <div className="flex items-center gap-2">
+                          <span className={`inline-block w-2.5 h-2.5 rounded-full ${hlRevenue.referral.user_referred ? 'bg-green-400' : 'bg-yellow-400'}`} />
+                          <span className={`text-sm ${hlRevenue.referral.user_referred ? 'text-green-400' : 'text-yellow-400'}`}>
+                            {hlRevenue.referral.user_referred ? 'Referred' : 'Not Referred'}
+                          </span>
+                        </div>
+                      </div>
+                      {!hlRevenue.referral.user_referred && hlRevenue.referral.link && (
+                        <a href={hlRevenue.referral.link} target="_blank" rel="noopener noreferrer"
+                          className="block mt-2 px-4 py-2 text-sm text-center bg-blue-600/20 text-blue-400 rounded-lg border border-blue-600/30 hover:bg-blue-600/30">
+                          Register via Referral Link
+                        </a>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="p-3 bg-gray-800 rounded-lg text-sm text-gray-500">
+                      Not configured. Set HL_REFERRAL_CODE in .env to enable.
+                    </div>
+                  )}
+                </div>
+
+                {/* Fee Tier Info */}
+                {hlRevenue.user_fees && (
+                  <div>
+                    <h4 className="text-sm font-medium text-gray-400 mb-3 uppercase tracking-wider">Fee Tier</h4>
+                    <div className="p-3 bg-gray-800 rounded-lg text-sm text-gray-300">
+                      <pre className="whitespace-pre-wrap text-xs">{JSON.stringify(hlRevenue.user_fees, null, 2)}</pre>
+                    </div>
+                  </div>
+                )}
+
+                {/* Earnings Summary */}
+                {hlRevenue?.earnings && (
+                  <div>
+                    <h4 className="text-sm font-medium text-gray-400 mb-3 uppercase tracking-wider">
+                      {t('settings.hlEarnings')}
+                    </h4>
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between p-3 bg-gray-800 rounded-lg">
+                        <span className="text-sm text-gray-300">{t('settings.hlBuilderFees30d')}</span>
+                        <span className="text-sm text-emerald-400 font-medium">
+                          ${(hlRevenue.earnings.total_builder_fees_30d || 0).toFixed(4)}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between p-3 bg-gray-800 rounded-lg">
+                        <span className="text-sm text-gray-300">{t('settings.hlTradesWithFee')}</span>
+                        <span className="text-sm text-white">{hlRevenue.earnings.trades_with_builder_fee || 0}</span>
+                      </div>
+                      <div className="flex items-center justify-between p-3 bg-gray-800 rounded-lg">
+                        <span className="text-sm text-gray-300">{t('settings.hlMonthlyEstimate')}</span>
+                        <span className="text-sm text-emerald-400 font-medium">
+                          ${(hlRevenue.earnings.monthly_estimate || 0).toFixed(2)}/mo
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </>
+            ) : (
+              <div className="text-center text-gray-500 py-8">
+                {hlLoading ? t('settings.refreshing') : 'No Hyperliquid connection configured'}
+              </div>
+            )}
+          </div>
         </div>
       )}
 

@@ -626,6 +626,28 @@ class BitgetExchangeClient(ExchangeClient):
 
         return await self._request("POST", ENDPOINTS["place_order"], data=data)
 
+    async def check_affiliate_uid(self, uid: str) -> bool:
+        """Check if a UID is in our affiliate referral list via Bitget Affiliate API."""
+        try:
+            page = 1
+            while True:
+                result = await self._request(
+                    "GET",
+                    "/api/v2/affiliate/entity/customerInfo/GetDirectCommissions",
+                    params={"page": str(page), "pageSize": "200"},
+                )
+                items = result if isinstance(result, list) else result.get("list", [])
+                for item in items:
+                    if str(item.get("uid", "")) == str(uid):
+                        return True
+                if not items or len(items) < 200:
+                    break
+                page += 1
+            return False
+        except Exception as e:
+            logger.warning(f"Affiliate UID check failed for {uid}: {e}")
+            return False
+
     def calculate_position_size(
         self, balance: float, price: float, risk_percent: float, leverage: int,
     ) -> float:

@@ -15,7 +15,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.schemas.config import (
     ConfigResponse,
-    DiscordConfigUpdate,
     ExchangeConnectionResponse,
     ExchangeConnectionUpdate,
     LLMConnectionResponse,
@@ -28,7 +27,7 @@ from src.models.database import ExchangeConnection, LLMConnection, TradeRecord, 
 from src.models.session import get_db
 from src.utils.circuit_breaker import circuit_registry
 from src.api.routers.auth import limiter
-from src.utils.encryption import decrypt_value, encrypt_value, mask_value
+from src.utils.encryption import decrypt_value, encrypt_value
 from src.utils.logger import get_logger
 
 _config_logger = get_logger(__name__)
@@ -73,6 +72,8 @@ def _conn_to_response(conn: ExchangeConnection) -> ExchangeConnectionResponse:
         exchange_type=conn.exchange_type,
         api_keys_configured=bool(conn.api_key_encrypted),
         demo_api_keys_configured=bool(conn.demo_api_key_encrypted),
+        affiliate_uid=getattr(conn, "affiliate_uid", None),
+        affiliate_verified=getattr(conn, "affiliate_verified", None) if getattr(conn, "affiliate_uid", None) else None,
     )
 
 
@@ -93,16 +94,6 @@ async def get_config(
     if config.strategy_config:
         strategy = StrategyConfigUpdate(**json.loads(config.strategy_config))
 
-    discord = None
-    if config.discord_webhook_url:
-        try:
-            decrypted_url = decrypt_value(config.discord_webhook_url)
-            masked = mask_value(decrypted_url, 8)
-        except (ValueError, Exception):
-            masked = "****invalid****"
-        # Use model_construct to skip validation on the masked display value
-        discord = DiscordConfigUpdate.model_construct(webhook_url=masked)
-
     conn_responses = [_conn_to_response(c) for c in connections]
 
     # Deprecated fields for backward compat
@@ -112,7 +103,6 @@ async def get_config(
     return ConfigResponse(
         trading=trading,
         strategy=strategy,
-        discord=discord,
         connections=conn_responses,
         exchange_type=config.exchange_type,
         api_keys_configured=has_live_keys,
@@ -142,54 +132,6 @@ async def update_strategy_config(
     config = await _get_or_create_config(user, db)
     config.strategy_config = json.dumps(data.model_dump())
     return {"status": "ok", "message": "Strategy config updated"}
-
-
-@router.put("/discord")
-async def update_discord_config(
-    data: DiscordConfigUpdate,
-    user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-):
-    """Update Discord webhook URL."""
-    config = await _get_or_create_config(user, db)
-    if data.webhook_url:
-        config.discord_webhook_url = encrypt_value(data.webhook_url)
-    else:
-        config.discord_webhook_url = None
-    return {"status": "ok", "message": "Discord config updated"}
-
-
-@router.post("/discord/test")
-async def test_discord_webhook(
-    user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-):
-    """Send a test message to the configured Discord webhook."""
-    config = await _get_or_create_config(user, db)
-    if not config.discord_webhook_url:
-        raise HTTPException(status_code=400, detail="No Discord webhook configured")
-
-    try:
-        webhook_url = decrypt_value(config.discord_webhook_url)
-    except (ValueError, Exception):
-        raise HTTPException(status_code=400, detail="Discord webhook URL could not be decrypted")
-
-    try:
-        async with aiohttp.ClientSession() as session:
-            payload = {
-                "content": None,
-                "embeds": [{
-                    "title": "Test Notification",
-                    "description": "Trading Bot webhook is working!",
-                    "color": 3447003,
-                }],
-            }
-            async with session.post(webhook_url, json=payload) as resp:
-                if resp.status in (200, 204):
-                    return {"status": "ok", "message": "Test message sent"}
-                return {"status": "error", "message": f"Discord returned {resp.status}"}
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Failed to send: {str(e)}")
 
 
 # ── Exchange Connection CRUD ─────────────────────────────────────────
@@ -352,6 +294,82 @@ async def test_exchange_connection(
         raise HTTPException(status_code=400, detail=f"Connection failed: {str(e)}")
 
 
+# ── Affiliate UID ───────────────────────────────────────────────────
+
+
+@router.put("/exchange-connections/{exchange_type}/affiliate-uid")
+@limiter.limit("10/minute")
+async def set_affiliate_uid(
+    request: Request,
+    exchange_type: str = Path(pattern="^(bitget|weex)$"),
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """User sets their exchange UID; auto-verify via affiliate API."""
+    body = await request.json()
+    uid = str(body.get("uid", "")).strip()
+    if not uid or not uid.isdigit():
+        raise HTTPException(status_code=400, detail="UID muss eine Zahl sein.")
+
+    # Get or create user's exchange connection
+    result = await db.execute(
+        select(ExchangeConnection).where(
+            ExchangeConnection.user_id == user.id,
+            ExchangeConnection.exchange_type == exchange_type,
+        )
+    )
+    conn = result.scalar_one_or_none()
+    if not conn:
+        conn = ExchangeConnection(user_id=user.id, exchange_type=exchange_type)
+        db.add(conn)
+
+    conn.affiliate_uid = uid
+    conn.affiliate_verified = False
+    conn.affiliate_verified_at = None
+
+    # Try auto-verify via admin's API keys
+    verified = False
+    try:
+        admin_conn = await _get_admin_exchange_conn(exchange_type, db)
+        if admin_conn:
+            from src.exchanges.factory import create_exchange_client
+            client = create_exchange_client(
+                exchange_type=exchange_type,
+                api_key=decrypt_value(admin_conn.api_key_encrypted),
+                api_secret=decrypt_value(admin_conn.api_secret_encrypted),
+                passphrase=decrypt_value(admin_conn.passphrase_encrypted) if admin_conn.passphrase_encrypted else "",
+                demo_mode=False,
+            )
+            verified = await client.check_affiliate_uid(uid)
+            await client.close()
+
+            if verified:
+                conn.affiliate_verified = True
+                conn.affiliate_verified_at = datetime.utcnow()
+    except Exception:
+        pass  # Verification failed silently; UID is still saved
+
+    await db.flush()
+
+    return {
+        "uid": uid,
+        "verified": verified,
+        "message": "UID verifiziert." if verified else "UID gespeichert. Verifizierung ausstehend.",
+    }
+
+
+async def _get_admin_exchange_conn(exchange_type: str, db: AsyncSession):
+    """Get the first admin user's live exchange connection for affiliate API calls."""
+    result = await db.execute(
+        select(ExchangeConnection).join(User).where(
+            User.is_admin == True,
+            ExchangeConnection.exchange_type == exchange_type,
+            ExchangeConnection.api_key_encrypted.isnot(None),
+        ).limit(1)
+    )
+    return result.scalar_one_or_none()
+
+
 # ── Connection Status (Ping) ────────────────────────────────────────
 
 
@@ -436,14 +454,6 @@ async def get_connections_status(
                 "json_body": ping_info.get("json_body"),
             }
 
-    has_discord = bool(config.discord_webhook_url)
-    # Verify we can decrypt it
-    if has_discord:
-        try:
-            decrypt_value(config.discord_webhook_url)
-        except (ValueError, Exception):
-            has_discord = False
-
     # Collect services that need actual pinging (unique URLs only)
     services_to_ping = [
         n for n in services
@@ -486,8 +496,6 @@ async def get_connections_status(
             "provider": svc.get("provider", ""),
             **ping_data,
         }
-
-    results["discord"] = {"label": "Discord Webhook", "type": "notification", "configured": has_discord, "reachable": has_discord}
 
     return {
         "timestamp": datetime.utcnow().isoformat(),
@@ -623,6 +631,91 @@ async def test_llm_connection(
 # ── Hyperliquid Builder Code & Referral ────────────────────────────
 
 
+@router.get("/hyperliquid/admin-settings")
+async def get_hl_admin_settings(
+    admin: User = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Admin: get current builder config (DB values + ENV fallback indicator)."""
+    from src.utils.settings import get_hl_config
+    from src.models.database import SystemSetting
+
+    config = await get_hl_config()
+
+    # Check which values come from DB vs ENV
+    db_keys = await db.execute(
+        select(SystemSetting.key, SystemSetting.value).where(
+            SystemSetting.key.in_(["HL_BUILDER_ADDRESS", "HL_BUILDER_FEE", "HL_REFERRAL_CODE"])
+        )
+    )
+    db_values = {row.key: row.value for row in db_keys.all()}
+
+    return {
+        "builder_address": config["builder_address"],
+        "builder_fee": config["builder_fee"],
+        "referral_code": config["referral_code"],
+        "sources": {
+            "builder_address": "db" if db_values.get("HL_BUILDER_ADDRESS") else "env" if config["builder_address"] else "none",
+            "builder_fee": "db" if db_values.get("HL_BUILDER_FEE") else "env" if config["builder_fee"] else "none",
+            "referral_code": "db" if db_values.get("HL_REFERRAL_CODE") else "env" if config["referral_code"] else "none",
+        },
+    }
+
+
+@router.put("/hyperliquid/admin-settings")
+@limiter.limit("10/minute")
+async def update_hl_admin_settings(
+    request: Request,
+    admin: User = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Admin: update builder address, fee, referral code."""
+    import re as _re
+    from src.models.database import SystemSetting
+
+    body = await request.json()
+    builder_address = (body.get("builder_address") or "").strip()
+    builder_fee = body.get("builder_fee")
+    referral_code = (body.get("referral_code") or "").strip()
+
+    # Validate builder address (empty = clear, otherwise must be 0x + 40 hex)
+    if builder_address and not _re.match(r"^0x[0-9a-fA-F]{40}$", builder_address):
+        raise HTTPException(status_code=400, detail="Builder address must be a valid Ethereum address (0x + 40 hex characters)")
+
+    # Validate fee (0 = disabled, 1-100 valid range)
+    if builder_fee is not None:
+        try:
+            builder_fee = int(builder_fee)
+        except (ValueError, TypeError):
+            raise HTTPException(status_code=400, detail="Builder fee must be an integer")
+        if builder_fee < 0 or builder_fee > 100:
+            raise HTTPException(status_code=400, detail="Builder fee must be 0-100 (0 = disabled)")
+
+    # Validate referral code (alphanumeric, max 50 chars)
+    if referral_code and (len(referral_code) > 50 or not _re.match(r"^[a-zA-Z0-9_-]+$", referral_code)):
+        raise HTTPException(status_code=400, detail="Referral code must be alphanumeric (max 50 characters)")
+
+    # Upsert each setting
+    settings = {
+        "HL_BUILDER_ADDRESS": builder_address,
+        "HL_BUILDER_FEE": str(builder_fee) if builder_fee is not None else "",
+        "HL_REFERRAL_CODE": referral_code,
+    }
+
+    for key, value in settings.items():
+        result = await db.execute(
+            select(SystemSetting).where(SystemSetting.key == key)
+        )
+        existing = result.scalar_one_or_none()
+        if existing:
+            existing.value = value
+            existing.updated_at = datetime.utcnow()
+        else:
+            db.add(SystemSetting(key=key, value=value, updated_at=datetime.utcnow()))
+
+    return {"status": "ok", "message": "Hyperliquid settings updated"}
+
+
 def _create_hl_client(conn: ExchangeConnection, use_demo: bool):
     """Helper: create a temporary HyperliquidClient from stored credentials."""
     from src.exchanges.factory import create_exchange_client
@@ -647,58 +740,64 @@ def _create_hl_client(conn: ExchangeConnection, use_demo: bool):
         )
 
 
-@router.get("/hyperliquid/builder-status")
-async def get_builder_status(
-    mode: Optional[Literal["live", "demo"]] = None,
-    user: User = Depends(get_current_admin),
+@router.get("/hyperliquid/builder-config")
+async def get_builder_config(
+    user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Check builder fee approval status (admin only)."""
-    result = await db.execute(
-        select(ExchangeConnection).where(
-            ExchangeConnection.user_id == user.id,
-            ExchangeConnection.exchange_type == "hyperliquid",
-        )
-    )
-    conn = result.scalar_one_or_none()
-    if not conn:
-        raise HTTPException(status_code=400, detail="No Hyperliquid connection configured")
-
-    builder_address = os.environ.get("HL_BUILDER_ADDRESS", "").strip()
-    if not builder_address:
-        return {"builder_configured": False, "message": "No builder code configured on server"}
-
+    """Get builder fee config for frontend wallet signing (public, all users)."""
     from src.exchanges.hyperliquid.constants import DEFAULT_BUILDER_FEE
 
-    builder_fee = int(os.environ.get("HL_BUILDER_FEE", str(DEFAULT_BUILDER_FEE)))
-    use_demo = mode == "demo" if mode else bool(conn.demo_api_key_encrypted)
+    from src.utils.settings import get_hl_config
+    hl_cfg = await get_hl_config()
+    builder_address = hl_cfg["builder_address"]
+    if not builder_address:
+        return {"builder_configured": False}
 
-    try:
-        client = _create_hl_client(conn, use_demo)
-        approved_fee = await client.check_builder_fee_approval()
-        await client.close()
+    builder_fee = hl_cfg["builder_fee"] or DEFAULT_BUILDER_FEE
+    raw_rate = builder_fee / 1000
+    max_fee_rate = f"{raw_rate:g}%"
 
-        return {
-            "builder_configured": True,
-            "builder_address": builder_address[:10] + "...",
-            "builder_fee": builder_fee,
-            "user_approved": approved_fee is not None,
-            "approved_max_fee": approved_fee,
-            "needs_approval": approved_fee is None or approved_fee < builder_fee,
-        }
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Failed to check builder status: {str(e)}")
+    # Check if user has HL connection and approval status
+    result = await db.execute(
+        select(ExchangeConnection).where(
+            ExchangeConnection.user_id == user.id,
+            ExchangeConnection.exchange_type == "hyperliquid",
+        )
+    )
+    conn = result.scalar_one_or_none()
+
+    referral_code = hl_cfg["referral_code"]
+
+    referral_required = bool(referral_code)
+    referral_verified = getattr(conn, "referral_verified", False) if conn else False
+    builder_fee_approved = getattr(conn, "builder_fee_approved", False) if conn else False
+
+    return {
+        "builder_configured": True,
+        "builder_address": builder_address,
+        "builder_fee": builder_fee,
+        "max_fee_rate": max_fee_rate,
+        "chain_id": 42161,
+        "testnet_chain_id": 421614,
+        "has_hl_connection": conn is not None,
+        "builder_fee_approved": builder_fee_approved,
+        "needs_approval": conn is not None and not builder_fee_approved,
+        "referral_code": referral_code,
+        "referral_required": referral_required,
+        "referral_verified": referral_verified,
+        "needs_referral": referral_required and not referral_verified,
+    }
 
 
-@router.post("/hyperliquid/approve-builder-fee")
-async def approve_builder_fee(
-    mode: Optional[Literal["live", "demo"]] = None,
-    user: User = Depends(get_current_admin),
+@router.post("/hyperliquid/confirm-builder-approval")
+@limiter.limit("10/minute")
+async def confirm_builder_approval(
+    request: Request,
+    user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Approve builder fee (admin only, EIP-712 signed)."""
+    """After frontend wallet signing, verify approval on-chain and record in DB."""
     result = await db.execute(
         select(ExchangeConnection).where(
             ExchangeConnection.user_id == user.id,
@@ -709,24 +808,28 @@ async def approve_builder_fee(
     if not conn:
         raise HTTPException(status_code=400, detail="No Hyperliquid connection configured")
 
-    builder_address = os.environ.get("HL_BUILDER_ADDRESS", "").strip()
-    if not builder_address:
-        raise HTTPException(status_code=400, detail="No builder code configured on server")
+    from src.utils.settings import get_hl_config
+    hl_cfg = await get_hl_config()
+    builder_fee = hl_cfg["builder_fee"] or 10
 
-    use_demo = mode == "demo" if mode else bool(conn.demo_api_key_encrypted)
-
+    # Verify approval on-chain via Hyperliquid API
+    use_demo = bool(conn.demo_api_key_encrypted and not conn.api_key_encrypted)
+    client = _create_hl_client(conn, use_demo)
     try:
-        client = _create_hl_client(conn, use_demo)
-        success = await client.approve_builder_fee()
+        approved_fee = await client.check_builder_fee_approval()
+    finally:
         await client.close()
 
-        if success:
-            return {"status": "ok", "message": "Builder fee approved successfully"}
-        raise HTTPException(status_code=400, detail="Builder fee approval failed")
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Approval failed: {str(e)}")
+    if approved_fee is not None and approved_fee >= builder_fee:
+        conn.builder_fee_approved = True
+        conn.builder_fee_approved_at = datetime.utcnow()
+        await db.commit()
+        return {"status": "ok", "approved_max_fee": approved_fee}
+
+    raise HTTPException(
+        status_code=400,
+        detail="Builder fee approval not found on Hyperliquid. Please try signing again.",
+    )
 
 
 @router.get("/hyperliquid/referral-status")
@@ -746,7 +849,9 @@ async def get_referral_status(
     if not conn:
         raise HTTPException(status_code=400, detail="No Hyperliquid connection configured")
 
-    referral_code = os.environ.get("HL_REFERRAL_CODE", "").strip()
+    from src.utils.settings import get_hl_config
+    hl_cfg = await get_hl_config()
+    referral_code = hl_cfg["referral_code"]
     use_demo = mode == "demo" if mode else bool(conn.demo_api_key_encrypted)
 
     try:
@@ -788,8 +893,10 @@ async def get_revenue_summary(
     if not conn:
         raise HTTPException(status_code=400, detail="No Hyperliquid connection configured")
 
-    builder_address = os.environ.get("HL_BUILDER_ADDRESS", "").strip()
-    referral_code = os.environ.get("HL_REFERRAL_CODE", "").strip()
+    from src.utils.settings import get_hl_config
+    hl_cfg = await get_hl_config()
+    builder_address = hl_cfg["builder_address"]
+    referral_code = hl_cfg["referral_code"]
     use_demo = mode == "demo" if mode else bool(conn.demo_api_key_encrypted)
 
     try:
@@ -805,7 +912,7 @@ async def get_revenue_summary(
 
         from src.exchanges.hyperliquid.constants import DEFAULT_BUILDER_FEE
 
-        builder_fee = int(os.environ.get("HL_BUILDER_FEE", str(DEFAULT_BUILDER_FEE)))
+        builder_fee = hl_cfg["builder_fee"] or DEFAULT_BUILDER_FEE
 
         referred_by = None
         if referral_info:
@@ -859,3 +966,60 @@ async def get_revenue_summary(
 async def _async_none():
     """Helper that returns None for asyncio.gather when a task is skipped."""
     return None
+
+
+# ── Admin: Affiliate UID management ────────────────────────────────
+
+
+@router.get("/admin/affiliate-uids")
+async def list_affiliate_uids(
+    admin: User = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Admin: List all users who submitted an affiliate UID."""
+    result = await db.execute(
+        select(ExchangeConnection, User.username).join(User).where(
+            ExchangeConnection.affiliate_uid.isnot(None),
+        ).order_by(ExchangeConnection.updated_at.desc())
+    )
+    rows = result.all()
+    return [
+        {
+            "connection_id": conn.id,
+            "user_id": conn.user_id,
+            "username": username,
+            "exchange_type": conn.exchange_type,
+            "affiliate_uid": conn.affiliate_uid,
+            "affiliate_verified": conn.affiliate_verified,
+            "affiliate_verified_at": conn.affiliate_verified_at.isoformat() if conn.affiliate_verified_at else None,
+        }
+        for conn, username in rows
+    ]
+
+
+@router.put("/admin/affiliate-uids/{connection_id}/verify")
+async def verify_affiliate_uid(
+    connection_id: int,
+    request: Request,
+    admin: User = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Admin: Manually verify or reject an affiliate UID."""
+    body = await request.json()
+    verified = bool(body.get("verified", True))
+
+    result = await db.execute(
+        select(ExchangeConnection).where(ExchangeConnection.id == connection_id)
+    )
+    conn = result.scalar_one_or_none()
+    if not conn or not conn.affiliate_uid:
+        raise HTTPException(status_code=404, detail="Affiliate UID not found")
+
+    conn.affiliate_verified = verified
+    conn.affiliate_verified_at = datetime.utcnow() if verified else None
+
+    return {
+        "connection_id": conn.id,
+        "affiliate_uid": conn.affiliate_uid,
+        "affiliate_verified": conn.affiliate_verified,
+    }

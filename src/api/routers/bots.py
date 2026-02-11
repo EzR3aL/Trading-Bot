@@ -12,6 +12,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from src.api.schemas.bots import (
     BotConfigCreate,
@@ -23,10 +24,11 @@ from src.api.schemas.bots import (
     StrategyInfo,
 )
 from src.auth.dependencies import get_current_user
-from src.models.database import BotConfig, TradeRecord, User
+from src.models.database import AffiliateLink, BotConfig, ConfigPreset, ExchangeConnection, TradeRecord, User
 from src.models.session import get_db
 from src.strategy.base import StrategyRegistry
 from src.api.routers.auth import limiter
+from src.utils.encryption import encrypt_value
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -92,6 +94,10 @@ def _config_to_response(config: BotConfig) -> BotConfigResponse:
         rotation_interval_minutes=config.rotation_interval_minutes,
         rotation_start_time=config.rotation_start_time,
         is_enabled=config.is_enabled,
+        discord_webhook_configured=bool(config.discord_webhook_url),
+        telegram_configured=bool(config.telegram_bot_token and config.telegram_chat_id),
+        active_preset_id=config.active_preset_id,
+        active_preset_name=getattr(config.active_preset, "name", None) if config.active_preset_id else None,
         created_at=config.created_at.isoformat() if config.created_at else None,
         updated_at=config.updated_at.isoformat() if config.updated_at else None,
     )
@@ -151,6 +157,16 @@ async def create_bot(
     if count_result.scalar() >= MAX_BOTS_PER_USER:
         raise HTTPException(status_code=400, detail=f"Maximum {MAX_BOTS_PER_USER} bots per user")
 
+    # Encrypt discord webhook if provided
+    encrypted_webhook = None
+    if body.discord_webhook_url:
+        encrypted_webhook = encrypt_value(body.discord_webhook_url)
+
+    # Encrypt telegram bot token if provided
+    encrypted_telegram_token = None
+    if body.telegram_bot_token:
+        encrypted_telegram_token = encrypt_value(body.telegram_bot_token)
+
     config = BotConfig(
         user_id=user.id,
         name=body.name,
@@ -171,6 +187,9 @@ async def create_bot(
         rotation_enabled=body.rotation_enabled,
         rotation_interval_minutes=body.rotation_interval_minutes,
         rotation_start_time=body.rotation_start_time,
+        discord_webhook_url=encrypted_webhook,
+        telegram_bot_token=encrypted_telegram_token,
+        telegram_chat_id=body.telegram_chat_id,
         is_enabled=False,
     )
     db.add(config)
@@ -188,6 +207,44 @@ async def list_bots(
     db: AsyncSession = Depends(get_db),
 ):
     """List all bots for the current user with runtime status."""
+    # Preload preset names for active presets
+    preset_names: dict[int, str] = {}
+    preset_result = await db.execute(
+        select(ConfigPreset.id, ConfigPreset.name).where(ConfigPreset.user_id == user.id)
+    )
+    for pid, pname in preset_result.all():
+        preset_names[pid] = pname
+
+    # Preload HL gate status (builder fee + referral)
+    hl_approved = False
+    hl_referral_verified = False
+    hl_conn_result = await db.execute(
+        select(ExchangeConnection).where(
+            ExchangeConnection.user_id == user.id,
+            ExchangeConnection.exchange_type == "hyperliquid",
+        )
+    )
+    hl_conn = hl_conn_result.scalar_one_or_none()
+    if hl_conn:
+        hl_approved = getattr(hl_conn, "builder_fee_approved", False)
+        hl_referral_verified = getattr(hl_conn, "referral_verified", False)
+
+    # Preload affiliate UID status (Bitget / Weex)
+    affiliate_data: dict[str, dict] = {}
+    for ex_type in ("bitget", "weex"):
+        ex_result = await db.execute(
+            select(ExchangeConnection).where(
+                ExchangeConnection.user_id == user.id,
+                ExchangeConnection.exchange_type == ex_type,
+            )
+        )
+        ex_conn = ex_result.scalar_one_or_none()
+        if ex_conn:
+            affiliate_data[ex_type] = {
+                "uid": getattr(ex_conn, "affiliate_uid", None),
+                "verified": getattr(ex_conn, "affiliate_verified", False),
+            }
+
     # Filter bots by mode when demo_mode is set
     bot_query = select(BotConfig).where(BotConfig.user_id == user.id)
     if demo_mode is True:
@@ -348,6 +405,14 @@ async def list_bots(
             total_fees=round(float(total_fees), 2),
             total_funding=round(float(total_funding), 2),
             open_trades=open_trades,
+            discord_webhook_configured=bool(config.discord_webhook_url),
+            telegram_configured=bool(config.telegram_bot_token and config.telegram_chat_id),
+            active_preset_id=config.active_preset_id,
+            active_preset_name=preset_names.get(config.active_preset_id) if config.active_preset_id else None,
+            builder_fee_approved=hl_approved if config.exchange_type == "hyperliquid" else None,
+            referral_verified=hl_referral_verified if config.exchange_type == "hyperliquid" else None,
+            affiliate_uid=affiliate_data.get(config.exchange_type, {}).get("uid") if config.exchange_type in ("bitget", "weex") else None,
+            affiliate_verified=affiliate_data.get(config.exchange_type, {}).get("verified") if config.exchange_type in ("bitget", "weex") else None,
             **llm_data,
         ))
 
@@ -363,6 +428,7 @@ async def get_bot(
     """Get a specific bot configuration."""
     result = await db.execute(
         select(BotConfig).where(BotConfig.id == bot_id, BotConfig.user_id == user.id)
+        .options(selectinload(BotConfig.active_preset))
     )
     config = result.scalar_one_or_none()
     if not config:
@@ -406,6 +472,24 @@ async def update_bot(
             setattr(config, field, json.dumps(value))
         elif field == "schedule_config" and value is not None:
             setattr(config, field, json.dumps(value))
+        elif field == "discord_webhook_url":
+            # Empty string = clear, non-empty = encrypt
+            if value:
+                setattr(config, field, encrypt_value(value))
+            else:
+                setattr(config, field, None)
+        elif field == "telegram_bot_token":
+            # Empty string = clear, non-empty = encrypt
+            if value:
+                setattr(config, field, encrypt_value(value))
+            else:
+                setattr(config, field, None)
+        elif field == "telegram_chat_id":
+            # Empty string = clear, non-empty = set
+            if value:
+                setattr(config, field, value)
+            else:
+                setattr(config, field, None)
         elif value is not None:
             setattr(config, field, value)
 
@@ -442,6 +526,86 @@ async def delete_bot(
 
 # ─── Lifecycle ────────────────────────────────────────────────
 
+
+async def _enforce_hl_gates(user: User, db: AsyncSession):
+    """API-level hard gate for Hyperliquid: check builder fee + referral in DB.
+
+    Raises HTTPException if any gate fails. Called from start_bot AND restart_bot.
+    """
+    from src.utils.settings import get_hl_config
+
+    hl_conn_result = await db.execute(
+        select(ExchangeConnection).where(
+            ExchangeConnection.user_id == user.id,
+            ExchangeConnection.exchange_type == "hyperliquid",
+        )
+    )
+    hl_conn = hl_conn_result.scalar_one_or_none()
+    if not hl_conn:
+        raise HTTPException(status_code=400, detail="Keine Hyperliquid-Verbindung konfiguriert.")
+
+    hl_cfg = await get_hl_config()
+
+    # Gate 1: Referral check
+    referral_code = hl_cfg["referral_code"]
+    if referral_code and not hl_conn.referral_verified:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Referral erforderlich. Bitte registriere dich ueber "
+                   f"https://app.hyperliquid.xyz/join/{referral_code} "
+                   f"bevor du Hyperliquid Bots nutzen kannst.",
+        )
+
+    # Gate 2: Builder fee check
+    builder_address = hl_cfg["builder_address"]
+    if builder_address and not hl_conn.builder_fee_approved:
+        raise HTTPException(
+            status_code=400,
+            detail="Builder Fee nicht genehmigt. Bitte genehmige die Builder Fee auf der Website.",
+        )
+
+
+async def _enforce_affiliate_gate(exchange_type: str, user: User, db: AsyncSession):
+    """Check if user has verified affiliate UID for Bitget/Weex."""
+    # Check if uid_required is active for this exchange
+    link_result = await db.execute(
+        select(AffiliateLink).where(
+            AffiliateLink.exchange_type == exchange_type,
+            AffiliateLink.is_active == True,
+            AffiliateLink.uid_required == True,
+        )
+    )
+    aff_link = link_result.scalar_one_or_none()
+    if not aff_link:
+        return  # No UID requirement active
+
+    conn_result = await db.execute(
+        select(ExchangeConnection).where(
+            ExchangeConnection.user_id == user.id,
+            ExchangeConnection.exchange_type == exchange_type,
+        )
+    )
+    conn = conn_result.scalar_one_or_none()
+
+    if not conn or not conn.affiliate_uid:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "message": "Registriere dich zuerst über unseren Affiliate-Link, trage dann deine UID unter Einstellungen → API Keys ein.",
+                "affiliate_url": aff_link.affiliate_url,
+                "type": "affiliate_required",
+            },
+        )
+    if not conn.affiliate_verified:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "message": "Deine UID wurde eingereicht, ist aber noch nicht freigegeben. Bitte warte auf die Freigabe durch einen Admin.",
+                "type": "affiliate_pending",
+            },
+        )
+
+
 @router.post("/{bot_id}/start")
 @limiter.limit("20/minute")
 async def start_bot(
@@ -457,6 +621,12 @@ async def start_bot(
     config = result.scalar_one_or_none()
     if not config:
         raise HTTPException(status_code=404, detail="Bot not found")
+
+    # ── Pre-start gates (API level) ─────────────────────────────
+    if config.exchange_type == "hyperliquid":
+        await _enforce_hl_gates(user, db)
+    if config.exchange_type in ("bitget", "weex"):
+        await _enforce_affiliate_gate(config.exchange_type, user, db)
 
     orchestrator = _get_orchestrator()
 
@@ -516,6 +686,12 @@ async def restart_bot(
     if not config:
         raise HTTPException(status_code=404, detail="Bot not found")
 
+    # ── Pre-start gates (API level) ─────────────────────────────
+    if config.exchange_type == "hyperliquid":
+        await _enforce_hl_gates(user, db)
+    if config.exchange_type in ("bitget", "weex"):
+        await _enforce_affiliate_gate(config.exchange_type, user, db)
+
     orchestrator = _get_orchestrator()
 
     try:
@@ -535,6 +711,112 @@ async def stop_all_bots(user: User = Depends(get_current_user)):
     orchestrator = _get_orchestrator()
     stopped = await orchestrator.stop_all_for_user(user.id)
     return {"status": "ok", "message": f"{stopped} bot(s) stopped"}
+
+
+@router.post("/{bot_id}/test-telegram")
+async def test_telegram(
+    bot_id: int,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db),
+):
+    """Send a test Telegram message."""
+    result = await session.execute(
+        select(BotConfig).where(BotConfig.id == bot_id, BotConfig.user_id == user.id)
+    )
+    config = result.scalar_one_or_none()
+    if not config:
+        raise HTTPException(status_code=404, detail="Bot not found")
+    if not config.telegram_bot_token or not config.telegram_chat_id:
+        raise HTTPException(status_code=400, detail="Telegram not configured")
+
+    from src.notifications.telegram_notifier import TelegramNotifier
+    from src.utils.encryption import decrypt_value
+
+    notifier = TelegramNotifier(
+        bot_token=decrypt_value(config.telegram_bot_token),
+        chat_id=config.telegram_chat_id,
+    )
+    success = await notifier.send_test_message()
+    if not success:
+        raise HTTPException(status_code=502, detail="Failed to send Telegram message")
+    return {"status": "ok", "message": "Test message sent"}
+
+
+# ─── Preset Application ──────────────────────────────────────
+
+@router.post("/{bot_id}/apply-preset/{preset_id}", response_model=BotConfigResponse)
+async def apply_preset_to_bot(
+    bot_id: int,
+    preset_id: int,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Apply a preset to an existing bot. Bot must be stopped."""
+    result = await db.execute(
+        select(BotConfig).where(BotConfig.id == bot_id, BotConfig.user_id == user.id)
+    )
+    config = result.scalar_one_or_none()
+    if not config:
+        raise HTTPException(status_code=404, detail="Bot not found")
+
+    # Check if running
+    orchestrator = _get_orchestrator()
+    if orchestrator.is_running(bot_id):
+        raise HTTPException(status_code=400, detail="Stop the bot before applying a preset")
+
+    # Load preset
+    preset_result = await db.execute(
+        select(ConfigPreset).where(ConfigPreset.id == preset_id, ConfigPreset.user_id == user.id)
+    )
+    preset = preset_result.scalar_one_or_none()
+    if not preset:
+        raise HTTPException(status_code=404, detail="Preset not found")
+
+    # Apply trading config from preset
+    if preset.trading_config:
+        trading = json.loads(preset.trading_config)
+        if "leverage" in trading:
+            config.leverage = trading["leverage"]
+        if "position_size_percent" in trading:
+            config.position_size_percent = trading["position_size_percent"]
+        if "max_trades_per_day" in trading:
+            config.max_trades_per_day = trading["max_trades_per_day"]
+        if "take_profit_percent" in trading:
+            config.take_profit_percent = trading["take_profit_percent"]
+        if "stop_loss_percent" in trading:
+            config.stop_loss_percent = trading["stop_loss_percent"]
+        if "daily_loss_limit_percent" in trading:
+            config.daily_loss_limit_percent = trading["daily_loss_limit_percent"]
+
+    # Apply strategy config from preset
+    if preset.strategy_config:
+        config.strategy_params = preset.strategy_config
+
+    # Apply trading pairs (convert if needed for exchange compatibility)
+    if preset.trading_pairs:
+        pairs = json.loads(preset.trading_pairs)
+        if config.exchange_type == "hyperliquid":
+            # Strip USDT suffix for Hyperliquid
+            pairs = [p.replace("USDT", "") if p.endswith("USDT") else p for p in pairs]
+        else:
+            # Add USDT suffix for CEX exchanges if missing
+            pairs = [p if p.endswith("USDT") else f"{p}USDT" for p in pairs]
+        config.trading_pairs = json.dumps(pairs)
+
+    # Track which preset is active
+    config.active_preset_id = preset_id
+
+    await db.flush()
+
+    # Re-fetch with preset relationship loaded
+    refreshed = await db.execute(
+        select(BotConfig).where(BotConfig.id == bot_id)
+        .options(selectinload(BotConfig.active_preset))
+    )
+    config = refreshed.scalar_one()
+
+    logger.info(f"Preset '{preset.name}' applied to bot {config.name} (id={bot_id})")
+    return _config_to_response(config)
 
 
 # ─── Per-Bot Statistics ──────────────────────────────────────

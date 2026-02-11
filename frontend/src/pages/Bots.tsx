@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
+import { Link } from 'react-router-dom'
 import { toBlob } from 'html-to-image'
 import api from '../api/client'
 import { useFilterStore } from '../stores/filterStore'
@@ -7,6 +8,7 @@ import { useThemeStore } from '../stores/themeStore'
 import { useToastStore } from '../stores/toastStore'
 import { ExchangeIcon } from '../components/ui/ExchangeLogo'
 import BotBuilder from '../components/bots/BotBuilder'
+import BuilderFeeApproval from '../components/hyperliquid/BuilderFeeApproval'
 import { SkeletonBotCard } from '../components/ui/Skeleton'
 import PnlCell from '../components/ui/PnlCell'
 import {
@@ -25,6 +27,8 @@ import {
   ArrowUpRight,
   ArrowDownRight,
   Copy,
+  ChevronDown,
+  Layers,
 } from 'lucide-react'
 
 interface BotStatus {
@@ -54,6 +58,16 @@ interface BotStatus {
   llm_total_predictions?: number | null
   llm_total_tokens_used?: number | null
   llm_avg_tokens_per_call?: number | null
+  active_preset_id?: number | null
+  active_preset_name?: string | null
+  builder_fee_approved?: boolean | null
+  referral_verified?: boolean | null
+}
+
+interface Preset {
+  id: number
+  name: string
+  exchange_type: string
 }
 
 interface BotTrade {
@@ -529,6 +543,18 @@ export default function Bots() {
   const { t } = useTranslation()
   const { demoFilter } = useFilterStore()
   const { addToast } = useToastStore()
+
+  const handleStartError = (err: any) => {
+    const detail = err.response?.data?.detail
+    if (detail && typeof detail === 'object' && detail.message) {
+      const msg = detail.affiliate_url
+        ? `${detail.message}\n${detail.affiliate_url}`
+        : detail.message
+      addToast('error', msg, 10000)
+    } else {
+      addToast('error', typeof detail === 'string' ? detail : t('bots.failedStart'))
+    }
+  }
   const [bots, setBots] = useState<BotStatus[]>([])
   const [loading, setLoading] = useState(true)
   const [showBuilder, setShowBuilder] = useState(false)
@@ -536,6 +562,9 @@ export default function Bots() {
   const [actionLoading, setActionLoading] = useState<number | null>(null)
   const [error, setError] = useState('')
   const [historyBot, setHistoryBot] = useState<BotStatus | null>(null)
+  const [presets, setPresets] = useState<Preset[]>([])
+  const [presetDropdownOpen, setPresetDropdownOpen] = useState<number | null>(null)
+  const [builderFeeModalBotId, setBuilderFeeModalBotId] = useState<number | null>(null)
 
   const fetchBots = useCallback(async () => {
     try {
@@ -556,16 +585,45 @@ export default function Bots() {
     return () => clearInterval(interval)
   }, [fetchBots])
 
+  useEffect(() => {
+    api.get('/presets').then(res => setPresets(res.data)).catch(() => {})
+  }, [])
+
   const handleStart = async (id: number) => {
+    // Check if HL bot needs builder fee approval or referral first
+    const bot = bots.find(b => b.bot_config_id === id)
+    if (bot?.exchange_type === 'hyperliquid' && (bot?.builder_fee_approved === false || bot?.referral_verified === false)) {
+      setBuilderFeeModalBotId(id)
+      return
+    }
+
     setActionLoading(id)
     try {
       await api.post(`/bots/${id}/start`)
       await fetchBots()
       addToast('success', t('bots.start') + ' - OK')
     } catch (err: any) {
-      addToast('error', err.response?.data?.detail || t('bots.failedStart'))
+      handleStartError(err)
     }
     setActionLoading(null)
+  }
+
+  const handleBuilderFeeApproved = async () => {
+    const botId = builderFeeModalBotId
+    setBuilderFeeModalBotId(null)
+    if (botId) {
+      await fetchBots()
+      // Auto-start bot after approval
+      setActionLoading(botId)
+      try {
+        await api.post(`/bots/${botId}/start`)
+        await fetchBots()
+        addToast('success', t('bots.start') + ' - OK')
+      } catch (err: any) {
+        handleStartError(err)
+      }
+      setActionLoading(null)
+    }
   }
 
   const handleStop = async (id: number) => {
@@ -589,6 +647,19 @@ export default function Bots() {
     } catch (err: any) {
       addToast('error', err.response?.data?.detail || t('bots.failedDelete'))
     }
+  }
+
+  const handleApplyPreset = async (botId: number, presetId: number) => {
+    setPresetDropdownOpen(null)
+    setActionLoading(botId)
+    try {
+      await api.post(`/bots/${botId}/apply-preset/${presetId}`)
+      await fetchBots()
+      addToast('success', t('bots.presetApplied'))
+    } catch (err: any) {
+      addToast('error', err.response?.data?.detail || t('bots.presetSwitchFailed'))
+    }
+    setActionLoading(null)
   }
 
   const handleStopAll = async () => {
@@ -684,7 +755,7 @@ export default function Bots() {
                 {/* Header row */}
                 <div className="flex items-start justify-between mb-3">
                   <div>
-                    <h3 className="text-white font-semibold text-lg">{bot.name}</h3>
+                    <Link to={`/bots/${bot.bot_config_id}`} className="text-white font-semibold text-lg hover:text-primary-400 transition-colors">{bot.name}</Link>
                     <div className="flex items-center gap-2 mt-1.5">
                       <span className="badge-neutral text-[10px] inline-flex items-center gap-1">
                         <ExchangeIcon exchange={bot.exchange_type} size={14} />
@@ -726,6 +797,56 @@ export default function Bots() {
                     </span>
                   ))}
                 </div>
+
+                {/* Preset Selector */}
+                {presets.length > 0 && (
+                  <div className="relative mb-3">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        if (bot.status === 'running') {
+                          addToast('info', t('bots.stopBotFirst'))
+                          return
+                        }
+                        setPresetDropdownOpen(presetDropdownOpen === bot.bot_config_id ? null : bot.bot_config_id)
+                      }}
+                      className={`w-full flex items-center justify-between gap-2 px-3 py-1.5 text-xs rounded-lg border transition-all ${
+                        bot.active_preset_name
+                          ? 'bg-primary-500/10 border-primary-500/20 text-primary-400'
+                          : 'bg-white/[0.03] border-white/5 text-gray-400'
+                      } ${bot.status === 'running' ? 'opacity-50 cursor-not-allowed' : 'hover:bg-white/[0.06] hover:border-white/10'}`}
+                    >
+                      <span className="flex items-center gap-1.5 truncate">
+                        <Layers size={12} />
+                        {bot.active_preset_name || t('bots.noPreset')}
+                      </span>
+                      <ChevronDown size={12} className={`transition-transform ${presetDropdownOpen === bot.bot_config_id ? 'rotate-180' : ''}`} />
+                    </button>
+                    {presetDropdownOpen === bot.bot_config_id && (
+                      <>
+                        <div className="fixed inset-0 z-10" onClick={() => setPresetDropdownOpen(null)} />
+                        <div className="absolute z-20 mt-1 w-full bg-[#1a1f2e] border border-white/10 rounded-lg shadow-xl overflow-hidden">
+                          {presets.map(preset => (
+                            <button
+                              key={preset.id}
+                              onClick={() => handleApplyPreset(bot.bot_config_id, preset.id)}
+                              className={`w-full text-left px-3 py-2 text-xs transition-colors ${
+                                preset.id === bot.active_preset_id
+                                  ? 'bg-primary-500/15 text-primary-400'
+                                  : 'text-gray-300 hover:bg-white/5'
+                              }`}
+                            >
+                              <span className="font-medium">{preset.name}</span>
+                              {preset.exchange_type !== 'any' && (
+                                <span className="ml-1.5 text-gray-500">({preset.exchange_type})</span>
+                              )}
+                            </button>
+                          ))}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )}
 
                 {/* Stats row */}
                 <div className="grid grid-cols-3 gap-2 mb-3 text-center">
@@ -896,6 +1017,18 @@ export default function Bots() {
       {/* Trade History Modal */}
       {historyBot && (
         <BotTradeHistoryModal bot={historyBot} onClose={() => setHistoryBot(null)} t={t} />
+      )}
+
+      {/* Builder Fee Approval Modal */}
+      {builderFeeModalBotId !== null && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-md" onClick={() => setBuilderFeeModalBotId(null)}>
+          <div className="max-w-lg w-full mx-4" onClick={(e) => e.stopPropagation()}>
+            <BuilderFeeApproval
+              onApproved={handleBuilderFeeApproved}
+              onClose={() => setBuilderFeeModalBotId(null)}
+            />
+          </div>
+        </div>
       )}
     </div>
   )

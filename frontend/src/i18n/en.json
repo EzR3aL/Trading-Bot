@@ -138,7 +138,8 @@
     "duplicate": "Duplicate",
     "delete": "Delete",
     "active": "ACTIVE",
-    "confirmDelete": "Delete this preset?"
+    "confirmDelete": "Delete this preset?",
+    "allExchanges": "All Exchanges"
   },
   "bot": {
     "title": "Bot Control",
@@ -308,6 +309,12 @@
     "copyImage": "Copy Image",
     "copied": "Copied!",
     "affiliateLink": "Affiliate Link",
+    "activePreset": "Preset",
+    "noPreset": "No preset",
+    "switchPreset": "Switch Preset",
+    "presetApplied": "Preset applied",
+    "presetSwitchFailed": "Failed to apply preset",
+    "stopBotFirst": "Stop the bot first",
     "builder": {
       "title": "Create New Bot",
       "editTitle": "Edit Bot",
@@ -368,6 +375,16 @@
       "spot": "Spot Market",
       "technical": "Technical Indicators",
       "tradfi": "TradFi / CME",
+      "discordWebhook": "Discord Webhook (optional)",
+      "discordWebhookHint": "Discord notifications for this bot",
+      "telegramToken": "Telegram Bot Token (optional)",
+      "telegramChatId": "Telegram Chat ID",
+      "telegramHint": "Create a bot via @BotFather on Telegram, start it in your chat, then enter the token and chat ID here.",
+      "loadFromPreset": "Load from Preset",
+      "selectPreset": "Select a preset...",
+      "noPresets": "No presets yet",
+      "createPreset": "Create Preset",
+      "presetLoaded": "Preset loaded — adjust settings as needed",
       "errors": {
         "nameRequired": "Please enter a bot name",
         "strategyRequired": "Please select a strategy",
@@ -378,6 +395,38 @@
         "hoursRequired": "Please select at least one hour"
       }
     }
+  },
+  "botDetail": {
+    "title": "Bot Details",
+    "back": "Back to Bots",
+    "config": "Configuration",
+    "strategy": "Strategy",
+    "pairs": "Trading Pairs",
+    "schedule": "Schedule",
+    "recentTrades": "Recent Trades",
+    "performance": "Performance",
+    "noTrades": "No trades yet",
+    "totalPnl": "Total PnL",
+    "winRate": "Win Rate",
+    "totalTrades": "Total Trades",
+    "bestTrade": "Best Trade",
+    "worstTrade": "Worst Trade",
+    "avgPnl": "Avg PnL",
+    "fees": "Fees",
+    "funding": "Funding",
+    "leverage": "Leverage",
+    "positionSize": "Position Size",
+    "takeProfit": "Take Profit",
+    "stopLoss": "Stop Loss",
+    "dailyLoss": "Daily Loss Limit",
+    "maxTrades": "Max Trades/Day",
+    "discordConfigured": "Discord configured",
+    "telegramConfigured": "Telegram configured",
+    "testTelegram": "Test Telegram",
+    "created": "Created",
+    "pnlChart": "PnL Over Time",
+    "dailyPnl": "Daily PnL",
+    "cumulativePnl": "Cumulative PnL"
   },
   "performance": {
     "title": "Bot Performance",
@@ -399,6 +448,21 @@
     "loadError": "Failed to load performance data",
     "detailError": "Failed to load bot details"
   },
+  "builderFee": {
+    "title": "Hyperliquid Activation",
+    "description": "A one-time confirmation with your wallet is required to use Hyperliquid bots. Connect your main Hyperliquid wallet and confirm the transaction.",
+    "walletConnected": "Wallet Connected",
+    "signHint": "Confirm the transaction in your wallet. This is a one-time action — after this, you can start any Hyperliquid bot without being asked again.",
+    "approve": "Confirm Transaction",
+    "approving": "Confirming...",
+    "approved": "Activation Successful!",
+    "approvedHint": "You can now use all Hyperliquid bots. This confirmation will not be requested again.",
+    "required": "One-time activation required before starting Hyperliquid bots.",
+    "signFailed": "Confirmation failed. Please try again.",
+    "affiliateHint": "Don't have a Hyperliquid account yet? Sign up with our link:",
+    "loadError": "Failed to load configuration.",
+    "notConfigured": "Hyperliquid is not configured on this server."
+  },
   "common": {
     "loading": "Loading...",
     "error": "Something went wrong. Please try again.",
@@ -406,6 +470,7 @@
     "success": "Success",
     "cancel": "Cancel",
     "confirm": "Confirm",
+    "change": "Change",
     "demo": "Demo",
     "live": "Live",
     "all": "All",
@@ -428,5 +493,21 @@
     "deactivate": "Deactivate",
     "activate": "Activate",
     "deleteUser": "Delete user?"
+  },
+  "affiliate": {
+    "uid": "Exchange UID",
+    "uidPlaceholder": "Enter your exchange UID",
+    "uidSaved": "UID saved. Verification pending.",
+    "uidVerified": "UID verified!",
+    "uidPending": "Verification pending",
+    "uidNotSubmitted": "Not submitted",
+    "uidRequired": "Please enter your exchange UID in the settings.",
+    "uidRequiredToggle": "UID required",
+    "verifyUid": "Verify",
+    "rejectUid": "Reject",
+    "noUids": "No UIDs submitted",
+    "submitUid": "Save UID",
+    "affiliateUids": "Affiliate UIDs",
+    "uidHint": "Please register via the affiliate link below. Then find your UID in your exchange profile, enter it here, and save."
   }
 }

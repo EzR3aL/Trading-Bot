@@ -10,6 +10,7 @@ class AffiliateLinkResponse(BaseModel):
     affiliate_url: str
     label: Optional[str] = None
     is_active: bool = True
+    uid_required: bool = False
 
     class Config:
         from_attributes = True
@@ -19,3 +20,4 @@ class AffiliateLinkUpdate(BaseModel):
     affiliate_url: str
     label: Optional[str] = None
     is_active: bool = True
+    uid_required: bool = False

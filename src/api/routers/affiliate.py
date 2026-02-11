@@ -46,12 +46,14 @@ async def upsert_affiliate_link(
         link.affiliate_url = data.affiliate_url
         link.label = data.label
         link.is_active = data.is_active
+        link.uid_required = data.uid_required
     else:
         link = AffiliateLink(
             exchange_type=exchange,
             affiliate_url=data.affiliate_url,
             label=data.label,
             is_active=data.is_active,
+            uid_required=data.uid_required,
         )
         db.add(link)
 
