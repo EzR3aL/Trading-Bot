@@ -645,6 +645,7 @@ export default function Backtest() {
                   <th className="text-left">{t('backtest.startDate')}</th>
                   <th className="text-left">{t('backtest.endDate')}</th>
                   <th className="text-right">{t('backtest.totalReturn')}</th>
+                  <th className="text-right">{t('backtest.profit')}</th>
                   <th className="text-right">{t('backtest.winRate')}</th>
                   <th className="text-right">{t('backtest.totalTrades')}</th>
                   <th className="text-center">{t('backtest.status')}</th>
@@ -670,6 +671,15 @@ export default function Backtest() {
                     }`}>
                       {run.total_return_percent !== null
                         ? `${run.total_return_percent >= 0 ? '+' : ''}${run.total_return_percent.toFixed(2)}%`
+                        : '--'}
+                    </td>
+                    <td className={`text-right font-mono ${
+                      run.total_return_percent !== null
+                        ? (run.total_return_percent >= 0 ? 'text-profit' : 'text-loss')
+                        : 'text-gray-500'
+                    }`}>
+                      {run.total_return_percent !== null
+                        ? `${run.total_return_percent >= 0 ? '+' : ''}$${Math.abs(run.initial_capital * run.total_return_percent / 100).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
                         : '--'}
                     </td>
                     <td className={`text-right font-mono ${

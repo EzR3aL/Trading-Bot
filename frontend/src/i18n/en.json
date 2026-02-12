@@ -548,6 +548,7 @@
     "metrics": "Metrics",
     "tradeLog": "Trade Log",
     "totalReturn": "Total Return",
+    "profit": "Profit/Loss",
     "winRate": "Win Rate",
     "maxDrawdown": "Max Drawdown",
     "sharpeRatio": "Sharpe Ratio",

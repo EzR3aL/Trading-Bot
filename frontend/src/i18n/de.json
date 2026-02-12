@@ -549,6 +549,7 @@
     "metrics": "Kennzahlen",
     "tradeLog": "Trade-Log",
     "totalReturn": "Gesamtrendite",
+    "profit": "Gewinn/Verlust",
     "winRate": "Gewinnrate",
     "maxDrawdown": "Max. Drawdown",
     "sharpeRatio": "Sharpe Ratio",
