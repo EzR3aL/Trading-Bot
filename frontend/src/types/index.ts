@@ -187,6 +187,7 @@ export interface BacktestMetrics {
   total_fees: number
   starting_capital: number
   ending_capital: number
+  data_sources?: string[] | null
 }
 
 export interface EquityPoint {

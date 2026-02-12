@@ -55,6 +55,7 @@ class BacktestMetrics(BaseModel):
     total_fees: float
     starting_capital: float
     ending_capital: float
+    data_sources: Optional[List[str]] = None
 
 
 class BacktestRunResponse(BaseModel):

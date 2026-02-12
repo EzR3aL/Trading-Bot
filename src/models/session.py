@@ -7,6 +7,7 @@ Supports SQLite (default) and PostgreSQL (via DATABASE_URL env var).
 import os
 from contextlib import asynccontextmanager
 
+from sqlalchemy import event
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from src.models.database import Base
@@ -22,6 +23,15 @@ engine = create_async_engine(
     connect_args={"check_same_thread": False} if "sqlite" in DATABASE_URL else {},
 )
 
+# Set WAL mode and busy_timeout on EVERY new SQLite connection
+if "sqlite" in DATABASE_URL:
+    @event.listens_for(engine.sync_engine, "connect")
+    def _set_sqlite_pragma(dbapi_conn, connection_record):
+        cursor = dbapi_conn.cursor()
+        cursor.execute("PRAGMA journal_mode=WAL")
+        cursor.execute("PRAGMA busy_timeout=5000")
+        cursor.close()
+
 async_session_factory = async_sessionmaker(
     engine,
     class_=AsyncSession,
@@ -32,14 +42,6 @@ async_session_factory = async_sessionmaker(
 async def init_db() -> None:
     """Create all tables. Call once at application startup."""
     async with engine.begin() as conn:
-        # Enable WAL mode for SQLite
-        if "sqlite" in DATABASE_URL:
-            await conn.execute(
-                __import__("sqlalchemy").text("PRAGMA journal_mode=WAL")
-            )
-            await conn.execute(
-                __import__("sqlalchemy").text("PRAGMA busy_timeout=5000")
-            )
         await conn.run_sync(Base.metadata.create_all)
 
         # Migrations for existing SQLite databases

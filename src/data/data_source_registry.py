@@ -213,6 +213,35 @@ DATA_SOURCES: List[DataSourceDef] = [
         free=True,
         default=False,
     ),
+    # ── On-Chain Data ──
+    DataSourceDef(
+        id="stablecoin_flows",
+        name="Stablecoin Flows",
+        description="7-day USDT market cap change – inflows signal new capital entering crypto",
+        category="spot",
+        provider="DefiLlama",
+        free=True,
+        default=False,
+    ),
+    DataSourceDef(
+        id="btc_hashrate",
+        name="BTC Hashrate",
+        description="Bitcoin network hashrate – rising hashrate signals miner confidence",
+        category="spot",
+        provider="Blockchain.info",
+        free=True,
+        default=False,
+    ),
+    # ── Cross-Exchange ──
+    DataSourceDef(
+        id="bitget_funding",
+        name="Bitget Funding Rate",
+        description="Bitget perpetual funding rate – compare with Binance for divergence signals",
+        category="futures",
+        provider="Bitget",
+        free=True,
+        default=False,
+    ),
     # ── TradFi / CME ──
     DataSourceDef(
         id="cme_gap",
@@ -220,6 +249,24 @@ DATA_SOURCES: List[DataSourceDef] = [
         description="Detects price gaps between CME Friday close and current price",
         category="tradfi",
         provider="Binance",
+        free=True,
+        default=False,
+    ),
+    DataSourceDef(
+        id="macro_dxy",
+        name="US Dollar Index (DXY)",
+        description="Dollar strength index – strong USD is typically bearish for crypto",
+        category="tradfi",
+        provider="FRED",
+        free=True,
+        default=False,
+    ),
+    DataSourceDef(
+        id="fed_funds_rate",
+        name="Fed Funds Rate",
+        description="US Federal Reserve interest rate – rate cuts are bullish for risk assets",
+        category="tradfi",
+        provider="FRED",
         free=True,
         default=False,
     ),
@@ -241,6 +288,10 @@ PROVIDER_HEALTH_URLS: Dict[str, str] = {
     "Deribit": "https://www.deribit.com/api/v2/public/test",
     "CoinGecko": "https://api.coingecko.com/api/v3/ping",
     "GDELT": "https://api.gdeltproject.org/api/v2/doc/doc?query=test&format=json&maxrecords=1",
+    "DefiLlama": "https://stablecoins.llama.fi/stablecoins?includePrices=false",
+    "Blockchain.info": "https://api.blockchain.info/stats",
+    "Bitget": "https://api.bitget.com/api/v2/public/time",
+    "FRED": "https://api.stlouisfed.org/fred/series?series_id=DFF&api_key=DEMO_KEY&file_type=json",
     # "Calculated" sources have no external dependency
 }
 

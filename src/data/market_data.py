@@ -34,6 +34,10 @@ _alternative_me_breaker = circuit_registry.get("alternative_me_api", fail_thresh
 _gdelt_breaker = circuit_registry.get("gdelt_api", fail_threshold=3, reset_timeout=120)
 _deribit_breaker = circuit_registry.get("deribit_api", fail_threshold=3, reset_timeout=120)
 _coingecko_breaker = circuit_registry.get("coingecko_api", fail_threshold=3, reset_timeout=120)
+_defillama_breaker = circuit_registry.get("defillama_api", fail_threshold=3, reset_timeout=120)
+_blockchain_breaker = circuit_registry.get("blockchain_api", fail_threshold=3, reset_timeout=120)
+_bitget_breaker = circuit_registry.get("bitget_api", fail_threshold=3, reset_timeout=120)
+_fred_breaker = circuit_registry.get("fred_api", fail_threshold=3, reset_timeout=300)
 
 
 class DataFetchError(Exception):
@@ -164,6 +168,10 @@ class MarketDataFetcher:
     GDELT_API_URL = "https://api.gdeltproject.org/api/v2/doc/doc"
     DERIBIT_URL = "https://www.deribit.com/api/v2"
     COINGECKO_URL = "https://api.coingecko.com/api/v3"
+    DEFILLAMA_URL = "https://stablecoins.llama.fi"
+    BLOCKCHAIN_URL = "https://api.blockchain.info"
+    BITGET_URL = "https://api.bitget.com/api/v2"
+    FRED_URL = "https://api.stlouisfed.org/fred"
 
     def __init__(self):
         """Initialize the market data fetcher."""
@@ -1304,6 +1312,168 @@ class MarketDataFetcher:
             "market_cap_change_24h_pct": 0,
         }
 
+    # ==================== Stablecoin Flows (DefiLlama) ====================
+
+    async def get_stablecoin_flows(self) -> Dict[str, Any]:
+        """
+        Fetch stablecoin market cap data from DefiLlama.
+
+        Rising USDT market cap = new capital entering crypto (bullish).
+
+        Returns:
+            Dict with usdt_market_cap, change_7d, change_7d_pct
+        """
+        try:
+            url = f"{self.DEFILLAMA_URL}/stablecoins?includePrices=false"
+
+            async def _fetch():
+                return await self._get_with_retry(url)
+
+            data = await _defillama_breaker.call(_fetch)
+
+            if data and "peggedAssets" in data:
+                for asset in data["peggedAssets"]:
+                    if asset.get("symbol", "").upper() == "USDT":
+                        chains = asset.get("chainCirculating", {})
+                        total_mcap = sum(
+                            c.get("current", {}).get("peggedUSD", 0)
+                            for c in chains.values()
+                        )
+                        if total_mcap == 0:
+                            total_mcap = asset.get("circulating", {}).get("peggedUSD", 0)
+
+                        logger.info(f"Stablecoin USDT MCap: ${total_mcap / 1e9:.1f}B")
+                        return {
+                            "usdt_market_cap": total_mcap,
+                            "symbol": "USDT",
+                        }
+
+        except CircuitBreakerError as e:
+            logger.warning(f"DefiLlama API circuit open: {e}")
+        except Exception as e:
+            logger.error(f"Error fetching stablecoin flows: {e}")
+
+        return {"usdt_market_cap": 0, "symbol": "USDT"}
+
+    # ==================== BTC Hashrate (Blockchain.info) ====================
+
+    async def get_btc_hashrate(self) -> Dict[str, Any]:
+        """
+        Fetch Bitcoin network hashrate from Blockchain.info.
+
+        Rising hashrate = miner confidence, network security.
+
+        Returns:
+            Dict with hashrate (TH/s), difficulty
+        """
+        try:
+            url = f"{self.BLOCKCHAIN_URL}/stats"
+
+            async def _fetch():
+                return await self._get_with_retry(url)
+
+            data = await _blockchain_breaker.call(_fetch)
+
+            if data:
+                hashrate = data.get("hash_rate", 0)  # TH/s
+                difficulty = data.get("difficulty", 0)
+                logger.info(f"BTC Hashrate: {hashrate / 1e6:.1f} EH/s")
+                return {
+                    "hashrate_ths": hashrate,
+                    "difficulty": difficulty,
+                }
+
+        except CircuitBreakerError as e:
+            logger.warning(f"Blockchain.info API circuit open: {e}")
+        except Exception as e:
+            logger.error(f"Error fetching BTC hashrate: {e}")
+
+        return {"hashrate_ths": 0, "difficulty": 0}
+
+    # ==================== Bitget Funding Rate ====================
+
+    async def get_bitget_funding_rate(self, symbol: str = "BTCUSDT") -> Dict[str, Any]:
+        """
+        Fetch current funding rate from Bitget.
+
+        Comparing Binance vs Bitget funding rates reveals cross-exchange divergence.
+
+        Returns:
+            Dict with funding_rate, funding_time
+        """
+        try:
+            url = f"{self.BITGET_URL}/mix/market/current-fund-rate"
+            params = {"symbol": symbol, "productType": "USDT-FUTURES"}
+
+            async def _fetch():
+                return await self._get_with_retry(url, params)
+
+            data = await _bitget_breaker.call(_fetch)
+
+            if data and data.get("code") == "00000" and "data" in data:
+                items = data["data"]
+                if items and len(items) > 0:
+                    rate = float(items[0].get("fundingRate", 0))
+                    logger.info(f"Bitget Funding Rate ({symbol}): {rate:.6f}")
+                    return {"funding_rate": rate, "symbol": symbol}
+
+        except CircuitBreakerError as e:
+            logger.warning(f"Bitget API circuit open: {e}")
+        except Exception as e:
+            logger.error(f"Error fetching Bitget funding rate: {e}")
+
+        return {"funding_rate": 0.0, "symbol": symbol}
+
+    # ==================== FRED Macro Data ====================
+
+    async def get_fred_series(self, series_id: str) -> Dict[str, Any]:
+        """
+        Fetch latest value of a FRED economic data series.
+
+        Used for DXY (US Dollar Index) and Fed Funds Rate.
+
+        Args:
+            series_id: FRED series ID (e.g. 'DTWEXBGS' for DXY, 'DFF' for Fed Funds)
+
+        Returns:
+            Dict with value, date, series_id
+        """
+        import os
+
+        api_key = os.environ.get("FRED_API_KEY", "")
+        if not api_key:
+            return {"value": 0.0, "date": "", "series_id": series_id}
+
+        try:
+            url = f"{self.FRED_URL}/series/observations"
+            params = {
+                "series_id": series_id,
+                "api_key": api_key,
+                "file_type": "json",
+                "sort_order": "desc",
+                "limit": "1",
+            }
+
+            async def _fetch():
+                return await self._get_with_retry(url, params)
+
+            data = await _fred_breaker.call(_fetch)
+
+            if data and "observations" in data and data["observations"]:
+                obs = data["observations"][0]
+                value_str = obs.get("value", ".")
+                value = float(value_str) if value_str != "." else 0.0
+                date = obs.get("date", "")
+                logger.info(f"FRED {series_id}: {value} ({date})")
+                return {"value": value, "date": date, "series_id": series_id}
+
+        except CircuitBreakerError as e:
+            logger.warning(f"FRED API circuit open: {e}")
+        except Exception as e:
+            logger.error(f"Error fetching FRED {series_id}: {e}")
+
+        return {"value": 0.0, "date": "", "series_id": series_id}
+
     # ==================== CME Gap Detection ====================
 
     async def get_cme_gap(self, symbol: str = "BTCUSDT") -> Dict[str, Any]:
@@ -1409,6 +1579,16 @@ class MarketDataFetcher:
                 dispatch[src_id] = self.get_trend_direction(symbol)
             elif src_id == "cme_gap":
                 dispatch[src_id] = self.get_cme_gap(symbol)
+            elif src_id == "stablecoin_flows":
+                dispatch[src_id] = self.get_stablecoin_flows()
+            elif src_id == "btc_hashrate":
+                dispatch[src_id] = self.get_btc_hashrate()
+            elif src_id == "bitget_funding":
+                dispatch[src_id] = self.get_bitget_funding_rate(symbol)
+            elif src_id == "macro_dxy":
+                dispatch[src_id] = self.get_fred_series("DTWEXBGS")
+            elif src_id == "fed_funds_rate":
+                dispatch[src_id] = self.get_fred_series("DFF")
             # Technical indicators computed from klines are handled below
 
         # Fetch klines if needed for calculated indicators

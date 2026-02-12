@@ -36,12 +36,15 @@ async def run_backtest_for_strategy(
 
     # Fetch historical data
     fetcher = HistoricalDataFetcher()
+    data_sources = []
     try:
         data_points = await fetcher.fetch_all_historical_data(days=days)
+        data_sources = fetcher.data_sources
     except Exception as e:
         logger.warning(f"Failed to fetch live data, using mock: {e}")
         from src.backtest.mock_data import generate_mock_historical_data
         data_points = generate_mock_historical_data(days=days)
+        data_sources = ["Mock Data Generator"]
     finally:
         await fetcher.close()
 
@@ -110,6 +113,7 @@ async def run_backtest_for_strategy(
         "total_fees": round(result.total_fees, 2),
         "starting_capital": result.starting_capital,
         "ending_capital": round(result.ending_capital, 2),
+        "data_sources": data_sources,
     }
 
     return {

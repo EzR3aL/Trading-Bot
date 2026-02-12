@@ -4,12 +4,23 @@ Historical Data Fetcher for Backtesting.
 Fetches and caches historical market data from various APIs:
 - Fear & Greed Index (Alternative.me)
 - Long/Short Ratio (Binance Futures)
-- Funding Rates (Binance Futures)
-- Price Data (Binance, CoinGecko, CoinMarketCap as fallbacks)
+- Funding Rates (Binance Futures + Bitget)
+- Price Data / OHLCV (Binance Futures, CoinGecko fallback)
+- Open Interest (Binance Futures)
+- Taker Buy/Sell Volume (Binance Futures)
+- Top Trader Positions (Binance Futures)
+- Stablecoin Flows (DefiLlama)
+- BTC Dominance & Total Market Cap (CoinGecko)
+- Bitcoin Hashrate (Blockchain.info)
+- DXY Index & Fed Funds Rate (FRED, optional API key)
+- Historical Volatility (calculated from price data)
 """
 
 import asyncio
+import dataclasses
 import json
+import math
+import os
 from dataclasses import dataclass, asdict
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -51,6 +62,40 @@ class HistoricalDataPoint:
     btc_24h_change: float
     eth_24h_change: float
 
+    # --- Extended fields (defaults for backward compatibility) ---
+
+    # Open Interest (Binance Futures)
+    open_interest_btc: float = 0.0
+    open_interest_change_24h: float = 0.0
+
+    # Taker Buy/Sell Volume Ratio (Binance Futures)
+    taker_buy_sell_ratio: float = 1.0
+
+    # Top Trader Long/Short Ratio (Binance Futures)
+    top_trader_long_short_ratio: float = 1.0
+
+    # Bitget Funding Rate (cross-exchange comparison)
+    funding_rate_bitget: float = 0.0
+
+    # Stablecoin Flows (DefiLlama)
+    stablecoin_flow_7d: float = 0.0
+    usdt_market_cap: float = 0.0
+
+    # Global Market Data (CoinGecko)
+    btc_dominance: float = 0.0
+    total_crypto_market_cap: float = 0.0
+
+    # Macro Indicators (FRED, optional)
+    dxy_index: float = 0.0
+    fed_funds_rate: float = 0.0
+
+    # Bitcoin Network (Blockchain.info)
+    btc_hashrate: float = 0.0
+
+    # Calculated Metrics
+    historical_volatility: float = 0.0
+    btc_volume: float = 0.0
+
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary."""
         result = asdict(self)
@@ -59,9 +104,12 @@ class HistoricalDataPoint:
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "HistoricalDataPoint":
-        """Create from dictionary."""
+        """Create from dictionary (handles missing fields gracefully)."""
+        data = dict(data)
         data["timestamp"] = datetime.fromisoformat(data["timestamp"])
-        return cls(**data)
+        valid_fields = {f.name for f in dataclasses.fields(cls)}
+        filtered = {k: v for k, v in data.items() if k in valid_fields}
+        return cls(**filtered)
 
 
 class HistoricalDataFetcher:
@@ -74,9 +122,11 @@ class HistoricalDataFetcher:
     FEAR_GREED_URL = "https://api.alternative.me/fng/"
     BINANCE_FUTURES_URL = "https://fapi.binance.com"
     COINGECKO_URL = "https://api.coingecko.com/api/v3"
-    COINMARKETCAP_URL = "https://pro-api.coinmarketcap.com/v1"
+    BITGET_URL = "https://api.bitget.com/api/v2"
+    DEFILLAMA_STABLECOINS_URL = "https://stablecoins.llama.fi"
+    BLOCKCHAIN_INFO_URL = "https://api.blockchain.info"
+    FRED_URL = "https://api.stlouisfed.org/fred"
 
-    # CoinGecko coin IDs
     COINGECKO_IDS = {
         "BTC": "bitcoin",
         "ETH": "ethereum"
@@ -87,6 +137,7 @@ class HistoricalDataFetcher:
         self.cache_dir = Path(cache_dir)
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         self._session: Optional[aiohttp.ClientSession] = None
+        self._data_sources: List[str] = []
 
     async def _ensure_session(self):
         """Ensure aiohttp session exists."""
@@ -123,7 +174,6 @@ class HistoricalDataFetcher:
             try:
                 with open(cache_file, "r") as f:
                     data = json.load(f)
-                    # Check if cache is fresh (less than 24 hours old)
                     if "cached_at" in data:
                         cached_at = datetime.fromisoformat(data["cached_at"])
                         if datetime.now() - cached_at < timedelta(hours=24):
@@ -146,16 +196,12 @@ class HistoricalDataFetcher:
         except Exception as e:
             logger.warning(f"Error saving cache {name}: {e}")
 
+    # ------------------------------------------------------------------ #
+    #  EXISTING DATA SOURCES                                              #
+    # ------------------------------------------------------------------ #
+
     async def fetch_fear_greed_history(self, days: int = 180) -> List[Dict]:
-        """
-        Fetch Fear & Greed Index history.
-
-        Args:
-            days: Number of days to fetch
-
-        Returns:
-            List of Fear & Greed data points
-        """
+        """Fetch Fear & Greed Index history from Alternative.me."""
         cache_name = f"fear_greed_{days}d"
         cached = self._load_cache(cache_name)
         if cached:
@@ -181,16 +227,7 @@ class HistoricalDataFetcher:
     async def fetch_funding_rate_history(
         self, symbol: str = "BTCUSDT", days: int = 180
     ) -> List[Dict]:
-        """
-        Fetch funding rate history from Binance.
-
-        Args:
-            symbol: Trading pair
-            days: Number of days to fetch
-
-        Returns:
-            List of funding rate data points
-        """
+        """Fetch funding rate history from Binance Futures."""
         cache_name = f"funding_{symbol}_{days}d"
         cached = self._load_cache(cache_name)
         if cached:
@@ -198,8 +235,6 @@ class HistoricalDataFetcher:
 
         logger.info(f"Fetching funding rate history for {symbol} ({days} days)...")
 
-        # Binance returns max 1000 records, funding is every 8 hours
-        # 180 days = 180 * 3 = 540 funding payments
         url = f"{self.BINANCE_FUTURES_URL}/fapi/v1/fundingRate"
 
         end_time = int(datetime.now().timestamp() * 1000)
@@ -221,14 +256,9 @@ class HistoricalDataFetcher:
                 break
 
             all_data.extend(data)
-
-            # Move to earlier time
             current_end = int(data[-1]["fundingTime"]) - 1
-
-            # Rate limiting
             await asyncio.sleep(0.2)
 
-        # Sort by time
         all_data.sort(key=lambda x: x["fundingTime"])
 
         result = []
@@ -246,17 +276,7 @@ class HistoricalDataFetcher:
     async def fetch_klines_history(
         self, symbol: str = "BTCUSDT", interval: str = "1d", days: int = 180
     ) -> List[Dict]:
-        """
-        Fetch OHLCV candlestick data from Binance.
-
-        Args:
-            symbol: Trading pair
-            interval: Candle interval (1d recommended for backtest)
-            days: Number of days to fetch
-
-        Returns:
-            List of OHLCV data points
-        """
+        """Fetch OHLCV candlestick data from Binance Futures."""
         cache_name = f"klines_{symbol}_{interval}_{days}d"
         cached = self._load_cache(cache_name)
         if cached:
@@ -299,16 +319,7 @@ class HistoricalDataFetcher:
     async def fetch_coingecko_history(
         self, coin_id: str = "bitcoin", days: int = 180
     ) -> List[Dict]:
-        """
-        Fetch OHLCV data from CoinGecko as fallback.
-
-        Args:
-            coin_id: CoinGecko coin ID (bitcoin, ethereum)
-            days: Number of days to fetch
-
-        Returns:
-            List of OHLCV data points
-        """
+        """Fetch OHLCV data from CoinGecko as fallback."""
         cache_name = f"coingecko_{coin_id}_{days}d"
         cached = self._load_cache(cache_name)
         if cached:
@@ -316,7 +327,6 @@ class HistoricalDataFetcher:
 
         logger.info(f"Fetching CoinGecko price history for {coin_id} ({days} days)...")
 
-        # CoinGecko market_chart endpoint
         url = f"{self.COINGECKO_URL}/coins/{coin_id}/market_chart"
         params = {
             "vs_currency": "usd",
@@ -333,11 +343,10 @@ class HistoricalDataFetcher:
         prices = data.get("prices", [])
 
         result = []
-        for i, price_data in enumerate(prices):
+        for price_data in prices:
             ts = int(price_data[0]) // 1000
             price = float(price_data[1])
 
-            # Estimate high/low as +/- 2% (CoinGecko only gives close prices)
             result.append({
                 "timestamp": ts,
                 "open": price * 0.99,
@@ -354,28 +363,12 @@ class HistoricalDataFetcher:
     async def fetch_klines_with_fallback(
         self, symbol: str = "BTCUSDT", days: int = 180
     ) -> List[Dict]:
-        """
-        Fetch price data with fallback to alternative sources.
-
-        Order of sources:
-        1. Binance Futures
-        2. CoinGecko
-        3. Mock data (if all else fails)
-
-        Args:
-            symbol: Trading pair
-            days: Number of days to fetch
-
-        Returns:
-            List of OHLCV data points
-        """
-        # Try Binance first
+        """Fetch price data with fallback to CoinGecko."""
         data = await self.fetch_klines_history(symbol, "1d", days)
         if data:
             logger.info(f"Got {len(data)} candles from Binance for {symbol}")
             return data
 
-        # Try CoinGecko as fallback
         coin_id = "bitcoin" if "BTC" in symbol else "ethereum"
         data = await self.fetch_coingecko_history(coin_id, days)
         if data:
@@ -388,16 +381,7 @@ class HistoricalDataFetcher:
     async def fetch_long_short_history(
         self, symbol: str = "BTCUSDT", days: int = 180
     ) -> List[Dict]:
-        """
-        Fetch Long/Short ratio history from Binance.
-
-        Args:
-            symbol: Trading pair
-            days: Number of days to fetch
-
-        Returns:
-            List of L/S ratio data points
-        """
+        """Fetch Long/Short ratio history from Binance Futures."""
         cache_name = f"long_short_{symbol}_{days}d"
         cached = self._load_cache(cache_name)
         if cached:
@@ -427,13 +411,9 @@ class HistoricalDataFetcher:
                 break
 
             all_data.extend(data)
-
-            # Move to earlier time
             current_end = int(data[-1]["timestamp"]) - 1
-
             await asyncio.sleep(0.2)
 
-        # Sort and deduplicate
         all_data.sort(key=lambda x: x["timestamp"])
 
         result = []
@@ -450,100 +430,628 @@ class HistoricalDataFetcher:
         self._save_cache(cache_name, result)
         return result
 
+    # ------------------------------------------------------------------ #
+    #  NEW DATA SOURCES                                                   #
+    # ------------------------------------------------------------------ #
+
+    async def fetch_open_interest_history(
+        self, symbol: str = "BTCUSDT", days: int = 180
+    ) -> List[Dict]:
+        """Fetch Open Interest history from Binance Futures."""
+        cache_name = f"open_interest_{symbol}_{days}d"
+        cached = self._load_cache(cache_name)
+        if cached:
+            return cached
+
+        logger.info(f"Fetching Open Interest history for {symbol} ({days} days)...")
+
+        url = f"{self.BINANCE_FUTURES_URL}/futures/data/openInterestHist"
+
+        all_data = []
+        end_time = int(datetime.now().timestamp() * 1000)
+        start_time = int((datetime.now() - timedelta(days=days)).timestamp() * 1000)
+        current_end = end_time
+
+        while current_end > start_time:
+            params = {
+                "symbol": symbol,
+                "period": "1d",
+                "endTime": current_end,
+                "limit": 500
+            }
+
+            data = await self._get(url, params)
+            if not data or len(data) == 0:
+                break
+
+            all_data.extend(data)
+            oldest_ts = min(int(d["timestamp"]) for d in data)
+            current_end = oldest_ts - 1
+            await asyncio.sleep(0.2)
+
+        all_data.sort(key=lambda x: x["timestamp"])
+
+        result = []
+        seen = set()
+        for item in all_data:
+            ts = int(item["timestamp"]) // 1000
+            if ts >= start_time // 1000 and ts not in seen:
+                seen.add(ts)
+                result.append({
+                    "timestamp": ts,
+                    "oi_value": float(item.get("sumOpenInterestValue", 0)),
+                    "oi_quantity": float(item.get("sumOpenInterest", 0)),
+                })
+
+        self._save_cache(cache_name, result)
+        logger.info(f"Open Interest: Got {len(result)} data points")
+        return result
+
+    async def fetch_taker_buy_sell_history(
+        self, symbol: str = "BTCUSDT", days: int = 180
+    ) -> List[Dict]:
+        """Fetch Taker Buy/Sell Volume Ratio from Binance Futures."""
+        cache_name = f"taker_bs_{symbol}_{days}d"
+        cached = self._load_cache(cache_name)
+        if cached:
+            return cached
+
+        logger.info(f"Fetching Taker Buy/Sell ratio for {symbol} ({days} days)...")
+
+        url = f"{self.BINANCE_FUTURES_URL}/futures/data/takerlongshortRatio"
+
+        all_data = []
+        end_time = int(datetime.now().timestamp() * 1000)
+        start_time = int((datetime.now() - timedelta(days=days)).timestamp() * 1000)
+        current_end = end_time
+
+        while current_end > start_time:
+            params = {
+                "symbol": symbol,
+                "period": "1d",
+                "endTime": current_end,
+                "limit": 500
+            }
+
+            data = await self._get(url, params)
+            if not data or len(data) == 0:
+                break
+
+            all_data.extend(data)
+            oldest_ts = min(int(d["timestamp"]) for d in data)
+            current_end = oldest_ts - 1
+            await asyncio.sleep(0.2)
+
+        all_data.sort(key=lambda x: x["timestamp"])
+
+        result = []
+        seen = set()
+        for item in all_data:
+            ts = int(item["timestamp"]) // 1000
+            if ts >= start_time // 1000 and ts not in seen:
+                seen.add(ts)
+                result.append({
+                    "timestamp": ts,
+                    "ratio": float(item.get("buySellRatio", 1.0)),
+                    "buy_vol": float(item.get("buyVol", 0)),
+                    "sell_vol": float(item.get("sellVol", 0)),
+                })
+
+        self._save_cache(cache_name, result)
+        logger.info(f"Taker Buy/Sell: Got {len(result)} data points")
+        return result
+
+    async def fetch_top_trader_ls_history(
+        self, symbol: str = "BTCUSDT", days: int = 180
+    ) -> List[Dict]:
+        """Fetch Top Trader Long/Short Ratio (Accounts) from Binance Futures."""
+        cache_name = f"top_trader_ls_{symbol}_{days}d"
+        cached = self._load_cache(cache_name)
+        if cached:
+            return cached
+
+        logger.info(f"Fetching Top Trader L/S ratio for {symbol} ({days} days)...")
+
+        url = f"{self.BINANCE_FUTURES_URL}/futures/data/topLongShortAccountRatio"
+
+        all_data = []
+        end_time = int(datetime.now().timestamp() * 1000)
+        start_time = int((datetime.now() - timedelta(days=days)).timestamp() * 1000)
+        current_end = end_time
+
+        while current_end > start_time:
+            params = {
+                "symbol": symbol,
+                "period": "1d",
+                "endTime": current_end,
+                "limit": 500
+            }
+
+            data = await self._get(url, params)
+            if not data or len(data) == 0:
+                break
+
+            all_data.extend(data)
+            oldest_ts = min(int(d["timestamp"]) for d in data)
+            current_end = oldest_ts - 1
+            await asyncio.sleep(0.2)
+
+        all_data.sort(key=lambda x: x["timestamp"])
+
+        result = []
+        seen = set()
+        for item in all_data:
+            ts = int(item["timestamp"]) // 1000
+            if ts >= start_time // 1000 and ts not in seen:
+                seen.add(ts)
+                result.append({
+                    "timestamp": ts,
+                    "ratio": float(item.get("longShortRatio", 1.0)),
+                })
+
+        self._save_cache(cache_name, result)
+        logger.info(f"Top Trader L/S: Got {len(result)} data points")
+        return result
+
+    async def fetch_bitget_funding_history(
+        self, symbol: str = "BTCUSDT", days: int = 180
+    ) -> List[Dict]:
+        """Fetch funding rate history from Bitget for cross-exchange comparison."""
+        cache_name = f"bitget_funding_{symbol}_{days}d"
+        cached = self._load_cache(cache_name)
+        if cached:
+            return cached
+
+        logger.info(f"Fetching Bitget funding rate history for {symbol} ({days} days)...")
+
+        url = f"{self.BITGET_URL}/mix/market/history-fund-rate"
+
+        all_data = []
+        page_no = 1
+        max_pages = 20
+
+        while page_no <= max_pages:
+            params = {
+                "symbol": symbol,
+                "productType": "USDT-FUTURES",
+                "pageSize": "100",
+                "pageNo": str(page_no),
+            }
+
+            data = await self._get(url, params)
+
+            if not data or data.get("code") != "00000":
+                break
+
+            items = data.get("data", [])
+            if not items:
+                break
+
+            all_data.extend(items)
+            page_no += 1
+            await asyncio.sleep(0.3)
+
+        cutoff_ts = int((datetime.now() - timedelta(days=days)).timestamp() * 1000)
+
+        result = []
+        for item in all_data:
+            settle_time = int(item.get("settleTime", 0))
+            if settle_time >= cutoff_ts:
+                result.append({
+                    "timestamp": settle_time // 1000,
+                    "rate": float(item.get("fundingRate", 0)),
+                })
+
+        result.sort(key=lambda x: x["timestamp"])
+        self._save_cache(cache_name, result)
+        logger.info(f"Bitget Funding: Got {len(result)} data points")
+        return result
+
+    async def fetch_stablecoin_history(self, days: int = 180) -> List[Dict]:
+        """Fetch USDT stablecoin market cap history from DefiLlama."""
+        cache_name = f"stablecoin_usdt_{days}d"
+        cached = self._load_cache(cache_name)
+        if cached:
+            return cached
+
+        logger.info(f"Fetching stablecoin (USDT) history ({days} days)...")
+
+        # DefiLlama: stablecoin id 1 = USDT
+        url = f"{self.DEFILLAMA_STABLECOINS_URL}/stablecoincharts/all"
+        params = {"stablecoin": "1"}
+
+        data = await self._get(url, params)
+
+        if not data or not isinstance(data, list):
+            logger.warning("DefiLlama stablecoin API returned no data")
+            return []
+
+        cutoff_ts = int((datetime.now() - timedelta(days=days)).timestamp())
+
+        result = []
+        for item in data:
+            ts = int(item.get("date", 0))
+            if ts >= cutoff_ts:
+                circulating = item.get("totalCirculatingUSD", {})
+                mcap = circulating.get("peggedUSD", 0) if isinstance(circulating, dict) else 0
+                result.append({
+                    "timestamp": ts,
+                    "usdt_mcap": float(mcap),
+                })
+
+        self._save_cache(cache_name, result)
+        logger.info(f"DefiLlama Stablecoins: Got {len(result)} data points")
+        return result
+
+    async def fetch_global_market_data(self) -> Dict:
+        """Fetch current global crypto market data from CoinGecko."""
+        cache_name = "coingecko_global"
+        cached = self._load_cache(cache_name)
+        if cached:
+            return cached
+
+        logger.info("Fetching CoinGecko global market data...")
+
+        url = f"{self.COINGECKO_URL}/global"
+        data = await self._get(url)
+
+        if not data or "data" not in data:
+            logger.warning("CoinGecko global API returned no data")
+            return {}
+
+        global_data = data["data"]
+        result = {
+            "btc_dominance": float(global_data.get("market_cap_percentage", {}).get("btc", 0)),
+            "total_market_cap_usd": float(global_data.get("total_market_cap", {}).get("usd", 0)),
+            "total_volume_usd": float(global_data.get("total_volume", {}).get("usd", 0)),
+        }
+
+        self._save_cache(cache_name, result)
+        logger.info(f"CoinGecko Global: BTC dominance={result['btc_dominance']:.1f}%")
+        return result
+
+    async def fetch_btc_hashrate_history(self, days: int = 180) -> List[Dict]:
+        """Fetch Bitcoin hashrate history from Blockchain.info."""
+        cache_name = f"btc_hashrate_{days}d"
+        cached = self._load_cache(cache_name)
+        if cached:
+            return cached
+
+        logger.info(f"Fetching BTC hashrate history ({days} days)...")
+
+        url = f"{self.BLOCKCHAIN_INFO_URL}/charts/hash-rate"
+        params = {
+            "timespan": f"{days}days",
+            "format": "json",
+            "rollingAverage": "1days",
+        }
+
+        data = await self._get(url, params)
+
+        if not data or "values" not in data:
+            logger.warning("Blockchain.info hashrate API returned no data")
+            return []
+
+        result = []
+        for item in data["values"]:
+            result.append({
+                "timestamp": int(item["x"]),
+                "hashrate": float(item["y"]),
+            })
+
+        self._save_cache(cache_name, result)
+        logger.info(f"Blockchain.info Hashrate: Got {len(result)} data points")
+        return result
+
+    async def fetch_fred_series(
+        self, series_id: str, days: int = 180
+    ) -> List[Dict]:
+        """Fetch economic data from FRED (requires FRED_API_KEY env var)."""
+        api_key = os.getenv("FRED_API_KEY")
+        if not api_key:
+            logger.info(f"FRED_API_KEY not set, skipping {series_id}")
+            return []
+
+        cache_name = f"fred_{series_id}_{days}d"
+        cached = self._load_cache(cache_name)
+        if cached:
+            return cached
+
+        logger.info(f"Fetching FRED series {series_id} ({days} days)...")
+
+        start_date = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
+
+        url = f"{self.FRED_URL}/series/observations"
+        params = {
+            "series_id": series_id,
+            "api_key": api_key,
+            "file_type": "json",
+            "observation_start": start_date,
+        }
+
+        data = await self._get(url, params)
+
+        if not data or "observations" not in data:
+            logger.warning(f"FRED returned no data for {series_id}")
+            return []
+
+        result = []
+        for obs in data["observations"]:
+            try:
+                val = float(obs["value"])
+                date = datetime.strptime(obs["date"], "%Y-%m-%d")
+                result.append({
+                    "timestamp": int(date.timestamp()),
+                    "value": val,
+                    "date": obs["date"],
+                })
+            except (ValueError, KeyError):
+                continue
+
+        self._save_cache(cache_name, result)
+        logger.info(f"FRED {series_id}: Got {len(result)} data points")
+        return result
+
+    # ------------------------------------------------------------------ #
+    #  CALCULATED METRICS                                                 #
+    # ------------------------------------------------------------------ #
+
+    @staticmethod
+    def calculate_volatility(
+        klines: List[Dict], window: int = 20
+    ) -> Dict[str, float]:
+        """
+        Calculate rolling historical volatility from kline data.
+
+        Returns dict of date_key -> annualized volatility.
+        """
+        if len(klines) < window + 1:
+            return {}
+
+        daily_returns = []
+        for i in range(1, len(klines)):
+            prev_close = klines[i - 1]["close"]
+            curr_close = klines[i]["close"]
+            if prev_close > 0:
+                ret = math.log(curr_close / prev_close)
+                daily_returns.append((klines[i]["timestamp"], ret))
+
+        volatility_by_date = {}
+        for i in range(window, len(daily_returns)):
+            window_returns = [r[1] for r in daily_returns[i - window:i]]
+            mean = sum(window_returns) / len(window_returns)
+            variance = sum((r - mean) ** 2 for r in window_returns) / (len(window_returns) - 1)
+            std = math.sqrt(variance) if variance > 0 else 0
+            annualized_vol = std * math.sqrt(365) * 100
+
+            ts = daily_returns[i][0]
+            date_key = datetime.fromtimestamp(ts).strftime("%Y-%m-%d")
+            volatility_by_date[date_key] = round(annualized_vol, 2)
+
+        return volatility_by_date
+
+    # ------------------------------------------------------------------ #
+    #  COMBINED DATA FETCH                                                #
+    # ------------------------------------------------------------------ #
+
     async def fetch_all_historical_data(self, days: int = 180) -> List[HistoricalDataPoint]:
         """
         Fetch all historical data and combine into data points.
 
-        Args:
-            days: Number of days to fetch
-
         Returns:
-            List of combined historical data points
+            List of combined historical data points with all available fields
         """
         logger.info(f"Fetching all historical data for {days} days...")
+        self._data_sources = []
 
-        # Fetch all data in parallel (using fallback methods for prices)
-        results = await asyncio.gather(
+        # Phase 1: Core data (Binance + Alternative.me)
+        core_results = await asyncio.gather(
             self.fetch_fear_greed_history(days),
             self.fetch_funding_rate_history("BTCUSDT", days),
             self.fetch_funding_rate_history("ETHUSDT", days),
-            self.fetch_klines_with_fallback("BTCUSDT", days),  # Uses CoinGecko fallback
-            self.fetch_klines_with_fallback("ETHUSDT", days),  # Uses CoinGecko fallback
+            self.fetch_klines_with_fallback("BTCUSDT", days),
+            self.fetch_klines_with_fallback("ETHUSDT", days),
             self.fetch_long_short_history("BTCUSDT", days),
             return_exceptions=True
         )
 
-        fear_greed = results[0] if not isinstance(results[0], Exception) else []
-        funding_btc = results[1] if not isinstance(results[1], Exception) else []
-        funding_eth = results[2] if not isinstance(results[2], Exception) else []
-        klines_btc = results[3] if not isinstance(results[3], Exception) else []
-        klines_eth = results[4] if not isinstance(results[4], Exception) else []
-        long_short = results[5] if not isinstance(results[5], Exception) else []
+        fear_greed = core_results[0] if not isinstance(core_results[0], Exception) else []
+        funding_btc = core_results[1] if not isinstance(core_results[1], Exception) else []
+        funding_eth = core_results[2] if not isinstance(core_results[2], Exception) else []
+        klines_btc = core_results[3] if not isinstance(core_results[3], Exception) else []
+        klines_eth = core_results[4] if not isinstance(core_results[4], Exception) else []
+        long_short = core_results[5] if not isinstance(core_results[5], Exception) else []
 
-        # Log data sources used
-        sources = []
+        # Phase 2: Extended data (new sources, parallel)
+        ext_results = await asyncio.gather(
+            self.fetch_open_interest_history("BTCUSDT", days),
+            self.fetch_taker_buy_sell_history("BTCUSDT", days),
+            self.fetch_top_trader_ls_history("BTCUSDT", days),
+            self.fetch_bitget_funding_history("BTCUSDT", days),
+            self.fetch_stablecoin_history(days),
+            self.fetch_global_market_data(),
+            self.fetch_btc_hashrate_history(days),
+            self.fetch_fred_series("DTWEXBGS", days),   # DXY
+            self.fetch_fred_series("DFF", days),         # Fed Funds Rate
+            return_exceptions=True
+        )
+
+        open_interest = ext_results[0] if not isinstance(ext_results[0], Exception) else []
+        taker_bs = ext_results[1] if not isinstance(ext_results[1], Exception) else []
+        top_trader_ls = ext_results[2] if not isinstance(ext_results[2], Exception) else []
+        bitget_funding = ext_results[3] if not isinstance(ext_results[3], Exception) else []
+        stablecoin_data = ext_results[4] if not isinstance(ext_results[4], Exception) else []
+        global_market = ext_results[5] if not isinstance(ext_results[5], Exception) else {}
+        btc_hashrate = ext_results[6] if not isinstance(ext_results[6], Exception) else []
+        fred_dxy = ext_results[7] if not isinstance(ext_results[7], Exception) else []
+        fred_ffr = ext_results[8] if not isinstance(ext_results[8], Exception) else []
+
+        # Track which data sources returned data
         if klines_btc:
-            sources.append("Binance/CoinGecko")
+            self._data_sources.append("Binance Futures (OHLCV)")
         if fear_greed:
-            sources.append("Alternative.me")
+            self._data_sources.append("Alternative.me (Fear & Greed)")
         if long_short:
-            sources.append("Binance Futures")
+            self._data_sources.append("Binance (L/S Ratio)")
+        if funding_btc:
+            self._data_sources.append("Binance (Funding Rates)")
+        if open_interest:
+            self._data_sources.append("Binance (Open Interest)")
+        if taker_bs:
+            self._data_sources.append("Binance (Taker Buy/Sell)")
+        if top_trader_ls:
+            self._data_sources.append("Binance (Top Trader L/S)")
+        if bitget_funding:
+            self._data_sources.append("Bitget (Funding Rates)")
+        if stablecoin_data:
+            self._data_sources.append("DefiLlama (Stablecoin Flows)")
+        if global_market:
+            self._data_sources.append("CoinGecko (Global Market)")
+        if btc_hashrate:
+            self._data_sources.append("Blockchain.info (Hashrate)")
+        if fred_dxy:
+            self._data_sources.append("FRED (DXY Index)")
+        if fred_ffr:
+            self._data_sources.append("FRED (Fed Funds Rate)")
 
-        logger.info(f"Data sources: {', '.join(sources) if sources else 'None'}")
-        logger.info(f"Data fetched - FG: {len(fear_greed)}, Funding BTC: {len(funding_btc)}, "
-                   f"Klines BTC: {len(klines_btc)}, L/S: {len(long_short)}")
+        logger.info(f"Active data sources: {len(self._data_sources)}")
+        for src in self._data_sources:
+            logger.info(f"  - {src}")
 
-        # Create lookup dictionaries by date
+        logger.info(
+            f"Data counts - FG:{len(fear_greed)} Funding:{len(funding_btc)} "
+            f"Klines:{len(klines_btc)} L/S:{len(long_short)} OI:{len(open_interest)} "
+            f"Taker:{len(taker_bs)} TopTrader:{len(top_trader_ls)} "
+            f"Bitget:{len(bitget_funding)} Stable:{len(stablecoin_data)} "
+            f"Hash:{len(btc_hashrate)} DXY:{len(fred_dxy)} FFR:{len(fred_ffr)}"
+        )
+
+        # Calculate volatility from BTC klines
+        volatility_map = self.calculate_volatility(klines_btc) if klines_btc else {}
+
+        # Build lookup dictionaries by date
         def to_date_key(ts: int) -> str:
             return datetime.fromtimestamp(ts).strftime("%Y-%m-%d")
 
         fg_by_date = {to_date_key(item["timestamp"]): item for item in fear_greed}
 
-        # Aggregate funding rates by date (average of 3 daily payments)
-        funding_btc_by_date = {}
+        # Aggregate funding rates by date (average of daily payments)
+        funding_btc_by_date: Dict[str, List[float]] = {}
         for item in funding_btc:
-            date_key = to_date_key(item["timestamp"])
-            if date_key not in funding_btc_by_date:
-                funding_btc_by_date[date_key] = []
-            funding_btc_by_date[date_key].append(item["rate"])
+            dk = to_date_key(item["timestamp"])
+            funding_btc_by_date.setdefault(dk, []).append(item["rate"])
 
-        funding_eth_by_date = {}
+        funding_eth_by_date: Dict[str, List[float]] = {}
         for item in funding_eth:
-            date_key = to_date_key(item["timestamp"])
-            if date_key not in funding_eth_by_date:
-                funding_eth_by_date[date_key] = []
-            funding_eth_by_date[date_key].append(item["rate"])
+            dk = to_date_key(item["timestamp"])
+            funding_eth_by_date.setdefault(dk, []).append(item["rate"])
 
         klines_btc_by_date = {to_date_key(item["timestamp"]): item for item in klines_btc}
         klines_eth_by_date = {to_date_key(item["timestamp"]): item for item in klines_eth}
         ls_by_date = {to_date_key(item["timestamp"]): item for item in long_short}
 
+        # New source lookups
+        oi_by_date = {to_date_key(item["timestamp"]): item for item in open_interest}
+        taker_by_date = {to_date_key(item["timestamp"]): item for item in taker_bs}
+        top_ls_by_date = {to_date_key(item["timestamp"]): item for item in top_trader_ls}
+
+        # Aggregate Bitget funding by date
+        bitget_funding_by_date: Dict[str, List[float]] = {}
+        for item in bitget_funding:
+            dk = to_date_key(item["timestamp"])
+            bitget_funding_by_date.setdefault(dk, []).append(item["rate"])
+
+        stable_by_date = {to_date_key(item["timestamp"]): item for item in stablecoin_data}
+        hashrate_by_date = {to_date_key(item["timestamp"]): item for item in btc_hashrate}
+
+        # FRED data uses date strings directly
+        dxy_by_date = {}
+        for item in fred_dxy:
+            dk = item.get("date", to_date_key(item["timestamp"]))
+            dxy_by_date[dk] = item["value"]
+
+        ffr_by_date = {}
+        for item in fred_ffr:
+            dk = item.get("date", to_date_key(item["timestamp"]))
+            ffr_by_date[dk] = item["value"]
+
+        # Compute stablecoin 7-day flows
+        stable_sorted = sorted(stablecoin_data, key=lambda x: x["timestamp"])
+        stable_flow_by_date = {}
+        for i, item in enumerate(stable_sorted):
+            dk = to_date_key(item["timestamp"])
+            if i >= 7:
+                flow = item["usdt_mcap"] - stable_sorted[i - 7]["usdt_mcap"]
+                stable_flow_by_date[dk] = flow
+            else:
+                stable_flow_by_date[dk] = 0.0
+
+        # Compute OI 24h change
+        oi_sorted = sorted(open_interest, key=lambda x: x["timestamp"])
+        oi_change_by_date = {}
+        for i, item in enumerate(oi_sorted):
+            dk = to_date_key(item["timestamp"])
+            if i >= 1:
+                prev_oi = oi_sorted[i - 1]["oi_value"]
+                curr_oi = item["oi_value"]
+                change_pct = ((curr_oi - prev_oi) / prev_oi * 100) if prev_oi > 0 else 0
+                oi_change_by_date[dk] = change_pct
+            else:
+                oi_change_by_date[dk] = 0.0
+
+        # Global market data (current snapshot applied to all dates)
+        current_btc_dom = global_market.get("btc_dominance", 0) if isinstance(global_market, dict) else 0
+        current_total_mcap = global_market.get("total_market_cap_usd", 0) if isinstance(global_market, dict) else 0
+
+        # FRED data: forward-fill (use last known value for missing dates)
+        last_dxy = 0.0
+        last_ffr = 0.0
+
         # Combine into data points
         data_points = []
 
-        # Use BTC klines as the base timeline
         for kline in klines_btc:
             date_key = to_date_key(kline["timestamp"])
             timestamp = datetime.fromtimestamp(kline["timestamp"])
 
-            # Get Fear & Greed (default to 50 = neutral if missing)
+            # Core data
             fg = fg_by_date.get(date_key, {"value": 50, "classification": "Neutral"})
-
-            # Get funding rates (average if multiple, default to 0)
-            btc_funding = funding_btc_by_date.get(date_key, [0])
-            eth_funding = funding_eth_by_date.get(date_key, [0])
-
-            # Get ETH klines
-            eth_kline = klines_eth_by_date.get(date_key, {
-                "close": 0, "high": 0, "low": 0
-            })
-
-            # Get L/S ratio (default to 1.0 = neutral)
+            btc_funding_rates = funding_btc_by_date.get(date_key, [0])
+            eth_funding_rates = funding_eth_by_date.get(date_key, [0])
+            eth_kline = klines_eth_by_date.get(date_key, {"close": 0, "high": 0, "low": 0, "open": 0})
             ls = ls_by_date.get(date_key, {"ratio": 1.0})
 
-            # Calculate 24h changes
             btc_change = ((kline["close"] - kline["open"]) / kline["open"] * 100) if kline["open"] > 0 else 0
             eth_change = ((eth_kline.get("close", 0) - eth_kline.get("open", 0)) / eth_kline.get("open", 1) * 100) if eth_kline.get("open", 0) > 0 else 0
+
+            # Open Interest
+            oi = oi_by_date.get(date_key, {"oi_value": 0})
+            oi_change = oi_change_by_date.get(date_key, 0.0)
+
+            # Taker Buy/Sell
+            taker = taker_by_date.get(date_key, {"ratio": 1.0})
+
+            # Top Trader L/S
+            top_ls = top_ls_by_date.get(date_key, {"ratio": 1.0})
+
+            # Bitget Funding
+            bitget_rates = bitget_funding_by_date.get(date_key, [0])
+
+            # Stablecoin
+            stable = stable_by_date.get(date_key, {"usdt_mcap": 0})
+            stable_flow = stable_flow_by_date.get(date_key, 0.0)
+
+            # Hashrate
+            hr = hashrate_by_date.get(date_key, {"hashrate": 0})
+
+            # FRED (forward-fill)
+            if date_key in dxy_by_date:
+                last_dxy = dxy_by_date[date_key]
+            if date_key in ffr_by_date:
+                last_ffr = ffr_by_date[date_key]
+
+            # Volatility
+            vol = volatility_map.get(date_key, 0.0)
 
             data_point = HistoricalDataPoint(
                 timestamp=timestamp,
@@ -551,8 +1059,8 @@ class HistoricalDataFetcher:
                 fear_greed_index=fg.get("value", 50),
                 fear_greed_classification=fg.get("classification", "Neutral"),
                 long_short_ratio=ls.get("ratio", 1.0),
-                funding_rate_btc=sum(btc_funding) / len(btc_funding) if btc_funding else 0,
-                funding_rate_eth=sum(eth_funding) / len(eth_funding) if eth_funding else 0,
+                funding_rate_btc=sum(btc_funding_rates) / len(btc_funding_rates) if btc_funding_rates else 0,
+                funding_rate_eth=sum(eth_funding_rates) / len(eth_funding_rates) if eth_funding_rates else 0,
                 btc_price=kline["close"],
                 eth_price=eth_kline.get("close", 0),
                 btc_high=kline["high"],
@@ -560,17 +1068,36 @@ class HistoricalDataFetcher:
                 eth_high=eth_kline.get("high", 0),
                 eth_low=eth_kline.get("low", 0),
                 btc_24h_change=btc_change,
-                eth_24h_change=eth_change
+                eth_24h_change=eth_change,
+                # New fields
+                open_interest_btc=oi.get("oi_value", 0),
+                open_interest_change_24h=oi_change,
+                taker_buy_sell_ratio=taker.get("ratio", 1.0),
+                top_trader_long_short_ratio=top_ls.get("ratio", 1.0),
+                funding_rate_bitget=sum(bitget_rates) / len(bitget_rates) if bitget_rates else 0,
+                stablecoin_flow_7d=stable_flow,
+                usdt_market_cap=stable.get("usdt_mcap", 0),
+                btc_dominance=current_btc_dom,
+                total_crypto_market_cap=current_total_mcap,
+                dxy_index=last_dxy,
+                fed_funds_rate=last_ffr,
+                btc_hashrate=hr.get("hashrate", 0),
+                historical_volatility=vol,
+                btc_volume=kline.get("volume", 0),
             )
 
             data_points.append(data_point)
 
-        # Sort by date
         data_points.sort(key=lambda x: x.timestamp)
 
-        logger.info(f"Combined {len(data_points)} historical data points")
+        logger.info(f"Combined {len(data_points)} historical data points from {len(self._data_sources)} sources")
 
         return data_points
+
+    @property
+    def data_sources(self) -> List[str]:
+        """Return list of data sources used in the last fetch."""
+        return self._data_sources
 
     def save_data_points(self, data_points: List[HistoricalDataPoint], filename: str = "historical_data.json"):
         """Save data points to file."""
