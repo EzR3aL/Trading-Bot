@@ -8,14 +8,12 @@ Sends formatted trade notifications to a Discord channel including:
 - Risk alerts
 """
 
-import asyncio
 from datetime import datetime
 from typing import Optional, Dict, Any
 
 import aiohttp
 
 from src.utils.logger import get_logger
-from config import settings
 
 logger = get_logger(__name__)
 
@@ -41,9 +39,9 @@ class DiscordNotifier:
         Initialize the Discord notifier.
 
         Args:
-            webhook_url: Discord webhook URL (uses config if not provided)
+            webhook_url: Per-bot Discord webhook URL (required)
         """
-        self.webhook_url = webhook_url or settings.discord.webhook_url
+        self.webhook_url = webhook_url
         self._session: Optional[aiohttp.ClientSession] = None
 
     async def __aenter__(self):
