@@ -145,7 +145,15 @@
     "delete": "Delete",
     "active": "ACTIVE",
     "confirmDelete": "Delete this preset?",
-    "allExchanges": "All Exchanges"
+    "allExchanges": "All Exchanges",
+    "name": "Name",
+    "description": "Description",
+    "leverage": "Leverage",
+    "positionPercent": "Position %",
+    "tpPercent": "TP %",
+    "slPercent": "SL %",
+    "noPresets": "No presets yet. Create your first one!",
+    "summary": "{{leverage}}x Leverage | {{position}}% Position | {{sl}}% SL"
   },
   "bot": {
     "title": "Bot Control",

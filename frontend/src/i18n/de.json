@@ -145,7 +145,15 @@
     "delete": "Löschen",
     "active": "AKTIV",
     "confirmDelete": "Preset wirklich löschen?",
-    "allExchanges": "Alle Exchanges"
+    "allExchanges": "Alle Exchanges",
+    "name": "Name",
+    "description": "Beschreibung",
+    "leverage": "Hebel",
+    "positionPercent": "Position %",
+    "tpPercent": "TP %",
+    "slPercent": "SL %",
+    "noPresets": "Noch keine Presets vorhanden. Erstelle dein erstes!",
+    "summary": "{{leverage}}x Hebel | {{position}}% Position | {{sl}}% SL"
   },
   "bot": {
     "title": "Bot-Steuerung",
