@@ -116,9 +116,14 @@ class BitgetWebSocket:
             api_secret: Bitget API secret
             passphrase: Bitget API passphrase
         """
-        self.api_key = api_key or settings.bitget.api_key
-        self.api_secret = api_secret or settings.bitget.api_secret
-        self.passphrase = passphrase or settings.bitget.passphrase
+        if not api_key or not api_secret:
+            raise ValueError(
+                "Bitget WebSocket requires explicit api_key and api_secret. "
+                "Credentials are loaded from the database, not environment variables."
+            )
+        self.api_key = api_key
+        self.api_secret = api_secret
+        self.passphrase = passphrase or ""
 
         self._ws_private: Optional[websockets.WebSocketClientProtocol] = None
         self._ws_public: Optional[websockets.WebSocketClientProtocol] = None

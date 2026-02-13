@@ -35,41 +35,31 @@ def get_env(key: str, default: str = "", cast_type: type = str):
 
 @dataclass
 class BitgetConfig:
-    """Bitget API configuration."""
-    # Live Trading API Keys (for real money trading)
-    api_key: str = field(default_factory=lambda: get_env("BITGET_API_KEY"))
-    api_secret: str = field(default_factory=lambda: get_env("BITGET_API_SECRET"))
-    passphrase: str = field(default_factory=lambda: get_env("BITGET_PASSPHRASE"))
+    """Bitget API configuration.
 
-    # Demo Trading API Keys (for paper money trading on Bitget Demo Account)
-    demo_api_key: str = field(default_factory=lambda: get_env("BITGET_DEMO_API_KEY"))
-    demo_api_secret: str = field(default_factory=lambda: get_env("BITGET_DEMO_API_SECRET"))
-    demo_passphrase: str = field(default_factory=lambda: get_env("BITGET_DEMO_PASSPHRASE"))
+    DEPRECATED: API keys are now stored encrypted in the database via
+    ExchangeConnection. This class no longer loads keys from environment
+    variables. Kept for backwards compatibility of the settings object.
+    """
+    # All credential fields default to empty — no longer loaded from env
+    api_key: str = ""
+    api_secret: str = ""
+    passphrase: str = ""
+    demo_api_key: str = ""
+    demo_api_secret: str = ""
+    demo_passphrase: str = ""
 
     testnet: bool = field(default_factory=lambda: get_env("BITGET_TESTNET", "false", bool))
 
     def validate(self, demo_mode: bool = False) -> bool:
-        """
-        Validate that all required credentials are present.
-
-        Args:
-            demo_mode: If True, validate demo API keys; otherwise validate live API keys
-        """
+        """Validate that all required credentials are present."""
         if demo_mode:
             return all([self.demo_api_key, self.demo_api_secret, self.demo_passphrase])
         else:
             return all([self.api_key, self.api_secret, self.passphrase])
 
     def get_active_credentials(self, demo_mode: bool = False) -> dict:
-        """
-        Get the active API credentials based on trading mode.
-
-        Args:
-            demo_mode: If True, return demo credentials; otherwise return live credentials
-
-        Returns:
-            Dictionary with api_key, api_secret, and passphrase
-        """
+        """Get the active API credentials based on trading mode."""
         if demo_mode:
             return {
                 "api_key": self.demo_api_key,
