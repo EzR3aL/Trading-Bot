@@ -56,6 +56,7 @@ class LLMSignalStrategy(BaseStrategy):
 
         # Extract LLM-specific params
         self.llm_provider_name = self.params.get("llm_provider", "groq")
+        self.llm_model = self.params.get("llm_model", "")
         self.llm_api_key = self.params.get("llm_api_key", "")
         self.custom_prompt = self.params.get("custom_prompt", "").strip()
         if len(self.custom_prompt) > MAX_CUSTOM_PROMPT_LENGTH:
@@ -76,9 +77,12 @@ class LLMSignalStrategy(BaseStrategy):
                 "Configure it in Settings → LLM Keys."
             )
 
-        # Initialize provider
+        # Initialize provider (model_override=None falls back to class default)
         provider_class = get_provider_class(self.llm_provider_name)
-        self.provider = provider_class(self.llm_api_key)
+        self.provider = provider_class(
+            self.llm_api_key,
+            model_override=self.llm_model or None,
+        )
         self.prompt = self.custom_prompt if self.custom_prompt else DEFAULT_PROMPT
 
     async def _ensure_fetcher(self):
@@ -278,21 +282,39 @@ class LLMSignalStrategy(BaseStrategy):
     @classmethod
     def get_param_schema(cls) -> Dict[str, Any]:
         """Return parameter schema for the BotBuilder UI."""
+        from src.ai.providers import MODEL_CATALOG
+
+        # Build family options
+        family_options = []
+        for key, family in MODEL_CATALOG.items():
+            label = family["family_name"]
+            if family.get("free"):
+                label += " - Free"
+            family_options.append({"value": key, "label": label})
+
+        # Build model options grouped by family
+        model_options_map: Dict[str, list] = {}
+        for key, family in MODEL_CATALOG.items():
+            model_options_map[key] = [
+                {"value": m["id"], "label": m["name"]}
+                for m in family["models"]
+            ]
+
         return {
             "llm_provider": {
                 "type": "select",
-                "label": "LLM Provider",
-                "description": "Which AI model to use for analysis",
+                "label": "Model Family",
+                "description": "Which AI provider to use for analysis",
                 "default": "groq",
-                "options": [
-                    {"value": "groq", "label": "Groq (Llama 3.3 70B) - Free"},
-                    {"value": "gemini", "label": "Google Gemini 2.0 Flash - Free"},
-                    {"value": "openai", "label": "OpenAI GPT-4o-mini"},
-                    {"value": "anthropic", "label": "Anthropic Claude Haiku 4.5"},
-                    {"value": "mistral", "label": "Mistral Small"},
-                    {"value": "xai", "label": "xAI Grok"},
-                    {"value": "perplexity", "label": "Perplexity Sonar"},
-                ],
+                "options": family_options,
+            },
+            "llm_model": {
+                "type": "dependent_select",
+                "label": "Model",
+                "description": "Which model to use from the selected provider",
+                "default": "",
+                "depends_on": "llm_provider",
+                "options_map": model_options_map,
             },
             "custom_prompt": {
                 "type": "textarea",

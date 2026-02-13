@@ -32,7 +32,7 @@ class AnthropicProvider(BaseLLMProvider):
             "Content-Type": "application/json",
         }
         payload = {
-            "model": self.MODEL,
+            "model": self.active_model,
             "max_tokens": 500,
             "temperature": temperature,
             "system": prompt,
@@ -58,7 +58,7 @@ class AnthropicProvider(BaseLLMProvider):
             confidence=confidence,
             reasoning=reasoning,
             raw_response=raw_text,
-            model_used=self.MODEL,
+            model_used=self.active_model,
             tokens_used=tokens,
         )
 
@@ -72,7 +72,7 @@ class AnthropicProvider(BaseLLMProvider):
                 "Content-Type": "application/json",
             }
             payload = {
-                "model": self.MODEL,
+                "model": self.active_model,
                 "max_tokens": 10,
                 "messages": [{"role": "user", "content": "Hi"}],
             }

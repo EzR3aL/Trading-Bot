@@ -2,8 +2,9 @@ import { useState, useEffect, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
 import api from '../../api/client'
-import { ArrowLeft, ArrowRight, Check, Play, Brain, TrendingUp, BarChart3, DollarSign, Activity, Building } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Check, Play, Brain, TrendingUp, BarChart3, DollarSign, Activity, Building, LayoutGrid, List, Bot } from 'lucide-react'
 import ExchangeLogo from '../ui/ExchangeLogo'
+import FilterDropdown from '../ui/FilterDropdown'
 
 interface Strategy {
   name: string
@@ -24,6 +25,8 @@ interface ParamDef {
   min?: number
   max?: number
   options?: (string | ParamOption)[]
+  depends_on?: string
+  options_map?: Record<string, ParamOption[]>
 }
 
 interface DataSource {
@@ -110,13 +113,18 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
   const [dailyLossLimit, setDailyLossLimit] = useState(5.0)
   const [scheduleType, setScheduleType] = useState('market_sessions')
   const [intervalMinutes, setIntervalMinutes] = useState(60)
-  const [customHours, setCustomHours] = useState<number[]>([1, 8, 14, 21])
+  const [customHours, setCustomHours] = useState<number[]>([])
   const [rotationEnabled, setRotationEnabled] = useState(false)
   const [rotationMinutes, setRotationMinutes] = useState(60)
   const [rotationStartTime, setRotationStartTime] = useState('08:00')
   const [discordWebhookUrl, setDiscordWebhookUrl] = useState('')
   const [telegramBotToken, setTelegramBotToken] = useState('')
   const [telegramChatId, setTelegramChatId] = useState('')
+
+  // View modes for strategy, data sources, and schedule
+  const [strategyView, setStrategyView] = useState<'grid' | 'list'>('grid')
+  const [sourcesView, setSourcesView] = useState<'grid' | 'list'>('grid')
+  const [scheduleView, setScheduleView] = useState<'grid' | 'list'>('grid')
 
   // Presets
   const [presets, setPresets] = useState<Preset[]>([])
@@ -198,9 +206,9 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
     api.get('/bots/data-sources').then(res => {
       setDataSources(res.data.sources)
       setDefaultSourceIds(res.data.defaults)
-      // Only set defaults if not editing (editing loads from bot config)
+      // New bots start with no sources selected; editing loads from bot config
       if (!isEdit) {
-        setSelectedSources(res.data.defaults)
+        setSelectedSources([])
       }
     }).catch(() => {})
   }, [isEdit])
@@ -257,6 +265,20 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
       setStrategyParams(defaults)
     }
   }
+
+  // Auto-select first model when provider family changes
+  useEffect(() => {
+    if (!selectedStrategy) return
+    const modelDef = selectedStrategy.param_schema['llm_model'] as ParamDef | undefined
+    if (!modelDef?.options_map) return
+
+    const family = strategyParams.llm_provider as string
+    const models = modelDef.options_map[family] || []
+    const currentModel = strategyParams.llm_model
+    if (!models.some((m: ParamOption) => m.value === currentModel)) {
+      setStrategyParams(prev => ({ ...prev, llm_model: models[0]?.value ?? '' }))
+    }
+  }, [strategyParams.llm_provider, selectedStrategy])
 
   // Convert trading pairs when exchange type changes
   useEffect(() => {
@@ -437,7 +459,7 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
       )}
 
       {/* Step content */}
-      <div className="bg-gray-900 border border-gray-800 rounded-lg p-6 mb-6">
+      <div className="border border-white/10 bg-white/[0.03] rounded-xl p-6 mb-6">
         {/* Step 1: Name */}
         {currentStepKey === 'step1' && (
           <div className="space-y-4 max-w-md">
@@ -448,7 +470,7 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
                 value={name}
                 onChange={e => setName(e.target.value)}
                 placeholder={b.namePlaceholder}
-                className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded text-white focus:border-primary-500 focus:outline-none"
+                className="filter-select w-full text-sm"
                 autoFocus
               />
             </div>
@@ -459,29 +481,25 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
                 value={description}
                 onChange={e => setDescription(e.target.value)}
                 placeholder={b.descriptionPlaceholder}
-                className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded text-white focus:border-primary-500 focus:outline-none"
+                className="filter-select w-full text-sm"
               />
             </div>
 
             {/* Preset selection */}
             {!isEdit && (
-              <div className="pt-2 border-t border-gray-800">
+              <div className="pt-2 border-t border-white/5">
                 <label className="block text-sm text-gray-400 mb-1">{t('bots.builder.loadFromPreset')}</label>
                 {presets.length > 0 ? (
                   <>
-                    <select
-                      value={selectedPresetId ?? ''}
-                      onChange={e => {
-                        const id = parseInt(e.target.value)
-                        if (id) applyPreset(id)
-                      }}
-                      className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded text-white focus:border-primary-500 focus:outline-none"
-                    >
-                      <option value="">{t('bots.builder.selectPreset')}</option>
-                      {presets.map(p => (
-                        <option key={p.id} value={p.id}>{p.name} {p.exchange_type !== 'any' ? `(${p.exchange_type})` : ''}</option>
-                      ))}
-                    </select>
+                    <FilterDropdown
+                      value={String(selectedPresetId ?? '')}
+                      onChange={val => { const id = parseInt(val); if (id) applyPreset(id) }}
+                      options={[
+                        { value: '', label: t('bots.builder.selectPreset') },
+                        ...presets.map(p => ({ value: String(p.id), label: `${p.name}${p.exchange_type !== 'any' ? ` (${p.exchange_type})` : ''}` }))
+                      ]}
+                      ariaLabel="Preset"
+                    />
                     {selectedPresetId && (
                       <p className="text-xs text-green-400 mt-1">{t('bots.builder.presetLoaded')}</p>
                     )}
@@ -500,23 +518,80 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
         {currentStepKey === 'step2' && (
           <div className="space-y-6">
             <div>
-              <label className="block text-sm text-gray-400 mb-2">{b.selectStrategy}</label>
-              <div className="grid gap-3">
-                {strategies.map(s => (
+              <div className="flex items-center justify-between mb-2">
+                <label className="block text-sm text-gray-400">{b.selectStrategy}</label>
+                <div className="flex items-center gap-1 bg-white/5 rounded-lg p-0.5">
                   <button
-                    key={s.name}
-                    onClick={() => handleStrategyChange(s.name)}
-                    className={`text-left p-4 rounded border transition-colors ${
-                      strategyType === s.name
-                        ? 'border-primary-500 bg-primary-900/20'
-                        : 'border-gray-700 bg-gray-800 hover:border-gray-600'
-                    }`}
+                    type="button"
+                    onClick={() => setStrategyView('grid')}
+                    className={`p-1.5 rounded-md transition-colors ${strategyView === 'grid' ? 'bg-white/10 text-white' : 'text-gray-500 hover:text-gray-300'}`}
+                    title="Kacheln"
                   >
-                    <div className="text-white font-medium">{getStrategyDisplayName(s.name)}</div>
-                    <div className="text-sm text-gray-400 mt-1">{STRATEGY_DESCRIPTIONS_DE[s.name] || s.description}</div>
+                    <LayoutGrid size={14} />
                   </button>
-                ))}
+                  <button
+                    type="button"
+                    onClick={() => setStrategyView('list')}
+                    className={`p-1.5 rounded-md transition-colors ${strategyView === 'list' ? 'bg-white/10 text-white' : 'text-gray-500 hover:text-gray-300'}`}
+                    title="Liste"
+                  >
+                    <List size={14} />
+                  </button>
+                </div>
               </div>
+
+              {strategyView === 'grid' ? (
+                <div className="grid grid-cols-2 gap-2">
+                  {strategies.map(s => {
+                    const isSelected = strategyType === s.name
+                    return (
+                      <button
+                        key={s.name}
+                        onClick={() => handleStrategyChange(s.name)}
+                        className={`text-left p-3 rounded-xl border transition-all ${
+                          isSelected
+                            ? 'border-primary-500 bg-primary-500/10 ring-1 ring-primary-500/30'
+                            : 'border-white/10 bg-white/[0.03] hover:border-white/20 hover:bg-white/[0.06]'
+                        }`}
+                      >
+                        <div className={`flex items-center gap-1.5 text-sm font-medium ${isSelected ? 'text-primary-400' : 'text-white'}`}>
+                          {getStrategyDisplayName(s.name)}
+                          {s.name === 'llm_signal' && <Bot size={14} className="text-emerald-400" />}
+                        </div>
+                        <div className="text-xs text-gray-500 mt-1 line-clamp-2">
+                          {STRATEGY_DESCRIPTIONS_DE[s.name] || s.description}
+                        </div>
+                      </button>
+                    )
+                  })}
+                </div>
+              ) : (
+                <div className="space-y-1">
+                  {strategies.map(s => {
+                    const isSelected = strategyType === s.name
+                    return (
+                      <button
+                        key={s.name}
+                        onClick={() => handleStrategyChange(s.name)}
+                        className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl border transition-all ${
+                          isSelected
+                            ? 'border-primary-500 bg-primary-500/10 ring-1 ring-primary-500/30'
+                            : 'border-white/10 bg-white/[0.03] hover:border-white/20 hover:bg-white/[0.06]'
+                        }`}
+                      >
+                        {isSelected && <Check size={14} className="text-primary-400 shrink-0" />}
+                        <div className={`flex items-center gap-1.5 text-sm font-medium ${isSelected ? 'text-primary-400' : 'text-white'}`}>
+                          {getStrategyDisplayName(s.name)}
+                          {s.name === 'llm_signal' && <Bot size={14} className="text-emerald-400" />}
+                        </div>
+                        <div className="text-xs text-gray-500 truncate ml-auto">
+                          {(STRATEGY_DESCRIPTIONS_DE[s.name] || s.description).slice(0, 60)}...
+                        </div>
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
             </div>
 
             {/* LLM info banner */}
@@ -529,80 +604,141 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
             {selectedStrategy && Object.keys(selectedStrategy.param_schema).length > 0 && (
               <div>
                 <label className="block text-sm text-gray-400 mb-3">{b.strategyParams}</label>
-                <div className="grid grid-cols-2 gap-4">
-                  {Object.entries(selectedStrategy.param_schema).map(([key, def]) => {
-                    const d = def as ParamDef
-
-                    if (d.type === 'select' && d.options) {
-                      return (
-                        <div key={key}>
-                          <label className="block text-xs text-gray-500 mb-1" title={d.description}>{d.label}</label>
-                          <select
-                            value={strategyParams[key] ?? d.default}
-                            onChange={e => setStrategyParams(prev => ({ ...prev, [key]: e.target.value }))}
-                            className="w-full px-2 py-1.5 text-sm bg-gray-800 border border-gray-700 rounded text-white focus:border-primary-500 focus:outline-none"
-                          >
-                            {d.options.map(opt => {
-                              const val = typeof opt === 'string' ? opt : opt.value
-                              const label = typeof opt === 'string' ? opt : opt.label
-                              return <option key={val} value={val}>{label}</option>
-                            })}
-                          </select>
-                        </div>
-                      )
-                    }
-
-                    if (d.type === 'textarea') {
-                      return (
-                        <div key={key} className="col-span-2">
-                          <label className="block text-xs text-gray-500 mb-1" title={d.description}>{d.label}</label>
-                          <textarea
-                            value={strategyParams[key] ?? ''}
-                            onChange={e => setStrategyParams(prev => ({ ...prev, [key]: e.target.value }))}
-                            rows={5}
-                            placeholder={b.customPromptPlaceholder || d.description}
-                            className="w-full px-2 py-1.5 text-sm bg-gray-800 border border-gray-700 rounded text-white font-mono focus:border-primary-500 focus:outline-none"
-                          />
-                        </div>
-                      )
-                    }
-
-                    if (d.type === 'float' && d.min !== undefined && d.max !== undefined && d.max <= 1) {
-                      const val = strategyParams[key] ?? d.default
-                      return (
-                        <div key={key}>
-                          <label className="block text-xs text-gray-500 mb-1" title={d.description}>
-                            {d.label}: {Number(val).toFixed(1)}
-                          </label>
-                          <input
-                            type="range"
-                            min={d.min}
-                            max={d.max}
-                            step={0.1}
-                            value={val}
-                            onChange={e => setStrategyParams(prev => ({ ...prev, [key]: parseFloat(e.target.value) }))}
-                            className="w-full accent-primary-500"
-                          />
-                          <p className="text-xs text-gray-600 mt-0.5">{d.description}</p>
-                        </div>
-                      )
-                    }
+                <div className="space-y-3">
+                  {(() => {
+                    const selectEntries = Object.entries(selectedStrategy.param_schema).filter(
+                      ([, def]) => (def as ParamDef).type === 'select' || (def as ParamDef).type === 'dependent_select'
+                    )
+                    const otherEntries = Object.entries(selectedStrategy.param_schema).filter(
+                      ([, def]) => (def as ParamDef).type !== 'select' && (def as ParamDef).type !== 'dependent_select'
+                    )
 
                     return (
-                      <div key={key}>
-                        <label className="block text-xs text-gray-500 mb-1" title={d.description}>{d.label}</label>
-                        <input
-                          type="number"
-                          value={strategyParams[key] ?? d.default}
-                          onChange={e => setStrategyParams(prev => ({ ...prev, [key]: parseFloat(e.target.value) || 0 }))}
-                          min={d.min}
-                          max={d.max}
-                          step={d.type === 'float' ? 0.0001 : 1}
-                          className="w-full px-2 py-1.5 text-sm bg-gray-800 border border-gray-700 rounded text-white focus:border-primary-500 focus:outline-none"
-                        />
-                      </div>
+                      <>
+                        {/* Dropdowns (Model Family + Model) compact in one row */}
+                        {selectEntries.length > 0 && (
+                          <div className="flex items-end gap-3 flex-wrap">
+                            {selectEntries.map(([key, def]) => {
+                              const d = def as ParamDef
+                              if (d.type === 'select' && d.options) {
+                                const selectOptions = d.options.map(opt => ({
+                                  value: typeof opt === 'string' ? opt : opt.value,
+                                  label: typeof opt === 'string' ? opt : opt.label,
+                                }))
+                                return (
+                                  <div key={key}>
+                                    <label className="block text-xs text-gray-500 mb-1" title={d.description}>{d.label}</label>
+                                    <FilterDropdown
+                                      value={String(strategyParams[key] ?? d.default)}
+                                      onChange={val => setStrategyParams(prev => ({ ...prev, [key]: val }))}
+                                      options={selectOptions}
+                                      ariaLabel={d.label}
+                                    />
+                                  </div>
+                                )
+                              }
+                              if (d.type === 'dependent_select' && d.options_map && d.depends_on) {
+                                const parentValue = (strategyParams[d.depends_on] ?? '') as string
+                                const depOptions = (d.options_map[parentValue] || []).map((opt: ParamOption) => ({
+                                  value: opt.value,
+                                  label: opt.label,
+                                }))
+                                const currentValue = strategyParams[key] ?? ''
+                                const isValid = depOptions.some(opt => opt.value === currentValue)
+                                const displayValue = isValid ? String(currentValue) : (depOptions[0]?.value ?? '')
+                                return (
+                                  <div key={key}>
+                                    <label className="block text-xs text-gray-500 mb-1" title={d.description}>{d.label}</label>
+                                    <FilterDropdown
+                                      value={displayValue}
+                                      onChange={val => setStrategyParams(prev => ({ ...prev, [key]: val }))}
+                                      options={depOptions}
+                                      ariaLabel={d.label}
+                                    />
+                                  </div>
+                                )
+                              }
+                              return null
+                            })}
+                          </div>
+                        )}
+
+                        {/* Special fields: Prompt + Temperature slider */}
+                        {otherEntries
+                          .filter(([, def]) => {
+                            const d = def as ParamDef
+                            return d.type === 'textarea' || (d.type === 'float' && d.min !== undefined && d.max !== undefined && d.max <= 1)
+                          })
+                          .map(([key, def]) => {
+                            const d = def as ParamDef
+                            if (d.type === 'textarea') {
+                              return (
+                                <div key={key}>
+                                  <label className="block text-xs text-gray-500 mb-1" title={d.description}>{d.label}</label>
+                                  <textarea
+                                    value={strategyParams[key] ?? ''}
+                                    onChange={e => setStrategyParams(prev => ({ ...prev, [key]: e.target.value }))}
+                                    rows={6}
+                                    placeholder="Eigene Anweisungen für die KI-Analyse eingeben..."
+                                    className="filter-select w-full text-sm font-mono !h-auto"
+                                  />
+                                </div>
+                              )
+                            }
+                            const val = strategyParams[key] ?? d.default
+                            return (
+                              <div key={key} className="max-w-sm">
+                                <label className="block text-xs text-gray-500 mb-1" title={d.description}>
+                                  {d.label}: {Number(val).toFixed(1)}
+                                </label>
+                                <input
+                                  type="range"
+                                  min={d.min}
+                                  max={d.max}
+                                  step={0.1}
+                                  value={val}
+                                  onChange={e => setStrategyParams(prev => ({ ...prev, [key]: parseFloat(e.target.value) }))}
+                                  className="w-full accent-primary-500"
+                                />
+                                <p className="text-[11px] text-gray-600 mt-0.5">
+                                  Niedrig = konsistente Antworten · Hoch = kreativere Analysen · Empfohlen: 0.2–0.4
+                                </p>
+                              </div>
+                            )
+                          })}
+
+                        {/* Number inputs in 2-column grid */}
+                        {(() => {
+                          const numberEntries = otherEntries.filter(([, def]) => {
+                            const d = def as ParamDef
+                            return d.type !== 'textarea' && !(d.type === 'float' && d.min !== undefined && d.max !== undefined && d.max <= 1)
+                          })
+                          if (numberEntries.length === 0) return null
+                          return (
+                            <div className="grid grid-cols-2 gap-3">
+                              {numberEntries.map(([key, def]) => {
+                                const d = def as ParamDef
+                                return (
+                                  <div key={key}>
+                                    <label className="block text-xs text-gray-500 mb-1" title={d.description}>{d.label}</label>
+                                    <input
+                                      type="number"
+                                      value={strategyParams[key] ?? d.default}
+                                      onChange={e => setStrategyParams(prev => ({ ...prev, [key]: parseFloat(e.target.value) || 0 }))}
+                                      min={d.min}
+                                      max={d.max}
+                                      step={d.type === 'float' ? 0.0001 : 1}
+                                      className="filter-select w-full text-sm"
+                                    />
+                                  </div>
+                                )
+                              })}
+                            </div>
+                          )
+                        })()}
+                      </>
                     )
-                  })}
+                  })()}
                 </div>
               </div>
             )}
@@ -611,12 +747,31 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
 
         {/* Step 2b: Data Sources */}
         {currentStepKey === 'step2b' && (
-          <div className="space-y-6">
-            <div>
-              <label className="block text-sm text-gray-400 mb-1">{b.dataSources || 'Data Sources'}</label>
-              <p className="text-xs text-gray-500 mb-4">{b.dataSourcesDesc || 'Select which market data your bot should analyze'}</p>
-              <div className="text-xs text-gray-400 mb-4">
-                {selectedSources.length} {b.sourcesSelected || 'sources selected'}
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <label className="block text-sm text-gray-400">{b.dataSources || 'Data Sources'}</label>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  {selectedSources.length} {b.sourcesSelected || 'sources selected'}
+                </p>
+              </div>
+              <div className="flex items-center gap-1 bg-white/5 rounded-lg p-0.5">
+                <button
+                  type="button"
+                  onClick={() => setSourcesView('grid')}
+                  className={`p-1.5 rounded-md transition-colors ${sourcesView === 'grid' ? 'bg-white/10 text-white' : 'text-gray-500 hover:text-gray-300'}`}
+                  title="Kacheln"
+                >
+                  <LayoutGrid size={14} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSourcesView('list')}
+                  className={`p-1.5 rounded-md transition-colors ${sourcesView === 'list' ? 'bg-white/10 text-white' : 'text-gray-500 hover:text-gray-300'}`}
+                  title="Liste"
+                >
+                  <List size={14} />
+                </button>
               </div>
             </div>
 
@@ -629,50 +784,78 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
 
               return (
                 <div key={cat}>
-                  <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center gap-2">
-                      <Icon size={16} className="text-gray-400" />
+                      <Icon size={15} className="text-gray-400" />
                       <span className="text-sm font-medium text-gray-300">{catLabel}</span>
                     </div>
                     <div className="flex gap-2">
                       <button
                         onClick={() => selectAllInCategory(cat)}
-                        className={`text-[10px] px-2 py-0.5 rounded ${allSelected ? 'text-gray-600' : 'text-primary-400 hover:text-primary-300'}`}
+                        className={`text-xs px-2 py-0.5 rounded ${allSelected ? 'text-gray-600' : 'text-primary-400 hover:text-primary-300'}`}
                         disabled={allSelected}
                       >
                         {b.selectAll || 'Select All'}
                       </button>
                       <button
                         onClick={() => clearCategory(cat)}
-                        className="text-[10px] px-2 py-0.5 rounded text-gray-500 hover:text-gray-400"
+                        className="text-xs px-2 py-0.5 rounded text-gray-500 hover:text-gray-400"
                       >
                         {b.clearAll || 'Clear'}
                       </button>
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 mb-4">
-                    {sources.map(src => {
-                      const isSelected = selectedSources.includes(src.id)
-                      return (
-                        <button
-                          key={src.id}
-                          onClick={() => toggleSource(src.id)}
-                          className={`text-left p-3 rounded-lg border transition-all duration-200 ${
-                            isSelected
-                              ? 'border-green-400/70 bg-green-950/30 shadow-[0_0_15px_rgba(74,222,128,0.15)]'
-                              : 'border-gray-700 bg-gray-800/50 hover:border-gray-600'
-                          }`}
-                        >
-                          <div className={`text-sm font-medium ${isSelected ? 'text-green-300' : 'text-white'}`}>
-                            {src.name}
-                          </div>
-                          <div className="text-[11px] text-gray-400 mt-1 line-clamp-2">{src.description}</div>
-                          <div className="text-[10px] text-gray-500 mt-1.5">{src.provider}</div>
-                        </button>
-                      )
-                    })}
-                  </div>
+                  {sourcesView === 'grid' ? (
+                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 mb-4">
+                      {sources.map(src => {
+                        const isSelected = selectedSources.includes(src.id)
+                        return (
+                          <button
+                            key={src.id}
+                            onClick={() => toggleSource(src.id)}
+                            className={`text-left px-3 py-2.5 rounded-xl border transition-all duration-200 ${
+                              isSelected
+                                ? 'border-green-400/70 bg-green-950/30 shadow-[0_0_10px_rgba(74,222,128,0.1)]'
+                                : 'border-white/10 bg-white/[0.03] hover:border-white/20 hover:bg-white/[0.06]'
+                            }`}
+                          >
+                            <div className={`text-sm font-medium ${isSelected ? 'text-green-300' : 'text-white'}`}>
+                              {src.name}
+                            </div>
+                            <div className="text-xs text-gray-500 mt-0.5 line-clamp-2">{src.description}</div>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  ) : (
+                    <div className="space-y-1 mb-4">
+                      {sources.map(src => {
+                        const isSelected = selectedSources.includes(src.id)
+                        return (
+                          <button
+                            key={src.id}
+                            onClick={() => toggleSource(src.id)}
+                            className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl border transition-all duration-200 ${
+                              isSelected
+                                ? 'border-green-400/70 bg-green-950/30'
+                                : 'border-white/10 bg-white/[0.03] hover:border-white/20 hover:bg-white/[0.06]'
+                            }`}
+                          >
+                            <div className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 ${
+                              isSelected ? 'border-green-400 bg-green-500/20' : 'border-gray-600'
+                            }`}>
+                              {isSelected && <Check size={11} className="text-green-400" />}
+                            </div>
+                            <span className={`text-sm font-medium ${isSelected ? 'text-green-300' : 'text-white'}`}>
+                              {src.name}
+                            </span>
+                            <span className="text-xs text-gray-500 truncate ml-auto">{src.provider}</span>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  )}
                 </div>
               )
             })}
@@ -684,53 +867,53 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
           <div className="space-y-6">
             <div>
               <label className="block text-sm text-gray-400 mb-2">{b.tradingPairs}</label>
-              <div className="flex flex-wrap gap-2">
-                {activePairs.map(pair => (
-                  <button
-                    key={pair}
-                    onClick={() => togglePair(pair)}
-                    className={`px-3 py-1.5 text-sm rounded border transition-colors ${
-                      tradingPairs.includes(pair)
-                        ? 'border-primary-500 bg-primary-900/30 text-primary-400'
-                        : 'border-gray-700 bg-gray-800 text-gray-400 hover:border-gray-600'
-                    }`}
-                  >
-                    {pair}
-                  </button>
-                ))}
+              <div className="flex flex-wrap gap-1.5">
+                {activePairs.map(pair => {
+                  const active = tradingPairs.includes(pair)
+                  return (
+                    <button key={pair} onClick={() => togglePair(pair)}
+                      className={`px-3 py-1.5 text-sm rounded-lg border transition-all ${
+                        active
+                          ? 'border-primary-500 bg-primary-500/15 text-primary-400 ring-1 ring-primary-500/30'
+                          : 'border-white/10 bg-white/[0.03] text-gray-400 hover:border-white/20 hover:bg-white/[0.06] hover:text-gray-300'
+                      }`}>
+                      {pair}
+                    </button>
+                  )
+                })}
               </div>
             </div>
 
             <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
               <div>
-                <label className="block text-xs text-gray-500 mb-1">{b.leverage}</label>
+                <label className="block text-xs text-gray-500 mb-1.5">{b.leverage}</label>
                 <input type="number" value={leverage} onChange={e => setLeverage(parseInt(e.target.value) || 1)} min={1} max={20}
-                  className="w-full px-2 py-1.5 text-sm bg-gray-800 border border-gray-700 rounded text-white focus:border-primary-500 focus:outline-none" />
+                  className="filter-select w-full text-sm tabular-nums" />
               </div>
               <div>
-                <label className="block text-xs text-gray-500 mb-1">{b.positionSize}</label>
+                <label className="block text-xs text-gray-500 mb-1.5">{b.positionSize}</label>
                 <input type="number" value={positionSize} onChange={e => setPositionSize(parseFloat(e.target.value) || 1)} min={1} max={25} step={0.5}
-                  className="w-full px-2 py-1.5 text-sm bg-gray-800 border border-gray-700 rounded text-white focus:border-primary-500 focus:outline-none" />
+                  className="filter-select w-full text-sm tabular-nums" />
               </div>
               <div>
-                <label className="block text-xs text-gray-500 mb-1">{b.maxTrades}</label>
+                <label className="block text-xs text-gray-500 mb-1.5">{b.maxTrades}</label>
                 <input type="number" value={maxTrades} onChange={e => setMaxTrades(parseInt(e.target.value) || 1)} min={1} max={10}
-                  className="w-full px-2 py-1.5 text-sm bg-gray-800 border border-gray-700 rounded text-white focus:border-primary-500 focus:outline-none" />
+                  className="filter-select w-full text-sm tabular-nums" />
               </div>
               <div>
-                <label className="block text-xs text-gray-500 mb-1">{b.takeProfit}</label>
+                <label className="block text-xs text-gray-500 mb-1.5">{b.takeProfit}</label>
                 <input type="number" value={takeProfit} onChange={e => setTakeProfit(parseFloat(e.target.value) || 0.5)} min={0.5} max={20} step={0.5}
-                  className="w-full px-2 py-1.5 text-sm bg-gray-800 border border-gray-700 rounded text-white focus:border-primary-500 focus:outline-none" />
+                  className="filter-select w-full text-sm tabular-nums" />
               </div>
               <div>
-                <label className="block text-xs text-gray-500 mb-1">{b.stopLoss}</label>
+                <label className="block text-xs text-gray-500 mb-1.5">{b.stopLoss}</label>
                 <input type="number" value={stopLoss} onChange={e => setStopLoss(parseFloat(e.target.value) || 0.5)} min={0.5} max={10} step={0.5}
-                  className="w-full px-2 py-1.5 text-sm bg-gray-800 border border-gray-700 rounded text-white focus:border-primary-500 focus:outline-none" />
+                  className="filter-select w-full text-sm tabular-nums" />
               </div>
               <div>
-                <label className="block text-xs text-gray-500 mb-1">{b.dailyLossLimit}</label>
+                <label className="block text-xs text-gray-500 mb-1.5">{b.dailyLossLimit}</label>
                 <input type="number" value={dailyLossLimit} onChange={e => setDailyLossLimit(parseFloat(e.target.value) || 1)} min={1} max={20} step={0.5}
-                  className="w-full px-2 py-1.5 text-sm bg-gray-800 border border-gray-700 rounded text-white focus:border-primary-500 focus:outline-none" />
+                  className="filter-select w-full text-sm tabular-nums" />
               </div>
             </div>
           </div>
@@ -741,57 +924,60 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
           <div className="space-y-6">
             <div>
               <label className="block text-sm text-gray-400 mb-2">{b.exchange}</label>
-              <div className="flex gap-3">
-                {EXCHANGES.map(ex => (
-                  <button
-                    key={ex}
-                    onClick={() => setExchangeType(ex)}
-                    className={`px-4 py-2 rounded border transition-colors ${
-                      exchangeType === ex
-                        ? 'border-primary-500 bg-primary-900/20 text-white'
-                        : 'border-gray-700 bg-gray-800 text-gray-400 hover:border-gray-600'
-                    }`}
-                  >
-                    <ExchangeLogo exchange={ex} size={16} />
-                  </button>
-                ))}
+              <div className="flex gap-2">
+                {EXCHANGES.map(ex => {
+                  const active = exchangeType === ex
+                  return (
+                    <button key={ex} onClick={() => setExchangeType(ex)}
+                      className={`px-4 py-2 rounded-xl border transition-all ${
+                        active
+                          ? 'border-primary-500 bg-primary-500/10 text-white ring-1 ring-primary-500/30'
+                          : 'border-white/10 bg-white/[0.03] text-gray-400 hover:border-white/20 hover:bg-white/[0.06]'
+                      }`}>
+                      <ExchangeLogo exchange={ex} size={16} />
+                    </button>
+                  )
+                })}
               </div>
             </div>
 
             <div>
               <label className="block text-sm text-gray-400 mb-2">{b.mode}</label>
-              <div className="flex gap-3">
-                {(['demo', 'live', 'both'] as const).map(m => (
-                  <button
-                    key={m}
-                    onClick={() => setMode(m)}
-                    className={`px-4 py-2 rounded border transition-colors ${
-                      mode === m
-                        ? m === 'demo' ? 'border-blue-500 bg-blue-900/20 text-blue-400' :
-                          m === 'live' ? 'border-orange-500 bg-orange-900/20 text-orange-400' :
-                          'border-purple-500 bg-purple-900/20 text-purple-400'
-                        : 'border-gray-700 bg-gray-800 text-gray-400 hover:border-gray-600'
-                    }`}
-                  >
-                    {b[m]}
-                  </button>
-                ))}
+              <div className="flex gap-2">
+                {(['demo', 'live', 'both'] as const).map(m => {
+                  const active = mode === m
+                  const colorMap = {
+                    demo: active ? 'border-blue-500 bg-blue-500/10 text-blue-400 ring-1 ring-blue-500/30' : '',
+                    live: active ? 'border-orange-500 bg-orange-500/10 text-orange-400 ring-1 ring-orange-500/30' : '',
+                    both: active ? 'border-purple-500 bg-purple-500/10 text-purple-400 ring-1 ring-purple-500/30' : '',
+                  }
+                  return (
+                    <button key={m} onClick={() => setMode(m)}
+                      className={`px-4 py-2 rounded-xl border transition-all ${
+                        active
+                          ? colorMap[m]
+                          : 'border-white/10 bg-white/[0.03] text-gray-400 hover:border-white/20 hover:bg-white/[0.06]'
+                      }`}>
+                      {b[m]}
+                    </button>
+                  )
+                })}
               </div>
             </div>
 
             {/* Notifications section */}
-            <div className="pt-2 border-t border-gray-800">
+            <div className="pt-4 border-t border-white/5">
               <label className="block text-sm text-gray-400 mb-3">{t('settings.notifications')}</label>
 
               {/* Discord */}
               <div className="mb-4">
-                <label className="block text-xs text-gray-500 mb-1">{t('bots.builder.discordWebhook')}</label>
+                <label className="block text-xs text-gray-500 mb-1.5">{t('bots.builder.discordWebhook')}</label>
                 <input
                   type="url"
                   value={discordWebhookUrl}
                   onChange={e => setDiscordWebhookUrl(e.target.value)}
                   placeholder="https://discord.com/api/webhooks/..."
-                  className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-white placeholder-gray-500 focus:border-primary-500 focus:outline-none"
+                  className="filter-select w-full text-sm"
                 />
                 <p className="text-xs text-gray-500 mt-1">{t('bots.builder.discordWebhookHint')}</p>
               </div>
@@ -799,26 +985,26 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
               {/* Telegram */}
               <div className="space-y-3">
                 <div>
-                  <label className="block text-xs text-gray-500 mb-1">{t('bots.builder.telegramToken')}</label>
+                  <label className="block text-xs text-gray-500 mb-1.5">{t('bots.builder.telegramToken')}</label>
                   <input
                     type="password"
                     value={telegramBotToken}
                     onChange={e => setTelegramBotToken(e.target.value)}
                     placeholder="6123456789:ABCdef..."
-                    className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-white placeholder-gray-500 focus:border-primary-500 focus:outline-none"
+                    className="filter-select w-full text-sm"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs text-gray-500 mb-1">{t('bots.builder.telegramChatId')}</label>
+                  <label className="block text-xs text-gray-500 mb-1.5">{t('bots.builder.telegramChatId')}</label>
                   <input
                     type="text"
                     value={telegramChatId}
                     onChange={e => setTelegramChatId(e.target.value)}
                     placeholder="123456789"
-                    className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-white placeholder-gray-500 focus:border-primary-500 focus:outline-none"
+                    className="filter-select w-full text-sm"
                   />
                 </div>
-                <div className="bg-blue-900/20 border border-blue-800/50 rounded p-2.5">
+                <div className="bg-blue-900/20 border border-blue-800/50 rounded-xl p-2.5">
                   <p className="text-xs text-blue-300">{t('bots.builder.telegramHint')}</p>
                 </div>
               </div>
@@ -829,144 +1015,153 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
         {/* Step 5: Schedule */}
         {currentStepKey === 'step5' && (
           <div className="space-y-4">
-            <label className="block text-sm text-gray-400 mb-2">{b.schedule}</label>
-            <div className="space-y-3">
-              {(['rotation_only', 'market_sessions', 'interval', 'custom_cron'] as const).map(st => {
-                const labelMap: Record<string, string> = {
-                  rotation_only: b.rotationOnly || 'Trade Rotation Only',
-                  market_sessions: b.marketSessions,
-                  interval: b.interval,
-                  custom_cron: b.customCron,
-                }
-                const descMap: Record<string, string> = {
-                  rotation_only: b.rotationOnlyDesc || 'Opens a trade on start, then auto-closes and reopens at fixed intervals',
-                  market_sessions: '',
-                  interval: '',
-                  custom_cron: '',
-                }
-                return (
-                  <button
-                    key={st}
-                    onClick={() => {
-                      setScheduleType(st)
-                      if (st === 'rotation_only') setRotationEnabled(true)
-                    }}
-                    className={`block w-full text-left p-3 rounded border transition-colors ${
-                      scheduleType === st
-                        ? 'border-primary-500 bg-primary-900/20'
-                        : 'border-gray-700 bg-gray-800 hover:border-gray-600'
-                    }`}
-                  >
-                    <div className="text-white text-sm">{labelMap[st]}</div>
-                    {descMap[st] && <div className="text-xs text-gray-500 mt-0.5">{descMap[st]}</div>}
-                  </button>
-                )
-              })}
+            <div className="flex items-center justify-between">
+              <label className="block text-sm text-gray-400">{b.schedule}</label>
+              <div className="flex items-center gap-1 bg-white/5 rounded-lg p-0.5">
+                <button type="button" onClick={() => setScheduleView('grid')}
+                  className={`p-1.5 rounded-md transition-colors ${scheduleView === 'grid' ? 'bg-white/10 text-white' : 'text-gray-500 hover:text-gray-300'}`}>
+                  <LayoutGrid size={14} />
+                </button>
+                <button type="button" onClick={() => setScheduleView('list')}
+                  className={`p-1.5 rounded-md transition-colors ${scheduleView === 'list' ? 'bg-white/10 text-white' : 'text-gray-500 hover:text-gray-300'}`}>
+                  <List size={14} />
+                </button>
+              </div>
             </div>
 
+            {scheduleView === 'grid' ? (
+              <div className="grid grid-cols-2 gap-2">
+                {(['rotation_only', 'market_sessions', 'interval', 'custom_cron'] as const).map(st => {
+                  const labelMap: Record<string, string> = {
+                    rotation_only: b.rotationOnly || 'Trade Rotation Only',
+                    market_sessions: b.marketSessions,
+                    interval: b.interval,
+                    custom_cron: b.customCron,
+                  }
+                  const descMap: Record<string, string> = {
+                    rotation_only: b.rotationOnlyDesc || 'Auto-close and reopen at intervals',
+                    market_sessions: '01, 08, 14, 21h UTC',
+                    interval: '',
+                    custom_cron: '',
+                  }
+                  const isSelected = scheduleType === st
+                  return (
+                    <button key={st} onClick={() => { setScheduleType(st); if (st === 'rotation_only') setRotationEnabled(true) }}
+                      className={`text-left p-3 rounded-xl border transition-all ${
+                        isSelected
+                          ? 'border-primary-500 bg-primary-500/10 ring-1 ring-primary-500/30'
+                          : 'border-white/10 bg-white/[0.03] hover:border-white/20 hover:bg-white/[0.06]'
+                      }`}>
+                      <div className={`text-sm font-medium ${isSelected ? 'text-primary-400' : 'text-white'}`}>{labelMap[st]}</div>
+                      {descMap[st] && <div className="text-xs text-gray-500 mt-0.5 line-clamp-2">{descMap[st]}</div>}
+                    </button>
+                  )
+                })}
+              </div>
+            ) : (
+              <div className="space-y-1">
+                {(['rotation_only', 'market_sessions', 'interval', 'custom_cron'] as const).map(st => {
+                  const labelMap: Record<string, string> = {
+                    rotation_only: b.rotationOnly || 'Trade Rotation Only',
+                    market_sessions: b.marketSessions,
+                    interval: b.interval,
+                    custom_cron: b.customCron,
+                  }
+                  const isSelected = scheduleType === st
+                  return (
+                    <button key={st} onClick={() => { setScheduleType(st); if (st === 'rotation_only') setRotationEnabled(true) }}
+                      className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl border transition-all ${
+                        isSelected
+                          ? 'border-primary-500 bg-primary-500/10 ring-1 ring-primary-500/30'
+                          : 'border-white/10 bg-white/[0.03] hover:border-white/20 hover:bg-white/[0.06]'
+                      }`}>
+                      {isSelected && <Check size={14} className="text-primary-400 shrink-0" />}
+                      <div className={`text-sm font-medium ${isSelected ? 'text-primary-400' : 'text-white'}`}>{labelMap[st]}</div>
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+
             {scheduleType === 'interval' && (
-              <div className="mt-4">
-                <label className="block text-xs text-gray-500 mb-1">{b.intervalMinutes}</label>
+              <div className="mt-2">
+                <label className="block text-xs text-gray-500 mb-1.5">{b.intervalMinutes}</label>
                 <input type="number" value={intervalMinutes} onChange={e => setIntervalMinutes(parseInt(e.target.value) || 5)} min={5} max={1440}
-                  className="w-32 px-2 py-1.5 text-sm bg-gray-800 border border-gray-700 rounded text-white focus:border-primary-500 focus:outline-none" />
+                  className="filter-select w-36 text-sm tabular-nums" />
               </div>
             )}
 
             {scheduleType === 'custom_cron' && (
-              <div className="mt-4">
+              <div className="mt-2">
                 <label className="block text-xs text-gray-500 mb-2">{b.customHours}</label>
-                <div className="flex flex-wrap gap-1.5">
-                  {Array.from({ length: 24 }, (_, i) => (
-                    <button
-                      key={i}
-                      onClick={() => toggleHour(i)}
-                      className={`w-10 h-8 text-xs rounded border transition-colors ${
-                        customHours.includes(i)
-                          ? 'border-primary-500 bg-primary-900/30 text-primary-400'
-                          : 'border-gray-700 bg-gray-800 text-gray-500 hover:border-gray-600'
-                      }`}
-                    >
-                      {String(i).padStart(2, '0')}h
-                    </button>
-                  ))}
+                <div className="grid grid-cols-8 gap-1.5">
+                  {Array.from({ length: 24 }, (_, i) => {
+                    const active = customHours.includes(i)
+                    return (
+                      <button key={i} onClick={() => toggleHour(i)}
+                        className={`h-8 text-xs rounded-lg border transition-all ${
+                          active
+                            ? 'border-primary-500 bg-primary-500/15 text-primary-400 ring-1 ring-primary-500/30'
+                            : 'border-white/10 bg-white/[0.03] text-gray-500 hover:border-white/20 hover:bg-white/[0.06] hover:text-gray-300'
+                        }`}>
+                        {String(i).padStart(2, '0')}h
+                      </button>
+                    )
+                  })}
                 </div>
               </div>
             )}
 
-            {/* Trade Rotation — shown as standalone section for non-rotation_only modes */}
+            {/* Trade Rotation toggle */}
             {scheduleType !== 'rotation_only' && (
-              <div className="mt-6 pt-5 border-t border-gray-800">
-                <div className="flex items-center justify-between mb-3">
+              <div className="mt-4 pt-4 border-t border-white/5">
+                <div className="flex items-center justify-between">
                   <div>
                     <span className="text-sm text-gray-300">{b.tradeRotation || 'Trade Rotation'}</span>
                     <p className="text-xs text-gray-500 mt-0.5">{b.tradeRotationDesc || 'Auto-close and reopen trades at fixed intervals'}</p>
                   </div>
-                  <button
-                    onClick={() => setRotationEnabled(!rotationEnabled)}
-                    className={`relative w-11 h-6 rounded-full transition-colors ${
-                      rotationEnabled ? 'bg-primary-600' : 'bg-gray-700'
-                    }`}
-                  >
-                    <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform ${
-                      rotationEnabled ? 'translate-x-5' : ''
-                    }`} />
+                  <button onClick={() => setRotationEnabled(!rotationEnabled)}
+                    className={`relative w-11 h-6 rounded-full transition-colors ${rotationEnabled ? 'bg-primary-600' : 'bg-gray-700'}`}>
+                    <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform ${rotationEnabled ? 'translate-x-5' : ''}`} />
                   </button>
                 </div>
               </div>
             )}
 
-            {/* Rotation settings — for rotation_only always shown, otherwise only when toggle on */}
+            {/* Rotation settings */}
             {(scheduleType === 'rotation_only' || rotationEnabled) && (
-              <div className="space-y-4 mt-4">
-                {/* Interval presets */}
+              <div className="space-y-3 mt-3">
                 <div className="flex flex-wrap gap-1.5">
                   {[
-                    { label: '5m', value: 5 },
-                    { label: '15m', value: 15 },
-                    { label: '30m', value: 30 },
-                    { label: '1h', value: 60 },
-                    { label: '4h', value: 240 },
-                    { label: '8h', value: 480 },
-                    { label: '12h', value: 720 },
-                    { label: '24h', value: 1440 },
+                    { label: '5m', value: 5 }, { label: '15m', value: 15 },
+                    { label: '30m', value: 30 }, { label: '1h', value: 60 },
+                    { label: '4h', value: 240 }, { label: '8h', value: 480 },
+                    { label: '12h', value: 720 }, { label: '24h', value: 1440 },
                   ].map(preset => (
-                    <button
-                      key={preset.value}
-                      onClick={() => setRotationMinutes(preset.value)}
-                      className={`px-3 py-1.5 text-xs rounded border transition-colors ${
+                    <button key={preset.value} onClick={() => setRotationMinutes(preset.value)}
+                      className={`px-3 py-1.5 text-xs rounded-lg border transition-all ${
                         rotationMinutes === preset.value
-                          ? 'border-primary-500 bg-primary-900/30 text-primary-400'
-                          : 'border-gray-700 bg-gray-800 text-gray-500 hover:border-gray-600'
-                      }`}
-                    >
+                          ? 'border-primary-500 bg-primary-500/15 text-primary-400 ring-1 ring-primary-500/30'
+                          : 'border-white/10 bg-white/[0.03] text-gray-500 hover:border-white/20 hover:bg-white/[0.06] hover:text-gray-300'
+                      }`}>
                       {preset.label}
                     </button>
                   ))}
                 </div>
 
                 <div className="flex gap-4">
-                  {/* Custom minutes */}
                   <div>
-                    <label className="block text-xs text-gray-500 mb-1">{b.customMinutes || 'Custom (minutes)'}</label>
-                    <input
-                      type="number"
-                      value={rotationMinutes}
+                    <label className="block text-xs text-gray-500 mb-1.5">{b.customMinutes || 'Custom (minutes)'}</label>
+                    <input type="number" value={rotationMinutes}
                       onChange={e => setRotationMinutes(Math.max(5, parseInt(e.target.value) || 5))}
-                      min={5}
-                      max={10080}
-                      className="w-32 px-2 py-1.5 text-sm bg-gray-800 border border-gray-700 rounded text-white focus:border-primary-500 focus:outline-none"
-                    />
+                      min={5} max={10080}
+                      className="filter-select w-36 text-sm tabular-nums" />
                   </div>
-
-                  {/* Start time (UTC) */}
                   <div>
-                    <label className="block text-xs text-gray-500 mb-1">{b.rotationStartTime || 'Start Time (UTC)'}</label>
-                    <input
-                      type="time"
-                      value={rotationStartTime}
+                    <label className="block text-xs text-gray-500 mb-1.5">{b.rotationStartTime || 'Start Time (UTC)'}</label>
+                    <input type="time" value={rotationStartTime}
                       onChange={e => setRotationStartTime(e.target.value)}
-                      className="w-32 px-2 py-1.5 text-sm bg-gray-800 border border-gray-700 rounded text-white focus:border-primary-500 focus:outline-none"
-                    />
+                      className="filter-select w-36 text-sm" />
                   </div>
                 </div>
               </div>

@@ -34,7 +34,7 @@ class GeminiProvider(BaseLLMProvider):
         if not self._get_rate_limiter("gemini").check("gemini"):
             raise Exception("Rate limit exceeded for Gemini")
 
-        url = f"{self.BASE_URL}/{self.MODEL}:generateContent?key={self.api_key}"
+        url = f"{self.BASE_URL}/{self.active_model}:generateContent?key={self.api_key}"
         payload = {
             "contents": [
                 {
@@ -71,7 +71,7 @@ class GeminiProvider(BaseLLMProvider):
             confidence=confidence,
             reasoning=reasoning,
             raw_response=raw_text,
-            model_used=self.MODEL,
+            model_used=self.active_model,
             tokens_used=tokens,
         )
 

@@ -1,4 +1,4 @@
-"""Perplexity LLM provider (Sonar - search-augmented)."""
+"""DeepSeek LLM provider (OpenAI-compatible API)."""
 
 from src.ai.providers.base import (
     BaseLLMProvider,
@@ -14,17 +14,17 @@ from src.utils.logger import get_logger
 logger = get_logger(__name__)
 
 
-class PerplexityProvider(BaseLLMProvider):
-    """Perplexity API provider using Sonar."""
+class DeepSeekProvider(BaseLLMProvider):
+    """DeepSeek API provider (OpenAI-compatible)."""
 
-    BASE_URL = "https://api.perplexity.ai/chat/completions"
-    MODEL = "sonar"
+    BASE_URL = "https://api.deepseek.com/chat/completions"
+    MODEL = "deepseek-chat"
 
     async def generate_signal(
         self, prompt: str, market_data: dict, temperature: float = 0.3
     ) -> LLMResponse:
-        if not self._get_rate_limiter("perplexity").check("perplexity"):
-            raise Exception("Rate limit exceeded for Perplexity")
+        if not self._get_rate_limiter("deepseek").check("deepseek"):
+            raise Exception("Rate limit exceeded for DeepSeek")
 
         headers = {
             "Authorization": f"Bearer {self.api_key}",
@@ -48,9 +48,9 @@ class PerplexityProvider(BaseLLMProvider):
                 self.BASE_URL, headers=headers, json=payload,
             )
         except _HttpError as e:
-            raise Exception(sanitize_error(e, "Perplexity"))
+            raise Exception(sanitize_error(e, "DeepSeek"))
 
-        raw_text, tokens = _extract_response_text(result, "perplexity")
+        raw_text, tokens = _extract_response_text(result, "deepseek")
         direction, confidence, reasoning = parse_llm_response(raw_text)
         return LLMResponse(
             direction=direction,
@@ -65,18 +65,11 @@ class PerplexityProvider(BaseLLMProvider):
         try:
             import aiohttp
 
-            headers = {
-                "Authorization": f"Bearer {self.api_key}",
-                "Content-Type": "application/json",
-            }
-            payload = {
-                "model": self.active_model,
-                "messages": [{"role": "user", "content": "Hi"}],
-                "max_tokens": 5,
-            }
+            headers = {"Authorization": f"Bearer {self.api_key}"}
             async with aiohttp.ClientSession() as s:
-                async with s.post(
-                    self.BASE_URL, headers=headers, json=payload,
+                async with s.get(
+                    "https://api.deepseek.com/models",
+                    headers=headers,
                     timeout=aiohttp.ClientTimeout(total=10),
                 ) as resp:
                     return resp.status == 200
@@ -89,4 +82,4 @@ class PerplexityProvider(BaseLLMProvider):
 
     @classmethod
     def get_display_name(cls) -> str:
-        return "Perplexity Sonar"
+        return "DeepSeek V3"

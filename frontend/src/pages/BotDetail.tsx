@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import {
@@ -95,6 +95,8 @@ interface RuntimeStatus {
   started_at: string | null
   last_analysis: string | null
   trades_today: number
+  llm_provider?: string | null
+  llm_model?: string | null
 }
 
 const STATUS_STYLES: Record<string, { dot: string; badge: string; i18nKey: string }> = {
@@ -118,6 +120,21 @@ export default function BotDetail() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [days, setDays] = useState(30)
+  const [llmConnections, setLlmConnections] = useState<any[]>([])
+
+  const modelNameMap = useMemo(() => {
+    const map: Record<string, string> = {}
+    for (const conn of llmConnections) {
+      for (const m of conn.models || []) map[m.id] = m.name
+    }
+    return map
+  }, [llmConnections])
+
+  const providerNameMap = useMemo(() => {
+    const map: Record<string, string> = {}
+    for (const conn of llmConnections) map[conn.provider_type] = conn.family_name || conn.display_name
+    return map
+  }, [llmConnections])
 
   const fetchData = useCallback(async () => {
     if (!botId) return
@@ -139,6 +156,8 @@ export default function BotDetail() {
           started_at: match.started_at,
           last_analysis: match.last_analysis,
           trades_today: match.trades_today,
+          llm_provider: match.llm_provider,
+          llm_model: match.llm_model,
         })
       }
       setError('')
@@ -150,6 +169,10 @@ export default function BotDetail() {
   }, [botId, days, demoFilter])
 
   useEffect(() => { fetchData() }, [fetchData])
+
+  useEffect(() => {
+    api.get('/config/llm-connections').then(res => setLlmConnections(res.data.connections || [])).catch(() => {})
+  }, [])
 
   // Auto-refresh every 10s
   useEffect(() => {
@@ -235,6 +258,15 @@ export default function BotDetail() {
               {config.strategy_type === 'llm_signal' && (
                 <Bot size={15} className="text-emerald-400" />
               )}
+              {runtime?.llm_provider && (
+                <>
+                  <span className="text-gray-600">·</span>
+                  <span className="text-gray-500">{providerNameMap[runtime.llm_provider] || runtime.llm_provider}</span>
+                  {runtime.llm_model && (
+                    <span className="text-gray-300 font-medium">{modelNameMap[runtime.llm_model] || runtime.llm_model}</span>
+                  )}
+                </>
+              )}
             </div>
           </div>
 
@@ -268,7 +300,7 @@ export default function BotDetail() {
 
       {/* PnL Chart */}
       {stats.daily_series.length > 0 && (
-        <div className="glass-card rounded-xl p-5 border border-gray-800">
+        <div className="glass-card rounded-xl p-5 border border-white/10">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-white font-semibold">{d('pnlChart')}</h2>
             <div className="flex gap-1">
@@ -295,7 +327,7 @@ export default function BotDetail() {
               <XAxis dataKey="date" tick={{ fill: '#6b7280', fontSize: 11 }} tickFormatter={v => v?.slice(5)} />
               <YAxis tick={{ fill: '#6b7280', fontSize: 11 }} tickFormatter={v => `$${v}`} />
               <Tooltip
-                contentStyle={{ backgroundColor: '#1f2937', border: '1px solid #374151', borderRadius: '8px' }}
+                contentStyle={{ backgroundColor: 'rgba(20, 26, 42, 0.95)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', backdropFilter: 'blur(24px)' }}
                 labelStyle={{ color: '#9ca3af' }}
                 formatter={(value: number, name: string) => [`$${value.toFixed(2)}`, name === 'cumulative_pnl' ? d('cumulativePnl') : d('dailyPnl')]}
               />
@@ -308,51 +340,61 @@ export default function BotDetail() {
 
       <div className="grid lg:grid-cols-3 gap-6">
         {/* Trades Table */}
-        <div className="lg:col-span-2 glass-card rounded-xl p-5 border border-gray-800">
+        <div className="lg:col-span-2 glass-card rounded-xl p-5 border border-white/10">
           <h2 className="text-white font-semibold mb-4">{d('recentTrades')} ({stats.recent_trades.length})</h2>
           {stats.recent_trades.length === 0 ? (
             <p className="text-gray-500 text-sm py-8 text-center">{d('noTrades')}</p>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className="table-premium">
                 <thead>
-                  <tr className="text-gray-500 border-b border-gray-800">
-                    <th className="text-left py-2 font-medium">Symbol</th>
-                    <th className="text-left py-2 font-medium">Side</th>
-                    <th className="text-right py-2 font-medium">Entry</th>
-                    <th className="text-right py-2 font-medium">Exit</th>
-                    <th className="text-right py-2 font-medium">PnL</th>
-                    <th className="text-right py-2 font-medium">%</th>
-                    <th className="text-left py-2 font-medium">Status</th>
-                    <th className="text-left py-2 font-medium">Time</th>
+                  <tr>
+                    <th className="text-left">{t('trades.date')}</th>
+                    <th className="text-center">{t('trades.exchange')}</th>
+                    <th className="text-left">{t('trades.symbol')}</th>
+                    <th className="text-center">{t('trades.side')}</th>
+                    <th className="text-right">{t('trades.entryPrice')}</th>
+                    <th className="text-right">{t('trades.pnl')}</th>
+                    <th className="text-center">{t('trades.mode')}</th>
+                    <th className="text-center">{t('trades.status')}</th>
                   </tr>
                 </thead>
                 <tbody>
                   {stats.recent_trades.map(trade => (
-                    <tr key={trade.id} className="border-b border-gray-800/50 hover:bg-gray-800/30">
-                      <td className="py-2 text-white font-mono">{trade.symbol}</td>
-                      <td className="py-2">
-                        <span className={trade.side === 'long' ? 'text-emerald-400' : 'text-red-400'}>
-                          {trade.side.toUpperCase()}
-                        </span>
-                      </td>
-                      <td className="py-2 text-right text-gray-300 font-mono">${trade.entry_price.toLocaleString()}</td>
-                      <td className="py-2 text-right text-gray-300 font-mono">
-                        {trade.exit_price ? `$${trade.exit_price.toLocaleString()}` : '—'}
-                      </td>
-                      <td className="py-2 text-right"><PnlCell pnl={trade.pnl} fees={trade.fees || 0} fundingPaid={trade.funding_paid || 0} /></td>
-                      <td className="py-2 text-right">
-                        <span className={trade.pnl_percent >= 0 ? 'text-emerald-400' : 'text-red-400'}>
-                          {trade.pnl_percent >= 0 ? '+' : ''}{trade.pnl_percent.toFixed(1)}%
-                        </span>
-                      </td>
-                      <td className="py-2">
-                        <span className={`text-xs px-1.5 py-0.5 rounded ${trade.status === 'open' ? 'bg-blue-900/30 text-blue-400' : 'bg-gray-800 text-gray-400'}`}>
-                          {trade.status}
-                        </span>
-                      </td>
-                      <td className="py-2 text-gray-500 text-xs">
+                    <tr key={trade.id}>
+                      <td className="text-gray-300 cursor-default" title={trade.entry_time ? new Date(trade.entry_time).toLocaleTimeString('de-DE', { timeZone: 'UTC', hour: '2-digit', minute: '2-digit' }) + ' UTC' : undefined}>
                         {trade.entry_time ? new Date(trade.entry_time).toLocaleDateString() : '—'}
+                      </td>
+                      <td className="text-center">
+                        <span className="inline-flex justify-center">
+                          <ExchangeIcon exchange={config.exchange_type} size={18} />
+                        </span>
+                      </td>
+                      <td className="text-white font-medium">{trade.symbol}</td>
+                      <td className="text-center">
+                        <span className={trade.side === 'long' ? 'text-profit' : 'text-loss'}>
+                          {trade.side === 'long' ? '+' : '-'} {trade.side.toUpperCase()}
+                        </span>
+                      </td>
+                      <td className="text-right text-gray-300">
+                        ${trade.entry_price.toLocaleString()}
+                      </td>
+                      <td className="text-right">
+                        <PnlCell pnl={trade.pnl} fees={trade.fees || 0} fundingPaid={trade.funding_paid || 0} status={trade.status} className={trade.pnl >= 0 ? 'pnl-positive' : 'pnl-negative'} />
+                      </td>
+                      <td className="text-center">
+                        <span className={trade.demo_mode ? 'badge-demo' : 'badge-live'}>
+                          {trade.demo_mode ? t('common.demo') : t('common.live')}
+                        </span>
+                      </td>
+                      <td className="text-center">
+                        <span className={
+                          trade.status === 'open' ? 'badge-open' :
+                          trade.status === 'closed' ? 'badge-neutral' :
+                          'badge-demo'
+                        }>
+                          {t(`trades.${trade.status}`)}
+                        </span>
                       </td>
                     </tr>
                   ))}
@@ -363,7 +405,7 @@ export default function BotDetail() {
         </div>
 
         {/* Config Card */}
-        <div className="glass-card rounded-xl p-5 border border-gray-800 space-y-4">
+        <div className="glass-card rounded-xl p-5 border border-white/10 space-y-4">
           <h2 className="text-white font-semibold flex items-center gap-2">
             <Settings size={16} className="text-gray-400" /> {d('config')}
           </h2>
@@ -407,7 +449,7 @@ function StatCard({ icon, label, value, color, sub }: {
   sub?: string
 }) {
   return (
-    <div className="glass-card rounded-xl p-4 border border-gray-800">
+    <div className="glass-card rounded-xl p-4 border border-white/10">
       <div className="flex items-center gap-2 text-gray-400 text-xs mb-1">
         {icon} {label}
       </div>

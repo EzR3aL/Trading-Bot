@@ -144,6 +144,9 @@
     "mainnet": "Mainnet",
     "testnet": "Testnet",
     "free": "Free",
+    "models": "Models",
+    "availableModels": "Available Models",
+    "defaultModel": "Default",
     "affiliateLabelPlaceholder": "e.g. 10% fee discount",
     "hlBuilderConfig": "Hyperliquid Builder Config",
     "hlBuilderConfigDesc": "Configure builder address, fee rate, and referral code",
@@ -423,7 +426,7 @@
       "back": "Back",
       "next": "Next",
       "llmNote": "This bot uses AI for signal generation. Configure your API key in Settings → LLM Keys.",
-      "customPromptPlaceholder": "Leave empty for default prompt, or enter custom AI instructions...",
+      "customPromptPlaceholder": "Enter custom instructions for the AI analysis...",
       "step2b": "Data",
       "dataSources": "Data Sources",
       "dataSourcesDesc": "Select which market data your bot should analyze",
@@ -581,7 +584,8 @@
     "submitUid": "Save UID",
     "affiliateUids": "Affiliate UIDs",
     "uidHint": "Please register via the affiliate link below. Then find your UID in your exchange profile, enter it here, and save.",
-    "uidRejected": "UID rejected"
+    "uidRejected": "UID rejected",
+    "submittedAt": "Submitted"
   },
   "backtest": {
     "title": "Backtest Lab",
@@ -641,7 +645,7 @@
     "long": "Long",
     "short": "Short",
     "noResults": "Start a backtest to see results",
-    "llmNote": "Note: KI-Companion backtests use standard signal logic. Live AI analysis is not available in backtesting.",
+    "llmNote": "Note: Backtests do not call the actual AI — a simplified algorithm is used instead. Real AI performance can only be evaluated in live or demo mode.",
     "tooltipTotalReturn": "Change in portfolio value as a percentage.",
     "tooltipWinRate": "Percentage of profitable trades out of all trades.",
     "tooltipMaxDrawdown": "Largest peak-to-trough decline. Shows maximum downside risk.",

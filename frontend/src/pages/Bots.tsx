@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
 import { toBlob } from 'html-to-image'
@@ -298,17 +298,17 @@ function BotTradeHistoryModal({ bot, onClose, t }: { bot: BotStatus; onClose: ()
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-md" onClick={onClose}>
       <div
-        className="bg-[#0b0f19] rounded-2xl max-w-5xl w-full mx-4 my-8 max-h-[90vh] flex flex-col border border-white/10 shadow-2xl overflow-hidden"
+        className="bg-[#0b0f19] rounded-2xl max-w-5xl w-full mx-4 my-3 max-h-[96vh] flex flex-col border border-white/10 shadow-2xl overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Modal Header */}
-        <div className="flex items-center justify-between px-7 py-5 border-b border-white/5 shrink-0">
-          <div className="flex items-center gap-4">
-            <div className="p-2 rounded-xl bg-white/5">
-              <ExchangeIcon exchange={bot.exchange_type} size={22} />
+        <div className="flex items-center justify-between px-6 py-3.5 border-b border-white/5 shrink-0">
+          <div className="flex items-center gap-3">
+            <div className="p-1.5 rounded-xl bg-white/5">
+              <ExchangeIcon exchange={bot.exchange_type} size={20} />
             </div>
             <div>
-              <h2 className="text-xl font-bold text-white">{bot.name}</h2>
+              <h2 className="text-lg font-bold text-white">{bot.name}</h2>
               <div className="flex items-center gap-2 mt-0.5">
                 <span className="text-xs text-gray-500">{strategyLabel(bot.strategy_type)}</span>
                 {bot.strategy_type === 'llm_signal' && (
@@ -345,72 +345,72 @@ function BotTradeHistoryModal({ bot, onClose, t }: { bot: BotStatus; onClose: ()
             <>
               {/* Summary Stats Bar */}
               <div className="grid grid-cols-2 md:grid-cols-5 gap-px bg-white/5">
-                <div className="bg-[#0b0f19] px-5 py-4 text-center">
-                  <div className="text-xs text-gray-500 uppercase tracking-wider mb-1">{t('bots.totalPnl')}</div>
-                  <div className={`text-xl font-bold font-mono ${stats.summary.total_pnl >= 0 ? 'text-profit' : 'text-loss'}`}>
+                <div className="bg-[#0b0f19] px-5 py-3 text-center">
+                  <div className="text-xs text-gray-500 uppercase tracking-wider mb-0.5">{t('bots.totalPnl')}</div>
+                  <div className={`text-lg font-bold font-mono ${stats.summary.total_pnl >= 0 ? 'text-profit' : 'text-loss'}`}>
                     <PnlCell
                       pnl={stats.summary.total_pnl}
                       fees={stats.summary.total_fees}
                       fundingPaid={stats.summary.total_funding ?? 0}
-                      className={`text-xl font-bold font-mono ${stats.summary.total_pnl >= 0 ? 'text-profit' : 'text-loss'}`}
+                      className={`text-lg font-bold font-mono ${stats.summary.total_pnl >= 0 ? 'text-profit' : 'text-loss'}`}
                     />
                   </div>
                 </div>
-                <div className="bg-[#0b0f19] px-5 py-4 text-center">
-                  <div className="text-xs text-gray-500 uppercase tracking-wider mb-1">{t('bots.winRate')}</div>
-                  <div className={`text-xl font-bold ${stats.summary.win_rate >= 60 ? 'text-profit' : stats.summary.win_rate >= 40 ? 'text-yellow-400' : 'text-loss'}`}>{stats.summary.win_rate}%</div>
+                <div className="bg-[#0b0f19] px-5 py-3 text-center">
+                  <div className="text-xs text-gray-500 uppercase tracking-wider mb-0.5">{t('bots.winRate')}</div>
+                  <div className={`text-lg font-bold ${stats.summary.win_rate >= 60 ? 'text-profit' : stats.summary.win_rate >= 40 ? 'text-yellow-400' : 'text-loss'}`}>{stats.summary.win_rate}%</div>
                 </div>
-                <div className="bg-[#0b0f19] px-5 py-4 text-center">
-                  <div className="text-xs text-gray-500 uppercase tracking-wider mb-1">{t('bots.trades')}</div>
-                  <div className="text-xl font-bold text-white">
+                <div className="bg-[#0b0f19] px-5 py-3 text-center">
+                  <div className="text-xs text-gray-500 uppercase tracking-wider mb-0.5">{t('bots.trades')}</div>
+                  <div className="text-lg font-bold text-white">
                     {stats.summary.total_trades}
-                    <span className="text-xs font-normal text-gray-500 ml-1.5">
+                    <span className="text-xs font-normal text-gray-500 ml-1">
                       ({stats.summary.wins}W / {stats.summary.losses}L)
                     </span>
                   </div>
                 </div>
-                <div className="bg-[#0b0f19] px-5 py-4 text-center">
-                  <div className="text-xs text-gray-500 uppercase tracking-wider mb-1 flex items-center justify-center gap-1">
+                <div className="bg-[#0b0f19] px-5 py-3 text-center">
+                  <div className="text-xs text-gray-500 uppercase tracking-wider mb-0.5 flex items-center justify-center gap-1">
                     <ArrowUpRight size={12} className="text-profit" /> {t('bots.bestTrade')}
                   </div>
-                  <div className="text-xl font-bold text-profit font-mono">{formatPnl(stats.summary.best_trade)}</div>
+                  <div className="text-lg font-bold text-profit font-mono">{formatPnl(stats.summary.best_trade)}</div>
                 </div>
-                <div className="bg-[#0b0f19] px-5 py-4 text-center">
-                  <div className="text-xs text-gray-500 uppercase tracking-wider mb-1 flex items-center justify-center gap-1">
+                <div className="bg-[#0b0f19] px-5 py-3 text-center">
+                  <div className="text-xs text-gray-500 uppercase tracking-wider mb-0.5 flex items-center justify-center gap-1">
                     <ArrowDownRight size={12} className="text-loss" /> {t('bots.worstTrade')}
                   </div>
-                  <div className="text-xl font-bold text-loss font-mono">{formatPnl(stats.summary.worst_trade)}</div>
+                  <div className="text-lg font-bold text-loss font-mono">{formatPnl(stats.summary.worst_trade)}</div>
                 </div>
               </div>
 
               {/* Latest Trade Hero Card */}
               {latestClosed && (
-                <div className="mx-6 mt-5 mb-2">
-                  <div className="flex items-center justify-between mb-3">
+                <div className="mx-6 mt-4 mb-2">
+                  <div className="flex items-center justify-between mb-2">
                     <div className="text-xs text-gray-500 uppercase tracking-wider font-semibold">{t('bots.latestTrade')}</div>
                     <button
                       onClick={(e) => { e.stopPropagation(); handleCopyImage() }}
-                      className={`flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg transition-all border ${
+                      className={`flex items-center gap-1.5 px-3 py-1 text-xs rounded-lg transition-all border ${
                         copied
                           ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20'
                           : 'text-gray-400 hover:text-white bg-white/5 hover:bg-white/10 border-white/5'
                       }`}
                       title={t('bots.copyImage')}
                     >
-                      <Copy size={14} />
+                      <Copy size={13} />
                       {copied ? t('bots.copied') : t('bots.copyImage')}
                     </button>
                   </div>
                   <div
                     ref={latestCardRef}
-                    className="bg-white/[0.02] rounded-xl p-5 border border-white/5 cursor-pointer hover:border-white/10 transition-all"
+                    className="bg-white/[0.02] rounded-xl p-4 border border-white/5 cursor-pointer hover:border-white/10 transition-all"
                     onClick={() => setSelectedTrade(latestClosed)}
                   >
                     {/* Header: Symbol + Side + Date */}
-                    <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center justify-between mb-3">
                       <div className="flex items-center gap-3">
                         <span className="text-white font-bold text-lg">{latestClosed.symbol}</span>
-                        <span className={`px-2.5 py-1 rounded-lg text-xs font-bold ${
+                        <span className={`px-2.5 py-0.5 rounded-lg text-xs font-bold ${
                           latestClosed.side === 'long' ? 'bg-emerald-500/15 text-profit border border-emerald-500/20' : 'bg-red-500/15 text-loss border border-red-500/20'
                         }`}>
                           {latestClosed.side === 'long' ? '+ LONG' : '- SHORT'}
@@ -422,11 +422,11 @@ function BotTradeHistoryModal({ bot, onClose, t }: { bot: BotStatus; onClose: ()
                     {/* 4-column grid: PnL | Einstieg | Ausstieg | Konfidenz */}
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                       <div>
-                        <div className="text-xs text-gray-500 uppercase tracking-wider mb-1">{t('bots.result')}</div>
-                        <div className={`text-3xl font-bold tracking-tight ${latestClosed.pnl_percent >= 0 ? 'text-profit' : 'text-loss'}`}>
+                        <div className="text-xs text-gray-500 uppercase tracking-wider mb-0.5">{t('bots.result')}</div>
+                        <div className={`text-2xl font-bold tracking-tight ${latestClosed.pnl_percent >= 0 ? 'text-profit' : 'text-loss'}`}>
                           {formatPnlPercent(latestClosed.pnl_percent)}
                         </div>
-                        <div className={`text-sm font-medium mt-0.5 ${latestClosed.pnl >= 0 ? 'text-profit/60' : 'text-loss/60'}`}>
+                        <div className={`text-sm font-medium ${latestClosed.pnl >= 0 ? 'text-profit/60' : 'text-loss/60'}`}>
                           <PnlCell
                             pnl={latestClosed.pnl}
                             fees={latestClosed.fees ?? 0}
@@ -437,24 +437,24 @@ function BotTradeHistoryModal({ bot, onClose, t }: { bot: BotStatus; onClose: ()
                         </div>
                       </div>
                       <div>
-                        <div className="text-xs text-gray-500 uppercase tracking-wider mb-1">{t('bots.entryPrice')}</div>
-                        <div className="text-xl font-bold text-white">${latestClosed.entry_price.toLocaleString()}</div>
+                        <div className="text-xs text-gray-500 uppercase tracking-wider mb-0.5">{t('bots.entryPrice')}</div>
+                        <div className="text-lg font-bold text-white">${latestClosed.entry_price.toLocaleString()}</div>
                       </div>
                       <div>
-                        <div className="text-xs text-gray-500 uppercase tracking-wider mb-1">{t('bots.exitPrice')}</div>
-                        <div className="text-xl font-bold text-white">
+                        <div className="text-xs text-gray-500 uppercase tracking-wider mb-0.5">{t('bots.exitPrice')}</div>
+                        <div className="text-lg font-bold text-white">
                           {latestClosed.exit_price ? `$${latestClosed.exit_price.toLocaleString()}` : '--'}
                         </div>
                       </div>
                       <div>
-                        <div className="text-xs text-gray-500 uppercase tracking-wider mb-1">{t('bots.confidence')}</div>
-                        <div className={`text-xl font-bold ${confidenceColor(latestClosed.confidence)}`}>{latestClosed.confidence}%</div>
+                        <div className="text-xs text-gray-500 uppercase tracking-wider mb-0.5">{t('bots.confidence')}</div>
+                        <div className={`text-lg font-bold ${confidenceColor(latestClosed.confidence)}`}>{latestClosed.confidence}%</div>
                       </div>
                     </div>
 
                     {/* Affiliate Link (inside card for screenshot capture) */}
                     {affiliateLink && (
-                      <div className="mt-4 pt-3 border-t border-white/5 flex items-center justify-between">
+                      <div className="mt-3 pt-2 border-t border-white/5 flex items-center justify-between">
                         <span className="text-xs text-gray-500">{affiliateLink.label || t('bots.affiliateLink')}</span>
                         <span className="text-xs text-primary-400 font-medium">{affiliateLink.affiliate_url}</span>
                       </div>
@@ -464,75 +464,84 @@ function BotTradeHistoryModal({ bot, onClose, t }: { bot: BotStatus; onClose: ()
               )}
 
               {/* Trade History Table */}
-              <div className="px-6 py-4">
-                <div className="text-xs text-gray-500 uppercase tracking-wider mb-3 font-semibold">{t('bots.tradeHistory')}</div>
+              <div className="px-6 pt-3 pb-2">
+                <div className="text-xs text-gray-500 uppercase tracking-wider font-semibold">{t('bots.tradeHistory')}</div>
               </div>
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead>
-                    <tr className="border-t border-b border-white/5 bg-white/[0.02]">
-                      <th className="text-left px-6 py-3 text-xs text-gray-500 uppercase font-semibold tracking-wider">{t('trades.date')}</th>
-                      <th className="text-left px-4 py-3 text-xs text-gray-500 uppercase font-semibold tracking-wider">{t('trades.symbol')}</th>
-                      <th className="text-center px-4 py-3 text-xs text-gray-500 uppercase font-semibold tracking-wider">{t('trades.side')}</th>
-                      <th className="text-center px-4 py-3 text-xs text-gray-500 uppercase font-semibold tracking-wider">{t('bots.confidence')}</th>
-                      <th className="text-center px-4 py-3 text-xs text-gray-500 uppercase font-semibold tracking-wider">{t('bots.result')}</th>
-                      <th className="text-left px-4 py-3 text-xs text-gray-500 uppercase font-semibold tracking-wider">{t('bots.reasoning')}</th>
-                      <th className="text-center px-4 py-3 text-xs text-gray-500 uppercase font-semibold tracking-wider">{t('bots.details')}</th>
-                      <th className="text-right px-6 py-3 text-xs text-gray-500 uppercase font-semibold tracking-wider">PnL</th>
+              <table className="w-full">
+                <thead>
+                  <tr className="border-t border-b border-white/5 bg-white/[0.02]">
+                    <th className="text-left px-5 py-2.5 text-xs text-gray-500 uppercase font-semibold tracking-wider">{t('trades.date')}</th>
+                    <th className="text-center px-3 py-2.5 text-xs text-gray-500 uppercase font-semibold tracking-wider">{t('trades.exchange')}</th>
+                    <th className="text-left px-3 py-2.5 text-xs text-gray-500 uppercase font-semibold tracking-wider">{t('trades.symbol')}</th>
+                    <th className="text-center px-3 py-2.5 text-xs text-gray-500 uppercase font-semibold tracking-wider">{t('trades.side')}</th>
+                    <th className="text-right px-3 py-2.5 text-xs text-gray-500 uppercase font-semibold tracking-wider">{t('trades.entryPrice')}</th>
+                    <th className="text-right px-3 py-2.5 text-xs text-gray-500 uppercase font-semibold tracking-wider">{t('trades.pnl')}</th>
+                    <th className="text-center px-3 py-2.5 text-xs text-gray-500 uppercase font-semibold tracking-wider">{t('trades.mode')}</th>
+                    <th className="text-center px-3 py-2.5 text-xs text-gray-500 uppercase font-semibold tracking-wider">{t('trades.status')}</th>
+                    <th className="text-center px-3 py-2.5 text-xs text-gray-500 uppercase font-semibold tracking-wider">{t('bots.confidence')}</th>
+                    <th className="text-center px-3 py-2.5 text-xs text-gray-500 uppercase font-semibold tracking-wider">{t('bots.details')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {stats.recent_trades.map((trade) => (
+                    <tr key={trade.id} className="border-b border-white/5 hover:bg-white/[0.02] transition-colors">
+                      <td className="px-5 py-2.5 text-sm text-gray-300" title={new Date(trade.entry_time).toLocaleTimeString('de-DE', { timeZone: 'UTC', hour: '2-digit', minute: '2-digit' }) + ' UTC'}>
+                        {new Date(trade.entry_time).toLocaleDateString()}
+                      </td>
+                      <td className="px-3 py-2.5 text-center">
+                        <span className="inline-flex justify-center">
+                          <ExchangeIcon exchange={bot.exchange_type} size={18} />
+                        </span>
+                      </td>
+                      <td className="px-3 py-2.5 text-sm text-white font-semibold">{trade.symbol}</td>
+                      <td className="px-3 py-2.5 text-center">
+                        <span className={`text-sm ${trade.side === 'long' ? 'text-profit' : 'text-loss'}`}>
+                          {trade.side === 'long' ? '+' : '-'} {trade.side.toUpperCase()}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2.5 text-right text-sm text-gray-300">
+                        ${trade.entry_price.toLocaleString()}
+                      </td>
+                      <td className="px-3 py-2.5 text-right">
+                        <PnlCell
+                          pnl={trade.pnl}
+                          fees={trade.fees ?? 0}
+                          fundingPaid={trade.funding_paid ?? 0}
+                          status={trade.status}
+                          className={`text-sm font-semibold font-mono ${
+                            trade.status === 'open' ? 'text-gray-500' :
+                            trade.pnl >= 0 ? 'text-profit' : 'text-loss'
+                          }`}
+                        />
+                      </td>
+                      <td className="px-3 py-2.5 text-center">
+                        <span className={trade.demo_mode ? 'badge-demo' : 'badge-live'}>
+                          {trade.demo_mode ? t('common.demo') : t('common.live')}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2.5 text-center">
+                        <span className={
+                          trade.status === 'open' ? 'badge-open' :
+                          trade.status === 'closed' ? 'badge-neutral' :
+                          'badge-demo'
+                        }>
+                          {t(`trades.${trade.status}`)}
+                        </span>
+                      </td>
+                      <td className={`px-3 py-2.5 text-center text-sm font-medium ${confidenceColor(trade.confidence)}`}>{trade.confidence}%</td>
+                      <td className="px-3 py-2.5 text-center">
+                        <button
+                          onClick={() => setSelectedTrade(trade)}
+                          className="p-1.5 text-gray-400 hover:text-white transition-colors rounded-lg hover:bg-white/5"
+                          aria-label={t('bots.details')}
+                        >
+                          <FileText size={16} />
+                        </button>
+                      </td>
                     </tr>
-                  </thead>
-                  <tbody>
-                    {stats.recent_trades.map((trade) => (
-                      <tr key={trade.id} className="border-b border-white/5 hover:bg-white/[0.02] transition-colors">
-                        <td className="px-6 py-3.5 text-sm text-gray-300 cursor-default" title={new Date(trade.entry_time).toLocaleTimeString('de-DE', { timeZone: 'UTC', hour: '2-digit', minute: '2-digit' }) + ' UTC'}>
-                          {new Date(trade.entry_time).toLocaleDateString()}
-                        </td>
-                        <td className="px-4 py-3.5 text-sm text-white font-semibold">{trade.symbol}</td>
-                        <td className="px-4 py-3.5 text-center">
-                          <span className={`inline-block px-2.5 py-1 rounded-lg text-xs font-bold ${
-                            trade.side === 'long' ? 'bg-emerald-500/15 text-profit' : 'bg-red-500/15 text-loss'
-                          }`}>
-                            {trade.side.toUpperCase()}
-                          </span>
-                        </td>
-                        <td className={`px-4 py-3.5 text-center text-sm font-medium ${confidenceColor(trade.confidence)}`}>{trade.confidence}%</td>
-                        <td className="px-4 py-3.5 text-center">
-                          <span className={`text-sm font-semibold ${
-                            trade.status === 'open' ? 'text-amber-400' :
-                            trade.pnl_percent >= 0 ? 'text-profit' : 'text-loss'
-                          }`}>
-                            {trade.status === 'open' ? t('bots.pending') : formatPnlPercent(trade.pnl_percent)}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3.5 text-sm text-gray-400 max-w-[280px] truncate" title={trade.reason}>
-                          {trade.reason || '--'}
-                        </td>
-                        <td className="px-4 py-3.5 text-center">
-                          <button
-                            onClick={() => setSelectedTrade(trade)}
-                            className="p-1.5 text-gray-400 hover:text-white transition-colors rounded-lg hover:bg-white/5"
-                            aria-label={t('bots.details')}
-                          >
-                            <FileText size={16} />
-                          </button>
-                        </td>
-                        <td className="px-6 py-3.5 text-right">
-                          <PnlCell
-                            pnl={trade.pnl}
-                            fees={trade.fees ?? 0}
-                            fundingPaid={trade.funding_paid ?? 0}
-                            status={trade.status}
-                            className={`text-sm font-semibold font-mono ${
-                              trade.status === 'open' ? 'text-gray-500' :
-                              trade.pnl >= 0 ? 'text-profit' : 'text-loss'
-                            }`}
-                          />
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                  ))}
+                </tbody>
+              </table>
             </>
           )}
         </div>
@@ -572,6 +581,26 @@ export default function Bots() {
   const [presets, setPresets] = useState<Preset[]>([])
   const [presetDropdownOpen, setPresetDropdownOpen] = useState<number | null>(null)
   const [builderFeeModalBotId, setBuilderFeeModalBotId] = useState<number | null>(null)
+  const [llmConnections, setLlmConnections] = useState<any[]>([])
+
+  // Build lookup: model_id → display name, provider_type → family_name
+  const modelNameMap = useMemo(() => {
+    const map: Record<string, string> = {}
+    for (const conn of llmConnections) {
+      for (const m of conn.models || []) {
+        map[m.id] = m.name
+      }
+    }
+    return map
+  }, [llmConnections])
+
+  const providerNameMap = useMemo(() => {
+    const map: Record<string, string> = {}
+    for (const conn of llmConnections) {
+      map[conn.provider_type] = conn.family_name || conn.display_name
+    }
+    return map
+  }, [llmConnections])
 
   const fetchBots = useCallback(async () => {
     try {
@@ -594,6 +623,7 @@ export default function Bots() {
 
   useEffect(() => {
     api.get('/presets').then(res => setPresets(res.data)).catch(() => {})
+    api.get('/config/llm-connections').then(res => setLlmConnections(res.data.connections || [])).catch(() => {})
   }, [])
 
   const handleStart = async (id: number) => {
@@ -764,15 +794,15 @@ export default function Bots() {
                   <div>
                     <Link to={`/bots/${bot.bot_config_id}`} className="text-white font-semibold text-lg hover:text-primary-400 transition-colors">{bot.name}</Link>
                     <div className="flex items-center gap-2 mt-1.5">
-                      <span className="badge-neutral text-[10px] inline-flex items-center gap-1">
-                        <ExchangeIcon exchange={bot.exchange_type} size={14} />
+                      <span className="badge-neutral text-xs inline-flex items-center gap-1">
+                        <ExchangeIcon exchange={bot.exchange_type} size={16} />
                       </span>
-                      <span className={bot.mode === 'demo' ? 'badge-demo text-[10px]' : bot.mode === 'live' ? 'badge-live text-[10px]' : 'badge-open text-[10px]'}>
+                      <span className={bot.mode === 'demo' ? 'badge-demo text-xs' : bot.mode === 'live' ? 'badge-live text-xs' : 'badge-open text-xs'}>
                         {bot.mode.toUpperCase()}
                       </span>
-                      <span className="text-[10px] text-gray-500">{strategyLabel(bot.strategy_type)}</span>
+                      <span className="text-xs text-gray-500">{strategyLabel(bot.strategy_type)}</span>
                       {bot.strategy_type === 'llm_signal' && (
-                        <Bot size={14} className="text-emerald-400" />
+                        <Bot size={15} className="text-emerald-400" />
                       )}
                     </div>
                   </div>
@@ -789,10 +819,10 @@ export default function Bots() {
                       </span>
                     </div>
                     {bot.llm_provider && (
-                      <div className="mt-1 text-[10px] text-gray-500 leading-tight">
-                        <span className="capitalize">{bot.llm_provider}</span>
+                      <div className="mt-1 text-xs text-gray-500 leading-tight">
+                        <span>{providerNameMap[bot.llm_provider] || bot.llm_provider}</span>
                         {bot.llm_model && (
-                          <div className="text-gray-400 font-medium">{bot.llm_model}</div>
+                          <div className="text-gray-400 font-medium">{modelNameMap[bot.llm_model] || bot.llm_model}</div>
                         )}
                       </div>
                     )}
@@ -800,9 +830,9 @@ export default function Bots() {
                 </div>
 
                 {/* Pairs */}
-                <div className="flex flex-wrap gap-1 mb-3">
+                <div className="flex flex-wrap gap-1.5 mb-3">
                   {bot.trading_pairs.map(pair => (
-                    <span key={pair} className="text-[10px] px-1.5 py-0.5 bg-white/5 text-gray-300 rounded-md border border-white/5">
+                    <span key={pair} className="text-xs px-2 py-0.5 bg-white/5 text-gray-300 rounded-md border border-white/5">
                       {pair}
                     </span>
                   ))}
@@ -820,17 +850,17 @@ export default function Bots() {
                         }
                         setPresetDropdownOpen(presetDropdownOpen === bot.bot_config_id ? null : bot.bot_config_id)
                       }}
-                      className={`w-full flex items-center justify-between gap-2 px-3 py-1.5 text-xs rounded-lg border transition-all ${
+                      className={`w-full flex items-center justify-between gap-2 px-3 py-2 text-sm rounded-lg border transition-all ${
                         bot.active_preset_name
                           ? 'bg-primary-500/10 border-primary-500/20 text-primary-400'
                           : 'bg-white/[0.03] border-white/5 text-gray-400'
                       } ${bot.status === 'running' ? 'opacity-50 cursor-not-allowed' : 'hover:bg-white/[0.06] hover:border-white/10'}`}
                     >
                       <span className="flex items-center gap-1.5 truncate">
-                        <Layers size={12} />
+                        <Layers size={14} />
                         {bot.active_preset_name || t('bots.noPreset')}
                       </span>
-                      <ChevronDown size={12} className={`transition-transform ${presetDropdownOpen === bot.bot_config_id ? 'rotate-180' : ''}`} />
+                      <ChevronDown size={14} className={`transition-transform ${presetDropdownOpen === bot.bot_config_id ? 'rotate-180' : ''}`} />
                     </button>
                     {presetDropdownOpen === bot.bot_config_id && (
                       <>
@@ -840,7 +870,7 @@ export default function Bots() {
                             <button
                               key={preset.id}
                               onClick={() => handleApplyPreset(bot.bot_config_id, preset.id)}
-                              className={`w-full text-left px-3 py-2 text-xs transition-colors ${
+                              className={`w-full text-left px-3 py-2 text-sm transition-colors ${
                                 preset.id === bot.active_preset_id
                                   ? 'bg-primary-500/15 text-primary-400'
                                   : 'text-gray-300 hover:bg-white/5'
@@ -861,30 +891,30 @@ export default function Bots() {
                 {/* Stats row */}
                 <div className="grid grid-cols-3 gap-1 sm:gap-2 mb-3 text-center">
                   <div>
-                    <div className="text-[10px] text-gray-500 uppercase tracking-wider">{t('bots.totalPnl')}</div>
-                    <div className={`text-sm font-mono font-medium ${bot.total_pnl >= 0 ? 'text-profit' : 'text-loss'}`}>
+                    <div className="text-xs text-gray-500 uppercase tracking-wider">{t('bots.totalPnl')}</div>
+                    <div className={`text-base font-mono font-semibold ${bot.total_pnl >= 0 ? 'text-profit' : 'text-loss'}`}>
                       <PnlCell
                         pnl={bot.total_pnl}
                         fees={bot.total_fees ?? 0}
                         fundingPaid={bot.total_funding ?? 0}
-                        className={`text-sm font-mono font-medium ${bot.total_pnl >= 0 ? 'text-profit' : 'text-loss'}`}
+                        className={`text-base font-mono font-semibold ${bot.total_pnl >= 0 ? 'text-profit' : 'text-loss'}`}
                       />
                     </div>
                   </div>
                   <div>
-                    <div className="text-[10px] text-gray-500 uppercase tracking-wider">{t('bots.trades')}</div>
-                    <div className="text-sm text-white font-medium">{bot.total_trades}</div>
+                    <div className="text-xs text-gray-500 uppercase tracking-wider">{t('bots.trades')}</div>
+                    <div className="text-base text-white font-semibold">{bot.total_trades}</div>
                   </div>
                   <div>
-                    <div className="text-[10px] text-gray-500 uppercase tracking-wider">{t('bots.openTrades')}</div>
-                    <div className="text-sm text-white font-medium">{bot.open_trades}</div>
+                    <div className="text-xs text-gray-500 uppercase tracking-wider">{t('bots.openTrades')}</div>
+                    <div className="text-base text-white font-semibold">{bot.open_trades}</div>
                   </div>
                 </div>
 
                 {/* LLM Metrics */}
                 {bot.strategy_type === 'llm_signal' && (
-                  <div className="mb-3 pt-3 border-t border-white/5 space-y-2">
-                    <div className="flex items-center gap-2 text-xs">
+                  <div className="mb-3 pt-3 border-t border-white/5 space-y-2.5">
+                    <div className="flex items-center gap-2 text-sm">
                       <span className="text-gray-500">{t('bots.llmLastSignal')}</span>
                       {bot.llm_last_direction && (
                         <span className={`font-semibold ${bot.llm_last_direction === 'LONG' ? 'text-profit' : 'text-loss'}`}>
@@ -895,13 +925,13 @@ export default function Bots() {
 
                     {bot.llm_last_confidence != null && (
                       <div>
-                        <div className="flex items-center justify-between text-xs mb-1">
+                        <div className="flex items-center justify-between text-sm mb-1">
                           <span className="text-gray-500">{t('bots.confidence')}</span>
                           <span className={`font-medium ${confidenceColor(bot.llm_last_confidence)}`}>{bot.llm_last_confidence}%</span>
                         </div>
-                        <div className="w-full bg-white/5 rounded-full h-1.5">
+                        <div className="w-full bg-white/5 rounded-full h-2">
                           <div
-                            className={`h-1.5 rounded-full transition-all ${
+                            className={`h-2 rounded-full transition-all ${
                               bot.llm_last_confidence >= 75 ? 'bg-emerald-500' :
                               bot.llm_last_confidence >= 50 ? 'bg-amber-500' : 'bg-red-500'
                             }`}
@@ -911,7 +941,7 @@ export default function Bots() {
                       </div>
                     )}
 
-                    <div className="text-xs">
+                    <div className="text-sm">
                       <span className="text-gray-500">{t('bots.accuracy')}: </span>
                       <span className="text-white font-medium">
                         {bot.llm_accuracy != null ? `${bot.llm_accuracy.toFixed(1)}%` : 'N/A'}
@@ -950,16 +980,16 @@ export default function Bots() {
 
                 {/* Error message */}
                 {bot.error_message && (
-                  <div className="flex items-center gap-1.5 mb-3 text-xs text-red-400 bg-red-500/5 rounded-lg px-2 py-1.5">
-                    <AlertCircle size={12} />
+                  <div className="flex items-center gap-1.5 mb-3 text-sm text-red-400 bg-red-500/5 rounded-lg px-2.5 py-2">
+                    <AlertCircle size={14} />
                     <span className="truncate">{bot.error_message}</span>
                   </div>
                 )}
 
                 {/* Last analysis */}
                 {bot.last_analysis && (
-                  <div className="flex items-center gap-1 mb-3 text-xs text-gray-500">
-                    <Clock size={12} />
+                  <div className="flex items-center gap-1.5 mb-3 text-sm text-gray-500">
+                    <Clock size={14} />
                     {t('bots.lastAnalysis')}: {new Date(bot.last_analysis).toLocaleTimeString()}
                   </div>
                 )}
@@ -971,9 +1001,9 @@ export default function Bots() {
                       onClick={() => handleStop(bot.bot_config_id)}
                       disabled={actionLoading === bot.bot_config_id}
                       aria-label={`${t('bots.stop')} ${bot.name}`}
-                      className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 text-sm bg-red-500/10 text-red-400 rounded-xl border border-red-500/10 hover:bg-red-500/20 disabled:opacity-50 transition-all duration-200"
+                      className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 text-sm bg-red-500/10 text-red-400 rounded-xl border border-red-500/10 hover:bg-red-500/20 disabled:opacity-50 transition-all duration-200"
                     >
-                      <Square size={14} />
+                      <Square size={16} />
                       {t('bots.stop')}
                     </button>
                   ) : (
@@ -981,12 +1011,12 @@ export default function Bots() {
                       onClick={() => handleStart(bot.bot_config_id)}
                       disabled={actionLoading === bot.bot_config_id}
                       aria-label={`${t('bots.start')} ${bot.name}`}
-                      className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 text-sm bg-emerald-500/10 text-emerald-400 rounded-xl border border-emerald-500/10 hover:bg-emerald-500/20 disabled:opacity-50 transition-all duration-200"
+                      className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 text-sm bg-emerald-500/10 text-emerald-400 rounded-xl border border-emerald-500/10 hover:bg-emerald-500/20 disabled:opacity-50 transition-all duration-200"
                     >
                       {actionLoading === bot.bot_config_id ? (
-                        <RefreshCw size={14} className="animate-spin" />
+                        <RefreshCw size={16} className="animate-spin" />
                       ) : (
-                        <Play size={14} />
+                        <Play size={16} />
                       )}
                       {t('bots.start')}
                     </button>
@@ -997,7 +1027,7 @@ export default function Bots() {
                     className="p-2 text-gray-400 hover:text-primary-400 hover:bg-primary-500/10 transition-all duration-200 rounded-lg"
                     title={t('bots.tradeHistory')}
                   >
-                    <TrendingUp size={14} />
+                    <TrendingUp size={16} />
                   </button>
                   <button
                     onClick={() => setEditBotId(bot.bot_config_id)}
@@ -1006,7 +1036,7 @@ export default function Bots() {
                     className="p-2 text-gray-400 hover:text-white disabled:opacity-30 transition-all duration-200 rounded-lg hover:bg-white/5"
                     title={t('bots.edit')}
                   >
-                    <Pencil size={14} />
+                    <Pencil size={16} />
                   </button>
                   <button
                     onClick={() => handleDelete(bot.bot_config_id, bot.name)}
@@ -1015,7 +1045,7 @@ export default function Bots() {
                     className="p-2 text-gray-400 hover:text-red-400 disabled:opacity-30 transition-all duration-200 rounded-lg hover:bg-red-500/5"
                     title={t('bots.delete')}
                   >
-                    <Trash2 size={14} />
+                    <Trash2 size={16} />
                   </button>
                 </div>
               </div>

@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { ChevronDown } from 'lucide-react'
+import { ChevronDown, Search, ChevronLeft, ChevronRight, CheckCircle, Clock, Users } from 'lucide-react'
 import api from '../api/client'
 import { useAuthStore } from '../stores/authStore'
 import type { ConnectionsStatusResponse, ExchangeConnectionStatus, ExchangeInfo, ServiceStatus } from '../types'
 import { ExchangeIcon } from '../components/ui/ExchangeLogo'
+import FilterDropdown from '../components/ui/FilterDropdown'
 
 const BASE_TABS = ['apiKeys', 'llmKeys', 'connections'] as const
 const ADMIN_TABS = [...BASE_TABS, 'affiliateLinks', 'hyperliquid'] as const
@@ -49,9 +50,31 @@ function KeyForm({
 
   const formId = label.toLowerCase().replace(/\s+/g, '-')
 
+  const isLive = label.toLowerCase().includes('live') || label.toLowerCase().includes('mainnet')
+  const isDemo = label.toLowerCase().includes('demo') || label.toLowerCase().includes('testnet')
+
+  const sectionBorder = isLive
+    ? 'border-l-4 border-l-red-500 bg-red-950/20'
+    : isDemo
+      ? 'border-l-4 border-l-amber-500 bg-amber-950/20'
+      : ''
+
+  const badgeClass = isLive
+    ? 'bg-red-500/20 text-red-400 border border-red-500/40 ring-1 ring-red-500/20'
+    : isDemo
+      ? 'bg-amber-500/20 text-amber-400 border border-amber-500/40 ring-1 ring-amber-500/20'
+      : 'text-gray-400'
+
   return (
-    <div className="space-y-3">
-      <h4 className="text-xs font-medium text-gray-400 uppercase tracking-wider">{label}</h4>
+    <div className={`space-y-3 rounded-lg p-4 ${sectionBorder}`}>
+      <div className="flex items-center gap-2">
+        {(isLive || isDemo) && (
+          <span className={`w-2.5 h-2.5 rounded-full ${isLive ? 'bg-red-500 animate-pulse' : 'bg-amber-500'}`} />
+        )}
+        <span className={`inline-block text-sm font-bold uppercase tracking-wider ${badgeClass} ${(isLive || isDemo) ? 'px-3 py-1 rounded-md' : ''}`}>
+          {label}
+        </span>
+      </div>
       {isWallet && (
         <div className="p-2.5 bg-blue-900/20 border border-blue-800/40 rounded text-xs text-blue-300">
           {t('settings.hyperliquidHint')}
@@ -62,21 +85,21 @@ function KeyForm({
           <label htmlFor={`${formId}-key`} className="block text-xs text-gray-500 mb-1">{keyLabel}</label>
           <input id={`${formId}-key`} type={isWallet ? 'text' : 'password'} value={keyValue} onChange={(e) => onKeyChange(e.target.value)}
             placeholder={keyPlaceholder}
-            className={`w-full px-3 py-1.5 bg-gray-800 border rounded text-white text-sm font-mono ${addrError ? 'border-red-500' : 'border-gray-700'}`} />
+            className={`filter-select w-full text-sm font-mono ${addrError ? '!border-red-500' : ''}`} />
           {addrError && <p className="text-xs text-red-400 mt-1">{addrError}</p>}
         </div>
         <div>
           <label htmlFor={`${formId}-secret`} className="block text-xs text-gray-500 mb-1">{secretLabel}</label>
           <input id={`${formId}-secret`} type="password" value={secretValue} onChange={(e) => onSecretChange(e.target.value)}
             placeholder={secretPlaceholder}
-            className={`w-full px-3 py-1.5 bg-gray-800 border rounded text-white text-sm ${pkError ? 'border-red-500' : 'border-gray-700'}`} />
+            className={`filter-select w-full text-sm ${pkError ? '!border-red-500' : ''}`} />
           {pkError && <p className="text-xs text-red-400 mt-1">{pkError}</p>}
         </div>
         {showPassphrase !== false && (
           <div>
             <label htmlFor={`${formId}-passphrase`} className="block text-xs text-gray-500 mb-1">{t('settings.passphrase')}</label>
             <input id={`${formId}-passphrase`} type="password" value={passphraseValue} onChange={(e) => onPassphraseChange(e.target.value)}
-              className="w-full px-3 py-1.5 bg-gray-800 border border-gray-700 rounded text-white text-sm" />
+              className="filter-select w-full text-sm" />
           </div>
         )}
       </div>
@@ -127,7 +150,7 @@ export default function Settings() {
   const [keyForms, setKeyForms] = useState<Record<string, ExchangeKeyForm>>({})
 
   // LLM connections
-  const [llmConnections, setLlmConnections] = useState<{provider_type: string; api_key_configured: boolean; display_name: string; free_tier: boolean}[]>([])
+  const [llmConnections, setLlmConnections] = useState<{provider_type: string; api_key_configured: boolean; display_name: string; free_tier: boolean; family_name?: string; models?: {id: string; name: string; default?: boolean}[]}[]>([])
   const [llmKeyForms, setLlmKeyForms] = useState<Record<string, string>>({})
 
   // Accordion state
@@ -160,8 +183,14 @@ export default function Settings() {
   const [userAffiliateLinks, setUserAffiliateLinks] = useState<Record<string, { affiliate_url: string; label: string | null; uid_required: boolean }>>({})
   const [uidForms, setUidForms] = useState<Record<string, string>>({})
 
-  // Admin UID management
+  // Admin UID management (paginated)
   const [adminUids, setAdminUids] = useState<any[]>([])
+  const [adminUidPage, setAdminUidPage] = useState(1)
+  const [adminUidPages, setAdminUidPages] = useState(1)
+  const [adminUidTotal, setAdminUidTotal] = useState(0)
+  const [adminUidSearch, setAdminUidSearch] = useState('')
+  const [adminUidFilter, setAdminUidFilter] = useState<'all' | 'pending' | 'verified'>('all')
+  const [adminUidStats, setAdminUidStats] = useState({ total: 0, verified: 0, pending: 0 })
 
   useEffect(() => {
     const load = async () => {
@@ -394,17 +423,21 @@ export default function Settings() {
     setSaving(false)
   }
 
-  const loadAdminUids = async () => {
+  const loadAdminUids = async (page = adminUidPage, search = adminUidSearch, status = adminUidFilter) => {
     try {
-      const res = await api.get('/config/admin/affiliate-uids')
-      setAdminUids(res.data)
+      const res = await api.get('/config/admin/affiliate-uids', { params: { page, per_page: 15, search, status } })
+      setAdminUids(res.data.items)
+      setAdminUidTotal(res.data.total)
+      setAdminUidPages(res.data.pages)
+      setAdminUidPage(res.data.page)
+      setAdminUidStats(res.data.stats)
     } catch {}
   }
 
   const verifyAdminUid = async (connectionId: number, verified: boolean) => {
     try {
       await api.put(`/config/admin/affiliate-uids/${connectionId}/verify`, { verified })
-      await loadAdminUids()
+      await loadAdminUids(adminUidPage, adminUidSearch, adminUidFilter)
       showMessage(verified ? t('affiliate.uidVerified') : t('affiliate.uidRejected'))
     } catch (err: any) {
       showMessage(err.response?.data?.detail || t('common.error'))
@@ -493,11 +526,11 @@ export default function Settings() {
             const demoOk = conn?.demo_api_keys_configured ?? false
 
             return (
-              <div key={ex.name} className="bg-gray-900 border border-gray-800 rounded-lg overflow-hidden">
+              <div key={ex.name} className="border border-white/10 bg-white/[0.03] rounded-xl overflow-hidden">
                 {/* Accordion Header */}
                 <button
                   onClick={() => setOpenExchange(isOpen ? null : ex.name)}
-                  className="w-full flex items-center justify-between px-5 py-4 hover:bg-gray-800/50 transition-colors"
+                  className="w-full flex items-center justify-between px-5 py-4 hover:bg-white/[0.04] transition-colors"
                 >
                   <div className="flex items-center gap-3">
                     <ExchangeIcon exchange={ex.name} size={20} />
@@ -515,7 +548,7 @@ export default function Settings() {
                       </span>
                     )}
                     {!liveOk && !demoOk && (
-                      <span className="text-xs px-2 py-0.5 rounded-full bg-gray-800 text-gray-500 border border-gray-700">
+                      <span className="text-xs px-2 py-0.5 rounded-full bg-white/5 text-gray-500 border border-white/10">
                         {t('settings.notConfigured')}
                       </span>
                     )}
@@ -525,7 +558,7 @@ export default function Settings() {
 
                 {/* Accordion Content */}
                 {isOpen && (
-                  <div className="px-5 pb-5 pt-1 space-y-5 border-t border-gray-800">
+                  <div className="px-5 pb-5 pt-1 space-y-5 border-t border-white/5">
                     <KeyForm
                       label={ex.auth_type === 'eth_wallet' ? t('settings.mainnet') : t('common.live')}
                       configured={liveOk}
@@ -540,7 +573,7 @@ export default function Settings() {
 
                     {ex.supports_demo && (
                       <>
-                        <div className="border-t border-gray-800" />
+                        <div className="border-t border-white/10 my-2" />
                         <KeyForm
                           label={ex.auth_type === 'eth_wallet' ? t('settings.testnet') : t('common.demo')}
                           configured={demoOk}
@@ -562,7 +595,7 @@ export default function Settings() {
 
                     {/* Affiliate UID (Bitget/Weex only) */}
                     {(ex.name === 'bitget' || ex.name === 'weex') && userAffiliateLinks[ex.name]?.uid_required && (
-                      <div className="mt-4 pt-4 border-t border-gray-800">
+                      <div className="mt-4 pt-4 border-t border-white/5">
                         <h4 className="text-sm font-medium text-white mb-2">{t('affiliate.uid')}</h4>
                         <p className="text-gray-400 text-xs mb-3">{t('affiliate.uidHint')}</p>
                         {userAffiliateLinks[ex.name]?.affiliate_url && (
@@ -581,7 +614,7 @@ export default function Settings() {
                               value={uidForms[ex.name] ?? getConn(ex.name)?.affiliate_uid ?? ''}
                               onChange={(e) => setUidForms(prev => ({ ...prev, [ex.name]: e.target.value }))}
                               placeholder={t('affiliate.uidPlaceholder')}
-                              className="w-full px-3 py-1.5 bg-gray-800 border border-gray-700 rounded text-white text-sm"
+                              className="filter-select w-full text-sm"
                             />
                           </div>
                           <button
@@ -620,23 +653,26 @@ export default function Settings() {
         <div className="max-w-2xl">
           <p className="text-sm text-gray-400 mb-4">{t('settings.llmKeysDescription')}</p>
           <div className="space-y-2">
-            {llmConnections.map(({ provider_type, api_key_configured, display_name, free_tier }) => {
+            {llmConnections.map(({ provider_type, api_key_configured, display_name, free_tier, family_name, models }) => {
               const isOpen = openLlm === provider_type
               return (
-                <div key={provider_type} className="bg-gray-900 border border-gray-800 rounded-lg overflow-hidden">
+                <div key={provider_type} className="border border-white/10 bg-white/[0.03] rounded-xl overflow-hidden">
                   {/* Accordion Header */}
                   <button
                     onClick={() => setOpenLlm(isOpen ? null : provider_type)}
-                    className="w-full flex items-center justify-between px-5 py-4 hover:bg-gray-800/50 transition-colors"
+                    className="w-full flex items-center justify-between px-5 py-4 hover:bg-white/[0.04] transition-colors"
                   >
                     <div className="flex items-center gap-2">
-                      <h4 className="text-white text-sm font-medium">{display_name}</h4>
+                      <h4 className="text-white text-sm font-medium">{family_name || display_name}</h4>
+                      {models && models.length > 0 && (
+                        <span className="text-xs text-gray-500">({models.length} {t('settings.models')})</span>
+                      )}
                       {free_tier && (
                         <span className="text-xs px-1.5 py-0.5 rounded bg-blue-900/40 text-blue-400 border border-blue-800">{t('settings.free')}</span>
                       )}
                     </div>
                     <div className="flex items-center gap-2">
-                      <span className={`text-xs px-2 py-0.5 rounded-full ${api_key_configured ? 'bg-green-900/40 text-green-400 border border-green-800' : 'bg-gray-800 text-gray-500 border border-gray-700'}`}>
+                      <span className={`text-xs px-2 py-0.5 rounded-full ${api_key_configured ? 'bg-green-900/40 text-green-400 border border-green-800' : 'bg-white/5 text-gray-500 border border-white/10'}`}>
                         {api_key_configured ? t('settings.configured') : t('settings.notConfigured')}
                       </span>
                       <ChevronDown size={16} className={`text-gray-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
@@ -645,7 +681,27 @@ export default function Settings() {
 
                   {/* Accordion Content */}
                   {isOpen && (
-                    <div className="px-5 pb-5 pt-1 space-y-3 border-t border-gray-800">
+                    <div className="px-5 pb-5 pt-1 space-y-3 border-t border-white/5">
+                      {/* Available models */}
+                      {models && models.length > 0 && (
+                        <div>
+                          <span className="block text-xs text-gray-500 mb-1.5">{t('settings.availableModels')}</span>
+                          <div className="flex flex-wrap gap-1.5">
+                            {models.map((m: any) => (
+                              <span
+                                key={m.id}
+                                className={`px-2 py-0.5 text-xs rounded border ${
+                                  m.default
+                                    ? 'bg-primary-900/30 text-primary-400 border-primary-800'
+                                    : 'bg-white/5 text-gray-400 border-white/10'
+                                }`}
+                              >
+                                {m.name}{m.default ? ` (${t('settings.defaultModel')})` : ''}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                       <div>
                         <label htmlFor={`llm-key-${provider_type}`} className="block text-xs text-gray-500 mb-1">{t('settings.apiKey')}</label>
                         <input
@@ -654,7 +710,7 @@ export default function Settings() {
                           value={llmKeyForms[provider_type] || ''}
                           onChange={(e) => setLlmKeyForms(prev => ({ ...prev, [provider_type]: e.target.value }))}
                           placeholder={api_key_configured ? '****configured****' : ''}
-                          className="w-full px-3 py-1.5 bg-gray-800 border border-gray-700 rounded text-white text-sm"
+                          className="filter-select w-full text-sm"
                         />
                       </div>
                       <div className="flex gap-2">
@@ -684,141 +740,230 @@ export default function Settings() {
 
       {/* Affiliate Links Tab (admin only) */}
       {activeTab === 'affiliateLinks' && (
-        <div className="max-w-2xl">
+        <div>
           <p className="text-sm text-gray-400 mb-4">{t('settings.affiliateLinksDesc')}</p>
-          <div className="space-y-4">
-            {['bitget', 'weex', 'hyperliquid'].map((ex) => {
-              const form = affiliateForms[ex] || { url: '', label: '', active: true }
-              const hasExisting = !!affiliateLinks[ex]
-              return (
-                <div key={ex} className="bg-gray-900 border border-gray-800 rounded-lg p-5">
-                  <div className="flex items-center gap-3 mb-4">
-                    <ExchangeIcon exchange={ex} size={20} />
-                    <h3 className="text-white font-semibold capitalize">{ex}</h3>
-                    {hasExisting && (
-                      <span className="text-xs px-2 py-0.5 rounded-full bg-green-900/40 text-green-400 border border-green-800">
-                        {t('settings.configured')}
-                      </span>
-                    )}
-                  </div>
-                  <div className="space-y-3">
-                    <div>
-                      <label className="block text-xs text-gray-500 mb-1">{t('settings.affiliateUrl')}</label>
-                      <input
-                        type="text"
-                        value={form.url}
-                        onChange={(e) => setAffiliateForms(prev => ({ ...prev, [ex]: { ...form, url: e.target.value } }))}
-                        placeholder="https://..."
-                        className="w-full px-3 py-1.5 bg-gray-800 border border-gray-700 rounded text-white text-sm"
-                      />
+          <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.6fr)] gap-4 items-start">
+            {/* Left: Affiliate Link Configuration */}
+            <div className="space-y-4">
+              {['bitget', 'weex', 'hyperliquid'].map((ex) => {
+                const form = affiliateForms[ex] || { url: '', label: '', active: true }
+                const hasExisting = !!affiliateLinks[ex]
+                return (
+                  <div key={ex} className="border border-white/10 bg-white/[0.03] rounded-xl p-5">
+                    <div className="flex items-center gap-3 mb-4">
+                      <ExchangeIcon exchange={ex} size={20} />
+                      <h3 className="text-white font-semibold capitalize">{ex}</h3>
+                      {hasExisting && (
+                        <span className="text-xs px-2 py-0.5 rounded-full bg-green-900/40 text-green-400 border border-green-800">
+                          {t('settings.configured')}
+                        </span>
+                      )}
                     </div>
-                    <div>
-                      <label className="block text-xs text-gray-500 mb-1">{t('settings.affiliateLabel')}</label>
-                      <input
-                        type="text"
-                        value={form.label}
-                        onChange={(e) => setAffiliateForms(prev => ({ ...prev, [ex]: { ...form, label: e.target.value } }))}
-                        placeholder={t('settings.affiliateLabelPlaceholder')}
-                        className="w-full px-3 py-1.5 bg-gray-800 border border-gray-700 rounded text-white text-sm"
-                      />
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="checkbox"
-                        id={`aff-active-${ex}`}
-                        checked={form.active}
-                        onChange={(e) => setAffiliateForms(prev => ({ ...prev, [ex]: { ...form, active: e.target.checked } }))}
-                        className="rounded border-gray-700 bg-gray-800 text-primary-600"
-                      />
-                      <label htmlFor={`aff-active-${ex}`} className="text-sm text-gray-400">{t('settings.affiliateActive')}</label>
-                    </div>
-                    {(ex === 'bitget' || ex === 'weex') && (
+                    <div className="space-y-3">
+                      <div>
+                        <label className="block text-xs text-gray-500 mb-1">{t('settings.affiliateUrl')}</label>
+                        <input
+                          type="text"
+                          value={form.url}
+                          onChange={(e) => setAffiliateForms(prev => ({ ...prev, [ex]: { ...form, url: e.target.value } }))}
+                          placeholder="https://..."
+                          className="filter-select w-full text-sm"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-gray-500 mb-1">{t('settings.affiliateLabel')}</label>
+                        <input
+                          type="text"
+                          value={form.label}
+                          onChange={(e) => setAffiliateForms(prev => ({ ...prev, [ex]: { ...form, label: e.target.value } }))}
+                          placeholder={t('settings.affiliateLabelPlaceholder')}
+                          className="filter-select w-full text-sm"
+                        />
+                      </div>
                       <div className="flex items-center gap-2">
                         <input
                           type="checkbox"
-                          id={`aff-uid-${ex}`}
-                          checked={form.uidRequired}
-                          onChange={(e) => setAffiliateForms(prev => ({ ...prev, [ex]: { ...form, uidRequired: e.target.checked } }))}
-                          className="rounded border-gray-700 bg-gray-800 text-primary-600"
+                          id={`aff-active-${ex}`}
+                          checked={form.active}
+                          onChange={(e) => setAffiliateForms(prev => ({ ...prev, [ex]: { ...form, active: e.target.checked } }))}
+                          className="rounded border-white/10 bg-white/5 text-primary-600"
                         />
-                        <label htmlFor={`aff-uid-${ex}`} className="text-sm text-gray-400">{t('affiliate.uidRequiredToggle')}</label>
+                        <label htmlFor={`aff-active-${ex}`} className="text-sm text-gray-400">{t('settings.affiliateActive')}</label>
                       </div>
-                    )}
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => saveAffiliateLink(ex)}
-                        disabled={saving || !form.url}
-                        className="px-3 py-1.5 text-sm bg-primary-600 text-white rounded hover:bg-primary-700 disabled:opacity-50"
-                      >
-                        {t('settings.save')}
-                      </button>
-                      {hasExisting && (
-                        <button
-                          onClick={() => deleteAffiliateLink(ex)}
-                          disabled={saving}
-                          className="px-3 py-1.5 text-sm bg-red-900/50 text-red-400 rounded hover:bg-red-900 disabled:opacity-50"
-                        >
-                          {t('presets.delete')}
-                        </button>
+                      {(ex === 'bitget' || ex === 'weex') && (
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            id={`aff-uid-${ex}`}
+                            checked={form.uidRequired}
+                            onChange={(e) => setAffiliateForms(prev => ({ ...prev, [ex]: { ...form, uidRequired: e.target.checked } }))}
+                            className="rounded border-white/10 bg-white/5 text-primary-600"
+                          />
+                          <label htmlFor={`aff-uid-${ex}`} className="text-sm text-gray-400">{t('affiliate.uidRequiredToggle')}</label>
+                        </div>
                       )}
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => saveAffiliateLink(ex)}
+                          disabled={saving || !form.url}
+                          className="px-3 py-1.5 text-sm bg-primary-600 text-white rounded hover:bg-primary-700 disabled:opacity-50"
+                        >
+                          {t('settings.save')}
+                        </button>
+                        {hasExisting && (
+                          <button
+                            onClick={() => deleteAffiliateLink(ex)}
+                            disabled={saving}
+                            className="px-3 py-1.5 text-sm bg-red-900/50 text-red-400 rounded hover:bg-red-900 disabled:opacity-50"
+                          >
+                            {t('presets.delete')}
+                          </button>
+                        )}
+                      </div>
                     </div>
+                  </div>
+                )
+              })}
+            </div>
+
+            {/* Right: Admin UID Management — Paginated */}
+            <div className="border border-white/10 bg-white/[0.03] rounded-xl p-4 lg:sticky lg:top-4">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-white font-medium">{t('affiliate.affiliateUids')}</h3>
+                <div className="flex items-center gap-2">
+                  <span className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-white/5 text-gray-400">
+                    <Users size={11} /> {adminUidStats.total}
+                  </span>
+                  <span className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-yellow-900/30 text-yellow-400">
+                    <Clock size={11} /> {adminUidStats.pending}
+                  </span>
+                  <span className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-green-900/30 text-green-400">
+                    <CheckCircle size={11} /> {adminUidStats.verified}
+                  </span>
+                </div>
+              </div>
+
+              {/* Search + Filter */}
+              <div className="flex items-center gap-2 mb-3">
+                <div className="relative flex-1">
+                  <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-500" />
+                  <input
+                    type="text"
+                    value={adminUidSearch}
+                    onChange={(e) => {
+                      setAdminUidSearch(e.target.value)
+                      loadAdminUids(1, e.target.value, adminUidFilter)
+                    }}
+                    placeholder="Username / UID..."
+                    className="filter-select w-full text-sm !pl-8"
+                  />
+                </div>
+                <div className="flex rounded-lg border border-white/10 overflow-hidden shrink-0">
+                  {(['all', 'pending', 'verified'] as const).map(f => (
+                    <button key={f} onClick={() => { setAdminUidFilter(f); loadAdminUids(1, adminUidSearch, f) }}
+                      className={`px-2.5 py-1.5 text-xs transition-colors ${adminUidFilter === f ? 'bg-white/10 text-white' : 'text-gray-500 hover:text-gray-300'}`}>
+                      {f === 'all' ? 'Alle' : f === 'pending' ? 'Offen' : 'Verifiziert'}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Table */}
+              {adminUids.length === 0 ? (
+                <p className="text-gray-500 text-sm py-6 text-center">{t('affiliate.noUids')}</p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-white/5 text-gray-500 text-xs">
+                        <th className="text-left py-2 px-2 font-medium">User</th>
+                        <th className="text-left py-2 px-2 font-medium">Exchange</th>
+                        <th className="text-left py-2 px-2 font-medium">UID</th>
+                        <th className="text-left py-2 px-2 font-medium">{t('affiliate.submittedAt')}</th>
+                        <th className="text-left py-2 px-2 font-medium">Status</th>
+                        <th className="text-right py-2 px-2 font-medium">Aktion</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {adminUids.map((item: any) => (
+                        <tr key={item.connection_id} className="border-b border-white/5 hover:bg-white/[0.02]">
+                          <td className="py-1.5 px-2 text-white font-medium">{item.username}</td>
+                          <td className="py-1.5 px-2">
+                            <div className="flex items-center gap-1.5">
+                              <ExchangeIcon exchange={item.exchange_type} size={14} />
+                              <span className="text-gray-400 capitalize">{item.exchange_type}</span>
+                            </div>
+                          </td>
+                          <td className="py-1.5 px-2 text-gray-300 font-mono text-xs">{item.affiliate_uid}</td>
+                          <td className="py-1.5 px-2 text-gray-500 text-xs whitespace-nowrap">
+                            {item.submitted_at
+                              ? new Date(item.submitted_at).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' })
+                              : '—'}
+                          </td>
+                          <td className="py-1.5 px-2">
+                            <span className={`text-[10px] px-1.5 py-0.5 rounded ${
+                              item.affiliate_verified
+                                ? 'bg-green-900/30 text-green-400'
+                                : 'bg-yellow-900/30 text-yellow-400'
+                            }`}>
+                              {item.affiliate_verified ? t('affiliate.uidVerified') : t('affiliate.uidPending')}
+                            </span>
+                          </td>
+                          <td className="py-1.5 px-2 text-right">
+                            <div className="flex gap-1 justify-end">
+                              {!item.affiliate_verified && (
+                                <button onClick={() => verifyAdminUid(item.connection_id, true)}
+                                  title={t('affiliate.verifyUid')}
+                                  className="px-2 py-0.5 text-[11px] bg-green-900/30 text-green-400 rounded hover:bg-green-900/50 transition-colors">
+                                  {t('affiliate.verifyUid')}
+                                </button>
+                              )}
+                              <button onClick={() => verifyAdminUid(item.connection_id, false)}
+                                title={t('affiliate.rejectUid')}
+                                className={`px-2 py-0.5 text-[11px] rounded transition-colors ${
+                                  item.affiliate_verified
+                                    ? 'bg-red-900/30 text-red-400 hover:bg-red-900/50'
+                                    : 'bg-red-900/20 text-red-400/60 hover:bg-red-900/40'
+                                }`}>
+                                {t('affiliate.rejectUid')}
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {/* Pagination */}
+              {adminUidPages > 1 && (
+                <div className="flex items-center justify-between mt-3 pt-3 border-t border-white/5">
+                  <span className="text-xs text-gray-500">{adminUidTotal} Ergebnisse · Seite {adminUidPage}/{adminUidPages}</span>
+                  <div className="flex items-center gap-1">
+                    <button onClick={() => loadAdminUids(adminUidPage - 1)} disabled={adminUidPage <= 1}
+                      className="p-1 rounded text-gray-400 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors">
+                      <ChevronLeft size={16} />
+                    </button>
+                    {Array.from({ length: Math.min(adminUidPages, 5) }, (_, i) => {
+                      const start = Math.max(1, Math.min(adminUidPage - 2, adminUidPages - 4))
+                      const p = start + i
+                      if (p > adminUidPages) return null
+                      return (
+                        <button key={p} onClick={() => loadAdminUids(p)}
+                          className={`w-7 h-7 text-xs rounded transition-colors ${p === adminUidPage ? 'bg-primary-600 text-white' : 'text-gray-400 hover:bg-white/10'}`}>
+                          {p}
+                        </button>
+                      )
+                    })}
+                    <button onClick={() => loadAdminUids(adminUidPage + 1)} disabled={adminUidPage >= adminUidPages}
+                      className="p-1 rounded text-gray-400 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors">
+                      <ChevronRight size={16} />
+                    </button>
                   </div>
                 </div>
-              )
-            })}
-          </div>
-
-          {/* Admin: Affiliate UID Management */}
-          <div className="bg-gray-900 border border-gray-800 rounded-lg p-4 mt-4">
-            <h3 className="text-white font-medium mb-3">{t('affiliate.affiliateUids')}</h3>
-            {adminUids.length === 0 ? (
-              <p className="text-gray-500 text-sm">{t('affiliate.noUids')}</p>
-            ) : (
-              <div className="space-y-2">
-                {adminUids.map((item: any) => (
-                  <div key={item.connection_id} className="flex items-center justify-between bg-gray-800 rounded p-3">
-                    <div>
-                      <span className="text-white text-sm font-medium">{item.username}</span>
-                      <span className="text-gray-500 text-xs ml-2">{item.exchange_type}</span>
-                      <span className="text-gray-400 text-sm ml-3 font-mono">{item.affiliate_uid}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {item.affiliate_verified ? (
-                        <>
-                          <span className="text-xs px-2 py-0.5 rounded-full bg-green-900/40 text-green-400 border border-green-800">
-                            {t('affiliate.uidVerified')}
-                          </span>
-                          <button
-                            onClick={() => verifyAdminUid(item.connection_id, false)}
-                            className="px-2 py-1 text-xs bg-red-900/50 text-red-400 rounded hover:bg-red-900"
-                          >
-                            {t('affiliate.rejectUid')}
-                          </button>
-                        </>
-                      ) : (
-                        <>
-                          <span className="text-xs px-2 py-0.5 rounded-full bg-yellow-900/40 text-yellow-400 border border-yellow-800">
-                            {t('affiliate.uidPending')}
-                          </span>
-                          <button
-                            onClick={() => verifyAdminUid(item.connection_id, true)}
-                            className="px-2 py-1 text-xs bg-green-900/50 text-green-400 rounded hover:bg-green-900"
-                          >
-                            {t('affiliate.verifyUid')}
-                          </button>
-                          <button
-                            onClick={() => verifyAdminUid(item.connection_id, false)}
-                            className="px-2 py-1 text-xs bg-red-900/50 text-red-400 rounded hover:bg-red-900"
-                          >
-                            {t('affiliate.rejectUid')}
-                          </button>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
+              )}
+            </div>
           </div>
         </div>
       )}
@@ -827,7 +972,7 @@ export default function Settings() {
       {activeTab === 'hyperliquid' && (
         <div className="space-y-6 max-w-2xl">
           {/* Admin Builder Config */}
-          <div className="bg-gray-900 border border-gray-800 rounded-lg p-6 space-y-4">
+          <div className="border border-white/10 bg-white/[0.03] rounded-xl p-6 space-y-4">
             <div>
               <h3 className="text-white font-medium">{t('settings.hlBuilderConfig')}</h3>
               <p className="text-sm text-gray-400 mt-1">{t('settings.hlBuilderConfigDesc')}</p>
@@ -841,7 +986,7 @@ export default function Settings() {
                   value={hlAdminForm.builder_address}
                   onChange={(e) => setHlAdminForm(prev => ({ ...prev, builder_address: e.target.value }))}
                   placeholder="0x..."
-                  className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded text-white text-sm font-mono"
+                  className="filter-select w-full text-sm font-mono"
                 />
                 {hlAdminSettings?.sources?.builder_address && (
                   <p className="text-xs text-gray-600 mt-1">
@@ -852,19 +997,20 @@ export default function Settings() {
 
               <div>
                 <label className="block text-xs text-gray-500 mb-1">{t('settings.hlBuilderFeeLabel')}</label>
-                <select
-                  value={hlAdminForm.builder_fee}
-                  onChange={(e) => setHlAdminForm(prev => ({ ...prev, builder_fee: parseInt(e.target.value) }))}
-                  className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded text-white text-sm"
-                >
-                  <option value={0}>{t('settings.hlFeeDisabled')}</option>
-                  <option value={1}>1 (0.001%)</option>
-                  <option value={5}>5 (0.005%)</option>
-                  <option value={10}>10 (0.01%) - {t('settings.hlFeeDefault')}</option>
-                  <option value={25}>25 (0.025%)</option>
-                  <option value={50}>50 (0.05%)</option>
-                  <option value={100}>100 (0.1%)</option>
-                </select>
+                <FilterDropdown
+                  value={String(hlAdminForm.builder_fee)}
+                  onChange={val => setHlAdminForm(prev => ({ ...prev, builder_fee: parseInt(val) }))}
+                  options={[
+                    { value: '0', label: t('settings.hlFeeDisabled') },
+                    { value: '1', label: '1 (0.001%)' },
+                    { value: '5', label: '5 (0.005%)' },
+                    { value: '10', label: `10 (0.01%) - ${t('settings.hlFeeDefault')}` },
+                    { value: '25', label: '25 (0.025%)' },
+                    { value: '50', label: '50 (0.05%)' },
+                    { value: '100', label: '100 (0.1%)' },
+                  ]}
+                  ariaLabel="Builder Fee"
+                />
                 {hlAdminSettings?.sources?.builder_fee && (
                   <p className="text-xs text-gray-600 mt-1">
                     {t('settings.hlSource', { source: hlAdminSettings.sources.builder_fee === 'db' ? t('settings.hlSourceDb') : hlAdminSettings.sources.builder_fee === 'env' ? t('settings.hlSourceEnv') : t('settings.hlSourceNotSet') })}
@@ -879,7 +1025,7 @@ export default function Settings() {
                   value={hlAdminForm.referral_code}
                   onChange={(e) => setHlAdminForm(prev => ({ ...prev, referral_code: e.target.value }))}
                   placeholder="e.g. MYCODE"
-                  className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded text-white text-sm"
+                  className="filter-select w-full text-sm"
                 />
                 {hlAdminSettings?.sources?.referral_code && (
                   <p className="text-xs text-gray-600 mt-1">
@@ -899,14 +1045,14 @@ export default function Settings() {
           </div>
 
           {/* Revenue Display (existing) */}
-          <div className="bg-gray-900 border border-gray-800 rounded-lg p-6 space-y-6">
+          <div className="border border-white/10 bg-white/[0.03] rounded-xl p-6 space-y-6">
             <div className="flex items-center justify-between">
               <div>
                 <h3 className="text-white font-medium">{t('settings.hlRevenue')}</h3>
                 <p className="text-sm text-gray-400 mt-1">{t('settings.hlRevenueDesc')}</p>
               </div>
               <button onClick={loadHlRevenue} disabled={hlLoading}
-                className="px-3 py-1.5 text-sm bg-gray-800 text-gray-300 rounded hover:bg-gray-700 disabled:opacity-50">
+                className="px-3 py-1.5 text-sm bg-white/5 border border-white/10 text-gray-300 rounded-xl hover:bg-white/10 disabled:opacity-50">
                 {hlLoading ? t('settings.refreshing') : t('settings.refreshStatus')}
               </button>
             </div>
@@ -918,15 +1064,15 @@ export default function Settings() {
                   <h4 className="text-sm font-medium text-gray-400 mb-3 uppercase tracking-wider">{t('settings.hlBuilderCode')}</h4>
                   {hlRevenue.builder?.configured ? (
                     <div className="space-y-2">
-                      <div className="flex items-center justify-between p-3 bg-gray-800 rounded-lg">
+                      <div className="flex items-center justify-between p-3 bg-white/[0.03] border border-white/10 rounded-xl">
                         <span className="text-sm text-gray-300">{t('settings.hlBuilderAddressLabel')}</span>
                         <span className="text-sm text-white font-mono">{hlRevenue.builder.address}</span>
                       </div>
-                      <div className="flex items-center justify-between p-3 bg-gray-800 rounded-lg">
+                      <div className="flex items-center justify-between p-3 bg-white/[0.03] border border-white/10 rounded-xl">
                         <span className="text-sm text-gray-300">{t('settings.hlFeeRate')}</span>
                         <span className="text-sm text-white">{hlRevenue.builder.fee_percent}</span>
                       </div>
-                      <div className="flex items-center justify-between p-3 bg-gray-800 rounded-lg">
+                      <div className="flex items-center justify-between p-3 bg-white/[0.03] border border-white/10 rounded-xl">
                         <span className="text-sm text-gray-300">{t('settings.hlUserApproved')}</span>
                         <div className="flex items-center gap-2">
                           <span className={`inline-block w-2.5 h-2.5 rounded-full ${hlRevenue.builder.user_approved ? 'bg-green-400' : 'bg-red-400'}`} />
@@ -943,7 +1089,7 @@ export default function Settings() {
                       )}
                     </div>
                   ) : (
-                    <div className="p-3 bg-gray-800 rounded-lg text-sm text-gray-500">
+                    <div className="p-3 bg-white/[0.03] border border-white/10 rounded-xl text-sm text-gray-500">
                       {t('settings.hlNotConfiguredBuilder')}
                     </div>
                   )}
@@ -954,11 +1100,11 @@ export default function Settings() {
                   <h4 className="text-sm font-medium text-gray-400 mb-3 uppercase tracking-wider">{t('settings.hlReferral')}</h4>
                   {hlRevenue.referral?.configured ? (
                     <div className="space-y-2">
-                      <div className="flex items-center justify-between p-3 bg-gray-800 rounded-lg">
+                      <div className="flex items-center justify-between p-3 bg-white/[0.03] border border-white/10 rounded-xl">
                         <span className="text-sm text-gray-300">{t('settings.hlReferralCodeLabel')}</span>
                         <span className="text-sm text-white font-mono">{hlRevenue.referral.code}</span>
                       </div>
-                      <div className="flex items-center justify-between p-3 bg-gray-800 rounded-lg">
+                      <div className="flex items-center justify-between p-3 bg-white/[0.03] border border-white/10 rounded-xl">
                         <span className="text-sm text-gray-300">{t('settings.hlUserReferred')}</span>
                         <div className="flex items-center gap-2">
                           <span className={`inline-block w-2.5 h-2.5 rounded-full ${hlRevenue.referral.user_referred ? 'bg-green-400' : 'bg-yellow-400'}`} />
@@ -975,7 +1121,7 @@ export default function Settings() {
                       )}
                     </div>
                   ) : (
-                    <div className="p-3 bg-gray-800 rounded-lg text-sm text-gray-500">
+                    <div className="p-3 bg-white/[0.03] border border-white/10 rounded-xl text-sm text-gray-500">
                       {t('settings.hlNotConfiguredReferral')}
                     </div>
                   )}
@@ -985,7 +1131,7 @@ export default function Settings() {
                 {hlRevenue.user_fees && (
                   <div>
                     <h4 className="text-sm font-medium text-gray-400 mb-3 uppercase tracking-wider">{t('settings.hlFeeTier')}</h4>
-                    <div className="p-3 bg-gray-800 rounded-lg text-sm text-gray-300">
+                    <div className="p-3 bg-white/[0.03] border border-white/10 rounded-xl text-sm text-gray-300">
                       <pre className="whitespace-pre-wrap text-xs">{JSON.stringify(hlRevenue.user_fees, null, 2)}</pre>
                     </div>
                   </div>
@@ -998,17 +1144,17 @@ export default function Settings() {
                       {t('settings.hlEarnings')}
                     </h4>
                     <div className="space-y-2">
-                      <div className="flex items-center justify-between p-3 bg-gray-800 rounded-lg">
+                      <div className="flex items-center justify-between p-3 bg-white/[0.03] border border-white/10 rounded-xl">
                         <span className="text-sm text-gray-300">{t('settings.hlBuilderFees30d')}</span>
                         <span className="text-sm text-emerald-400 font-medium">
                           ${(hlRevenue.earnings.total_builder_fees_30d || 0).toFixed(4)}
                         </span>
                       </div>
-                      <div className="flex items-center justify-between p-3 bg-gray-800 rounded-lg">
+                      <div className="flex items-center justify-between p-3 bg-white/[0.03] border border-white/10 rounded-xl">
                         <span className="text-sm text-gray-300">{t('settings.hlTradesWithFee')}</span>
                         <span className="text-sm text-white">{hlRevenue.earnings.trades_with_builder_fee || 0}</span>
                       </div>
-                      <div className="flex items-center justify-between p-3 bg-gray-800 rounded-lg">
+                      <div className="flex items-center justify-between p-3 bg-white/[0.03] border border-white/10 rounded-xl">
                         <span className="text-sm text-gray-300">{t('settings.hlMonthlyEstimate')}</span>
                         <span className="text-sm text-emerald-400 font-medium">
                           ${(hlRevenue.earnings.monthly_estimate || 0).toFixed(2)}/mo
@@ -1033,7 +1179,7 @@ export default function Settings() {
           <div className="flex items-center justify-between">
             <p className="text-sm text-gray-400">{t('settings.connectionsDesc')}</p>
             <button onClick={loadConnectionStatus} disabled={connLoading}
-              className="px-3 py-1.5 text-sm bg-gray-800 text-gray-300 rounded hover:bg-gray-700 disabled:opacity-50">
+              className="px-3 py-1.5 text-sm bg-white/5 border border-white/10 text-gray-300 rounded-xl hover:bg-white/10 disabled:opacity-50">
               {connLoading ? t('settings.refreshing') : t('settings.refreshStatus')}
             </button>
           </div>
@@ -1078,7 +1224,7 @@ export default function Settings() {
                           if (!catItems || catItems.length === 0) return null
                           const allUp = catItems.every(([, s]) => s.reachable)
                           return (
-                            <div key={cat} className="bg-gray-900 border border-gray-800 rounded-lg p-3">
+                            <div key={cat} className="border border-white/10 bg-white/[0.03] rounded-xl p-3">
                               <div className="flex items-center justify-between mb-2">
                                 <span className="text-[11px] font-medium text-gray-500 uppercase tracking-wider">
                                   {catLabels[cat] || cat}
@@ -1087,7 +1233,7 @@ export default function Settings() {
                               </div>
                               <div className="space-y-0.5">
                                 {catItems.map(([key, svc]) => (
-                                  <div key={key} className="flex items-center justify-between py-1 px-1.5 rounded hover:bg-gray-800/60">
+                                  <div key={key} className="flex items-center justify-between py-1 px-1.5 rounded hover:bg-white/[0.04]">
                                     <div className="flex items-center gap-2 min-w-0">
                                       <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${svc.reachable ? 'bg-green-400' : 'bg-red-400'}`} />
                                       <span className="text-white text-xs truncate">{svc.label}</span>
@@ -1118,13 +1264,13 @@ export default function Settings() {
                     if (!items || items.length === 0) return null
                     const label = groupKey === 'exchange' ? t('settings.exchangeApi') : t('settings.notifications')
                     return (
-                      <div key={groupKey} className="bg-gray-900 border border-gray-800 rounded-lg p-3">
+                      <div key={groupKey} className="border border-white/10 bg-white/[0.03] rounded-xl p-3">
                         <h3 className="text-[11px] font-medium text-gray-500 mb-2 uppercase tracking-wider">
                           {label}
                         </h3>
                         <div className="space-y-0.5">
                           {items.map(([key, svc]) => (
-                            <div key={key} className="flex items-center justify-between py-1 px-1.5 rounded hover:bg-gray-800/60">
+                            <div key={key} className="flex items-center justify-between py-1 px-1.5 rounded hover:bg-white/[0.04]">
                               <div className="flex items-center gap-2">
                                 <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${svc.reachable ? 'bg-green-400' : 'bg-red-400'}`} />
                                 <span className="text-white text-xs">{svc.label}</span>
@@ -1147,13 +1293,13 @@ export default function Settings() {
 
                 {/* ── Circuit Breakers — compact grid ── */}
                 {Object.keys(connStatus.circuit_breakers).length > 0 && (
-                  <div className="bg-gray-900 border border-gray-800 rounded-lg p-3">
+                  <div className="border border-white/10 bg-white/[0.03] rounded-xl p-3">
                     <h3 className="text-[11px] font-medium text-gray-500 mb-2 uppercase tracking-wider">
                       {t('settings.circuitBreakers')}
                     </h3>
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-0.5">
                       {Object.entries(connStatus.circuit_breakers).map(([name, cb]) => (
-                        <div key={name} className="flex items-center justify-between py-1 px-1.5 rounded hover:bg-gray-800/60">
+                        <div key={name} className="flex items-center justify-between py-1 px-1.5 rounded hover:bg-white/[0.04]">
                           <div className="flex items-center gap-2">
                             <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
                               cb.state === 'closed' ? 'bg-green-400' :

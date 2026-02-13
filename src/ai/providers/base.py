@@ -206,10 +206,17 @@ class BaseLLMProvider(ABC):
     """Base interface for all LLM providers."""
 
     TIMEOUT = 30  # seconds
+    MODEL = ""  # subclasses override
 
-    def __init__(self, api_key: str):
+    def __init__(self, api_key: str, model_override: Optional[str] = None):
         self.api_key = api_key
+        self.model_override = model_override
         self._session: Optional[aiohttp.ClientSession] = None
+
+    @property
+    def active_model(self) -> str:
+        """Return the model to use: override if set, otherwise class default."""
+        return self.model_override or self.MODEL
 
     def _get_rate_limiter(self, provider_name: str) -> RateLimiter:
         """Get or create a shared rate limiter for this provider type."""

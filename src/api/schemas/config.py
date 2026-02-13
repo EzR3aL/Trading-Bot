@@ -76,9 +76,18 @@ class LLMConnectionUpdate(BaseModel):
     api_key: str = Field(..., min_length=1)
 
 
+class LLMModelInfo(BaseModel):
+    """A single model variant within a provider family."""
+    id: str
+    name: str
+    default: bool = False
+
+
 class LLMConnectionResponse(BaseModel):
     """Response for LLM connection status."""
     provider_type: str
     api_key_configured: bool
     display_name: str
     free_tier: bool
+    family_name: str = ""
+    models: List[LLMModelInfo] = []

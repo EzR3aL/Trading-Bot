@@ -9,8 +9,8 @@ from datetime import datetime
 from typing import Any, Dict, List, Literal, Optional
 
 import aiohttp
-from fastapi import APIRouter, Depends, HTTPException, Path, Request
-from sqlalchemy import select
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request
+from sqlalchemy import select, func as sa_func, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.schemas.config import (
@@ -506,7 +506,7 @@ async def get_connections_status(
 
 # ── LLM Connection CRUD ─────────────────────────────────────────
 
-VALID_LLM_PROVIDERS = "^(groq|gemini|openai|anthropic|mistral|xai|perplexity)$"
+VALID_LLM_PROVIDERS = "^(groq|gemini|gemini_pro|openai|anthropic|deepseek|mistral|xai|perplexity)$"
 
 
 @router.get("/llm-connections")
@@ -515,7 +515,8 @@ async def get_llm_connections(
     db: AsyncSession = Depends(get_db),
 ):
     """Get all LLM connections for the user (shows all 7 providers)."""
-    from src.ai.providers import LLM_PROVIDERS_INFO
+    from src.ai.providers import LLM_PROVIDERS_INFO, MODEL_CATALOG
+    from src.api.schemas.config import LLMModelInfo
 
     result = await db.execute(
         select(LLMConnection).where(LLMConnection.user_id == user.id)
@@ -525,12 +526,18 @@ async def get_llm_connections(
     connections = []
     for provider_type, info in LLM_PROVIDERS_INFO.items():
         conn = saved.get(provider_type)
+        family = MODEL_CATALOG.get(provider_type, {})
         connections.append(
             LLMConnectionResponse(
                 provider_type=provider_type,
                 api_key_configured=bool(conn and conn.api_key_encrypted),
                 display_name=info["name"],
                 free_tier=info["free"],
+                family_name=family.get("family_name", info["name"]),
+                models=[
+                    LLMModelInfo(id=m["id"], name=m["name"], default=m.get("default", False))
+                    for m in family.get("models", [])
+                ],
             )
         )
     return {"connections": connections}
@@ -975,26 +982,102 @@ async def _async_none():
 async def list_affiliate_uids(
     admin: User = Depends(get_current_admin),
     db: AsyncSession = Depends(get_db),
+    page: int = Query(1, ge=1),
+    per_page: int = Query(20, ge=5, le=100),
+    search: str = Query("", max_length=100),
+    status: str = Query("all", pattern="^(all|pending|verified)$"),
 ):
-    """Admin: List all users who submitted an affiliate UID."""
+    """Admin: Paginated list of users who submitted an affiliate UID."""
+    base = (
+        select(ExchangeConnection, User.username)
+        .join(User)
+        .where(ExchangeConnection.affiliate_uid.isnot(None))
+    )
+
+    # Filter by status
+    if status == "pending":
+        base = base.where(ExchangeConnection.affiliate_verified == False)  # noqa: E712
+    elif status == "verified":
+        base = base.where(ExchangeConnection.affiliate_verified == True)  # noqa: E712
+
+    # Search by username or UID
+    if search.strip():
+        term = f"%{search.strip()}%"
+        base = base.where(
+            or_(
+                User.username.ilike(term),
+                ExchangeConnection.affiliate_uid.ilike(term),
+            )
+        )
+
+    # Count total
+    count_q = select(sa_func.count()).select_from(base.subquery())
+    total = (await db.execute(count_q)).scalar() or 0
+
+    # Stats (always unfiltered)
+    stats_base = (
+        select(ExchangeConnection)
+        .where(ExchangeConnection.affiliate_uid.isnot(None))
+    )
+    total_all = (await db.execute(
+        select(sa_func.count()).select_from(stats_base.subquery())
+    )).scalar() or 0
+    verified_count = (await db.execute(
+        select(sa_func.count()).select_from(
+            stats_base.where(ExchangeConnection.affiliate_verified == True).subquery()  # noqa: E712
+        )
+    )).scalar() or 0
+    pending_count = total_all - verified_count
+
+    # Paginated query — sort by exchange then newest first
+    offset = (page - 1) * per_page
     result = await db.execute(
-        select(ExchangeConnection, User.username).join(User).where(
-            ExchangeConnection.affiliate_uid.isnot(None),
-        ).order_by(ExchangeConnection.updated_at.desc())
+        base.order_by(
+            ExchangeConnection.exchange_type.asc(),
+            ExchangeConnection.created_at.desc(),
+        )
+        .offset(offset)
+        .limit(per_page)
     )
     rows = result.all()
-    return [
-        {
-            "connection_id": conn.id,
-            "user_id": conn.user_id,
-            "username": username,
-            "exchange_type": conn.exchange_type,
-            "affiliate_uid": conn.affiliate_uid,
-            "affiliate_verified": conn.affiliate_verified,
-            "affiliate_verified_at": conn.affiliate_verified_at.isoformat() if conn.affiliate_verified_at else None,
-        }
-        for conn, username in rows
-    ]
+
+    return {
+        "items": [
+            {
+                "connection_id": conn.id,
+                "user_id": conn.user_id,
+                "username": username,
+                "exchange_type": conn.exchange_type,
+                "affiliate_uid": conn.affiliate_uid,
+                "affiliate_verified": conn.affiliate_verified,
+                "affiliate_verified_at": (
+                    conn.affiliate_verified_at.isoformat()
+                    if conn.affiliate_verified_at
+                    else None
+                ),
+                "submitted_at": (
+                    conn.created_at.isoformat()
+                    if conn.created_at
+                    else None
+                ),
+                "updated_at": (
+                    conn.updated_at.isoformat()
+                    if conn.updated_at
+                    else None
+                ),
+            }
+            for conn, username in rows
+        ],
+        "total": total,
+        "page": page,
+        "per_page": per_page,
+        "pages": max(1, -(-total // per_page)),
+        "stats": {
+            "total": total_all,
+            "verified": verified_count,
+            "pending": pending_count,
+        },
+    }
 
 
 @router.put("/admin/affiliate-uids/{connection_id}/verify")

@@ -58,7 +58,7 @@ export default function PnlCell({ pnl, fees, fundingPaid, status = 'closed', cla
           className="fixed z-[9999] pointer-events-none"
           style={{ top: pos.top, left: pos.left, transform: 'translate(-100%, -100%)' }}
         >
-          <div className="bg-gray-900 border border-white/10 rounded-lg px-3 py-2 text-xs whitespace-nowrap shadow-2xl">
+          <div className="bg-[#141a2a]/95 border border-white/10 rounded-xl px-3 py-2 text-xs whitespace-nowrap shadow-2xl backdrop-blur-xl">
             <div className="flex justify-between gap-4">
               <span className="text-gray-400">{t('trades.fees')}:</span>
               <span className="text-amber-400 font-mono">{fees > 0 ? `$${fees.toFixed(2)}` : '--'}</span>

@@ -31,7 +31,7 @@ class XAIProvider(BaseLLMProvider):
             "Content-Type": "application/json",
         }
         payload = {
-            "model": self.MODEL,
+            "model": self.active_model,
             "messages": [
                 {"role": "system", "content": prompt},
                 {
@@ -57,7 +57,7 @@ class XAIProvider(BaseLLMProvider):
             confidence=confidence,
             reasoning=reasoning,
             raw_response=raw_text,
-            model_used=self.MODEL,
+            model_used=self.active_model,
             tokens_used=tokens,
         )
 

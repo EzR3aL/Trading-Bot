@@ -36,7 +36,7 @@ function PnlTooltip({ active, payload, label }: {
   const total = pnl - fees - funding
 
   return (
-    <div className="bg-gray-800 border border-gray-700 rounded-lg p-3 shadow-lg min-w-[180px]">
+    <div className="bg-[#141a2a]/95 border border-white/10 rounded-xl p-3 shadow-lg backdrop-blur-xl min-w-[180px]">
       <p className="text-gray-400 text-xs mb-2 font-medium">{label}</p>
       {pnlEntry && (
         <div className="flex justify-between text-sm mb-0.5">

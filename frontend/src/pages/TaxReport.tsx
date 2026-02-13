@@ -4,6 +4,7 @@ import api from '../api/client'
 import { useFilterStore } from '../stores/filterStore'
 import { SkeletonCard, SkeletonTable } from '../components/ui/Skeleton'
 import { Download, ArrowUpRight, ArrowDownRight } from 'lucide-react'
+import FilterDropdown from '../components/ui/FilterDropdown'
 
 interface TaxData {
   year: number
@@ -56,16 +57,12 @@ export default function TaxReport() {
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold text-white tracking-tight">{t('tax.title')}</h1>
         <div className="flex gap-3">
-          <select
-            value={year}
-            onChange={(e) => setYear(Number(e.target.value))}
-            aria-label={t('tax.year')}
-            className="input-dark w-auto py-2"
-          >
-            {Array.from({ length: 5 }, (_, i) => currentYear - i).map((y) => (
-              <option key={y} value={y}>{y}</option>
-            ))}
-          </select>
+          <FilterDropdown
+            value={String(year)}
+            onChange={val => setYear(Number(val))}
+            options={Array.from({ length: 5 }, (_, i) => ({ value: String(currentYear - i), label: String(currentYear - i) }))}
+            ariaLabel={t('tax.year')}
+          />
           <button
             onClick={downloadCsv}
             aria-label={t('tax.downloadCsv')}

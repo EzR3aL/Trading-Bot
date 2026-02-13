@@ -144,6 +144,9 @@
     "mainnet": "Mainnet",
     "testnet": "Testnet",
     "free": "Kostenlos",
+    "models": "Modelle",
+    "availableModels": "Verfuegbare Modelle",
+    "defaultModel": "Standard",
     "affiliateLabelPlaceholder": "z.B. 10% Rabatt auf Gebühren",
     "hlBuilderConfig": "Hyperliquid Builder-Konfiguration",
     "hlBuilderConfigDesc": "Builder-Adresse, Gebührenrate und Empfehlungscode konfigurieren",
@@ -424,7 +427,7 @@
       "back": "Zurück",
       "next": "Weiter",
       "llmNote": "Dieser Bot nutzt KI zur Signalgenerierung. Konfiguriere deinen API-Schlüssel unter Einstellungen → LLM-Schlüssel.",
-      "customPromptPlaceholder": "Leer lassen für Standard-Prompt oder eigene KI-Anweisungen eingeben...",
+      "customPromptPlaceholder": "Eigene Anweisungen für die KI-Analyse eingeben...",
       "step2b": "Daten",
       "dataSources": "Datenquellen",
       "dataSourcesDesc": "Wähle welche Marktdaten dein Bot analysieren soll",
@@ -582,7 +585,8 @@
     "submitUid": "UID speichern",
     "affiliateUids": "Affiliate UIDs",
     "uidHint": "Bitte melde dich über den untenstehenden Affiliate-Link bei der Exchange an. Anschließend findest du deine UID in deinem Exchange-Profil. Trage sie hier ein und speichere.",
-    "uidRejected": "UID abgelehnt"
+    "uidRejected": "UID abgelehnt",
+    "submittedAt": "Eingereicht"
   },
   "backtest": {
     "title": "Backtest Labor",
@@ -642,7 +646,7 @@
     "long": "Long",
     "short": "Short",
     "noResults": "Starte einen Backtest um Ergebnisse zu sehen",
-    "llmNote": "Hinweis: KI-Companion Backtests verwenden die Standard-Signallogik. Live-KI-Analyse ist im Backtest nicht verfügbar.",
+    "llmNote": "Hinweis: Im Backtest wird keine echte KI aufgerufen — stattdessen wird ein vereinfachter Algorithmus verwendet. Die tatsächliche KI-Performance siehst du nur im Live- oder Demo-Betrieb.",
     "tooltipTotalReturn": "Veränderung des Portfoliowerts in Prozent.",
     "tooltipWinRate": "Anteil profitabler Trades an der Gesamtzahl.",
     "tooltipMaxDrawdown": "Größter Rückgang vom Höchst- zum Tiefststand. Zeigt das maximale Verlustrisiko.",

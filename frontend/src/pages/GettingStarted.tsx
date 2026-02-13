@@ -40,7 +40,7 @@ function Step({ number, icon, title, description, details, isLast }: StepProps) 
 
       {/* Content */}
       <div className="flex-1 pb-8">
-        <div className="bg-gray-900 border border-gray-800 rounded-lg p-5 hover:border-gray-700 transition-colors">
+        <div className="border border-white/10 bg-white/[0.03] rounded-xl p-5 hover:border-white/20 transition-colors">
           <div className="flex items-center gap-2 mb-2">
             {icon}
             <h3 className="text-lg font-semibold text-white">{title}</h3>
@@ -73,7 +73,7 @@ function ExchangeComparisonTable() {
   ]
 
   return (
-    <div className="bg-gray-900 border border-gray-800 rounded-lg p-6">
+    <div className="border border-white/10 bg-white/[0.03] rounded-xl p-6">
       <div className="flex items-center gap-2 mb-1">
         <Server size={20} className="text-cyan-400" />
         <h3 className="text-lg font-semibold text-white">{t('guide.exchangeCompTitle')}</h3>
@@ -119,17 +119,16 @@ interface ExchangeSetupProps {
   title: string
   steps: string[]
   icon: React.ReactNode
-  borderColor: string
 }
 
-function ExchangeSetupCard({ title, steps, icon, borderColor }: ExchangeSetupProps) {
+function ExchangeSetupCard({ title, steps, icon }: ExchangeSetupProps) {
   const [open, setOpen] = useState(false)
 
   return (
-    <div className={`bg-gray-900 border rounded-lg overflow-hidden ${borderColor}`}>
+    <div className="border border-white/10 bg-white/[0.03] rounded-xl overflow-hidden">
       <button
         onClick={() => setOpen(!open)}
-        className="w-full flex items-center justify-between p-4 text-left hover:bg-gray-800/50 transition-colors"
+        className="w-full flex items-center justify-between p-4 text-left hover:bg-white/[0.04] transition-colors"
       >
         <div className="flex items-center gap-2">
           {icon}
@@ -138,7 +137,7 @@ function ExchangeSetupCard({ title, steps, icon, borderColor }: ExchangeSetupPro
         {open ? <ChevronUp size={18} className="text-gray-400" /> : <ChevronDown size={18} className="text-gray-400" />}
       </button>
       {open && (
-        <div className="px-4 pb-4 border-t border-gray-800">
+        <div className="px-4 pb-4 border-t border-white/5">
           <ol className="space-y-2 mt-3">
             {steps.map((step, i) => (
               <li key={i} className="flex items-start gap-3 text-sm text-gray-300">
@@ -170,7 +169,7 @@ function ExampleConfig() {
   ]
 
   return (
-    <div className="bg-gray-900 border border-gray-800 rounded-lg p-6">
+    <div className="border border-white/10 bg-white/[0.03] rounded-xl p-6">
       <div className="flex items-center gap-2 mb-1">
         <Gauge size={20} className="text-orange-400" />
         <h3 className="text-lg font-semibold text-white">{t('guide.exampleTitle')}</h3>
@@ -273,7 +272,6 @@ export default function GettingStarted() {
     {
       title: t('guide.bitgetSetupTitle'),
       icon: <ExchangeIcon exchange="bitget" size={20} />,
-      borderColor: 'border-yellow-500/30',
       steps: [
         t('guide.bitgetSetup1'),
         t('guide.bitgetSetup2'),
@@ -284,7 +282,6 @@ export default function GettingStarted() {
     {
       title: t('guide.weexSetupTitle'),
       icon: <ExchangeIcon exchange="weex" size={20} />,
-      borderColor: 'border-blue-500/30',
       steps: [
         t('guide.weexSetup1'),
         t('guide.weexSetup2'),
@@ -295,7 +292,6 @@ export default function GettingStarted() {
     {
       title: t('guide.hyperliquidSetupTitle'),
       icon: <ExchangeIcon exchange="hyperliquid" size={20} />,
-      borderColor: 'border-green-500/30',
       steps: [
         t('guide.hyperliquidSetup1'),
         t('guide.hyperliquidSetup2'),
@@ -344,7 +340,7 @@ export default function GettingStarted() {
           <ExampleConfig />
 
           {/* Tip Box */}
-          <div className="bg-gray-900 border border-primary-600/30 rounded-lg p-5 flex gap-3">
+          <div className="border border-primary-600/30 bg-white/[0.03] rounded-xl p-5 flex gap-3">
             <Lightbulb size={20} className="flex-shrink-0 text-primary-400 mt-0.5" />
             <div>
               <h3 className="font-semibold text-primary-400 mb-1">{t('guide.tipTitle')}</h3>

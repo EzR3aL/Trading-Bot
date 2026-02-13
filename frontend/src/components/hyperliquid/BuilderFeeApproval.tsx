@@ -171,7 +171,7 @@ function BuilderFeeApprovalInner({ onApproved, onClose }: BuilderFeeApprovalProp
 
   if (loading) {
     return (
-      <div className="bg-gray-800 rounded-xl border border-gray-700 p-6 max-w-md w-full mx-auto text-center">
+      <div className="bg-white/[0.03] rounded-xl border border-white/10 p-6 max-w-md w-full mx-auto text-center">
         <div className="flex items-center justify-center gap-3 py-8">
           <Loader2 className="w-6 h-6 animate-spin text-emerald-400" />
           <span className="text-gray-300">{t('common.loading')}</span>
@@ -182,7 +182,7 @@ function BuilderFeeApprovalInner({ onApproved, onClose }: BuilderFeeApprovalProp
 
   if (error && !config) {
     return (
-      <div className="bg-gray-800 rounded-xl border border-red-700/50 p-6 max-w-md w-full mx-auto text-center">
+      <div className="bg-white/[0.03] rounded-xl border border-red-700/50 p-6 max-w-md w-full mx-auto text-center">
         <AlertTriangle className="w-10 h-10 text-red-400 mx-auto mb-3" />
         <h3 className="text-lg font-semibold text-red-400 mb-2">{t('common.errorShort')}</h3>
         <p className="text-gray-300 text-sm mb-4">{error}</p>
@@ -197,7 +197,7 @@ function BuilderFeeApprovalInner({ onApproved, onClose }: BuilderFeeApprovalProp
 
   if (!config?.builder_configured) {
     return (
-      <div className="bg-gray-800 rounded-xl border border-gray-700 p-6 max-w-md w-full mx-auto text-center">
+      <div className="bg-white/[0.03] rounded-xl border border-white/10 p-6 max-w-md w-full mx-auto text-center">
         <Wallet className="w-10 h-10 text-emerald-400 mx-auto mb-3" />
         <h3 className="text-lg font-semibold text-white mb-2">{t('builderFee.title')}</h3>
         <p className="text-gray-300 text-sm mb-4">{t('builderFee.notConfigured')}</p>
@@ -211,7 +211,7 @@ function BuilderFeeApprovalInner({ onApproved, onClose }: BuilderFeeApprovalProp
   }
 
   return (
-    <div className="bg-gray-800 rounded-xl border border-gray-700 p-6 max-w-md w-full mx-auto text-center">
+    <div className="bg-white/[0.03] rounded-xl border border-white/10 p-6 max-w-md w-full mx-auto text-center">
       {/* Header */}
       <div className="relative mb-5">
         <div className="flex items-center justify-center gap-2.5">
@@ -268,7 +268,7 @@ function BuilderFeeApprovalInner({ onApproved, onClose }: BuilderFeeApprovalProp
       {step === 2 && (
         <div className="space-y-4">
           {/* Connected wallet info */}
-          <div className="flex items-center justify-between bg-gray-700/40 rounded-lg p-3">
+          <div className="flex items-center justify-between bg-white/[0.03] border border-white/10 rounded-xl p-3">
             <div className="text-left">
               <p className="text-xs text-gray-400">{t('builderFee.walletConnected')}</p>
               <p className="text-sm text-white font-mono">
@@ -334,7 +334,7 @@ class WalletErrorBoundary extends Component<
   render() {
     if (this.state.error) {
       return (
-        <div className="bg-gray-800 rounded-xl border border-red-700/50 p-6 max-w-md w-full mx-auto text-center">
+        <div className="bg-white/[0.03] rounded-xl border border-red-700/50 p-6 max-w-md w-full mx-auto text-center">
           <AlertTriangle className="w-10 h-10 text-red-400 mx-auto mb-3" />
           <h3 className="text-lg font-semibold text-red-400 mb-2">Wallet Error</h3>
           <p className="text-gray-300 text-sm mb-3">

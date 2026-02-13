@@ -190,7 +190,7 @@ export default function Backtest() {
       </div>
 
       {/* Configuration Card – backdrop-filter disabled to prevent clipping of DatePicker popups */}
-      <div className="glass-card rounded-xl p-6 border border-gray-800 overflow-visible !backdrop-blur-none">
+      <div className="glass-card rounded-xl p-6 border border-white/10 overflow-visible !backdrop-blur-none">
         <h2 className="text-white font-semibold mb-5">{t('backtest.configuration')}</h2>
 
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-x-5 gap-y-4">
@@ -310,7 +310,7 @@ export default function Backtest() {
 
       {/* Running State */}
       {isRunning && (
-        <div className="glass-card rounded-xl p-8 border border-gray-800 flex flex-col items-center justify-center">
+        <div className="glass-card rounded-xl p-8 border border-white/10 flex flex-col items-center justify-center">
           <div className="w-10 h-10 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin mb-4" />
           <p className="text-gray-300 font-medium">{t('backtest.running')}</p>
           <p className="text-gray-500 text-sm mt-1">{strategyLabel(activeRun?.strategy_type || '')} &middot; {activeRun?.symbol}</p>
@@ -439,21 +439,21 @@ export default function Backtest() {
 
           {/* Capital Summary */}
           <div className="grid sm:grid-cols-2 gap-3">
-            <div className="glass-card rounded-xl p-4 border border-gray-800 group relative">
+            <div className="glass-card rounded-xl p-4 border border-white/10 group relative">
               <div className="flex items-center gap-1.5 text-xs text-gray-400 mb-1">
                 {t('backtest.startingCapital')}
                 <Info size={12} className="text-gray-600 group-hover:text-gray-400 transition-colors cursor-help" />
               </div>
               <div className="text-lg font-bold text-gray-300">${activeRun.metrics.starting_capital.toLocaleString()}</div>
-              <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2.5 bg-gray-900 border border-gray-700 rounded-lg text-[11px] text-gray-300 w-64 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 shadow-xl shadow-black/40">
+              <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2.5 bg-[#141a2a]/95 border border-white/10 rounded-xl text-[11px] text-gray-300 w-64 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 shadow-xl shadow-black/40 backdrop-blur-xl">
                 <div className="text-left">
                   <div className="font-semibold text-white mb-1">{t('backtest.startingCapital')}</div>
                   <div className="text-gray-400">{t('backtest.tooltipStartingCapital')}</div>
                 </div>
-                <div className="absolute top-full left-1/2 -translate-x-1/2 w-2 h-2 bg-gray-900 border-r border-b border-gray-700 rotate-45 -mt-1" />
+                <div className="absolute top-full left-1/2 -translate-x-1/2 w-2 h-2 bg-[#141a2a]/95 border-r border-b border-white/10 rotate-45 -mt-1" />
               </div>
             </div>
-            <div className="glass-card rounded-xl p-4 border border-gray-800 group relative">
+            <div className="glass-card rounded-xl p-4 border border-white/10 group relative">
               <div className="flex items-center gap-1.5 text-xs text-gray-400 mb-1">
                 {t('backtest.endingCapital')}
                 <Info size={12} className="text-gray-600 group-hover:text-gray-400 transition-colors cursor-help" />
@@ -461,19 +461,19 @@ export default function Backtest() {
               <div className={`text-lg font-bold ${activeRun.metrics.ending_capital >= activeRun.metrics.starting_capital ? 'text-profit' : 'text-loss'}`}>
                 ${activeRun.metrics.ending_capital.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </div>
-              <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2.5 bg-gray-900 border border-gray-700 rounded-lg text-[11px] text-gray-300 w-64 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 shadow-xl shadow-black/40">
+              <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2.5 bg-[#141a2a]/95 border border-white/10 rounded-xl text-[11px] text-gray-300 w-64 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 shadow-xl shadow-black/40 backdrop-blur-xl">
                 <div className="text-left">
                   <div className="font-semibold text-white mb-1">{t('backtest.endingCapital')}</div>
                   <div className="text-gray-400">{t('backtest.tooltipEndingCapital')}</div>
                 </div>
-                <div className="absolute top-full left-1/2 -translate-x-1/2 w-2 h-2 bg-gray-900 border-r border-b border-gray-700 rotate-45 -mt-1" />
+                <div className="absolute top-full left-1/2 -translate-x-1/2 w-2 h-2 bg-[#141a2a]/95 border-r border-b border-white/10 rotate-45 -mt-1" />
               </div>
             </div>
           </div>
 
           {/* Data Sources */}
           {activeRun.metrics.data_sources && activeRun.metrics.data_sources.length > 0 && (
-            <div className="glass-card rounded-xl p-4 border border-gray-800">
+            <div className="glass-card rounded-xl p-4 border border-white/10">
               <div className="flex items-center gap-2 mb-3">
                 <Database size={14} className="text-primary-400" />
                 <h3 className="text-white font-semibold text-sm">{t('backtest.dataSources')}</h3>
@@ -497,7 +497,7 @@ export default function Backtest() {
 
           {/* Equity Curve */}
           {activeRun.equity_curve && activeRun.equity_curve.length > 0 && (
-            <div className="glass-card rounded-xl p-5 border border-gray-800">
+            <div className="glass-card rounded-xl p-5 border border-white/10">
               <h3 className="text-white font-semibold mb-4">{t('backtest.equityCurve')}</h3>
               <ResponsiveContainer width="100%" height={300}>
                 <AreaChart data={activeRun.equity_curve}>
@@ -530,7 +530,7 @@ export default function Backtest() {
 
           {/* Trade Log */}
           {activeRun.trades && activeRun.trades.length > 0 && (
-            <div className="glass-card rounded-xl overflow-hidden border border-gray-800">
+            <div className="glass-card rounded-xl overflow-hidden border border-white/10">
               <div className="px-5 pt-5 pb-3">
                 <h3 className="text-white font-semibold">
                   {t('backtest.tradeLog')} ({activeRun.trades.length})
@@ -617,14 +617,14 @@ export default function Backtest() {
 
       {/* No Results Hint */}
       {!activeRun && !isRunning && (
-        <div className="glass-card rounded-xl p-10 border border-gray-800 text-center">
+        <div className="glass-card rounded-xl p-10 border border-white/10 text-center">
           <FlaskConical size={40} className="text-gray-600 mx-auto mb-3" />
           <p className="text-gray-500">{t('backtest.noResults')}</p>
         </div>
       )}
 
       {/* History */}
-      <div className="glass-card rounded-xl overflow-hidden border border-gray-800">
+      <div className="glass-card rounded-xl overflow-hidden border border-white/10">
         <div className="px-5 pt-5 pb-3">
           <h2 className="text-white font-semibold">{t('backtest.history')}</h2>
         </div>
@@ -724,7 +724,7 @@ function MetricCard({ icon, label, value, color, sub, tooltip }: {
   tooltip?: React.ReactNode
 }) {
   return (
-    <div className="glass-card rounded-xl p-4 border border-gray-800 group relative">
+    <div className="glass-card rounded-xl p-4 border border-white/10 group relative">
       <div className="flex items-center gap-2 text-gray-400 text-xs mb-1">
         {icon} {label}
         {tooltip && <Info size={12} className="text-gray-600 group-hover:text-gray-400 transition-colors cursor-help" />}
@@ -732,9 +732,9 @@ function MetricCard({ icon, label, value, color, sub, tooltip }: {
       <div className={`text-xl font-bold ${color}`}>{value}</div>
       {sub && <div className="text-xs text-gray-500 mt-0.5">{sub}</div>}
       {tooltip && (
-        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2.5 bg-gray-900 border border-gray-700 rounded-lg text-[11px] text-gray-300 w-64 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 shadow-xl shadow-black/40">
+        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2.5 bg-[#141a2a]/95 border border-white/10 rounded-xl text-[11px] text-gray-300 w-64 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 shadow-xl shadow-black/40 backdrop-blur-xl">
           {tooltip}
-          <div className="absolute top-full left-1/2 -translate-x-1/2 w-2 h-2 bg-gray-900 border-r border-b border-gray-700 rotate-45 -mt-1" />
+          <div className="absolute top-full left-1/2 -translate-x-1/2 w-2 h-2 bg-[#141a2a]/95 border-r border-b border-white/10 rotate-45 -mt-1" />
         </div>
       )}
     </div>

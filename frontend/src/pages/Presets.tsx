@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { LayoutGrid, List, Pencil, Copy, Trash2, Zap, CheckCircle } from 'lucide-react'
 import api from '../api/client'
 import type { Preset } from '../types'
 
@@ -14,6 +15,7 @@ export default function Presets() {
   const [positionSize, setPositionSize] = useState(7.5)
   const [stopLoss, setStopLoss] = useState(1.5)
   const [takeProfit, setTakeProfit] = useState(4.0)
+  const [view, setView] = useState<'grid' | 'list'>('grid')
 
   const loadPresets = async () => {
     try {
@@ -88,62 +90,80 @@ export default function Presets() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-5">
         <h1 className="text-2xl font-bold text-white">{t('presets.title')}</h1>
-        <button
-          onClick={() => { resetForm(); setShowForm(true) }}
-          className="px-4 py-2 bg-primary-600 text-white rounded hover:bg-primary-700"
-        >
-          + {t('presets.create')}
-        </button>
+        <div className="flex items-center gap-2">
+          <div className="flex rounded-lg border border-white/10 overflow-hidden">
+            <button
+              onClick={() => setView('grid')}
+              className={`p-1.5 transition-colors ${view === 'grid' ? 'bg-white/10 text-white' : 'text-gray-500 hover:text-gray-300'}`}
+            >
+              <LayoutGrid size={15} />
+            </button>
+            <button
+              onClick={() => setView('list')}
+              className={`p-1.5 transition-colors ${view === 'list' ? 'bg-white/10 text-white' : 'text-gray-500 hover:text-gray-300'}`}
+            >
+              <List size={15} />
+            </button>
+          </div>
+          <button
+            onClick={() => { resetForm(); setShowForm(true) }}
+            className="px-3 py-1.5 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
+          >
+            + {t('presets.create')}
+          </button>
+        </div>
       </div>
 
       {/* Preset form */}
       {showForm && (
-        <div className="bg-gray-900 border border-gray-800 rounded-lg p-6 mb-6 max-w-2xl">
-          <h2 className="text-lg font-semibold text-white mb-4">
+        <div className="border border-white/10 bg-white/[0.03] rounded-xl p-5 mb-5 max-w-2xl">
+          <h2 className="text-sm font-semibold text-white mb-3">
             {editId ? t('presets.edit') : t('presets.create')}
           </h2>
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm text-gray-400 mb-1">{t('presets.name')}</label>
-              <input type="text" value={name} onChange={(e) => setName(e.target.value)}
-                className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded text-white" />
-            </div>
-            <div>
-              <label className="block text-sm text-gray-400 mb-1">{t('presets.description')}</label>
-              <input type="text" value={description} onChange={(e) => setDescription(e.target.value)}
-                className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded text-white" />
-            </div>
-            <div className="grid grid-cols-4 gap-4">
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-sm text-gray-400 mb-1">{t('presets.leverage')}</label>
+                <label className="block text-xs text-gray-400 mb-1">{t('presets.name')}</label>
+                <input type="text" value={name} onChange={(e) => setName(e.target.value)}
+                  className="filter-select w-full text-sm" />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-400 mb-1">{t('presets.description')}</label>
+                <input type="text" value={description} onChange={(e) => setDescription(e.target.value)}
+                  className="filter-select w-full text-sm" />
+              </div>
+            </div>
+            <div className="grid grid-cols-4 gap-3">
+              <div>
+                <label className="block text-xs text-gray-400 mb-1">{t('presets.leverage')}</label>
                 <input type="number" value={leverage} onChange={(e) => setLeverage(Number(e.target.value))} min={1} max={20}
-                  className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded text-white" />
+                  className="filter-select w-full text-sm" />
               </div>
               <div>
-                <label className="block text-sm text-gray-400 mb-1">{t('presets.positionPercent')}</label>
+                <label className="block text-xs text-gray-400 mb-1">{t('presets.positionPercent')}</label>
                 <input type="number" value={positionSize} onChange={(e) => setPositionSize(Number(e.target.value))} step={0.5}
-                  className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded text-white" />
+                  className="filter-select w-full text-sm" />
               </div>
               <div>
-                <label className="block text-sm text-gray-400 mb-1">{t('presets.tpPercent')}</label>
+                <label className="block text-xs text-gray-400 mb-1">{t('presets.tpPercent')}</label>
                 <input type="number" value={takeProfit} onChange={(e) => setTakeProfit(Number(e.target.value))} step={0.5}
-                  className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded text-white" />
+                  className="filter-select w-full text-sm" />
               </div>
               <div>
-                <label className="block text-sm text-gray-400 mb-1">{t('presets.slPercent')}</label>
+                <label className="block text-xs text-gray-400 mb-1">{t('presets.slPercent')}</label>
                 <input type="number" value={stopLoss} onChange={(e) => setStopLoss(Number(e.target.value))} step={0.5}
-                  className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded text-white" />
+                  className="filter-select w-full text-sm" />
               </div>
             </div>
-            <div className="flex gap-2">
+            <div className="flex gap-2 pt-1">
               <button onClick={savePreset}
-                className="px-4 py-2 bg-primary-600 text-white rounded hover:bg-primary-700">
+                className="px-3 py-1.5 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors">
                 {t('settings.save')}
               </button>
               <button onClick={resetForm}
-                className="px-4 py-2 bg-gray-700 text-gray-300 rounded hover:bg-gray-600">
+                className="px-3 py-1.5 text-sm bg-white/5 border border-white/10 text-gray-300 rounded-lg hover:bg-white/10 transition-colors">
                 {t('common.cancel')}
               </button>
             </div>
@@ -152,66 +172,102 @@ export default function Presets() {
       )}
 
       {/* Preset cards */}
-      <div className="space-y-3">
-        {presets.map((preset) => (
-          <div key={preset.id}
-            className={`bg-gray-900 border rounded-lg p-4 ${
-              preset.is_active ? 'border-primary-500' : 'border-gray-800'
-            }`}
-          >
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="text-white font-medium">{preset.name}</span>
-                  {preset.is_active && (
-                    <span className="text-xs text-primary-400 bg-primary-900/30 px-2 py-0.5 rounded font-medium">
-                      {t('presets.active')}
-                    </span>
-                  )}
-                </div>
-                {preset.trading_config && (
-                  <div className="text-sm text-gray-400 mt-1">
-                    {t('presets.summary', {
-                      leverage: preset.trading_config.leverage,
-                      position: preset.trading_config.position_size_percent,
-                      sl: preset.trading_config.stop_loss_percent,
-                    })}
-                  </div>
-                )}
-                {preset.description && (
-                  <div className="text-xs text-gray-500 mt-1">{preset.description}</div>
+      {view === 'grid' ? (
+        <div className="grid grid-cols-2 xl:grid-cols-3 gap-2.5">
+          {presets.map((preset) => (
+            <div key={preset.id}
+              className={`border bg-white/[0.03] rounded-xl px-3.5 py-3 hover:bg-white/[0.05] transition-colors ${
+                preset.is_active ? 'border-primary-500 ring-1 ring-primary-500/30' : 'border-white/10'
+              }`}
+            >
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-sm font-medium text-white truncate">{preset.name}</span>
+                {preset.is_active && (
+                  <CheckCircle size={13} className="flex-shrink-0 text-primary-400" />
                 )}
               </div>
-              <div className="flex gap-2">
+              {preset.trading_config && (
+                <div className="text-xs text-gray-400 mb-1">
+                  {preset.trading_config.leverage}x | {preset.trading_config.position_size_percent}% | SL {preset.trading_config.stop_loss_percent}% | TP {preset.trading_config.take_profit_percent}%
+                </div>
+              )}
+              {preset.description && (
+                <div className="text-xs text-gray-500 truncate mb-2">{preset.description}</div>
+              )}
+              <div className="flex gap-1.5 pt-1.5 border-t border-white/5">
                 {!preset.is_active && (
                   <button onClick={() => activate(preset.id)}
-                    className="px-3 py-1.5 text-sm bg-primary-600/20 text-primary-400 rounded hover:bg-primary-600/30">
+                    className="flex items-center gap-1 px-2 py-1 text-[11px] bg-primary-600/20 text-primary-400 rounded-md hover:bg-primary-600/30 transition-colors">
+                    <Zap size={11} />
                     {t('presets.activate')}
                   </button>
                 )}
                 <button onClick={() => startEdit(preset)}
-                  className="px-3 py-1.5 text-sm bg-gray-800 text-gray-300 rounded hover:bg-gray-700">
-                  {t('presets.edit')}
+                  className="flex items-center gap-1 px-2 py-1 text-[11px] bg-white/5 text-gray-400 rounded-md hover:bg-white/10 hover:text-gray-300 transition-colors">
+                  <Pencil size={11} />
                 </button>
                 <button onClick={() => duplicate(preset.id)}
-                  className="px-3 py-1.5 text-sm bg-gray-800 text-gray-300 rounded hover:bg-gray-700">
-                  {t('presets.duplicate')}
+                  className="flex items-center gap-1 px-2 py-1 text-[11px] bg-white/5 text-gray-400 rounded-md hover:bg-white/10 hover:text-gray-300 transition-colors">
+                  <Copy size={11} />
                 </button>
                 <button onClick={() => deletePreset(preset.id)}
-                  className="px-3 py-1.5 text-sm bg-red-900/20 text-red-400 rounded hover:bg-red-900/30">
-                  {t('presets.delete')}
+                  className="flex items-center gap-1 px-2 py-1 text-[11px] bg-red-900/20 text-red-400/70 rounded-md hover:bg-red-900/30 hover:text-red-400 transition-colors ml-auto">
+                  <Trash2 size={11} />
                 </button>
               </div>
             </div>
-          </div>
-        ))}
+          ))}
+        </div>
+      ) : (
+        <div className="space-y-1.5">
+          {presets.map((preset) => (
+            <div key={preset.id}
+              className={`border bg-white/[0.03] rounded-lg flex items-center gap-3 px-3 py-2 hover:bg-white/[0.05] transition-colors ${
+                preset.is_active ? 'border-primary-500 ring-1 ring-primary-500/30' : 'border-white/10'
+              }`}
+            >
+              {preset.is_active && (
+                <CheckCircle size={14} className="flex-shrink-0 text-primary-400" />
+              )}
+              <span className="text-sm font-medium text-white whitespace-nowrap">{preset.name}</span>
+              {preset.trading_config && (
+                <span className="text-xs text-gray-500 whitespace-nowrap">
+                  {preset.trading_config.leverage}x | {preset.trading_config.position_size_percent}% | SL {preset.trading_config.stop_loss_percent}%
+                </span>
+              )}
+              {preset.description && (
+                <span className="text-xs text-gray-600 truncate hidden lg:block">{preset.description}</span>
+              )}
+              <div className="flex gap-1.5 ml-auto flex-shrink-0">
+                {!preset.is_active && (
+                  <button onClick={() => activate(preset.id)}
+                    className="flex items-center gap-1 px-2 py-1 text-[11px] bg-primary-600/20 text-primary-400 rounded-md hover:bg-primary-600/30 transition-colors">
+                    <Zap size={11} />
+                  </button>
+                )}
+                <button onClick={() => startEdit(preset)}
+                  className="p-1 text-gray-500 hover:text-gray-300 transition-colors">
+                  <Pencil size={13} />
+                </button>
+                <button onClick={() => duplicate(preset.id)}
+                  className="p-1 text-gray-500 hover:text-gray-300 transition-colors">
+                  <Copy size={13} />
+                </button>
+                <button onClick={() => deletePreset(preset.id)}
+                  className="p-1 text-red-400/50 hover:text-red-400 transition-colors">
+                  <Trash2 size={13} />
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
-        {presets.length === 0 && (
-          <div className="text-center text-gray-500 py-12">
-            {t('presets.noPresets')}
-          </div>
-        )}
-      </div>
+      {presets.length === 0 && (
+        <div className="text-center text-gray-500 py-12 text-sm">
+          {t('presets.noPresets')}
+        </div>
+      )}
     </div>
   )
 }
