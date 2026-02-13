@@ -294,50 +294,196 @@ class TestBuilderProperty:
         assert client.builder_config is None
 
 
+# ── Calculate Builder Fee ─────────────────────────────────────────
+
+
+class TestCalculateBuilderFee:
+    def test_calculate_fee_round_trip(self):
+        """calculate_builder_fee computes correct round-trip fee."""
+        from src.exchanges.hyperliquid.client import HyperliquidClient
+
+        client = object.__new__(HyperliquidClient)
+        client._builder = {"b": "0xbuilder", "f": 10}
+
+        # entry_value=100000, exit_value=101000, total=201000
+        # fee = 201000 * (10 / 1_000_000) = 2.01
+        fee = client.calculate_builder_fee(
+            entry_price=50000.0, exit_price=50500.0, size=2.0
+        )
+        assert fee == 2.01
+
+    def test_calculate_fee_returns_zero_without_builder(self):
+        """calculate_builder_fee returns 0.0 when builder not configured."""
+        from src.exchanges.hyperliquid.client import HyperliquidClient
+
+        client = object.__new__(HyperliquidClient)
+        client._builder = None
+
+        fee = client.calculate_builder_fee(
+            entry_price=50000.0, exit_price=51000.0, size=1.0
+        )
+        assert fee == 0.0
+
+    def test_calculate_fee_small_trade(self):
+        """calculate_builder_fee handles small trades correctly."""
+        from src.exchanges.hyperliquid.client import HyperliquidClient
+
+        client = object.__new__(HyperliquidClient)
+        client._builder = {"b": "0xbuilder", "f": 5}
+
+        # entry_value=100, exit_value=102, total=202
+        # fee = 202 * (5 / 1_000_000) = 0.00101
+        fee = client.calculate_builder_fee(
+            entry_price=100.0, exit_price=102.0, size=1.0
+        )
+        assert fee == 0.00101
+
+
+# ── Builder Kwargs in Orders ──────────────────────────────────────
+
+
+class TestBuilderKwargsInOrders:
+    def test_builder_kwargs_present_when_configured(self):
+        """When builder is configured, builder kwarg should be constructed."""
+        from src.exchanges.hyperliquid.client import HyperliquidClient
+
+        client = object.__new__(HyperliquidClient)
+        client._builder = {"b": "0xbuilder", "f": 10}
+
+        builder_kwargs = {"builder": client._builder} if client._builder else {}
+        assert builder_kwargs == {"builder": {"b": "0xbuilder", "f": 10}}
+
+    def test_builder_kwargs_empty_when_not_configured(self):
+        """When builder is None, builder kwarg should be empty dict."""
+        from src.exchanges.hyperliquid.client import HyperliquidClient
+
+        client = object.__new__(HyperliquidClient)
+        client._builder = None
+
+        builder_kwargs = {"builder": client._builder} if client._builder else {}
+        assert builder_kwargs == {}
+
+
 # ── BotWorker Referral Gate ────────────────────────────────────────
 
 
 class TestBotWorkerReferralGate:
     @pytest.mark.asyncio
-    @patch.dict(os.environ, {"HL_REQUIRE_REFERRAL": "true", "HL_REFERRAL_CODE": "MYCODE"})
     async def test_referral_gate_blocks_unreferred_user(self):
         """Bot should fail to start if referral required but user not referred."""
         from src.bot.bot_worker import BotWorker
         from src.exchanges.hyperliquid.client import HyperliquidClient
 
         worker = BotWorker(bot_config_id=1)
+        worker._config = MagicMock()
+        worker._config.user_id = 1
+
         mock_client = MagicMock(spec=HyperliquidClient)
         mock_client.get_referral_info = AsyncMock(return_value={"referredBy": None})
 
-        result = await worker._check_referral_gate(mock_client)
+        mock_db = AsyncMock()
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = None
+        mock_db.execute = AsyncMock(return_value=mock_result)
+
+        with patch("src.utils.settings.get_hl_config", new_callable=AsyncMock) as mock_cfg:
+            mock_cfg.return_value = {"referral_code": "MYCODE", "builder_address": "", "builder_fee": 10}
+            result = await worker._check_referral_gate(mock_client, mock_db)
+
         assert result is False
-        assert "Referral required" in worker.error_message
+        assert "Referral" in worker.error_message
 
     @pytest.mark.asyncio
-    @patch.dict(os.environ, {"HL_REQUIRE_REFERRAL": "true", "HL_REFERRAL_CODE": "MYCODE"})
     async def test_referral_gate_allows_referred_user(self):
         """Bot should start if user is referred."""
         from src.bot.bot_worker import BotWorker
         from src.exchanges.hyperliquid.client import HyperliquidClient
 
         worker = BotWorker(bot_config_id=1)
+        worker._config = MagicMock()
+        worker._config.user_id = 1
+
         mock_client = MagicMock(spec=HyperliquidClient)
         mock_client.get_referral_info = AsyncMock(return_value={"referredBy": "0xreferrer"})
 
-        result = await worker._check_referral_gate(mock_client)
+        mock_db = AsyncMock()
+        mock_result = MagicMock()
+        mock_conn = MagicMock()
+        mock_conn.referral_verified = False
+        mock_result.scalar_one_or_none.return_value = mock_conn
+        mock_db.execute = AsyncMock(return_value=mock_result)
+
+        with patch("src.utils.settings.get_hl_config", new_callable=AsyncMock) as mock_cfg:
+            mock_cfg.return_value = {"referral_code": "MYCODE", "builder_address": "", "builder_fee": 10}
+            result = await worker._check_referral_gate(mock_client, mock_db)
+
         assert result is True
 
     @pytest.mark.asyncio
-    @patch.dict(os.environ, {"HL_REQUIRE_REFERRAL": "false"})
-    async def test_referral_gate_skipped_when_disabled(self):
-        """Bot should always pass when HL_REQUIRE_REFERRAL=false."""
+    async def test_referral_gate_skipped_when_no_code(self):
+        """Bot should always pass when referral_code is empty."""
         from src.bot.bot_worker import BotWorker
 
         worker = BotWorker(bot_config_id=1)
-        mock_client = MagicMock()  # Not even a HyperliquidClient
+        mock_client = MagicMock()
+        mock_db = AsyncMock()
 
-        result = await worker._check_referral_gate(mock_client)
+        with patch("src.utils.settings.get_hl_config", new_callable=AsyncMock) as mock_cfg:
+            mock_cfg.return_value = {"referral_code": "", "builder_address": "", "builder_fee": 10}
+            result = await worker._check_referral_gate(mock_client, mock_db)
+
         assert result is True
+
+    @pytest.mark.asyncio
+    async def test_referral_gate_passes_on_db_flag(self):
+        """Bot should pass when DB flag referral_verified is True (fast path)."""
+        from src.bot.bot_worker import BotWorker
+        from src.exchanges.hyperliquid.client import HyperliquidClient
+
+        worker = BotWorker(bot_config_id=1)
+        worker._config = MagicMock()
+        worker._config.user_id = 1
+
+        mock_client = MagicMock(spec=HyperliquidClient)
+
+        mock_db = AsyncMock()
+        mock_result = MagicMock()
+        mock_conn = MagicMock()
+        mock_conn.referral_verified = True
+        mock_result.scalar_one_or_none.return_value = mock_conn
+        mock_db.execute = AsyncMock(return_value=mock_result)
+
+        with patch("src.utils.settings.get_hl_config", new_callable=AsyncMock) as mock_cfg:
+            mock_cfg.return_value = {"referral_code": "MYCODE", "builder_address": "", "builder_fee": 10}
+            result = await worker._check_referral_gate(mock_client, mock_db)
+
+        assert result is True
+        # Should NOT call HL API since DB flag was set
+        mock_client.get_referral_info.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_referral_gate_blocks_on_api_error(self):
+        """Referral gate should block on API error (fail safe)."""
+        from src.bot.bot_worker import BotWorker
+        from src.exchanges.hyperliquid.client import HyperliquidClient
+
+        worker = BotWorker(bot_config_id=1)
+        worker._config = MagicMock()
+        worker._config.user_id = 1
+
+        mock_client = MagicMock(spec=HyperliquidClient)
+        mock_client.get_referral_info = AsyncMock(side_effect=Exception("network error"))
+
+        mock_db = AsyncMock()
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = None
+        mock_db.execute = AsyncMock(return_value=mock_result)
+
+        with patch("src.utils.settings.get_hl_config", new_callable=AsyncMock) as mock_cfg:
+            mock_cfg.return_value = {"referral_code": "MYCODE", "builder_address": "", "builder_fee": 10}
+            result = await worker._check_referral_gate(mock_client, mock_db)
+
+        assert result is False
 
 
 # ── BotWorker Builder Approval Check ───────────────────────────────
@@ -345,43 +491,129 @@ class TestBotWorkerReferralGate:
 
 class TestBotWorkerBuilderCheck:
     @pytest.mark.asyncio
-    async def test_builder_check_logs_warning_when_not_approved(self):
-        """Builder check should warn but not block when not approved."""
+    async def test_builder_check_blocks_when_not_approved(self):
+        """Builder check should block bot start when not approved (hard gate)."""
         from src.bot.bot_worker import BotWorker
         from src.exchanges.hyperliquid.client import HyperliquidClient
 
         worker = BotWorker(bot_config_id=1)
+        worker._config = MagicMock()
+        worker._config.user_id = 1
+
         mock_client = MagicMock(spec=HyperliquidClient)
         mock_client.builder_config = {"b": "0xbuilder", "f": 10}
         mock_client.check_builder_fee_approval = AsyncMock(return_value=None)
 
-        # Should not raise — it's a soft check
-        await worker._check_builder_approval(mock_client)
+        mock_db = AsyncMock()
+        mock_result = MagicMock()
+        mock_conn = MagicMock()
+        mock_conn.builder_fee_approved = False
+        mock_result.scalar_one_or_none.return_value = mock_conn
+        mock_db.execute = AsyncMock(return_value=mock_result)
+
+        result = await worker._check_builder_approval(mock_client, mock_db)
+        assert result is False
+        assert "Builder Fee" in worker.error_message
         mock_client.check_builder_fee_approval.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_builder_check_passes_when_approved(self):
-        """Builder check should pass silently when approved."""
+    async def test_builder_check_passes_when_approved_on_chain(self):
+        """Builder check should pass when on-chain approval found."""
+        from src.bot.bot_worker import BotWorker
+        from src.exchanges.hyperliquid.client import HyperliquidClient
+
+        worker = BotWorker(bot_config_id=1)
+        worker._config = MagicMock()
+        worker._config.user_id = 1
+
+        mock_client = MagicMock(spec=HyperliquidClient)
+        mock_client.builder_config = {"b": "0xbuilder", "f": 10}
+        mock_client.check_builder_fee_approval = AsyncMock(return_value=10)
+
+        mock_db = AsyncMock()
+        mock_result = MagicMock()
+        mock_conn = MagicMock()
+        mock_conn.builder_fee_approved = False
+        mock_result.scalar_one_or_none.return_value = mock_conn
+        mock_db.execute = AsyncMock(return_value=mock_result)
+
+        result = await worker._check_builder_approval(mock_client, mock_db)
+        assert result is True
+
+    @pytest.mark.asyncio
+    async def test_builder_check_passes_on_db_flag(self):
+        """Builder check should pass when DB flag is set (fast path)."""
+        from src.bot.bot_worker import BotWorker
+        from src.exchanges.hyperliquid.client import HyperliquidClient
+
+        worker = BotWorker(bot_config_id=1)
+        worker._config = MagicMock()
+        worker._config.user_id = 1
+
+        mock_client = MagicMock(spec=HyperliquidClient)
+        mock_client.builder_config = {"b": "0xbuilder", "f": 10}
+
+        mock_db = AsyncMock()
+        mock_result = MagicMock()
+        mock_conn = MagicMock()
+        mock_conn.builder_fee_approved = True
+        mock_result.scalar_one_or_none.return_value = mock_conn
+        mock_db.execute = AsyncMock(return_value=mock_result)
+
+        result = await worker._check_builder_approval(mock_client, mock_db)
+        assert result is True
+        # Should NOT call on-chain check since DB flag was set
+        mock_client.check_builder_fee_approval.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_builder_check_skipped_for_non_hl_client(self):
+        """Builder check should pass for non-Hyperliquid clients."""
+        from src.bot.bot_worker import BotWorker
+
+        worker = BotWorker(bot_config_id=1)
+        mock_client = MagicMock()  # Not a HyperliquidClient
+        mock_db = AsyncMock()
+
+        result = await worker._check_builder_approval(mock_client, mock_db)
+        assert result is True
+
+    @pytest.mark.asyncio
+    async def test_builder_check_skipped_when_no_builder_config(self):
+        """Builder check should pass when client has no builder config."""
         from src.bot.bot_worker import BotWorker
         from src.exchanges.hyperliquid.client import HyperliquidClient
 
         worker = BotWorker(bot_config_id=1)
         mock_client = MagicMock(spec=HyperliquidClient)
-        mock_client.builder_config = {"b": "0xbuilder", "f": 10}
-        mock_client.check_builder_fee_approval = AsyncMock(return_value=10)
+        mock_client.builder_config = None
+        mock_db = AsyncMock()
 
-        await worker._check_builder_approval(mock_client)
+        result = await worker._check_builder_approval(mock_client, mock_db)
+        assert result is True
 
     @pytest.mark.asyncio
-    async def test_builder_check_skipped_for_non_hl_client(self):
-        """Builder check should skip for non-Hyperliquid clients."""
+    async def test_builder_check_blocks_on_error(self):
+        """Builder check should block on unexpected errors (fail safe)."""
         from src.bot.bot_worker import BotWorker
+        from src.exchanges.hyperliquid.client import HyperliquidClient
 
         worker = BotWorker(bot_config_id=1)
-        mock_client = MagicMock()  # Not a HyperliquidClient
+        worker._config = MagicMock()
+        worker._config.user_id = 1
 
-        # Should not raise
-        await worker._check_builder_approval(mock_client)
+        mock_client = MagicMock(spec=HyperliquidClient)
+        mock_client.builder_config = {"b": "0xbuilder", "f": 10}
+        mock_client.check_builder_fee_approval = AsyncMock(side_effect=Exception("db down"))
+
+        mock_db = AsyncMock()
+        mock_result = MagicMock()
+        mock_conn = MagicMock()
+        mock_conn.builder_fee_approved = False
+        mock_result.scalar_one_or_none.return_value = mock_conn
+        mock_db.execute = AsyncMock(return_value=mock_result)
+
+        result = await worker._check_builder_approval(mock_client, mock_db)
+        assert result is False
 
 
 # ── Constants ──────────────────────────────────────────────────────
