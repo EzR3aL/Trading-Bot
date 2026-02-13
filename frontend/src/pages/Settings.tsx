@@ -43,9 +43,9 @@ function KeyForm({
   const addrRegex = /^0x[0-9a-fA-F]{40}$/
   const keyRegex = /^(0x)?[0-9a-fA-F]{64}$/
   const addrError = isWallet && keyValue && !addrRegex.test(keyValue)
-    ? 'Must be 0x + 40 hex characters' : ''
+    ? t('settings.validationAddress') : ''
   const pkError = isWallet && secretValue && !keyRegex.test(secretValue)
-    ? 'Must be 64 hex characters (with or without 0x)' : ''
+    ? t('settings.validationPrivateKey') : ''
 
   const formId = label.toLowerCase().replace(/\s+/g, '-')
 
@@ -74,7 +74,7 @@ function KeyForm({
         </div>
         {showPassphrase !== false && (
           <div>
-            <label htmlFor={`${formId}-passphrase`} className="block text-xs text-gray-500 mb-1">Passphrase</label>
+            <label htmlFor={`${formId}-passphrase`} className="block text-xs text-gray-500 mb-1">{t('settings.passphrase')}</label>
             <input id={`${formId}-passphrase`} type="password" value={passphraseValue} onChange={(e) => onPassphraseChange(e.target.value)}
               className="w-full px-3 py-1.5 bg-gray-800 border border-gray-700 rounded text-white text-sm" />
           </div>
@@ -236,9 +236,9 @@ export default function Settings() {
   const testConnection = async (exchangeType: string, mode: 'live' | 'demo') => {
     try {
       const res = await api.post(`/config/exchange-connections/${exchangeType}/test?mode=${mode}`)
-      const label = mode === 'demo' ? 'Demo' : 'Live'
-      showMessage(`${label} ${exchangeType} connected! Balance: $${res.data.balance}`)
-    } catch { showMessage('Connection failed') }
+      const modeLabel = mode === 'demo' ? t('common.demo') : t('common.live')
+      showMessage(t('settings.testConnectionResult', { mode: modeLabel, exchange: exchangeType, balance: res.data.balance }))
+    } catch { showMessage(t('settings.connectionFailed')) }
   }
 
   const saveLlmKey = async (provider: string) => {
@@ -299,7 +299,7 @@ export default function Settings() {
     setHlApproving(true)
     try {
       await api.post('/config/hyperliquid/approve-builder-fee')
-      showMessage('Builder fee approved!')
+      showMessage(t('settings.hlBuilderFeeApproved'))
       loadHlRevenue()
     } catch { showMessage(t('common.error')) }
     setHlApproving(false)
@@ -321,12 +321,12 @@ export default function Settings() {
     setHlAdminSaving(true)
     try {
       await api.put('/config/hyperliquid/admin-settings', hlAdminForm)
-      showMessage('Hyperliquid settings saved')
+      showMessage(t('settings.hlSettingsSaved'))
       await loadHlAdminSettings()
       // Refresh revenue view too
       loadHlRevenue()
     } catch (err: any) {
-      showMessage(err?.response?.data?.detail || 'Failed to save settings')
+      showMessage(err?.response?.data?.detail || t('settings.hlSettingsFailed'))
     }
     setHlAdminSaving(false)
   }
@@ -405,7 +405,7 @@ export default function Settings() {
     try {
       await api.put(`/config/admin/affiliate-uids/${connectionId}/verify`, { verified })
       await loadAdminUids()
-      showMessage(verified ? t('affiliate.uidVerified') : 'UID abgelehnt')
+      showMessage(verified ? t('affiliate.uidVerified') : t('affiliate.uidRejected'))
     } catch (err: any) {
       showMessage(err.response?.data?.detail || t('common.error'))
     }
@@ -527,7 +527,7 @@ export default function Settings() {
                 {isOpen && (
                   <div className="px-5 pb-5 pt-1 space-y-5 border-t border-gray-800">
                     <KeyForm
-                      label={ex.auth_type === 'eth_wallet' ? 'Mainnet' : 'Live'}
+                      label={ex.auth_type === 'eth_wallet' ? t('settings.mainnet') : t('common.live')}
                       configured={liveOk}
                       keyValue={form.apiKey} secretValue={form.apiSecret} passphraseValue={form.passphrase}
                       onKeyChange={(v) => updateForm(ex.name, { apiKey: v })}
@@ -542,7 +542,7 @@ export default function Settings() {
                       <>
                         <div className="border-t border-gray-800" />
                         <KeyForm
-                          label={ex.auth_type === 'eth_wallet' ? 'Testnet' : 'Demo'}
+                          label={ex.auth_type === 'eth_wallet' ? t('settings.testnet') : t('common.demo')}
                           configured={demoOk}
                           keyValue={form.demoApiKey} secretValue={form.demoApiSecret} passphraseValue={form.demoPassphrase}
                           onKeyChange={(v) => updateForm(ex.name, { demoApiKey: v })}
@@ -567,7 +567,7 @@ export default function Settings() {
                         <p className="text-gray-400 text-xs mb-3">{t('affiliate.uidHint')}</p>
                         {userAffiliateLinks[ex.name]?.affiliate_url && (
                           <div className="mb-3 p-2.5 bg-emerald-900/20 border border-emerald-800/30 rounded">
-                            <p className="text-gray-400 text-xs mb-1">{userAffiliateLinks[ex.name]?.label || 'Affiliate Link'}</p>
+                            <p className="text-gray-400 text-xs mb-1">{userAffiliateLinks[ex.name]?.label || t('bots.affiliateLink')}</p>
                             <a href={userAffiliateLinks[ex.name].affiliate_url} target="_blank" rel="noopener noreferrer"
                                className="text-emerald-400 hover:text-emerald-300 break-all text-sm font-medium">
                               {userAffiliateLinks[ex.name].affiliate_url}
@@ -632,7 +632,7 @@ export default function Settings() {
                     <div className="flex items-center gap-2">
                       <h4 className="text-white text-sm font-medium">{display_name}</h4>
                       {free_tier && (
-                        <span className="text-xs px-1.5 py-0.5 rounded bg-blue-900/40 text-blue-400 border border-blue-800">Free</span>
+                        <span className="text-xs px-1.5 py-0.5 rounded bg-blue-900/40 text-blue-400 border border-blue-800">{t('settings.free')}</span>
                       )}
                     </div>
                     <div className="flex items-center gap-2">
@@ -718,7 +718,7 @@ export default function Settings() {
                         type="text"
                         value={form.label}
                         onChange={(e) => setAffiliateForms(prev => ({ ...prev, [ex]: { ...form, label: e.target.value } }))}
-                        placeholder="z.B. 10% Rabatt auf Gebühren"
+                        placeholder={t('settings.affiliateLabelPlaceholder')}
                         className="w-full px-3 py-1.5 bg-gray-800 border border-gray-700 rounded text-white text-sm"
                       />
                     </div>
@@ -829,13 +829,13 @@ export default function Settings() {
           {/* Admin Builder Config */}
           <div className="bg-gray-900 border border-gray-800 rounded-lg p-6 space-y-4">
             <div>
-              <h3 className="text-white font-medium">Hyperliquid Builder Config</h3>
-              <p className="text-sm text-gray-400 mt-1">Configure builder address, fee rate, and referral code</p>
+              <h3 className="text-white font-medium">{t('settings.hlBuilderConfig')}</h3>
+              <p className="text-sm text-gray-400 mt-1">{t('settings.hlBuilderConfigDesc')}</p>
             </div>
 
             <div className="space-y-3">
               <div>
-                <label className="block text-xs text-gray-500 mb-1">Builder Wallet Address</label>
+                <label className="block text-xs text-gray-500 mb-1">{t('settings.hlBuilderAddress')}</label>
                 <input
                   type="text"
                   value={hlAdminForm.builder_address}
@@ -845,35 +845,35 @@ export default function Settings() {
                 />
                 {hlAdminSettings?.sources?.builder_address && (
                   <p className="text-xs text-gray-600 mt-1">
-                    Source: {hlAdminSettings.sources.builder_address === 'db' ? 'Database' : hlAdminSettings.sources.builder_address === 'env' ? '.env fallback' : 'Not set'}
+                    {t('settings.hlSource', { source: hlAdminSettings.sources.builder_address === 'db' ? t('settings.hlSourceDb') : hlAdminSettings.sources.builder_address === 'env' ? t('settings.hlSourceEnv') : t('settings.hlSourceNotSet') })}
                   </p>
                 )}
               </div>
 
               <div>
-                <label className="block text-xs text-gray-500 mb-1">Builder Fee (1-100, in 0.001% units)</label>
+                <label className="block text-xs text-gray-500 mb-1">{t('settings.hlBuilderFeeLabel')}</label>
                 <select
                   value={hlAdminForm.builder_fee}
                   onChange={(e) => setHlAdminForm(prev => ({ ...prev, builder_fee: parseInt(e.target.value) }))}
                   className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded text-white text-sm"
                 >
-                  <option value={0}>0 - Disabled</option>
+                  <option value={0}>{t('settings.hlFeeDisabled')}</option>
                   <option value={1}>1 (0.001%)</option>
                   <option value={5}>5 (0.005%)</option>
-                  <option value={10}>10 (0.01%) - Default</option>
+                  <option value={10}>10 (0.01%) - {t('settings.hlFeeDefault')}</option>
                   <option value={25}>25 (0.025%)</option>
                   <option value={50}>50 (0.05%)</option>
                   <option value={100}>100 (0.1%)</option>
                 </select>
                 {hlAdminSettings?.sources?.builder_fee && (
                   <p className="text-xs text-gray-600 mt-1">
-                    Source: {hlAdminSettings.sources.builder_fee === 'db' ? 'Database' : hlAdminSettings.sources.builder_fee === 'env' ? '.env fallback' : 'Not set'}
+                    {t('settings.hlSource', { source: hlAdminSettings.sources.builder_fee === 'db' ? t('settings.hlSourceDb') : hlAdminSettings.sources.builder_fee === 'env' ? t('settings.hlSourceEnv') : t('settings.hlSourceNotSet') })}
                   </p>
                 )}
               </div>
 
               <div>
-                <label className="block text-xs text-gray-500 mb-1">Referral Code</label>
+                <label className="block text-xs text-gray-500 mb-1">{t('settings.hlReferralCode')}</label>
                 <input
                   type="text"
                   value={hlAdminForm.referral_code}
@@ -883,7 +883,7 @@ export default function Settings() {
                 />
                 {hlAdminSettings?.sources?.referral_code && (
                   <p className="text-xs text-gray-600 mt-1">
-                    Source: {hlAdminSettings.sources.referral_code === 'db' ? 'Database' : hlAdminSettings.sources.referral_code === 'env' ? '.env fallback' : 'Not set'}
+                    {t('settings.hlSource', { source: hlAdminSettings.sources.referral_code === 'db' ? t('settings.hlSourceDb') : hlAdminSettings.sources.referral_code === 'env' ? t('settings.hlSourceEnv') : t('settings.hlSourceNotSet') })}
                   </p>
                 )}
               </div>
@@ -894,7 +894,7 @@ export default function Settings() {
               disabled={hlAdminSaving}
               className="px-4 py-2 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50"
             >
-              {hlAdminSaving ? 'Saving...' : 'Save Settings'}
+              {hlAdminSaving ? t('settings.hlSaving') : t('settings.hlSaveSettings')}
             </button>
           </div>
 
@@ -902,8 +902,8 @@ export default function Settings() {
           <div className="bg-gray-900 border border-gray-800 rounded-lg p-6 space-y-6">
             <div className="flex items-center justify-between">
               <div>
-                <h3 className="text-white font-medium">Hyperliquid Revenue</h3>
-                <p className="text-sm text-gray-400 mt-1">Builder Code & Referral status</p>
+                <h3 className="text-white font-medium">{t('settings.hlRevenue')}</h3>
+                <p className="text-sm text-gray-400 mt-1">{t('settings.hlRevenueDesc')}</p>
               </div>
               <button onClick={loadHlRevenue} disabled={hlLoading}
                 className="px-3 py-1.5 text-sm bg-gray-800 text-gray-300 rounded hover:bg-gray-700 disabled:opacity-50">
@@ -915,68 +915,68 @@ export default function Settings() {
               <>
                 {/* Builder Code Section */}
                 <div>
-                  <h4 className="text-sm font-medium text-gray-400 mb-3 uppercase tracking-wider">Builder Code</h4>
+                  <h4 className="text-sm font-medium text-gray-400 mb-3 uppercase tracking-wider">{t('settings.hlBuilderCode')}</h4>
                   {hlRevenue.builder?.configured ? (
                     <div className="space-y-2">
                       <div className="flex items-center justify-between p-3 bg-gray-800 rounded-lg">
-                        <span className="text-sm text-gray-300">Builder Address</span>
+                        <span className="text-sm text-gray-300">{t('settings.hlBuilderAddressLabel')}</span>
                         <span className="text-sm text-white font-mono">{hlRevenue.builder.address}</span>
                       </div>
                       <div className="flex items-center justify-between p-3 bg-gray-800 rounded-lg">
-                        <span className="text-sm text-gray-300">Fee Rate</span>
+                        <span className="text-sm text-gray-300">{t('settings.hlFeeRate')}</span>
                         <span className="text-sm text-white">{hlRevenue.builder.fee_percent}</span>
                       </div>
                       <div className="flex items-center justify-between p-3 bg-gray-800 rounded-lg">
-                        <span className="text-sm text-gray-300">User Approved</span>
+                        <span className="text-sm text-gray-300">{t('settings.hlUserApproved')}</span>
                         <div className="flex items-center gap-2">
                           <span className={`inline-block w-2.5 h-2.5 rounded-full ${hlRevenue.builder.user_approved ? 'bg-green-400' : 'bg-red-400'}`} />
                           <span className={`text-sm ${hlRevenue.builder.user_approved ? 'text-green-400' : 'text-red-400'}`}>
-                            {hlRevenue.builder.user_approved ? 'Approved' : 'Not Approved'}
+                            {hlRevenue.builder.user_approved ? t('settings.hlApproved') : t('settings.hlNotApproved')}
                           </span>
                         </div>
                       </div>
                       {!hlRevenue.builder.user_approved && (
                         <button onClick={approveBuilderFee} disabled={hlApproving}
                           className="w-full mt-2 px-4 py-2 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50">
-                          {hlApproving ? 'Approving...' : 'Approve Builder Fee'}
+                          {hlApproving ? t('settings.hlApproving') : t('settings.hlApproveBuilderFee')}
                         </button>
                       )}
                     </div>
                   ) : (
                     <div className="p-3 bg-gray-800 rounded-lg text-sm text-gray-500">
-                      Not configured. Set HL_BUILDER_ADDRESS in .env to enable.
+                      {t('settings.hlNotConfiguredBuilder')}
                     </div>
                   )}
                 </div>
 
                 {/* Referral Section */}
                 <div>
-                  <h4 className="text-sm font-medium text-gray-400 mb-3 uppercase tracking-wider">Referral</h4>
+                  <h4 className="text-sm font-medium text-gray-400 mb-3 uppercase tracking-wider">{t('settings.hlReferral')}</h4>
                   {hlRevenue.referral?.configured ? (
                     <div className="space-y-2">
                       <div className="flex items-center justify-between p-3 bg-gray-800 rounded-lg">
-                        <span className="text-sm text-gray-300">Referral Code</span>
+                        <span className="text-sm text-gray-300">{t('settings.hlReferralCodeLabel')}</span>
                         <span className="text-sm text-white font-mono">{hlRevenue.referral.code}</span>
                       </div>
                       <div className="flex items-center justify-between p-3 bg-gray-800 rounded-lg">
-                        <span className="text-sm text-gray-300">User Referred</span>
+                        <span className="text-sm text-gray-300">{t('settings.hlUserReferred')}</span>
                         <div className="flex items-center gap-2">
                           <span className={`inline-block w-2.5 h-2.5 rounded-full ${hlRevenue.referral.user_referred ? 'bg-green-400' : 'bg-yellow-400'}`} />
                           <span className={`text-sm ${hlRevenue.referral.user_referred ? 'text-green-400' : 'text-yellow-400'}`}>
-                            {hlRevenue.referral.user_referred ? 'Referred' : 'Not Referred'}
+                            {hlRevenue.referral.user_referred ? t('settings.hlReferred') : t('settings.hlNotReferred')}
                           </span>
                         </div>
                       </div>
                       {!hlRevenue.referral.user_referred && hlRevenue.referral.link && (
                         <a href={hlRevenue.referral.link} target="_blank" rel="noopener noreferrer"
                           className="block mt-2 px-4 py-2 text-sm text-center bg-blue-600/20 text-blue-400 rounded-lg border border-blue-600/30 hover:bg-blue-600/30">
-                          Register via Referral Link
+                          {t('settings.hlRegisterReferral')}
                         </a>
                       )}
                     </div>
                   ) : (
                     <div className="p-3 bg-gray-800 rounded-lg text-sm text-gray-500">
-                      Not configured. Set HL_REFERRAL_CODE in .env to enable.
+                      {t('settings.hlNotConfiguredReferral')}
                     </div>
                   )}
                 </div>
@@ -984,7 +984,7 @@ export default function Settings() {
                 {/* Fee Tier Info */}
                 {hlRevenue.user_fees && (
                   <div>
-                    <h4 className="text-sm font-medium text-gray-400 mb-3 uppercase tracking-wider">Fee Tier</h4>
+                    <h4 className="text-sm font-medium text-gray-400 mb-3 uppercase tracking-wider">{t('settings.hlFeeTier')}</h4>
                     <div className="p-3 bg-gray-800 rounded-lg text-sm text-gray-300">
                       <pre className="whitespace-pre-wrap text-xs">{JSON.stringify(hlRevenue.user_fees, null, 2)}</pre>
                     </div>
@@ -1020,7 +1020,7 @@ export default function Settings() {
               </>
             ) : (
               <div className="text-center text-gray-500 py-8">
-                {hlLoading ? t('settings.refreshing') : 'No Hyperliquid connection configured'}
+                {hlLoading ? t('settings.refreshing') : t('settings.hlNoConnection')}
               </div>
             )}
           </div>
@@ -1069,7 +1069,7 @@ export default function Settings() {
                           {t('settings.dataSources')}
                         </h3>
                         <span className="text-xs text-gray-600">
-                          {dsOnline}/{dsItems.length} online
+                          {dsOnline}/{dsItems.length} {t('settings.online').toLowerCase()}
                         </span>
                       </div>
                       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">

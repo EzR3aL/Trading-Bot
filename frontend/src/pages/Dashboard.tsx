@@ -137,7 +137,7 @@ export default function Dashboard() {
       </div>
 
       {/* Stats grid */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-4 mb-6">
         <StatCard
           label={t('dashboard.totalPnl')}
           value={stats ? `$${stats.net_pnl.toFixed(2)}` : '--'}

@@ -192,7 +192,7 @@ export default function Trades() {
             className="filter-reset"
           >
             <X size={12} />
-            Reset
+            {t('trades.reset')}
           </button>
         )}
       </div>

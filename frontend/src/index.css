@@ -476,7 +476,22 @@ html.light .login-bg {
 /* ── Skeleton ───────────────────────────────────────────────── */
 
 html.light .skeleton-pulse {
-  background: rgba(0, 0, 0, 0.06) !important;
+  background: rgba(0, 0, 0, 0.10) !important;
+}
+
+/* ── Info Box Backgrounds ───────────────────────────────────── */
+
+html.light .bg-blue-900\/20 {
+  background-color: rgba(59, 130, 246, 0.08) !important;
+}
+html.light .bg-amber-900\/20 {
+  background-color: rgba(245, 158, 11, 0.08) !important;
+}
+html.light .bg-emerald-900\/20 {
+  background-color: rgba(16, 185, 129, 0.08) !important;
+}
+html.light .bg-red-900\/20 {
+  background-color: rgba(239, 68, 68, 0.08) !important;
 }
 
 /* ═══════════════════════════════════════════════════════════════ */
