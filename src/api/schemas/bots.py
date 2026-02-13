@@ -40,10 +40,10 @@ class BotConfigCreate(BaseModel):
         description="UTC start time for rotation intervals (HH:MM format, e.g. '08:00')",
     )
 
-    # Per-bot Discord webhook (optional, overrides user-level)
+    # Per-bot Discord webhook (optional)
     discord_webhook_url: Optional[str] = Field(
         default=None,
-        description="Discord webhook URL for this bot (overrides user-level setting)",
+        description="Discord webhook URL for this bot's notifications",
     )
 
     # Per-bot Telegram notifications (optional)
@@ -81,7 +81,7 @@ class BotConfigUpdate(BaseModel):
         description="UTC start time for rotation intervals (HH:MM format)",
     )
 
-    # Per-bot Discord webhook (optional, overrides user-level)
+    # Per-bot Discord webhook (optional)
     discord_webhook_url: Optional[str] = Field(
         default=None,
         description="Discord webhook URL for this bot (empty string clears it)",

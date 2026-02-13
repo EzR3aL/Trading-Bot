@@ -127,7 +127,6 @@ export interface ExchangeConnectionStatus {
 export interface ConfigResponse {
   trading: TradingConfig | null
   strategy: StrategyConfig | null
-  discord: { webhook_url: string | null } | null
   connections: ExchangeConnectionStatus[]
   // Deprecated
   exchange_type: string
