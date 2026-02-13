@@ -362,7 +362,7 @@ async def _get_admin_exchange_conn(exchange_type: str, db: AsyncSession):
     """Get the first admin user's live exchange connection for affiliate API calls."""
     result = await db.execute(
         select(ExchangeConnection).join(User).where(
-            User.is_admin == True,
+            User.role == "admin",
             ExchangeConnection.exchange_type == exchange_type,
             ExchangeConnection.api_key_encrypted.isnot(None),
         ).limit(1)

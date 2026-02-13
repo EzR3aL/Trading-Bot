@@ -82,7 +82,8 @@ class UserConfig(Base):
     # Strategy config (JSON stored as text)
     strategy_config = Column(Text, nullable=True)  # JSON: fear_greed thresholds, funding rate, etc.
 
-    # DEPRECATED: moved to per-bot BotConfig.discord_webhook_url
+    # DEPRECATED & CLEARED: moved to per-bot BotConfig.discord_webhook_url (encrypted).
+    # Migration nullifies any existing plaintext values. Do NOT write to this column.
     discord_webhook_url = Column(Text, nullable=True)
 
     created_at = Column(DateTime, server_default=func.now())
