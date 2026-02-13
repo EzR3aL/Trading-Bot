@@ -431,6 +431,8 @@
     "telegramConfigured": "Telegram konfiguriert",
     "testTelegram": "Telegram testen",
     "created": "Erstellt",
+    "started": "Gestartet",
+    "lastAnalysis": "Letzte Analyse",
     "pnlChart": "PnL-Verlauf",
     "dailyPnl": "Täglicher PnL",
     "cumulativePnl": "Kumulativer PnL"

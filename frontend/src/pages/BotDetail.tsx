@@ -34,6 +34,7 @@ interface BotConfig {
   rotation_interval_minutes: number | null
   is_enabled: boolean
   discord_webhook_configured: boolean
+  telegram_configured: boolean
   created_at: string | null
 }
 
@@ -380,14 +381,17 @@ export default function BotDetail() {
           {config.discord_webhook_configured && (
             <ConfigRow label="Discord" value={`✓ ${d('discordConfigured')}`} />
           )}
+          {config.telegram_configured && (
+            <ConfigRow label="Telegram" value={`✓ ${d('telegramConfigured')}`} />
+          )}
           {config.created_at && (
             <ConfigRow label={d('created')} value={new Date(config.created_at).toLocaleDateString()} />
           )}
           {runtime?.started_at && (
-            <ConfigRow label="Started" value={new Date(runtime.started_at).toLocaleString()} />
+            <ConfigRow label={d('started')} value={new Date(runtime.started_at).toLocaleString()} />
           )}
           {runtime?.last_analysis && (
-            <ConfigRow label="Last Analysis" value={new Date(runtime.last_analysis).toLocaleString()} />
+            <ConfigRow label={d('lastAnalysis')} value={new Date(runtime.last_analysis).toLocaleString()} />
           )}
         </div>
       </div>
