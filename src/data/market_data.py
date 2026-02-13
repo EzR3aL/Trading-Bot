@@ -13,6 +13,7 @@ Fetches:
 """
 
 import asyncio
+import time
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Optional, Dict, Any, Tuple, List
@@ -57,10 +58,12 @@ class DataQuality:
         self.failed_sources: List[str] = []
         self.successful_sources: List[str] = []
         self.warnings: List[str] = []
+        self.fetch_timestamps: Dict[str, float] = {}
 
     def mark_success(self, source: str):
         """Mark a data source as successfully fetched."""
         self.successful_sources.append(source)
+        self.fetch_timestamps[source] = time.time()
 
     def mark_failure(self, source: str, reason: str):
         """Mark a data source as failed."""
@@ -323,13 +326,18 @@ class MarketDataFetcher:
                 "limit": 1,
             }
 
-            data = await self._get(url, params)
+            async def _fetch():
+                return await self._get(url, params)
+
+            data = await _binance_breaker.call(_fetch)
 
             if data and len(data) > 0:
                 ratio = float(data[0].get("longShortRatio", 1.0))
                 logger.info(f"Top Trader Long/Short Ratio ({symbol}): {ratio:.4f}")
                 return ratio
 
+        except CircuitBreakerError:
+            logger.warning("Circuit breaker open for Binance top trader L/S ratio")
         except Exception as e:
             logger.error(f"Error fetching Top Trader Long/Short Ratio: {e}")
 
@@ -501,9 +509,15 @@ class MarketDataFetcher:
                 "limit": limit,
             }
 
-            data = await self._get(url, params)
+            async def _fetch():
+                return await self._get(url, params)
+
+            data = await _binance_breaker.call(_fetch)
             return data if data else []
 
+        except CircuitBreakerError:
+            logger.warning("Circuit breaker open for Binance OI history")
+            return []
         except Exception as e:
             logger.error(f"Error fetching OI history: {e}")
             return []
@@ -530,9 +544,15 @@ class MarketDataFetcher:
                 "limit": limit,
             }
 
-            data = await self._get(url, params)
+            async def _fetch():
+                return await self._get(url, params)
+
+            data = await _binance_breaker.call(_fetch)
             return data if data else []
 
+        except CircuitBreakerError:
+            logger.warning("Circuit breaker open for Binance liquidations")
+            return []
         except Exception as e:
             logger.error(f"Error fetching liquidations: {e}")
             return []

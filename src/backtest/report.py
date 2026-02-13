@@ -205,7 +205,7 @@ class BacktestReport:
             start = datetime.strptime(self.result.start_date, "%Y-%m-%d")
             end = datetime.strptime(self.result.end_date, "%Y-%m-%d")
             return (end - start).days
-        except:
+        except (ValueError, TypeError):
             return 0
 
     def _generate_bar(self, value: float, max_width: int = 20) -> str:

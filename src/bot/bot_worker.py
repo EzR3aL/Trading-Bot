@@ -467,8 +467,8 @@ class BotWorker:
                     actual = await client.get_fill_price(signal.symbol, order.order_id)
                     if actual:
                         fill_price = actual
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug(f"{log_prefix} [{mode_str}] Could not fetch fill price: {e}")
 
             # Record trade in database
             async with get_session() as session:
@@ -621,7 +621,8 @@ class BotWorker:
                         entry_order_id=trade.order_id,
                         close_order_id=trade.close_order_id,
                     )
-            except Exception:
+            except Exception as e:
+                logger.debug(f"{log_prefix} Could not fetch fees for trade #{trade.id}: {e}")
                 trade.fees = 0
 
             # Fetch funding fees (charged every 8h while position was open)
@@ -634,7 +635,8 @@ class BotWorker:
                         start_time_ms=entry_ms,
                         end_time_ms=exit_ms,
                     )
-            except Exception:
+            except Exception as e:
+                logger.debug(f"{log_prefix} Could not fetch funding fees for trade #{trade.id}: {e}")
                 trade.funding_paid = 0
 
             # Calculate builder fee revenue (Hyperliquid only)
@@ -647,7 +649,8 @@ class BotWorker:
                     )
                 else:
                     trade.builder_fee = 0
-            except Exception:
+            except Exception as e:
+                logger.debug(f"{log_prefix} Could not calculate builder fee for trade #{trade.id}: {e}")
                 trade.builder_fee = 0
 
             # Update trade record
