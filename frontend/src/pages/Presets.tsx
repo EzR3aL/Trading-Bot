@@ -106,33 +106,33 @@ export default function Presets() {
           </h2>
           <div className="space-y-4">
             <div>
-              <label className="block text-sm text-gray-400 mb-1">Name</label>
+              <label className="block text-sm text-gray-400 mb-1">{t('presets.name')}</label>
               <input type="text" value={name} onChange={(e) => setName(e.target.value)}
                 className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded text-white" />
             </div>
             <div>
-              <label className="block text-sm text-gray-400 mb-1">Description</label>
+              <label className="block text-sm text-gray-400 mb-1">{t('presets.description')}</label>
               <input type="text" value={description} onChange={(e) => setDescription(e.target.value)}
                 className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded text-white" />
             </div>
             <div className="grid grid-cols-4 gap-4">
               <div>
-                <label className="block text-sm text-gray-400 mb-1">Leverage</label>
+                <label className="block text-sm text-gray-400 mb-1">{t('presets.leverage')}</label>
                 <input type="number" value={leverage} onChange={(e) => setLeverage(Number(e.target.value))} min={1} max={20}
                   className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded text-white" />
               </div>
               <div>
-                <label className="block text-sm text-gray-400 mb-1">Position %</label>
+                <label className="block text-sm text-gray-400 mb-1">{t('presets.positionPercent')}</label>
                 <input type="number" value={positionSize} onChange={(e) => setPositionSize(Number(e.target.value))} step={0.5}
                   className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded text-white" />
               </div>
               <div>
-                <label className="block text-sm text-gray-400 mb-1">TP %</label>
+                <label className="block text-sm text-gray-400 mb-1">{t('presets.tpPercent')}</label>
                 <input type="number" value={takeProfit} onChange={(e) => setTakeProfit(Number(e.target.value))} step={0.5}
                   className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded text-white" />
               </div>
               <div>
-                <label className="block text-sm text-gray-400 mb-1">SL %</label>
+                <label className="block text-sm text-gray-400 mb-1">{t('presets.slPercent')}</label>
                 <input type="number" value={stopLoss} onChange={(e) => setStopLoss(Number(e.target.value))} step={0.5}
                   className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded text-white" />
               </div>
@@ -171,9 +171,11 @@ export default function Presets() {
                 </div>
                 {preset.trading_config && (
                   <div className="text-sm text-gray-400 mt-1">
-                    {preset.trading_config.leverage}x Hebel |{' '}
-                    {preset.trading_config.position_size_percent}% Position |{' '}
-                    {preset.trading_config.stop_loss_percent}% SL
+                    {t('presets.summary', {
+                      leverage: preset.trading_config.leverage,
+                      position: preset.trading_config.position_size_percent,
+                      sl: preset.trading_config.stop_loss_percent,
+                    })}
                   </div>
                 )}
                 {preset.description && (
@@ -206,7 +208,7 @@ export default function Presets() {
 
         {presets.length === 0 && (
           <div className="text-center text-gray-500 py-12">
-            No presets yet. Create your first one!
+            {t('presets.noPresets')}
           </div>
         )}
       </div>
