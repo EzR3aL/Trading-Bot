@@ -430,6 +430,8 @@
     "telegramConfigured": "Telegram configured",
     "testTelegram": "Test Telegram",
     "created": "Created",
+    "started": "Started",
+    "lastAnalysis": "Last Analysis",
     "pnlChart": "PnL Over Time",
     "dailyPnl": "Daily PnL",
     "cumulativePnl": "Cumulative PnL"
