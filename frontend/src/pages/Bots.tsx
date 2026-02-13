@@ -420,7 +420,7 @@ function BotTradeHistoryModal({ bot, onClose, t }: { bot: BotStatus; onClose: ()
                     </div>
 
                     {/* 4-column grid: PnL | Einstieg | Ausstieg | Konfidenz */}
-                    <div className="grid grid-cols-4 gap-4">
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                       <div>
                         <div className="text-xs text-gray-500 uppercase tracking-wider mb-1">{t('bots.result')}</div>
                         <div className={`text-3xl font-bold tracking-tight ${latestClosed.pnl_percent >= 0 ? 'text-profit' : 'text-loss'}`}>
@@ -859,7 +859,7 @@ export default function Bots() {
                 )}
 
                 {/* Stats row */}
-                <div className="grid grid-cols-3 gap-2 mb-3 text-center">
+                <div className="grid grid-cols-3 gap-1 sm:gap-2 mb-3 text-center">
                   <div>
                     <div className="text-[10px] text-gray-500 uppercase tracking-wider">{t('bots.totalPnl')}</div>
                     <div className={`text-sm font-mono font-medium ${bot.total_pnl >= 0 ? 'text-profit' : 'text-loss'}`}>
@@ -965,7 +965,7 @@ export default function Bots() {
                 )}
 
                 {/* Actions */}
-                <div className="flex items-center gap-2 pt-3 border-t border-white/5">
+                <div className="flex flex-wrap items-center gap-2 pt-3 border-t border-white/5">
                   {bot.status === 'running' ? (
                     <button
                       onClick={() => handleStop(bot.bot_config_id)}
