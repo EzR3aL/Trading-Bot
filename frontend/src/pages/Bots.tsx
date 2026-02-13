@@ -650,7 +650,7 @@ export default function Bots() {
     try {
       await api.delete(`/bots/${id}`)
       await fetchBots()
-      addToast('success', `${name} deleted`)
+      addToast('success', t('bots.deleted', { name }))
     } catch (err: any) {
       addToast('error', err.response?.data?.detail || t('bots.failedDelete'))
     }

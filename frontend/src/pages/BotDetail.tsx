@@ -96,12 +96,12 @@ interface RuntimeStatus {
   trades_today: number
 }
 
-const STATUS_STYLES: Record<string, { dot: string; badge: string; label: string }> = {
-  running:  { dot: 'bg-emerald-400 animate-pulse', badge: 'bg-emerald-900/30 text-emerald-400 border-emerald-700', label: 'Running' },
-  starting: { dot: 'bg-yellow-400 animate-pulse',  badge: 'bg-yellow-900/30 text-yellow-400 border-yellow-700',   label: 'Starting' },
-  idle:     { dot: 'bg-gray-400',                   badge: 'bg-gray-800 text-gray-400 border-gray-700',           label: 'Idle' },
-  stopped:  { dot: 'bg-gray-500',                   badge: 'bg-gray-800 text-gray-400 border-gray-700',           label: 'Stopped' },
-  error:    { dot: 'bg-red-400',                     badge: 'bg-red-900/30 text-red-400 border-red-700',           label: 'Error' },
+const STATUS_STYLES: Record<string, { dot: string; badge: string; i18nKey: string }> = {
+  running:  { dot: 'bg-emerald-400 animate-pulse', badge: 'bg-emerald-900/30 text-emerald-400 border-emerald-700', i18nKey: 'bots.running' },
+  starting: { dot: 'bg-yellow-400 animate-pulse',  badge: 'bg-yellow-900/30 text-yellow-400 border-yellow-700',   i18nKey: 'bots.starting' },
+  idle:     { dot: 'bg-gray-400',                   badge: 'bg-gray-800 text-gray-400 border-gray-700',           i18nKey: 'bots.idle' },
+  stopped:  { dot: 'bg-gray-500',                   badge: 'bg-gray-800 text-gray-400 border-gray-700',           i18nKey: 'bots.stopped' },
+  error:    { dot: 'bg-red-400',                     badge: 'bg-red-900/30 text-red-400 border-red-700',           i18nKey: 'bots.error' },
 }
 
 export default function BotDetail() {
@@ -161,7 +161,7 @@ export default function BotDetail() {
       await api.post(`/bots/${botId}/start`)
       fetchData()
     } catch (err: any) {
-      setError(err.response?.data?.detail || 'Start failed')
+      setError(err.response?.data?.detail || t('bots.failedStart'))
     }
   }
 
@@ -170,7 +170,7 @@ export default function BotDetail() {
       await api.post(`/bots/${botId}/stop`)
       fetchData()
     } catch (err: any) {
-      setError(err.response?.data?.detail || 'Stop failed')
+      setError(err.response?.data?.detail || t('bots.failedStop'))
     }
   }
 
@@ -188,7 +188,7 @@ export default function BotDetail() {
         <button onClick={() => navigate('/bots')} className="flex items-center gap-2 text-gray-400 hover:text-white mb-4">
           <ArrowLeft size={16} /> {d('back')}
         </button>
-        <div className="text-red-400">{error || 'Bot not found'}</div>
+        <div className="text-red-400">{error || t('common.error')}</div>
       </div>
     )
   }
@@ -198,10 +198,10 @@ export default function BotDetail() {
   const style = STATUS_STYLES[statusKey] || STATUS_STYLES.idle
 
   const formatSchedule = () => {
-    if (config.schedule_type === 'market_sessions') return 'Market Sessions (1, 8, 14, 21 UTC)'
-    if (config.schedule_type === 'interval') return `Every ${config.schedule_config?.interval_minutes || 60}min`
-    if (config.schedule_type === 'rotation_only') return `Rotation (${config.rotation_interval_minutes}min)`
-    if (config.schedule_type === 'custom_cron') return `Custom: ${(config.schedule_config?.hours || []).join(', ')}h UTC`
+    if (config.schedule_type === 'market_sessions') return d('scheduleMarketSessions')
+    if (config.schedule_type === 'interval') return t('botDetail.scheduleInterval', { minutes: config.schedule_config?.interval_minutes || 60 })
+    if (config.schedule_type === 'rotation_only') return t('botDetail.scheduleRotation', { minutes: config.rotation_interval_minutes })
+    if (config.schedule_type === 'custom_cron') return t('botDetail.scheduleCustom', { hours: (config.schedule_config?.hours || []).join(', ') })
     return config.schedule_type
   }
 
@@ -219,7 +219,7 @@ export default function BotDetail() {
               <h1 className="text-2xl font-bold text-white">{config.name}</h1>
               <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs border ${style.badge}`}>
                 <span className={`w-2 h-2 rounded-full ${style.dot}`} />
-                {style.label}
+                {t(style.i18nKey)}
               </span>
             </div>
             <div className="flex items-center gap-2 mt-1.5 text-sm text-gray-400">
@@ -384,10 +384,10 @@ export default function BotDetail() {
             <ConfigRow label={d('created')} value={new Date(config.created_at).toLocaleDateString()} />
           )}
           {runtime?.started_at && (
-            <ConfigRow label="Started" value={new Date(runtime.started_at).toLocaleString()} />
+            <ConfigRow label={d('started')} value={new Date(runtime.started_at).toLocaleString()} />
           )}
           {runtime?.last_analysis && (
-            <ConfigRow label="Last Analysis" value={new Date(runtime.last_analysis).toLocaleString()} />
+            <ConfigRow label={d('lastAnalysis')} value={new Date(runtime.last_analysis).toLocaleString()} />
           )}
         </div>
       </div>
