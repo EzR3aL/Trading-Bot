@@ -81,8 +81,8 @@ export interface Preset {
   description: string | null
   exchange_type: string
   is_active: boolean
-  trading_config: TradingConfig | null
-  strategy_config: StrategyConfig | null
+  trading_config: Record<string, any> | null
+  strategy_config: Record<string, any> | null
   trading_pairs: string[] | null
 }
 

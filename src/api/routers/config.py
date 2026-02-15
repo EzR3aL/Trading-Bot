@@ -441,29 +441,35 @@ async def get_connections_status(
                 "url": health_url, "shared_with": None,
             }
 
-    # Add exchange pings for all configured exchanges
+    # Add exchange pings for all supported exchanges (configured + unconfigured)
     configured_exchanges = {c.exchange_type for c in user_connections}
-    for ex_type in configured_exchanges:
-        ping_info = EXCHANGE_PING_URLS.get(ex_type)
-        if ping_info:
-            services[f"exchange_{ex_type}"] = {
-                "label": ping_info["label"],
-                "type": "exchange",
-                "url": ping_info["url"],
-                "method": ping_info.get("method", "GET"),
-                "json_body": ping_info.get("json_body"),
-            }
+    for ex_type, ping_info in EXCHANGE_PING_URLS.items():
+        services[f"exchange_{ex_type}"] = {
+            "label": ping_info["label"],
+            "type": "exchange",
+            "url": ping_info["url"],
+            "method": ping_info.get("method", "GET"),
+            "json_body": ping_info.get("json_body"),
+            "configured": ex_type in configured_exchanges,
+        }
 
-    # Collect services that need actual pinging (unique URLs only)
+    # Collect services that need actual pinging (unique URLs only, skip unconfigured exchanges)
     services_to_ping = [
         n for n in services
-        if services[n].get("url") and not services[n].get("shared_with")
+        if services[n].get("url")
+        and not services[n].get("shared_with")
+        and services[n].get("configured", True)  # skip unconfigured exchanges
     ]
 
-    # Ping all in parallel
+    # Ping all in parallel (GDELT gets extra timeout)
     async with aiohttp.ClientSession() as http:
         coros = [
-            _ping_service(http, services[n]["url"], method=services[n].get("method", "GET"), json_body=services[n].get("json_body"))
+            _ping_service(
+                http, services[n]["url"],
+                method=services[n].get("method", "GET"),
+                json_body=services[n].get("json_body"),
+                timeout=5.0 if "GDELT" in services[n].get("provider", "") else 3.0,
+            )
             for n in services_to_ping
         ]
         pings = await asyncio.gather(*coros, return_exceptions=True)
@@ -479,23 +485,30 @@ async def get_connections_status(
     results: Dict[str, Any] = {}
     for svc_name in services:
         svc = services[svc_name]
+        is_configured = svc.get("configured", True)
 
-        if svc.get("url") is None:
+        if not is_configured:
+            # Unconfigured exchanges — skip ping, show as not configured
+            ping_data: Dict[str, Any] = {"reachable": False, "latency_ms": None}
+        elif svc.get("url") is None:
             # Calculated sources — always reachable
-            ping_data: Dict[str, Any] = {"reachable": True, "latency_ms": 0}
+            ping_data = {"reachable": True, "latency_ms": 0}
         elif svc.get("shared_with"):
             # Reuse ping from the first source of the same provider
             ping_data = ping_results_map.get(svc["shared_with"], {"reachable": False, "error": "no ping"})
         else:
             ping_data = ping_results_map.get(svc_name, {"reachable": False, "error": "no ping"})
 
-        results[svc_name] = {
+        result_entry: Dict[str, Any] = {
             "label": svc["label"],
             "type": svc["type"],
             "category": svc.get("category", ""),
             "provider": svc.get("provider", ""),
             **ping_data,
         }
+        if not is_configured:
+            result_entry["configured"] = False
+        results[svc_name] = result_entry
 
     return {
         "timestamp": datetime.utcnow().isoformat(),
@@ -762,8 +775,7 @@ async def get_builder_config(
         return {"builder_configured": False}
 
     builder_fee = hl_cfg["builder_fee"] or DEFAULT_BUILDER_FEE
-    raw_rate = builder_fee / 1000
-    max_fee_rate = f"{raw_rate:g}%"
+    max_fee_rate = str(builder_fee)
 
     # Check if user has HL connection and approval status
     result = await db.execute(
@@ -815,6 +827,10 @@ async def confirm_builder_approval(
     if not conn:
         raise HTTPException(status_code=400, detail="No Hyperliquid connection configured")
 
+    # Frontend may pass the browser wallet address that actually signed
+    body = await request.json() if request.headers.get("content-type", "").startswith("application/json") else {}
+    signing_wallet = (body.get("wallet_address") or "").strip().lower() or None
+
     from src.utils.settings import get_hl_config
     hl_cfg = await get_hl_config()
     builder_fee = hl_cfg["builder_fee"] or 10
@@ -823,7 +839,10 @@ async def confirm_builder_approval(
     use_demo = bool(conn.demo_api_key_encrypted and not conn.api_key_encrypted)
     client = _create_hl_client(conn, use_demo)
     try:
+        # Check with stored wallet address first, then signing wallet if different
         approved_fee = await client.check_builder_fee_approval()
+        if approved_fee is None and signing_wallet:
+            approved_fee = await client.check_builder_fee_approval(user_address=signing_wallet)
     finally:
         await client.close()
 
@@ -833,9 +852,65 @@ async def confirm_builder_approval(
         await db.commit()
         return {"status": "ok", "approved_max_fee": approved_fee}
 
+    _config_logger.warning(
+        f"Builder fee check failed: approved_fee={approved_fee}, "
+        f"required={builder_fee}, stored_wallet={client.wallet_address[:10]}..., "
+        f"signing_wallet={signing_wallet[:10] if signing_wallet else 'none'}..."
+    )
     raise HTTPException(
         status_code=400,
         detail="Builder fee approval not found on Hyperliquid. Please try signing again.",
+    )
+
+
+@router.post("/hyperliquid/verify-referral")
+@limiter.limit("10/minute")
+async def verify_referral(
+    request: Request,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """User-facing: check referral via HL API and save result to DB."""
+    result = await db.execute(
+        select(ExchangeConnection).where(
+            ExchangeConnection.user_id == user.id,
+            ExchangeConnection.exchange_type == "hyperliquid",
+        )
+    )
+    conn = result.scalar_one_or_none()
+    if not conn:
+        raise HTTPException(status_code=400, detail="Keine Hyperliquid-Verbindung konfiguriert.")
+
+    from src.utils.settings import get_hl_config
+    hl_cfg = await get_hl_config()
+    referral_code = hl_cfg["referral_code"]
+    if not referral_code:
+        return {"verified": True, "message": "Kein Referral erforderlich."}
+
+    if conn.referral_verified:
+        return {"verified": True, "message": "Bereits verifiziert."}
+
+    use_demo = bool(conn.demo_api_key_encrypted and not conn.api_key_encrypted)
+    client = _create_hl_client(conn, use_demo)
+    try:
+        referral_info = await client.get_referral_info()
+    finally:
+        await client.close()
+
+    referred_by = None
+    if referral_info:
+        referred_by = referral_info.get("referredBy") or referral_info.get("referred_by")
+
+    if referred_by:
+        conn.referral_verified = True
+        conn.referral_verified_at = datetime.utcnow()
+        await db.commit()
+        return {"verified": True, "referred_by": referred_by}
+
+    raise HTTPException(
+        status_code=400,
+        detail=f"Referral nicht gefunden. Bitte registriere dich zuerst ueber "
+               f"https://app.hyperliquid.xyz/join/{referral_code}",
     )
 
 

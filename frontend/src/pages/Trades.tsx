@@ -6,7 +6,8 @@ import type { Trade } from '../types'
 import { ExchangeIcon } from '../components/ui/ExchangeLogo'
 import { SkeletonTable } from '../components/ui/Skeleton'
 import PnlCell from '../components/ui/PnlCell'
-import { ChevronLeft, ChevronRight, X } from 'lucide-react'
+import { X } from 'lucide-react'
+import Pagination from '../components/ui/Pagination'
 import DatePicker from '../components/ui/DatePicker'
 import FilterDropdown from '../components/ui/FilterDropdown'
 
@@ -101,22 +102,6 @@ export default function Trades() {
     setDateFrom('')
     setDateTo('')
     setPage(1)
-  }
-
-  const getPageNumbers = () => {
-    const pages: (number | '...')[] = []
-    if (totalPages <= 7) {
-      for (let i = 1; i <= totalPages; i++) pages.push(i)
-    } else {
-      pages.push(1)
-      if (page > 3) pages.push('...')
-      for (let i = Math.max(2, page - 1); i <= Math.min(totalPages - 1, page + 1); i++) {
-        pages.push(i)
-      }
-      if (page < totalPages - 2) pages.push('...')
-      pages.push(totalPages)
-    }
-    return pages
   }
 
   return (
@@ -289,50 +274,14 @@ export default function Trades() {
       )}
 
       {/* Pagination */}
-      {totalPages > 1 && (
-        <div className="flex items-center justify-center gap-1 mt-5">
-          <button
-            onClick={() => setPage(Math.max(1, page - 1))}
-            disabled={page === 1}
-            aria-label="Previous page"
-            className="p-2 rounded-lg text-gray-400 hover:text-white hover:bg-white/5 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
-          >
-            <ChevronLeft size={16} />
-          </button>
-
-          {getPageNumbers().map((p, i) => (
-            p === '...' ? (
-              <span key={`dots-${i}`} className="px-2 text-gray-500 text-sm">...</span>
-            ) : (
-              <button
-                key={p}
-                onClick={() => setPage(p)}
-                aria-label={`${t('common.page')} ${p}`}
-                className={`min-w-[32px] h-8 rounded-lg text-xs font-medium transition-all duration-200 ${
-                  page === p
-                    ? 'bg-gradient-to-r from-primary-600 to-primary-500 text-white shadow-glow-sm'
-                    : 'text-gray-400 hover:text-white hover:bg-white/5'
-                }`}
-              >
-                {p}
-              </button>
-            )
-          ))}
-
-          <button
-            onClick={() => setPage(Math.min(totalPages, page + 1))}
-            disabled={page === totalPages}
-            aria-label="Next page"
-            className="p-2 rounded-lg text-gray-400 hover:text-white hover:bg-white/5 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
-          >
-            <ChevronRight size={16} />
-          </button>
-
-          <span className="text-xs text-gray-500 ml-3">
-            {t('common.page')} {page} {t('common.of')} {totalPages}
-          </span>
-        </div>
-      )}
+      <div className="mt-5">
+        <Pagination
+          page={page}
+          totalPages={totalPages}
+          onPageChange={setPage}
+          label={totalPages > 1 ? `${t('common.page')} ${page} ${t('common.of')} ${totalPages}` : undefined}
+        />
+      </div>
     </div>
   )
 }

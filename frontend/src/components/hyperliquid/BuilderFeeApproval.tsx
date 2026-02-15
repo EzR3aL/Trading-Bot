@@ -3,8 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { WagmiProvider } from 'wagmi'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { RainbowKitProvider, ConnectButton, darkTheme } from '@rainbow-me/rainbowkit'
-import { useAccount, useSignTypedData } from 'wagmi'
-import { keccak256, toBytes } from 'viem'
+import { useAccount, useWalletClient, useChainId } from 'wagmi'
 import '@rainbow-me/rainbowkit/styles.css'
 import { walletConfig } from '../../config/wallet'
 import { CheckCircle, AlertTriangle, Wallet, Loader2, ExternalLink, X } from 'lucide-react'
@@ -32,17 +31,16 @@ interface BuilderFeeApprovalProps {
 function BuilderFeeApprovalInner({ onApproved, onClose }: BuilderFeeApprovalProps) {
   const { t } = useTranslation()
   const { address, isConnected } = useAccount()
-  const { signTypedData, isPending: isSigning, isSuccess: signSuccess, data: signature, error: signError, reset: resetSign } = useSignTypedData()
+  const chainId = useChainId()
+  const { data: walletClient } = useWalletClient()
 
   const [config, setConfig] = useState<BuilderConfig | null>(null)
   const [loading, setLoading] = useState(true)
   const [step, setStep] = useState(1)
-  const [submitting, setSubmitting] = useState(false)
+  const [processing, setProcessing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [confirmed, setConfirmed] = useState(false)
-  const [nonce, setNonce] = useState(0)
 
-  // Load builder config from backend
   useEffect(() => {
     const fetchConfig = async () => {
       try {
@@ -61,111 +59,106 @@ function BuilderFeeApprovalInner({ onApproved, onClose }: BuilderFeeApprovalProp
     fetchConfig()
   }, [])
 
-  // When wallet connects, advance to step 2
   useEffect(() => {
     if (isConnected && step === 1) {
       setStep(2)
     }
   }, [isConnected, step])
 
-  // After signing succeeds, submit to HL API then confirm with backend
-  useEffect(() => {
-    if (signSuccess && signature && !submitting && !confirmed) {
-      submitApproval(signature)
-    }
-  }, [signSuccess, signature])
-
-  const handleSign = () => {
-    if (!config) return
+  const handleSignAndSubmit = async () => {
+    if (!config || !walletClient || !address) return
     setError(null)
-    resetSign()
-
-    const ts = Date.now()
-    setNonce(ts)
-
-    const action = {
-      type: 'approveBuilderFee' as const,
-      hyperliquidChain: 'Mainnet' as const,
-      maxFeeRate: config.max_fee_rate,
-      builder: config.builder_address,
-      nonce: ts,
-    }
-
-    // Hyperliquid Phantom Agent: compact JSON with sorted keys, then hash
-    const sortedKeys = Object.keys(action).sort() as (keyof typeof action)[]
-    const sorted: Record<string, unknown> = {}
-    for (const k of sortedKeys) sorted[k] = action[k]
-    const actionHash = keccak256(toBytes(JSON.stringify(sorted)))
-
-    signTypedData({
-      domain: {
-        name: 'Exchange',
-        version: '1',
-        chainId: config.chain_id,
-        verifyingContract: '0x0000000000000000000000000000000000000000' as `0x${string}`,
-      },
-      types: {
-        Agent: [
-          { name: 'source', type: 'string' },
-          { name: 'connectionId', type: 'bytes32' },
-        ],
-      },
-      primaryType: 'Agent',
-      message: {
-        source: 'a',
-        connectionId: actionHash,
-      },
-    })
-  }
-
-  const submitApproval = async (sig: string) => {
-    if (!config) return
-    setSubmitting(true)
-    setError(null)
+    setProcessing(true)
 
     try {
-      // Build the action object (same as signed)
+      const nonce = Date.now()
+      // Use wallet's connected chainId as signatureChainId
+      // SDK comment: "signatureChainId can be any chain" — hyperliquidChain determines the env
+      const signatureChainIdHex = '0x' + chainId.toString(16)
+
+      // Sign via standard walletClient.signTypedData (no raw RPC needed)
+      // Domain chainId matches wallet's network so viem validation passes
+      const signature = await walletClient.signTypedData({
+        account: walletClient.account!,
+        domain: {
+          name: 'HyperliquidSignTransaction',
+          version: '1',
+          chainId,
+          verifyingContract: '0x0000000000000000000000000000000000000000' as `0x${string}`,
+        },
+        types: {
+          'HyperliquidTransaction:ApproveBuilderFee': [
+            { name: 'hyperliquidChain', type: 'string' },
+            { name: 'maxFeeRate', type: 'string' },
+            { name: 'builder', type: 'address' },
+            { name: 'nonce', type: 'uint64' },
+          ],
+        },
+        primaryType: 'HyperliquidTransaction:ApproveBuilderFee' as const,
+        message: {
+          hyperliquidChain: 'Mainnet',
+          maxFeeRate: config.max_fee_rate,
+          builder: config.builder_address as `0x${string}`,
+          nonce: BigInt(nonce),
+        },
+      })
+
+      // Parse signature into r, s, v components
+      const r = signature.slice(0, 66)
+      const s = '0x' + signature.slice(66, 130)
+      const v = parseInt(signature.slice(130, 132), 16)
+
+      // Action for POST body (signatureChainId must match the signing domain chainId)
       const action = {
         type: 'approveBuilderFee',
         hyperliquidChain: 'Mainnet',
         maxFeeRate: config.max_fee_rate,
         builder: config.builder_address,
-        nonce: nonce,
+        nonce,
+        signatureChainId: signatureChainIdHex,
       }
 
-      // Parse signature into r, s, v
-      const r = sig.slice(0, 66)
-      const s = '0x' + sig.slice(66, 130)
-      const v = parseInt(sig.slice(130, 132), 16)
-
-      // Send directly to Hyperliquid Exchange API
+      // POST to Hyperliquid Exchange API
       const hlResponse = await fetch('https://api.hyperliquid.xyz/exchange', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action,
-          nonce: nonce,
+          nonce,
           signature: { r, s, v },
+          vaultAddress: null,
         }),
       })
 
+      // Check both HTTP status and response body for errors
+      const hlBody = await hlResponse.json().catch(() => null)
       if (!hlResponse.ok) {
-        const body = await hlResponse.text()
-        throw new Error(`Hyperliquid: ${body}`)
+        throw new Error(`Hyperliquid: ${JSON.stringify(hlBody) || hlResponse.statusText}`)
+      }
+      if (hlBody?.status === 'err') {
+        throw new Error(`Hyperliquid: ${hlBody.response || 'Unknown error'}`)
       }
 
-      // Confirm with our backend (verifies on-chain + saves DB flag)
-      await api.post('/config/hyperliquid/confirm-builder-approval')
+      // Small delay for propagation before backend verification
+      await new Promise(resolve => setTimeout(resolve, 1500))
+
+      // Confirm with our backend — pass signing wallet so it checks the right address
+      await api.post('/config/hyperliquid/confirm-builder-approval', {
+        wallet_address: address,
+      })
 
       setConfirmed(true)
       setStep(3)
-
-      // Wait a moment, then call onApproved
       setTimeout(() => onApproved(), 1500)
-    } catch (err: any) {
-      setError(err.response?.data?.detail || err.message || t('builderFee.signFailed'))
+    } catch (err: unknown) {
+      const e = err as { code?: number; message?: string; response?: { data?: { detail?: string } } }
+      if (e.code === 4001 || e.message?.includes('rejected')) {
+        setError(t('builderFee.signRejected', 'Signing was rejected'))
+      } else {
+        setError(e.response?.data?.detail || e.message || t('builderFee.signFailed'))
+      }
     } finally {
-      setSubmitting(false)
+      setProcessing(false)
     }
   }
 
@@ -288,11 +281,11 @@ function BuilderFeeApprovalInner({ onApproved, onClose }: BuilderFeeApprovalProp
 
           {/* Sign button */}
           <button
-            onClick={handleSign}
-            disabled={isSigning || submitting}
+            onClick={handleSignAndSubmit}
+            disabled={processing}
             className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
           >
-            {isSigning || submitting ? (
+            {processing ? (
               <><Loader2 className="w-4 h-4 animate-spin" /> {t('builderFee.approving')}</>
             ) : (
               t('builderFee.approve')
@@ -300,9 +293,9 @@ function BuilderFeeApprovalInner({ onApproved, onClose }: BuilderFeeApprovalProp
           </button>
 
           {/* Error */}
-          {(error || signError) && (
+          {error && (
             <div className="bg-red-900/30 border border-red-700/50 rounded-lg p-3 text-sm text-red-300 text-left">
-              {error || signError?.message || t('builderFee.signFailed')}
+              {error}
             </div>
           )}
         </div>

@@ -65,8 +65,10 @@ class LLMSignalStrategy(BaseStrategy):
                 f"(max {MAX_CUSTOM_PROMPT_LENGTH}). Shorten your prompt."
             )
         self.temperature = float(self.params.get("temperature", 0.3))
-        self.take_profit_percent = float(self.params.get("take_profit_percent", 4.0))
-        self.stop_loss_percent = float(self.params.get("stop_loss_percent", 1.5))
+        tp_raw = self.params.get("take_profit_percent")
+        sl_raw = self.params.get("stop_loss_percent")
+        self.take_profit_percent = float(tp_raw) if tp_raw is not None else None
+        self.stop_loss_percent = float(sl_raw) if sl_raw is not None else None
 
         # Data sources selection (from Bot Builder cards)
         self.selected_sources: List[str] = self.params.get("data_sources", DEFAULT_SOURCES)
@@ -218,17 +220,16 @@ class LLMSignalStrategy(BaseStrategy):
             else SignalDirection.SHORT
         )
 
-        # Calculate TP/SL
-        if current_price > 0:
+        # Calculate TP/SL (None = no TP/SL, trades closed by rotation or manually)
+        target_price = None
+        stop_loss = None
+        if current_price > 0 and self.take_profit_percent is not None and self.stop_loss_percent is not None:
             if direction == SignalDirection.LONG:
                 target_price = current_price * (1 + self.take_profit_percent / 100)
                 stop_loss = current_price * (1 - self.stop_loss_percent / 100)
             else:
                 target_price = current_price * (1 - self.take_profit_percent / 100)
                 stop_loss = current_price * (1 + self.stop_loss_percent / 100)
-        else:
-            target_price = 0.0
-            stop_loss = 0.0
 
         # Build reason string (sanitized)
         safe_reasoning = sanitize_text(llm_response.reasoning, max_length=400)

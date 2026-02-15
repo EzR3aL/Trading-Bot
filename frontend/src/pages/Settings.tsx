@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { ChevronDown, Search, ChevronLeft, ChevronRight, CheckCircle, Clock, Users } from 'lucide-react'
+import { ChevronDown, Search, CheckCircle, Clock, Users, Activity, Wifi, WifiOff, Shield, Zap, BarChart3, TrendingUp, Database, Cpu, Hammer, UserCheck, DollarSign, ExternalLink, Settings2, Copy, Check } from 'lucide-react'
+import Pagination from '../components/ui/Pagination'
 import api from '../api/client'
 import { useAuthStore } from '../stores/authStore'
 import type { ConnectionsStatusResponse, ExchangeConnectionStatus, ExchangeInfo, ServiceStatus } from '../types'
@@ -160,6 +161,10 @@ export default function Settings() {
   // Connections status
   const [connStatus, setConnStatus] = useState<ConnectionsStatusResponse | null>(null)
   const [connLoading, setConnLoading] = useState(false)
+
+  // Hyperliquid referral (user-facing)
+  const [hlReferralInfo, setHlReferralInfo] = useState<{ referral_code?: string; referral_required?: boolean; referral_verified?: boolean; needs_referral?: boolean } | null>(null)
+  const [hlVerifying, setHlVerifying] = useState(false)
 
   // Hyperliquid revenue
   const [hlRevenue, setHlRevenue] = useState<any>(null)
@@ -423,6 +428,27 @@ export default function Settings() {
     setSaving(false)
   }
 
+  const loadHlReferralInfo = async () => {
+    try {
+      const res = await api.get('/config/hyperliquid/builder-config')
+      setHlReferralInfo(res.data)
+    } catch { /* ignore — no HL connection */ }
+  }
+
+  const verifyHlReferral = async () => {
+    setHlVerifying(true)
+    try {
+      await api.post('/config/hyperliquid/verify-referral')
+      showMessage(t('affiliate.referralVerified'))
+      await loadHlReferralInfo()
+      const connRes = await api.get('/config/exchange-connections')
+      setConnections(connRes.data.connections || [])
+    } catch (err: any) {
+      showMessage(err.response?.data?.detail || t('common.error'))
+    }
+    setHlVerifying(false)
+  }
+
   const loadAdminUids = async (page = adminUidPage, search = adminUidSearch, status = adminUidFilter) => {
     try {
       const res = await api.get('/config/admin/affiliate-uids', { params: { page, per_page: 15, search, status } })
@@ -443,6 +469,13 @@ export default function Settings() {
       showMessage(err.response?.data?.detail || t('common.error'))
     }
   }
+
+  // Load HL referral info when HL accordion opens
+  useEffect(() => {
+    if (openExchange === 'hyperliquid' && !hlReferralInfo) {
+      loadHlReferralInfo()
+    }
+  }, [openExchange])
 
   useEffect(() => {
     if (activeTab === 'connections' && !connStatus) {
@@ -515,677 +548,1012 @@ export default function Settings() {
       </div>
 
       {/* API Keys Tab — Accordion */}
-      {activeTab === 'apiKeys' && (
-        <div className="max-w-2xl space-y-2">
-          {exchanges.map((ex) => {
-            const conn = getConn(ex.name)
-            const form = getForm(ex.name)
-            const showPass = ex.requires_passphrase
-            const isOpen = openExchange === ex.name
-            const liveOk = conn?.api_keys_configured ?? false
-            const demoOk = conn?.demo_api_keys_configured ?? false
-
-            return (
-              <div key={ex.name} className="border border-white/10 bg-white/[0.03] rounded-xl overflow-hidden">
-                {/* Accordion Header */}
-                <button
-                  onClick={() => setOpenExchange(isOpen ? null : ex.name)}
-                  className="w-full flex items-center justify-between px-5 py-4 hover:bg-white/[0.04] transition-colors"
-                >
-                  <div className="flex items-center gap-3">
-                    <ExchangeIcon exchange={ex.name} size={20} />
-                    <h3 className="text-white font-semibold">{ex.display_name}</h3>
+      {activeTab === 'apiKeys' && (() => {
+        const liveCount = exchanges.filter(ex => getConn(ex.name)?.api_keys_configured).length
+        const demoCount = exchanges.filter(ex => getConn(ex.name)?.demo_api_keys_configured).length
+        const totalConfigured = liveCount + demoCount
+        const totalPossible = exchanges.length + exchanges.filter(ex => ex.supports_demo).length
+        const configPct = totalPossible > 0 ? Math.round((totalConfigured / totalPossible) * 100) : 0
+        return (
+          <div className="space-y-6">
+            {/* ── Summary Bar ── */}
+            <div className="border border-white/10 bg-white/[0.03] rounded-xl p-5">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="flex items-center gap-4">
+                  <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
+                    liveCount === exchanges.length ? 'bg-emerald-500/15' : liveCount > 0 ? 'bg-yellow-500/15' : 'bg-white/5'
+                  }`}>
+                    <Zap size={22} className={
+                      liveCount === exchanges.length ? 'text-emerald-400' : liveCount > 0 ? 'text-yellow-400' : 'text-gray-600'
+                    } />
                   </div>
-                  <div className="flex items-center gap-2">
-                    {liveOk && (
-                      <span className="text-xs px-2 py-0.5 rounded-full bg-green-900/40 text-green-400 border border-green-800">
-                        Live
-                      </span>
-                    )}
-                    {demoOk && (
-                      <span className="text-xs px-2 py-0.5 rounded-full bg-yellow-900/40 text-yellow-400 border border-yellow-800">
-                        Demo
-                      </span>
-                    )}
-                    {!liveOk && !demoOk && (
-                      <span className="text-xs px-2 py-0.5 rounded-full bg-white/5 text-gray-500 border border-white/10">
-                        {t('settings.notConfigured')}
-                      </span>
-                    )}
-                    <ChevronDown size={16} className={`text-gray-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+                  <div>
+                    <h3 className="text-white font-semibold text-lg leading-tight">
+                      {t('settings.apiKeys')}
+                    </h3>
+                    <p className="text-gray-500 text-sm mt-0.5">
+                      {liveCount}/{exchanges.length} Live
+                      {demoCount > 0 && <> &middot; {demoCount} Demo</>}
+                    </p>
                   </div>
-                </button>
-
-                {/* Accordion Content */}
-                {isOpen && (
-                  <div className="px-5 pb-5 pt-1 space-y-5 border-t border-white/5">
-                    <KeyForm
-                      label={ex.auth_type === 'eth_wallet' ? t('settings.mainnet') : t('common.live')}
-                      configured={liveOk}
-                      keyValue={form.apiKey} secretValue={form.apiSecret} passphraseValue={form.passphrase}
-                      onKeyChange={(v) => updateForm(ex.name, { apiKey: v })}
-                      onSecretChange={(v) => updateForm(ex.name, { apiSecret: v })}
-                      onPassphraseChange={(v) => updateForm(ex.name, { passphrase: v })}
-                      onSave={() => saveLiveKeys(ex.name)}
-                      onTest={() => testConnection(ex.name, 'live')}
-                      saving={saving} t={t} showPassphrase={showPass} authType={ex.auth_type}
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-24 h-2 bg-white/5 rounded-full overflow-hidden">
+                    <div
+                      className={`h-full rounded-full transition-all duration-500 ${
+                        liveCount === exchanges.length ? 'bg-emerald-500' : liveCount > 0 ? 'bg-yellow-500' : 'bg-gray-600'
+                      }`}
+                      style={{ width: `${configPct}%` }}
                     />
+                  </div>
+                  <span className={`text-sm font-bold tabular-nums ${
+                    liveCount === exchanges.length ? 'text-emerald-400' : liveCount > 0 ? 'text-yellow-400' : 'text-gray-600'
+                  }`}>
+                    {configPct}%
+                  </span>
+                </div>
+              </div>
+            </div>
 
-                    {ex.supports_demo && (
-                      <>
-                        <div className="border-t border-white/10 my-2" />
+            {/* ── Exchange Cards ── */}
+            <div className="space-y-3 max-w-2xl">
+              {exchanges.map((ex) => {
+                const conn = getConn(ex.name)
+                const form = getForm(ex.name)
+                const showPass = ex.requires_passphrase
+                const isOpen = openExchange === ex.name
+                const liveOk = conn?.api_keys_configured ?? false
+                const demoOk = conn?.demo_api_keys_configured ?? false
+
+                return (
+                  <div key={ex.name} className="border border-white/[0.08] bg-white/[0.02] rounded-xl overflow-hidden">
+                    {/* Accordion Header with accent */}
+                    <button
+                      onClick={() => setOpenExchange(isOpen ? null : ex.name)}
+                      className="w-full flex items-center justify-between px-5 py-3.5 hover:bg-white/[0.04] transition-colors"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${
+                          liveOk ? 'bg-emerald-500/10' : 'bg-white/5'
+                        }`}>
+                          <ExchangeIcon exchange={ex.name} size={20} />
+                        </div>
+                        <div className="text-left">
+                          <h3 className="text-white font-semibold text-sm">{ex.display_name}</h3>
+                          {liveOk && (
+                            <span className="text-[10px] text-gray-600">{ex.auth_type === 'eth_wallet' ? 'Wallet' : 'API'}</span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {liveOk && (
+                          <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400">
+                            Live
+                          </span>
+                        )}
+                        {demoOk && (
+                          <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-yellow-500/10 text-yellow-400">
+                            Demo
+                          </span>
+                        )}
+                        {!liveOk && !demoOk && (
+                          <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-white/5 text-gray-500">
+                            {t('settings.notConfigured')}
+                          </span>
+                        )}
+                        <ChevronDown size={14} className={`text-gray-500 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+                      </div>
+                    </button>
+
+                    {/* Accordion Content */}
+                    {isOpen && (
+                      <div className="px-5 pb-5 pt-1 space-y-5 border-t border-white/[0.06]">
                         <KeyForm
-                          label={ex.auth_type === 'eth_wallet' ? t('settings.testnet') : t('common.demo')}
-                          configured={demoOk}
-                          keyValue={form.demoApiKey} secretValue={form.demoApiSecret} passphraseValue={form.demoPassphrase}
-                          onKeyChange={(v) => updateForm(ex.name, { demoApiKey: v })}
-                          onSecretChange={(v) => updateForm(ex.name, { demoApiSecret: v })}
-                          onPassphraseChange={(v) => updateForm(ex.name, { demoPassphrase: v })}
-                          onSave={() => saveDemoKeys(ex.name)}
-                          onTest={() => testConnection(ex.name, 'demo')}
+                          label={ex.auth_type === 'eth_wallet' ? t('settings.mainnet') : t('common.live')}
+                          configured={liveOk}
+                          keyValue={form.apiKey} secretValue={form.apiSecret} passphraseValue={form.passphrase}
+                          onKeyChange={(v) => updateForm(ex.name, { apiKey: v })}
+                          onSecretChange={(v) => updateForm(ex.name, { apiSecret: v })}
+                          onPassphraseChange={(v) => updateForm(ex.name, { passphrase: v })}
+                          onSave={() => saveLiveKeys(ex.name)}
+                          onTest={() => testConnection(ex.name, 'live')}
                           saving={saving} t={t} showPassphrase={showPass} authType={ex.auth_type}
                         />
-                        {ex.auth_type === 'eth_wallet' && (
-                          <div className="p-2.5 bg-amber-900/20 border border-amber-800/40 rounded text-xs text-amber-300">
-                            {t('settings.hyperliquidTestnetNote')}
-                          </div>
-                        )}
-                      </>
-                    )}
 
-                    {/* Affiliate UID (Bitget/Weex only) */}
-                    {(ex.name === 'bitget' || ex.name === 'weex') && userAffiliateLinks[ex.name]?.uid_required && (
-                      <div className="mt-4 pt-4 border-t border-white/5">
-                        <h4 className="text-sm font-medium text-white mb-2">{t('affiliate.uid')}</h4>
-                        <p className="text-gray-400 text-xs mb-3">{t('affiliate.uidHint')}</p>
-                        {userAffiliateLinks[ex.name]?.affiliate_url && (
-                          <div className="mb-3 p-2.5 bg-emerald-900/20 border border-emerald-800/30 rounded">
-                            <p className="text-gray-400 text-xs mb-1">{userAffiliateLinks[ex.name]?.label || t('bots.affiliateLink')}</p>
-                            <a href={userAffiliateLinks[ex.name].affiliate_url} target="_blank" rel="noopener noreferrer"
-                               className="text-emerald-400 hover:text-emerald-300 break-all text-sm font-medium">
-                              {userAffiliateLinks[ex.name].affiliate_url}
-                            </a>
+                        {ex.supports_demo && (
+                          <>
+                            <div className="border-t border-white/[0.06] my-2" />
+                            <KeyForm
+                              label={ex.auth_type === 'eth_wallet' ? t('settings.testnet') : t('common.demo')}
+                              configured={demoOk}
+                              keyValue={form.demoApiKey} secretValue={form.demoApiSecret} passphraseValue={form.demoPassphrase}
+                              onKeyChange={(v) => updateForm(ex.name, { demoApiKey: v })}
+                              onSecretChange={(v) => updateForm(ex.name, { demoApiSecret: v })}
+                              onPassphraseChange={(v) => updateForm(ex.name, { demoPassphrase: v })}
+                              onSave={() => saveDemoKeys(ex.name)}
+                              onTest={() => testConnection(ex.name, 'demo')}
+                              saving={saving} t={t} showPassphrase={showPass} authType={ex.auth_type}
+                            />
+                            {ex.auth_type === 'eth_wallet' && (
+                              <div className="p-2.5 bg-amber-900/20 border border-amber-800/40 rounded-lg text-xs text-amber-300">
+                                {t('settings.hyperliquidTestnetNote')}
+                              </div>
+                            )}
+                          </>
+                        )}
+
+                        {/* Hyperliquid: Referral verification (no UID) */}
+                        {ex.name === 'hyperliquid' && hlReferralInfo?.referral_required && (
+                          <div className="mt-4 pt-4 border-t border-white/[0.06]">
+                            <h4 className="text-sm font-medium text-white mb-2">{t('affiliate.referral')}</h4>
+                            <p className="text-gray-400 text-xs mb-3">{t('affiliate.referralHint')}</p>
+                            {hlReferralInfo.referral_code && (
+                              <div className="mb-3 p-3 bg-emerald-500/[0.05] border border-emerald-500/20 rounded-lg">
+                                <p className="text-gray-400 text-xs mb-1">{t('affiliate.referralRegisterVia')}</p>
+                                <a href={`https://app.hyperliquid.xyz/join/${hlReferralInfo.referral_code}`} target="_blank" rel="noopener noreferrer"
+                                   className="text-emerald-400 hover:text-emerald-300 break-all text-sm font-medium inline-flex items-center gap-1.5">
+                                  <ExternalLink size={12} />
+                                  https://app.hyperliquid.xyz/join/{hlReferralInfo.referral_code}
+                                </a>
+                              </div>
+                            )}
+                            <div className="flex items-center gap-3">
+                              {hlReferralInfo.referral_verified ? (
+                                <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400">
+                                  {t('affiliate.referralVerified')}
+                                </span>
+                              ) : (
+                                <>
+                                  <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-yellow-500/10 text-yellow-400">
+                                    {t('affiliate.referralNotVerified')}
+                                  </span>
+                                  <button
+                                    onClick={verifyHlReferral}
+                                    disabled={hlVerifying}
+                                    className="px-3 py-1.5 text-xs bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 transition-colors"
+                                  >
+                                    {hlVerifying ? t('common.loading') : t('affiliate.verifyReferral')}
+                                  </button>
+                                </>
+                              )}
+                            </div>
                           </div>
                         )}
-                        <div className="flex gap-2 items-end">
-                          <div className="flex-1">
-                            <input
-                              type="text"
-                              value={uidForms[ex.name] ?? getConn(ex.name)?.affiliate_uid ?? ''}
-                              onChange={(e) => setUidForms(prev => ({ ...prev, [ex.name]: e.target.value }))}
-                              placeholder={t('affiliate.uidPlaceholder')}
-                              className="filter-select w-full text-sm"
-                            />
-                          </div>
-                          <button
-                            onClick={() => saveAffiliateUid(ex.name)}
-                            disabled={saving || !uidForms[ex.name]?.trim()}
-                            className="px-3 py-1.5 text-sm bg-primary-600 text-white rounded hover:bg-primary-700 disabled:opacity-50"
-                          >
-                            {t('affiliate.submitUid')}
-                          </button>
-                        </div>
-                        {getConn(ex.name)?.affiliate_uid && (
-                          <div className="mt-2">
-                            {getConn(ex.name)?.affiliate_verified ? (
-                              <span className="text-xs px-2 py-0.5 rounded-full bg-green-900/40 text-green-400 border border-green-800">
-                                {t('affiliate.uidVerified')}
-                              </span>
-                            ) : (
-                              <span className="text-xs px-2 py-0.5 rounded-full bg-yellow-900/40 text-yellow-400 border border-yellow-800">
-                                {t('affiliate.uidPending')}
-                              </span>
+
+                        {/* Bitget/Weex: Affiliate UID */}
+                        {ex.name !== 'hyperliquid' && userAffiliateLinks[ex.name]?.uid_required && (
+                          <div className="mt-4 pt-4 border-t border-white/[0.06]">
+                            <h4 className="text-sm font-medium text-white mb-2">{t('affiliate.uid')}</h4>
+                            <p className="text-gray-400 text-xs mb-3">{t('affiliate.uidHint')}</p>
+                            {userAffiliateLinks[ex.name]?.affiliate_url && (
+                              <div className="mb-3 p-3 bg-emerald-500/[0.05] border border-emerald-500/20 rounded-lg">
+                                <p className="text-gray-400 text-xs mb-1">{userAffiliateLinks[ex.name]?.label || t('bots.affiliateLink')}</p>
+                                <a href={userAffiliateLinks[ex.name].affiliate_url} target="_blank" rel="noopener noreferrer"
+                                   className="text-emerald-400 hover:text-emerald-300 break-all text-sm font-medium inline-flex items-center gap-1.5">
+                                  <ExternalLink size={12} />
+                                  {userAffiliateLinks[ex.name].affiliate_url}
+                                </a>
+                              </div>
+                            )}
+                            <div className="flex gap-2 items-end">
+                              <div className="flex-1">
+                                <input
+                                  type="text"
+                                  value={uidForms[ex.name] ?? getConn(ex.name)?.affiliate_uid ?? ''}
+                                  onChange={(e) => setUidForms(prev => ({ ...prev, [ex.name]: e.target.value }))}
+                                  placeholder={t('affiliate.uidPlaceholder')}
+                                  className="filter-select w-full text-sm"
+                                />
+                              </div>
+                              <button
+                                onClick={() => saveAffiliateUid(ex.name)}
+                                disabled={saving || !uidForms[ex.name]?.trim()}
+                                className="px-3 py-1.5 text-xs bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 transition-colors"
+                              >
+                                {t('affiliate.submitUid')}
+                              </button>
+                            </div>
+                            {getConn(ex.name)?.affiliate_uid && (
+                              <div className="mt-2">
+                                {getConn(ex.name)?.affiliate_verified ? (
+                                  <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400">
+                                    {t('affiliate.uidVerified')}
+                                  </span>
+                                ) : (
+                                  <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-yellow-500/10 text-yellow-400">
+                                    {t('affiliate.uidPending')}
+                                  </span>
+                                )}
+                              </div>
                             )}
                           </div>
                         )}
                       </div>
                     )}
                   </div>
-                )}
-              </div>
-            )
-          })}
-        </div>
-      )}
-
-      {/* LLM Keys Tab — Accordion */}
-      {activeTab === 'llmKeys' && (
-        <div className="max-w-2xl">
-          <p className="text-sm text-gray-400 mb-4">{t('settings.llmKeysDescription')}</p>
-          <div className="space-y-2">
-            {llmConnections.map(({ provider_type, api_key_configured, display_name, free_tier, family_name, models }) => {
-              const isOpen = openLlm === provider_type
-              return (
-                <div key={provider_type} className="border border-white/10 bg-white/[0.03] rounded-xl overflow-hidden">
-                  {/* Accordion Header */}
-                  <button
-                    onClick={() => setOpenLlm(isOpen ? null : provider_type)}
-                    className="w-full flex items-center justify-between px-5 py-4 hover:bg-white/[0.04] transition-colors"
-                  >
-                    <div className="flex items-center gap-2">
-                      <h4 className="text-white text-sm font-medium">{family_name || display_name}</h4>
-                      {models && models.length > 0 && (
-                        <span className="text-xs text-gray-500">({models.length} {t('settings.models')})</span>
-                      )}
-                      {free_tier && (
-                        <span className="text-xs px-1.5 py-0.5 rounded bg-blue-900/40 text-blue-400 border border-blue-800">{t('settings.free')}</span>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className={`text-xs px-2 py-0.5 rounded-full ${api_key_configured ? 'bg-green-900/40 text-green-400 border border-green-800' : 'bg-white/5 text-gray-500 border border-white/10'}`}>
-                        {api_key_configured ? t('settings.configured') : t('settings.notConfigured')}
-                      </span>
-                      <ChevronDown size={16} className={`text-gray-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
-                    </div>
-                  </button>
-
-                  {/* Accordion Content */}
-                  {isOpen && (
-                    <div className="px-5 pb-5 pt-1 space-y-3 border-t border-white/5">
-                      {/* Available models */}
-                      {models && models.length > 0 && (
-                        <div>
-                          <span className="block text-xs text-gray-500 mb-1.5">{t('settings.availableModels')}</span>
-                          <div className="flex flex-wrap gap-1.5">
-                            {models.map((m: any) => (
-                              <span
-                                key={m.id}
-                                className={`px-2 py-0.5 text-xs rounded border ${
-                                  m.default
-                                    ? 'bg-primary-900/30 text-primary-400 border-primary-800'
-                                    : 'bg-white/5 text-gray-400 border-white/10'
-                                }`}
-                              >
-                                {m.name}{m.default ? ` (${t('settings.defaultModel')})` : ''}
-                              </span>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                      <div>
-                        <label htmlFor={`llm-key-${provider_type}`} className="block text-xs text-gray-500 mb-1">{t('settings.apiKey')}</label>
-                        <input
-                          id={`llm-key-${provider_type}`}
-                          type="password"
-                          value={llmKeyForms[provider_type] || ''}
-                          onChange={(e) => setLlmKeyForms(prev => ({ ...prev, [provider_type]: e.target.value }))}
-                          placeholder={api_key_configured ? '****configured****' : ''}
-                          className="filter-select w-full text-sm"
-                        />
-                      </div>
-                      <div className="flex gap-2">
-                        <button onClick={() => saveLlmKey(provider_type)} disabled={saving}
-                          className="px-3 py-1.5 text-sm bg-primary-600 text-white rounded hover:bg-primary-700 disabled:opacity-50">
-                          {t('settings.save')}
-                        </button>
-                        <button onClick={() => testLlmKey(provider_type)} disabled={!api_key_configured || saving}
-                          className="px-3 py-1.5 text-sm bg-gray-700 text-white rounded hover:bg-gray-600 disabled:opacity-50">
-                          {t('settings.testConnection')}
-                        </button>
-                        {api_key_configured && (
-                          <button onClick={() => deleteLlmKey(provider_type)} disabled={saving}
-                            className="px-3 py-1.5 text-sm bg-red-900/50 text-red-400 rounded hover:bg-red-900 disabled:opacity-50">
-                            {t('presets.delete')}
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* Affiliate Links Tab (admin only) */}
-      {activeTab === 'affiliateLinks' && (
-        <div>
-          <p className="text-sm text-gray-400 mb-4">{t('settings.affiliateLinksDesc')}</p>
-          <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.6fr)] gap-4 items-start">
-            {/* Left: Affiliate Link Configuration */}
-            <div className="space-y-4">
-              {['bitget', 'weex', 'hyperliquid'].map((ex) => {
-                const form = affiliateForms[ex] || { url: '', label: '', active: true }
-                const hasExisting = !!affiliateLinks[ex]
-                return (
-                  <div key={ex} className="border border-white/10 bg-white/[0.03] rounded-xl p-5">
-                    <div className="flex items-center gap-3 mb-4">
-                      <ExchangeIcon exchange={ex} size={20} />
-                      <h3 className="text-white font-semibold capitalize">{ex}</h3>
-                      {hasExisting && (
-                        <span className="text-xs px-2 py-0.5 rounded-full bg-green-900/40 text-green-400 border border-green-800">
-                          {t('settings.configured')}
-                        </span>
-                      )}
-                    </div>
-                    <div className="space-y-3">
-                      <div>
-                        <label className="block text-xs text-gray-500 mb-1">{t('settings.affiliateUrl')}</label>
-                        <input
-                          type="text"
-                          value={form.url}
-                          onChange={(e) => setAffiliateForms(prev => ({ ...prev, [ex]: { ...form, url: e.target.value } }))}
-                          placeholder="https://..."
-                          className="filter-select w-full text-sm"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs text-gray-500 mb-1">{t('settings.affiliateLabel')}</label>
-                        <input
-                          type="text"
-                          value={form.label}
-                          onChange={(e) => setAffiliateForms(prev => ({ ...prev, [ex]: { ...form, label: e.target.value } }))}
-                          placeholder={t('settings.affiliateLabelPlaceholder')}
-                          className="filter-select w-full text-sm"
-                        />
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="checkbox"
-                          id={`aff-active-${ex}`}
-                          checked={form.active}
-                          onChange={(e) => setAffiliateForms(prev => ({ ...prev, [ex]: { ...form, active: e.target.checked } }))}
-                          className="rounded border-white/10 bg-white/5 text-primary-600"
-                        />
-                        <label htmlFor={`aff-active-${ex}`} className="text-sm text-gray-400">{t('settings.affiliateActive')}</label>
-                      </div>
-                      {(ex === 'bitget' || ex === 'weex') && (
-                        <div className="flex items-center gap-2">
-                          <input
-                            type="checkbox"
-                            id={`aff-uid-${ex}`}
-                            checked={form.uidRequired}
-                            onChange={(e) => setAffiliateForms(prev => ({ ...prev, [ex]: { ...form, uidRequired: e.target.checked } }))}
-                            className="rounded border-white/10 bg-white/5 text-primary-600"
-                          />
-                          <label htmlFor={`aff-uid-${ex}`} className="text-sm text-gray-400">{t('affiliate.uidRequiredToggle')}</label>
-                        </div>
-                      )}
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => saveAffiliateLink(ex)}
-                          disabled={saving || !form.url}
-                          className="px-3 py-1.5 text-sm bg-primary-600 text-white rounded hover:bg-primary-700 disabled:opacity-50"
-                        >
-                          {t('settings.save')}
-                        </button>
-                        {hasExisting && (
-                          <button
-                            onClick={() => deleteAffiliateLink(ex)}
-                            disabled={saving}
-                            className="px-3 py-1.5 text-sm bg-red-900/50 text-red-400 rounded hover:bg-red-900 disabled:opacity-50"
-                          >
-                            {t('presets.delete')}
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  </div>
                 )
               })}
             </div>
+          </div>
+        )
+      })()}
 
-            {/* Right: Admin UID Management — Paginated */}
-            <div className="border border-white/10 bg-white/[0.03] rounded-xl p-4 lg:sticky lg:top-4">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-white font-medium">{t('affiliate.affiliateUids')}</h3>
-                <div className="flex items-center gap-2">
-                  <span className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-white/5 text-gray-400">
-                    <Users size={11} /> {adminUidStats.total}
-                  </span>
-                  <span className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-yellow-900/30 text-yellow-400">
-                    <Clock size={11} /> {adminUidStats.pending}
-                  </span>
-                  <span className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-green-900/30 text-green-400">
-                    <CheckCircle size={11} /> {adminUidStats.verified}
-                  </span>
-                </div>
-              </div>
-
-              {/* Search + Filter */}
-              <div className="flex items-center gap-2 mb-3">
-                <div className="relative flex-1">
-                  <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-500" />
-                  <input
-                    type="text"
-                    value={adminUidSearch}
-                    onChange={(e) => {
-                      setAdminUidSearch(e.target.value)
-                      loadAdminUids(1, e.target.value, adminUidFilter)
-                    }}
-                    placeholder="Username / UID..."
-                    className="filter-select w-full text-sm !pl-8"
-                  />
-                </div>
-                <div className="flex rounded-lg border border-white/10 overflow-hidden shrink-0">
-                  {(['all', 'pending', 'verified'] as const).map(f => (
-                    <button key={f} onClick={() => { setAdminUidFilter(f); loadAdminUids(1, adminUidSearch, f) }}
-                      className={`px-2.5 py-1.5 text-xs transition-colors ${adminUidFilter === f ? 'bg-white/10 text-white' : 'text-gray-500 hover:text-gray-300'}`}>
-                      {f === 'all' ? 'Alle' : f === 'pending' ? 'Offen' : 'Verifiziert'}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Table */}
-              {adminUids.length === 0 ? (
-                <p className="text-gray-500 text-sm py-6 text-center">{t('affiliate.noUids')}</p>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b border-white/5 text-gray-500 text-xs">
-                        <th className="text-left py-2 px-2 font-medium">User</th>
-                        <th className="text-left py-2 px-2 font-medium">Exchange</th>
-                        <th className="text-left py-2 px-2 font-medium">UID</th>
-                        <th className="text-left py-2 px-2 font-medium">{t('affiliate.submittedAt')}</th>
-                        <th className="text-left py-2 px-2 font-medium">Status</th>
-                        <th className="text-right py-2 px-2 font-medium">Aktion</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {adminUids.map((item: any) => (
-                        <tr key={item.connection_id} className="border-b border-white/5 hover:bg-white/[0.02]">
-                          <td className="py-1.5 px-2 text-white font-medium">{item.username}</td>
-                          <td className="py-1.5 px-2">
-                            <div className="flex items-center gap-1.5">
-                              <ExchangeIcon exchange={item.exchange_type} size={14} />
-                              <span className="text-gray-400 capitalize">{item.exchange_type}</span>
-                            </div>
-                          </td>
-                          <td className="py-1.5 px-2 text-gray-300 font-mono text-xs">{item.affiliate_uid}</td>
-                          <td className="py-1.5 px-2 text-gray-500 text-xs whitespace-nowrap">
-                            {item.submitted_at
-                              ? new Date(item.submitted_at).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' })
-                              : '—'}
-                          </td>
-                          <td className="py-1.5 px-2">
-                            <span className={`text-[10px] px-1.5 py-0.5 rounded ${
-                              item.affiliate_verified
-                                ? 'bg-green-900/30 text-green-400'
-                                : 'bg-yellow-900/30 text-yellow-400'
-                            }`}>
-                              {item.affiliate_verified ? t('affiliate.uidVerified') : t('affiliate.uidPending')}
-                            </span>
-                          </td>
-                          <td className="py-1.5 px-2 text-right">
-                            <div className="flex gap-1 justify-end">
-                              {!item.affiliate_verified && (
-                                <button onClick={() => verifyAdminUid(item.connection_id, true)}
-                                  title={t('affiliate.verifyUid')}
-                                  className="px-2 py-0.5 text-[11px] bg-green-900/30 text-green-400 rounded hover:bg-green-900/50 transition-colors">
-                                  {t('affiliate.verifyUid')}
-                                </button>
-                              )}
-                              <button onClick={() => verifyAdminUid(item.connection_id, false)}
-                                title={t('affiliate.rejectUid')}
-                                className={`px-2 py-0.5 text-[11px] rounded transition-colors ${
-                                  item.affiliate_verified
-                                    ? 'bg-red-900/30 text-red-400 hover:bg-red-900/50'
-                                    : 'bg-red-900/20 text-red-400/60 hover:bg-red-900/40'
-                                }`}>
-                                {t('affiliate.rejectUid')}
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-
-              {/* Pagination */}
-              {adminUidPages > 1 && (
-                <div className="flex items-center justify-between mt-3 pt-3 border-t border-white/5">
-                  <span className="text-xs text-gray-500">{adminUidTotal} Ergebnisse · Seite {adminUidPage}/{adminUidPages}</span>
-                  <div className="flex items-center gap-1">
-                    <button onClick={() => loadAdminUids(adminUidPage - 1)} disabled={adminUidPage <= 1}
-                      className="p-1 rounded text-gray-400 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors">
-                      <ChevronLeft size={16} />
-                    </button>
-                    {Array.from({ length: Math.min(adminUidPages, 5) }, (_, i) => {
-                      const start = Math.max(1, Math.min(adminUidPage - 2, adminUidPages - 4))
-                      const p = start + i
-                      if (p > adminUidPages) return null
-                      return (
-                        <button key={p} onClick={() => loadAdminUids(p)}
-                          className={`w-7 h-7 text-xs rounded transition-colors ${p === adminUidPage ? 'bg-primary-600 text-white' : 'text-gray-400 hover:bg-white/10'}`}>
-                          {p}
-                        </button>
-                      )
-                    })}
-                    <button onClick={() => loadAdminUids(adminUidPage + 1)} disabled={adminUidPage >= adminUidPages}
-                      className="p-1 rounded text-gray-400 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors">
-                      <ChevronRight size={16} />
-                    </button>
+      {/* LLM Keys Tab — Accordion */}
+      {activeTab === 'llmKeys' && (() => {
+        const configuredLlm = llmConnections.filter(c => c.api_key_configured).length
+        const totalLlm = llmConnections.length
+        const llmPct = totalLlm > 0 ? Math.round((configuredLlm / totalLlm) * 100) : 0
+        const totalModels = llmConnections.reduce((sum, c) => sum + (c.models?.length || 0), 0)
+        return (
+          <div className="space-y-6">
+            {/* ── Summary Bar ── */}
+            <div className="border border-white/10 bg-white/[0.03] rounded-xl p-5">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="flex items-center gap-4">
+                  <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
+                    configuredLlm > 0 ? 'bg-emerald-500/15' : 'bg-white/5'
+                  }`}>
+                    <Cpu size={22} className={configuredLlm > 0 ? 'text-emerald-400' : 'text-gray-600'} />
+                  </div>
+                  <div>
+                    <h3 className="text-white font-semibold text-lg leading-tight">
+                      {t('settings.llmKeys')}
+                    </h3>
+                    <p className="text-gray-500 text-sm mt-0.5">
+                      {configuredLlm}/{totalLlm} {t('settings.configured')}
+                      {totalModels > 0 && <> &middot; {totalModels} {t('settings.models')}</>}
+                    </p>
                   </div>
                 </div>
-              )}
+                <div className="flex items-center gap-2">
+                  <div className="w-24 h-2 bg-white/5 rounded-full overflow-hidden">
+                    <div
+                      className={`h-full rounded-full transition-all duration-500 ${
+                        configuredLlm > 0 ? 'bg-emerald-500' : 'bg-gray-600'
+                      }`}
+                      style={{ width: `${llmPct}%` }}
+                    />
+                  </div>
+                  <span className={`text-sm font-bold tabular-nums ${
+                    configuredLlm > 0 ? 'text-emerald-400' : 'text-gray-600'
+                  }`}>
+                    {llmPct}%
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* ── Provider Cards ── */}
+            <div>
+              <p className="text-xs text-gray-500 mb-3">{t('settings.llmKeysDescription')}</p>
+              <div className="space-y-3 max-w-2xl">
+                {llmConnections.map(({ provider_type, api_key_configured, display_name, free_tier, family_name, models }) => {
+                  const isOpen = openLlm === provider_type
+                  return (
+                    <div key={provider_type} className="border border-white/[0.08] bg-white/[0.02] rounded-xl overflow-hidden">
+                      {/* Accordion Header */}
+                      <button
+                        onClick={() => setOpenLlm(isOpen ? null : provider_type)}
+                        className="w-full flex items-center justify-between px-5 py-3.5 hover:bg-white/[0.04] transition-colors"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${
+                            api_key_configured ? 'bg-emerald-500/10' : 'bg-white/5'
+                          }`}>
+                            <Cpu size={16} className={api_key_configured ? 'text-emerald-400' : 'text-gray-500'} />
+                          </div>
+                          <div className="text-left">
+                            <div className="flex items-center gap-2">
+                              <h4 className="text-white text-sm font-medium">{family_name || display_name}</h4>
+                              {free_tier && (
+                                <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-400">{t('settings.free')}</span>
+                              )}
+                            </div>
+                            {models && models.length > 0 && (
+                              <span className="text-[10px] text-gray-600">{models.length} {t('settings.models')}</span>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${
+                            api_key_configured ? 'bg-emerald-500/10 text-emerald-400' : 'bg-white/5 text-gray-500'
+                          }`}>
+                            {api_key_configured ? t('settings.configured') : t('settings.notConfigured')}
+                          </span>
+                          <ChevronDown size={14} className={`text-gray-500 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+                        </div>
+                      </button>
+
+                      {/* Accordion Content */}
+                      {isOpen && (
+                        <div className="px-5 pb-5 pt-1 space-y-3 border-t border-white/[0.06]">
+                          {/* Available models */}
+                          {models && models.length > 0 && (
+                            <div>
+                              <span className="block text-xs text-gray-500 mb-1.5">{t('settings.availableModels')}</span>
+                              <div className="flex flex-wrap gap-1.5">
+                                {models.map((m: any) => (
+                                  <span
+                                    key={m.id}
+                                    className={`px-2 py-0.5 text-[10px] rounded border ${
+                                      m.default
+                                        ? 'bg-primary-900/30 text-primary-400 border-primary-800'
+                                        : 'bg-white/[0.03] text-gray-400 border-white/[0.08]'
+                                    }`}
+                                  >
+                                    {m.name}{m.default ? ` (${t('settings.defaultModel')})` : ''}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                          <div>
+                            <label htmlFor={`llm-key-${provider_type}`} className="block text-xs text-gray-500 mb-1">{t('settings.apiKey')}</label>
+                            <input
+                              id={`llm-key-${provider_type}`}
+                              type="password"
+                              value={llmKeyForms[provider_type] || ''}
+                              onChange={(e) => setLlmKeyForms(prev => ({ ...prev, [provider_type]: e.target.value }))}
+                              placeholder={api_key_configured ? '****configured****' : ''}
+                              className="filter-select w-full text-sm"
+                            />
+                          </div>
+                          <div className="flex gap-2">
+                            <button onClick={() => saveLlmKey(provider_type)} disabled={saving}
+                              className="px-3 py-1.5 text-xs bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 transition-colors">
+                              {t('settings.save')}
+                            </button>
+                            <button onClick={() => testLlmKey(provider_type)} disabled={!api_key_configured || saving}
+                              className="px-3 py-1.5 text-xs bg-white/5 border border-white/10 text-gray-300 rounded-lg hover:bg-white/10 disabled:opacity-50 transition-colors">
+                              {t('settings.testConnection')}
+                            </button>
+                            {api_key_configured && (
+                              <button onClick={() => deleteLlmKey(provider_type)} disabled={saving}
+                                className="px-3 py-1.5 text-xs bg-red-500/10 text-red-400 border border-red-500/20 rounded-lg hover:bg-red-500/20 disabled:opacity-50 transition-colors">
+                                {t('presets.delete')}
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )
+      })()}
+
+      {/* Affiliate Links Tab (admin only) */}
+      {activeTab === 'affiliateLinks' && (() => {
+        const configuredAff = ['bitget', 'weex', 'hyperliquid'].filter(ex => !!affiliateLinks[ex]).length
+        return (
+          <div className="space-y-6">
+            {/* ── Summary Bar ── */}
+            <div className="border border-white/10 bg-white/[0.03] rounded-xl p-5">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="flex items-center gap-4">
+                  <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
+                    configuredAff === 3 ? 'bg-emerald-500/15' : configuredAff > 0 ? 'bg-yellow-500/15' : 'bg-white/5'
+                  }`}>
+                    <ExternalLink size={22} className={
+                      configuredAff === 3 ? 'text-emerald-400' : configuredAff > 0 ? 'text-yellow-400' : 'text-gray-600'
+                    } />
+                  </div>
+                  <div>
+                    <h3 className="text-white font-semibold text-lg leading-tight">
+                      {t('settings.affiliateLinks')}
+                    </h3>
+                    <p className="text-gray-500 text-sm mt-0.5">
+                      {configuredAff}/3 {t('settings.configured')}
+                      {adminUidStats.pending > 0 && (
+                        <> &middot; <span className="text-yellow-400">{adminUidStats.pending} {t('affiliate.uidPending')}</span></>
+                      )}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  {/* UID Stats Badges */}
+                  <div className="flex items-center gap-1.5">
+                    <span className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-white/5 text-gray-400 border border-white/[0.08]">
+                      <Users size={10} /> {adminUidStats.total}
+                    </span>
+                    <span className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-yellow-500/10 text-yellow-400 border border-yellow-500/20">
+                      <Clock size={10} /> {adminUidStats.pending}
+                    </span>
+                    <span className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                      <CheckCircle size={10} /> {adminUidStats.verified}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.6fr)] gap-4 items-start">
+              {/* Left: Affiliate Link Configuration */}
+              <div>
+                <div className="flex items-center gap-2 mb-3">
+                  <ExternalLink size={16} className="text-gray-500" />
+                  <h3 className="text-sm font-semibold text-gray-300 uppercase tracking-wider">
+                    {t('settings.affiliateLinksDesc').split('.')[0]}
+                  </h3>
+                </div>
+                <div className="space-y-3">
+                  {['bitget', 'weex', 'hyperliquid'].map((ex) => {
+                    const form = affiliateForms[ex] || { url: '', label: '', active: true }
+                    const hasExisting = !!affiliateLinks[ex]
+                    return (
+                      <div key={ex} className="border border-white/[0.08] bg-white/[0.02] rounded-xl overflow-hidden">
+                        {/* Exchange header with accent */}
+                        <div className={`px-4 py-2.5 flex items-center justify-between border-b ${
+                          hasExisting
+                            ? 'border-emerald-500/10 bg-emerald-500/[0.03]'
+                            : 'border-white/[0.06] bg-white/[0.02]'
+                        }`}>
+                          <div className="flex items-center gap-2.5">
+                            <ExchangeIcon exchange={ex} size={18} />
+                            <span className="text-xs font-semibold text-gray-300 uppercase tracking-wider capitalize">{ex}</span>
+                          </div>
+                          <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${
+                            hasExisting ? 'bg-emerald-500/10 text-emerald-400' : 'bg-white/5 text-gray-500'
+                          }`}>
+                            {hasExisting ? t('settings.configured') : t('settings.notConfigured')}
+                          </span>
+                        </div>
+                        {/* Form content */}
+                        <div className="p-4 space-y-3">
+                          <div>
+                            <label className="block text-xs text-gray-500 mb-1">{t('settings.affiliateUrl')}</label>
+                            <input
+                              type="text"
+                              value={form.url}
+                              onChange={(e) => setAffiliateForms(prev => ({ ...prev, [ex]: { ...form, url: e.target.value } }))}
+                              placeholder="https://..."
+                              className="filter-select w-full text-sm"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs text-gray-500 mb-1">{t('settings.affiliateLabel')}</label>
+                            <input
+                              type="text"
+                              value={form.label}
+                              onChange={(e) => setAffiliateForms(prev => ({ ...prev, [ex]: { ...form, label: e.target.value } }))}
+                              placeholder={t('settings.affiliateLabelPlaceholder')}
+                              className="filter-select w-full text-sm"
+                            />
+                          </div>
+                          <div className="flex items-center gap-4">
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="checkbox"
+                                id={`aff-active-${ex}`}
+                                checked={form.active}
+                                onChange={(e) => setAffiliateForms(prev => ({ ...prev, [ex]: { ...form, active: e.target.checked } }))}
+                                className="rounded border-white/10 bg-white/5 text-primary-600"
+                              />
+                              <label htmlFor={`aff-active-${ex}`} className="text-xs text-gray-400">{t('settings.affiliateActive')}</label>
+                            </div>
+                            {ex !== 'hyperliquid' && (
+                              <div className="flex items-center gap-2">
+                                <input
+                                  type="checkbox"
+                                  id={`aff-uid-${ex}`}
+                                  checked={form.uidRequired}
+                                  onChange={(e) => setAffiliateForms(prev => ({ ...prev, [ex]: { ...form, uidRequired: e.target.checked } }))}
+                                  className="rounded border-white/10 bg-white/5 text-primary-600"
+                                />
+                                <label htmlFor={`aff-uid-${ex}`} className="text-xs text-gray-400">{t('affiliate.uidRequiredToggle')}</label>
+                              </div>
+                            )}
+                          </div>
+                          <div className="flex gap-2 pt-1">
+                            <button
+                              onClick={() => saveAffiliateLink(ex)}
+                              disabled={saving || !form.url}
+                              className="px-3 py-1.5 text-xs bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 transition-colors"
+                            >
+                              {t('settings.save')}
+                            </button>
+                            {hasExisting && (
+                              <button
+                                onClick={() => deleteAffiliateLink(ex)}
+                                disabled={saving}
+                                className="px-3 py-1.5 text-xs bg-red-500/10 text-red-400 border border-red-500/20 rounded-lg hover:bg-red-500/20 disabled:opacity-50 transition-colors"
+                              >
+                                {t('presets.delete')}
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+
+              {/* Right: Admin UID Management — Paginated */}
+              <div className="lg:sticky lg:top-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <Users size={16} className="text-gray-500" />
+                  <h3 className="text-sm font-semibold text-gray-300 uppercase tracking-wider">
+                    {t('affiliate.affiliateUids')}
+                  </h3>
+                  <span className="text-xs px-2 py-0.5 rounded-full bg-white/5 text-gray-500 border border-white/[0.08] tabular-nums">
+                    {adminUidStats.total}
+                  </span>
+                </div>
+                <div className="border border-white/[0.08] bg-white/[0.02] rounded-xl overflow-hidden">
+                  {/* Search + Filter header */}
+                  <div className="px-4 py-3 border-b border-white/[0.06] bg-white/[0.02]">
+                    <div className="flex items-center gap-2">
+                      <div className="relative flex-1">
+                        <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-500" />
+                        <input
+                          type="text"
+                          value={adminUidSearch}
+                          onChange={(e) => {
+                            setAdminUidSearch(e.target.value)
+                            loadAdminUids(1, e.target.value, adminUidFilter)
+                          }}
+                          placeholder="Username / UID..."
+                          className="filter-select w-full text-sm !pl-8"
+                        />
+                      </div>
+                      <div className="flex rounded-lg border border-white/[0.08] overflow-hidden shrink-0">
+                        {(['all', 'pending', 'verified'] as const).map(f => (
+                          <button key={f} onClick={() => { setAdminUidFilter(f); loadAdminUids(1, adminUidSearch, f) }}
+                            className={`px-2.5 py-1.5 text-xs transition-colors ${adminUidFilter === f ? 'bg-white/10 text-white' : 'text-gray-500 hover:text-gray-300'}`}>
+                            {f === 'all' ? 'Alle' : f === 'pending' ? 'Offen' : 'Verifiziert'}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Table */}
+                  {adminUids.length === 0 ? (
+                    <div className="py-8 text-center">
+                      <Users size={20} className="text-gray-700 mx-auto mb-2" />
+                      <p className="text-gray-500 text-xs">{t('affiliate.noUids')}</p>
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b border-white/[0.06] text-gray-500 text-[10px] uppercase tracking-wider">
+                            <th className="text-left py-2.5 px-3 font-medium">User</th>
+                            <th className="text-left py-2.5 px-3 font-medium">Exchange</th>
+                            <th className="text-left py-2.5 px-3 font-medium">UID</th>
+                            <th className="text-left py-2.5 px-3 font-medium">{t('affiliate.submittedAt')}</th>
+                            <th className="text-left py-2.5 px-3 font-medium">Status</th>
+                            <th className="text-right py-2.5 px-3 font-medium">Aktion</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {adminUids.map((item: any) => (
+                            <tr key={item.connection_id} className="border-b border-white/[0.04] hover:bg-white/[0.03] transition-colors">
+                              <td className="py-2 px-3 text-white text-xs font-medium">{item.username}</td>
+                              <td className="py-2 px-3">
+                                <div className="flex items-center gap-1.5">
+                                  <ExchangeIcon exchange={item.exchange_type} size={14} />
+                                  <span className="text-gray-400 capitalize text-xs">{item.exchange_type}</span>
+                                </div>
+                              </td>
+                              <td className="py-2 px-3 text-gray-300 font-mono text-[10px]">{item.affiliate_uid}</td>
+                              <td className="py-2 px-3 text-gray-500 text-[10px] whitespace-nowrap tabular-nums">
+                                {item.submitted_at
+                                  ? new Date(item.submitted_at).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' })
+                                  : '—'}
+                              </td>
+                              <td className="py-2 px-3">
+                                <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${
+                                  item.affiliate_verified
+                                    ? 'bg-emerald-500/10 text-emerald-400'
+                                    : 'bg-yellow-500/10 text-yellow-400'
+                                }`}>
+                                  {item.affiliate_verified ? t('affiliate.uidVerified') : t('affiliate.uidPending')}
+                                </span>
+                              </td>
+                              <td className="py-2 px-3 text-right">
+                                <div className="flex gap-1 justify-end">
+                                  {!item.affiliate_verified && (
+                                    <button onClick={() => verifyAdminUid(item.connection_id, true)}
+                                      title={t('affiliate.verifyUid')}
+                                      className="px-2 py-0.5 text-[10px] bg-emerald-500/10 text-emerald-400 rounded hover:bg-emerald-500/20 transition-colors">
+                                      {t('affiliate.verifyUid')}
+                                    </button>
+                                  )}
+                                  <button onClick={() => verifyAdminUid(item.connection_id, false)}
+                                    title={t('affiliate.rejectUid')}
+                                    className={`px-2 py-0.5 text-[10px] rounded transition-colors ${
+                                      item.affiliate_verified
+                                        ? 'bg-red-500/10 text-red-400 hover:bg-red-500/20'
+                                        : 'bg-red-500/5 text-red-400/60 hover:bg-red-500/10'
+                                    }`}>
+                                    {t('affiliate.rejectUid')}
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+
+                  {/* Pagination */}
+                  {adminUidPages > 1 && (
+                    <div className="px-4 py-3 border-t border-white/[0.06] flex items-center justify-between">
+                      <span className="text-[10px] text-gray-600 tabular-nums">{adminUidTotal} Ergebnisse</span>
+                      <Pagination
+                        page={adminUidPage}
+                        totalPages={adminUidPages}
+                        onPageChange={loadAdminUids}
+                      />
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
 
       {/* Hyperliquid Tab */}
       {activeTab === 'hyperliquid' && (
-        <div className="space-y-6 max-w-2xl">
-          {/* Admin Builder Config */}
-          <div className="border border-white/10 bg-white/[0.03] rounded-xl p-6 space-y-4">
-            <div>
-              <h3 className="text-white font-medium">{t('settings.hlBuilderConfig')}</h3>
-              <p className="text-sm text-gray-400 mt-1">{t('settings.hlBuilderConfigDesc')}</p>
-            </div>
-
-            <div className="space-y-3">
-              <div>
-                <label className="block text-xs text-gray-500 mb-1">{t('settings.hlBuilderAddress')}</label>
-                <input
-                  type="text"
-                  value={hlAdminForm.builder_address}
-                  onChange={(e) => setHlAdminForm(prev => ({ ...prev, builder_address: e.target.value }))}
-                  placeholder="0x..."
-                  className="filter-select w-full text-sm font-mono"
-                />
-                {hlAdminSettings?.sources?.builder_address && (
-                  <p className="text-xs text-gray-600 mt-1">
-                    {t('settings.hlSource', { source: hlAdminSettings.sources.builder_address === 'db' ? t('settings.hlSourceDb') : hlAdminSettings.sources.builder_address === 'env' ? t('settings.hlSourceEnv') : t('settings.hlSourceNotSet') })}
-                  </p>
+        <div className="space-y-6">
+          {/* ── Status Overview Bar ── */}
+          {hlRevenue ? (() => {
+            const builderOk = hlRevenue.builder?.configured && hlRevenue.builder?.user_approved
+            const referralOk = hlRevenue.referral?.configured && hlRevenue.referral?.user_referred
+            const statusCount = (builderOk ? 1 : 0) + (referralOk ? 1 : 0)
+            const statusPct = Math.round((statusCount / 2) * 100)
+            return (
+              <div className="border border-white/10 bg-white/[0.03] rounded-xl p-5">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div className="flex items-center gap-4">
+                    <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
+                      statusPct === 100 ? 'bg-emerald-500/15' : statusPct >= 50 ? 'bg-yellow-500/15' : 'bg-red-500/15'
+                    }`}>
+                      {statusPct === 100
+                        ? <CheckCircle size={22} className="text-emerald-400" />
+                        : statusPct >= 50
+                          ? <Settings2 size={22} className="text-yellow-400" />
+                          : <Shield size={22} className="text-red-400" />
+                      }
+                    </div>
+                    <div>
+                      <h3 className="text-white font-semibold text-lg leading-tight">
+                        {statusPct === 100
+                          ? t('settings.hlAllConfigured', 'Vollständig konfiguriert')
+                          : statusPct >= 50
+                            ? t('settings.hlPartialConfig', 'Teilweise konfiguriert')
+                            : t('settings.hlNotReady', 'Einrichtung erforderlich')
+                        }
+                      </h3>
+                      <p className="text-gray-500 text-sm mt-0.5">
+                        {statusCount}/2 {t('settings.hlServicesActive', 'Dienste aktiv')}
+                        {hlRevenue.earnings && (
+                          <> &middot; ${(hlRevenue.earnings.total_builder_fees_30d || 0).toFixed(4)} (30d)</>
+                        )}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2">
+                      <div className="w-24 h-2 bg-white/5 rounded-full overflow-hidden">
+                        <div
+                          className={`h-full rounded-full transition-all duration-500 ${
+                            statusPct === 100 ? 'bg-emerald-500' : statusPct >= 50 ? 'bg-yellow-500' : 'bg-red-500'
+                          }`}
+                          style={{ width: `${statusPct}%` }}
+                        />
+                      </div>
+                      <span className={`text-sm font-bold tabular-nums ${
+                        statusPct === 100 ? 'text-emerald-400' : statusPct >= 50 ? 'text-yellow-400' : 'text-red-400'
+                      }`}>
+                        {statusPct}%
+                      </span>
+                    </div>
+                    <button onClick={loadHlRevenue} disabled={hlLoading}
+                      className="px-3 py-1.5 text-sm bg-white/5 border border-white/10 text-gray-300 rounded-xl hover:bg-white/10 disabled:opacity-50 transition-colors">
+                      {hlLoading ? t('settings.refreshing') : t('settings.refreshStatus')}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )
+          })() : (
+            <div className="border border-white/10 bg-white/[0.03] rounded-xl p-5">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 rounded-xl bg-white/5 flex items-center justify-center">
+                    <Settings2 size={22} className="text-gray-600" />
+                  </div>
+                  <div>
+                    <h3 className="text-white font-semibold text-lg leading-tight">Hyperliquid</h3>
+                    <p className="text-gray-500 text-sm mt-0.5">{hlLoading ? t('settings.refreshing') : t('settings.hlNoConnection')}</p>
+                  </div>
+                </div>
+                {!hlLoading && (
+                  <button onClick={loadHlRevenue}
+                    className="px-4 py-2 text-sm bg-primary-600 text-white rounded-xl hover:bg-primary-700 transition-colors">
+                    {t('settings.refreshStatus')}
+                  </button>
                 )}
               </div>
-
-              <div>
-                <label className="block text-xs text-gray-500 mb-1">{t('settings.hlBuilderFeeLabel')}</label>
-                <FilterDropdown
-                  value={String(hlAdminForm.builder_fee)}
-                  onChange={val => setHlAdminForm(prev => ({ ...prev, builder_fee: parseInt(val) }))}
-                  options={[
-                    { value: '0', label: t('settings.hlFeeDisabled') },
-                    { value: '1', label: '1 (0.001%)' },
-                    { value: '5', label: '5 (0.005%)' },
-                    { value: '10', label: `10 (0.01%) - ${t('settings.hlFeeDefault')}` },
-                    { value: '25', label: '25 (0.025%)' },
-                    { value: '50', label: '50 (0.05%)' },
-                    { value: '100', label: '100 (0.1%)' },
-                  ]}
-                  ariaLabel="Builder Fee"
-                />
-                {hlAdminSettings?.sources?.builder_fee && (
-                  <p className="text-xs text-gray-600 mt-1">
-                    {t('settings.hlSource', { source: hlAdminSettings.sources.builder_fee === 'db' ? t('settings.hlSourceDb') : hlAdminSettings.sources.builder_fee === 'env' ? t('settings.hlSourceEnv') : t('settings.hlSourceNotSet') })}
-                  </p>
-                )}
-              </div>
-
-              <div>
-                <label className="block text-xs text-gray-500 mb-1">{t('settings.hlReferralCode')}</label>
-                <input
-                  type="text"
-                  value={hlAdminForm.referral_code}
-                  onChange={(e) => setHlAdminForm(prev => ({ ...prev, referral_code: e.target.value }))}
-                  placeholder="e.g. MYCODE"
-                  className="filter-select w-full text-sm"
-                />
-                {hlAdminSettings?.sources?.referral_code && (
-                  <p className="text-xs text-gray-600 mt-1">
-                    {t('settings.hlSource', { source: hlAdminSettings.sources.referral_code === 'db' ? t('settings.hlSourceDb') : hlAdminSettings.sources.referral_code === 'env' ? t('settings.hlSourceEnv') : t('settings.hlSourceNotSet') })}
-                  </p>
-                )}
-              </div>
             </div>
+          )}
 
-            <button
-              onClick={saveHlAdminSettings}
-              disabled={hlAdminSaving}
-              className="px-4 py-2 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50"
-            >
-              {hlAdminSaving ? t('settings.hlSaving') : t('settings.hlSaveSettings')}
-            </button>
-          </div>
-
-          {/* Revenue Display (existing) */}
-          <div className="border border-white/10 bg-white/[0.03] rounded-xl p-6 space-y-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="text-white font-medium">{t('settings.hlRevenue')}</h3>
-                <p className="text-sm text-gray-400 mt-1">{t('settings.hlRevenueDesc')}</p>
-              </div>
-              <button onClick={loadHlRevenue} disabled={hlLoading}
-                className="px-3 py-1.5 text-sm bg-white/5 border border-white/10 text-gray-300 rounded-xl hover:bg-white/10 disabled:opacity-50">
-                {hlLoading ? t('settings.refreshing') : t('settings.refreshStatus')}
-              </button>
-            </div>
-
-            {hlRevenue ? (
-              <>
-                {/* Builder Code Section */}
-                <div>
-                  <h4 className="text-sm font-medium text-gray-400 mb-3 uppercase tracking-wider">{t('settings.hlBuilderCode')}</h4>
+          {/* ── Builder & Referral Status Cards ── */}
+          {hlRevenue && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Builder Code Card */}
+              <div className="border border-white/[0.08] bg-white/[0.02] rounded-xl overflow-hidden">
+                <div className={`px-4 py-2.5 flex items-center justify-between border-b ${
+                  hlRevenue.builder?.configured && hlRevenue.builder?.user_approved
+                    ? 'border-emerald-500/10 bg-emerald-500/[0.03]'
+                    : hlRevenue.builder?.configured
+                      ? 'border-yellow-500/10 bg-yellow-500/[0.03]'
+                      : 'border-red-500/10 bg-red-500/[0.03]'
+                }`}>
+                  <div className="flex items-center gap-2">
+                    <Hammer size={14} className={
+                      hlRevenue.builder?.configured && hlRevenue.builder?.user_approved
+                        ? 'text-emerald-400/70'
+                        : hlRevenue.builder?.configured ? 'text-yellow-400/70' : 'text-red-400/70'
+                    } />
+                    <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                      {t('settings.hlBuilderCode')}
+                    </span>
+                  </div>
+                  <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${
+                    hlRevenue.builder?.configured && hlRevenue.builder?.user_approved
+                      ? 'bg-emerald-500/10 text-emerald-400'
+                      : hlRevenue.builder?.configured
+                        ? 'bg-yellow-500/10 text-yellow-400'
+                        : 'bg-red-500/10 text-red-400'
+                  }`}>
+                    {hlRevenue.builder?.configured && hlRevenue.builder?.user_approved
+                      ? t('settings.hlApproved')
+                      : hlRevenue.builder?.configured
+                        ? t('settings.hlNotApproved')
+                        : t('settings.notConfigured')
+                    }
+                  </span>
+                </div>
+                <div className="px-4 py-3 space-y-1">
                   {hlRevenue.builder?.configured ? (
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between p-3 bg-white/[0.03] border border-white/10 rounded-xl">
-                        <span className="text-sm text-gray-300">{t('settings.hlBuilderAddressLabel')}</span>
-                        <span className="text-sm text-white font-mono">{hlRevenue.builder.address}</span>
+                    <>
+                      <div className="flex items-center justify-between py-1.5 px-1.5 rounded-lg hover:bg-white/[0.04] transition-colors">
+                        <span className="text-xs text-gray-400">{t('settings.hlBuilderAddressLabel')}</span>
+                        <span className="text-xs text-white font-mono truncate max-w-[180px]">{hlRevenue.builder.address}</span>
                       </div>
-                      <div className="flex items-center justify-between p-3 bg-white/[0.03] border border-white/10 rounded-xl">
-                        <span className="text-sm text-gray-300">{t('settings.hlFeeRate')}</span>
-                        <span className="text-sm text-white">{hlRevenue.builder.fee_percent}</span>
+                      <div className="flex items-center justify-between py-1.5 px-1.5 rounded-lg hover:bg-white/[0.04] transition-colors">
+                        <span className="text-xs text-gray-400">{t('settings.hlFeeRate')}</span>
+                        <span className="text-xs text-white">{hlRevenue.builder.fee_percent}</span>
                       </div>
-                      <div className="flex items-center justify-between p-3 bg-white/[0.03] border border-white/10 rounded-xl">
-                        <span className="text-sm text-gray-300">{t('settings.hlUserApproved')}</span>
-                        <div className="flex items-center gap-2">
-                          <span className={`inline-block w-2.5 h-2.5 rounded-full ${hlRevenue.builder.user_approved ? 'bg-green-400' : 'bg-red-400'}`} />
-                          <span className={`text-sm ${hlRevenue.builder.user_approved ? 'text-green-400' : 'text-red-400'}`}>
+                      <div className="flex items-center justify-between py-1.5 px-1.5 rounded-lg hover:bg-white/[0.04] transition-colors">
+                        <span className="text-xs text-gray-400">{t('settings.hlUserApproved')}</span>
+                        <div className="flex items-center gap-1.5">
+                          <span className={`w-1.5 h-1.5 rounded-full ${hlRevenue.builder.user_approved ? 'bg-emerald-400' : 'bg-red-400 animate-pulse'}`} />
+                          <span className={`text-xs ${hlRevenue.builder.user_approved ? 'text-emerald-400' : 'text-red-400'}`}>
                             {hlRevenue.builder.user_approved ? t('settings.hlApproved') : t('settings.hlNotApproved')}
                           </span>
                         </div>
                       </div>
                       {!hlRevenue.builder.user_approved && (
                         <button onClick={approveBuilderFee} disabled={hlApproving}
-                          className="w-full mt-2 px-4 py-2 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50">
+                          className="w-full mt-2 px-3 py-2 text-xs bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 transition-colors">
                           {hlApproving ? t('settings.hlApproving') : t('settings.hlApproveBuilderFee')}
                         </button>
                       )}
-                    </div>
+                    </>
                   ) : (
-                    <div className="p-3 bg-white/[0.03] border border-white/10 rounded-xl text-sm text-gray-500">
+                    <div className="py-4 text-center text-xs text-gray-600">
                       {t('settings.hlNotConfiguredBuilder')}
                     </div>
                   )}
                 </div>
+              </div>
 
-                {/* Referral Section */}
-                <div>
-                  <h4 className="text-sm font-medium text-gray-400 mb-3 uppercase tracking-wider">{t('settings.hlReferral')}</h4>
+              {/* Referral Card */}
+              <div className="border border-white/[0.08] bg-white/[0.02] rounded-xl overflow-hidden">
+                <div className={`px-4 py-2.5 flex items-center justify-between border-b ${
+                  hlRevenue.referral?.configured && hlRevenue.referral?.user_referred
+                    ? 'border-emerald-500/10 bg-emerald-500/[0.03]'
+                    : hlRevenue.referral?.configured
+                      ? 'border-yellow-500/10 bg-yellow-500/[0.03]'
+                      : 'border-red-500/10 bg-red-500/[0.03]'
+                }`}>
+                  <div className="flex items-center gap-2">
+                    <UserCheck size={14} className={
+                      hlRevenue.referral?.configured && hlRevenue.referral?.user_referred
+                        ? 'text-emerald-400/70'
+                        : hlRevenue.referral?.configured ? 'text-yellow-400/70' : 'text-red-400/70'
+                    } />
+                    <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                      {t('settings.hlReferral')}
+                    </span>
+                  </div>
+                  <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${
+                    hlRevenue.referral?.configured && hlRevenue.referral?.user_referred
+                      ? 'bg-emerald-500/10 text-emerald-400'
+                      : hlRevenue.referral?.configured
+                        ? 'bg-yellow-500/10 text-yellow-400'
+                        : 'bg-red-500/10 text-red-400'
+                  }`}>
+                    {hlRevenue.referral?.configured && hlRevenue.referral?.user_referred
+                      ? t('settings.hlReferred')
+                      : hlRevenue.referral?.configured
+                        ? t('settings.hlNotReferred')
+                        : t('settings.notConfigured')
+                    }
+                  </span>
+                </div>
+                <div className="px-4 py-3 space-y-1">
                   {hlRevenue.referral?.configured ? (
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between p-3 bg-white/[0.03] border border-white/10 rounded-xl">
-                        <span className="text-sm text-gray-300">{t('settings.hlReferralCodeLabel')}</span>
-                        <span className="text-sm text-white font-mono">{hlRevenue.referral.code}</span>
+                    <>
+                      <div className="flex items-center justify-between py-1.5 px-1.5 rounded-lg hover:bg-white/[0.04] transition-colors">
+                        <span className="text-xs text-gray-400">{t('settings.hlReferralCodeLabel')}</span>
+                        <span className="text-xs text-white font-mono">{hlRevenue.referral.code}</span>
                       </div>
-                      <div className="flex items-center justify-between p-3 bg-white/[0.03] border border-white/10 rounded-xl">
-                        <span className="text-sm text-gray-300">{t('settings.hlUserReferred')}</span>
-                        <div className="flex items-center gap-2">
-                          <span className={`inline-block w-2.5 h-2.5 rounded-full ${hlRevenue.referral.user_referred ? 'bg-green-400' : 'bg-yellow-400'}`} />
-                          <span className={`text-sm ${hlRevenue.referral.user_referred ? 'text-green-400' : 'text-yellow-400'}`}>
+                      <div className="flex items-center justify-between py-1.5 px-1.5 rounded-lg hover:bg-white/[0.04] transition-colors">
+                        <span className="text-xs text-gray-400">{t('settings.hlUserReferred')}</span>
+                        <div className="flex items-center gap-1.5">
+                          <span className={`w-1.5 h-1.5 rounded-full ${hlRevenue.referral.user_referred ? 'bg-emerald-400' : 'bg-yellow-400 animate-pulse'}`} />
+                          <span className={`text-xs ${hlRevenue.referral.user_referred ? 'text-emerald-400' : 'text-yellow-400'}`}>
                             {hlRevenue.referral.user_referred ? t('settings.hlReferred') : t('settings.hlNotReferred')}
                           </span>
                         </div>
                       </div>
                       {!hlRevenue.referral.user_referred && hlRevenue.referral.link && (
                         <a href={hlRevenue.referral.link} target="_blank" rel="noopener noreferrer"
-                          className="block mt-2 px-4 py-2 text-sm text-center bg-blue-600/20 text-blue-400 rounded-lg border border-blue-600/30 hover:bg-blue-600/30">
+                          className="flex items-center justify-center gap-2 w-full mt-2 px-3 py-2 text-xs bg-blue-600/20 text-blue-400 rounded-lg border border-blue-600/30 hover:bg-blue-600/30 transition-colors">
+                          <ExternalLink size={12} />
                           {t('settings.hlRegisterReferral')}
                         </a>
                       )}
-                    </div>
+                    </>
                   ) : (
-                    <div className="p-3 bg-white/[0.03] border border-white/10 rounded-xl text-sm text-gray-500">
+                    <div className="py-4 text-center text-xs text-gray-600">
                       {t('settings.hlNotConfiguredReferral')}
                     </div>
                   )}
                 </div>
-
-                {/* Fee Tier Info */}
-                {hlRevenue.user_fees && (
-                  <div>
-                    <h4 className="text-sm font-medium text-gray-400 mb-3 uppercase tracking-wider">{t('settings.hlFeeTier')}</h4>
-                    <div className="p-3 bg-white/[0.03] border border-white/10 rounded-xl text-sm text-gray-300">
-                      <pre className="whitespace-pre-wrap text-xs">{JSON.stringify(hlRevenue.user_fees, null, 2)}</pre>
-                    </div>
-                  </div>
-                )}
-
-                {/* Earnings Summary */}
-                {hlRevenue?.earnings && (
-                  <div>
-                    <h4 className="text-sm font-medium text-gray-400 mb-3 uppercase tracking-wider">
-                      {t('settings.hlEarnings')}
-                    </h4>
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between p-3 bg-white/[0.03] border border-white/10 rounded-xl">
-                        <span className="text-sm text-gray-300">{t('settings.hlBuilderFees30d')}</span>
-                        <span className="text-sm text-emerald-400 font-medium">
-                          ${(hlRevenue.earnings.total_builder_fees_30d || 0).toFixed(4)}
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-between p-3 bg-white/[0.03] border border-white/10 rounded-xl">
-                        <span className="text-sm text-gray-300">{t('settings.hlTradesWithFee')}</span>
-                        <span className="text-sm text-white">{hlRevenue.earnings.trades_with_builder_fee || 0}</span>
-                      </div>
-                      <div className="flex items-center justify-between p-3 bg-white/[0.03] border border-white/10 rounded-xl">
-                        <span className="text-sm text-gray-300">{t('settings.hlMonthlyEstimate')}</span>
-                        <span className="text-sm text-emerald-400 font-medium">
-                          ${(hlRevenue.earnings.monthly_estimate || 0).toFixed(2)}/mo
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </>
-            ) : (
-              <div className="text-center text-gray-500 py-8">
-                {hlLoading ? t('settings.refreshing') : t('settings.hlNoConnection')}
               </div>
-            )}
+            </div>
+          )}
+
+          {/* ── Earnings ── */}
+          {hlRevenue?.earnings && (
+            <div>
+              <div className="flex items-center gap-2 mb-3">
+                <DollarSign size={16} className="text-gray-500" />
+                <h3 className="text-sm font-semibold text-gray-300 uppercase tracking-wider">
+                  {t('settings.hlEarnings')}
+                </h3>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="border border-white/[0.08] bg-white/[0.02] rounded-xl p-4 hover:bg-white/[0.04] transition-colors">
+                  <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">{t('settings.hlBuilderFees30d')}</p>
+                  <p className="text-xl font-bold text-emerald-400 tabular-nums">
+                    ${(hlRevenue.earnings.total_builder_fees_30d || 0).toFixed(4)}
+                  </p>
+                </div>
+                <div className="border border-white/[0.08] bg-white/[0.02] rounded-xl p-4 hover:bg-white/[0.04] transition-colors">
+                  <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">{t('settings.hlTradesWithFee')}</p>
+                  <p className="text-xl font-bold text-white tabular-nums">
+                    {hlRevenue.earnings.trades_with_builder_fee || 0}
+                  </p>
+                </div>
+                <div className="border border-white/[0.08] bg-white/[0.02] rounded-xl p-4 hover:bg-white/[0.04] transition-colors">
+                  <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">{t('settings.hlMonthlyEstimate')}</p>
+                  <p className="text-xl font-bold text-emerald-400 tabular-nums">
+                    ${(hlRevenue.earnings.monthly_estimate || 0).toFixed(2)}
+                    <span className="text-xs text-gray-500 font-normal ml-0.5">/mo</span>
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ── Admin Configuration ── */}
+          <div>
+            <div className="flex items-center gap-2 mb-3">
+              <Settings2 size={16} className="text-gray-500" />
+              <h3 className="text-sm font-semibold text-gray-300 uppercase tracking-wider">
+                {t('settings.hlBuilderConfig')}
+              </h3>
+            </div>
+            <div className="border border-white/[0.08] bg-white/[0.02] rounded-xl">
+              <div className="px-4 py-2.5 border-b border-white/[0.06] bg-white/[0.02] rounded-t-xl">
+                <p className="text-xs text-gray-500">{t('settings.hlBuilderConfigDesc')}</p>
+              </div>
+              <div className="p-4 space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1.5">{t('settings.hlBuilderAddress')}</label>
+                    <input
+                      type="text"
+                      value={hlAdminForm.builder_address}
+                      onChange={(e) => setHlAdminForm(prev => ({ ...prev, builder_address: e.target.value }))}
+                      placeholder="0x..."
+                      className="filter-select w-full text-sm font-mono"
+                    />
+                    {hlAdminSettings?.sources?.builder_address && (
+                      <p className="text-[10px] text-gray-600 mt-1">
+                        {t('settings.hlSource', { source: hlAdminSettings.sources.builder_address === 'db' ? t('settings.hlSourceDb') : hlAdminSettings.sources.builder_address === 'env' ? t('settings.hlSourceEnv') : t('settings.hlSourceNotSet') })}
+                      </p>
+                    )}
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1.5">{t('settings.hlBuilderFeeLabel')}</label>
+                    <FilterDropdown
+                      value={String(hlAdminForm.builder_fee)}
+                      onChange={val => setHlAdminForm(prev => ({ ...prev, builder_fee: parseInt(val) }))}
+                      options={[
+                        { value: '0', label: t('settings.hlFeeDisabled') },
+                        { value: '1', label: '1 (0.001%)' },
+                        { value: '5', label: '5 (0.005%)' },
+                        { value: '10', label: `10 (0.01%) - ${t('settings.hlFeeDefault')}` },
+                        { value: '25', label: '25 (0.025%)' },
+                        { value: '50', label: '50 (0.05%)' },
+                        { value: '100', label: '100 (0.1%)' },
+                      ]}
+                      ariaLabel="Builder Fee"
+                    />
+                    {hlAdminSettings?.sources?.builder_fee && (
+                      <p className="text-[10px] text-gray-600 mt-1">
+                        {t('settings.hlSource', { source: hlAdminSettings.sources.builder_fee === 'db' ? t('settings.hlSourceDb') : hlAdminSettings.sources.builder_fee === 'env' ? t('settings.hlSourceEnv') : t('settings.hlSourceNotSet') })}
+                      </p>
+                    )}
+                  </div>
+                </div>
+                <div className="sm:w-1/2">
+                  <label className="block text-xs text-gray-500 mb-1.5">{t('settings.hlReferralCode')}</label>
+                  <input
+                    type="text"
+                    value={hlAdminForm.referral_code}
+                    onChange={(e) => setHlAdminForm(prev => ({ ...prev, referral_code: e.target.value }))}
+                    placeholder="e.g. MYCODE"
+                    className="filter-select w-full text-sm"
+                  />
+                  {hlAdminSettings?.sources?.referral_code && (
+                    <p className="text-[10px] text-gray-600 mt-1">
+                      {t('settings.hlSource', { source: hlAdminSettings.sources.referral_code === 'db' ? t('settings.hlSourceDb') : hlAdminSettings.sources.referral_code === 'env' ? t('settings.hlSourceEnv') : t('settings.hlSourceNotSet') })}
+                    </p>
+                  )}
+                </div>
+                <div className="pt-1">
+                  <button
+                    onClick={saveHlAdminSettings}
+                    disabled={hlAdminSaving}
+                    className="px-4 py-2 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 transition-colors"
+                  >
+                    {hlAdminSaving ? t('settings.hlSaving') : t('settings.hlSaveSettings')}
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       )}
 
       {/* Connections Tab */}
       {activeTab === 'connections' && (
-        <div className="space-y-5">
-          <div className="flex items-center justify-between">
-            <p className="text-sm text-gray-400">{t('settings.connectionsDesc')}</p>
-            <button onClick={loadConnectionStatus} disabled={connLoading}
-              className="px-3 py-1.5 text-sm bg-white/5 border border-white/10 text-gray-300 rounded-xl hover:bg-white/10 disabled:opacity-50">
-              {connLoading ? t('settings.refreshing') : t('settings.refreshStatus')}
-            </button>
-          </div>
-
+        <div className="space-y-6">
           {connStatus ? (() => {
             const groups = groupServices(connStatus.services)
+            const CAT_ICONS: Record<string, typeof Activity> = {
+              sentiment: TrendingUp,
+              futures: BarChart3,
+              options: Cpu,
+              spot: Database,
+              technical: Activity,
+              tradfi: Zap,
+            }
             const catLabels: Record<string, string> = {
               sentiment: t('settings.sentimentNews', 'Sentiment & News'),
               futures: t('settings.futuresData', 'Futures Data'),
@@ -1196,11 +1564,66 @@ export default function Settings() {
             }
             const catOrder = ['sentiment', 'futures', 'options', 'spot', 'technical', 'tradfi']
             const dsItems = groups['data_source'] || []
-            const dsOnline = dsItems.filter(([, s]) => s.reachable).length
+            const exchItems = groups['exchange'] || []
+            const notifItems = groups['notification'] || []
+            const allItems = [...dsItems, ...exchItems, ...notifItems].filter(([, s]) => (s as any).configured !== false)
+            const totalOnline = allItems.filter(([, s]) => s.reachable).length
+            const totalCount = allItems.length
+            const healthPct = totalCount > 0 ? Math.round((totalOnline / totalCount) * 100) : 0
+            const cbEntries = Object.entries(connStatus.circuit_breakers)
+            const cbHealthy = cbEntries.filter(([, cb]) => cb.state === 'closed').length
 
             return (
               <>
-                {/* ── Data Sources — compact grid ── */}
+                {/* ── Health Summary Bar ── */}
+                <div className="border border-white/10 bg-white/[0.03] rounded-xl p-5">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div className="flex items-center gap-4">
+                      <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
+                        healthPct === 100 ? 'bg-emerald-500/15' : healthPct >= 80 ? 'bg-yellow-500/15' : 'bg-red-500/15'
+                      }`}>
+                        {healthPct === 100
+                          ? <Wifi size={22} className="text-emerald-400" />
+                          : healthPct >= 80
+                            ? <Activity size={22} className="text-yellow-400" />
+                            : <WifiOff size={22} className="text-red-400" />
+                        }
+                      </div>
+                      <div>
+                        <h3 className="text-white font-semibold text-lg leading-tight">
+                          {healthPct === 100 ? t('settings.allSystemsOperational', 'Alle Systeme betriebsbereit') : healthPct >= 80 ? t('settings.partialOutage', 'Teilweise eingeschränkt') : t('settings.majorOutage', 'Systemstörung')}
+                        </h3>
+                        <p className="text-gray-500 text-sm mt-0.5">
+                          {totalOnline}/{totalCount} {t('settings.servicesOnline', 'Dienste online')}
+                          {cbEntries.length > 0 && <> &middot; {cbHealthy}/{cbEntries.length} {t('settings.circuitBreakers')}</>}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-2">
+                        <div className="w-24 h-2 bg-white/5 rounded-full overflow-hidden">
+                          <div
+                            className={`h-full rounded-full transition-all duration-500 ${
+                              healthPct === 100 ? 'bg-emerald-500' : healthPct >= 80 ? 'bg-yellow-500' : 'bg-red-500'
+                            }`}
+                            style={{ width: `${healthPct}%` }}
+                          />
+                        </div>
+                        <span className={`text-sm font-bold tabular-nums ${
+                          healthPct === 100 ? 'text-emerald-400' : healthPct >= 80 ? 'text-yellow-400' : 'text-red-400'
+                        }`}>
+                          {healthPct}%
+                        </span>
+                      </div>
+                      <button onClick={loadConnectionStatus} disabled={connLoading}
+                        className="px-3 py-1.5 text-sm bg-white/5 border border-white/10 text-gray-300 rounded-xl hover:bg-white/10 disabled:opacity-50 transition-colors">
+                        {connLoading ? t('settings.refreshing') : t('settings.refreshStatus')}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* ── Data Sources ── */}
                 {dsItems.length > 0 && (() => {
                   const byCategory: Record<string, [string, ServiceStatus][]> = {}
                   for (const [key, svc] of dsItems) {
@@ -1208,42 +1631,61 @@ export default function Settings() {
                     if (!byCategory[cat]) byCategory[cat] = []
                     byCategory[cat].push([key, svc])
                   }
+                  const dsOnline = dsItems.filter(([, s]) => s.reachable).length
                   return (
                     <div>
                       <div className="flex items-center gap-3 mb-3">
-                        <h3 className="text-sm font-medium text-gray-400 uppercase tracking-wider">
+                        <Database size={16} className="text-gray-500" />
+                        <h3 className="text-sm font-semibold text-gray-300 uppercase tracking-wider">
                           {t('settings.dataSources')}
                         </h3>
-                        <span className="text-xs text-gray-600">
-                          {dsOnline}/{dsItems.length} {t('settings.online').toLowerCase()}
+                        <span className="text-xs px-2 py-0.5 rounded-full bg-white/5 text-gray-500 border border-white/10 tabular-nums">
+                          {dsOnline}/{dsItems.length}
                         </span>
                       </div>
                       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
                         {catOrder.map(cat => {
                           const catItems = byCategory[cat]
                           if (!catItems || catItems.length === 0) return null
-                          const allUp = catItems.every(([, s]) => s.reachable)
+                          const catOnline = catItems.filter(([, s]) => s.reachable).length
+                          const allUp = catOnline === catItems.length
+                          const CatIcon = CAT_ICONS[cat] || Activity
                           return (
-                            <div key={cat} className="border border-white/10 bg-white/[0.03] rounded-xl p-3">
-                              <div className="flex items-center justify-between mb-2">
-                                <span className="text-[11px] font-medium text-gray-500 uppercase tracking-wider">
-                                  {catLabels[cat] || cat}
+                            <div key={cat} className="border border-white/[0.08] bg-white/[0.02] rounded-xl overflow-hidden">
+                              {/* Category header with accent */}
+                              <div className={`px-4 py-2.5 flex items-center justify-between border-b ${
+                                allUp ? 'border-emerald-500/10 bg-emerald-500/[0.03]' : 'border-red-500/10 bg-red-500/[0.03]'
+                              }`}>
+                                <div className="flex items-center gap-2">
+                                  <CatIcon size={14} className={allUp ? 'text-emerald-400/70' : 'text-red-400/70'} />
+                                  <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                                    {catLabels[cat] || cat}
+                                  </span>
+                                </div>
+                                <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${
+                                  allUp ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400'
+                                }`}>
+                                  {catOnline}/{catItems.length}
                                 </span>
-                                <span className={`w-2 h-2 rounded-full ${allUp ? 'bg-green-400' : 'bg-red-400'}`} />
                               </div>
-                              <div className="space-y-0.5">
+                              {/* Items */}
+                              <div className="px-3 py-2 space-y-0.5">
                                 {catItems.map(([key, svc]) => (
-                                  <div key={key} className="flex items-center justify-between py-1 px-1.5 rounded hover:bg-white/[0.04]">
-                                    <div className="flex items-center gap-2 min-w-0">
-                                      <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${svc.reachable ? 'bg-green-400' : 'bg-red-400'}`} />
+                                  <div key={key} className="flex items-center justify-between py-1.5 px-1.5 rounded-lg hover:bg-white/[0.04] transition-colors">
+                                    <div className="flex items-center gap-2.5 min-w-0">
+                                      <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${svc.reachable ? 'bg-emerald-400' : 'bg-red-400'} ${svc.reachable ? '' : 'animate-pulse'}`} />
                                       <span className="text-white text-xs truncate">{svc.label}</span>
                                     </div>
-                                    <div className="flex items-center gap-1.5 flex-shrink-0 ml-2">
+                                    <div className="flex items-center gap-2 flex-shrink-0 ml-2">
                                       {(svc as any).provider && (svc as any).provider !== 'Calculated' && (
-                                        <span className="text-gray-600 text-[10px]">{(svc as any).provider}</span>
+                                        <span className="text-gray-600 text-[10px] hidden sm:inline">{(svc as any).provider}</span>
                                       )}
                                       {svc.latency_ms != null && svc.latency_ms > 0 && (
-                                        <span className="text-gray-600 text-[10px] tabular-nums w-8 text-right">{svc.latency_ms}ms</span>
+                                        <span className={`text-[10px] tabular-nums px-1.5 py-0.5 rounded ${
+                                          svc.latency_ms < 500 ? 'text-emerald-400/60' : svc.latency_ms < 2000 ? 'text-yellow-400/60' : 'text-red-400/60'
+                                        }`}>
+                                          {svc.latency_ms}ms
+                                        </span>
                                       )}
                                     </div>
                                   </div>
@@ -1257,57 +1699,119 @@ export default function Settings() {
                   )
                 })()}
 
-                {/* ── Exchanges & Notifications — side by side ── */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  {(['exchange', 'notification'] as const).map((groupKey) => {
-                    const items = groups[groupKey]
-                    if (!items || items.length === 0) return null
-                    const label = groupKey === 'exchange' ? t('settings.exchangeApi') : t('settings.notifications')
-                    return (
-                      <div key={groupKey} className="border border-white/10 bg-white/[0.03] rounded-xl p-3">
-                        <h3 className="text-[11px] font-medium text-gray-500 mb-2 uppercase tracking-wider">
-                          {label}
+                {/* ── Exchanges & Notifications ── */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {exchItems.length > 0 && (
+                    <div>
+                      <div className="flex items-center gap-2 mb-3">
+                        <Zap size={16} className="text-gray-500" />
+                        <h3 className="text-sm font-semibold text-gray-300 uppercase tracking-wider">
+                          {t('settings.exchangeApi')}
                         </h3>
-                        <div className="space-y-0.5">
-                          {items.map(([key, svc]) => (
-                            <div key={key} className="flex items-center justify-between py-1 px-1.5 rounded hover:bg-white/[0.04]">
-                              <div className="flex items-center gap-2">
-                                <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${svc.reachable ? 'bg-green-400' : 'bg-red-400'}`} />
-                                <span className="text-white text-xs">{svc.label}</span>
+                      </div>
+                      <div className="space-y-2">
+                        {exchItems.map(([key, svc]) => {
+                          const isConfigured = (svc as any).configured !== false
+                          return (
+                            <div key={key} className="border border-white/[0.08] bg-white/[0.02] rounded-xl p-4 flex items-center justify-between hover:bg-white/[0.04] transition-colors">
+                              <div className="flex items-center gap-3">
+                                <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${
+                                  !isConfigured ? 'bg-gray-500/10' : svc.reachable ? 'bg-emerald-500/10' : 'bg-red-500/10'
+                                }`}>
+                                  <ExchangeIcon exchange={key.replace('exchange_', '')} size={20} />
+                                </div>
+                                <div>
+                                  <span className="text-white text-sm font-medium block">{svc.label}</span>
+                                  {isConfigured && svc.latency_ms != null && (
+                                    <span className="text-gray-600 text-[10px] tabular-nums">{svc.latency_ms}ms</span>
+                                  )}
+                                  {!isConfigured && (
+                                    <span className="text-gray-600 text-[10px]">{t('settings.notConfigured')}</span>
+                                  )}
+                                </div>
                               </div>
-                              <div className="flex items-center gap-1.5 text-[10px]">
+                              <span className={`text-xs font-medium px-2.5 py-1 rounded-lg ${
+                                !isConfigured
+                                  ? 'bg-white/5 text-gray-500 border border-white/10'
+                                  : svc.reachable
+                                    ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                                    : 'bg-red-500/10 text-red-400 border border-red-500/20'
+                              }`}>
+                                {!isConfigured ? '—' : svc.reachable ? t('settings.online') : t('settings.offline')}
+                              </span>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {notifItems.length > 0 && (
+                    <div>
+                      <div className="flex items-center gap-2 mb-3">
+                        <Activity size={16} className="text-gray-500" />
+                        <h3 className="text-sm font-semibold text-gray-300 uppercase tracking-wider">
+                          {t('settings.notifications')}
+                        </h3>
+                      </div>
+                      <div className="space-y-2">
+                        {notifItems.map(([key, svc]) => (
+                          <div key={key} className="border border-white/[0.08] bg-white/[0.02] rounded-xl p-4 flex items-center justify-between hover:bg-white/[0.04] transition-colors">
+                            <div className="flex items-center gap-3">
+                              <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${
+                                svc.reachable ? 'bg-emerald-500/10' : 'bg-red-500/10'
+                              }`}>
+                                <Activity size={16} className={svc.reachable ? 'text-emerald-400' : 'text-red-400'} />
+                              </div>
+                              <div>
+                                <span className="text-white text-sm font-medium block">{svc.label}</span>
                                 {svc.latency_ms != null && (
-                                  <span className="text-gray-600 tabular-nums">{svc.latency_ms}ms</span>
+                                  <span className="text-gray-600 text-[10px] tabular-nums">{svc.latency_ms}ms</span>
                                 )}
-                                <span className={svc.reachable ? 'text-green-400' : 'text-red-400'}>
-                                  {svc.reachable ? t('settings.online') : t('settings.offline')}
-                                </span>
                               </div>
                             </div>
-                          ))}
-                        </div>
+                            <span className={`text-xs font-medium px-2.5 py-1 rounded-lg ${
+                              svc.reachable
+                                ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                                : 'bg-red-500/10 text-red-400 border border-red-500/20'
+                            }`}>
+                              {svc.reachable ? t('settings.online') : t('settings.offline')}
+                            </span>
+                          </div>
+                        ))}
                       </div>
-                    )
-                  })}
+                    </div>
+                  )}
                 </div>
 
-                {/* ── Circuit Breakers — compact grid ── */}
-                {Object.keys(connStatus.circuit_breakers).length > 0 && (
-                  <div className="border border-white/10 bg-white/[0.03] rounded-xl p-3">
-                    <h3 className="text-[11px] font-medium text-gray-500 mb-2 uppercase tracking-wider">
-                      {t('settings.circuitBreakers')}
-                    </h3>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-0.5">
-                      {Object.entries(connStatus.circuit_breakers).map(([name, cb]) => (
-                        <div key={name} className="flex items-center justify-between py-1 px-1.5 rounded hover:bg-white/[0.04]">
-                          <div className="flex items-center gap-2">
-                            <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
-                              cb.state === 'closed' ? 'bg-green-400' :
-                              cb.state === 'open' ? 'bg-red-400' : 'bg-yellow-400'
+                {/* ── Circuit Breakers ── */}
+                {cbEntries.length > 0 && (
+                  <div>
+                    <div className="flex items-center gap-2 mb-3">
+                      <Shield size={16} className="text-gray-500" />
+                      <h3 className="text-sm font-semibold text-gray-300 uppercase tracking-wider">
+                        {t('settings.circuitBreakers')}
+                      </h3>
+                      <span className="text-xs px-2 py-0.5 rounded-full bg-white/5 text-gray-500 border border-white/10 tabular-nums">
+                        {cbHealthy}/{cbEntries.length}
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                      {cbEntries.map(([name, cb]) => (
+                        <div key={name} className="border border-white/[0.08] bg-white/[0.02] rounded-xl px-4 py-3 flex items-center justify-between hover:bg-white/[0.04] transition-colors">
+                          <div className="flex items-center gap-2.5">
+                            <span className={`w-2 h-2 rounded-full flex-shrink-0 ${
+                              cb.state === 'closed' ? 'bg-emerald-400' : cb.state === 'open' ? 'bg-red-400 animate-pulse' : 'bg-yellow-400 animate-pulse'
                             }`} />
-                            <span className="text-white text-xs">{cb.name}</span>
+                            <span className="text-white text-xs font-medium">{cb.name}</span>
                           </div>
-                          <span className={`text-[10px] ${circuitColor(cb.state)}`}>
+                          <span className={`text-[10px] font-medium px-2 py-0.5 rounded-md ${
+                            cb.state === 'closed'
+                              ? 'bg-emerald-500/10 text-emerald-400'
+                              : cb.state === 'open'
+                                ? 'bg-red-500/10 text-red-400'
+                                : 'bg-yellow-500/10 text-yellow-400'
+                          }`}>
                             {circuitLabel(cb.state)}
                           </span>
                         </div>
@@ -1318,8 +1822,19 @@ export default function Settings() {
               </>
             )
           })() : (
-            <div className="text-center text-gray-500 py-8">
-              {connLoading ? t('settings.refreshing') : t('common.loading')}
+            <div className="flex flex-col items-center justify-center py-16 space-y-4">
+              <div className="w-12 h-12 rounded-xl bg-white/5 flex items-center justify-center">
+                <Activity size={22} className="text-gray-600" />
+              </div>
+              <div className="text-center">
+                <p className="text-gray-400 text-sm">{connLoading ? t('settings.refreshing') : t('settings.connectionsDesc')}</p>
+                {!connLoading && (
+                  <button onClick={loadConnectionStatus}
+                    className="mt-3 px-4 py-2 text-sm bg-primary-600 text-white rounded-xl hover:bg-primary-700 transition-colors">
+                    {t('settings.refreshStatus')}
+                  </button>
+                )}
+              </div>
             </div>
           )}
         </div>

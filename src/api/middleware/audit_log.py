@@ -6,6 +6,7 @@ method, path, status_code, response_time_ms, and client_ip.
 Also stores audit records in the database.
 """
 
+import asyncio
 import time
 from typing import Optional
 
@@ -53,18 +54,16 @@ class AuditLogMiddleware(BaseHTTPMiddleware):
                 user_id or "anonymous",
             )
 
-            # Store in database (non-blocking, best-effort)
-            try:
-                await _store_audit_record(
+            # Store in database (fire-and-forget, skip if contention)
+            if path not in ("/api/status", "/openapi.json"):
+                asyncio.create_task(_store_audit_record_safe(
                     user_id=user_id,
                     method=method,
                     path=path,
                     status_code=status_code,
                     response_time_ms=response_time_ms,
                     client_ip=client_ip,
-                )
-            except Exception as e:
-                logger.warning("Failed to store audit log record: %s", e)
+                ))
 
 
 def _extract_user_id(request: Request) -> Optional[int]:
@@ -86,6 +85,39 @@ def _extract_user_id(request: Request) -> Optional[int]:
         return None
 
 
+async def _store_audit_record_safe(**kwargs) -> None:
+    """Fire-and-forget wrapper that swallows exceptions."""
+    try:
+        await _store_audit_record(**kwargs)
+    except Exception:
+        pass  # Best-effort — never block or crash
+
+
+# Dedicated engine for audit writes — zero busy_timeout to never block app queries
+_audit_engine = None
+_audit_session_factory = None
+
+
+def _get_audit_session_factory():
+    """Lazy-init a dedicated audit engine with busy_timeout=0."""
+    global _audit_engine, _audit_session_factory
+    if _audit_session_factory is None:
+        import os
+        from sqlalchemy.ext.asyncio import AsyncSession as _AS, async_sessionmaker as _asm, create_async_engine as _cae
+        from sqlalchemy import event as _ev
+        db_url = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///data/bot.db")
+        _audit_engine = _cae(db_url, connect_args={"check_same_thread": False} if "sqlite" in db_url else {})
+        if "sqlite" in db_url:
+            @_ev.listens_for(_audit_engine.sync_engine, "connect")
+            def _set_pragma(dbapi_conn, _):
+                c = dbapi_conn.cursor()
+                c.execute("PRAGMA journal_mode=WAL")
+                c.execute("PRAGMA busy_timeout=0")
+                c.close()
+        _audit_session_factory = _asm(_audit_engine, class_=_AS, expire_on_commit=False)
+    return _audit_session_factory
+
+
 async def _store_audit_record(
     user_id: Optional[int],
     method: str,
@@ -94,12 +126,11 @@ async def _store_audit_record(
     response_time_ms: float,
     client_ip: str,
 ) -> None:
-    """Store an audit log record in the database."""
+    """Store an audit log record in the database (dedicated engine, never blocks main)."""
     from sqlalchemy import text
 
-    from src.models.session import async_session_factory
-
-    async with async_session_factory() as session:
+    factory = _get_audit_session_factory()
+    async with factory() as session:
         await session.execute(
             text(
                 "INSERT INTO audit_logs "

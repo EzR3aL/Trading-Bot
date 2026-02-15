@@ -32,7 +32,7 @@ logger = get_logger(__name__)
 # Circuit breakers for external APIs
 _binance_breaker = circuit_registry.get("binance_api", fail_threshold=5, reset_timeout=60)
 _alternative_me_breaker = circuit_registry.get("alternative_me_api", fail_threshold=3, reset_timeout=120)
-_gdelt_breaker = circuit_registry.get("gdelt_api", fail_threshold=3, reset_timeout=120)
+_gdelt_breaker = circuit_registry.get("gdelt_api", fail_threshold=5, reset_timeout=300)
 _deribit_breaker = circuit_registry.get("deribit_api", fail_threshold=3, reset_timeout=120)
 _coingecko_breaker = circuit_registry.get("coingecko_api", fail_threshold=3, reset_timeout=120)
 _defillama_breaker = circuit_registry.get("defillama_api", fail_threshold=3, reset_timeout=120)
@@ -199,11 +199,11 @@ class MarketDataFetcher:
         if self._session and not self._session.closed:
             await self._session.close()
 
-    async def _get(self, url: str, params: Optional[Dict] = None) -> Dict[str, Any]:
+    async def _get(self, url: str, params: Optional[Dict] = None, timeout: int = 10) -> Dict[str, Any]:
         """Make a GET request with retry logic."""
         await self._ensure_session()
         try:
-            async with self._session.get(url, params=params, timeout=10) as response:
+            async with self._session.get(url, params=params, timeout=timeout) as response:
                 if response.status == 200:
                     return await response.json()
                 elif response.status == 429:
@@ -228,9 +228,9 @@ class MarketDataFetcher:
             return {}
 
     @with_retry(max_attempts=3, min_wait=1.0, max_wait=5.0, retry_on=(aiohttp.ClientError, asyncio.TimeoutError))
-    async def _get_with_retry(self, url: str, params: Optional[Dict] = None) -> Dict[str, Any]:
+    async def _get_with_retry(self, url: str, params: Optional[Dict] = None, timeout: int = 10) -> Dict[str, Any]:
         """Make a GET request with automatic retry on failure."""
-        return await self._get(url, params)
+        return await self._get(url, params, timeout=timeout)
 
     # ==================== Fear & Greed Index ====================
 
@@ -557,6 +557,64 @@ class MarketDataFetcher:
             logger.error(f"Error fetching liquidations: {e}")
             return []
 
+    async def get_order_book_depth(self, symbol: str = "BTCUSDT", limit: int = 20) -> dict:
+        """
+        Fetch order book depth from Binance Futures.
+
+        Returns:
+            Dict with midPrice, spreadBps, imbalanceTop10, interpretation
+        """
+        try:
+            url = f"{self.BINANCE_FUTURES_URL}/fapi/v1/depth"
+            params = {"symbol": symbol, "limit": limit}
+
+            async def _fetch():
+                return await self._get(url, params)
+
+            data = await _binance_breaker.call(_fetch)
+            if not data or "bids" not in data or "asks" not in data:
+                return {}
+
+            bids = data["bids"][:10]
+            asks = data["asks"][:10]
+            if not bids or not asks:
+                return {}
+
+            best_bid = float(bids[0][0])
+            best_ask = float(asks[0][0])
+            mid_price = (best_bid + best_ask) / 2
+            spread_bps = ((best_ask - best_bid) / mid_price) * 10000 if mid_price > 0 else 0
+
+            sum_bids = sum(float(b[1]) for b in bids)
+            sum_asks = sum(float(a[1]) for a in asks)
+            total = sum_bids + sum_asks
+            imbalance = (sum_bids - sum_asks) / total if total > 0 else 0
+
+            if abs(imbalance) < 0.1:
+                interpretation = f"Balanced order book ({abs(imbalance)*100:.1f}% imbalance). No clear directional bias."
+            elif imbalance > 0.3:
+                interpretation = f"Strong bid-side imbalance ({imbalance*100:.1f}%). Buyers dominating — bullish pressure."
+            elif imbalance > 0.1:
+                interpretation = f"Moderate bid-side imbalance ({imbalance*100:.1f}%). Slight buy pressure."
+            elif imbalance < -0.3:
+                interpretation = f"Strong ask-side imbalance ({abs(imbalance)*100:.1f}%). Sellers dominating — bearish pressure."
+            else:
+                interpretation = f"Moderate ask-side imbalance ({abs(imbalance)*100:.1f}%). Slight sell pressure."
+
+            return {
+                "midPrice": round(mid_price, 2),
+                "spreadBps": round(spread_bps, 4),
+                "imbalanceTop10": round(imbalance, 4),
+                "interpretation": interpretation,
+            }
+
+        except CircuitBreakerError:
+            logger.warning("Circuit breaker open for Binance order book")
+            return {}
+        except Exception as e:
+            logger.error(f"Error fetching order book depth: {e}")
+            return {}
+
     # ==================== Aggregate Fetching ====================
 
     async def fetch_all_metrics(self, require_reliable: bool = True) -> MarketMetrics:
@@ -799,10 +857,13 @@ class MarketDataFetcher:
     # ==================== News Sentiment (GDELT) ====================
 
     async def get_news_sentiment(
-        self, query: str = "bitcoin", lookback_hours: int = 24, max_records: int = 250
+        self, query: str = "bitcoin OR cryptocurrency OR crypto", lookback_hours: int = 24, max_records: int = 25
     ) -> Dict[str, Any]:
         """
         Fetch news sentiment from GDELT Project API.
+
+        Uses broader crypto-related query to capture all market-moving news.
+        Low maxrecords is critical — GDELT scales response time linearly with record count.
 
         Returns:
             Dict with average_tone (-10 to +10), article_count
@@ -814,7 +875,7 @@ class MarketDataFetcher:
             start = now - timedelta(hours=lookback_hours)
 
             params = {
-                "query": f'"{query}"',
+                "query": query,
                 "startdatetime": start.strftime("%Y%m%d%H%M%S"),
                 "enddatetime": now.strftime("%Y%m%d%H%M%S"),
                 "format": "json",
@@ -823,7 +884,7 @@ class MarketDataFetcher:
             }
 
             async def _fetch():
-                return await self._get_with_retry(self.GDELT_API_URL, params)
+                return await self._get_with_retry(self.GDELT_API_URL, params, timeout=15)
 
             data = await _gdelt_breaker.call(_fetch)
 
@@ -833,7 +894,7 @@ class MarketDataFetcher:
                     tone_values = [float(t.get("tone", 0)) for t in tones if "tone" in t]
                     if tone_values:
                         avg_tone = sum(tone_values) / len(tone_values)
-                        logger.info(f"News Sentiment ({query}): tone={avg_tone:.2f}, articles={len(tone_values)}")
+                        logger.info(f"News Sentiment ({query[:30]}): tone={avg_tone:.2f}, articles={len(tone_values)}")
                         return {"average_tone": avg_tone, "article_count": len(tone_values)}
 
         except CircuitBreakerError as e:
@@ -1603,6 +1664,8 @@ class MarketDataFetcher:
                 dispatch[src_id] = self.get_stablecoin_flows()
             elif src_id == "btc_hashrate":
                 dispatch[src_id] = self.get_btc_hashrate()
+            elif src_id == "order_book":
+                dispatch[src_id] = self.get_order_book_depth(symbol)
             elif src_id == "bitget_funding":
                 dispatch[src_id] = self.get_bitget_funding_rate(symbol)
             elif src_id == "macro_dxy":

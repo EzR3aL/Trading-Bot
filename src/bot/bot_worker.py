@@ -22,7 +22,7 @@ from src.models.database import BotConfig, ExchangeConnection, LLMConnection, Tr
 from src.models.session import get_session
 from src.notifications.discord_notifier import DiscordNotifier
 from src.risk.risk_manager import RiskManager
-from src.strategy.base import BaseStrategy, StrategyRegistry, TradeSignal
+from src.strategy import BaseStrategy, StrategyRegistry, TradeSignal
 from src.utils.encryption import decrypt_value
 from src.utils.logger import get_logger
 
@@ -159,7 +159,7 @@ class BotWorker:
                 strategy_params.setdefault("stop_loss_percent", self._config.stop_loss_percent)
 
                 # If LLM strategy, inject decrypted API key from user's LLMConnection
-                if self._config.strategy_type == "llm_signal":
+                if self._config.strategy_type in ("llm_signal", "degen"):
                     llm_provider = strategy_params.get("llm_provider", "groq")
                     llm_conn_result = await session.execute(
                         select(LLMConnection).where(
@@ -179,12 +179,31 @@ class BotWorker:
                     params=strategy_params,
                 )
 
+                # Build per-symbol risk limits from per_asset_config
+                per_symbol_limits: dict = {}
+                if self._config.per_asset_config:
+                    try:
+                        pac = json.loads(self._config.per_asset_config) if isinstance(
+                            self._config.per_asset_config, str
+                        ) else self._config.per_asset_config
+                        for sym, cfg in pac.items():
+                            sym_lim: dict = {}
+                            if cfg.get("max_trades") is not None:
+                                sym_lim["max_trades"] = int(cfg["max_trades"])
+                            if cfg.get("loss_limit") is not None:
+                                sym_lim["loss_limit"] = float(cfg["loss_limit"])
+                            if sym_lim:
+                                per_symbol_limits[sym] = sym_lim
+                    except (json.JSONDecodeError, TypeError):
+                        pass
+
                 # Initialize risk manager with bot-specific params
                 self._risk_manager = RiskManager(
                     max_trades_per_day=self._config.max_trades_per_day,
                     daily_loss_limit_percent=self._config.daily_loss_limit_percent,
                     position_size_percent=self._config.position_size_percent,
                     data_dir=f"data/risk/bot_{self.bot_config_id}",
+                    per_symbol_limits=per_symbol_limits if per_symbol_limits else None,
                 )
 
             # ── Hyperliquid pre-start checks ──────────────────────────
@@ -341,12 +360,53 @@ class BotWorker:
             logger.error(f"[Bot:{self.bot_config_id}] Analysis error: {e}")
             self.error_message = str(e)
 
+    def _calculate_asset_budgets(self, total_balance: float, trading_pairs: list[str]) -> dict[str, float]:
+        """Calculate per-asset budget based on per_asset_config.
+
+        Assets with a fixed position_pct get that share of the total balance.
+        Remaining balance is split equally among unconfigured assets.
+        If no per_asset_config exists, all assets share equally.
+        """
+        per_asset_cfg = {}
+        if self._config.per_asset_config:
+            try:
+                per_asset_cfg = json.loads(self._config.per_asset_config) if isinstance(
+                    self._config.per_asset_config, str
+                ) else self._config.per_asset_config
+            except (json.JSONDecodeError, TypeError):
+                per_asset_cfg = {}
+
+        budgets: dict[str, float] = {}
+        fixed_total = 0.0
+        unfixed_assets = []
+
+        for symbol in trading_pairs:
+            asset_cfg = per_asset_cfg.get(symbol, {})
+            pct = asset_cfg.get("position_pct")
+            if pct is not None and pct > 0:
+                budgets[symbol] = total_balance * pct / 100
+                fixed_total += budgets[symbol]
+            else:
+                unfixed_assets.append(symbol)
+
+        remaining = max(0.0, total_balance - fixed_total)
+        if unfixed_assets:
+            per_asset = remaining / len(unfixed_assets)
+            for symbol in unfixed_assets:
+                budgets[symbol] = per_asset
+
+        log_prefix = f"[Bot:{self.bot_config_id}]"
+        for symbol, budget in budgets.items():
+            logger.info(f"{log_prefix} Budget {symbol}: ${budget:,.2f}")
+
+        return budgets
+
     async def _analyze_and_trade(self):
         """Main trading logic — analyze markets and execute trades."""
         log_prefix = f"[Bot:{self.bot_config_id}]"
         logger.info(f"{log_prefix} Starting analysis...")
 
-        # Check risk limits
+        # Global halt check (e.g. stats not initialized)
         can_trade, reason = self._risk_manager.can_trade()
         if not can_trade:
             logger.warning(f"{log_prefix} Cannot trade: {reason}")
@@ -354,16 +414,20 @@ class BotWorker:
 
         # Parse trading pairs
         trading_pairs = json.loads(self._config.trading_pairs)
-        remaining = self._risk_manager.get_remaining_trades()
+
+        # Calculate per-asset budgets
+        balance = await self._client.get_account_balance()
+        budgets = self._calculate_asset_budgets(balance.available, trading_pairs)
 
         for symbol in trading_pairs:
-            if remaining <= 0:
-                logger.info(f"{log_prefix} No remaining trades today")
-                break
+            # Per-symbol risk check
+            can_trade_sym, sym_reason = self._risk_manager.can_trade(symbol)
+            if not can_trade_sym:
+                logger.info(f"{log_prefix} Skipping {symbol}: {sym_reason}")
+                continue
 
             try:
-                await self._analyze_symbol(symbol)
-                remaining = self._risk_manager.get_remaining_trades()
+                await self._analyze_symbol(symbol, asset_budget=budgets.get(symbol))
             except Exception as e:
                 logger.error(f"{log_prefix} Error analyzing {symbol}: {e}")
 
@@ -375,17 +439,18 @@ class BotWorker:
             self._symbol_locks[symbol] = asyncio.Lock()
         return self._symbol_locks[symbol]
 
-    async def _analyze_symbol(self, symbol: str, force: bool = False):
+    async def _analyze_symbol(self, symbol: str, force: bool = False, asset_budget: Optional[float] = None):
         """Analyze a single symbol and potentially trade it.
 
         Args:
             symbol: Trading pair to analyze
             force: If True, skip the open-position check (used after rotation close)
+            asset_budget: Pre-calculated budget for this asset (None = use full balance)
         """
         async with self._get_symbol_lock(symbol):
-            await self._analyze_symbol_locked(symbol, force)
+            await self._analyze_symbol_locked(symbol, force, asset_budget=asset_budget)
 
-    async def _analyze_symbol_locked(self, symbol: str, force: bool = False):
+    async def _analyze_symbol_locked(self, symbol: str, force: bool = False, asset_budget: Optional[float] = None):
         """Internal: analyze symbol while holding per-symbol lock."""
         log_prefix = f"[Bot:{self.bot_config_id}]"
 
@@ -416,34 +481,74 @@ class BotWorker:
         # Execute on appropriate clients
         mode = self._config.mode
         if mode in ("demo", "both") and self._demo_client:
-            await self._execute_trade(signal, self._demo_client, demo_mode=True)
+            await self._execute_trade(signal, self._demo_client, demo_mode=True, asset_budget=asset_budget)
         if mode in ("live", "both") and self._live_client:
-            await self._execute_trade(signal, self._live_client, demo_mode=False)
+            await self._execute_trade(signal, self._live_client, demo_mode=False, asset_budget=asset_budget)
 
-    async def _execute_trade(self, signal: TradeSignal, client: ExchangeClient, demo_mode: bool):
+    async def _execute_trade(
+        self, signal: TradeSignal, client: ExchangeClient, demo_mode: bool,
+        asset_budget: Optional[float] = None,
+    ):
         """Execute a trade on a specific exchange client."""
         log_prefix = f"[Bot:{self.bot_config_id}]"
         mode_str = "DEMO" if demo_mode else "LIVE"
 
+        # Resolve per-asset config overrides
+        per_asset_cfg = {}
+        if self._config.per_asset_config:
+            try:
+                per_asset_cfg = json.loads(self._config.per_asset_config) if isinstance(
+                    self._config.per_asset_config, str
+                ) else self._config.per_asset_config
+            except (json.JSONDecodeError, TypeError):
+                pass
+        asset_cfg = per_asset_cfg.get(signal.symbol, {})
+
+        # Resolve leverage: per-asset > global > 1x
+        leverage = asset_cfg.get("leverage") or self._config.leverage or 1
+
+        # Apply per-asset TP/SL overrides to signal
+        asset_tp = asset_cfg.get("tp")
+        asset_sl = asset_cfg.get("sl")
+        if asset_tp is not None and signal.entry_price > 0:
+            if signal.direction.value == "long":
+                signal.target_price = round(signal.entry_price * (1 + asset_tp / 100), 2)
+            else:
+                signal.target_price = round(signal.entry_price * (1 - asset_tp / 100), 2)
+        if asset_sl is not None and signal.entry_price > 0:
+            if signal.direction.value == "long":
+                signal.stop_loss = round(signal.entry_price * (1 - asset_sl / 100), 2)
+            else:
+                signal.stop_loss = round(signal.entry_price * (1 + asset_sl / 100), 2)
+
         try:
-            # Get balance
-            balance = await client.get_account_balance()
-            available = balance.available
+            # Use pre-calculated asset budget or fall back to full available balance
+            if asset_budget is not None:
+                available = asset_budget
+            else:
+                balance = await client.get_account_balance()
+                available = balance.available
 
             # Calculate position size
-            position_usdt, position_size = self._risk_manager.calculate_position_size(
-                balance=available,
-                entry_price=signal.entry_price,
-                confidence=signal.confidence,
-                leverage=self._config.leverage,
-            )
+            if asset_budget is not None and self._config.position_size_percent is None:
+                # Full budget mode — no double-sizing
+                position_usdt = available
+                position_size = (available * leverage) / signal.entry_price
+            else:
+                # Legacy fallback via RiskManager
+                position_usdt, position_size = self._risk_manager.calculate_position_size(
+                    balance=available,
+                    entry_price=signal.entry_price,
+                    confidence=signal.confidence,
+                    leverage=leverage,
+                )
 
             if position_usdt < 5:
                 logger.warning(f"{log_prefix} [{mode_str}] Position too small: ${position_usdt:.2f} (min 5 USDT)")
                 return
 
             # Set leverage
-            await client.set_leverage(signal.symbol, self._config.leverage)
+            await client.set_leverage(signal.symbol, leverage)
 
             # Place order
             side = "long" if signal.direction.value == "long" else "short"
@@ -451,7 +556,7 @@ class BotWorker:
                 symbol=signal.symbol,
                 side=side,
                 size=position_size,
-                leverage=self._config.leverage,
+                leverage=leverage,
                 take_profit=signal.target_price,
                 stop_loss=signal.stop_loss,
             )
@@ -482,7 +587,7 @@ class BotWorker:
                     entry_price=fill_price,
                     take_profit=signal.target_price,
                     stop_loss=signal.stop_loss,
-                    leverage=self._config.leverage,
+                    leverage=leverage,
                     confidence=signal.confidence,
                     reason=signal.reason,
                     order_id=order.order_id,
@@ -499,7 +604,7 @@ class BotWorker:
                 side=signal.direction.value,
                 size=position_size,
                 entry_price=fill_price,
-                leverage=self._config.leverage,
+                leverage=leverage,
                 confidence=signal.confidence,
                 reason=signal.reason,
                 order_id=order.order_id,
@@ -521,7 +626,7 @@ class BotWorker:
                                 side=signal.direction.value,
                                 size=position_size,
                                 entry_price=fill_price,
-                                leverage=self._config.leverage,
+                                leverage=leverage,
                                 take_profit=signal.target_price,
                                 stop_loss=signal.stop_loss,
                                 confidence=signal.confidence,
@@ -749,9 +854,15 @@ class BotWorker:
                 if self._config.schedule_type == "rotation_only":
                     logger.info(f"{log_prefix} ROTATION: No open trades — triggering analysis")
                     pairs = json.loads(self._config.trading_pairs) if isinstance(self._config.trading_pairs, str) else self._config.trading_pairs
+                    rot_balance = await self._client.get_account_balance()
+                    rot_budgets = self._calculate_asset_budgets(rot_balance.available, pairs)
                     for symbol in pairs:
+                        can_trade_sym, sym_reason = self._risk_manager.can_trade(symbol)
+                        if not can_trade_sym:
+                            logger.info(f"{log_prefix} ROTATION: Skipping {symbol} — {sym_reason}")
+                            continue
                         try:
-                            await self._analyze_symbol(symbol, force=True)
+                            await self._analyze_symbol(symbol, force=True, asset_budget=rot_budgets.get(symbol))
                         except Exception as e:
                             logger.error(f"{log_prefix} ROTATION: Analysis failed for {symbol}: {e}")
                 return
@@ -808,10 +919,19 @@ class BotWorker:
                 closed = await self._force_close_trade(trade, client, session)
 
                 if closed:
+                    # Check risk limits before re-opening
+                    can_reopen, reopen_reason = self._risk_manager.can_trade(trade.symbol)
+                    if not can_reopen:
+                        logger.info(f"{log_prefix} ROTATION: Trade closed but no re-open — {reopen_reason}")
+                        continue
+
                     # Re-analyze and open a new trade for this symbol
                     logger.info(f"{log_prefix} ROTATION: Re-analyzing {trade.symbol}...")
                     try:
-                        await self._analyze_symbol(trade.symbol, force=True)
+                        pairs = json.loads(self._config.trading_pairs) if isinstance(self._config.trading_pairs, str) else self._config.trading_pairs
+                        reopen_balance = await client.get_account_balance()
+                        reopen_budgets = self._calculate_asset_budgets(reopen_balance.available, pairs)
+                        await self._analyze_symbol(trade.symbol, force=True, asset_budget=reopen_budgets.get(trade.symbol))
                     except Exception as e:
                         logger.error(f"{log_prefix} ROTATION: Re-analysis failed for {trade.symbol}: {e}")
 

@@ -36,6 +36,10 @@ class DailyStats:
     max_drawdown: float
     is_trading_halted: bool = False
     halt_reason: str = ""
+    # Per-symbol tracking for per-asset risk limits
+    symbol_trades: Dict[str, int] = field(default_factory=dict)
+    symbol_pnl: Dict[str, float] = field(default_factory=dict)
+    halted_symbols: Dict[str, str] = field(default_factory=dict)
 
     @property
     def net_pnl(self) -> float:
@@ -75,6 +79,9 @@ class DailyStats:
             "max_drawdown": self.max_drawdown,
             "is_trading_halted": self.is_trading_halted,
             "halt_reason": self.halt_reason,
+            "symbol_trades": self.symbol_trades,
+            "symbol_pnl": self.symbol_pnl,
+            "halted_symbols": self.halted_symbols,
         }
 
 
@@ -100,19 +107,24 @@ class RiskManager:
         enable_profit_lock: bool = True,
         profit_lock_percent: float = 75.0,
         min_profit_floor: float = 0.5,
+        per_symbol_limits: Optional[Dict[str, Dict]] = None,
     ):
         """
         Initialize the risk manager.
 
         Args:
-            max_trades_per_day: Maximum number of trades allowed per day
-            daily_loss_limit_percent: Maximum loss percentage before halting
+            max_trades_per_day: Global max trades (fallback if no per-symbol limit)
+            daily_loss_limit_percent: Global loss limit (fallback if no per-symbol limit)
             position_size_percent: Default position size as percentage of balance
             data_dir: Directory to store risk data
+            per_symbol_limits: Per-symbol overrides, e.g.
+                {"BTCUSDT": {"max_trades": 5, "loss_limit": 3.0}}
         """
-        self.max_trades = max_trades_per_day or settings.trading.max_trades_per_day
-        self.daily_loss_limit = daily_loss_limit_percent or settings.trading.daily_loss_limit_percent
+        # None = no limit (unlimited trades / no loss cap)
+        self.max_trades = max_trades_per_day
+        self.daily_loss_limit = daily_loss_limit_percent
         self.position_size_pct = position_size_percent or settings.trading.position_size_percent
+        self.per_symbol_limits = per_symbol_limits or {}
 
         # Profit Lock-In settings
         self.enable_profit_lock = enable_profit_lock
@@ -195,36 +207,29 @@ class RiskManager:
 
         return self._daily_stats
 
-    def get_dynamic_loss_limit(self) -> float:
+    def get_dynamic_loss_limit(self, symbol: Optional[str] = None) -> Optional[float]:
         """
         Calculate dynamic loss limit based on current daily PnL.
 
-        Implements the Profit Lock-In feature:
-        - When in profit, reduces allowed loss to lock in gains
-        - Example: If +4% profit, with 75% lock, only allows -1% loss
-          (keeping minimum +0.5% profit)
+        Args:
+            symbol: If provided, checks per-symbol PnL. Otherwise global.
 
         Returns:
-            Current effective loss limit as percentage
+            Current effective loss limit as percentage, or None if no limit set.
         """
+        if self.daily_loss_limit is None:
+            return None
+
         if not self.enable_profit_lock or not self._daily_stats:
             return self.daily_loss_limit
 
         current_return = self._daily_stats.return_percent
 
         if current_return <= 0:
-            # Not in profit, use standard loss limit
             return self.daily_loss_limit
-
-        # Calculate how much profit to lock
-        # locked_profit = current_return * (profit_lock_percent / 100)
-        # The max allowed loss = current_return - min_profit_floor
-        # But capped at standard loss limit
 
         max_allowed_loss = current_return - self.min_profit_floor
         new_limit = min(self.daily_loss_limit, max_allowed_loss)
-
-        # Ensure at least some small loss is allowed for flexibility
         new_limit = max(new_limit, 0.5)
 
         logger.debug(
@@ -234,9 +239,12 @@ class RiskManager:
 
         return new_limit
 
-    def can_trade(self) -> tuple[bool, str]:
+    def can_trade(self, symbol: Optional[str] = None) -> tuple[bool, str]:
         """
         Check if trading is allowed based on risk limits.
+
+        Args:
+            symbol: If provided, checks per-symbol limits. Otherwise general check.
 
         Returns:
             Tuple of (can_trade: bool, reason: str)
@@ -244,21 +252,43 @@ class RiskManager:
         if not self._daily_stats:
             return False, "Daily stats not initialized. Call initialize_day() first."
 
-        # Check if trading is halted
+        # Check if trading is globally halted
         if self._daily_stats.is_trading_halted:
             return False, f"Trading halted: {self._daily_stats.halt_reason}"
 
-        # Check trade count limit
-        if self._daily_stats.trades_executed >= self.max_trades:
-            return False, f"Daily trade limit reached ({self.max_trades} trades)"
+        # Check if this specific symbol is halted
+        if symbol and symbol in self._daily_stats.halted_symbols:
+            return False, f"{symbol} halted: {self._daily_stats.halted_symbols[symbol]}"
 
-        # Check dynamic loss limit (includes Profit Lock-In)
-        current_loss_limit = self.get_dynamic_loss_limit()
-        loss_percent = abs(min(0, self._daily_stats.return_percent))
+        # Resolve per-symbol limits (per-symbol override > global fallback > None)
+        if symbol:
+            sym_limits = self.per_symbol_limits.get(symbol, {})
+            effective_max_trades = sym_limits.get("max_trades", self.max_trades)
+            effective_loss_limit = sym_limits.get("loss_limit", self.daily_loss_limit)
 
-        if loss_percent >= current_loss_limit:
-            self._halt_trading(f"Loss limit exceeded ({loss_percent:.2f}% > {current_loss_limit:.2f}%)")
-            return False, f"Loss limit exceeded: {loss_percent:.2f}%"
+            # Check per-symbol trade count limit
+            if effective_max_trades is not None:
+                symbol_count = self._daily_stats.symbol_trades.get(symbol, 0)
+                if symbol_count >= effective_max_trades:
+                    return False, f"{symbol}: trade limit reached ({symbol_count}/{effective_max_trades})"
+
+            # Check per-symbol loss limit
+            if effective_loss_limit is not None:
+                symbol_pnl = self._daily_stats.symbol_pnl.get(symbol, 0.0)
+                if self._daily_stats.starting_balance > 0:
+                    symbol_loss_pct = abs(min(0, (symbol_pnl / self._daily_stats.starting_balance) * 100))
+                    if symbol_loss_pct >= effective_loss_limit:
+                        halt_reason = f"Loss limit exceeded ({symbol_loss_pct:.2f}% >= {effective_loss_limit:.2f}%)"
+                        self._daily_stats.halted_symbols[symbol] = halt_reason
+                        self._save_daily_stats()
+                        logger.warning(f"{symbol} HALTED: {halt_reason}")
+                        return False, f"{symbol}: {halt_reason}"
+
+        # General check (no symbol) — for gating entire analysis runs
+        if symbol is None:
+            # If max_trades set, check if ALL symbols would be blocked (not useful to run)
+            # Just return True — per-symbol checks happen later
+            pass
 
         return True, "Trading allowed"
 
@@ -349,8 +379,9 @@ class RiskManager:
             logger.error("Daily stats not initialized!")
             return False
 
-        # Update trade count
+        # Update trade counts (global + per-symbol)
         self._daily_stats.trades_executed += 1
+        self._daily_stats.symbol_trades[symbol] = self._daily_stats.symbol_trades.get(symbol, 0) + 1
 
         # Log the trade
         self.trade_logger.log_trade_entry(
@@ -365,7 +396,9 @@ class RiskManager:
         )
 
         self._save_daily_stats()
-        logger.info(f"Trade entry recorded. Trades today: {self._daily_stats.trades_executed}/{self.max_trades}")
+        symbol_count = self._daily_stats.symbol_trades[symbol]
+        limit_str = str(self.max_trades) if self.max_trades is not None else "∞"
+        logger.info(f"Trade entry recorded. {symbol}: {symbol_count}/{limit_str} trades today")
 
         return True
 
@@ -410,11 +443,12 @@ class RiskManager:
 
         pnl_percent = (pnl / (entry_price * size)) * 100
 
-        # Update stats
+        # Update stats (global + per-symbol)
         self._daily_stats.total_pnl += pnl
         self._daily_stats.total_fees += fees
         self._daily_stats.total_funding += funding_paid
         self._daily_stats.current_balance += (pnl - fees - funding_paid)
+        self._daily_stats.symbol_pnl[symbol] = self._daily_stats.symbol_pnl.get(symbol, 0.0) + pnl
 
         if pnl > 0:
             self._daily_stats.winning_trades += 1
@@ -443,13 +477,20 @@ class RiskManager:
         self._save_daily_stats()
 
         logger.info(
-            f"Trade exit recorded: PnL=${pnl:.2f} ({pnl_percent:+.2f}%) | "
+            f"Trade exit recorded: {symbol} PnL=${pnl:.2f} ({pnl_percent:+.2f}%) | "
             f"Day PnL: ${self._daily_stats.net_pnl:.2f} ({self._daily_stats.return_percent:+.2f}%)"
         )
 
-        # Check if we hit loss limit
-        if self._daily_stats.return_percent <= -self.daily_loss_limit:
-            self._halt_trading(f"Daily loss limit reached: {self._daily_stats.return_percent:.2f}%")
+        # Check per-symbol loss limit (per-symbol override > global fallback)
+        sym_limits = self.per_symbol_limits.get(symbol, {})
+        effective_loss_limit = sym_limits.get("loss_limit", self.daily_loss_limit)
+        if effective_loss_limit is not None and self._daily_stats.starting_balance > 0:
+            symbol_pnl_total = self._daily_stats.symbol_pnl.get(symbol, 0.0)
+            symbol_loss_pct = abs(min(0, (symbol_pnl_total / self._daily_stats.starting_balance) * 100))
+            if symbol_loss_pct >= effective_loss_limit:
+                self._daily_stats.halted_symbols[symbol] = f"Loss limit reached: {symbol_loss_pct:.2f}%"
+                self._save_daily_stats()
+                logger.warning(f"{symbol} HALTED: Loss limit {symbol_loss_pct:.2f}% >= {effective_loss_limit}%")
 
         return True
 
@@ -457,14 +498,27 @@ class RiskManager:
         """Get current daily statistics."""
         return self._daily_stats
 
-    def get_remaining_trades(self) -> int:
-        """Get number of trades remaining for today."""
+    def get_remaining_trades(self, symbol: Optional[str] = None) -> int:
+        """Get number of trades remaining for today (per-symbol if symbol given)."""
+        if symbol:
+            sym_limits = self.per_symbol_limits.get(symbol, {})
+            effective_max = sym_limits.get("max_trades", self.max_trades)
+            if effective_max is None:
+                return 999
+            if not self._daily_stats:
+                return effective_max
+            symbol_count = self._daily_stats.symbol_trades.get(symbol, 0)
+            return max(0, effective_max - symbol_count)
+        if self.max_trades is None:
+            return 999
         if not self._daily_stats:
             return self.max_trades
         return max(0, self.max_trades - self._daily_stats.trades_executed)
 
-    def get_remaining_risk_budget(self) -> float:
+    def get_remaining_risk_budget(self) -> Optional[float]:
         """Get remaining risk budget as percentage."""
+        if self.daily_loss_limit is None:
+            return None
         if not self._daily_stats:
             return self.daily_loss_limit
 

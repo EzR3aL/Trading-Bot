@@ -61,12 +61,12 @@ export default function FilterDropdown({ value, onChange, options, ariaLabel }: 
       </button>
 
       {isOpen && (
-        <div className={`absolute top-full mt-1.5 left-0 z-50 min-w-full rounded-xl border shadow-2xl backdrop-blur-xl animate-in overflow-hidden ${
+        <div className={`absolute top-full mt-1.5 left-0 z-50 min-w-full rounded-xl border shadow-2xl backdrop-blur-xl animate-in ${
           isLight
             ? 'bg-white border-gray-200 shadow-gray-200/50'
             : 'bg-[#141a2a]/95 border-white/10 shadow-black/60'
         }`}>
-          <div className="py-1.5">
+          <div className="py-1.5 max-h-60 overflow-y-auto">
             {options.map((opt) => {
               const isActive = opt.value === value
               return (
