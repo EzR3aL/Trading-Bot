@@ -5,6 +5,7 @@ import api from '../../api/client'
 import { ArrowLeft, ArrowRight, Check, Play, Brain, TrendingUp, BarChart3, DollarSign, Activity, Building, LayoutGrid, List, Bot } from 'lucide-react'
 import ExchangeLogo from '../ui/ExchangeLogo'
 import FilterDropdown from '../ui/FilterDropdown'
+import NumInput from '../ui/NumInput'
 
 interface Strategy {
   name: string
@@ -55,14 +56,35 @@ interface BotBuilderProps {
 }
 
 // Strategies that use market data and should show the data sources step
-const DATA_STRATEGIES = ['llm_signal', 'sentiment_surfer', 'liquidation_hunter']
+const DATA_STRATEGIES = ['llm_signal', 'sentiment_surfer', 'liquidation_hunter', 'degen']
+
+// Fixed data sources for non-LLM strategies (these strategies use hardcoded sources internally)
+const FIXED_STRATEGY_SOURCES: Record<string, string[]> = {
+  sentiment_surfer: [
+    'fear_greed', 'news_sentiment', 'vwap', 'supertrend', 'spot_volume', 'spot_price', 'oiwap',
+  ],
+  liquidation_hunter: [
+    'fear_greed', 'long_short_ratio', 'funding_rate', 'open_interest', 'spot_price',
+  ],
+  degen: [
+    'spot_price', 'fear_greed', 'news_sentiment', 'funding_rate', 'open_interest',
+    'long_short_ratio', 'order_book', 'liquidations', 'supertrend', 'vwap',
+    'oiwap', 'spot_volume', 'volatility', 'coingecko_market',
+  ],
+}
 
 const STRATEGY_DISPLAY_NAMES: Record<string, string> = {
   llm_signal: 'KI-Companion',
+  sentiment_surfer: 'Sentiment Surfer',
+  liquidation_hunter: 'Liquidation Hunter',
+  degen: 'Degen',
 }
 
 const STRATEGY_DESCRIPTIONS_DE: Record<string, string> = {
   llm_signal: 'KI-gestützte Signalgenerierung mittels Large Language Models. Die KI analysiert Marktdaten in jedem Zyklus und liefert LONG/SHORT-Empfehlungen mit Konfidenzbewertung.',
+  sentiment_surfer: 'Kombiniert Marktstimmung mit technischen Indikatoren zur Vorhersage von Preisbewegungen. Nutzt News-Sentiment, Fear & Greed, VWAP, Supertrend und Spot-Daten. Erfordert Übereinstimmung mehrerer Quellen.',
+  liquidation_hunter: 'Contrarian-Strategie, die gegen überfüllte Positionen handelt. Analysiert Long/Short-Verhältnisse, Funding Rates und Fear & Greed, um Liquidationskaskaden frühzeitig zu erkennen.',
+  degen: 'KI-gesteuerte Arena-Strategie mit festem Prompt und 14 Datenquellen. Nutzt Derivatives, Order Book, Supertrend, VWAP und mehr fuer 1h BTC-Vorhersagen. Inspiriert vom Degen Prediction Bot.',
 }
 
 function getStrategyDisplayName(name: string): string {
@@ -105,12 +127,9 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
   const [exchangeType, setExchangeType] = useState('bitget')
   const [mode, setMode] = useState('demo')
   const [tradingPairs, setTradingPairs] = useState<string[]>(['BTCUSDT'])
-  const [leverage, setLeverage] = useState(4)
-  const [positionSize, setPositionSize] = useState(7.5)
-  const [maxTrades, setMaxTrades] = useState(2)
-  const [takeProfit, setTakeProfit] = useState(4.0)
-  const [stopLoss, setStopLoss] = useState(1.5)
-  const [dailyLossLimit, setDailyLossLimit] = useState(5.0)
+  const [maxTrades, setMaxTrades] = useState<number | null>(null)
+  const [dailyLossLimit, setDailyLossLimit] = useState<number | null>(null)
+  const [perAssetConfig, setPerAssetConfig] = useState<Record<string, { position_pct?: number; leverage?: number; tp?: number; sl?: number; max_trades?: number; loss_limit?: number }>>({})
   const [scheduleType, setScheduleType] = useState('market_sessions')
   const [intervalMinutes, setIntervalMinutes] = useState(60)
   const [customHours, setCustomHours] = useState<number[]>([])
@@ -132,14 +151,16 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
 
   // Whether current strategy uses market data
   const usesData = DATA_STRATEGIES.includes(strategyType)
+  // Fixed strategies have predetermined sources — no manual selection needed
+  const hasFixedSources = !!FIXED_STRATEGY_SOURCES[strategyType]
 
-  // Dynamic steps: insert data sources step after strategy for data-using strategies
+  // Dynamic steps: insert data sources step only for LLM strategy (manual selection)
   const steps = useMemo(() => {
-    if (usesData) {
+    if (usesData && !hasFixedSources) {
       return ['step1', 'step2', 'step2b', 'step3', 'step4', 'step5', 'step6'] as const
     }
     return ['step1', 'step2', 'step3', 'step4', 'step5', 'step6'] as const
-  }, [usesData])
+  }, [usesData, hasFixedSources])
 
   // Group data sources by category
   const sourcesByCategory = useMemo(() => {
@@ -165,15 +186,14 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
     if (!preset) return
     setSelectedPresetId(presetId)
     const tc = preset.trading_config || {}
-    if (tc.leverage) setLeverage(tc.leverage)
-    if (tc.position_size_percent) setPositionSize(tc.position_size_percent)
     if (tc.max_trades_per_day) setMaxTrades(tc.max_trades_per_day)
-    if (tc.take_profit_percent) setTakeProfit(tc.take_profit_percent)
-    if (tc.stop_loss_percent) setStopLoss(tc.stop_loss_percent)
     if (tc.daily_loss_limit_percent) setDailyLossLimit(tc.daily_loss_limit_percent)
-    // Apply strategy params
+    // Apply strategy params — preserve data_sources
     if (preset.strategy_config && Object.keys(preset.strategy_config).length > 0) {
-      setStrategyParams(prev => ({ ...prev, ...preset.strategy_config }))
+      setStrategyParams(prev => {
+        const { data_sources, ...rest } = prev
+        return { ...rest, ...preset.strategy_config, ...(data_sources ? { data_sources } : {}) }
+      })
     }
     // Apply trading pairs (convert based on current exchange)
     if (preset.trading_pairs && preset.trading_pairs.length > 0) {
@@ -182,6 +202,10 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
         return isHyperliquid ? base : (base.match(/(USDT|USDC)$/i) ? base : base + 'USDT')
       })
       setTradingPairs(converted)
+    }
+    // Apply per-asset config from preset
+    if (tc.per_asset_config && typeof tc.per_asset_config === 'object') {
+      setPerAssetConfig(tc.per_asset_config)
     }
   }
 
@@ -225,12 +249,9 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
         setExchangeType(d.exchange_type)
         setMode(d.mode)
         setTradingPairs(d.trading_pairs)
-        setLeverage(d.leverage)
-        setPositionSize(d.position_size_percent)
-        setMaxTrades(d.max_trades_per_day)
-        setTakeProfit(d.take_profit_percent)
-        setStopLoss(d.stop_loss_percent)
-        setDailyLossLimit(d.daily_loss_limit_percent)
+        setMaxTrades(d.max_trades_per_day ?? null)
+        setDailyLossLimit(d.daily_loss_limit_percent ?? null)
+        if (d.per_asset_config) setPerAssetConfig(d.per_asset_config)
         setScheduleType(d.schedule_type)
         if (d.schedule_config) {
           if (d.schedule_config.interval_minutes) setIntervalMinutes(d.schedule_config.interval_minutes)
@@ -240,7 +261,10 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
         if (d.rotation_interval_minutes) setRotationMinutes(d.rotation_interval_minutes)
         if (d.rotation_start_time) setRotationStartTime(d.rotation_start_time)
         // Restore selected data sources from strategy_params
-        if (d.strategy_params?.data_sources) {
+        // Fixed strategies always use their predetermined sources
+        if (FIXED_STRATEGY_SOURCES[d.strategy_type]) {
+          setSelectedSources(FIXED_STRATEGY_SOURCES[d.strategy_type])
+        } else if (d.strategy_params?.data_sources) {
           setSelectedSources(d.strategy_params.data_sources)
         } else if (defaultSourceIds.length > 0) {
           setSelectedSources(defaultSourceIds)
@@ -263,6 +287,12 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
         defaults[key] = (def as ParamDef).default
       })
       setStrategyParams(defaults)
+    }
+    // Auto-set fixed data sources for non-LLM strategies
+    if (FIXED_STRATEGY_SOURCES[name]) {
+      setSelectedSources(FIXED_STRATEGY_SOURCES[name])
+    } else {
+      setSelectedSources([])
     }
   }
 
@@ -334,6 +364,19 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
 
     const effectiveRotation = rotationEnabled || isRotationOnly
 
+    // Build per_asset_config (filter out empty entries)
+    const filteredPerAsset: Record<string, Record<string, number>> = {}
+    for (const [symbol, cfg] of Object.entries(perAssetConfig)) {
+      const clean: Record<string, number> = {}
+      if (cfg.position_pct != null && cfg.position_pct > 0) clean.position_pct = cfg.position_pct
+      if (cfg.leverage != null && cfg.leverage > 0) clean.leverage = cfg.leverage
+      if (cfg.tp != null && cfg.tp > 0) clean.tp = cfg.tp
+      if (cfg.sl != null && cfg.sl > 0) clean.sl = cfg.sl
+      if (cfg.max_trades != null && cfg.max_trades > 0) clean.max_trades = cfg.max_trades
+      if (cfg.loss_limit != null && cfg.loss_limit > 0) clean.loss_limit = cfg.loss_limit
+      if (Object.keys(clean).length > 0) filteredPerAsset[symbol] = clean
+    }
+
     return {
       name,
       description: description || undefined,
@@ -341,12 +384,9 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
       exchange_type: exchangeType,
       mode,
       trading_pairs: tradingPairs,
-      leverage,
-      position_size_percent: positionSize,
-      max_trades_per_day: maxTrades,
-      take_profit_percent: takeProfit,
-      stop_loss_percent: stopLoss,
-      daily_loss_limit_percent: dailyLossLimit,
+      max_trades_per_day: maxTrades || undefined,
+      daily_loss_limit_percent: dailyLossLimit || undefined,
+      per_asset_config: Object.keys(filteredPerAsset).length > 0 ? filteredPerAsset : undefined,
       strategy_params: params,
       schedule_type: scheduleType,
       schedule_config: isRotationOnly ? null : scheduleConfig,
@@ -395,7 +435,7 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
     const errors: string[] = []
     if (stepKey === 'step1' && !name.trim()) errors.push(t('bots.builder.errors.nameRequired'))
     if (stepKey === 'step2' && !strategyType) errors.push(t('bots.builder.errors.strategyRequired'))
-    if (stepKey === 'step2b' && selectedSources.length === 0) errors.push(t('bots.builder.errors.dataSourcesRequired'))
+    if (stepKey === 'step2b' && !hasFixedSources && selectedSources.length === 0) errors.push(t('bots.builder.errors.dataSourcesRequired'))
     if (stepKey === 'step3' && tradingPairs.length === 0) errors.push(t('bots.builder.errors.pairsRequired'))
     if (stepKey === 'step5') {
       if (scheduleType === 'custom_cron' && customHours.length === 0) errors.push(t('bots.builder.errors.hoursRequired'))
@@ -573,20 +613,22 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
                       <button
                         key={s.name}
                         onClick={() => handleStrategyChange(s.name)}
-                        className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl border transition-all ${
+                        className={`w-full flex flex-col gap-1 px-3 py-2.5 rounded-xl border transition-all text-left ${
                           isSelected
                             ? 'border-primary-500 bg-primary-500/10 ring-1 ring-primary-500/30'
                             : 'border-white/10 bg-white/[0.03] hover:border-white/20 hover:bg-white/[0.06]'
                         }`}
                       >
-                        {isSelected && <Check size={14} className="text-primary-400 shrink-0" />}
-                        <div className={`flex items-center gap-1.5 text-sm font-medium ${isSelected ? 'text-primary-400' : 'text-white'}`}>
-                          {getStrategyDisplayName(s.name)}
+                        <div className="flex items-center gap-1.5">
+                          {isSelected && <Check size={14} className="text-primary-400 shrink-0" />}
+                          <span className={`text-sm font-medium ${isSelected ? 'text-primary-400' : 'text-white'}`}>
+                            {getStrategyDisplayName(s.name)}
+                          </span>
                           {s.name === 'llm_signal' && <Bot size={14} className="text-emerald-400" />}
                         </div>
-                        <div className="text-xs text-gray-500 truncate ml-auto">
-                          {(STRATEGY_DESCRIPTIONS_DE[s.name] || s.description).slice(0, 60)}...
-                        </div>
+                        <p className="text-xs text-gray-500 leading-relaxed">
+                          {STRATEGY_DESCRIPTIONS_DE[s.name] || s.description}
+                        </p>
                       </button>
                     )
                   })}
@@ -595,7 +637,7 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
             </div>
 
             {/* LLM info banner */}
-            {strategyType === 'llm_signal' && (
+            {(strategyType === 'llm_signal' || strategyType === 'degen') && (
               <div className="bg-blue-900/20 border border-blue-800 rounded-lg p-3">
                 <p className="text-xs text-blue-300">{b.llmNote || 'This bot uses AI for signal generation. Configure your API key in Settings → LLM Keys.'}</p>
               </div>
@@ -721,8 +763,7 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
                                 return (
                                   <div key={key}>
                                     <label className="block text-xs text-gray-500 mb-1" title={d.description}>{d.label}</label>
-                                    <input
-                                      type="number"
+                                    <NumInput
                                       value={strategyParams[key] ?? d.default}
                                       onChange={e => setStrategyParams(prev => ({ ...prev, [key]: parseFloat(e.target.value) || 0 }))}
                                       min={d.min}
@@ -820,8 +861,11 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
                                 : 'border-white/10 bg-white/[0.03] hover:border-white/20 hover:bg-white/[0.06]'
                             }`}
                           >
-                            <div className={`text-sm font-medium ${isSelected ? 'text-green-300' : 'text-white'}`}>
-                              {src.name}
+                            <div className="flex items-center justify-between gap-1">
+                              <span className={`text-sm font-medium ${isSelected ? 'text-green-300' : 'text-white'}`}>
+                                {src.name}
+                              </span>
+                              <span className="text-[10px] text-gray-500 shrink-0">{src.provider}</span>
                             </div>
                             <div className="text-xs text-gray-500 mt-0.5 line-clamp-2">{src.description}</div>
                           </button>
@@ -865,6 +909,7 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
         {/* Step 3: Trading Parameters */}
         {currentStepKey === 'step3' && (
           <div className="space-y-6">
+            {/* Trading pairs */}
             <div>
               <label className="block text-sm text-gray-400 mb-2">{b.tradingPairs}</label>
               <div className="flex flex-wrap gap-1.5">
@@ -884,38 +929,82 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
               </div>
             </div>
 
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+            {/* Per-asset config */}
+            {tradingPairs.length > 0 && (
               <div>
-                <label className="block text-xs text-gray-500 mb-1.5">{b.leverage}</label>
-                <input type="number" value={leverage} onChange={e => setLeverage(parseInt(e.target.value) || 1)} min={1} max={20}
-                  className="filter-select w-full text-sm tabular-nums" />
+                <label className="block text-sm text-gray-400 mb-3">{t('bots.builder.perAssetConfig')}</label>
+                <div className="space-y-3">
+                  {tradingPairs.map(pair => {
+                    const cfg = perAssetConfig[pair] || {}
+                    const updateAsset = (field: string, val: string) => {
+                      const num = val === '' ? undefined : parseFloat(val)
+                      setPerAssetConfig(prev => ({
+                        ...prev,
+                        [pair]: { ...prev[pair], [field]: num }
+                      }))
+                    }
+                    return (
+                      <div key={pair} className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-3">
+                        <div className="text-sm font-medium text-white mb-2">{pair}</div>
+                        <div className="grid grid-cols-3 gap-2">
+                          <div>
+                            <label className="block text-[10px] text-gray-500 mb-1">{t('bots.builder.balancePct')}</label>
+                            <NumInput value={cfg.position_pct ?? ''} onChange={e => updateAsset('position_pct', e.target.value)}
+                              placeholder="-" min={1} max={100} step={1}
+                              className="filter-select w-full text-sm tabular-nums text-center" />
+                          </div>
+                          <div>
+                            <label className="block text-[10px] text-gray-500 mb-1">{b.leverage}</label>
+                            <NumInput value={cfg.leverage ?? ''} onChange={e => updateAsset('leverage', e.target.value)}
+                              placeholder="-" min={1} max={20}
+                              className="filter-select w-full text-sm tabular-nums text-center" />
+                          </div>
+                          <div>
+                            <label className="block text-[10px] text-gray-500 mb-1">TP %</label>
+                            <NumInput value={cfg.tp ?? ''} onChange={e => updateAsset('tp', e.target.value)}
+                              placeholder="-" min={0.5} max={20} step={0.5}
+                              className="filter-select w-full text-sm tabular-nums text-center" />
+                          </div>
+                          <div>
+                            <label className="block text-[10px] text-gray-500 mb-1">SL %</label>
+                            <NumInput value={cfg.sl ?? ''} onChange={e => updateAsset('sl', e.target.value)}
+                              placeholder="-" min={0.5} max={10} step={0.5}
+                              className="filter-select w-full text-sm tabular-nums text-center" />
+                          </div>
+                          <div>
+                            <label className="block text-[10px] text-gray-500 mb-1">{b.maxTrades}</label>
+                            <NumInput value={cfg.max_trades ?? ''} onChange={e => updateAsset('max_trades', e.target.value)}
+                              placeholder="-" min={1} max={50}
+                              className="filter-select w-full text-sm tabular-nums text-center" />
+                          </div>
+                          <div>
+                            <label className="block text-[10px] text-gray-500 mb-1">{b.dailyLossLimit}</label>
+                            <NumInput value={cfg.loss_limit ?? ''} onChange={e => updateAsset('loss_limit', e.target.value)}
+                              placeholder="-" min={1} max={50} step={0.5}
+                              className="filter-select w-full text-sm tabular-nums text-center" />
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+                {/* Balance preview */}
+                <div className="mt-3 flex flex-wrap gap-2 text-xs text-gray-500">
+                  {(() => {
+                    const fixed = tradingPairs.reduce((sum, p) => sum + (perAssetConfig[p]?.position_pct || 0), 0)
+                    const unfixedCount = tradingPairs.filter(p => !perAssetConfig[p]?.position_pct).length
+                    const remaining = Math.max(0, 100 - fixed)
+                    const perUnfixed = unfixedCount > 0 ? remaining / unfixedCount : 0
+                    return tradingPairs.map(p => {
+                      const pct = perAssetConfig[p]?.position_pct || perUnfixed
+                      return <span key={p} className="bg-white/5 px-2 py-0.5 rounded">{p}: {pct.toFixed(1)}%</span>
+                    })
+                  })()}
+                </div>
+                <p className="text-xs text-gray-600 mt-1">{t('bots.builder.perAssetHint')}</p>
               </div>
-              <div>
-                <label className="block text-xs text-gray-500 mb-1.5">{b.positionSize}</label>
-                <input type="number" value={positionSize} onChange={e => setPositionSize(parseFloat(e.target.value) || 1)} min={1} max={25} step={0.5}
-                  className="filter-select w-full text-sm tabular-nums" />
-              </div>
-              <div>
-                <label className="block text-xs text-gray-500 mb-1.5">{b.maxTrades}</label>
-                <input type="number" value={maxTrades} onChange={e => setMaxTrades(parseInt(e.target.value) || 1)} min={1} max={10}
-                  className="filter-select w-full text-sm tabular-nums" />
-              </div>
-              <div>
-                <label className="block text-xs text-gray-500 mb-1.5">{b.takeProfit}</label>
-                <input type="number" value={takeProfit} onChange={e => setTakeProfit(parseFloat(e.target.value) || 0.5)} min={0.5} max={20} step={0.5}
-                  className="filter-select w-full text-sm tabular-nums" />
-              </div>
-              <div>
-                <label className="block text-xs text-gray-500 mb-1.5">{b.stopLoss}</label>
-                <input type="number" value={stopLoss} onChange={e => setStopLoss(parseFloat(e.target.value) || 0.5)} min={0.5} max={10} step={0.5}
-                  className="filter-select w-full text-sm tabular-nums" />
-              </div>
-              <div>
-                <label className="block text-xs text-gray-500 mb-1.5">{b.dailyLossLimit}</label>
-                <input type="number" value={dailyLossLimit} onChange={e => setDailyLossLimit(parseFloat(e.target.value) || 1)} min={1} max={20} step={0.5}
-                  className="filter-select w-full text-sm tabular-nums" />
-              </div>
-            </div>
+            )}
+
           </div>
         )}
 
@@ -1041,8 +1130,8 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
                   const descMap: Record<string, string> = {
                     rotation_only: b.rotationOnlyDesc || 'Auto-close and reopen at intervals',
                     market_sessions: '01, 08, 14, 21h UTC',
-                    interval: '',
-                    custom_cron: '',
+                    interval: b.intervalDesc || 'Analysis at a custom minute interval',
+                    custom_cron: b.customCronDesc || 'Analysis at specific hours (UTC)',
                   }
                   const isSelected = scheduleType === st
                   return (
@@ -1086,7 +1175,7 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
             {scheduleType === 'interval' && (
               <div className="mt-2">
                 <label className="block text-xs text-gray-500 mb-1.5">{b.intervalMinutes}</label>
-                <input type="number" value={intervalMinutes} onChange={e => setIntervalMinutes(parseInt(e.target.value) || 5)} min={5} max={1440}
+                <NumInput value={intervalMinutes} onChange={e => setIntervalMinutes(parseInt(e.target.value) || 5)} min={5} max={1440}
                   className="filter-select w-36 text-sm tabular-nums" />
               </div>
             )}
@@ -1094,21 +1183,26 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
             {scheduleType === 'custom_cron' && (
               <div className="mt-2">
                 <label className="block text-xs text-gray-500 mb-2">{b.customHours}</label>
-                <div className="grid grid-cols-8 gap-1.5">
+                <div className="flex flex-wrap gap-1">
                   {Array.from({ length: 24 }, (_, i) => {
                     const active = customHours.includes(i)
                     return (
                       <button key={i} onClick={() => toggleHour(i)}
-                        className={`h-8 text-xs rounded-lg border transition-all ${
+                        className={`w-9 h-7 text-[11px] rounded-md transition-all ${
                           active
-                            ? 'border-primary-500 bg-primary-500/15 text-primary-400 ring-1 ring-primary-500/30'
-                            : 'border-white/10 bg-white/[0.03] text-gray-500 hover:border-white/20 hover:bg-white/[0.06] hover:text-gray-300'
+                            ? 'bg-primary-500/20 text-primary-400 font-semibold ring-1 ring-primary-500/40'
+                            : 'bg-white/[0.04] text-gray-500 hover:bg-white/[0.08] hover:text-gray-300'
                         }`}>
-                        {String(i).padStart(2, '0')}h
+                        {String(i).padStart(2, '0')}
                       </button>
                     )
                   })}
                 </div>
+                {customHours.length > 0 && (
+                  <p className="text-[11px] text-gray-500 mt-1.5">
+                    {customHours.map(h => `${String(h).padStart(2, '0')}:00`).join(', ')} UTC
+                  </p>
+                )}
               </div>
             )}
 
@@ -1152,16 +1246,22 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
                 <div className="flex gap-4">
                   <div>
                     <label className="block text-xs text-gray-500 mb-1.5">{b.customMinutes || 'Custom (minutes)'}</label>
-                    <input type="number" value={rotationMinutes}
+                    <NumInput value={rotationMinutes}
                       onChange={e => setRotationMinutes(Math.max(5, parseInt(e.target.value) || 5))}
                       min={5} max={10080}
                       className="filter-select w-36 text-sm tabular-nums" />
                   </div>
                   <div>
                     <label className="block text-xs text-gray-500 mb-1.5">{b.rotationStartTime || 'Start Time (UTC)'}</label>
-                    <input type="time" value={rotationStartTime}
-                      onChange={e => setRotationStartTime(e.target.value)}
-                      className="filter-select w-36 text-sm" />
+                    <FilterDropdown
+                      value={rotationStartTime}
+                      onChange={val => setRotationStartTime(val)}
+                      options={Array.from({ length: 24 }, (_, h) => {
+                        const t = `${String(h).padStart(2, '0')}:00`
+                        return { value: t, label: `${t} UTC` }
+                      })}
+                      ariaLabel="Start Time"
+                    />
                   </div>
                 </div>
               </div>
@@ -1175,17 +1275,18 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
             <h3 className="text-white font-medium mb-4">{b.review}</h3>
             <div className="grid grid-cols-2 gap-4 text-sm">
               <div><span className="text-gray-500">{b.name}:</span> <span className="text-white ml-2">{name}</span></div>
-              <div><span className="text-gray-500">{b.strategy}:</span> <span className="text-white ml-2">{strategyType}</span></div>
+              <div><span className="text-gray-500">{b.strategy}:</span> <span className="text-white ml-2">{getStrategyDisplayName(strategyType)}</span></div>
               <div><span className="text-gray-500">{b.exchange}:</span> <span className="text-white ml-2"><ExchangeLogo exchange={exchangeType} size={14} /></span></div>
               <div><span className="text-gray-500">{b.mode}:</span> <span className="text-white ml-2">{mode}</span></div>
               <div><span className="text-gray-500">{b.tradingPairs}:</span> <span className="text-white ml-2">{tradingPairs.join(', ')}</span></div>
-              <div><span className="text-gray-500">{b.leverage}:</span> <span className="text-white ml-2">{leverage}x</span></div>
-              <div><span className="text-gray-500">{b.positionSize}:</span> <span className="text-white ml-2">{positionSize}%</span></div>
-              <div><span className="text-gray-500">{b.maxTrades}:</span> <span className="text-white ml-2">{maxTrades}</span></div>
-              <div><span className="text-gray-500">{b.takeProfit}:</span> <span className="text-white ml-2">{takeProfit}%</span></div>
-              <div><span className="text-gray-500">{b.stopLoss}:</span> <span className="text-white ml-2">{stopLoss}%</span></div>
               {usesData && (
-                <div><span className="text-gray-500">{b.dataSources || 'Data Sources'}:</span> <span className="text-white ml-2">{selectedSources.length} {b.sourcesSelected || 'selected'}</span></div>
+                <div><span className="text-gray-500">{b.dataSources || 'Data Sources'}:</span> <span className="text-white ml-2">{hasFixedSources ? `${selectedSources.length} (${b.fixedSources || 'fixed'})` : `${selectedSources.length} ${b.sourcesSelected || 'selected'}`}</span></div>
+              )}
+              {maxTrades != null && (
+                <div><span className="text-gray-500">{b.maxTrades}:</span> <span className="text-white ml-2">{maxTrades}</span></div>
+              )}
+              {dailyLossLimit != null && (
+                <div><span className="text-gray-500">{b.dailyLossLimit}:</span> <span className="text-white ml-2">{dailyLossLimit}%</span></div>
               )}
               <div><span className="text-gray-500">{b.schedule}:</span> <span className="text-white ml-2">
                 {scheduleType === 'rotation_only' ? (b.rotationOnly || 'Rotation Only') :
@@ -1200,6 +1301,37 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
                 </span></div>
               )}
             </div>
+
+            {/* Per-asset config review */}
+            {tradingPairs.length > 0 && (
+              <div className="mt-4 pt-4 border-t border-white/5">
+                <h4 className="text-sm text-gray-400 mb-2">{t('bots.builder.perAssetConfig')}</h4>
+                <div className="flex flex-wrap gap-2 text-xs">
+                  {(() => {
+                    const fixed = tradingPairs.reduce((sum, p) => sum + (perAssetConfig[p]?.position_pct || 0), 0)
+                    const unfixedCount = tradingPairs.filter(p => !perAssetConfig[p]?.position_pct).length
+                    const remaining = Math.max(0, 100 - fixed)
+                    const perUnfixed = unfixedCount > 0 ? remaining / unfixedCount : 0
+                    return tradingPairs.map(p => {
+                      const cfg = perAssetConfig[p] || {}
+                      const pct = cfg.position_pct || perUnfixed
+                      const parts = [`${pct.toFixed(0)}%`]
+                      if (cfg.leverage) parts.push(`${cfg.leverage}x`)
+                      if (cfg.tp) parts.push(`TP ${cfg.tp}%`)
+                      if (cfg.sl) parts.push(`SL ${cfg.sl}%`)
+                      if (cfg.max_trades) parts.push(`${cfg.max_trades} Trades`)
+                      if (cfg.loss_limit) parts.push(`Loss ${cfg.loss_limit}%`)
+                      return (
+                        <span key={p} className="bg-white/5 px-2 py-1 rounded">
+                          <span className="text-white font-medium">{p}</span>
+                          <span className="text-gray-400 ml-1">{parts.join(' · ')}</span>
+                        </span>
+                      )
+                    })
+                  })()}
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>

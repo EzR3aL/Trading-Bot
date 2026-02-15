@@ -512,7 +512,7 @@ class HyperliquidClient(ExchangeClient):
         try:
             self._exchange.approve_builder_fee(
                 builder=self._builder["b"],
-                max_fee_rate=fee,
+                max_fee_rate=str(fee),
             )
             logger.info(
                 f"Builder fee approved: builder={self._builder['b'][:10]}... maxFee={fee}"

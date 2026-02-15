@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next'
 import api from '../api/client'
 import { useFilterStore } from '../stores/filterStore'
 import { SkeletonCard, SkeletonTable } from '../components/ui/Skeleton'
-import { Download, ArrowUpRight, ArrowDownRight } from 'lucide-react'
+import { Download, ArrowUpRight, ArrowDownRight, Loader2 } from 'lucide-react'
 import FilterDropdown from '../components/ui/FilterDropdown'
 
 interface TaxData {
@@ -47,9 +47,28 @@ export default function TaxReport() {
     load()
   }, [year, demoFilter])
 
-  const downloadCsv = () => {
-    const demoParam = demoFilter === 'demo' ? '&demo_mode=true' : demoFilter === 'live' ? '&demo_mode=false' : ''
-    window.open(`/api/tax-report/csv?year=${year}${demoParam}`, '_blank')
+  const [downloading, setDownloading] = useState(false)
+
+  const downloadCsv = async () => {
+    setDownloading(true)
+    try {
+      const demoParam = demoFilter === 'demo' ? '&demo_mode=true' : demoFilter === 'live' ? '&demo_mode=false' : ''
+      const res = await api.get(`/tax-report/csv?year=${year}${demoParam}`, {
+        responseType: 'blob',
+      })
+      const url = window.URL.createObjectURL(new Blob([res.data], { type: 'text/csv; charset=utf-8' }))
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `steuerreport_${year}.csv`
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      window.URL.revokeObjectURL(url)
+    } catch {
+      setError(t('tax.downloadError', 'Download fehlgeschlagen'))
+    } finally {
+      setDownloading(false)
+    }
   }
 
   return (
@@ -65,10 +84,11 @@ export default function TaxReport() {
           />
           <button
             onClick={downloadCsv}
+            disabled={downloading}
             aria-label={t('tax.downloadCsv')}
-            className="btn-gradient flex items-center gap-2"
+            className="btn-gradient flex items-center gap-2 disabled:opacity-50"
           >
-            <Download size={16} />
+            {downloading ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />}
             {t('tax.downloadCsv')}
           </button>
         </div>

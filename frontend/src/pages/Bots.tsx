@@ -32,8 +32,8 @@ import {
   Bot,
 } from 'lucide-react'
 
-const STRATEGY_DISPLAY: Record<string, string> = { llm_signal: 'KI-Companion' }
-function strategyLabel(name: string) { return STRATEGY_DISPLAY[name] || name }
+const STRATEGY_DISPLAY: Record<string, string> = { llm_signal: 'KI-Companion', sentiment_surfer: 'Sentiment Surfer', liquidation_hunter: 'Liquidation Hunter', degen: 'Degen' }
+function strategyLabel(name: string) { return STRATEGY_DISPLAY[name] || name.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) }
 
 interface BotStatus {
   bot_config_id: number
@@ -686,6 +686,16 @@ export default function Bots() {
     }
   }
 
+  const handleDuplicate = async (id: number) => {
+    try {
+      await api.post(`/bots/${id}/duplicate`)
+      await fetchBots()
+      addToast('success', t('bots.duplicated'))
+    } catch (err: any) {
+      addToast('error', err.response?.data?.detail || t('bots.failedDuplicate'))
+    }
+  }
+
   const handleApplyPreset = async (botId: number, presetId: number) => {
     setPresetDropdownOpen(null)
     setActionLoading(botId)
@@ -1037,6 +1047,14 @@ export default function Bots() {
                     title={t('bots.edit')}
                   >
                     <Pencil size={16} />
+                  </button>
+                  <button
+                    onClick={() => handleDuplicate(bot.bot_config_id)}
+                    aria-label={`${t('bots.duplicate')} ${bot.name}`}
+                    className="p-2 text-gray-400 hover:text-white transition-all duration-200 rounded-lg hover:bg-white/5"
+                    title={t('bots.duplicate')}
+                  >
+                    <Copy size={16} />
                   </button>
                   <button
                     onClick={() => handleDelete(bot.bot_config_id, bot.name)}

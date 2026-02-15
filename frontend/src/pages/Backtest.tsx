@@ -13,12 +13,14 @@ import confetti from 'canvas-confetti'
 import api from '../api/client'
 import DatePicker from '../components/ui/DatePicker'
 import FilterDropdown from '../components/ui/FilterDropdown'
+import NumInput from '../components/ui/NumInput'
 import type { BacktestRun, BacktestHistoryItem } from '../types'
 
 const STRATEGY_DISPLAY: Record<string, string> = {
   liquidation_hunter: 'Liquidation Hunter',
   sentiment_surfer: 'Sentiment Surfer',
   llm_signal: 'KI-Companion',
+  degen: 'Degen',
 }
 
 const TRADING_PAIRS = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'XRPUSDT', 'DOGEUSDT', 'AVAXUSDT']
@@ -254,8 +256,7 @@ export default function Backtest() {
           {/* Initial Capital */}
           <div>
             <label className="text-xs text-gray-400 mb-1.5 block font-medium">{t('backtest.initialCapital')}</label>
-            <input
-              type="number"
+            <NumInput
               value={initialCapital}
               onChange={e => setInitialCapital(Number(e.target.value))}
               className="input-dark w-full"

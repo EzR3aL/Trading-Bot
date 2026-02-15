@@ -54,8 +54,8 @@ async def create_preset(
         name=data.name,
         description=data.description,
         exchange_type=data.exchange_type,
-        trading_config=json.dumps(data.trading_config.model_dump()),
-        strategy_config=json.dumps(data.strategy_config.model_dump()),
+        trading_config=json.dumps(data.trading_config) if data.trading_config else None,
+        strategy_config=json.dumps(data.strategy_config) if data.strategy_config else None,
         trading_pairs=json.dumps(data.trading_pairs),
     )
     db.add(preset)
@@ -104,9 +104,9 @@ async def update_preset(
     if data.description is not None:
         preset.description = data.description
     if data.trading_config is not None:
-        preset.trading_config = json.dumps(data.trading_config.model_dump())
+        preset.trading_config = json.dumps(data.trading_config)
     if data.strategy_config is not None:
-        preset.strategy_config = json.dumps(data.strategy_config.model_dump())
+        preset.strategy_config = json.dumps(data.strategy_config)
     if data.trading_pairs is not None:
         preset.trading_pairs = json.dumps(data.trading_pairs)
 

@@ -26,7 +26,7 @@ from src.api.schemas.bots import (
 from src.auth.dependencies import get_current_user
 from src.models.database import AffiliateLink, BotConfig, ConfigPreset, ExchangeConnection, TradeRecord, User
 from src.models.session import get_db
-from src.strategy.base import StrategyRegistry
+from src.strategy import StrategyRegistry  # imports __init__.py → registers all strategies
 from src.api.routers.auth import limiter
 from src.utils.encryption import encrypt_value
 from src.utils.logger import get_logger
@@ -73,6 +73,12 @@ def _config_to_response(config: BotConfig) -> BotConfigResponse:
         logger.warning(f"Failed to parse schedule_config for bot {config.id}: {e}")
         schedule_config = None
 
+    try:
+        per_asset_config = json.loads(config.per_asset_config) if config.per_asset_config else None
+    except (json.JSONDecodeError, TypeError) as e:
+        logger.warning(f"Failed to parse per_asset_config for bot {config.id}: {e}")
+        per_asset_config = None
+
     return BotConfigResponse(
         id=config.id,
         name=config.name,
@@ -87,6 +93,7 @@ def _config_to_response(config: BotConfig) -> BotConfigResponse:
         take_profit_percent=config.take_profit_percent,
         stop_loss_percent=config.stop_loss_percent,
         daily_loss_limit_percent=config.daily_loss_limit_percent,
+        per_asset_config=per_asset_config,
         strategy_params=strategy_params,
         schedule_type=config.schedule_type,
         schedule_config=schedule_config,
@@ -108,9 +115,6 @@ def _config_to_response(config: BotConfig) -> BotConfigResponse:
 @router.get("/strategies", response_model=StrategiesListResponse)
 async def list_strategies(user: User = Depends(get_current_user)):
     """List all available trading strategies with their parameter schemas."""
-    # Ensure strategies are registered
-    from src.strategy.liquidation_hunter import LiquidationHunterStrategy  # noqa: F401
-
     strategies = StrategyRegistry.list_available()
     return StrategiesListResponse(
         strategies=[StrategyInfo(**s) for s in strategies]
@@ -181,6 +185,7 @@ async def create_bot(
         take_profit_percent=body.take_profit_percent,
         stop_loss_percent=body.stop_loss_percent,
         daily_loss_limit_percent=body.daily_loss_limit_percent,
+        per_asset_config=json.dumps(body.per_asset_config) if body.per_asset_config else None,
         strategy_params=json.dumps(body.strategy_params) if body.strategy_params else None,
         schedule_type=body.schedule_type,
         schedule_config=json.dumps(body.schedule_config) if body.schedule_config else None,
@@ -489,6 +494,8 @@ async def update_bot(
             setattr(config, field, json.dumps(value))
         elif field == "schedule_config" and value is not None:
             setattr(config, field, json.dumps(value))
+        elif field == "per_asset_config" and value is not None:
+            setattr(config, field, json.dumps(value))
         elif field == "discord_webhook_url":
             # Empty string = clear, non-empty = encrypt
             if value:
@@ -539,6 +546,61 @@ async def delete_bot(
     await db.delete(config)
     logger.info(f"Bot deleted: {config.name} (id={bot_id})")
     return {"status": "ok", "message": f"Bot '{config.name}' deleted"}
+
+
+@router.post("/{bot_id}/duplicate", response_model=BotConfigResponse)
+async def duplicate_bot(
+    bot_id: int,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Duplicate an existing bot configuration (stopped, disabled copy)."""
+    result = await db.execute(
+        select(BotConfig).where(BotConfig.id == bot_id, BotConfig.user_id == user.id)
+    )
+    original = result.scalar_one_or_none()
+    if not original:
+        raise HTTPException(status_code=404, detail="Bot not found")
+
+    # Check bot limit
+    count_result = await db.execute(
+        select(func.count(BotConfig.id)).where(BotConfig.user_id == user.id)
+    )
+    if count_result.scalar() >= MAX_BOTS_PER_USER:
+        raise HTTPException(status_code=400, detail=f"Maximum {MAX_BOTS_PER_USER} bots per user")
+
+    copy = BotConfig(
+        user_id=user.id,
+        name=f"{original.name} (Copy)",
+        description=original.description,
+        strategy_type=original.strategy_type,
+        exchange_type=original.exchange_type,
+        mode=original.mode,
+        trading_pairs=original.trading_pairs,
+        leverage=original.leverage,
+        position_size_percent=original.position_size_percent,
+        max_trades_per_day=original.max_trades_per_day,
+        take_profit_percent=original.take_profit_percent,
+        stop_loss_percent=original.stop_loss_percent,
+        daily_loss_limit_percent=original.daily_loss_limit_percent,
+        per_asset_config=original.per_asset_config,
+        strategy_params=original.strategy_params,
+        schedule_type=original.schedule_type,
+        schedule_config=original.schedule_config,
+        rotation_enabled=original.rotation_enabled,
+        rotation_interval_minutes=original.rotation_interval_minutes,
+        rotation_start_time=original.rotation_start_time,
+        discord_webhook_url=original.discord_webhook_url,
+        telegram_bot_token=original.telegram_bot_token,
+        telegram_chat_id=original.telegram_chat_id,
+        is_enabled=False,
+    )
+    db.add(copy)
+    await db.flush()
+    await db.refresh(copy)
+
+    logger.info(f"Bot duplicated: {original.name} -> {copy.name} (id={copy.id}) by user {user.id}")
+    return _config_to_response(copy)
 
 
 # ─── Lifecycle ────────────────────────────────────────────────
@@ -639,11 +701,12 @@ async def start_bot(
     if not config:
         raise HTTPException(status_code=404, detail="Bot not found")
 
-    # ── Pre-start gates (API level) ─────────────────────────────
-    if config.exchange_type == "hyperliquid":
-        await _enforce_hl_gates(user, db)
-    if config.exchange_type in ("bitget", "weex"):
-        await _enforce_affiliate_gate(config.exchange_type, user, db)
+    # ── Pre-start gates (API level) — admins bypass all gates ──
+    if user.role != "admin":
+        if config.exchange_type == "hyperliquid":
+            await _enforce_hl_gates(user, db)
+        if config.exchange_type in ("bitget", "weex"):
+            await _enforce_affiliate_gate(config.exchange_type, user, db)
 
     orchestrator = _get_orchestrator()
 
@@ -703,11 +766,12 @@ async def restart_bot(
     if not config:
         raise HTTPException(status_code=404, detail="Bot not found")
 
-    # ── Pre-start gates (API level) ─────────────────────────────
-    if config.exchange_type == "hyperliquid":
-        await _enforce_hl_gates(user, db)
-    if config.exchange_type in ("bitget", "weex"):
-        await _enforce_affiliate_gate(config.exchange_type, user, db)
+    # ── Pre-start gates (API level) — admins bypass all gates ──
+    if user.role != "admin":
+        if config.exchange_type == "hyperliquid":
+            await _enforce_hl_gates(user, db)
+        if config.exchange_type in ("bitget", "weex"):
+            await _enforce_affiliate_gate(config.exchange_type, user, db)
 
     orchestrator = _get_orchestrator()
 
@@ -805,9 +869,15 @@ async def apply_preset_to_bot(
         if "daily_loss_limit_percent" in trading:
             config.daily_loss_limit_percent = trading["daily_loss_limit_percent"]
 
-    # Apply strategy config from preset
+    # Apply strategy config from preset (merge, preserve data_sources)
     if preset.strategy_config:
-        config.strategy_params = preset.strategy_config
+        existing = json.loads(config.strategy_params) if config.strategy_params else {}
+        preset_params = json.loads(preset.strategy_config) if isinstance(preset.strategy_config, str) else preset.strategy_config
+        preserved_data_sources = existing.get("data_sources")
+        existing.update(preset_params)
+        if preserved_data_sources is not None:
+            existing["data_sources"] = preserved_data_sources
+        config.strategy_params = json.dumps(existing)
 
     # Apply trading pairs (convert if needed for exchange compatibility)
     if preset.trading_pairs:

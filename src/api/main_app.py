@@ -14,7 +14,9 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from fastapi import FastAPI, Request, Response
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
@@ -128,6 +130,13 @@ def create_app() -> FastAPI:
     # Global exception handler — sanitizes error responses in production
     from src.api.middleware.error_handler import global_exception_handler
     app.add_exception_handler(Exception, global_exception_handler)
+
+    # Log 422 validation errors for debugging
+    @app.exception_handler(RequestValidationError)
+    async def validation_exception_handler(request: Request, exc: RequestValidationError):
+        body = await request.body()
+        print(f"[422] {request.method} {request.url.path} | errors={exc.errors()} | body={body[:500]}", flush=True)
+        return JSONResponse(status_code=422, content={"detail": exc.errors()})
 
     # Audit logging middleware
     from src.api.middleware.audit_log import AuditLogMiddleware

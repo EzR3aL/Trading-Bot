@@ -14,6 +14,103 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* ── Custom number input spinners ─────────────────────────── */
+
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+input[type="number"] {
+  -moz-appearance: textfield;
+}
+
+/* Wrapper for number inputs with custom arrows */
+.num-input-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: stretch;
+}
+
+.num-input-wrap input[type="number"] {
+  padding-right: 1.75rem;
+}
+
+/* Keep numbers visually centered when text-center is used */
+.num-input-wrap input[type="number"].text-center {
+  padding-left: 1.75rem;
+}
+
+.num-input-wrap .num-arrows {
+  position: absolute;
+  right: 1px;
+  top: 1px;
+  bottom: 1px;
+  width: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 0 0.65rem 0.65rem 0;
+  overflow: hidden;
+}
+
+.num-input-wrap .num-arrow {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: rgba(255, 255, 255, 0.25);
+  background: rgba(255, 255, 255, 0.02);
+  transition: all 0.15s ease;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.num-input-wrap .num-arrow:hover {
+  color: rgba(16, 185, 129, 0.9);
+  background: rgba(16, 185, 129, 0.08);
+}
+
+.num-input-wrap .num-arrow:active {
+  background: rgba(16, 185, 129, 0.15);
+  color: rgba(16, 185, 129, 1);
+}
+
+.num-input-wrap .num-arrow-up {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.num-input-wrap .num-arrow svg {
+  width: 10px;
+  height: 10px;
+  stroke-width: 2.5;
+}
+
+/* Light mode */
+html.light .num-input-wrap .num-arrows {
+  border-left-color: #e2e8f0;
+}
+
+html.light .num-input-wrap .num-arrow {
+  color: rgba(0, 0, 0, 0.25);
+  background: rgba(0, 0, 0, 0.02);
+}
+
+html.light .num-input-wrap .num-arrow:hover {
+  color: rgba(16, 185, 129, 0.9);
+  background: rgba(16, 185, 129, 0.06);
+}
+
+html.light .num-input-wrap .num-arrow:active {
+  background: rgba(16, 185, 129, 0.12);
+}
+
+html.light .num-input-wrap .num-arrow-up {
+  border-bottom-color: #e2e8f0;
+}
+
 /* ── Glassmorphism Card ──────────────────────────────────── */
 
 @layer components {

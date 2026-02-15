@@ -13,14 +13,20 @@ class BotConfigCreate(BaseModel):
     exchange_type: str = Field(..., pattern="^(bitget|weex|hyperliquid)$")
     mode: str = Field(default="demo", pattern="^(demo|live|both)$")
 
-    # Trading parameters
+    # Trading parameters (all optional — empty = equal split, no TP/SL)
     trading_pairs: List[str] = Field(default=["BTCUSDT"])
-    leverage: int = Field(default=4, ge=1, le=20)
-    position_size_percent: float = Field(default=7.5, ge=1, le=25)
-    max_trades_per_day: int = Field(default=2, ge=1, le=10)
-    take_profit_percent: float = Field(default=4.0, ge=0.5, le=20)
-    stop_loss_percent: float = Field(default=1.5, ge=0.5, le=10)
-    daily_loss_limit_percent: float = Field(default=5.0, ge=1, le=20)
+    leverage: Optional[int] = Field(default=None, ge=1, le=20)
+    position_size_percent: Optional[float] = Field(default=None, ge=1, le=100)
+    max_trades_per_day: Optional[int] = Field(default=None, ge=1, le=50)
+    take_profit_percent: Optional[float] = Field(default=None, ge=0.5, le=20)
+    stop_loss_percent: Optional[float] = Field(default=None, ge=0.5, le=10)
+    daily_loss_limit_percent: Optional[float] = Field(default=None, ge=1, le=50)
+
+    # Per-asset configuration (optional overrides per trading pair)
+    per_asset_config: Optional[Dict[str, Dict[str, Any]]] = Field(
+        default=None,
+        description='Per-asset overrides, e.g. {"BTCUSDT": {"position_pct": 10, "leverage": 5}}',
+    )
 
     # Strategy-specific parameters
     strategy_params: Optional[Dict[str, Any]] = None
@@ -87,6 +93,9 @@ class BotConfigUpdate(BaseModel):
         description="Discord webhook URL for this bot (empty string clears it)",
     )
 
+    # Per-asset configuration (optional overrides per trading pair)
+    per_asset_config: Optional[Dict[str, Dict[str, Any]]] = None
+
     # Per-bot Telegram notifications (optional)
     telegram_bot_token: Optional[str] = None
     telegram_chat_id: Optional[str] = None
@@ -101,12 +110,13 @@ class BotConfigResponse(BaseModel):
     exchange_type: str
     mode: str
     trading_pairs: List[str]
-    leverage: int
-    position_size_percent: float
-    max_trades_per_day: int
-    take_profit_percent: float
-    stop_loss_percent: float
-    daily_loss_limit_percent: float
+    leverage: Optional[int] = None
+    position_size_percent: Optional[float] = None
+    max_trades_per_day: Optional[int] = None
+    take_profit_percent: Optional[float] = None
+    stop_loss_percent: Optional[float] = None
+    daily_loss_limit_percent: Optional[float] = None
+    per_asset_config: Optional[Dict[str, Dict[str, Any]]] = None
     strategy_params: Optional[Dict[str, Any]] = None
     schedule_type: str
     schedule_config: Optional[Dict[str, Any]] = None

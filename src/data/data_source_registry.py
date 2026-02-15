@@ -111,6 +111,15 @@ DATA_SOURCES: List[DataSourceDef] = [
         free=True,
         default=False,
     ),
+    DataSourceDef(
+        id="order_book",
+        name="Order Book Depth",
+        description="Bid/ask imbalance and spread from Binance Futures order book",
+        category="futures",
+        provider="Binance",
+        free=True,
+        default=False,
+    ),
     # ── Options Data ──
     DataSourceDef(
         id="options_oi",
@@ -287,7 +296,7 @@ PROVIDER_HEALTH_URLS: Dict[str, str] = {
     "Binance": "https://fapi.binance.com/fapi/v1/ping",
     "Deribit": "https://www.deribit.com/api/v2/public/test",
     "CoinGecko": "https://api.coingecko.com/api/v3/ping",
-    "GDELT": "https://api.gdeltproject.org/api/v2/doc/doc?query=test&format=json&maxrecords=1",
+    "GDELT": "https://api.gdeltproject.org/api/v2/doc/doc?query=bitcoin&mode=tonechart&format=json&maxrecords=5",
     "DefiLlama": "https://stablecoins.llama.fi/stablecoins?includePrices=false",
     "Blockchain.info": "https://api.blockchain.info/stats",
     "Bitget": "https://api.bitget.com/api/v2/public/time",

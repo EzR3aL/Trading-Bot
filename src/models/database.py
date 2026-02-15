@@ -300,14 +300,17 @@ class BotConfig(Base):
     exchange_type = Column(String(50), nullable=False)  # bitget | weex | hyperliquid
     mode = Column(String(10), nullable=False, default="demo")  # demo | live | both
 
-    # Trading parameters
+    # Trading parameters (all nullable — None = equal split / no TP/SL)
     trading_pairs = Column(Text, nullable=False, default='["BTCUSDT"]')  # JSON array
-    leverage = Column(Integer, nullable=False, default=4)
-    position_size_percent = Column(Float, nullable=False, default=7.5)
-    max_trades_per_day = Column(Integer, nullable=False, default=2)
-    take_profit_percent = Column(Float, nullable=False, default=4.0)
-    stop_loss_percent = Column(Float, nullable=False, default=1.5)
-    daily_loss_limit_percent = Column(Float, nullable=False, default=5.0)
+    leverage = Column(Integer, nullable=True, default=None)
+    position_size_percent = Column(Float, nullable=True, default=None)
+    max_trades_per_day = Column(Integer, nullable=True, default=None)
+    take_profit_percent = Column(Float, nullable=True, default=None)
+    stop_loss_percent = Column(Float, nullable=True, default=None)
+    daily_loss_limit_percent = Column(Float, nullable=True, default=None)
+
+    # Per-asset configuration (JSON: per-trading-pair overrides)
+    per_asset_config = Column(Text, nullable=True)  # JSON: {"BTCUSDT": {"position_pct": 10, "leverage": 5}}
 
     # Strategy-specific parameters (JSON)
     strategy_params = Column(Text, nullable=True)  # JSON: strategy-specific thresholds
