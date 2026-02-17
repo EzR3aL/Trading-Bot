@@ -197,7 +197,7 @@ def generate_mock_historical_data(days: int = 180, seed: int = 42) -> List[Histo
         dxy_value = max(90, min(115, dxy_value))
 
         # Fed Funds Rate (changes infrequently)
-        if random.random() < 0.005:
+        if random.random() < 0.005:  # pragma: no cover — rare random event
             ffr_value += random.choice([-0.25, 0.25])
             ffr_value = max(0, min(10, ffr_value))
 

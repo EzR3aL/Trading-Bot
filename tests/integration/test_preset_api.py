@@ -52,7 +52,7 @@ SAMPLE_PRESET = {
 async def _create_preset(client, token, payload=None):
     """Helper to create a preset and return the response body."""
     resp = await client.post(
-        "/api/presets/",
+        "/api/presets",
         headers=auth_header(token),
         json=payload or SAMPLE_PRESET,
     )
@@ -71,7 +71,7 @@ async def test_list_presets_empty(client, user_token):
     assert user_token is not None
 
     response = await client.get(
-        "/api/presets/",
+        "/api/presets",
         headers=auth_header(user_token),
     )
     assert response.status_code == 200
@@ -86,7 +86,7 @@ async def test_list_presets_after_create(client, user_token):
     await _create_preset(client, user_token)
 
     response = await client.get(
-        "/api/presets/",
+        "/api/presets",
         headers=auth_header(user_token),
     )
     assert response.status_code == 200
@@ -118,7 +118,7 @@ async def test_create_preset(client, user_token):
 @pytest.mark.integration
 async def test_create_preset_requires_auth(client, test_db):
     """POST /api/presets/ without auth returns 401."""
-    response = await client.post("/api/presets/", json=SAMPLE_PRESET)
+    response = await client.post("/api/presets", json=SAMPLE_PRESET)
     assert response.status_code in (401, 403, 307)
 
 

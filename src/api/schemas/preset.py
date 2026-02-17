@@ -2,7 +2,7 @@
 
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class PresetCreate(BaseModel):
@@ -23,6 +23,8 @@ class PresetUpdate(BaseModel):
 
 
 class PresetResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     name: str
     description: Optional[str] = None
@@ -31,6 +33,3 @@ class PresetResponse(BaseModel):
     trading_config: Optional[dict] = None
     strategy_config: Optional[dict] = None
     trading_pairs: Optional[list] = None
-
-    class Config:
-        from_attributes = True

@@ -2,10 +2,11 @@
 
 import json
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.api.rate_limit import limiter
 from src.api.schemas.preset import PresetCreate, PresetResponse, PresetUpdate
 from src.auth.dependencies import get_current_user
 from src.models.database import ConfigPreset, User
@@ -43,7 +44,9 @@ async def list_presets(
 
 
 @router.post("", response_model=PresetResponse, status_code=status.HTTP_201_CREATED)
+@limiter.limit("10/minute")
 async def create_preset(
+    request: Request,
     data: PresetCreate,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -83,7 +86,9 @@ async def get_preset(
 
 
 @router.put("/{preset_id}", response_model=PresetResponse)
+@limiter.limit("10/minute")
 async def update_preset(
+    request: Request,
     preset_id: int,
     data: PresetUpdate,
     user: User = Depends(get_current_user),
@@ -116,7 +121,9 @@ async def update_preset(
 
 
 @router.delete("/{preset_id}", status_code=status.HTTP_204_NO_CONTENT)
+@limiter.limit("10/minute")
 async def delete_preset(
+    request: Request,
     preset_id: int,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -130,11 +137,15 @@ async def delete_preset(
     preset = result.scalar_one_or_none()
     if not preset:
         raise HTTPException(status_code=404, detail="Preset not found")
+    if preset.is_active:
+        raise HTTPException(status_code=400, detail="Cannot delete an active preset. Deactivate it first.")
     await db.delete(preset)
 
 
 @router.post("/{preset_id}/activate")
+@limiter.limit("10/minute")
 async def activate_preset(
+    request: Request,
     preset_id: int,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -162,7 +173,9 @@ async def activate_preset(
 
 
 @router.post("/{preset_id}/duplicate", response_model=PresetResponse)
+@limiter.limit("10/minute")
 async def duplicate_preset(
+    request: Request,
     preset_id: int,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),

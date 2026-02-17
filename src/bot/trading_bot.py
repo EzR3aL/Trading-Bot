@@ -250,9 +250,9 @@ class TradingBot:
 
         # Keep running
         try:
-            while self._running:
+            while self._running:  # pragma: no cover — main event loop
                 await asyncio.sleep(1)
-        except asyncio.CancelledError:
+        except asyncio.CancelledError:  # pragma: no cover — async lifecycle
             logger.info("Bot shutdown requested")
         finally:
             await self.stop()

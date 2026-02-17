@@ -1,8 +1,12 @@
 """Multibot system schemas."""
 
+import json as _json
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator, model_validator
+
+# Maximum serialized JSON size for dict fields (10 KB)
+_MAX_JSON_FIELD_BYTES = 10240
 
 
 class BotConfigCreate(BaseModel):
@@ -14,13 +18,13 @@ class BotConfigCreate(BaseModel):
     mode: str = Field(default="demo", pattern="^(demo|live|both)$")
 
     # Trading parameters (all optional — empty = equal split, no TP/SL)
-    trading_pairs: List[str] = Field(default=["BTCUSDT"])
+    trading_pairs: List[str] = Field(default=["BTCUSDT"], max_length=20)
     leverage: Optional[int] = Field(default=None, ge=1, le=20)
-    position_size_percent: Optional[float] = Field(default=None, ge=1, le=100)
-    max_trades_per_day: Optional[int] = Field(default=None, ge=1, le=50)
+    position_size_percent: Optional[float] = Field(default=None, ge=1, le=25)
+    max_trades_per_day: Optional[int] = Field(default=None, ge=1, le=10)
     take_profit_percent: Optional[float] = Field(default=None, ge=0.5, le=20)
     stop_loss_percent: Optional[float] = Field(default=None, ge=0.5, le=10)
-    daily_loss_limit_percent: Optional[float] = Field(default=None, ge=1, le=50)
+    daily_loss_limit_percent: Optional[float] = Field(default=None, ge=1, le=20)
 
     # Per-asset configuration (optional overrides per trading pair)
     per_asset_config: Optional[Dict[str, Dict[str, Any]]] = Field(
@@ -55,6 +59,24 @@ class BotConfigCreate(BaseModel):
     # Per-bot Telegram notifications (optional)
     telegram_bot_token: Optional[str] = None
     telegram_chat_id: Optional[str] = None
+
+    @field_validator("strategy_params", "schedule_config", "per_asset_config", mode="before")
+    @classmethod
+    def validate_dict_field_size(cls, v: Any) -> Any:
+        if v is not None and isinstance(v, dict):
+            if len(_json.dumps(v)) > _MAX_JSON_FIELD_BYTES:
+                raise ValueError(f"Field exceeds maximum size of {_MAX_JSON_FIELD_BYTES} bytes when serialized to JSON")
+        return v
+
+    @model_validator(mode="after")
+    def validate_strategy_requirements(self):
+        if self.strategy_type == "llm_signal":
+            sp = self.strategy_params or {}
+            if not sp.get("llm_provider"):
+                raise ValueError("LLM strategy requires 'llm_provider' in strategy_params")
+        if self.rotation_enabled and not self.rotation_interval_minutes:
+            raise ValueError("rotation_interval_minutes is required when rotation_enabled is True")
+        return self
 
 
 class BotConfigUpdate(BaseModel):
@@ -99,6 +121,14 @@ class BotConfigUpdate(BaseModel):
     # Per-bot Telegram notifications (optional)
     telegram_bot_token: Optional[str] = None
     telegram_chat_id: Optional[str] = None
+
+    @field_validator("strategy_params", "schedule_config", "per_asset_config", mode="before")
+    @classmethod
+    def validate_dict_field_size(cls, v: Any) -> Any:
+        if v is not None and isinstance(v, dict):
+            if len(_json.dumps(v)) > _MAX_JSON_FIELD_BYTES:
+                raise ValueError(f"Field exceeds maximum size of {_MAX_JSON_FIELD_BYTES} bytes when serialized to JSON")
+        return v
 
 
 class BotConfigResponse(BaseModel):

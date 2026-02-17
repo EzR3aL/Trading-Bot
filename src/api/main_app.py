@@ -50,9 +50,18 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response: Response = await call_next(request)
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["X-Frame-Options"] = "DENY"
-        response.headers["X-XSS-Protection"] = "1; mode=block"
+        response.headers["X-API-Version"] = "1"
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
-        if os.getenv("ENABLE_HSTS", "false").lower() == "true":
+        response.headers["Content-Security-Policy"] = (
+            "default-src 'self'; "
+            "script-src 'self'; "
+            "style-src 'self' 'unsafe-inline'; "
+            "img-src 'self' data: https:; "
+            "connect-src 'self' wss: https:; "
+            "font-src 'self'"
+        )
+        environment = os.getenv("ENVIRONMENT", "development").lower()
+        if environment == "production" or os.getenv("ENABLE_HSTS", "false").lower() == "true":
             response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
         return response
 
@@ -82,7 +91,6 @@ async def lifespan(app: FastAPI):
     # Initialize multibot orchestrator
     from src.bot.orchestrator import BotOrchestrator
     orchestrator = BotOrchestrator()
-    bots.set_orchestrator(orchestrator)
     app.state.orchestrator = orchestrator
 
     # Restore bots that were running before shutdown
@@ -94,6 +102,11 @@ async def lifespan(app: FastAPI):
     # Shutdown
     logger.info("Shutting down...")
     await orchestrator.shutdown_all()
+
+    # Drain pending audit writes before closing DB
+    from src.api.middleware.audit_log import drain_pending_audit_tasks
+    await drain_pending_audit_tasks(timeout=5.0)
+
     await close_db()
     logger.info("Application shut down")
 
@@ -120,22 +133,30 @@ async def _seed_exchanges():
 
 def create_app() -> FastAPI:
     """Create and configure the FastAPI application."""
+    environment = os.getenv("ENVIRONMENT", "development").lower()
+    is_prod = environment == "production"
+
     app = FastAPI(
         title="Trading Bot API",
         description="Multi-Exchange Trading Bot with Web UI",
         version="3.0.0",
         lifespan=lifespan,
+        docs_url=None if is_prod else "/docs",
+        redoc_url=None if is_prod else "/redoc",
+        openapi_url=None if is_prod else "/openapi.json",
     )
 
     # Global exception handler — sanitizes error responses in production
     from src.api.middleware.error_handler import global_exception_handler
     app.add_exception_handler(Exception, global_exception_handler)
 
-    # Log 422 validation errors for debugging
+    # Log 422 validation errors for debugging (without request body to avoid leaking secrets)
     @app.exception_handler(RequestValidationError)
     async def validation_exception_handler(request: Request, exc: RequestValidationError):
-        body = await request.body()
-        print(f"[422] {request.method} {request.url.path} | errors={exc.errors()} | body={body[:500]}", flush=True)
+        logger.warning(
+            "[422] %s %s | errors=%s",
+            request.method, request.url.path, exc.errors(),
+        )
         return JSONResponse(status_code=422, content={"detail": exc.errors()})
 
     # Audit logging middleware
@@ -182,7 +203,7 @@ def create_app() -> FastAPI:
     )
 
     # Rate limit handler
-    from src.api.routers.auth import limiter
+    from src.api.rate_limit import limiter
     app.state.limiter = limiter
     app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 

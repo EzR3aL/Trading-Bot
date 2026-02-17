@@ -4,11 +4,17 @@ BotWorker: A single autonomous trading bot instance.
 Each BotWorker runs its own strategy loop on its own schedule,
 trading on a specific exchange with its own parameters.
 Managed by the BotOrchestrator.
+
+Decomposed into focused mixins:
+- TradeExecutorMixin: trade execution logic
+- PositionMonitorMixin: position monitoring and close handling
+- RotationManagerMixin: trade rotation (auto-close and reopen)
+- HyperliquidGatesMixin: Hyperliquid-specific pre-start checks
+- NotificationsMixin: Discord and Telegram notification dispatch
 """
 
 import asyncio
 import json
-import os
 from datetime import datetime, timedelta
 from typing import Optional
 
@@ -16,14 +22,21 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 
+from src.bot.hyperliquid_gates import HyperliquidGatesMixin
+from src.bot.notifications import NotificationsMixin
+from src.bot.pnl import calculate_pnl  # noqa: F401 — re-export for backward compat
+from src.bot.position_monitor import PositionMonitorMixin
+from src.bot.rotation_manager import RotationManagerMixin
+from src.bot.trade_executor import TradeExecutorMixin
+
 from src.exchanges.base import ExchangeClient
 from src.exchanges.factory import create_exchange_client
 from src.models.database import BotConfig, ExchangeConnection, LLMConnection, TradeRecord
 from src.models.session import get_session
-from src.notifications.discord_notifier import DiscordNotifier
 from src.risk.risk_manager import RiskManager
 from src.strategy import BaseStrategy, StrategyRegistry, TradeSignal
 from src.utils.encryption import decrypt_value
+from src.utils.json_helpers import parse_json_field
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -32,7 +45,13 @@ logger = get_logger(__name__)
 DEFAULT_MARKET_HOURS = [1, 8, 14, 21]
 
 
-class BotWorker:
+class BotWorker(
+    TradeExecutorMixin,
+    PositionMonitorMixin,
+    RotationManagerMixin,
+    HyperliquidGatesMixin,
+    NotificationsMixin,
+):
     """
     A single bot instance running its own strategy loop.
 
@@ -64,6 +83,16 @@ class BotWorker:
         # Per-mode clients for "both" mode
         self._demo_client: Optional[ExchangeClient] = None
         self._live_client: Optional[ExchangeClient] = None
+
+        # Auto-recovery tracking
+        self._consecutive_errors: int = 0
+
+        # Signal deduplication cache
+        self._last_signal_keys: dict[str, datetime] = {}
+
+    def _get_client(self, demo_mode: bool) -> Optional[ExchangeClient]:
+        """Return the exchange client for the given mode."""
+        return self._demo_client if demo_mode else self._live_client
 
     @property
     def config(self) -> Optional[BotConfig]:
@@ -181,21 +210,20 @@ class BotWorker:
 
                 # Build per-symbol risk limits from per_asset_config
                 per_symbol_limits: dict = {}
-                if self._config.per_asset_config:
-                    try:
-                        pac = json.loads(self._config.per_asset_config) if isinstance(
-                            self._config.per_asset_config, str
-                        ) else self._config.per_asset_config
-                        for sym, cfg in pac.items():
-                            sym_lim: dict = {}
-                            if cfg.get("max_trades") is not None:
-                                sym_lim["max_trades"] = int(cfg["max_trades"])
-                            if cfg.get("loss_limit") is not None:
-                                sym_lim["loss_limit"] = float(cfg["loss_limit"])
-                            if sym_lim:
-                                per_symbol_limits[sym] = sym_lim
-                    except (json.JSONDecodeError, TypeError):
-                        pass
+                pac = parse_json_field(
+                    self._config.per_asset_config,
+                    field_name="per_asset_config",
+                    context=f"bot {self.bot_config_id}",
+                    default={},
+                )
+                for sym, cfg in pac.items():
+                    sym_lim: dict = {}
+                    if cfg.get("max_trades") is not None:
+                        sym_lim["max_trades"] = int(cfg["max_trades"])
+                    if cfg.get("loss_limit") is not None:
+                        sym_lim["loss_limit"] = float(cfg["loss_limit"])
+                    if sym_lim:
+                        per_symbol_limits[sym] = sym_lim
 
                 # Initialize risk manager with bot-specific params
                 self._risk_manager = RiskManager(
@@ -213,7 +241,7 @@ class BotWorker:
                     if not builder_ok:
                         return False
                     referral_ok = await self._check_referral_gate(self._client, hl_session)
-                    if not referral_ok:
+                    if not referral_ok:  # pragma: no cover — HL-specific gate
                         return False
 
             # Initialize daily session with balance
@@ -262,6 +290,7 @@ class BotWorker:
                 id=f"bot_{self.bot_config_id}_analysis",
                 name=f"Bot {self.bot_config_id} Analysis",
                 replace_existing=True,
+                max_instances=1,
             )
         elif schedule_type == "custom_cron":
             hours = schedule_config.get("hours", DEFAULT_MARKET_HOURS)
@@ -272,6 +301,7 @@ class BotWorker:
                 id=f"bot_{self.bot_config_id}_analysis",
                 name=f"Bot {self.bot_config_id} Analysis",
                 replace_existing=True,
+                max_instances=1,
             )
         else:
             # Default: market_sessions
@@ -283,6 +313,7 @@ class BotWorker:
                 id=f"bot_{self.bot_config_id}_analysis",
                 name=f"Bot {self.bot_config_id} Analysis",
                 replace_existing=True,
+                max_instances=1,
             )
 
         # Position monitoring every 5 minutes
@@ -292,6 +323,7 @@ class BotWorker:
             id=f"bot_{self.bot_config_id}_monitor",
             name=f"Bot {self.bot_config_id} Position Monitor",
             replace_existing=True,
+            max_instances=1,
         )
 
         # Trade rotation (auto-close & reopen) — check every minute if enabled
@@ -305,6 +337,7 @@ class BotWorker:
                 id=f"bot_{self.bot_config_id}_rotation",
                 name=f"Bot {self.bot_config_id} Trade Rotation",
                 replace_existing=True,
+                max_instances=1,
             )
             start_time = getattr(self._config, "rotation_start_time", None) or "now"
             logger.info(
@@ -340,25 +373,46 @@ class BotWorker:
         if self._demo_client:
             try:
                 await self._demo_client.close()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("Error closing demo client for bot %s: %s", self.bot_config_id, e)
 
         if self._live_client:
             try:
                 await self._live_client.close()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("Error closing live client for bot %s: %s", self.bot_config_id, e)
 
         self.status = "stopped"
         logger.info(f"[Bot:{self.bot_config_id}] Stopped")
 
     async def _analyze_and_trade_safe(self):
-        """Wrapper with error handling for the scheduler."""
+        """Wrapper with error handling and auto-recovery for the scheduler."""
         try:
             await self._analyze_and_trade()
+            # Reset error tracking on success
+            self._consecutive_errors = 0
+            self.error_message = None
         except Exception as e:
-            logger.error(f"[Bot:{self.bot_config_id}] Analysis error: {e}")
+            self._consecutive_errors += 1
+            logger.error(f"[Bot:{self.bot_config_id}] Analysis error ({self._consecutive_errors}/5): {e}")
             self.error_message = str(e)
+
+            if self._consecutive_errors >= 5:
+                logger.error(
+                    f"[Bot:{self.bot_config_id}] Too many consecutive errors ({self._consecutive_errors}). "
+                    f"Pausing for 60s before next attempt."
+                )
+                self.status = "error"
+                await asyncio.sleep(60)
+                # Verify scheduler is still alive — restart if crashed
+                if self._scheduler and not self._scheduler.running:
+                    logger.warning(f"[Bot:{self.bot_config_id}] Scheduler died — restarting")
+                    try:
+                        self._scheduler.start()
+                    except Exception as sched_err:
+                        logger.error(f"[Bot:{self.bot_config_id}] Scheduler restart failed: {sched_err}")
+                self.status = "running"
+                self._consecutive_errors = 3  # Allow 2 more tries before next pause
 
     def _calculate_asset_budgets(self, total_balance: float, trading_pairs: list[str]) -> dict[str, float]:
         """Calculate per-asset budget based on per_asset_config.
@@ -367,14 +421,12 @@ class BotWorker:
         Remaining balance is split equally among unconfigured assets.
         If no per_asset_config exists, all assets share equally.
         """
-        per_asset_cfg = {}
-        if self._config.per_asset_config:
-            try:
-                per_asset_cfg = json.loads(self._config.per_asset_config) if isinstance(
-                    self._config.per_asset_config, str
-                ) else self._config.per_asset_config
-            except (json.JSONDecodeError, TypeError):
-                per_asset_cfg = {}
+        per_asset_cfg = parse_json_field(
+            self._config.per_asset_config,
+            field_name="per_asset_config",
+            context=f"bot {self.bot_config_id}",
+            default={},
+        )
 
         budgets: dict[str, float] = {}
         fixed_total = 0.0
@@ -454,6 +506,12 @@ class BotWorker:
         """Internal: analyze symbol while holding per-symbol lock."""
         log_prefix = f"[Bot:{self.bot_config_id}]"
 
+        # Re-check per-symbol risk inside lock to prevent TOCTOU race
+        can_trade_sym, sym_reason = self._risk_manager.can_trade(symbol)
+        if not can_trade_sym:
+            logger.info(f"{log_prefix} Skipping {symbol} (inside lock): {sym_reason}")
+            return
+
         # Check for existing open positions (per bot) — skip when force-rotating
         if not force:
             async with get_session() as session:
@@ -478,751 +536,24 @@ class BotWorker:
             logger.info(f"{log_prefix} Signal rejected: {trade_reason}")
             return
 
+        # Signal deduplication — prevent duplicate trades from rapid re-analysis
+        dedup_key = f"{symbol}:{signal.direction.value}:{signal.entry_price:.2f}"
+        if dedup_key in self._last_signal_keys:
+            elapsed = (datetime.utcnow() - self._last_signal_keys[dedup_key]).total_seconds()
+            if elapsed < 60:  # Ignore duplicate signals within 60s
+                logger.info(f"{log_prefix} Duplicate signal for {dedup_key} ({elapsed:.0f}s ago), skipping")
+                return
+        self._last_signal_keys[dedup_key] = datetime.utcnow()
+        # Prune stale entries (>5min old) to prevent unbounded growth
+        cutoff = datetime.utcnow() - timedelta(minutes=5)
+        self._last_signal_keys = {k: v for k, v in self._last_signal_keys.items() if v > cutoff}
+
         # Execute on appropriate clients
         mode = self._config.mode
         if mode in ("demo", "both") and self._demo_client:
             await self._execute_trade(signal, self._demo_client, demo_mode=True, asset_budget=asset_budget)
         if mode in ("live", "both") and self._live_client:
             await self._execute_trade(signal, self._live_client, demo_mode=False, asset_budget=asset_budget)
-
-    async def _execute_trade(
-        self, signal: TradeSignal, client: ExchangeClient, demo_mode: bool,
-        asset_budget: Optional[float] = None,
-    ):
-        """Execute a trade on a specific exchange client."""
-        log_prefix = f"[Bot:{self.bot_config_id}]"
-        mode_str = "DEMO" if demo_mode else "LIVE"
-
-        # Resolve per-asset config overrides
-        per_asset_cfg = {}
-        if self._config.per_asset_config:
-            try:
-                per_asset_cfg = json.loads(self._config.per_asset_config) if isinstance(
-                    self._config.per_asset_config, str
-                ) else self._config.per_asset_config
-            except (json.JSONDecodeError, TypeError):
-                pass
-        asset_cfg = per_asset_cfg.get(signal.symbol, {})
-
-        # Resolve leverage: per-asset > global > 1x
-        leverage = asset_cfg.get("leverage") or self._config.leverage or 1
-
-        # Apply per-asset TP/SL overrides to signal
-        asset_tp = asset_cfg.get("tp")
-        asset_sl = asset_cfg.get("sl")
-        if asset_tp is not None and signal.entry_price > 0:
-            if signal.direction.value == "long":
-                signal.target_price = round(signal.entry_price * (1 + asset_tp / 100), 2)
-            else:
-                signal.target_price = round(signal.entry_price * (1 - asset_tp / 100), 2)
-        if asset_sl is not None and signal.entry_price > 0:
-            if signal.direction.value == "long":
-                signal.stop_loss = round(signal.entry_price * (1 - asset_sl / 100), 2)
-            else:
-                signal.stop_loss = round(signal.entry_price * (1 + asset_sl / 100), 2)
-
-        try:
-            # Use pre-calculated asset budget or fall back to full available balance
-            if asset_budget is not None:
-                available = asset_budget
-            else:
-                balance = await client.get_account_balance()
-                available = balance.available
-
-            # Calculate position size
-            if asset_budget is not None and self._config.position_size_percent is None:
-                # Full budget mode — no double-sizing
-                position_usdt = available
-                position_size = (available * leverage) / signal.entry_price
-            else:
-                # Legacy fallback via RiskManager
-                position_usdt, position_size = self._risk_manager.calculate_position_size(
-                    balance=available,
-                    entry_price=signal.entry_price,
-                    confidence=signal.confidence,
-                    leverage=leverage,
-                )
-
-            if position_usdt < 5:
-                logger.warning(f"{log_prefix} [{mode_str}] Position too small: ${position_usdt:.2f} (min 5 USDT)")
-                return
-
-            # Set leverage
-            await client.set_leverage(signal.symbol, leverage)
-
-            # Place order
-            side = "long" if signal.direction.value == "long" else "short"
-            order = await client.place_market_order(
-                symbol=signal.symbol,
-                side=side,
-                size=position_size,
-                leverage=leverage,
-                take_profit=signal.target_price,
-                stop_loss=signal.stop_loss,
-            )
-
-            if not order:
-                logger.error(f"{log_prefix} [{mode_str}] Failed to place order")
-                return
-
-            # Get fill price — prefer order.price (avgPx from exchange)
-            fill_price = order.price if order.price > 0 else signal.entry_price
-            if order.order_id:
-                try:
-                    actual = await client.get_fill_price(signal.symbol, order.order_id)
-                    if actual:
-                        fill_price = actual
-                except Exception as e:
-                    logger.debug(f"{log_prefix} [{mode_str}] Could not fetch fill price: {e}")
-
-            # Record trade in database
-            async with get_session() as session:
-                trade = TradeRecord(
-                    user_id=self._config.user_id,
-                    bot_config_id=self.bot_config_id,
-                    exchange=self._config.exchange_type,
-                    symbol=signal.symbol,
-                    side=signal.direction.value,
-                    size=position_size,
-                    entry_price=fill_price,
-                    take_profit=signal.target_price,
-                    stop_loss=signal.stop_loss,
-                    leverage=leverage,
-                    confidence=signal.confidence,
-                    reason=signal.reason,
-                    order_id=order.order_id,
-                    status="open",
-                    entry_time=datetime.utcnow(),
-                    demo_mode=demo_mode,
-                    metrics_snapshot=json.dumps(signal.metrics_snapshot),
-                )
-                session.add(trade)
-
-            # Record in risk manager
-            self._risk_manager.record_trade_entry(
-                symbol=signal.symbol,
-                side=signal.direction.value,
-                size=position_size,
-                entry_price=fill_price,
-                leverage=leverage,
-                confidence=signal.confidence,
-                reason=signal.reason,
-                order_id=order.order_id,
-            )
-
-            self.trades_today += 1
-            logger.info(
-                f"{log_prefix} [{mode_str}] Trade opened: {signal.direction.value.upper()} "
-                f"{signal.symbol} @ ${fill_price:,.2f} (conf: {signal.confidence}%)"
-            )
-
-            # Send notifications (Discord + Telegram)
-            try:
-                for notifier in await self._get_notifiers():
-                    try:
-                        async with notifier:
-                            await notifier.send_trade_entry(
-                                symbol=signal.symbol,
-                                side=signal.direction.value,
-                                size=position_size,
-                                entry_price=fill_price,
-                                leverage=leverage,
-                                take_profit=signal.target_price,
-                                stop_loss=signal.stop_loss,
-                                confidence=signal.confidence,
-                                reason=f"[{self._config.name}] {signal.reason}",
-                                order_id=order.order_id or "",
-                                demo_mode=demo_mode,
-                            )
-                    except Exception as ne:
-                        logger.warning(f"{log_prefix} Notification failed: {ne}")
-            except Exception as notify_err:
-                logger.warning(f"{log_prefix} Notifier setup failed: {notify_err}")
-
-        except Exception as e:
-            err_msg = str(e).lower()
-            if "minimum amount" in err_msg or "minimum order" in err_msg:
-                logger.warning(f"{log_prefix} [{mode_str}] Order below exchange minimum: {e}")
-            else:
-                logger.error(f"{log_prefix} [{mode_str}] Trade execution failed: {e}")
-
-    async def _monitor_positions_safe(self):
-        """Wrapper with error handling for position monitoring."""
-        try:
-            await self._monitor_positions()
-        except Exception as e:
-            logger.error(f"[Bot:{self.bot_config_id}] Monitor error: {e}")
-
-    async def _monitor_positions(self):
-        """Check open positions for this bot."""
-        async with get_session() as session:
-            from sqlalchemy import select
-            result = await session.execute(
-                select(TradeRecord).where(
-                    TradeRecord.bot_config_id == self.bot_config_id,
-                    TradeRecord.status == "open",
-                )
-            )
-            open_trades = result.scalars().all()
-
-            if not open_trades:
-                return
-
-            for trade in open_trades:
-                await self._check_position(trade, session)
-
-    async def _check_position(self, trade: TradeRecord, session):
-        """Check a single open position."""
-        # Determine which client to use
-        client = self._demo_client if trade.demo_mode else self._live_client
-        if not client:
-            return
-
-        try:
-            position = await client.get_position(trade.symbol)
-
-            if not position:
-                # Position closed (TP/SL hit or manual)
-                await self._handle_closed_position(trade, client, session)
-                return
-
-            # Check if position side matches
-            if hasattr(position, 'side') and position.side != trade.side:
-                await self._handle_closed_position(trade, client, session)
-
-        except Exception as e:
-            logger.error(f"[Bot:{self.bot_config_id}] Position check error: {e}")
-
-    async def _handle_closed_position(self, trade: TradeRecord, client: ExchangeClient, session):
-        """Handle a position that was closed externally (TP/SL/manual)."""
-        log_prefix = f"[Bot:{self.bot_config_id}]"
-
-        try:
-            # Get current price as exit price estimate
-            ticker = await client.get_ticker(trade.symbol)
-            exit_price = ticker.last_price if ticker else trade.entry_price
-
-            # Calculate PnL
-            if trade.side == "long":
-                pnl = (exit_price - trade.entry_price) * trade.size
-            else:
-                pnl = (trade.entry_price - exit_price) * trade.size
-
-            pnl_percent = (pnl / (trade.entry_price * trade.size)) * 100
-
-            # Determine exit reason
-            if abs(exit_price - trade.take_profit) < trade.entry_price * 0.002:
-                exit_reason = "TAKE_PROFIT"
-            elif abs(exit_price - trade.stop_loss) < trade.entry_price * 0.002:
-                exit_reason = "STOP_LOSS"
-            else:
-                exit_reason = "EXTERNAL_CLOSE"
-
-            # Fetch trading fees from exchange (entry + exit via orders-history)
-            try:
-                if trade.order_id:
-                    trade.fees = await client.get_trade_total_fees(
-                        symbol=trade.symbol,
-                        entry_order_id=trade.order_id,
-                        close_order_id=trade.close_order_id,
-                    )
-            except Exception as e:
-                logger.debug(f"{log_prefix} Could not fetch fees for trade #{trade.id}: {e}")
-                trade.fees = 0
-
-            # Fetch funding fees (charged every 8h while position was open)
-            try:
-                if trade.entry_time:
-                    entry_ms = int(trade.entry_time.timestamp() * 1000)
-                    exit_ms = int(datetime.utcnow().timestamp() * 1000)
-                    trade.funding_paid = await client.get_funding_fees(
-                        symbol=trade.symbol,
-                        start_time_ms=entry_ms,
-                        end_time_ms=exit_ms,
-                    )
-            except Exception as e:
-                logger.debug(f"{log_prefix} Could not fetch funding fees for trade #{trade.id}: {e}")
-                trade.funding_paid = 0
-
-            # Calculate builder fee revenue (Hyperliquid only)
-            try:
-                if hasattr(client, 'calculate_builder_fee'):
-                    trade.builder_fee = client.calculate_builder_fee(
-                        entry_price=trade.entry_price,
-                        exit_price=exit_price,
-                        size=trade.size,
-                    )
-                else:
-                    trade.builder_fee = 0
-            except Exception as e:
-                logger.debug(f"{log_prefix} Could not calculate builder fee for trade #{trade.id}: {e}")
-                trade.builder_fee = 0
-
-            # Update trade record
-            trade.exit_price = exit_price
-            trade.pnl = pnl
-            trade.pnl_percent = pnl_percent
-            trade.exit_time = datetime.utcnow()
-            trade.exit_reason = exit_reason
-            trade.status = "closed"
-
-            # Record in risk manager
-            self._risk_manager.record_trade_exit(
-                symbol=trade.symbol,
-                side=trade.side,
-                size=trade.size,
-                entry_price=trade.entry_price,
-                exit_price=exit_price,
-                fees=trade.fees or 0,
-                funding_paid=trade.funding_paid or 0,
-                reason=exit_reason,
-                order_id=trade.order_id,
-            )
-
-            logger.info(
-                f"{log_prefix} Trade #{trade.id} closed: {exit_reason} | "
-                f"PnL: ${pnl:.2f} ({pnl_percent:+.2f}%)"
-            )
-
-            # Send notifications (Discord + Telegram)
-            try:
-                duration_minutes = None
-                if trade.entry_time:
-                    duration_minutes = int((datetime.utcnow() - trade.entry_time).total_seconds() / 60)
-                for notifier in await self._get_notifiers():
-                    try:
-                        async with notifier:
-                            await notifier.send_trade_exit(
-                                symbol=trade.symbol,
-                                side=trade.side,
-                                size=trade.size,
-                                entry_price=trade.entry_price,
-                                exit_price=exit_price,
-                                pnl=pnl,
-                                pnl_percent=pnl_percent,
-                                fees=trade.fees or 0,
-                                funding_paid=trade.funding_paid or 0,
-                                reason=exit_reason,
-                                order_id=trade.order_id or "",
-                                duration_minutes=duration_minutes,
-                                demo_mode=trade.demo_mode,
-                                strategy_reason=f"[{self._config.name}]",
-                            )
-                    except Exception as ne:
-                        logger.warning(f"{log_prefix} Notification failed: {ne}")
-            except Exception as notify_err:
-                logger.warning(f"{log_prefix} Notifier setup failed: {notify_err}")
-
-        except Exception as e:
-            logger.error(f"{log_prefix} Handle closed position error: {e}")
-
-    # ── Trade Rotation ───────────────────────────────────────────
-
-    async def _check_rotation_safe(self):
-        """Wrapper with error handling for rotation check."""
-        try:
-            await self._check_rotation()
-        except Exception as e:
-            logger.error(f"[Bot:{self.bot_config_id}] Rotation check error: {e}")
-
-    async def _check_rotation(self):
-        """Check if any open trades have exceeded their rotation interval and need closing.
-
-        If rotation_start_time is set (e.g. "08:00"), rotation windows are anchored
-        to that UTC time. Otherwise, elapsed time since entry_time is used.
-        In rotation_only mode with no open trades, triggers a new analysis.
-        """
-        rotation_minutes = getattr(self._config, "rotation_interval_minutes", None)
-        if not rotation_minutes:
-            return
-
-        log_prefix = f"[Bot:{self.bot_config_id}]"
-        now = datetime.utcnow()
-
-        async with get_session() as session:
-            from sqlalchemy import select
-            result = await session.execute(
-                select(TradeRecord).where(
-                    TradeRecord.bot_config_id == self.bot_config_id,
-                    TradeRecord.status == "open",
-                )
-            )
-            open_trades = result.scalars().all()
-
-            if not open_trades:
-                # In rotation_only mode, if no open trades exist, open one now
-                if self._config.schedule_type == "rotation_only":
-                    logger.info(f"{log_prefix} ROTATION: No open trades — triggering analysis")
-                    pairs = json.loads(self._config.trading_pairs) if isinstance(self._config.trading_pairs, str) else self._config.trading_pairs
-                    rot_balance = await self._client.get_account_balance()
-                    rot_budgets = self._calculate_asset_budgets(rot_balance.available, pairs)
-                    for symbol in pairs:
-                        can_trade_sym, sym_reason = self._risk_manager.can_trade(symbol)
-                        if not can_trade_sym:
-                            logger.info(f"{log_prefix} ROTATION: Skipping {symbol} — {sym_reason}")
-                            continue
-                        try:
-                            await self._analyze_symbol(symbol, force=True, asset_budget=rot_budgets.get(symbol))
-                        except Exception as e:
-                            logger.error(f"{log_prefix} ROTATION: Analysis failed for {symbol}: {e}")
-                return
-
-            # Determine if we use anchored rotation (start_time) or elapsed-based
-            start_time_str = getattr(self._config, "rotation_start_time", None)
-
-            for trade in open_trades:
-                if not trade.entry_time:
-                    continue
-
-                should_rotate = False
-                if start_time_str:
-                    # Anchored rotation: calculate next rotation boundary from start_time
-                    try:
-                        sh, sm = int(start_time_str[:2]), int(start_time_str[3:5])
-                        # Build today's anchor at start_time UTC
-                        anchor = now.replace(hour=sh, minute=sm, second=0, microsecond=0)
-                        # If anchor is in the future, go back one day
-                        if anchor > now:
-                            anchor = anchor - timedelta(days=1)
-                        # How many intervals since anchor?
-                        elapsed_since_anchor = (now - anchor).total_seconds() / 60
-                        # Find the last rotation boundary
-                        intervals_passed = int(elapsed_since_anchor // rotation_minutes)
-                        last_boundary = anchor + timedelta(minutes=intervals_passed * rotation_minutes)
-                        # Trade should rotate if it was opened before the last boundary
-                        if trade.entry_time < last_boundary:
-                            should_rotate = True
-                            elapsed = (now - trade.entry_time).total_seconds() / 60
-                    except (ValueError, IndexError):
-                        # Fall back to elapsed-based
-                        elapsed = (now - trade.entry_time).total_seconds() / 60
-                        should_rotate = elapsed >= rotation_minutes
-                else:
-                    # Simple elapsed-based rotation
-                    elapsed = (now - trade.entry_time).total_seconds() / 60
-                    should_rotate = elapsed >= rotation_minutes
-
-                if not should_rotate:
-                    continue
-
-                elapsed = (now - trade.entry_time).total_seconds() / 60
-                logger.info(
-                    f"{log_prefix} ROTATION: Trade #{trade.id} {trade.symbol} "
-                    f"open for {elapsed:.0f}min (limit: {rotation_minutes}min) — closing"
-                )
-
-                # Force-close the trade
-                client = self._demo_client if trade.demo_mode else self._live_client
-                if not client:
-                    continue
-
-                closed = await self._force_close_trade(trade, client, session)
-
-                if closed:
-                    # Check risk limits before re-opening
-                    can_reopen, reopen_reason = self._risk_manager.can_trade(trade.symbol)
-                    if not can_reopen:
-                        logger.info(f"{log_prefix} ROTATION: Trade closed but no re-open — {reopen_reason}")
-                        continue
-
-                    # Re-analyze and open a new trade for this symbol
-                    logger.info(f"{log_prefix} ROTATION: Re-analyzing {trade.symbol}...")
-                    try:
-                        pairs = json.loads(self._config.trading_pairs) if isinstance(self._config.trading_pairs, str) else self._config.trading_pairs
-                        reopen_balance = await client.get_account_balance()
-                        reopen_budgets = self._calculate_asset_budgets(reopen_balance.available, pairs)
-                        await self._analyze_symbol(trade.symbol, force=True, asset_budget=reopen_budgets.get(trade.symbol))
-                    except Exception as e:
-                        logger.error(f"{log_prefix} ROTATION: Re-analysis failed for {trade.symbol}: {e}")
-
-    async def _force_close_trade(
-        self, trade: TradeRecord, client: ExchangeClient, session
-    ) -> bool:
-        """Force-close an open trade via the exchange. Returns True on success.
-
-        Handles the case where the position was already closed (TP/SL hit)
-        by marking the trade as ROTATION_ALREADY_CLOSED instead of retrying.
-        """
-        log_prefix = f"[Bot:{self.bot_config_id}]"
-        mode_str = "DEMO" if trade.demo_mode else "LIVE"
-
-        try:
-            # Close position via exchange client
-            order = await client.close_position(trade.symbol, trade.side)
-
-            if order is None:
-                # Position already closed (TP/SL triggered before rotation)
-                logger.info(
-                    f"{log_prefix} [{mode_str}] ROTATION: Trade #{trade.id} {trade.symbol} "
-                    f"already closed on exchange (TP/SL hit). Marking as ROTATION_ALREADY_CLOSED."
-                )
-                # Get current price for approximate PnL
-                exit_price = trade.entry_price
-                try:
-                    ticker = await client.get_ticker(trade.symbol)
-                    if ticker:
-                        exit_price = ticker.last_price
-                except Exception:
-                    pass
-
-                if trade.side == "long":
-                    pnl = (exit_price - trade.entry_price) * trade.size
-                else:
-                    pnl = (trade.entry_price - exit_price) * trade.size
-                pnl_percent = (pnl / (trade.entry_price * trade.size)) * 100
-
-                trade.exit_price = exit_price
-                trade.pnl = pnl
-                trade.pnl_percent = pnl_percent
-                trade.exit_time = datetime.utcnow()
-                trade.exit_reason = "ROTATION_ALREADY_CLOSED"
-                trade.status = "closed"
-
-                self._risk_manager.record_trade_exit(
-                    symbol=trade.symbol, side=trade.side, size=trade.size,
-                    entry_price=trade.entry_price, exit_price=exit_price,
-                    fees=trade.fees or 0, funding_paid=trade.funding_paid or 0,
-                    reason="ROTATION_ALREADY_CLOSED", order_id=trade.order_id,
-                )
-                return True
-
-            # Get exit price from the close order
-            exit_price = trade.entry_price
-            if order.price and order.price > 0:
-                exit_price = order.price
-            else:
-                try:
-                    ticker = await client.get_ticker(trade.symbol)
-                    if ticker:
-                        exit_price = ticker.last_price
-                except Exception:
-                    pass
-
-            # Calculate PnL
-            if trade.side == "long":
-                pnl = (exit_price - trade.entry_price) * trade.size
-            else:
-                pnl = (trade.entry_price - exit_price) * trade.size
-            pnl_percent = (pnl / (trade.entry_price * trade.size)) * 100
-
-            # Update trade record
-            trade.exit_price = exit_price
-            trade.pnl = pnl
-            trade.pnl_percent = pnl_percent
-            trade.exit_time = datetime.utcnow()
-            trade.exit_reason = "ROTATION"
-            trade.status = "closed"
-
-            # Record in risk manager
-            self._risk_manager.record_trade_exit(
-                symbol=trade.symbol, side=trade.side, size=trade.size,
-                entry_price=trade.entry_price, exit_price=exit_price,
-                fees=trade.fees or 0, funding_paid=trade.funding_paid or 0,
-                reason="ROTATION", order_id=trade.order_id,
-            )
-
-            logger.info(
-                f"{log_prefix} [{mode_str}] ROTATION closed trade #{trade.id}: "
-                f"{trade.side.upper()} {trade.symbol} | PnL: ${pnl:.2f} ({pnl_percent:+.2f}%)"
-            )
-
-            # Send notifications (Discord + Telegram)
-            try:
-                duration_minutes = int((datetime.utcnow() - trade.entry_time).total_seconds() / 60) if trade.entry_time else None
-                for notifier in await self._get_notifiers():
-                    try:
-                        async with notifier:
-                            await notifier.send_trade_exit(
-                                symbol=trade.symbol, side=trade.side, size=trade.size,
-                                entry_price=trade.entry_price, exit_price=exit_price,
-                                pnl=pnl, pnl_percent=pnl_percent,
-                                fees=trade.fees or 0, funding_paid=trade.funding_paid or 0,
-                                reason="ROTATION", order_id=trade.order_id or "",
-                                duration_minutes=duration_minutes, demo_mode=trade.demo_mode,
-                                strategy_reason=f"[{self._config.name}] Auto-rotation ({self._config.rotation_interval_minutes}min)",
-                            )
-                    except Exception as ne:
-                        logger.warning(f"{log_prefix} Notification failed: {ne}")
-            except Exception as notify_err:
-                logger.warning(f"{log_prefix} Notifier setup failed: {notify_err}")
-
-            return True
-
-        except Exception as e:
-            err_msg = str(e).lower()
-            # Handle "no position" errors from exchange API explicitly
-            if any(phrase in err_msg for phrase in ("no position", "position not exist", "does not exist")):
-                logger.info(
-                    f"{log_prefix} [{mode_str}] ROTATION: Trade #{trade.id} {trade.symbol} "
-                    f"position not found on exchange. Marking as ROTATION_ALREADY_CLOSED."
-                )
-                trade.exit_price = trade.entry_price
-                trade.pnl = 0
-                trade.pnl_percent = 0
-                trade.exit_time = datetime.utcnow()
-                trade.exit_reason = "ROTATION_ALREADY_CLOSED"
-                trade.status = "closed"
-                self._risk_manager.record_trade_exit(
-                    symbol=trade.symbol, side=trade.side, size=trade.size,
-                    entry_price=trade.entry_price, exit_price=trade.entry_price,
-                    fees=trade.fees or 0, funding_paid=trade.funding_paid or 0,
-                    reason="ROTATION_ALREADY_CLOSED", order_id=trade.order_id,
-                )
-                return True
-
-            logger.error(f"{log_prefix} [{mode_str}] ROTATION close failed for trade #{trade.id}: {e}")
-            return False
-
-    async def _get_discord_notifier(self) -> Optional[DiscordNotifier]:
-        """Load Discord webhook from bot-specific config only."""
-        try:
-            if self._config and self._config.discord_webhook_url:
-                webhook_url = decrypt_value(self._config.discord_webhook_url)
-                return DiscordNotifier(webhook_url=webhook_url)
-        except Exception as e:
-            logger.warning(f"[Bot:{self.bot_config_id}] Could not load Discord config: {e}")
-        return None
-
-    async def _get_notifiers(self) -> list:
-        """Return all configured notifiers (Discord + Telegram)."""
-        notifiers = []
-        discord = await self._get_discord_notifier()
-        if discord:
-            notifiers.append(discord)
-        try:
-            if self._config and self._config.telegram_bot_token and self._config.telegram_chat_id:
-                from src.notifications.telegram_notifier import TelegramNotifier
-                notifiers.append(TelegramNotifier(
-                    bot_token=decrypt_value(self._config.telegram_bot_token),
-                    chat_id=self._config.telegram_chat_id,
-                ))
-        except Exception as e:
-            logger.warning(f"[Bot:{self.bot_config_id}] Could not load Telegram config: {e}")
-        return notifiers
-
-    async def _check_referral_gate(self, client: ExchangeClient, db) -> bool:
-        """HARD gate: block bot start unless user is referred via our affiliate link.
-
-        Always enforced when HL_REFERRAL_CODE is set.
-        Checks DB flag first (fast path), then live HL API, saves result to DB.
-        Returns True if OK to proceed, False if blocked.
-        """
-        from src.utils.settings import get_hl_config
-        hl_cfg = await get_hl_config()
-        referral_code = hl_cfg["referral_code"]
-        if not referral_code:
-            return True
-
-        log_prefix = f"[Bot:{self.bot_config_id}]"
-
-        try:
-            from src.exchanges.hyperliquid.client import HyperliquidClient
-
-            if not isinstance(client, HyperliquidClient):
-                return True
-
-            # Check DB flag first (fast path)
-            from src.models.database import ExchangeConnection
-            from sqlalchemy import select as sa_select
-            result = await db.execute(
-                sa_select(ExchangeConnection).where(
-                    ExchangeConnection.user_id == self._config.user_id,
-                    ExchangeConnection.exchange_type == "hyperliquid",
-                )
-            )
-            conn = result.scalar_one_or_none()
-
-            if conn and conn.referral_verified:
-                logger.info(f"{log_prefix} Referral verified (DB flag)")
-                return True
-
-            # Live check via HL API
-            info = await client.get_referral_info()
-            referred_by = None
-            if info:
-                referred_by = info.get("referredBy") or info.get("referred_by")
-
-            if referred_by:
-                # Save to DB so API-level checks work
-                if conn:
-                    conn.referral_verified = True
-                    conn.referral_verified_at = datetime.utcnow()
-                    await db.commit()
-                logger.info(f"{log_prefix} User is referred (by {referred_by}), saved to DB")
-                return True
-
-            link = f"https://app.hyperliquid.xyz/join/{referral_code}"
-            self.error_message = (
-                f"Referral erforderlich: Bitte registriere dich ueber {link} "
-                f"bevor du Hyperliquid Bots nutzen kannst."
-            )
-            self.status = "error"
-            logger.warning(f"{log_prefix} {self.error_message}")
-            return False
-        except Exception as e:
-            # On error: BLOCK to be safe (no silent bypass)
-            logger.warning(f"{log_prefix} Referral check failed: {e}")
-            self.error_message = (
-                f"Referral-Pruefung fehlgeschlagen. Bitte versuche es erneut. "
-                f"Falls das Problem bestehen bleibt, registriere dich ueber "
-                f"https://app.hyperliquid.xyz/join/{referral_code}"
-            )
-            self.status = "error"
-            return False
-
-    async def _check_builder_approval(self, client: ExchangeClient, db) -> bool:
-        """HARD gate: block bot start if builder fee not approved.
-
-        Returns True if OK to proceed, False if blocked.
-        """
-        log_prefix = f"[Bot:{self.bot_config_id}]"
-        try:
-            from src.exchanges.hyperliquid.client import HyperliquidClient
-
-            if not isinstance(client, HyperliquidClient):
-                return True
-            if not client.builder_config:
-                return True
-
-            # Check DB flag first (fast path)
-            from src.models.database import ExchangeConnection
-            from sqlalchemy import select as sa_select
-            result = await db.execute(
-                sa_select(ExchangeConnection).where(
-                    ExchangeConnection.user_id == self._config.user_id,
-                    ExchangeConnection.exchange_type == "hyperliquid",
-                )
-            )
-            conn = result.scalar_one_or_none()
-
-            if conn and conn.builder_fee_approved:
-                logger.info(f"{log_prefix} Builder fee approved (DB flag)")
-                return True
-
-            # Fallback: verify on-chain
-            approved = await client.check_builder_fee_approval()
-            if approved is not None and approved >= client.builder_config["f"]:
-                if conn:
-                    conn.builder_fee_approved = True
-                    conn.builder_fee_approved_at = datetime.utcnow()
-                    await db.commit()
-                logger.info(f"{log_prefix} Builder fee approved (on-chain verified)")
-                return True
-
-            # NOT APPROVED — block bot start
-            self.error_message = (
-                "Builder Fee nicht genehmigt. Bitte genehmige die Builder Fee "
-                "auf der Website unter 'Meine Bots' bevor du einen Hyperliquid Bot starten kannst."
-            )
-            self.status = "error"
-            logger.warning(f"{log_prefix} Builder fee NOT approved — bot start blocked")
-            return False
-
-        except Exception as e:
-            logger.warning(f"{log_prefix} Builder approval check failed: {e}")
-            self.error_message = f"Builder Fee Pruefung fehlgeschlagen: {e}"
-            self.status = "error"
-            return False
 
     def get_status_dict(self) -> dict:
         """Return status info for API responses."""

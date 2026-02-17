@@ -120,9 +120,9 @@ class RiskManager:
             per_symbol_limits: Per-symbol overrides, e.g.
                 {"BTCUSDT": {"max_trades": 5, "loss_limit": 3.0}}
         """
-        # None = no limit (unlimited trades / no loss cap)
-        self.max_trades = max_trades_per_day
-        self.daily_loss_limit = daily_loss_limit_percent
+        # Fall back to settings when not explicitly provided
+        self.max_trades = max_trades_per_day if max_trades_per_day is not None else getattr(getattr(settings, 'trading', None), 'max_trades_per_day', None)
+        self.daily_loss_limit = daily_loss_limit_percent if daily_loss_limit_percent is not None else getattr(getattr(settings, 'trading', None), 'daily_loss_limit_percent', None)
         self.position_size_pct = position_size_percent or settings.trading.position_size_percent
         self.per_symbol_limits = per_symbol_limits or {}
 
@@ -136,6 +136,9 @@ class RiskManager:
 
         self.trade_logger = TradeLogger()
         self._daily_stats: Optional[DailyStats] = None
+        # Note: record_trade_entry/exit are synchronous with no await points,
+        # so they are safe under asyncio's single-threaded model without a lock.
+        # Per-symbol locks in BotWorker prevent concurrent calls for the same symbol.
         self._load_daily_stats()
 
     def _get_stats_file(self, for_date: Optional[str] = None) -> Path:
@@ -144,31 +147,46 @@ class RiskManager:
         return self.data_dir / f"daily_stats_{date_str}.json"
 
     def _load_daily_stats(self) -> None:
-        """Load today's stats from file or create new."""
+        """Load today's stats from file or create new (synchronous, call from __init__)."""
         today = datetime.now().strftime("%Y-%m-%d")
         stats_file = self._get_stats_file(today)
 
         if stats_file.exists():
             try:
-                with open(stats_file, "r") as f:
-                    data = json.load(f)
-                    # Remove computed properties that are not dataclass fields
-                    for key in ("net_pnl", "return_percent", "win_rate"):
-                        data.pop(key, None)
-                    self._daily_stats = DailyStats(**data)
-                    logger.info(f"Loaded daily stats: {self._daily_stats.trades_executed} trades, "
-                               f"PnL: ${self._daily_stats.net_pnl:.2f}")
+                data = self._read_stats_file(stats_file)
+                # Remove computed properties that are not dataclass fields
+                for key in ("net_pnl", "return_percent", "win_rate"):
+                    data.pop(key, None)
+                self._daily_stats = DailyStats(**data)
+                logger.info(f"Loaded daily stats: {self._daily_stats.trades_executed} trades, "
+                           f"PnL: ${self._daily_stats.net_pnl:.2f}")
             except Exception as e:
                 logger.error(f"Error loading daily stats: {e}")
                 self._daily_stats = None
 
+    @staticmethod
+    def _read_stats_file(path: Path) -> dict:
+        """Read and parse a stats JSON file (synchronous)."""
+        with open(path, "r") as f:
+            return json.load(f)
+
+    @staticmethod
+    def _write_stats_file(path: Path, data: dict) -> None:
+        """Write stats dict to a JSON file (synchronous)."""
+        with open(path, "w") as f:
+            json.dump(data, f, indent=2)
+
     def _save_daily_stats(self) -> None:
-        """Save current daily stats to file."""
+        """Save current daily stats to file.
+
+        Called from synchronous methods (record_trade_entry/exit, can_trade).
+        Uses synchronous I/O since callers are not async. The files are small
+        (<1 KB) so blocking is negligible in practice.
+        """
         if self._daily_stats:
             stats_file = self._get_stats_file(self._daily_stats.date)
             try:
-                with open(stats_file, "w") as f:
-                    json.dump(self._daily_stats.to_dict(), f, indent=2)
+                self._write_stats_file(stats_file, self._daily_stats.to_dict())
             except Exception as e:
                 logger.error(f"Error saving daily stats: {e}")
 
@@ -286,9 +304,17 @@ class RiskManager:
 
         # General check (no symbol) — for gating entire analysis runs
         if symbol is None:
-            # If max_trades set, check if ALL symbols would be blocked (not useful to run)
-            # Just return True — per-symbol checks happen later
-            pass
+            # Check global trade count limit
+            if self.max_trades is not None:
+                if self._daily_stats.trades_executed >= self.max_trades:
+                    return False, f"Global trade limit reached ({self._daily_stats.trades_executed}/{self.max_trades})"
+
+            # Check global loss limit
+            if self.daily_loss_limit is not None and self._daily_stats.starting_balance > 0:
+                current_loss_pct = abs(min(0, self._daily_stats.return_percent))
+                if current_loss_pct >= self.daily_loss_limit:
+                    self._halt_trading(f"Daily loss limit exceeded ({current_loss_pct:.2f}% >= {self.daily_loss_limit:.2f}%)")
+                    return False, f"Daily loss limit exceeded ({current_loss_pct:.2f}% >= {self.daily_loss_limit}%)"
 
         return True, "Trading allowed"
 
@@ -435,13 +461,8 @@ class RiskManager:
             logger.error("Daily stats not initialized!")
             return False
 
-        # Calculate PnL
-        if side.lower() == "long":
-            pnl = (exit_price - entry_price) * size
-        else:  # short
-            pnl = (entry_price - exit_price) * size
-
-        pnl_percent = (pnl / (entry_price * size)) * 100
+        from src.bot.bot_worker import calculate_pnl
+        pnl, pnl_percent = calculate_pnl(side, entry_price, exit_price, size)
 
         # Update stats (global + per-symbol)
         self._daily_stats.total_pnl += pnl
@@ -547,8 +568,8 @@ class RiskManager:
                 try:
                     with open(stats_file, "r") as f:
                         stats.append(json.load(f))
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.warning("Failed to read stats file %s: %s", stats_file, e)
 
         return stats
 

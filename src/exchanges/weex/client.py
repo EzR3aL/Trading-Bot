@@ -15,6 +15,7 @@ from typing import Any, Dict, List, Optional
 
 import aiohttp
 
+from src.exceptions import ExchangeError
 from src.exchanges.base import ExchangeClient
 from src.exchanges.types import Balance, FundingRateInfo, Order, Position, Ticker
 from src.exchanges.weex.constants import BASE_URL, SUCCESS_CODE, TESTNET_URL
@@ -23,8 +24,11 @@ from src.utils.logger import get_logger
 logger = get_logger(__name__)
 
 
-class WeexClientError(Exception):
-    pass
+class WeexClientError(ExchangeError):
+    """Custom exception for Weex API errors."""
+
+    def __init__(self, message: str, original_error: Exception = None):
+        super().__init__("weex", message, original_error)
 
 
 class WeexClient(ExchangeClient):

@@ -33,10 +33,11 @@ async def multi_day_trades(test_engine, test_user, sample_bot_config):
     session_factory = async_sessionmaker(
         test_engine, class_=AsyncSession, expire_on_commit=False
     )
-    now = datetime.utcnow()
+    # Use noon as base time to avoid midnight boundary issues
+    now = datetime.utcnow().replace(hour=12, minute=0, second=0, microsecond=0)
     trades = []
 
-    # Day 1: 2 winning trades (demo)
+    # Day 1: 2 winning trades (demo) - same date, different hours
     for i in range(2):
         trades.append(TradeRecord(
             user_id=test_user.id,
@@ -58,7 +59,7 @@ async def multi_day_trades(test_engine, test_user, sample_bot_config):
             fees=0.2,
             funding_paid=0.05,
             entry_time=now - timedelta(days=10, hours=i),
-            exit_time=now - timedelta(days=10, hours=i - 1),
+            exit_time=now - timedelta(days=10, hours=i) + timedelta(hours=1),
             exit_reason="TAKE_PROFIT",
             exchange="bitget",
             demo_mode=True,

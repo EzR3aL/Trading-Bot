@@ -304,8 +304,8 @@ class BinanceWebSocket:
         if self.on_disconnect:
             try:
                 self.on_disconnect()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning("on_disconnect handler error: %s", e)
 
         max_retries = 5
         base_delay = 1.0
@@ -320,8 +320,8 @@ class BinanceWebSocket:
                 if self.on_reconnect:
                     try:
                         self.on_reconnect()
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.warning("on_reconnect handler error: %s", e)
                 return
 
         logger.error("Failed to reconnect to Binance WebSocket after max retries")

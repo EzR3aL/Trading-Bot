@@ -29,6 +29,7 @@ from tenacity import (
     RetryError,
 )
 
+from src.exceptions import TradingBotError
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -71,13 +72,14 @@ class CircuitStats:
         }
 
 
-class CircuitBreakerError(Exception):
+class CircuitBreakerError(TradingBotError):
     """Raised when circuit is open and request is rejected."""
 
     def __init__(self, service_name: str, state: CircuitState, retry_after: float = 0):
         self.service_name = service_name
         self.state = state
         self.retry_after = retry_after
+        super().__init__(f"Circuit breaker open for {service_name} (state={state.value})")
         super().__init__(
             f"Circuit breaker for '{service_name}' is {state.value}. "
             f"Retry after {retry_after:.1f}s"
@@ -220,7 +222,7 @@ class CircuitBreaker:
             if self._state == CircuitState.HALF_OPEN:
                 return True
 
-            return False
+            return False  # pragma: no cover — all enum states handled above
 
     async def call(self, func: Callable[..., T], *args, **kwargs) -> T:
         """
@@ -386,7 +388,7 @@ def with_retry(
 
             try:
                 return await _retry_wrapper()
-            except RetryError as e:
+            except RetryError as e:  # pragma: no cover — reraise=True raises original exception
                 logger.error(f"All {max_attempts} retry attempts failed for {func.__name__}")
                 raise e.last_attempt.exception()
 

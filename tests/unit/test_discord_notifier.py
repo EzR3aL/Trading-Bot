@@ -22,11 +22,9 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 # ---------------------------------------------------------------------------
 
 def _make_notifier(webhook_url="https://discord.com/api/webhooks/test/token"):
-    """Create a DiscordNotifier with mocked settings to avoid config import issues."""
-    with patch("src.notifications.discord_notifier.settings") as mock_settings:
-        mock_settings.discord.webhook_url = webhook_url
-        from src.notifications.discord_notifier import DiscordNotifier
-        return DiscordNotifier(webhook_url=webhook_url)
+    """Create a DiscordNotifier directly (no module-level settings to mock)."""
+    from src.notifications.discord_notifier import DiscordNotifier
+    return DiscordNotifier(webhook_url=webhook_url)
 
 
 # ---------------------------------------------------------------------------

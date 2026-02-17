@@ -10,24 +10,40 @@ from src.utils.logger import get_logger
 
 _jwt_logger = get_logger(__name__)
 
-SECRET_KEY = os.getenv("JWT_SECRET_KEY", "")
-
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 REFRESH_TOKEN_EXPIRE_DAYS = 7
 
 
+def _get_secret_key() -> str:
+    """Lazy-load JWT secret key from environment.
+
+    Reads at call time (not import time) so that load_dotenv() in
+    main_app.py has already populated the environment.
+    """
+    return os.getenv("JWT_SECRET_KEY", "")
+
+
 def validate_jwt_config() -> None:
-    """Validate that JWT_SECRET_KEY is configured.
+    """Validate that JWT_SECRET_KEY is configured and strong enough.
 
     Call this during application startup (lifespan) instead of at import
     time, so the error is logged properly rather than crashing via sys.exit().
     """
-    if not SECRET_KEY:
+    key = _get_secret_key()
+    if not key:
         msg = (
             "FATAL: JWT_SECRET_KEY environment variable is not set. "
             "Generate one with: python -c \"import secrets; print(secrets.token_urlsafe(64))\" "
             "Then add it to your .env file."
+        )
+        _jwt_logger.critical(msg)
+        raise RuntimeError(msg)
+
+    if len(key) < 32:
+        msg = (
+            "FATAL: JWT_SECRET_KEY is too short (minimum 32 characters). "
+            "Generate a strong key with: python -c \"import secrets; print(secrets.token_urlsafe(64))\""
         )
         _jwt_logger.critical(msg)
         raise RuntimeError(msg)
@@ -49,7 +65,7 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
         expires_delta or timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     )
     to_encode.update({"exp": expire, "type": "access"})
-    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    return jwt.encode(to_encode, _get_secret_key(), algorithm=ALGORITHM)
 
 
 def create_refresh_token(data: dict) -> str:
@@ -65,21 +81,25 @@ def create_refresh_token(data: dict) -> str:
     to_encode = data.copy()
     expire = datetime.now(timezone.utc) + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
     to_encode.update({"exp": expire, "type": "refresh"})
-    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    return jwt.encode(to_encode, _get_secret_key(), algorithm=ALGORITHM)
 
 
-def decode_token(token: str) -> Optional[dict]:
+def decode_token(token: str, expected_type: Optional[str] = None) -> Optional[dict]:
     """
     Decode and validate a JWT token.
 
     Args:
         token: Encoded JWT string
+        expected_type: If set, reject tokens whose "type" field doesn't match
+                       (e.g. "access" or "refresh")
 
     Returns:
-        Decoded payload dict or None if invalid
+        Decoded payload dict or None if invalid / wrong type
     """
     try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        payload = jwt.decode(token, _get_secret_key(), algorithms=[ALGORITHM])
+        if expected_type and payload.get("type") != expected_type:
+            return None
         return payload
     except JWTError:
         return None

@@ -18,6 +18,7 @@ from hyperliquid.exchange import Exchange as HLExchange
 from hyperliquid.info import Info as HLInfo
 from hyperliquid.utils.constants import MAINNET_API_URL, TESTNET_API_URL
 
+from src.exceptions import ExchangeError
 from src.exchanges.base import ExchangeClient
 from src.exchanges.hyperliquid.constants import DEFAULT_BUILDER_FEE
 from src.exchanges.types import Balance, FundingRateInfo, Order, Position, Ticker
@@ -62,8 +63,11 @@ _QUOTE_SUFFIXES = re.compile(r"(USDT|USDC|USD|PERP)$", re.IGNORECASE)
 DEFAULT_SLIPPAGE = 0.05
 
 
-class HyperliquidClientError(Exception):
-    pass
+class HyperliquidClientError(ExchangeError):
+    """Custom exception for Hyperliquid API errors."""
+
+    def __init__(self, message: str, original_error: Exception = None):
+        super().__init__("hyperliquid", message, original_error)
 
 
 class SafeExchange:

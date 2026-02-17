@@ -1,9 +1,10 @@
 """Affiliate link CRUD endpoints (admin-managed, globally visible)."""
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.api.rate_limit import limiter
 from src.api.schemas.affiliate import AffiliateLinkResponse, AffiliateLinkUpdate
 from src.auth.dependencies import get_current_admin, get_current_user
 from src.models.database import AffiliateLink, User
@@ -27,7 +28,9 @@ async def list_affiliate_links(
 
 
 @router.put("/{exchange}", response_model=AffiliateLinkResponse)
+@limiter.limit("5/minute")
 async def upsert_affiliate_link(
+    request: Request,
     exchange: str,
     data: AffiliateLinkUpdate,
     admin: User = Depends(get_current_admin),
@@ -43,14 +46,14 @@ async def upsert_affiliate_link(
     link = result.scalar_one_or_none()
 
     if link:
-        link.affiliate_url = data.affiliate_url
+        link.affiliate_url = str(data.affiliate_url)
         link.label = data.label
         link.is_active = data.is_active
         link.uid_required = data.uid_required
     else:
         link = AffiliateLink(
             exchange_type=exchange,
-            affiliate_url=data.affiliate_url,
+            affiliate_url=str(data.affiliate_url),
             label=data.label,
             is_active=data.is_active,
             uid_required=data.uid_required,
@@ -62,7 +65,9 @@ async def upsert_affiliate_link(
 
 
 @router.delete("/{exchange}")
+@limiter.limit("5/minute")
 async def delete_affiliate_link(
+    request: Request,
     exchange: str,
     admin: User = Depends(get_current_admin),
     db: AsyncSession = Depends(get_db),

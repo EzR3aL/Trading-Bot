@@ -7,7 +7,7 @@ from jose import jwt
 
 from src.auth.jwt_handler import (
     ALGORITHM,
-    SECRET_KEY,
+    _get_secret_key,
     create_access_token,
     create_refresh_token,
     decode_token,
@@ -24,13 +24,13 @@ class TestCreateAccessToken:
     def test_access_token_has_expiry(self):
         """The decoded access token payload must contain an 'exp' claim."""
         token = create_access_token({"sub": "42"})
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        payload = jwt.decode(token, _get_secret_key(), algorithms=[ALGORITHM])
         assert "exp" in payload
 
     def test_token_contains_correct_type(self):
         """Access tokens must have type='access' in the payload."""
         token = create_access_token({"sub": "42"})
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        payload = jwt.decode(token, _get_secret_key(), algorithms=[ALGORITHM])
         assert payload["type"] == "access"
 
 
@@ -44,7 +44,7 @@ class TestCreateRefreshToken:
     def test_refresh_token_contains_correct_type(self):
         """Refresh tokens must have type='refresh' in the payload."""
         token = create_refresh_token({"sub": "42"})
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        payload = jwt.decode(token, _get_secret_key(), algorithms=[ALGORITHM])
         assert payload["type"] == "refresh"
 
 

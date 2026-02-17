@@ -1,7 +1,7 @@
 """Funding payment endpoints (user-scoped)."""
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import func, select
+from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.auth.dependencies import get_current_user
@@ -67,13 +67,13 @@ async def funding_summary(
             func.count().label("total_payments"),
             func.sum(FundingPayment.payment_amount).label("total_amount"),
             func.sum(
-                func.case(
+                case(
                     (FundingPayment.payment_amount > 0, FundingPayment.payment_amount),
                     else_=0,
                 )
             ).label("total_received"),
             func.sum(
-                func.case(
+                case(
                     (FundingPayment.payment_amount < 0, FundingPayment.payment_amount),
                     else_=0,
                 )

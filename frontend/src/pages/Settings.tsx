@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { ChevronDown, Search, CheckCircle, Clock, Users, Activity, Wifi, WifiOff, Shield, Zap, BarChart3, TrendingUp, Database, Cpu, Hammer, UserCheck, DollarSign, ExternalLink, Settings2, Copy, Check } from 'lucide-react'
+import { ChevronDown, Search, CheckCircle, Clock, Users, Activity, Wifi, WifiOff, Shield, Zap, BarChart3, TrendingUp, Database, Cpu, Hammer, UserCheck, DollarSign, ExternalLink, Settings2 } from 'lucide-react'
 import Pagination from '../components/ui/Pagination'
 import api from '../api/client'
 import { useAuthStore } from '../stores/authStore'
@@ -514,11 +514,7 @@ export default function Settings() {
     return t('settings.circuitHalfOpen')
   }
 
-  const circuitColor = (state: string) => {
-    if (state === 'closed') return 'text-green-400'
-    if (state === 'open') return 'text-red-400'
-    return 'text-yellow-400'
-  }
+
 
   return (
     <div>

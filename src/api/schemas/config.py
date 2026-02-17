@@ -2,7 +2,7 @@
 
 from typing import List, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class TradingConfigUpdate(BaseModel):
@@ -91,3 +91,39 @@ class LLMConnectionResponse(BaseModel):
     free_tier: bool
     family_name: str = ""
     models: List[LLMModelInfo] = []
+
+
+# ── Affiliate UID Schemas ─────────────────────────────────
+
+
+class AffiliateUidUpdate(BaseModel):
+    """Request body for setting an affiliate UID."""
+    uid: str = Field(min_length=1, max_length=50)
+
+    @field_validator("uid")
+    @classmethod
+    def validate_uid(cls, v: str) -> str:
+        v = v.strip()
+        if not v.isdigit():
+            raise ValueError("UID must be numeric")
+        return v
+
+
+class AffiliateVerifyUpdate(BaseModel):
+    """Request body for admin verification of an affiliate UID."""
+    verified: bool = True
+
+
+# ── Hyperliquid Admin Schemas ─────────────────────────────
+
+
+class HLAdminSettingsUpdate(BaseModel):
+    """Request body for updating Hyperliquid admin settings."""
+    builder_address: Optional[str] = Field(None, max_length=42)
+    builder_fee: Optional[int] = Field(None, ge=0, le=100)
+    referral_code: Optional[str] = Field(None, max_length=50)
+
+
+class BuilderApprovalConfirm(BaseModel):
+    """Request body for confirming builder fee approval."""
+    wallet_address: Optional[str] = Field(None, max_length=42)

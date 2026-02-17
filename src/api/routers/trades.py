@@ -14,7 +14,7 @@ from src.exchanges.factory import create_exchange_client
 from src.models.database import BotConfig, ExchangeConnection, TradeRecord, User, UserConfig
 from src.models.session import get_db
 from src.utils.encryption import decrypt_value
-from src.api.routers.auth import limiter
+from src.api.rate_limit import limiter
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -46,7 +46,8 @@ async def list_trades(
     if status:
         query = query.where(TradeRecord.status == status)
     if symbol:
-        query = query.where(TradeRecord.symbol.ilike(f"%{symbol}%"))
+        safe_symbol = symbol.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        query = query.where(TradeRecord.symbol.ilike(f"%{safe_symbol}%", escape="\\"))
     if exchange:
         query = query.where(BotConfig.exchange_type == exchange)
     if bot_name:
@@ -67,7 +68,7 @@ async def list_trades(
     if status:
         count_base = count_base.where(TradeRecord.status == status)
     if symbol:
-        count_base = count_base.where(TradeRecord.symbol.ilike(f"%{symbol}%"))
+        count_base = count_base.where(TradeRecord.symbol.ilike(f"%{safe_symbol}%", escape="\\"))
     if exchange:
         count_base = count_base.where(BotConfig.exchange_type == exchange)
     if bot_name:
@@ -295,7 +296,7 @@ async def sync_trades(
                 try:
                     for ct in closed_trades:
                         matching = [t for t in open_trades if t.id == ct["id"]]
-                        if not matching:
+                        if not matching:  # pragma: no cover — notify loop skip
                             continue
                         trade = matching[0]
 

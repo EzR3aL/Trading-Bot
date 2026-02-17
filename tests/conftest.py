@@ -119,12 +119,6 @@ async def app(test_engine, mock_orchestrator):
                 await session.rollback()
                 raise
 
-    # Import routers AFTER setting env vars
-    from src.api.routers import bots as bots_router
-
-    # Inject mocks into router globals
-    bots_router.set_orchestrator(mock_orchestrator)
-
     # We must register a test strategy so bot creation works
     _register_test_strategy()
 
@@ -153,6 +147,7 @@ async def app(test_engine, mock_orchestrator):
 
     test_app = FastAPI(title="Test Trading Bot API")
     test_app.state.limiter = limiter
+    test_app.state.orchestrator = mock_orchestrator
     test_app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
     # Include all routers

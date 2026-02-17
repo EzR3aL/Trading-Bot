@@ -210,8 +210,9 @@ class TestApproveBuilderFee:
 
         result = await client.approve_builder_fee()
         assert result is True
+        # SDK expects max_fee_rate as string (EIP-712 signing)
         client._exchange.approve_builder_fee.assert_called_once_with(
-            builder="0xbuilder", max_fee_rate=10,
+            builder="0xbuilder", max_fee_rate="10",
         )
 
     @pytest.mark.asyncio

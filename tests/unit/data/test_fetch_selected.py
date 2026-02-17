@@ -11,7 +11,9 @@ from src.data.market_data import MarketDataFetcher
 @pytest.fixture
 def fetcher():
     f = MarketDataFetcher()
-    f._session = MagicMock()
+    mock_session = MagicMock()
+    mock_session.closed = False
+    f._session = mock_session
     return f
 
 

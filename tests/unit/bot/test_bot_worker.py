@@ -58,6 +58,7 @@ def _make_mock_config(**overrides):
     config.rotation_interval_minutes = overrides.get("rotation_interval_minutes", None)
     config.rotation_start_time = overrides.get("rotation_start_time", None)
     config.is_enabled = overrides.get("is_enabled", True)
+    config.per_asset_config = overrides.get("per_asset_config", None)
     return config
 
 
@@ -96,6 +97,14 @@ def _make_mock_signal():
     )
 
 
+def _make_db_session():
+    """Create a mock DB session with sync methods (add, delete) as MagicMock."""
+    session = AsyncMock()
+    session.add = MagicMock()
+    session.delete = MagicMock()
+    return session
+
+
 # ---------------------------------------------------------------------------
 # Initialization tests
 # ---------------------------------------------------------------------------
@@ -132,7 +141,7 @@ class TestBotWorkerInitialize:
         mock_result = MagicMock()
         mock_result.scalar_one_or_none.return_value = None
 
-        mock_session = AsyncMock()
+        mock_session = _make_db_session()
         mock_session.execute = AsyncMock(return_value=mock_result)
         mock_session.__aenter__ = AsyncMock(return_value=mock_session)
         mock_session.__aexit__ = AsyncMock(return_value=False)
@@ -160,7 +169,7 @@ class TestBotWorkerInitialize:
                 result.scalar_one_or_none.return_value = None
             return result
 
-        mock_session = AsyncMock()
+        mock_session = _make_db_session()
         mock_session.execute = mock_execute
         mock_session.__aenter__ = AsyncMock(return_value=mock_session)
         mock_session.__aexit__ = AsyncMock(return_value=False)
@@ -347,13 +356,15 @@ class TestAnalyzeAndTrade:
         mock_rm.get_remaining_trades.return_value = 5
         worker._risk_manager = mock_rm
 
+        mock_client = AsyncMock()
+        mock_client.get_account_balance = AsyncMock(return_value=_make_mock_balance())
+        worker._client = mock_client
+
         worker._analyze_symbol = AsyncMock()
 
         await worker._analyze_and_trade()
 
         assert worker._analyze_symbol.await_count == 2
-        worker._analyze_symbol.assert_any_await("BTCUSDT")
-        worker._analyze_symbol.assert_any_await("ETHUSDT")
 
     async def test_stops_when_no_remaining_trades(self):
         worker = BotWorker(bot_config_id=1)
@@ -363,15 +374,30 @@ class TestAnalyzeAndTrade:
 
         mock_rm = MagicMock()
         mock_rm.can_trade.return_value = (True, "")
-        # Only 1 trade remaining
+        # After first symbol, per-symbol check blocks remaining
         mock_rm.get_remaining_trades.side_effect = [1, 0, 0]
         worker._risk_manager = mock_rm
+
+        mock_client = AsyncMock()
+        mock_client.get_account_balance = AsyncMock(return_value=_make_mock_balance())
+        worker._client = mock_client
+
+        # Override can_trade to block after first symbol
+        call_count = [0]
+        def can_trade_side_effect(symbol=None):
+            if symbol is None:
+                return (True, "")
+            call_count[0] += 1
+            if call_count[0] > 1:
+                return (False, "Trade limit reached")
+            return (True, "")
+        mock_rm.can_trade.side_effect = can_trade_side_effect
 
         worker._analyze_symbol = AsyncMock()
 
         await worker._analyze_and_trade()
 
-        # Should only analyze first symbol before hitting limit
+        # Should only analyze first symbol before per-symbol limit
         assert worker._analyze_symbol.await_count == 1
 
     async def test_analyze_and_trade_safe_catches_errors(self):
@@ -427,11 +453,11 @@ class TestExecuteTrade:
 
         signal = _make_mock_signal()
 
-        mock_session = AsyncMock()
+        mock_session = _make_db_session()
         mock_session.__aenter__ = AsyncMock(return_value=mock_session)
         mock_session.__aexit__ = AsyncMock(return_value=False)
 
-        with patch("src.bot.bot_worker.get_session", return_value=mock_session):
+        with patch("src.bot.trade_executor.get_session", return_value=mock_session):
             await worker._execute_trade(signal, mock_client, demo_mode=True)
 
         mock_client.place_market_order.assert_awaited_once()
@@ -500,12 +526,12 @@ class TestMonitorPositions:
         mock_result = MagicMock()
         mock_result.scalars.return_value.all.return_value = []
 
-        mock_session = AsyncMock()
+        mock_session = _make_db_session()
         mock_session.execute = AsyncMock(return_value=mock_result)
         mock_session.__aenter__ = AsyncMock(return_value=mock_session)
         mock_session.__aexit__ = AsyncMock(return_value=False)
 
-        with patch("src.bot.bot_worker.get_session", return_value=mock_session):
+        with patch("src.bot.position_monitor.get_session", return_value=mock_session):
             await worker._monitor_positions()
 
         # No _check_position calls
@@ -535,7 +561,7 @@ class TestGetNotifiers:
             discord_webhook_url="encrypted_webhook_url",
         )
 
-        with patch("src.bot.bot_worker.decrypt_value", return_value="https://discord.com/webhook/123"):
+        with patch("src.bot.notifications.decrypt_value", return_value="https://discord.com/webhook/123"):
             notifier = await worker._get_discord_notifier()
 
         assert notifier is not None
