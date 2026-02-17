@@ -36,6 +36,7 @@ from src.models.session import get_session
 from src.risk.risk_manager import RiskManager
 from src.strategy import BaseStrategy, StrategyRegistry, TradeSignal
 from src.utils.encryption import decrypt_value
+from src.utils.json_helpers import parse_json_field
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -209,21 +210,20 @@ class BotWorker(
 
                 # Build per-symbol risk limits from per_asset_config
                 per_symbol_limits: dict = {}
-                if self._config.per_asset_config:
-                    try:
-                        pac = json.loads(self._config.per_asset_config) if isinstance(
-                            self._config.per_asset_config, str
-                        ) else self._config.per_asset_config
-                        for sym, cfg in pac.items():
-                            sym_lim: dict = {}
-                            if cfg.get("max_trades") is not None:
-                                sym_lim["max_trades"] = int(cfg["max_trades"])
-                            if cfg.get("loss_limit") is not None:
-                                sym_lim["loss_limit"] = float(cfg["loss_limit"])
-                            if sym_lim:
-                                per_symbol_limits[sym] = sym_lim
-                    except (json.JSONDecodeError, TypeError) as e:
-                        logger.warning("Failed to parse per_symbol_limits for bot %s: %s", self.bot_config_id, e)
+                pac = parse_json_field(
+                    self._config.per_asset_config,
+                    field_name="per_asset_config",
+                    context=f"bot {self.bot_config_id}",
+                    default={},
+                )
+                for sym, cfg in pac.items():
+                    sym_lim: dict = {}
+                    if cfg.get("max_trades") is not None:
+                        sym_lim["max_trades"] = int(cfg["max_trades"])
+                    if cfg.get("loss_limit") is not None:
+                        sym_lim["loss_limit"] = float(cfg["loss_limit"])
+                    if sym_lim:
+                        per_symbol_limits[sym] = sym_lim
 
                 # Initialize risk manager with bot-specific params
                 self._risk_manager = RiskManager(
@@ -421,15 +421,12 @@ class BotWorker(
         Remaining balance is split equally among unconfigured assets.
         If no per_asset_config exists, all assets share equally.
         """
-        per_asset_cfg = {}
-        if self._config.per_asset_config:
-            try:
-                per_asset_cfg = json.loads(self._config.per_asset_config) if isinstance(
-                    self._config.per_asset_config, str
-                ) else self._config.per_asset_config
-            except (json.JSONDecodeError, TypeError) as e:
-                logger.warning("Failed to parse per_asset_config for bot %s: %s", self.bot_config_id, e)
-                per_asset_cfg = {}
+        per_asset_cfg = parse_json_field(
+            self._config.per_asset_config,
+            field_name="per_asset_config",
+            context=f"bot {self.bot_config_id}",
+            default={},
+        )
 
         budgets: dict[str, float] = {}
         fixed_total = 0.0

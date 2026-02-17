@@ -9,6 +9,7 @@ from src.exchanges.base import ExchangeClient
 from src.models.database import TradeRecord
 from src.models.session import get_session
 from src.strategy import TradeSignal
+from src.utils.json_helpers import parse_json_field
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -26,14 +27,12 @@ class TradeExecutorMixin:
         mode_str = "DEMO" if demo_mode else "LIVE"
 
         # Resolve per-asset config overrides
-        per_asset_cfg = {}
-        if self._config.per_asset_config:
-            try:
-                per_asset_cfg = json.loads(self._config.per_asset_config) if isinstance(
-                    self._config.per_asset_config, str
-                ) else self._config.per_asset_config
-            except (json.JSONDecodeError, TypeError):
-                pass
+        per_asset_cfg = parse_json_field(
+            self._config.per_asset_config,
+            field_name="per_asset_config",
+            context=f"bot {self.bot_config_id}",
+            default={},
+        )
         asset_cfg = per_asset_cfg.get(signal.symbol, {})
 
         # Resolve leverage: per-asset > global > 1x

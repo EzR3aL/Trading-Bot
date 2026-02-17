@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from src.utils.settings import get_setting, get_hl_config
+from src.utils.settings import get_setting, get_settings_batch, get_hl_config
 
 
 class TestGetSetting:
@@ -74,6 +74,29 @@ class TestGetSetting:
         assert result == "env_val"
 
 
+class TestGetSettingsBatch:
+    """Tests for get_settings_batch."""
+
+    @pytest.mark.asyncio
+    async def test_returns_batch_from_db(self):
+        mock_result = MagicMock()
+        mock_result.all.return_value = [
+            ("KEY_A", "val_a"),
+            ("KEY_B", "val_b"),
+        ]
+
+        mock_session = AsyncMock()
+        mock_session.execute = AsyncMock(return_value=mock_result)
+        mock_session.__aenter__ = AsyncMock(return_value=mock_session)
+        mock_session.__aexit__ = AsyncMock(return_value=False)
+
+        with patch("src.utils.settings.get_session", return_value=mock_session):
+            result = await get_settings_batch(["KEY_A", "KEY_B", "KEY_C"], defaults={"KEY_C": "default_c"})
+        assert result["KEY_A"] == "val_a"
+        assert result["KEY_B"] == "val_b"
+        assert result["KEY_C"] == "default_c"
+
+
 class TestGetHlConfig:
     """Tests for get_hl_config."""
 
@@ -85,10 +108,11 @@ class TestGetHlConfig:
             "HL_REFERRAL_CODE": "myref",
         }
 
-        async def fake_get_setting(key, default=""):
-            return values.get(key, default)
+        async def fake_batch(keys, defaults=None):
+            defaults = defaults or {}
+            return {k: values.get(k, defaults.get(k, "")) for k in keys}
 
-        with patch("src.utils.settings.get_setting", side_effect=fake_get_setting):
+        with patch("src.utils.settings.get_settings_batch", side_effect=fake_batch):
             result = await get_hl_config()
         assert result["builder_address"] == "0xabc"
         assert result["builder_fee"] == 50

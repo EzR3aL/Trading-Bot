@@ -365,14 +365,12 @@ async def test_lifespan_startup_and_shutdown():
          patch("src.api.main_app.init_db", new_callable=AsyncMock) as mock_init_db, \
          patch("src.api.main_app._seed_exchanges", new_callable=AsyncMock) as mock_seed, \
          patch("src.api.main_app.close_db", new_callable=AsyncMock) as mock_close_db, \
-         patch("src.bot.orchestrator.BotOrchestrator", return_value=mock_orchestrator), \
-         patch("src.api.main_app.bots") as mock_bots_module:
+         patch("src.bot.orchestrator.BotOrchestrator", return_value=mock_orchestrator):
 
         async with lifespan(app):
             mock_init_db.assert_awaited_once()
             mock_seed.assert_awaited_once()
             mock_orchestrator.restore_on_startup.assert_awaited_once()
-            mock_bots_module.set_orchestrator.assert_called_once_with(mock_orchestrator)
 
         mock_orchestrator.shutdown_all.assert_awaited_once()
         mock_close_db.assert_awaited_once()

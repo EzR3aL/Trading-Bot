@@ -40,7 +40,6 @@ from src.api.routers.bots import (
     start_bot,
     stop_bot,
     update_bot,
-    set_orchestrator,
     get_orchestrator,
 )
 

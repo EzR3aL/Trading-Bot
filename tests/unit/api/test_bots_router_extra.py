@@ -58,7 +58,6 @@ from src.api.routers.bots import (
     list_data_sources,
     list_strategies,
     restart_bot,
-    set_orchestrator,
     start_bot,
     stop_all_bots,
     stop_bot,

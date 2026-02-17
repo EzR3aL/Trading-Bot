@@ -91,7 +91,6 @@ async def lifespan(app: FastAPI):
     # Initialize multibot orchestrator
     from src.bot.orchestrator import BotOrchestrator
     orchestrator = BotOrchestrator()
-    bots.set_orchestrator(orchestrator)
     app.state.orchestrator = orchestrator
 
     # Restore bots that were running before shutdown

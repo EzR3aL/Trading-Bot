@@ -525,12 +525,6 @@ class TestConfigToResponse:
 class TestOrchestratorHelpers:
     """Tests for get_orchestrator dependency."""
 
-    def test_set_orchestrator_is_noop(self):
-        from src.api.routers.bots import set_orchestrator
-        # set_orchestrator is a no-op, should not raise
-        set_orchestrator(MagicMock())
-        set_orchestrator(None)
-
     def test_get_orchestrator_not_initialized(self):
         from src.api.routers.bots import get_orchestrator
         from fastapi import HTTPException
