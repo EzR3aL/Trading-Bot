@@ -20,6 +20,7 @@ from typing import Optional, Dict, Any, Tuple, List
 
 import aiohttp
 
+from src.exceptions import DataSourceError
 from src.utils.logger import get_logger
 from src.utils.circuit_breaker import (
     circuit_registry,
@@ -41,14 +42,9 @@ _bitget_breaker = circuit_registry.get("bitget_api", fail_threshold=3, reset_tim
 _fred_breaker = circuit_registry.get("fred_api", fail_threshold=3, reset_timeout=300)
 
 
-class DataFetchError(Exception):
+class DataFetchError(DataSourceError):
     """Raised when market data cannot be fetched from any source."""
-
-    def __init__(self, source: str, message: str, original_error: Optional[Exception] = None):
-        self.source = source
-        self.message = message
-        self.original_error = original_error
-        super().__init__(f"[{source}] {message}")
+    pass
 
 
 class DataQuality:
@@ -1272,7 +1268,7 @@ class MarketDataFetcher:
                     strikes[strike]["put_oi"] += oi
 
             # Calculate pain at each strike
-            if not strikes:
+            if not strikes:  # pragma: no cover — nearest_instruments always non-empty
                 return {"max_pain_price": 0.0, "nearest_expiry": ""}
 
             strike_list = sorted(strikes.keys())

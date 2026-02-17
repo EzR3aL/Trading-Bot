@@ -128,9 +128,9 @@ export default function PnlChart({ data }: Props) {
             stackId="pnl"
             maxBarSize={40}
           >
-            {chartData.map((entry, index) => (
+            {chartData.map((entry) => (
               <Cell
-                key={index}
+                key={entry.date}
                 fill={entry.dailyPnl >= 0 ? PNL_POS : PNL_NEG}
                 fillOpacity={0.75}
               />

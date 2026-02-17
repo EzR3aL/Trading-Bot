@@ -50,6 +50,102 @@ class TestEncryptDecrypt:
         assert decrypt_value(ct2) == plaintext
 
 
+class TestKeyRotation:
+    """Tests for encryption key rotation support."""
+
+    def test_decrypt_with_previous_key_fallback(self):
+        """Values encrypted with old key can be decrypted via ENCRYPTION_KEY_PREVIOUS."""
+        old_key = Fernet.generate_key().decode()
+        new_key = Fernet.generate_key().decode()
+
+        # Encrypt with old key
+        os.environ["ENCRYPTION_KEY"] = old_key
+        encryption_module._fernet = None
+        encryption_module._fernet_previous = None
+        ciphertext = encrypt_value("my-secret")
+
+        # Switch to new key, set old as previous
+        os.environ["ENCRYPTION_KEY"] = new_key
+        os.environ["ENCRYPTION_KEY_PREVIOUS"] = old_key
+        encryption_module._fernet = None
+        encryption_module._fernet_previous = None
+
+        # Should decrypt via fallback to previous key
+        assert decrypt_value(ciphertext) == "my-secret"
+
+        # Cleanup
+        os.environ.pop("ENCRYPTION_KEY_PREVIOUS", None)
+        encryption_module._fernet_previous = None
+
+    def test_decrypt_fails_with_wrong_keys(self):
+        """Decryption fails when neither current nor previous key matches."""
+        old_key = Fernet.generate_key().decode()
+        wrong_key = Fernet.generate_key().decode()
+
+        # Encrypt with old key
+        os.environ["ENCRYPTION_KEY"] = old_key
+        encryption_module._fernet = None
+        encryption_module._fernet_previous = None
+        ciphertext = encrypt_value("my-secret")
+
+        # Switch to completely different key, no previous set
+        os.environ["ENCRYPTION_KEY"] = wrong_key
+        os.environ.pop("ENCRYPTION_KEY_PREVIOUS", None)
+        encryption_module._fernet = None
+        encryption_module._fernet_previous = None
+
+        with pytest.raises(ValueError, match="Failed to decrypt"):
+            decrypt_value(ciphertext)
+
+    def test_decrypt_fails_with_both_current_and_previous_keys(self):
+        """Decryption fails when both current AND previous key are wrong."""
+        original_key = Fernet.generate_key().decode()
+        wrong_current = Fernet.generate_key().decode()
+        wrong_previous = Fernet.generate_key().decode()
+
+        # Encrypt with original key
+        os.environ["ENCRYPTION_KEY"] = original_key
+        encryption_module._fernet = None
+        encryption_module._fernet_previous = None
+        ciphertext = encrypt_value("my-secret")
+
+        # Set both keys to wrong values
+        os.environ["ENCRYPTION_KEY"] = wrong_current
+        os.environ["ENCRYPTION_KEY_PREVIOUS"] = wrong_previous
+        encryption_module._fernet = None
+        encryption_module._fernet_previous = None
+
+        with pytest.raises(ValueError, match="Failed to decrypt"):
+            decrypt_value(ciphertext)
+
+        # Cleanup
+        os.environ.pop("ENCRYPTION_KEY_PREVIOUS", None)
+        encryption_module._fernet_previous = None
+
+    def test_encrypt_value_has_version_prefix(self):
+        """Encrypted values start with version prefix v1:."""
+        ciphertext = encrypt_value("hello")
+        assert ciphertext.startswith("v1:")
+
+    def test_decrypt_legacy_value_without_prefix(self):
+        """Legacy ciphertext without version prefix still decrypts."""
+        # Encrypt directly with Fernet (no prefix)
+        raw_ct = Fernet(_TEST_KEY.encode()).encrypt(b"legacy-secret").decode()
+        assert decrypt_value(raw_ct) == "legacy-secret"
+
+
+class TestKeyValidation:
+    """Tests for encryption key validation."""
+
+    def test_invalid_fernet_key_format_rejected(self):
+        """A key that is long enough but not valid Fernet base64 is rejected."""
+        os.environ["ENCRYPTION_KEY"] = "x" * 44  # 44 chars but not valid base64
+        encryption_module._fernet = None
+        with pytest.raises(ValueError, match="not a valid Fernet key"):
+            from src.utils.encryption import _get_or_create_key
+            _get_or_create_key()
+
+
 class TestMaskValue:
     def test_mask_value_long_string(self):
         """A long value should be masked with asterisks, showing last 4 chars."""

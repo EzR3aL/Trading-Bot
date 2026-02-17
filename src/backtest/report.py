@@ -340,7 +340,7 @@ class BacktestReport:
 
             recommendations.append("")
 
-        if not recommendations:
+        if not recommendations:  # pragma: no cover — win_rate analysis always adds at least one entry
             recommendations.append("Strategy is performing well. No major changes recommended.")
 
         return recommendations

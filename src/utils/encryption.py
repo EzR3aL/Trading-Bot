@@ -4,12 +4,17 @@ Fernet-based symmetric encryption for API keys and secrets.
 Uses ENCRYPTION_KEY from environment. Auto-generates on first use if missing
 in development mode only.
 
+Key Rotation (v1.11.0):
+- Encrypted values are prefixed with the key version: "v1:ciphertext"
+- During rotation, set ENCRYPTION_KEY to the new key and
+  ENCRYPTION_KEY_PREVIOUS to the old key.
+- decrypt_value() tries the current key first, then falls back to previous.
+- Legacy values without a version prefix are treated as v1.
+
 SECURITY NOTE: In production (ENVIRONMENT=production), the ENCRYPTION_KEY
 environment variable MUST be explicitly set. Auto-generation is disabled
 in production to prevent accidental key rotation, which would render all
-previously encrypted API keys unreadable. If the key is lost or changed,
-all stored encrypted credentials (exchange API keys, webhook URLs, etc.)
-will become permanently inaccessible.
+previously encrypted API keys unreadable.
 """
 
 import os
@@ -21,6 +26,9 @@ from src.utils.logger import get_logger
 
 _encryption_logger = get_logger(__name__)
 
+# Current key version — bump when rotating
+_KEY_VERSION = "v1"
+
 
 def _get_or_create_key() -> bytes:
     """Get encryption key from env or generate and persist one.
@@ -30,7 +38,22 @@ def _get_or_create_key() -> bytes:
     """
     key = os.getenv("ENCRYPTION_KEY")
     if key:
-        return key.encode()
+        key_bytes = key.encode()
+        # Validate key is a proper Fernet key (44 bytes base64-encoded = 32 bytes raw)
+        if len(key_bytes) < 32:
+            raise ValueError(
+                "ENCRYPTION_KEY is too short. Generate a proper key with: "
+                'python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"'
+            )
+        # Validate it's a valid Fernet key format
+        try:
+            Fernet(key_bytes)
+        except (ValueError, Exception) as e:
+            raise ValueError(
+                f"ENCRYPTION_KEY is not a valid Fernet key: {e}. "
+                'Generate one with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"'
+            ) from e
+        return key_bytes
 
     environment = os.getenv("ENVIRONMENT", "development").lower()
 
@@ -62,50 +85,85 @@ def _get_or_create_key() -> bytes:
 
 
 _fernet = None
+_fernet_previous = None
 
 
 def _get_fernet() -> Fernet:
-    """Get or create Fernet instance (lazy singleton)."""
+    """Get or create Fernet instance for the current key (lazy singleton)."""
     global _fernet
     if _fernet is None:
         _fernet = Fernet(_get_or_create_key())
     return _fernet
 
 
+def _get_fernet_previous():
+    """Get Fernet instance for the previous key (for rotation), or None."""
+    global _fernet_previous
+    if _fernet_previous is None:
+        prev_key = os.getenv("ENCRYPTION_KEY_PREVIOUS")
+        if prev_key and len(prev_key.encode()) >= 32:
+            _fernet_previous = Fernet(prev_key.encode())
+        else:
+            return None
+    return _fernet_previous
+
+
 def encrypt_value(plaintext: str) -> str:
     """
-    Encrypt a plaintext string.
+    Encrypt a plaintext string with key version prefix.
 
     Args:
         plaintext: The string to encrypt (e.g., an API key)
 
     Returns:
-        Base64-encoded ciphertext string
+        Versioned ciphertext string: "v1:base64ciphertext"
     """
     if not plaintext:
         return ""
-    return _get_fernet().encrypt(plaintext.encode()).decode()
+    ciphertext = _get_fernet().encrypt(plaintext.encode()).decode()
+    return f"{_KEY_VERSION}:{ciphertext}"
 
 
 def decrypt_value(ciphertext: str) -> str:
     """
-    Decrypt a ciphertext string.
+    Decrypt a ciphertext string, supporting key rotation.
+
+    Tries the current key first. If that fails and ENCRYPTION_KEY_PREVIOUS
+    is set, tries the previous key (for rotation window).
 
     Args:
-        ciphertext: Base64-encoded ciphertext from encrypt_value()
+        ciphertext: Versioned or legacy ciphertext from encrypt_value()
 
     Returns:
         Original plaintext string
 
     Raises:
-        InvalidToken: If the ciphertext is invalid or key has changed
+        ValueError: If decryption fails with all available keys
     """
     if not ciphertext:
         return ""
+
+    # Strip version prefix if present (v1:ciphertext)
+    raw_ciphertext = ciphertext
+    if ":" in ciphertext and ciphertext.split(":")[0].startswith("v"):
+        raw_ciphertext = ciphertext.split(":", 1)[1]
+
+    # Try current key first
     try:
-        return _get_fernet().decrypt(ciphertext.encode()).decode()
+        return _get_fernet().decrypt(raw_ciphertext.encode()).decode()
     except InvalidToken:
-        raise ValueError("Failed to decrypt value. Encryption key may have changed.")
+        pass
+
+    # Try previous key (rotation window)
+    prev = _get_fernet_previous()
+    if prev:
+        try:
+            _encryption_logger.info("Decrypting with previous key (rotation in progress)")
+            return prev.decrypt(raw_ciphertext.encode()).decode()
+        except InvalidToken:
+            pass
+
+    raise ValueError("Failed to decrypt value. Encryption key may have changed.")
 
 
 def mask_value(value: str, visible_chars: int = 4) -> str:

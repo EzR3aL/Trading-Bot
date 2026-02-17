@@ -109,7 +109,7 @@ async def test_user_cannot_see_other_users_presets(client, alice_token, bob_toke
     """Presets created by alice should not appear in bob's list."""
     # Alice creates a preset
     create_resp = await client.post(
-        "/api/presets/",
+        "/api/presets",
         headers=auth_header(alice_token),
         json=SAMPLE_PRESET,
     )
@@ -118,7 +118,7 @@ async def test_user_cannot_see_other_users_presets(client, alice_token, bob_toke
 
     # Alice can see it
     alice_list = await client.get(
-        "/api/presets/",
+        "/api/presets",
         headers=auth_header(alice_token),
     )
     assert alice_list.status_code == 200
@@ -128,7 +128,7 @@ async def test_user_cannot_see_other_users_presets(client, alice_token, bob_toke
 
     # Bob should see an empty list (he has no presets)
     bob_list = await client.get(
-        "/api/presets/",
+        "/api/presets",
         headers=auth_header(bob_token),
     )
     assert bob_list.status_code == 200
@@ -141,7 +141,7 @@ async def test_user_cannot_access_other_users_preset_by_id(client, alice_token, 
     """Bob cannot fetch alice's preset directly by ID."""
     # Alice creates a preset
     create_resp = await client.post(
-        "/api/presets/",
+        "/api/presets",
         headers=auth_header(alice_token),
         json=SAMPLE_PRESET,
     )
@@ -161,7 +161,7 @@ async def test_user_cannot_update_other_users_preset(client, alice_token, bob_to
     """Bob cannot update alice's preset."""
     # Alice creates a preset
     create_resp = await client.post(
-        "/api/presets/",
+        "/api/presets",
         headers=auth_header(alice_token),
         json=SAMPLE_PRESET,
     )
@@ -190,7 +190,7 @@ async def test_user_cannot_delete_other_users_preset(client, alice_token, bob_to
     """Bob cannot delete alice's preset."""
     # Alice creates a preset
     create_resp = await client.post(
-        "/api/presets/",
+        "/api/presets",
         headers=auth_header(alice_token),
         json=SAMPLE_PRESET,
     )
@@ -217,7 +217,7 @@ async def test_user_cannot_activate_other_users_preset(client, alice_token, bob_
     """Bob cannot activate alice's preset."""
     # Alice creates a preset
     create_resp = await client.post(
-        "/api/presets/",
+        "/api/presets",
         headers=auth_header(alice_token),
         json=SAMPLE_PRESET,
     )
@@ -237,7 +237,7 @@ async def test_user_cannot_duplicate_other_users_preset(client, alice_token, bob
     """Bob cannot duplicate alice's preset."""
     # Alice creates a preset
     create_resp = await client.post(
-        "/api/presets/",
+        "/api/presets",
         headers=auth_header(alice_token),
         json=SAMPLE_PRESET,
     )
@@ -274,7 +274,7 @@ async def test_each_user_sees_only_own_config(client, alice_token, bob_token):
 
     # Bob's config should still be at defaults (no trading config set)
     bob_resp = await client.get(
-        "/api/config/",
+        "/api/config",
         headers=auth_header(bob_token),
     )
     assert bob_resp.status_code == 200
@@ -284,7 +284,7 @@ async def test_each_user_sees_only_own_config(client, alice_token, bob_token):
 
     # Alice's config should reflect her update
     alice_resp = await client.get(
-        "/api/config/",
+        "/api/config",
         headers=auth_header(alice_token),
     )
     assert alice_resp.status_code == 200

@@ -30,8 +30,8 @@ async def get_current_user(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    payload = decode_token(credentials.credentials)
-    if not payload or payload.get("type") != "access":
+    payload = decode_token(credentials.credentials, expected_type="access")
+    if not payload:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or expired token",
@@ -51,15 +51,17 @@ async def get_current_user(
     result = await db.execute(select(User).where(User.id == int(user_id)))
     user = result.scalar_one_or_none()
 
-    if not user or not user.is_active:
+    if not user or not user.is_active or user.is_deleted:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="User not found or inactive",
         )
 
-    # Reject tokens issued before a password change / forced logout
-    if token_version is not None and hasattr(user, "token_version"):
-        if user.token_version is not None and token_version < user.token_version:
+    # Reject tokens issued before a password change / forced logout.
+    # Treat missing 'tv' as version 0 so legacy tokens are revocable.
+    effective_tv = token_version if token_version is not None else 0
+    if hasattr(user, "token_version") and user.token_version is not None:
+        if effective_tv < user.token_version:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Token revoked — please log in again",

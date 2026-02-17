@@ -7,7 +7,7 @@ Replaces the old bot_control router for the new multibot system.
 
 import json
 from datetime import datetime, timedelta
-from typing import Optional
+from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import case, func, select
@@ -24,10 +24,11 @@ from src.api.schemas.bots import (
     StrategyInfo,
 )
 from src.auth.dependencies import get_current_user
+from src.exceptions import BotError, BotNotFoundError
 from src.models.database import AffiliateLink, BotConfig, ConfigPreset, ExchangeConnection, TradeRecord, User
 from src.models.session import get_db
 from src.strategy import StrategyRegistry  # imports __init__.py → registers all strategies
-from src.api.routers.auth import limiter
+from src.api.rate_limit import limiter
 from src.utils.encryption import encrypt_value
 from src.utils.logger import get_logger
 
@@ -35,22 +36,20 @@ logger = get_logger(__name__)
 
 router = APIRouter(prefix="/api/bots", tags=["bots"])
 
-# Orchestrator will be injected at app startup
-_orchestrator = None
-
 MAX_BOTS_PER_USER = 10
 
 
 def set_orchestrator(orchestrator):
-    """Set the orchestrator instance (called during app initialization)."""
-    global _orchestrator
-    _orchestrator = orchestrator
+    """No-op kept for backward compatibility. Orchestrator is now read from app.state."""
+    pass
 
 
-def _get_orchestrator():
-    if _orchestrator is None:
+def get_orchestrator(request: Request):
+    """FastAPI dependency: retrieve orchestrator from app.state."""
+    orchestrator = getattr(request.app.state, "orchestrator", None)
+    if orchestrator is None:
         raise HTTPException(status_code=503, detail="Bot orchestrator not initialized")
-    return _orchestrator
+    return orchestrator
 
 
 def _config_to_response(config: BotConfig) -> BotConfigResponse:
@@ -210,6 +209,7 @@ async def list_bots(
     demo_mode: Optional[bool] = Query(None),
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
+    orchestrator=Depends(get_orchestrator),
 ):
     """List all bots for the current user with runtime status."""
     # Preload preset names for active presets
@@ -234,21 +234,19 @@ async def list_bots(
         hl_approved = getattr(hl_conn, "builder_fee_approved", False)
         hl_referral_verified = getattr(hl_conn, "referral_verified", False)
 
-    # Preload affiliate UID status (Bitget / Weex)
+    # Preload affiliate UID status (Bitget / Weex) — single query
     affiliate_data: dict[str, dict] = {}
-    for ex_type in ("bitget", "weex"):
-        ex_result = await db.execute(
-            select(ExchangeConnection).where(
-                ExchangeConnection.user_id == user.id,
-                ExchangeConnection.exchange_type == ex_type,
-            )
+    aff_result = await db.execute(
+        select(ExchangeConnection).where(
+            ExchangeConnection.user_id == user.id,
+            ExchangeConnection.exchange_type.in_(["bitget", "weex"]),
         )
-        ex_conn = ex_result.scalar_one_or_none()
-        if ex_conn:
-            affiliate_data[ex_type] = {
-                "uid": getattr(ex_conn, "affiliate_uid", None),
-                "verified": getattr(ex_conn, "affiliate_verified", False),
-            }
+    )
+    for aff_conn in aff_result.scalars().all():
+        affiliate_data[aff_conn.exchange_type] = {
+            "uid": getattr(aff_conn, "affiliate_uid", None),
+            "verified": getattr(aff_conn, "affiliate_verified", False),
+        }
 
     # Filter bots by mode when demo_mode is set
     bot_query = select(BotConfig).where(BotConfig.user_id == user.id)
@@ -261,56 +259,122 @@ async def list_bots(
     result = await db.execute(bot_query)
     configs = result.scalars().all()
 
-    orchestrator = _get_orchestrator()
-    bots = []
+    bot_ids = [c.id for c in configs]
+    llm_bot_ids = [c.id for c in configs if c.strategy_type == "llm_signal"]
 
-    for config in configs:
-        # Get runtime status from orchestrator
-        runtime = orchestrator.get_bot_status(config.id)
-        trading_pairs = json.loads(config.trading_pairs) if config.trading_pairs else []
+    # ── Batch queries (replace N+1 per-bot queries) ──────────────
 
-        # Get trade stats from DB (filtered by demo_mode)
-        trade_filters = [TradeRecord.bot_config_id == config.id]
+    # Maps: bot_config_id → (count, pnl, fees, funding)
+    trade_stats: dict[int, tuple] = {}
+    open_counts: dict[int, int] = {}
+    closed_stats: dict[int, tuple] = {}
+    last_trades: dict[int, TradeRecord] = {}
+    bot_snapshots: dict[int, list[str]] = {}
+
+    if bot_ids:
+        # Batch 1: Trade stats per bot
+        stats_filters = [TradeRecord.bot_config_id.in_(bot_ids)]
         if demo_mode is not None:
-            trade_filters.append(TradeRecord.demo_mode == demo_mode)
+            stats_filters.append(TradeRecord.demo_mode == demo_mode)
 
         stats_result = await db.execute(
             select(
+                TradeRecord.bot_config_id,
                 func.count(TradeRecord.id),
                 func.coalesce(func.sum(TradeRecord.pnl), 0),
                 func.coalesce(func.sum(TradeRecord.fees), 0),
                 func.coalesce(func.sum(TradeRecord.funding_paid), 0),
-            ).where(*trade_filters)
+            ).where(*stats_filters)
+            .group_by(TradeRecord.bot_config_id)
         )
-        total_trades, total_pnl, total_fees, total_funding = stats_result.one()
+        for bid, cnt, pnl, fees, funding in stats_result.all():
+            trade_stats[bid] = (cnt, pnl, fees, funding)
 
+        # Batch 2: Open trade counts per bot
         open_filters = [
-            TradeRecord.bot_config_id == config.id,
+            TradeRecord.bot_config_id.in_(bot_ids),
             TradeRecord.status == "open",
         ]
         if demo_mode is not None:
             open_filters.append(TradeRecord.demo_mode == demo_mode)
 
         open_result = await db.execute(
-            select(func.count(TradeRecord.id)).where(*open_filters)
+            select(
+                TradeRecord.bot_config_id,
+                func.count(TradeRecord.id),
+            ).where(*open_filters)
+            .group_by(TradeRecord.bot_config_id)
         )
-        open_trades = open_result.scalar()
+        open_counts = dict(open_result.all())
+
+    if llm_bot_ids:
+        # Batch 3: Closed trade stats for LLM accuracy
+        closed_filters = [
+            TradeRecord.bot_config_id.in_(llm_bot_ids),
+            TradeRecord.status == "closed",
+        ]
+        if demo_mode is not None:
+            closed_filters.append(TradeRecord.demo_mode == demo_mode)
+
+        closed_result = await db.execute(
+            select(
+                TradeRecord.bot_config_id,
+                func.count(TradeRecord.id),
+                func.sum(case((TradeRecord.pnl > 0, 1), else_=0)),
+            ).where(*closed_filters)
+            .group_by(TradeRecord.bot_config_id)
+        )
+        for bid, total, wins in closed_result.all():
+            closed_stats[bid] = (total, wins)
+
+        # Batch 4: Last trade per LLM bot (max id per bot → single query)
+        last_trade_filters = [TradeRecord.bot_config_id.in_(llm_bot_ids)]
+        if demo_mode is not None:
+            last_trade_filters.append(TradeRecord.demo_mode == demo_mode)
+
+        max_id_subq = (
+            select(func.max(TradeRecord.id).label("max_id"))
+            .where(*last_trade_filters)
+            .group_by(TradeRecord.bot_config_id)
+            .subquery()
+        )
+        last_trades_result = await db.execute(
+            select(TradeRecord).where(TradeRecord.id.in_(select(max_id_subq.c.max_id)))
+        )
+        last_trades = {t.bot_config_id: t for t in last_trades_result.scalars().all()}
+
+        # Batch 5: Metrics snapshots for token aggregation
+        snapshot_filters = [
+            TradeRecord.bot_config_id.in_(llm_bot_ids),
+            TradeRecord.metrics_snapshot.isnot(None),
+        ]
+        if demo_mode is not None:
+            snapshot_filters.append(TradeRecord.demo_mode == demo_mode)
+
+        snapshots_result = await db.execute(
+            select(TradeRecord.bot_config_id, TradeRecord.metrics_snapshot)
+            .where(*snapshot_filters)
+        )
+        for bid, snapshot_json in snapshots_result.all():
+            bot_snapshots.setdefault(bid, []).append(snapshot_json)
+
+    # ── Build response from preloaded data ───────────────────────
+
+    bots = []
+
+    for config in configs:
+        runtime = orchestrator.get_bot_status(config.id)
+        trading_pairs = json.loads(config.trading_pairs) if config.trading_pairs else []
+
+        total_trades, total_pnl, total_fees, total_funding = trade_stats.get(
+            config.id, (0, 0, 0, 0)
+        )
+        open_trades = open_counts.get(config.id, 0)
 
         # LLM-specific metrics
         llm_data = {}
         if config.strategy_type == "llm_signal":
-            # Get last trade for latest signal info (filtered)
-            last_trade_filters = [TradeRecord.bot_config_id == config.id]
-            if demo_mode is not None:
-                last_trade_filters.append(TradeRecord.demo_mode == demo_mode)
-
-            last_trade_result = await db.execute(
-                select(TradeRecord)
-                .where(*last_trade_filters)
-                .order_by(TradeRecord.entry_time.desc())
-                .limit(1)
-            )
-            last_trade = last_trade_result.scalar_one_or_none()
+            last_trade = last_trades.get(config.id)
 
             if last_trade:
                 llm_data["llm_last_direction"] = last_trade.side.upper() if last_trade.side else None
@@ -324,62 +388,33 @@ async def list_bots(
                     except (json.JSONDecodeError, TypeError) as e:
                         logger.warning(f"Failed to parse metrics_snapshot for trade #{last_trade.id}: {e}")
 
-            # Accuracy = winning / total closed trades (filtered)
-            closed_filters = [
-                TradeRecord.bot_config_id == config.id,
-                TradeRecord.status == "closed",
-            ]
-            if demo_mode is not None:
-                closed_filters.append(TradeRecord.demo_mode == demo_mode)
-
-            closed_result = await db.execute(
-                select(
-                    func.count(TradeRecord.id),
-                    func.sum(
-                        case(
-                            (TradeRecord.pnl > 0, 1),
-                            else_=0,
-                        )
-                    ),
-                ).where(*closed_filters)
-            )
-            closed_total, winners = closed_result.one()
+            # Accuracy from batched closed stats
+            closed_total, winners = closed_stats.get(config.id, (0, 0))
             if closed_total and closed_total > 0:
                 llm_data["llm_accuracy"] = round(
                     (float(winners or 0) / closed_total) * 100, 1
                 )
             llm_data["llm_total_predictions"] = total_trades
 
-            # Aggregate token usage from metrics_snapshot (filtered)
-            try:
-                snapshot_filters = [
-                    TradeRecord.bot_config_id == config.id,
-                    TradeRecord.metrics_snapshot.isnot(None),
-                ]
-                if demo_mode is not None:
-                    snapshot_filters.append(TradeRecord.demo_mode == demo_mode)
-
-                snapshots_result = await db.execute(
-                    select(TradeRecord.metrics_snapshot).where(*snapshot_filters)
-                )
+            # Token aggregation from batched snapshots
+            snapshots = bot_snapshots.get(config.id, [])
+            if snapshots:
                 total_tokens = 0
                 token_count = 0
-                for (snapshot_json,) in snapshots_result:
+                for snapshot_json in snapshots:
                     try:
                         snapshot = json.loads(snapshot_json)
                         tokens = snapshot.get("llm_tokens_used", 0)
                         if tokens and tokens > 0:
                             total_tokens += tokens
                             token_count += 1
-                    except (json.JSONDecodeError, TypeError) as e:
-                        logger.debug(f"Failed to parse metrics_snapshot JSON: {e}")
+                    except (json.JSONDecodeError, TypeError):
+                        pass
                 if token_count > 0:
                     llm_data["llm_total_tokens_used"] = total_tokens
                     llm_data["llm_avg_tokens_per_call"] = round(
                         total_tokens / token_count, 1
                     )
-            except Exception as e:
-                logger.warning(f"Failed to aggregate LLM token usage for bot {config.id}: {e}")
 
             # Get provider/model from strategy_params as fallback
             if (not llm_data.get("llm_provider") or not llm_data.get("llm_model")) and config.strategy_params:
@@ -459,11 +494,14 @@ async def get_bot(
 
 
 @router.put("/{bot_id}", response_model=BotConfigResponse)
+@limiter.limit("10/minute")
 async def update_bot(
+    request: Request,
     bot_id: int,
     body: BotConfigUpdate,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
+    orchestrator=Depends(get_orchestrator),
 ):
     """Update a bot configuration. Bot must be stopped to update."""
     result = await db.execute(
@@ -474,7 +512,6 @@ async def update_bot(
         raise HTTPException(status_code=404, detail="Bot not found")
 
     # Check if running
-    orchestrator = _get_orchestrator()
     if orchestrator.is_running(bot_id):
         raise HTTPException(status_code=400, detail="Stop the bot before editing its configuration")
 
@@ -525,10 +562,13 @@ async def update_bot(
 
 
 @router.delete("/{bot_id}")
+@limiter.limit("10/minute")
 async def delete_bot(
+    request: Request,
     bot_id: int,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
+    orchestrator=Depends(get_orchestrator),
 ):
     """Delete a bot configuration. Bot must be stopped first."""
     result = await db.execute(
@@ -539,7 +579,6 @@ async def delete_bot(
         raise HTTPException(status_code=404, detail="Bot not found")
 
     # Stop if running
-    orchestrator = _get_orchestrator()
     if orchestrator.is_running(bot_id):
         await orchestrator.stop_bot(bot_id)
 
@@ -549,7 +588,9 @@ async def delete_bot(
 
 
 @router.post("/{bot_id}/duplicate", response_model=BotConfigResponse)
+@limiter.limit("10/minute")
 async def duplicate_bot(
+    request: Request,
     bot_id: int,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -692,6 +733,7 @@ async def start_bot(
     bot_id: int,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
+    orchestrator=Depends(get_orchestrator),
 ):
     """Start a bot."""
     result = await db.execute(
@@ -708,11 +750,9 @@ async def start_bot(
         if config.exchange_type in ("bitget", "weex"):
             await _enforce_affiliate_gate(config.exchange_type, user, db)
 
-    orchestrator = _get_orchestrator()
-
     try:
         await orchestrator.start_bot(bot_id)
-    except ValueError as e:
+    except (ValueError, BotError) as e:
         raise HTTPException(status_code=400, detail=str(e))
 
     # Mark as enabled
@@ -729,6 +769,7 @@ async def stop_bot(
     bot_id: int,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
+    orchestrator=Depends(get_orchestrator),
 ):
     """Stop a running bot."""
     result = await db.execute(
@@ -737,8 +778,6 @@ async def stop_bot(
     config = result.scalar_one_or_none()
     if not config:
         raise HTTPException(status_code=404, detail="Bot not found")
-
-    orchestrator = _get_orchestrator()
     success = await orchestrator.stop_bot(bot_id)
     if not success:
         raise HTTPException(status_code=400, detail="Bot is not running")
@@ -757,6 +796,7 @@ async def restart_bot(
     bot_id: int,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
+    orchestrator=Depends(get_orchestrator),
 ):
     """Restart a bot (stop + start)."""
     result = await db.execute(
@@ -773,11 +813,9 @@ async def restart_bot(
         if config.exchange_type in ("bitget", "weex"):
             await _enforce_affiliate_gate(config.exchange_type, user, db)
 
-    orchestrator = _get_orchestrator()
-
     try:
         await orchestrator.restart_bot(bot_id)
-    except ValueError as e:
+    except (ValueError, BotError) as e:
         raise HTTPException(status_code=400, detail=str(e))
 
     config.is_enabled = True
@@ -787,15 +825,21 @@ async def restart_bot(
 
 
 @router.post("/stop-all")
-async def stop_all_bots(user: User = Depends(get_current_user)):
+@limiter.limit("5/minute")
+async def stop_all_bots(
+    request: Request,
+    user: User = Depends(get_current_user),
+    orchestrator=Depends(get_orchestrator),
+):
     """Stop all running bots for the current user."""
-    orchestrator = _get_orchestrator()
     stopped = await orchestrator.stop_all_for_user(user.id)
     return {"status": "ok", "message": f"{stopped} bot(s) stopped"}
 
 
 @router.post("/{bot_id}/test-telegram")
+@limiter.limit("5/minute")
 async def test_telegram(
+    request: Request,
     bot_id: int,
     user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_db),
@@ -826,11 +870,14 @@ async def test_telegram(
 # ─── Preset Application ──────────────────────────────────────
 
 @router.post("/{bot_id}/apply-preset/{preset_id}", response_model=BotConfigResponse)
+@limiter.limit("10/minute")
 async def apply_preset_to_bot(
+    request: Request,
     bot_id: int,
     preset_id: int,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
+    orchestrator=Depends(get_orchestrator),
 ):
     """Apply a preset to an existing bot. Bot must be stopped."""
     result = await db.execute(
@@ -841,7 +888,6 @@ async def apply_preset_to_bot(
         raise HTTPException(status_code=404, detail="Bot not found")
 
     # Check if running
-    orchestrator = _get_orchestrator()
     if orchestrator.is_running(bot_id):
         raise HTTPException(status_code=400, detail="Stop the bot before applying a preset")
 
@@ -1069,71 +1115,99 @@ async def compare_bots_performance(
     configs = configs_result.scalars().all()
 
     since = datetime.utcnow() - timedelta(days=days)
-    bots_data = []
+    bot_ids = [c.id for c in configs]
+    if not bot_ids:
+        return {"days": days, "bots": []}
 
-    for config in configs:
-        compare_daily_filters = [
-            TradeRecord.bot_config_id == config.id,
-            TradeRecord.status == "closed",
-            TradeRecord.exit_time >= since,
-        ]
-        if demo_mode is not None:
-            compare_daily_filters.append(TradeRecord.demo_mode == demo_mode)
+    # ── Batch 1: Daily PnL per bot (single query) ────────────────────
+    daily_filters = [
+        TradeRecord.bot_config_id.in_(bot_ids),
+        TradeRecord.status == "closed",
+        TradeRecord.exit_time >= since,
+    ]
+    if demo_mode is not None:
+        daily_filters.append(TradeRecord.demo_mode == demo_mode)
 
-        daily_result = await db.execute(
-            select(
-                func.date(TradeRecord.exit_time).label("date"),
-                func.sum(TradeRecord.pnl).label("pnl"),
-            ).where(
-                *compare_daily_filters
-            ).group_by(
-                func.date(TradeRecord.exit_time)
-            ).order_by(
-                func.date(TradeRecord.exit_time)
-            )
+    daily_result = await db.execute(
+        select(
+            TradeRecord.bot_config_id,
+            func.date(TradeRecord.exit_time).label("date"),
+            func.sum(TradeRecord.pnl).label("pnl"),
+        ).where(*daily_filters).group_by(
+            TradeRecord.bot_config_id, func.date(TradeRecord.exit_time)
+        ).order_by(
+            TradeRecord.bot_config_id, func.date(TradeRecord.exit_time)
         )
+    )
+    # Build per-bot daily series
+    daily_by_bot: dict[int, list] = {bid: [] for bid in bot_ids}
+    for row in daily_result.all():
+        daily_by_bot[row.bot_config_id].append({
+            "date": str(row.date) if row.date else None,
+            "pnl": float(row.pnl or 0),
+        })
 
+    # ── Batch 2: Overall stats per bot (single query) ────────────────
+    stats_filters = [
+        TradeRecord.bot_config_id.in_(bot_ids),
+        TradeRecord.status == "closed",
+    ]
+    if demo_mode is not None:
+        stats_filters.append(TradeRecord.demo_mode == demo_mode)
+
+    stats_result = await db.execute(
+        select(
+            TradeRecord.bot_config_id,
+            func.count(TradeRecord.id).label("total"),
+            func.coalesce(func.sum(TradeRecord.pnl), 0).label("pnl"),
+            func.sum(case((TradeRecord.pnl > 0, 1), else_=0)).label("wins"),
+            func.coalesce(func.sum(TradeRecord.fees), 0).label("total_fees"),
+            func.coalesce(func.sum(TradeRecord.funding_paid), 0).label("total_funding"),
+        ).where(*stats_filters).group_by(TradeRecord.bot_config_id)
+    )
+    stats_by_bot: dict[int, Any] = {}
+    for row in stats_result.all():
+        stats_by_bot[row.bot_config_id] = row
+
+    # ── Batch 3: Last trade per bot (subquery + join) ────────────────
+    last_trade_filters = [TradeRecord.bot_config_id.in_(bot_ids)]
+    if demo_mode is not None:
+        last_trade_filters.append(TradeRecord.demo_mode == demo_mode)
+
+    max_id_subq = (
+        select(func.max(TradeRecord.id).label("max_id"))
+        .where(*last_trade_filters)
+        .group_by(TradeRecord.bot_config_id)
+        .subquery()
+    )
+    last_trades_result = await db.execute(
+        select(TradeRecord).where(TradeRecord.id.in_(select(max_id_subq.c.max_id)))
+    )
+    last_trade_by_bot: dict[int, TradeRecord] = {}
+    for trade in last_trades_result.scalars().all():
+        last_trade_by_bot[trade.bot_config_id] = trade
+
+    # ── Assemble response ────────────────────────────────────────────
+    bots_data = []
+    for config in configs:
+        # Build cumulative series from daily data
         cumulative = 0.0
         series = []
-        for row in daily_result.all():
-            cumulative += float(row.pnl or 0)
+        for day in daily_by_bot.get(config.id, []):
+            cumulative += day["pnl"]
             series.append({
-                "date": str(row.date) if row.date else None,
+                "date": day["date"],
                 "cumulative_pnl": round(cumulative, 2),
             })
 
-        # Overall stats for the summary table
-        compare_stats_filters = [
-            TradeRecord.bot_config_id == config.id,
-            TradeRecord.status == "closed",
-        ]
-        if demo_mode is not None:
-            compare_stats_filters.append(TradeRecord.demo_mode == demo_mode)
+        stats = stats_by_bot.get(config.id)
+        total = int(stats.total) if stats else 0
+        wins = int(stats.wins or 0) if stats else 0
+        pnl = float(stats.pnl or 0) if stats else 0.0
+        total_fees = float(stats.total_fees or 0) if stats else 0.0
+        total_funding = float(stats.total_funding or 0) if stats else 0.0
 
-        stats_result = await db.execute(
-            select(
-                func.count(TradeRecord.id).label("total"),
-                func.coalesce(func.sum(TradeRecord.pnl), 0).label("pnl"),
-                func.sum(case((TradeRecord.pnl > 0, 1), else_=0)).label("wins"),
-                func.coalesce(func.sum(TradeRecord.fees), 0).label("total_fees"),
-                func.coalesce(func.sum(TradeRecord.funding_paid), 0).label("total_funding"),
-            ).where(*compare_stats_filters)
-        )
-        stats = stats_result.one()
-        total = stats.total or 0
-        wins = int(stats.wins or 0)
-
-        # Last trade for direction/confidence (filtered)
-        last_trade_filters = [TradeRecord.bot_config_id == config.id]
-        if demo_mode is not None:
-            last_trade_filters.append(TradeRecord.demo_mode == demo_mode)
-
-        last_result = await db.execute(
-            select(TradeRecord).where(
-                *last_trade_filters
-            ).order_by(TradeRecord.entry_time.desc()).limit(1)
-        )
-        last_trade = last_result.scalar_one_or_none()
+        last_trade = last_trade_by_bot.get(config.id)
 
         # Extract LLM provider/model from strategy_params
         llm_provider = None
@@ -1170,9 +1244,9 @@ async def compare_bots_performance(
             "exchange_type": config.exchange_type,
             "mode": config.mode,
             "total_trades": total,
-            "total_pnl": round(float(stats.pnl or 0), 2),
-            "total_fees": round(float(stats.total_fees or 0), 2),
-            "total_funding": round(float(stats.total_funding or 0), 2),
+            "total_pnl": round(pnl, 2),
+            "total_fees": round(total_fees, 2),
+            "total_funding": round(total_funding, 2),
             "win_rate": round((wins / total) * 100, 1) if total > 0 else 0.0,
             "wins": wins,
             "last_direction": last_trade.side.upper() if last_trade and last_trade.side else None,

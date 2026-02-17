@@ -1,9 +1,10 @@
 """User management endpoints (admin only)."""
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.api.rate_limit import limiter
 from src.api.schemas.user import UserCreate, UserResponse, UserUpdate
 from src.auth.dependencies import get_current_admin
 from src.auth.password import hash_password
@@ -18,14 +19,18 @@ async def list_users(
     admin: User = Depends(get_current_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    """List all users (admin only)."""
-    result = await db.execute(select(User).order_by(User.id))
+    """List all active users, excluding soft-deleted (admin only)."""
+    result = await db.execute(
+        select(User).where(User.is_deleted == False).order_by(User.id)  # noqa: E712
+    )
     users = result.scalars().all()
     return [UserResponse.model_validate(u) for u in users]
 
 
 @router.post("", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
+@limiter.limit("5/minute")
 async def create_user(
+    request: Request,
     data: UserCreate,
     admin: User = Depends(get_current_admin),
     db: AsyncSession = Depends(get_db),
@@ -52,7 +57,9 @@ async def create_user(
 
 
 @router.put("/{user_id}", response_model=UserResponse)
+@limiter.limit("10/minute")
 async def update_user(
+    request: Request,
     user_id: int,
     data: UserUpdate,
     admin: User = Depends(get_current_admin),
@@ -81,12 +88,18 @@ async def update_user(
 
 
 @router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+@limiter.limit("5/minute")
 async def delete_user(
+    request: Request,
     user_id: int,
     admin: User = Depends(get_current_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    """Delete a user (admin only). Cannot delete yourself."""
+    """Soft-delete a user (admin only). Cannot delete yourself.
+
+    Sets is_deleted=True and bumps token_version to revoke all sessions.
+    Financial records (trades, funding) are preserved for audit purposes.
+    """
     if admin.id == user_id:
         raise HTTPException(status_code=400, detail="Cannot delete yourself")
 
@@ -95,4 +108,6 @@ async def delete_user(
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    await db.delete(user)
+    user.is_deleted = True
+    user.is_active = False
+    user.token_version = (user.token_version or 0) + 1

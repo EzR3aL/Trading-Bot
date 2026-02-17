@@ -2,10 +2,12 @@
 
 from typing import Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class TradeResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     symbol: str
     side: str
@@ -29,9 +31,6 @@ class TradeResponse(BaseModel):
     demo_mode: bool = False
     bot_name: Optional[str] = None
     bot_exchange: Optional[str] = None
-
-    class Config:
-        from_attributes = True
 
 
 class TradeListResponse(BaseModel):

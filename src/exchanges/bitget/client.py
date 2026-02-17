@@ -15,6 +15,7 @@ from typing import Any, Dict, List, Literal, Optional
 
 import aiohttp
 
+from src.exceptions import ExchangeError
 from src.exchanges.base import ExchangeClient
 from src.exchanges.bitget.constants import (
     BASE_URL,
@@ -32,9 +33,11 @@ logger = get_logger(__name__)
 _bitget_breaker = circuit_registry.get("bitget_api", fail_threshold=5, reset_timeout=60)
 
 
-class BitgetClientError(Exception):
+class BitgetClientError(ExchangeError):
     """Custom exception for Bitget API errors."""
-    pass
+
+    def __init__(self, message: str, original_error: Exception = None):
+        super().__init__("bitget", message, original_error)
 
 
 class BitgetExchangeClient(ExchangeClient):

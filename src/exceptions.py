@@ -2,9 +2,9 @@
 Centralized exception hierarchy for the Trading Bot.
 
 Provides a structured base for all application-specific exceptions.
-Existing module-level exceptions (BitgetClientError, HyperliquidClientError,
-WeexClientError, DataFetchError, CircuitBreakerError) remain where they are
-for backwards compatibility. New code should prefer these centralized types.
+Exchange-specific errors (BitgetClientError, HyperliquidClientError,
+WeexClientError) inherit from ExchangeError. DataFetchError inherits
+from DataSourceError. CircuitBreakerError inherits from TradingBotError.
 """
 
 from typing import Optional
@@ -50,6 +50,7 @@ class DataSourceError(TradingBotError):
 
     def __init__(self, source: str, message: str, original_error: Optional[Exception] = None):
         self.source = source
+        self.message = message
         super().__init__(f"[{source}] {message}", original_error)
 
 

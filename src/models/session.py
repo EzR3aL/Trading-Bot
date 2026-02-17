@@ -19,6 +19,8 @@ DATABASE_URL = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///data/bot.db")
 engine = create_async_engine(
     DATABASE_URL,
     echo=os.getenv("SQL_ECHO", "false").lower() == "true",
+    pool_pre_ping=True,
+    pool_recycle=3600,
     # SQLite-specific: enable WAL mode for concurrency
     connect_args={"check_same_thread": False} if "sqlite" in DATABASE_URL else {},
 )
@@ -168,11 +170,13 @@ async def init_db() -> None:
                 "CREATE INDEX IF NOT EXISTS idx_trade_records_bot_config ON trade_records(bot_config_id, entry_time DESC)",
                 "CREATE INDEX IF NOT EXISTS idx_bot_configs_user ON bot_configs(user_id, created_at DESC)",
             ]
+            from src.utils.logger import get_logger
+            _log = get_logger(__name__)
             for m in additional_migrations:
                 try:
                     await conn.execute(text(m))
-                except Exception:
-                    pass
+                except Exception as e:
+                    _log.warning("Index migration skipped: %s — %s", m[:60], e)
 
             # Backfill builder_fee for existing closed Hyperliquid trades
             try:
@@ -189,8 +193,8 @@ async def init_db() -> None:
                           AND exit_price IS NOT NULL
                         """
                     ))
-            except Exception:
-                pass
+            except Exception as e:
+                _log.warning("Builder fee backfill failed: %s", e)
 
 
 async def close_db() -> None:

@@ -45,8 +45,8 @@ export default function Trades() {
 
   const uniqueExchanges = useMemo(() => {
     const set = new Set<string>()
-    allTrades.forEach(t => {
-      const ex = t.bot_exchange || t.exchange
+    allTrades.forEach(trade => {
+      const ex = trade.bot_exchange || trade.exchange
       if (ex) set.add(ex)
     })
     return Array.from(set).sort()
@@ -54,7 +54,7 @@ export default function Trades() {
 
   const uniqueBots = useMemo(() => {
     const set = new Set<string>()
-    allTrades.forEach(t => { if (t.bot_name) set.add(t.bot_name) })
+    allTrades.forEach(trade => { if (trade.bot_name) set.add(trade.bot_name) })
     return Array.from(set).sort()
   }, [allTrades])
 

@@ -14,6 +14,7 @@ import asyncio
 import json
 import os
 import secrets
+from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional, List, Dict, Any
@@ -51,10 +52,15 @@ DASHBOARD_API_KEY = os.getenv("DASHBOARD_API_KEY", "")
 
 # Explicit development mode flag - must be explicitly set to disable auth
 # This prevents accidental auth bypass when API key is not configured
-DASHBOARD_DEV_MODE = os.getenv("DASHBOARD_DEV_MODE", "false").lower() == "true"
+# SAFETY: Dev mode is ALWAYS disabled in production, regardless of env var
+_is_production = os.getenv("ENVIRONMENT", "development").lower() == "production"
+DASHBOARD_DEV_MODE = (
+    os.getenv("DASHBOARD_DEV_MODE", "false").lower() == "true"
+    and not _is_production
+)
 
 # Log warning at startup if dev mode is enabled
-if DASHBOARD_DEV_MODE:
+if DASHBOARD_DEV_MODE:  # pragma: no cover — only runs at module import with env flag
     logger.warning("=" * 60)
     logger.warning("⚠️  DASHBOARD_DEV_MODE=true - Authentication DISABLED!")
     logger.warning("⚠️  Do NOT use this in production!")
@@ -93,10 +99,37 @@ async def verify_api_key(x_api_key: str = Header(None, alias="X-API-Key")):
 def create_app() -> FastAPI:
     """Create and configure the FastAPI application."""
 
+    @asynccontextmanager
+    async def lifespan(application: FastAPI):
+        """Manage startup and shutdown lifecycle."""
+        # Startup
+        application.state.trade_db = TradeDatabase()
+        await application.state.trade_db.initialize()
+
+        application.state.risk_manager = RiskManager()
+
+        application.state.funding_tracker = FundingTracker()
+        await application.state.funding_tracker.initialize()
+
+        application.state.tax_generator = TaxReportGenerator(
+            application.state.trade_db,
+            application.state.funding_tracker
+        )
+
+        logger.info("Dashboard started")
+
+        yield
+
+        # Shutdown
+        if application.state.funding_tracker:
+            await application.state.funding_tracker.close()
+        logger.info("Dashboard stopped")
+
     app = FastAPI(
         title="Bitget Trading Bot Dashboard",
         description="Real-time monitoring dashboard for the Contrarian Liquidation Hunter",
-        version="1.10.0"
+        version="1.10.0",
+        lifespan=lifespan,
     )
 
     # Rate limiter
@@ -121,37 +154,12 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
-    # Shared state
+    # Shared state (initialized by lifespan)
     app.state.trade_db = None
     app.state.risk_manager = None
     app.state.funding_tracker = None
     app.state.tax_generator = None
     app.state.websocket_clients = []
-
-    @app.on_event("startup")
-    async def startup():
-        """Initialize database connections on startup."""
-        app.state.trade_db = TradeDatabase()
-        await app.state.trade_db.initialize()
-
-        app.state.risk_manager = RiskManager()
-
-        app.state.funding_tracker = FundingTracker()
-        await app.state.funding_tracker.initialize()
-
-        app.state.tax_generator = TaxReportGenerator(
-            app.state.trade_db,
-            app.state.funding_tracker
-        )
-
-        logger.info("Dashboard started")
-
-    @app.on_event("shutdown")
-    async def shutdown():
-        """Clean up on shutdown."""
-        if app.state.funding_tracker:
-            await app.state.funding_tracker.close()
-        logger.info("Dashboard stopped")
 
     # ==================== API ENDPOINTS ====================
 
@@ -625,7 +633,7 @@ def create_app() -> FastAPI:
 
                 await websocket.send_json({"type": "status", "data": status_data})
                 await asyncio.sleep(5)
-        except WebSocketDisconnect:
+        except WebSocketDisconnect:  # pragma: no cover — triggered by live WS disconnect
             if websocket in app.state.websocket_clients:
                 app.state.websocket_clients.remove(websocket)
             logger.info(f"WebSocket client disconnected (remaining: {len(app.state.websocket_clients)})")

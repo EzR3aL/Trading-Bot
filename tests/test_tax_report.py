@@ -149,7 +149,7 @@ async def test_get_tax_report_empty_year(client, auth_headers, test_user):
 
 @pytest.mark.asyncio
 async def test_download_tax_report_csv(client, auth_headers, sample_trades):
-    """Download tax report as CSV returns valid CSV content."""
+    """Download tax report as CSV returns valid bilingual CSV content."""
     response = await client.get("/api/tax-report/csv", headers=auth_headers)
     assert response.status_code == 200
     assert "text/csv" in response.headers["content-type"]
@@ -157,14 +157,16 @@ async def test_download_tax_report_csv(client, auth_headers, sample_trades):
     content = response.text
     lines = content.strip().split("\n")
 
-    # Header row
-    assert "Date" in lines[0]
-    assert "Symbol" in lines[0]
-    assert "PnL (USDT)" in lines[0]
-    assert "Net PnL" in lines[0]
+    # Bilingual CSV format: has STEUERREPORT header, summary, monthly breakdown, trade details
+    assert "STEUERREPORT" in lines[0] or "TAX REPORT" in lines[0]
 
-    # Should have header + 3 closed trades = 4 lines
-    assert len(lines) == 4
+    # Should contain trade detail section with header row containing Symbol
+    trade_header_found = any("Symbol" in line for line in lines)
+    assert trade_header_found
+
+    # Should contain the 3 closed trades in the detail section
+    trade_data_lines = [l for l in lines if "BTCUSDT" in l or "ETHUSDT" in l]
+    assert len(trade_data_lines) == 3
 
 
 @pytest.mark.asyncio
@@ -179,13 +181,16 @@ async def test_download_csv_with_demo_filter(client, auth_headers, sample_trades
     content = response.text
     lines = content.strip().split("\n")
 
-    # Header + 2 demo closed trades = 3 lines
-    assert len(lines) == 3
+    # Bilingual format has sections; trade detail section has 2 demo trades
+    trade_data_lines = [l for l in lines if "BTCUSDT" in l or "ETHUSDT" in l]
+    # Filter out header row that contains these as column names
+    trade_data_lines = [l for l in trade_data_lines if "Richtung" not in l and "Side" not in l]
+    assert len(trade_data_lines) == 2
 
 
 @pytest.mark.asyncio
 async def test_download_csv_empty_year(client, auth_headers, test_user):
-    """CSV download for empty year returns only the header row."""
+    """CSV download for empty year returns bilingual report with no trade rows."""
     response = await client.get(
         "/api/tax-report/csv",
         headers=auth_headers,
@@ -195,9 +200,10 @@ async def test_download_csv_empty_year(client, auth_headers, test_user):
     content = response.text
     lines = content.strip().split("\n")
 
-    # Only header row
-    assert len(lines) == 1
-    assert "Date" in lines[0]
+    # Report still has header sections but no trade data
+    assert "STEUERREPORT" in lines[0] or "TAX REPORT" in lines[0]
+    # Trade count should be 0
+    assert any("0" in line and "Trade Count" in line for line in lines)
 
 
 @pytest.mark.asyncio
@@ -211,7 +217,7 @@ async def test_download_csv_content_disposition(client, auth_headers, sample_tra
     )
     assert response.status_code == 200
     disposition = response.headers.get("content-disposition", "")
-    assert f"tax_report_{current_year}.csv" in disposition
+    assert f"steuerreport_{current_year}.csv" in disposition
 
 
 # ---------------------------------------------------------------------------

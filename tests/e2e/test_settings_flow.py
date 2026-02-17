@@ -8,7 +8,13 @@ import pytest
 
 playwright = pytest.importorskip("playwright")
 
-pytestmark = [pytest.mark.e2e, pytest.mark.slow]
+from tests.e2e.conftest import _server_available
+
+pytestmark = [
+    pytest.mark.e2e,
+    pytest.mark.slow,
+    pytest.mark.skipif(not _server_available, reason="E2E server not running"),
+]
 
 
 @pytest.fixture

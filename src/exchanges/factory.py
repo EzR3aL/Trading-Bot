@@ -28,6 +28,8 @@ def create_exchange_client(
     Raises:
         ValueError: If exchange type is not supported
     """
+    exchange_type = exchange_type.lower().strip()
+
     if exchange_type == "bitget":
         from src.exchanges.bitget.client import BitgetExchangeClient
         return BitgetExchangeClient(
@@ -86,6 +88,8 @@ def create_exchange_websocket(
     Raises:
         ValueError: If exchange type is not supported
     """
+    exchange_type = exchange_type.lower().strip()
+
     if exchange_type == "bitget":
         from src.exchanges.bitget.websocket import BitgetExchangeWebSocket
         return BitgetExchangeWebSocket(

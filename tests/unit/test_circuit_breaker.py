@@ -26,6 +26,8 @@ from src.utils.circuit_breaker import (
     CircuitBreakerRegistry,
     CircuitState,
     CircuitStats,
+    with_circuit_breaker,
+    with_retry,
 )
 
 
@@ -394,3 +396,103 @@ class TestCircuitBreakerRegistry:
 
         assert breaker.state == CircuitState.CLOSED
         assert breaker.stats.failed_calls == 0
+
+
+# ---------------------------------------------------------------------------
+# with_retry decorator tests
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+class TestWithRetryDecorator:
+    """Tests for the with_retry decorator function."""
+
+    async def test_retries_on_failure_then_succeeds(self):
+        call_count = 0
+
+        @with_retry(max_attempts=3, min_wait=0.01, max_wait=0.02)
+        async def flaky_func():
+            nonlocal call_count
+            call_count += 1
+            if call_count < 3:
+                raise ConnectionError("transient")
+            return "ok"
+
+        result = await flaky_func()
+        assert result == "ok"
+        assert call_count == 3
+
+    async def test_raises_after_max_attempts_exhausted(self):
+        @with_retry(max_attempts=2, min_wait=0.01, max_wait=0.02)
+        async def always_fail():
+            raise ConnectionError("permanent")
+
+        with pytest.raises(ConnectionError, match="permanent"):
+            await always_fail()
+
+    async def test_succeeds_on_first_try(self):
+        @with_retry(max_attempts=3, min_wait=0.01, max_wait=0.02)
+        async def ok_func():
+            return 42
+
+        result = await ok_func()
+        assert result == 42
+
+
+# ---------------------------------------------------------------------------
+# with_circuit_breaker decorator tests
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+class TestWithCircuitBreakerDecorator:
+    """Tests for the with_circuit_breaker combined decorator."""
+
+    async def test_basic_circuit_breaker_decorator(self):
+        CircuitBreakerRegistry._instance = None
+        reg = CircuitBreakerRegistry()
+        reg._breakers = {}
+
+        @with_circuit_breaker("test_wcb", fail_threshold=3)
+        async def my_api_call():
+            return "data"
+
+        result = await my_api_call()
+        assert result == "data"
+
+    async def test_circuit_breaker_with_retry_config(self):
+        CircuitBreakerRegistry._instance = None
+        reg = CircuitBreakerRegistry()
+        reg._breakers = {}
+
+        call_count = 0
+
+        @with_circuit_breaker(
+            "test_wcb_retry",
+            fail_threshold=10,
+            with_retry_config={"max_attempts": 3, "min_wait": 0.01, "max_wait": 0.02},
+        )
+        async def flaky_api():
+            nonlocal call_count
+            call_count += 1
+            if call_count < 3:
+                raise ConnectionError("transient")
+            return "recovered"
+
+        result = await flaky_api()
+        assert result == "recovered"
+        assert call_count == 3
+
+    async def test_circuit_opens_through_decorator(self):
+        CircuitBreakerRegistry._instance = None
+        reg = CircuitBreakerRegistry()
+        reg._breakers = {}
+
+        @with_circuit_breaker("test_wcb_open", fail_threshold=2, reset_timeout=60)
+        async def bad_api():
+            raise RuntimeError("always fails")
+
+        for _ in range(2):
+            with pytest.raises(RuntimeError):
+                await bad_api()
+
+        with pytest.raises(CircuitBreakerError):
+            await bad_api()

@@ -4,11 +4,13 @@ import { Shield, ShieldOff, LayoutGrid, List, Trash2, UserCheck, UserX } from 'l
 import api from '../api/client'
 import FilterDropdown from '../components/ui/FilterDropdown'
 import { useAuthStore } from '../stores/authStore'
+import { useToastStore } from '../stores/toastStore'
 import type { User } from '../types'
 
 export default function AdminUsers() {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const currentUser = useAuthStore((s) => s.user)
+  const addToast = useToastStore((s) => s.addToast)
   const [users, setUsers] = useState<User[]>([])
   const [showForm, setShowForm] = useState(false)
   const [username, setUsername] = useState('')
@@ -27,34 +29,51 @@ export default function AdminUsers() {
   useEffect(() => { loadUsers() }, [])
 
   const createUser = async () => {
+    if (!username.trim()) { addToast('error', t('admin.usernameRequired', 'Username is required')); return }
+    if (password.length < 8) { addToast('error', t('admin.passwordTooShort', 'Password must be at least 8 characters')); return }
     try {
-      await api.post('/users', { username, password, email: email || null, role, language: 'de' })
+      await api.post('/users', { username, password, email: email || null, role, language: i18n.language })
       setShowForm(false)
       setUsername(''); setPassword(''); setEmail(''); setRole('user')
       loadUsers()
-    } catch { /* ignore */ }
+      addToast('success', t('admin.userCreated', 'User created'))
+    } catch (err: any) {
+      addToast('error', err.response?.data?.detail || t('common.error', 'Error'))
+    }
   }
 
   const toggleActive = async (user: User) => {
-    await api.put(`/users/${user.id}`, { is_active: !user.is_active })
-    loadUsers()
+    try {
+      await api.put(`/users/${user.id}`, { is_active: !user.is_active })
+      loadUsers()
+    } catch {
+      addToast('error', t('common.error', 'Error'))
+    }
   }
 
   const toggleRole = async (user: User) => {
     if (user.id === currentUser?.id) {
-      alert(t('admin.cannotDemoteSelf'))
+      addToast('error', t('admin.cannotDemoteSelf'))
       return
     }
     if (!confirm(t('admin.confirmRoleChange'))) return
-    const newRole = user.role === 'admin' ? 'user' : 'admin'
-    await api.put(`/users/${user.id}`, { role: newRole })
-    loadUsers()
+    try {
+      const newRole = user.role === 'admin' ? 'user' : 'admin'
+      await api.put(`/users/${user.id}`, { role: newRole })
+      loadUsers()
+    } catch {
+      addToast('error', t('common.error', 'Error'))
+    }
   }
 
   const deleteUser = async (id: number) => {
     if (!confirm(t('admin.deleteUser'))) return
-    await api.delete(`/users/${id}`)
-    loadUsers()
+    try {
+      await api.delete(`/users/${id}`)
+      loadUsers()
+    } catch {
+      addToast('error', t('common.error', 'Error'))
+    }
   }
 
   return (

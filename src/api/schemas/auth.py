@@ -1,11 +1,11 @@
 """Authentication schemas."""
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class LoginRequest(BaseModel):
     username: str = Field(min_length=1, max_length=50)
-    password: str = Field(min_length=1)
+    password: str = Field(min_length=1, max_length=128)
 
 
 class TokenResponse(BaseModel):
@@ -20,12 +20,11 @@ class RefreshRequest(BaseModel):
 
 
 class UserProfile(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     username: str
     email: str | None = None
     role: str
     language: str
     is_active: bool
-
-    class Config:
-        from_attributes = True

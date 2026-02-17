@@ -7,7 +7,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, R
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.api.routers.auth import limiter
+from src.api.rate_limit import limiter
 from src.api.schemas.backtest import (
     BacktestHistoryItem,
     BacktestHistoryResponse,

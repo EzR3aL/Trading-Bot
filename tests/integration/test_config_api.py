@@ -37,7 +37,7 @@ VALID_TRADING_CONFIG = {
 @pytest.mark.integration
 async def test_get_config_requires_auth(client, test_db):
     """GET /api/config/ without a token returns 401."""
-    response = await client.get("/api/config/")
+    response = await client.get("/api/config")
     assert response.status_code in (401, 403, 307)
 
 
@@ -52,7 +52,7 @@ async def test_get_config_authenticated(client, user_token):
     assert user_token is not None
 
     response = await client.get(
-        "/api/config/",
+        "/api/config",
         headers=auth_header(user_token),
     )
     assert response.status_code == 200
@@ -79,7 +79,7 @@ async def test_get_config_returns_updated_values(client, user_token):
     assert put_resp.status_code == 200
 
     # Now fetch and verify
-    get_resp = await client.get("/api/config/", headers=headers)
+    get_resp = await client.get("/api/config", headers=headers)
     assert get_resp.status_code == 200
 
     trading = get_resp.json().get("trading")

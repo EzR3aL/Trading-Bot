@@ -1,5 +1,7 @@
 /* ── Skeleton Loader Components ─────────────────────────── */
 
+const SKELETON_BAR_HEIGHTS = [62, 34, 78, 45, 23, 56, 41, 69, 52, 37, 74, 28, 63, 48, 31, 71, 44, 59, 26, 67]
+
 function SkeletonBase({ className = '', style }: { className?: string; style?: React.CSSProperties }) {
   return (
     <div className={`skeleton-pulse rounded-lg bg-white/5 ${className}`} style={style} />
@@ -25,7 +27,7 @@ export function SkeletonChart({ height = 'h-[250px]' }: { height?: string }) {
           <SkeletonBase
             key={i}
             className="flex-1"
-            style={{ height: `${Math.random() * 60 + 20}%` } as React.CSSProperties}
+            style={{ height: `${SKELETON_BAR_HEIGHTS[i]}%` } as React.CSSProperties}
           />
         ))}
       </div>
