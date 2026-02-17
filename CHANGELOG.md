@@ -9,6 +9,52 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.4.0] - 2026-02-17
+
+### PostgreSQL-Migration (Multi-User / 10k+ User Support)
+
+SQLite bleibt als Fallback fuer lokale Entwicklung erhalten. PostgreSQL wird als Produktionsdatenbank
+fuer Multi-User-Betrieb mit Connection Pooling eingefuehrt.
+
+#### Hinzugefuegt
+- **PostgreSQL Support** — Dual-Backend Architektur (SQLite + PostgreSQL)
+  - `asyncpg>=0.29.0` als PostgreSQL async Driver
+  - `_build_engine_kwargs()` in `session.py` — automatische Backend-Erkennung
+  - Connection Pooling: `pool_size` (default 20), `max_overflow` (default 30), `pool_pre_ping`, `pool_recycle` (default 1800s)
+  - Pool-Parameter konfigurierbar via `DB_POOL_SIZE`, `DB_MAX_OVERFLOW`, `DB_POOL_RECYCLE` Umgebungsvariablen
+- **PostgreSQL Docker Service** in `docker-compose.yml`
+  - `postgres:16-alpine` mit Healthcheck (`pg_isready`)
+  - Named Volume `pgdata` fuer Persistenz
+  - `trading-bot` Service: `depends_on: postgres` mit `condition: service_healthy`
+  - `DATABASE_URL` automatisch auf internen PostgreSQL Container gesetzt
+- **Dedizierter Audit-Pool** fuer PostgreSQL in `audit_log.py` (`pool_size=5, max_overflow=10`)
+- **Test Dual-Backend** — `TEST_DATABASE_URL` Env-Variable in `tests/conftest.py`
+- **Anleitung** `Anleitungen/PostgreSQL Migration.md` (DE + EN)
+
+#### Geaendert
+- `src/models/database.py`: Boolean `server_default="0"` → `server_default=text("false")` auf 5 Spalten (PostgreSQL-kompatibel)
+  - `TradeRecord.demo_mode`, `ExchangeConnection.builder_fee_approved`, `ExchangeConnection.referral_verified`,
+    `ExchangeConnection.affiliate_verified`, `AffiliateLink.uid_required`
+- `src/models/session.py`: SQLite-Migrationen in `_run_sqlite_migrations()` extrahiert, `_is_sqlite` Guard
+- `src/api/middleware/audit_log.py`: Backend-Erkennung, PostgreSQL Pool-Settings
+- `Dockerfile`: `libpq-dev` (Builder) + `libpq5` (Runtime) fuer asyncpg
+- `.env.example`: PostgreSQL-Konfiguration und Pool-Parameter dokumentiert
+- `.env`: `DATABASE_URL` auf PostgreSQL umgestellt
+
+| Datei | Aenderung |
+|-------|-----------|
+| `requirements.txt` | `asyncpg>=0.29.0` hinzugefuegt |
+| `src/models/session.py` | Dual-Backend Engine, Pool Config, Migrations extrahiert |
+| `src/models/database.py` | Boolean `server_default` PostgreSQL-kompatibel |
+| `src/api/middleware/audit_log.py` | Dedizierter PostgreSQL Audit-Pool |
+| `docker-compose.yml` | PostgreSQL Service + Volume |
+| `Dockerfile` | PostgreSQL Client-Libs |
+| `.env.example` | Pool-Parameter Dokumentation |
+| `.env` | `DATABASE_URL` auf PostgreSQL |
+| `tests/conftest.py` | `TEST_DATABASE_URL` Support |
+
+---
+
 ## [3.3.0] - 2026-02-11
 
 ### Hyperliquid Builder Fee Wallet-Gate

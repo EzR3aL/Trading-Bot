@@ -5,18 +5,51 @@
 #   Stop:        docker compose down
 
 services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: tradingbot-postgres
+    restart: unless-stopped
+
+    environment:
+      POSTGRES_USER: tradingbot
+      POSTGRES_PASSWORD: tradingbot_dev
+      POSTGRES_DB: tradingbot
+
+    ports:
+      - "127.0.0.1:5432:5432"
+
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tradingbot -d tradingbot"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+
   trading-bot:
     build:
       context: .
       dockerfile: Dockerfile
     container_name: bitget-trading-bot
     restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
 
     env_file:
       - .env
 
     environment:
       - PYTHONUNBUFFERED=1
+      - DATABASE_URL=postgresql+asyncpg://tradingbot:tradingbot_dev@postgres:5432/tradingbot
 
     ports:
       - "127.0.0.1:8000:8000"
@@ -40,3 +73,6 @@ services:
         reservations:
           cpus: '0.5'
           memory: 256M
+
+volumes:
+  pgdata:

@@ -20,6 +20,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     func,
+    text,
 )
 from sqlalchemy.orm import DeclarativeBase, relationship
 
@@ -154,7 +155,7 @@ class TradeRecord(Base):
     exit_time = Column(DateTime, nullable=True)
     exit_reason = Column(String(50), nullable=True)
     metrics_snapshot = Column(Text, nullable=True)  # JSON string
-    demo_mode = Column(Boolean, default=False, nullable=False, server_default="0")
+    demo_mode = Column(Boolean, default=False, nullable=False, server_default=text("false"))
 
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, onupdate=func.now())
@@ -231,16 +232,16 @@ class ExchangeConnection(Base):
     demo_passphrase_encrypted = Column(Text, nullable=True)
 
     # Builder fee approval tracking (Hyperliquid)
-    builder_fee_approved = Column(Boolean, default=False, nullable=False, server_default="0")
+    builder_fee_approved = Column(Boolean, default=False, nullable=False, server_default=text("false"))
     builder_fee_approved_at = Column(DateTime, nullable=True)
 
     # Referral verification tracking (Hyperliquid)
-    referral_verified = Column(Boolean, default=False, nullable=False, server_default="0")
+    referral_verified = Column(Boolean, default=False, nullable=False, server_default=text("false"))
     referral_verified_at = Column(DateTime, nullable=True)
 
     # Affiliate UID verification (Bitget / Weex)
     affiliate_uid = Column(String(100), nullable=True)
-    affiliate_verified = Column(Boolean, default=False, nullable=False, server_default="0")
+    affiliate_verified = Column(Boolean, default=False, nullable=False, server_default=text("false"))
     affiliate_verified_at = Column(DateTime, nullable=True)
 
     created_at = Column(DateTime, server_default=func.now())
@@ -368,7 +369,7 @@ class AffiliateLink(Base):
     affiliate_url = Column(Text, nullable=False)
     label = Column(String(200), nullable=True)
     is_active = Column(Boolean, default=True)
-    uid_required = Column(Boolean, default=False, nullable=False, server_default="0")
+    uid_required = Column(Boolean, default=False, nullable=False, server_default=text("false"))
 
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, onupdate=func.now())
