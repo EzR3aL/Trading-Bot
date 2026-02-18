@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
 import api from '../../api/client'
-import { ArrowLeft, ArrowRight, Check, Play, Brain, TrendingUp, BarChart3, DollarSign, Activity, Building, LayoutGrid, List, Bot } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Check, Play, Brain, TrendingUp, BarChart3, DollarSign, Activity, Building, LayoutGrid, List, Bot, Info } from 'lucide-react'
 import ExchangeLogo from '../ui/ExchangeLogo'
 import FilterDropdown from '../ui/FilterDropdown'
 import NumInput from '../ui/NumInput'
@@ -89,6 +89,17 @@ const STRATEGY_DESCRIPTIONS_DE: Record<string, string> = {
   degen: 'KI-gesteuerte Arena-Strategie mit festem Prompt und 14 Datenquellen. Nutzt Derivatives, Order Book, Supertrend, VWAP und mehr fuer 1h BTC-Vorhersagen. Inspiriert vom Degen Prediction Bot.',
   edge_indicator: 'Technische Analyse basierend auf dem TradingView "Trading Edge" Indikator. Kombiniert EMA 8/21 Ribbon, ADX-Chop-Filter und Predator Momentum Score (MACD + RSI Drift). Nur Kline-Daten, keine externen APIs.',
   claude_edge_indicator: 'Erweiterte Edge Strategie mit ATR-basierten TP/SL, Volumen-Bestätigung, Multi-Timeframe (4h), Trailing Stop, regime-basierter Positionsgröße und RSI-Divergenz.',
+}
+
+const INTERVAL_BACKTEST_HINTS: Record<string, Record<string, string>> = {
+  edge_indicator: {
+    best: '1h',
+    hint: 'Backtest-Empfehlung: 1h erzielt die beste Performance (hoechste Rendite, bester Sharpe Ratio). 30m ist die zweitbeste Option.',
+  },
+  claude_edge_indicator: {
+    best: '1h',
+    hint: 'Backtest-Empfehlung: 1h erzielt die beste Performance (+45% Rendite, 55.9% Win Rate, Sharpe 4.02). 30m ist die zweitbeste Option.',
+  },
 }
 
 function getStrategyDisplayName(name: string): string {
@@ -671,9 +682,20 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
                                   value: typeof opt === 'string' ? opt : opt.value,
                                   label: typeof opt === 'string' ? opt : opt.label,
                                 }))
+                                const backtestHint = key === 'kline_interval' ? INTERVAL_BACKTEST_HINTS[strategyType] : undefined
                                 return (
                                   <div key={key}>
-                                    <label className="block text-xs text-gray-500 mb-1" title={d.description}>{d.label}</label>
+                                    <label className="flex items-center gap-1 text-xs text-gray-500 mb-1" title={d.description}>
+                                      {d.label}
+                                      {backtestHint && (
+                                        <span className="relative group">
+                                          <Info size={13} className="text-blue-400 cursor-help" />
+                                          <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 hidden group-hover:block w-64 p-2 text-xs text-gray-200 bg-gray-800 border border-gray-600 rounded-lg shadow-lg z-50 whitespace-normal leading-relaxed">
+                                            {backtestHint.hint}
+                                          </span>
+                                        </span>
+                                      )}
+                                    </label>
                                     <FilterDropdown
                                       value={String(strategyParams[key] ?? d.default)}
                                       onChange={val => setStrategyParams(prev => ({ ...prev, [key]: val }))}
@@ -958,19 +980,43 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
                               className="filter-select w-full text-sm tabular-nums text-center" />
                           </div>
                           <div>
-                            <label className="block text-[10px] text-gray-500 mb-1">{b.leverage}</label>
+                            <label className="flex items-center gap-0.5 text-[10px] text-gray-500 mb-1">
+                              {b.leverage}
+                              <span className="relative group">
+                                <Info size={10} className="text-blue-400 cursor-help" />
+                                <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 hidden group-hover:block w-44 p-1.5 text-[10px] text-gray-200 bg-gray-800 border border-gray-600 rounded-lg shadow-lg z-50 whitespace-normal leading-relaxed">
+                                  {t('bots.builder.leverageHint')}
+                                </span>
+                              </span>
+                            </label>
                             <NumInput value={cfg.leverage ?? ''} onChange={e => updateAsset('leverage', e.target.value)}
                               placeholder="-" min={1} max={20}
                               className="filter-select w-full text-sm tabular-nums text-center" />
                           </div>
                           <div>
-                            <label className="block text-[10px] text-gray-500 mb-1">TP %</label>
+                            <label className="flex items-center gap-0.5 text-[10px] text-gray-500 mb-1">
+                              TP %
+                              <span className="relative group">
+                                <Info size={10} className="text-blue-400 cursor-help" />
+                                <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 hidden group-hover:block w-44 p-1.5 text-[10px] text-gray-200 bg-gray-800 border border-gray-600 rounded-lg shadow-lg z-50 whitespace-normal leading-relaxed">
+                                  {t('bots.builder.tpHint')}
+                                </span>
+                              </span>
+                            </label>
                             <NumInput value={cfg.tp ?? ''} onChange={e => updateAsset('tp', e.target.value)}
                               placeholder="-" min={0.5} max={20} step={0.5}
                               className="filter-select w-full text-sm tabular-nums text-center" />
                           </div>
                           <div>
-                            <label className="block text-[10px] text-gray-500 mb-1">SL %</label>
+                            <label className="flex items-center gap-0.5 text-[10px] text-gray-500 mb-1">
+                              SL %
+                              <span className="relative group">
+                                <Info size={10} className="text-blue-400 cursor-help" />
+                                <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 hidden group-hover:block w-44 p-1.5 text-[10px] text-gray-200 bg-gray-800 border border-gray-600 rounded-lg shadow-lg z-50 whitespace-normal leading-relaxed">
+                                  {t('bots.builder.slHint')}
+                                </span>
+                              </span>
+                            </label>
                             <NumInput value={cfg.sl ?? ''} onChange={e => updateAsset('sl', e.target.value)}
                               placeholder="-" min={0.5} max={10} step={0.5}
                               className="filter-select w-full text-sm tabular-nums text-center" />

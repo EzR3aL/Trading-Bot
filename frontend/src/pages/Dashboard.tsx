@@ -10,6 +10,7 @@ import { DashboardSkeleton } from '../components/ui/Skeleton'
 import PnlCell from '../components/ui/PnlCell'
 import { ArrowUpRight, ArrowDownRight } from 'lucide-react'
 import { ExchangeIcon } from '../components/ui/ExchangeLogo'
+import GuidedTour, { TourHelpButton, type TourStep } from '../components/ui/GuidedTour'
 
 /* ── Animated Number ─────────────────────────────────────── */
 
@@ -118,7 +119,9 @@ export default function Dashboard() {
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold text-white tracking-tight">{t('dashboard.title')}</h1>
-        <div className="flex items-center gap-1.5 bg-white/5 rounded-xl p-0.5 border border-white/5">
+        <div className="flex items-center gap-2">
+        <TourHelpButton tourId="dashboard" />
+        <div className="flex items-center gap-1.5 bg-white/5 rounded-xl p-0.5 border border-white/5" data-tour="dash-period">
           {PERIODS.map((p) => (
             <button
               key={p}
@@ -134,10 +137,11 @@ export default function Dashboard() {
             </button>
           ))}
         </div>
+        </div>
       </div>
 
       {/* Stats grid */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-4 mb-6">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-4 mb-6" data-tour="dash-stats">
         <StatCard
           label={t('dashboard.totalPnl')}
           value={stats ? `$${stats.net_pnl.toFixed(2)}` : '--'}
@@ -167,7 +171,7 @@ export default function Dashboard() {
       </div>
 
       {/* Charts Row 1: PnL + Win/Loss */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6" data-tour="dash-charts">
         <div className="lg:col-span-2 glass-card rounded-xl p-5">
           <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-4">{t('dashboard.pnlOverTime')}</h3>
           <PnlChart data={dailyStats} />
@@ -205,7 +209,7 @@ export default function Dashboard() {
       )}
 
       {/* Recent trades */}
-      <div className="glass-card rounded-xl overflow-hidden">
+      <div className="glass-card rounded-xl overflow-hidden" data-tour="dash-trades">
         <div className="p-5 border-b border-white/5">
           <h2 className="text-base font-semibold text-white">
             {t('dashboard.recentTrades')}
@@ -290,6 +294,30 @@ export default function Dashboard() {
           </table>
         </div>
       </div>
+
+      {/* Guided Tour */}
+      <GuidedTour tourId="dashboard" steps={dashboardTourSteps} />
     </div>
   )
 }
+
+const dashboardTourSteps: TourStep[] = [
+  {
+    target: '[data-tour="dash-stats"]',
+    titleKey: 'tour.dashPnlTitle',
+    descriptionKey: 'tour.dashPnlDesc',
+    position: 'bottom',
+  },
+  {
+    target: '[data-tour="dash-charts"]',
+    titleKey: 'tour.dashBotsTitle',
+    descriptionKey: 'tour.dashBotsDesc',
+    position: 'bottom',
+  },
+  {
+    target: '[data-tour="dash-trades"]',
+    titleKey: 'tour.dashFilterTitle',
+    descriptionKey: 'tour.dashFilterDesc',
+    position: 'top',
+  },
+]
