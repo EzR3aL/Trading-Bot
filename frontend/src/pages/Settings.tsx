@@ -7,6 +7,7 @@ import { useAuthStore } from '../stores/authStore'
 import type { ConnectionsStatusResponse, ExchangeConnectionStatus, ExchangeInfo, ServiceStatus } from '../types'
 import { ExchangeIcon } from '../components/ui/ExchangeLogo'
 import FilterDropdown from '../components/ui/FilterDropdown'
+import GuidedTour, { TourHelpButton, type TourStep } from '../components/ui/GuidedTour'
 
 const BASE_TABS = ['apiKeys', 'llmKeys', 'connections'] as const
 const ADMIN_TABS = [...BASE_TABS, 'affiliateLinks', 'hyperliquid'] as const
@@ -518,7 +519,10 @@ export default function Settings() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold text-white mb-6">{t('settings.title')}</h1>
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="text-2xl font-bold text-white">{t('settings.title')}</h1>
+        <TourHelpButton tourId="settings" />
+      </div>
 
       {message && (
         <div className="mb-4 p-3 bg-primary-900/30 border border-primary-800 rounded text-primary-400 text-sm">
@@ -527,7 +531,7 @@ export default function Settings() {
       )}
 
       {/* Tabs */}
-      <div className="flex gap-1 mb-6 bg-gray-900 p-1 rounded-lg w-fit">
+      <div className="flex gap-1 mb-6 bg-gray-900 p-1 rounded-lg w-fit" data-tour="settings-tabs">
         {TABS.map((tab) => (
           <button
             key={tab}
@@ -551,7 +555,7 @@ export default function Settings() {
         const totalPossible = exchanges.length + exchanges.filter(ex => ex.supports_demo).length
         const configPct = totalPossible > 0 ? Math.round((totalConfigured / totalPossible) * 100) : 0
         return (
-          <div className="space-y-6">
+          <div className="space-y-6" data-tour="settings-api-keys">
             {/* ── Summary Bar ── */}
             <div className="border border-white/10 bg-white/[0.03] rounded-xl p-5">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -593,7 +597,7 @@ export default function Settings() {
 
             {/* ── Exchange Cards ── */}
             <div className="space-y-3 max-w-2xl">
-              {exchanges.map((ex) => {
+              {exchanges.map((ex, exIdx) => {
                 const conn = getConn(ex.name)
                 const form = getForm(ex.name)
                 const showPass = ex.requires_passphrase
@@ -602,7 +606,7 @@ export default function Settings() {
                 const demoOk = conn?.demo_api_keys_configured ?? false
 
                 return (
-                  <div key={ex.name} className="border border-white/[0.08] bg-white/[0.02] rounded-xl overflow-hidden">
+                  <div key={ex.name} className="border border-white/[0.08] bg-white/[0.02] rounded-xl overflow-hidden" {...(exIdx === 0 ? { 'data-tour': 'settings-test-conn' } : {})}>
                     {/* Accordion Header with accent */}
                     <button
                       onClick={() => setOpenExchange(isOpen ? null : ex.name)}
@@ -1836,6 +1840,31 @@ export default function Settings() {
         </div>
       )}
 
+      {/* Guided Tour */}
+      <GuidedTour tourId="settings" steps={settingsTourSteps} />
     </div>
   )
 }
+
+/* ─── Settings Tour Steps ─────────────────────────────────────────── */
+
+const settingsTourSteps: TourStep[] = [
+  {
+    target: '[data-tour="settings-tabs"]',
+    titleKey: 'tour.settingsTabsTitle',
+    descriptionKey: 'tour.settingsTabsDesc',
+    position: 'bottom',
+  },
+  {
+    target: '[data-tour="settings-api-keys"]',
+    titleKey: 'tour.settingsApiKeysTitle',
+    descriptionKey: 'tour.settingsApiKeysDesc',
+    position: 'bottom',
+  },
+  {
+    target: '[data-tour="settings-test-conn"]',
+    titleKey: 'tour.settingsTestConnTitle',
+    descriptionKey: 'tour.settingsTestConnDesc',
+    position: 'bottom',
+  },
+]

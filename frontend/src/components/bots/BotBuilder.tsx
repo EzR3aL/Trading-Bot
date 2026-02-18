@@ -86,7 +86,7 @@ const STRATEGY_DESCRIPTIONS_DE: Record<string, string> = {
   llm_signal: 'KI-gestützte Signalgenerierung mittels Large Language Models. Die KI analysiert Marktdaten in jedem Zyklus und liefert LONG/SHORT-Empfehlungen mit Konfidenzbewertung.',
   sentiment_surfer: 'Kombiniert Marktstimmung mit technischen Indikatoren zur Vorhersage von Preisbewegungen. Nutzt News-Sentiment, Fear & Greed, VWAP, Supertrend und Spot-Daten. Erfordert Übereinstimmung mehrerer Quellen.',
   liquidation_hunter: 'Contrarian-Strategie, die gegen überfüllte Positionen handelt. Analysiert Long/Short-Verhältnisse, Funding Rates und Fear & Greed, um Liquidationskaskaden frühzeitig zu erkennen.',
-  degen: 'KI-gesteuerte Arena-Strategie mit festem Prompt und 14 Datenquellen. Nutzt Derivatives, Order Book, Supertrend, VWAP und mehr fuer 1h BTC-Vorhersagen. Inspiriert vom Degen Prediction Bot.',
+  degen: 'KI-gesteuerte Arena-Strategie mit festem Prompt und 14 Datenquellen. Nutzt Derivatives, Order Book, Supertrend, VWAP und mehr für 1h BTC-Vorhersagen. Inspiriert vom Degen Prediction Bot.',
   edge_indicator: 'Technische Analyse basierend auf dem TradingView "Trading Edge" Indikator. Kombiniert EMA 8/21 Ribbon, ADX-Chop-Filter und Predator Momentum Score (MACD + RSI Drift). Nur Kline-Daten, keine externen APIs.',
   claude_edge_indicator: 'Erweiterte Edge Strategie mit ATR-basierten TP/SL, Volumen-Bestätigung, Multi-Timeframe (4h), Trailing Stop, regime-basierter Positionsgröße und RSI-Divergenz.',
 }
@@ -94,7 +94,7 @@ const STRATEGY_DESCRIPTIONS_DE: Record<string, string> = {
 const INTERVAL_BACKTEST_HINTS: Record<string, Record<string, string>> = {
   edge_indicator: {
     best: '1h',
-    hint: 'Backtest-Empfehlung: 1h erzielt die beste Performance (hoechste Rendite, bester Sharpe Ratio). 30m ist die zweitbeste Option.',
+    hint: 'Backtest-Empfehlung: 1h erzielt die beste Performance (höchste Rendite, bester Sharpe Ratio). 30m ist die zweitbeste Option.',
   },
   claude_edge_indicator: {
     best: '1h',
@@ -580,7 +580,7 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
                     type="button"
                     onClick={() => setStrategyView('grid')}
                     className={`p-1.5 rounded-md transition-colors ${strategyView === 'grid' ? 'bg-white/10 text-white' : 'text-gray-500 hover:text-gray-300'}`}
-                    title="Kacheln"
+                    title={b.viewGrid || 'Grid'}
                   >
                     <LayoutGrid size={14} />
                   </button>
@@ -588,7 +588,7 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
                     type="button"
                     onClick={() => setStrategyView('list')}
                     className={`p-1.5 rounded-md transition-colors ${strategyView === 'list' ? 'bg-white/10 text-white' : 'text-gray-500 hover:text-gray-300'}`}
-                    title="Liste"
+                    title={b.viewList || 'List'}
                   >
                     <List size={14} />
                   </button>
@@ -747,7 +747,7 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
                                     value={strategyParams[key] ?? ''}
                                     onChange={e => setStrategyParams(prev => ({ ...prev, [key]: e.target.value }))}
                                     rows={6}
-                                    placeholder="Eigene Anweisungen für die KI-Analyse eingeben..."
+                                    placeholder={b.customPromptPlaceholder}
                                     className="filter-select w-full text-sm font-mono !h-auto"
                                   />
                                 </div>
@@ -769,7 +769,7 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
                                   className="w-full accent-primary-500"
                                 />
                                 <p className="text-[11px] text-gray-600 mt-0.5">
-                                  Niedrig = konsistente Antworten · Hoch = kreativere Analysen · Empfohlen: 0.2–0.4
+                                  {b.temperatureHint}
                                 </p>
                               </div>
                             )
@@ -827,7 +827,7 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
                   type="button"
                   onClick={() => setSourcesView('grid')}
                   className={`p-1.5 rounded-md transition-colors ${sourcesView === 'grid' ? 'bg-white/10 text-white' : 'text-gray-500 hover:text-gray-300'}`}
-                  title="Kacheln"
+                  title={b.viewGrid || 'Grid'}
                 >
                   <LayoutGrid size={14} />
                 </button>
@@ -835,7 +835,7 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
                   type="button"
                   onClick={() => setSourcesView('list')}
                   className={`p-1.5 rounded-md transition-colors ${sourcesView === 'list' ? 'bg-white/10 text-white' : 'text-gray-500 hover:text-gray-300'}`}
-                  title="Liste"
+                  title={b.viewList || 'List'}
                 >
                   <List size={14} />
                 </button>

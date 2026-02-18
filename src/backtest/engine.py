@@ -110,6 +110,9 @@ class BacktestConfig:
     position_size_percent: float = 10.0
     trading_fee_percent: float = 0.06
 
+    # Strategy type (determines signal generation logic)
+    strategy_type: str = "liquidation_hunter"
+
     # Strategy thresholds
     fear_greed_extreme_fear: int = 25
     fear_greed_extreme_greed: int = 75
@@ -397,53 +400,55 @@ class BacktestEngine:
         return 0, f"USD Neutral (DXY={dxy:.1f})"
 
     # ------------------------------------------------------------------ #
-    #  SIGNAL GENERATION                                                  #
+    #  SIGNAL GENERATION — dispatcher                                     #
     # ------------------------------------------------------------------ #
 
     def _generate_signal(
         self, data: HistoricalDataPoint, symbol: str = "BTC"
     ) -> Tuple[TradeDirection, int, str]:
+        """Dispatch to strategy-specific signal generation."""
+        st = self.config.strategy_type
+        if st == "sentiment_surfer":
+            return self._signal_sentiment_surfer(data, symbol)
+        if st == "llm_signal":
+            return self._signal_llm(data, symbol)
+        if st == "degen":
+            return self._signal_degen(data, symbol)
+        # Default: liquidation_hunter (and any unknown type)
+        return self._signal_liquidation_hunter(data, symbol)
+
+    # ------------------------------------------------------------------ #
+    #  Liquidation Hunter — contrarian leverage + sentiment               #
+    # ------------------------------------------------------------------ #
+
+    def _signal_liquidation_hunter(
+        self, data: HistoricalDataPoint, symbol: str = "BTC"
+    ) -> Tuple[TradeDirection, int, str]:
         """
-        Generate a trade signal based on historical data point.
+        Contrarian strategy: bet against crowded positions.
 
-        Combines analysis from all available data sources:
-        1. Long/Short Ratio (contrarian)
-        2. Fear & Greed Index (contrarian)
-        3. Funding Rate (trend confirmation)
-        4. Open Interest changes
-        5. Taker Buy/Sell Volume (contrarian)
-        6. Top Trader positioning (confirmation)
-        7. Cross-exchange funding divergence
-        8. Stablecoin flows (money flow)
-        9. Volatility (risk adjustment)
-        10. Macro indicators (DXY)
-
-        Returns:
-            Tuple of (direction, confidence, reason)
+        Primary: L/S Ratio + Fear & Greed (contrarian).
+        Secondary: Funding rate, Open Interest.
+        Always picks a side — no neutral.
         """
         reasons = []
         confidence = 50
 
-        if symbol == "BTC":
-            funding_rate = data.funding_rate_btc
-            price_change = data.btc_24h_change
-        else:
-            funding_rate = data.funding_rate_eth
-            price_change = data.eth_24h_change
+        funding_rate = data.funding_rate_btc if symbol == "BTC" else data.funding_rate_eth
+        price_change = data.btc_24h_change if symbol == "BTC" else data.eth_24h_change
 
-        # Step 1: Primary - Analyze Leverage
+        # Primary: Leverage (heavy weight)
         leverage_dir, leverage_conf, leverage_reason = self._analyze_leverage(data.long_short_ratio)
         reasons.append(leverage_reason)
         confidence += leverage_conf
 
-        # Step 2: Primary - Analyze Sentiment
+        # Primary: Sentiment (heavy weight)
         sentiment_dir, sentiment_conf, sentiment_reason = self._analyze_sentiment(data.fear_greed_index)
         reasons.append(sentiment_reason)
         confidence += sentiment_conf
 
-        # Step 3: Determine Base Direction
+        # Determine direction — never neutral
         final_direction = None
-
         if leverage_dir and sentiment_dir:
             if leverage_dir == sentiment_dir:
                 final_direction = leverage_dir
@@ -462,57 +467,359 @@ class BacktestEngine:
             confidence = max(self.config.low_confidence_min, min(confidence, 65))
             reasons.append(f"Trend: {price_change:+.2f}%")
 
-        # Step 4: Funding Rate Adjustment
+        # Secondary: Funding rate confirmation
         funding_adj, funding_reason = self._analyze_funding_rate(funding_rate, final_direction)
         confidence += funding_adj
         reasons.append(funding_reason)
 
-        # Step 5: Open Interest Analysis
+        # Secondary: Open Interest
         oi_adj, oi_reason = self._analyze_open_interest(data, final_direction)
         confidence += oi_adj
         if oi_adj != 0:
             reasons.append(oi_reason)
 
-        # Step 6: Taker Volume Analysis
-        taker_adj, taker_reason = self._analyze_taker_volume(data, final_direction)
-        confidence += taker_adj
-        if taker_adj != 0:
-            reasons.append(taker_reason)
-
-        # Step 7: Top Trader Analysis
-        top_adj, top_reason = self._analyze_top_traders(data, final_direction)
-        confidence += top_adj
-        if top_adj != 0:
-            reasons.append(top_reason)
-
-        # Step 8: Cross-Exchange Funding Divergence
-        div_adj, div_reason = self._analyze_funding_divergence(data, final_direction)
-        confidence += div_adj
-        if div_adj != 0:
-            reasons.append(div_reason)
-
-        # Step 9: Stablecoin Flows
-        stable_adj, stable_reason = self._analyze_stablecoin_flows(data, final_direction)
-        confidence += stable_adj
-        if stable_adj != 0:
-            reasons.append(stable_reason)
-
-        # Step 10: Volatility Risk Adjustment
+        # Volatility risk
         vol_adj, vol_reason = self._analyze_volatility(data)
         confidence += vol_adj
         if vol_adj != 0:
             reasons.append(vol_reason)
 
-        # Step 11: Macro (DXY)
-        macro_adj, macro_reason = self._analyze_macro(data, final_direction)
-        confidence += macro_adj
-        if macro_adj != 0:
-            reasons.append(macro_reason)
-
-        # Clamp confidence
         confidence = max(self.config.low_confidence_min, min(confidence, 95))
-
         return final_direction, confidence, " | ".join(reasons)
+
+    # ------------------------------------------------------------------ #
+    #  Sentiment Surfer — multi-source voting system                      #
+    # ------------------------------------------------------------------ #
+
+    def _signal_sentiment_surfer(
+        self, data: HistoricalDataPoint, symbol: str = "BTC"
+    ) -> Tuple[TradeDirection, int, str]:
+        """
+        Balanced strategy with 6-source voting.
+
+        Sources: Sentiment, Leverage, Funding, Taker Volume,
+        Stablecoin Flows, Macro (DXY).
+        Needs >= 3/6 source agreement to enter.
+        """
+        funding_rate = data.funding_rate_btc if symbol == "BTC" else data.funding_rate_eth
+        price_change = data.btc_24h_change if symbol == "BTC" else data.eth_24h_change
+
+        # Score each source: positive = LONG, negative = SHORT
+        scores: List[Tuple[float, float, str]] = []  # (score, weight, label)
+
+        # Source 1: Sentiment (contrarian) — weight 1.0
+        fgi = data.fear_greed_index
+        if fgi < self.config.fear_greed_extreme_fear:
+            scores.append(((self.config.fear_greed_extreme_fear - fgi) * 3, 1.0, f"FGI Bullish ({fgi})"))
+        elif fgi > self.config.fear_greed_extreme_greed:
+            scores.append((-(fgi - self.config.fear_greed_extreme_greed) * 3, 1.0, f"FGI Bearish ({fgi})"))
+        else:
+            scores.append((0, 1.0, f"FGI Neutral ({fgi})"))
+
+        # Source 2: Leverage (contrarian) — weight 1.0
+        ls = data.long_short_ratio
+        if ls > self.config.long_short_crowded_longs:
+            scores.append((-(ls - self.config.long_short_crowded_longs) * 40, 1.0, f"L/S Bearish ({ls:.2f})"))
+        elif ls < self.config.long_short_crowded_shorts:
+            scores.append(((self.config.long_short_crowded_shorts - ls) * 40, 1.0, f"L/S Bullish ({ls:.2f})"))
+        else:
+            scores.append((0, 1.0, f"L/S Neutral ({ls:.2f})"))
+
+        # Source 3: Funding rate — weight 0.8
+        if funding_rate > self.config.funding_rate_high:
+            scores.append((-50, 0.8, f"Funding Bearish ({funding_rate*100:.4f}%)"))
+        elif funding_rate < self.config.funding_rate_low:
+            scores.append((50, 0.8, f"Funding Bullish ({funding_rate*100:.4f}%)"))
+        else:
+            scores.append((0, 0.8, f"Funding Neutral"))
+
+        # Source 4: Taker Buy/Sell Volume — weight 1.2
+        ratio = data.taker_buy_sell_ratio
+        if ratio > 1.2:
+            scores.append((-40, 1.2, f"Taker Sell-bias ({ratio:.2f})"))
+        elif ratio < 0.8:
+            scores.append((40, 1.2, f"Taker Buy-bias ({ratio:.2f})"))
+        else:
+            scores.append(((ratio - 1.0) * 100, 1.2, f"Taker ({ratio:.2f})"))
+
+        # Source 5: Stablecoin flows — weight 0.8
+        flow = data.stablecoin_flow_7d
+        if flow > 1_000_000_000:
+            scores.append((30, 0.8, f"Stables Inflow"))
+        elif flow < -1_000_000_000:
+            scores.append((-30, 0.8, f"Stables Outflow"))
+        else:
+            scores.append((0, 0.8, f"Stables Neutral"))
+
+        # Source 6: Momentum (price change) — weight 1.2
+        if abs(price_change) > 1.0:
+            scores.append((price_change * 15, 1.2, f"Momentum {price_change:+.1f}%"))
+        else:
+            scores.append((0, 1.2, f"Momentum Flat"))
+
+        # Voting: count long vs short
+        long_votes = sum(1 for s, _, _ in scores if s > 10)
+        short_votes = sum(1 for s, _, _ in scores if s < -10)
+        min_agreement = 3
+
+        # Weighted score
+        total_weight = sum(w for _, w, _ in scores)
+        weighted_score = sum(s * w for s, w, _ in scores) / total_weight if total_weight > 0 else 0
+
+        reasons = [label for _, _, label in scores]
+
+        if long_votes >= min_agreement and long_votes > short_votes:
+            direction = TradeDirection.LONG
+            confidence = min(95, 40 + int(abs(weighted_score) * 0.3) + long_votes * 5)
+            reasons.append(f"VOTE: {long_votes}/6 LONG")
+        elif short_votes >= min_agreement and short_votes > long_votes:
+            direction = TradeDirection.SHORT
+            confidence = min(95, 40 + int(abs(weighted_score) * 0.3) + short_votes * 5)
+            reasons.append(f"VOTE: {short_votes}/6 SHORT")
+        else:
+            # No agreement — low confidence fallback
+            direction = TradeDirection.LONG if weighted_score > 0 else TradeDirection.SHORT
+            confidence = max(30, min(50, 35 + int(abs(weighted_score) * 0.1)))
+            reasons.append(f"WEAK: {long_votes}L/{short_votes}S")
+
+        # Volatility risk adjustment
+        vol_adj, vol_reason = self._analyze_volatility(data)
+        confidence += vol_adj
+        if vol_adj != 0:
+            reasons.append(vol_reason)
+
+        confidence = max(30, min(confidence, 95))
+        return direction, confidence, " | ".join(reasons)
+
+    # ------------------------------------------------------------------ #
+    #  LLM Signal — simulated balanced multi-factor analysis              #
+    # ------------------------------------------------------------------ #
+
+    def _signal_llm(
+        self, data: HistoricalDataPoint, symbol: str = "BTC"
+    ) -> Tuple[TradeDirection, int, str]:
+        """
+        Simulates LLM analysis: balanced, conservative, all-source model.
+
+        Since we can't call an LLM for each historical bar, we simulate
+        a balanced multi-factor model that weights ALL available data equally.
+        Higher confidence threshold — only trades strong setups.
+        """
+        funding_rate = data.funding_rate_btc if symbol == "BTC" else data.funding_rate_eth
+        price_change = data.btc_24h_change if symbol == "BTC" else data.eth_24h_change
+
+        # Score each factor on a -100 to +100 scale
+        factor_scores: List[Tuple[float, str]] = []
+
+        # Factor 1: Sentiment (contrarian)
+        fgi = data.fear_greed_index
+        if fgi < 20:
+            factor_scores.append((80, f"Extreme Fear ({fgi})"))
+        elif fgi < 35:
+            factor_scores.append((40, f"Fear ({fgi})"))
+        elif fgi > 80:
+            factor_scores.append((-80, f"Extreme Greed ({fgi})"))
+        elif fgi > 65:
+            factor_scores.append((-40, f"Greed ({fgi})"))
+        else:
+            factor_scores.append((0, f"Neutral Sentiment ({fgi})"))
+
+        # Factor 2: Leverage (contrarian)
+        ls = data.long_short_ratio
+        if ls > 2.0:
+            factor_scores.append((-(ls - 1.0) * 30, f"Crowded Longs ({ls:.2f})"))
+        elif ls < 0.5:
+            factor_scores.append(((1.0 - ls) * 30, f"Crowded Shorts ({ls:.2f})"))
+        else:
+            factor_scores.append((0, f"L/S Balanced ({ls:.2f})"))
+
+        # Factor 3: Funding rate
+        if funding_rate > 0.001:
+            factor_scores.append((-60, f"Very High Funding"))
+        elif funding_rate > self.config.funding_rate_high:
+            factor_scores.append((-30, f"High Funding"))
+        elif funding_rate < -0.0005:
+            factor_scores.append((60, f"Very Neg Funding"))
+        elif funding_rate < self.config.funding_rate_low:
+            factor_scores.append((30, f"Neg Funding"))
+        else:
+            factor_scores.append((0, f"Funding Neutral"))
+
+        # Factor 4: Open Interest momentum
+        oi_change = data.open_interest_change_24h
+        if oi_change > 5 and price_change > 0:
+            factor_scores.append((-25, f"OI+Price Rising (squeeze risk)"))
+        elif oi_change > 5 and price_change < 0:
+            factor_scores.append((25, f"OI Rising+Price Down (capitulation)"))
+        elif oi_change < -5:
+            factor_scores.append((15 if price_change > 0 else -15, f"OI Deleveraging"))
+        else:
+            factor_scores.append((0, f"OI Stable"))
+
+        # Factor 5: Taker Volume
+        taker = data.taker_buy_sell_ratio
+        if taker > 1.3:
+            factor_scores.append((-30, f"Heavy Buying (contrarian)"))
+        elif taker < 0.7:
+            factor_scores.append((30, f"Heavy Selling (contrarian)"))
+        else:
+            factor_scores.append((0, f"Volume Balanced"))
+
+        # Factor 6: Top Traders (trend confirmation)
+        top_ls = data.top_trader_long_short_ratio
+        if top_ls > 1.5:
+            factor_scores.append((20, f"TopTraders Long"))
+        elif top_ls < 0.7:
+            factor_scores.append((-20, f"TopTraders Short"))
+        else:
+            factor_scores.append((0, f"TopTraders Neutral"))
+
+        # Factor 7: Stablecoin flows
+        flow = data.stablecoin_flow_7d
+        if flow > 2_000_000_000:
+            factor_scores.append((25, f"Large Stablecoin Inflow"))
+        elif flow < -2_000_000_000:
+            factor_scores.append((-25, f"Large Stablecoin Outflow"))
+        else:
+            factor_scores.append((0, f"Stables Neutral"))
+
+        # Factor 8: Macro (DXY)
+        dxy = data.dxy_index
+        if dxy > 107:
+            factor_scores.append((-20, f"Strong USD"))
+        elif dxy > 0 and dxy < 100:
+            factor_scores.append((20, f"Weak USD"))
+        else:
+            factor_scores.append((0, f"USD Neutral"))
+
+        # Factor 9: Momentum
+        if price_change > 3:
+            factor_scores.append((-20, f"Overextended Up ({price_change:+.1f}%)"))
+        elif price_change < -3:
+            factor_scores.append((20, f"Overextended Down ({price_change:+.1f}%)"))
+        elif abs(price_change) > 1:
+            factor_scores.append((price_change * 5, f"Trend ({price_change:+.1f}%)"))
+        else:
+            factor_scores.append((0, f"Flat ({price_change:+.1f}%)"))
+
+        # Factor 10: Volatility
+        vol = data.historical_volatility
+        vol_penalty = 0
+        if vol > 100:
+            vol_penalty = -15
+        elif vol > 70:
+            vol_penalty = -8
+
+        # Aggregate: sum of non-zero signals (neutrals don't dilute)
+        total_score = sum(s for s, _ in factor_scores) + vol_penalty
+        active_count = sum(1 for s, _ in factor_scores if abs(s) > 5)
+
+        reasons = [label for _, label in factor_scores if True]
+
+        if abs(total_score) < 10:
+            # Very weak signal — low confidence
+            direction = TradeDirection.LONG if total_score >= 0 else TradeDirection.SHORT
+            confidence = max(30, 35 + active_count * 3)
+            reasons.append(f"LLM: Weak ({total_score:+.0f}, {active_count} active)")
+        else:
+            direction = TradeDirection.LONG if total_score > 0 else TradeDirection.SHORT
+            # Confidence: based on total score + how many factors are active
+            confidence = min(90, 40 + int(abs(total_score) * 0.2) + active_count * 4)
+            reasons.append(f"LLM Score: {total_score:+.0f} ({active_count} factors)")
+
+        return direction, confidence, " | ".join(reasons)
+
+    # ------------------------------------------------------------------ #
+    #  Degen — aggressive trend-following simulated AI                    #
+    # ------------------------------------------------------------------ #
+
+    def _signal_degen(
+        self, data: HistoricalDataPoint, symbol: str = "BTC"
+    ) -> Tuple[TradeDirection, int, str]:
+        """
+        Aggressive 1h-style signal: trend-following, NOT contrarian.
+
+        Uses taker volume, top traders, and momentum as PRIMARY signals.
+        OI and funding as confirmation. Always decisive (no neutral).
+        Lower confidence threshold = more trades.
+        """
+        funding_rate = data.funding_rate_btc if symbol == "BTC" else data.funding_rate_eth
+        price_change = data.btc_24h_change if symbol == "BTC" else data.eth_24h_change
+
+        reasons = []
+        score = 0  # Positive = LONG, negative = SHORT
+
+        # Primary: Taker Volume (TREND-FOLLOWING, not contrarian)
+        taker = data.taker_buy_sell_ratio
+        if taker > 1.2:
+            score += 35
+            reasons.append(f"Buyers Aggressive ({taker:.2f})")
+        elif taker < 0.8:
+            score -= 35
+            reasons.append(f"Sellers Aggressive ({taker:.2f})")
+        else:
+            diff = (taker - 1.0) * 50
+            score += int(diff)
+            reasons.append(f"Taker Ratio ({taker:.2f})")
+
+        # Primary: Top Trader positioning (FOLLOW smart money)
+        top_ls = data.top_trader_long_short_ratio
+        if top_ls > 1.3:
+            score += 30
+            reasons.append(f"TopTraders LONG ({top_ls:.2f})")
+        elif top_ls < 0.7:
+            score -= 30
+            reasons.append(f"TopTraders SHORT ({top_ls:.2f})")
+        else:
+            reasons.append(f"TopTraders Neutral ({top_ls:.2f})")
+
+        # Primary: Price Momentum (TREND-FOLLOWING)
+        if price_change > 2:
+            score += 25
+            reasons.append(f"Strong Uptrend ({price_change:+.1f}%)")
+        elif price_change < -2:
+            score -= 25
+            reasons.append(f"Strong Downtrend ({price_change:+.1f}%)")
+        elif abs(price_change) > 0.5:
+            score += int(price_change * 10)
+            reasons.append(f"Trend ({price_change:+.1f}%)")
+        else:
+            reasons.append(f"Flat ({price_change:+.1f}%)")
+
+        # Secondary: Open Interest confirmation
+        oi_change = data.open_interest_change_24h
+        if oi_change > 3 and score > 0:
+            score += 15
+            reasons.append(f"OI Confirms ({oi_change:+.1f}%)")
+        elif oi_change > 3 and score < 0:
+            score -= 10  # OI rising against our direction = risk
+        elif oi_change < -3:
+            score += -5 if score > 0 else 5  # Deleveraging reduces conviction
+            reasons.append(f"OI Falling ({oi_change:+.1f}%)")
+
+        # Secondary: Funding rate (light contrarian touch)
+        if funding_rate > 0.001 and score > 0:
+            score -= 10
+            reasons.append(f"High Funding Warning")
+        elif funding_rate < -0.0005 and score < 0:
+            score += 10
+            reasons.append(f"Neg Funding Warning")
+
+        # Forced decisiveness: ALWAYS pick a direction
+        if score > 0:
+            direction = TradeDirection.LONG
+        elif score < 0:
+            direction = TradeDirection.SHORT
+        else:
+            # Truly neutral → follow last 24h trend
+            direction = TradeDirection.LONG if price_change >= 0 else TradeDirection.SHORT
+            reasons.append("Coin Flip → Trend")
+
+        # Confidence: aggressive (lower threshold, higher base)
+        confidence = min(95, 50 + int(abs(score) * 0.4))
+
+        reasons.append(f"DEGEN Score: {score:+d}")
+        return direction, confidence, " | ".join(reasons)
 
     # ------------------------------------------------------------------ #
     #  POSITION MANAGEMENT                                                #

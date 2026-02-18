@@ -14,6 +14,18 @@ import { useFilterStore } from '../stores/filterStore'
 import { ExchangeIcon } from '../components/ui/ExchangeLogo'
 import PnlCell from '../components/ui/PnlCell'
 
+const STRATEGY_DISPLAY: Record<string, string> = {
+  llm_signal: 'KI-Companion',
+  sentiment_surfer: 'Sentiment Surfer',
+  liquidation_hunter: 'Liquidation Hunter',
+  degen: 'Degen',
+  edge_indicator: 'Edge Indicator',
+  claude_edge_indicator: 'Claude-Edge',
+}
+function strategyLabel(name: string): string {
+  return STRATEGY_DISPLAY[name] || name.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
+}
+
 interface BotConfig {
   id: number
   name: string
@@ -254,7 +266,7 @@ export default function BotDetail() {
                 {config.mode.toUpperCase()}
               </span>
               <span className="text-gray-600">·</span>
-              <span>{config.strategy_type === 'llm_signal' ? 'KI-Companion' : config.strategy_type.replace(/_/g, ' ')}</span>
+              <span>{strategyLabel(config.strategy_type)}</span>
               {config.strategy_type === 'llm_signal' && (
                 <Bot size={15} className="text-emerald-400" />
               )}
@@ -409,7 +421,7 @@ export default function BotDetail() {
           <h2 className="text-white font-semibold flex items-center gap-2">
             <Settings size={16} className="text-gray-400" /> {d('config')}
           </h2>
-          <ConfigRow label={d('strategy')} value={config.strategy_type.replace(/_/g, ' ')} />
+          <ConfigRow label={d('strategy')} value={strategyLabel(config.strategy_type)} />
           <ConfigRow label={d('pairs')} value={config.trading_pairs.join(', ')} />
           <ConfigRow label={d('leverage')} value={`${config.leverage}x`} />
           <ConfigRow label={d('positionSize')} value={`${config.position_size_percent}%`} />

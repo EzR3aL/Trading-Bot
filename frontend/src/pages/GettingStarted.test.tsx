@@ -18,6 +18,27 @@ vi.mock('../components/ui/ExchangeLogo', () => ({
   ),
 }))
 
+// Mock api client (used by PrerequisiteBanner)
+vi.mock('../api/client', () => {
+  const mockApi = {
+    get: vi.fn(() => Promise.resolve({ data: [] })),
+    post: vi.fn(() => Promise.resolve({ data: {} })),
+    put: vi.fn(() => Promise.resolve({ data: {} })),
+    delete: vi.fn(() => Promise.resolve({ data: {} })),
+  }
+  return { __esModule: true, default: mockApi }
+})
+
+// Mock GuidedTour
+vi.mock('../components/ui/GuidedTour', () => ({
+  default: ({ tourId }: { tourId: string }) => (
+    <div data-testid={`guided-tour-${tourId}`} />
+  ),
+  TourHelpButton: ({ tourId }: { tourId: string }) => (
+    <button data-testid={`tour-help-${tourId}`} />
+  ),
+}))
+
 function renderPage() {
   return render(
     <MemoryRouter>
@@ -50,7 +71,8 @@ describe('GettingStarted', () => {
       expect(screen.getByText('guide.qsStep1')).toBeInTheDocument()
       expect(screen.getByText('guide.qsStep2')).toBeInTheDocument()
       expect(screen.getByText('guide.qsStep3')).toBeInTheDocument()
-      expect(screen.getByText('guide.qsStep4')).toBeInTheDocument()
+      // qsStep4 appears in both QuickStartFlow and WorkflowDiagram
+      expect(screen.getAllByText('guide.qsStep4').length).toBeGreaterThanOrEqual(1)
     })
 
     it('links to /settings, /bots, /performance', () => {
@@ -60,6 +82,34 @@ describe('GettingStarted', () => {
       expect(hrefs).toContain('/settings')
       expect(hrefs).toContain('/bots')
       expect(hrefs).toContain('/performance')
+    })
+  })
+
+  describe('How It Works', () => {
+    it('renders guide.howItWorksTitle', () => {
+      renderPage()
+      expect(screen.getByText('guide.howItWorksTitle')).toBeInTheDocument()
+    })
+
+    it('renders all 3 card titles', () => {
+      renderPage()
+      expect(screen.getAllByText('guide.connectTitle').length).toBeGreaterThanOrEqual(1)
+      expect(screen.getAllByText('guide.configureTitle').length).toBeGreaterThanOrEqual(1)
+      expect(screen.getAllByText('guide.tradeTitle').length).toBeGreaterThanOrEqual(1)
+    })
+
+    it('renders card descriptions', () => {
+      renderPage()
+      expect(screen.getByText('guide.connectDesc')).toBeInTheDocument()
+      expect(screen.getByText('guide.configureDesc')).toBeInTheDocument()
+      expect(screen.getByText('guide.tradeDesc')).toBeInTheDocument()
+    })
+
+    it('renders bullet points for each card', () => {
+      renderPage()
+      expect(screen.getByText('guide.connectBullet1')).toBeInTheDocument()
+      expect(screen.getByText('guide.configureBullet1')).toBeInTheDocument()
+      expect(screen.getByText('guide.tradeBullet1')).toBeInTheDocument()
     })
   })
 
@@ -87,36 +137,36 @@ describe('GettingStarted', () => {
     })
   })
 
-  describe('Steps Timeline', () => {
-    it('renders all 6 step titles', () => {
+  describe('data-tour attributes', () => {
+    it('has data-tour on all major sections', () => {
+      const { container } = renderPage()
+      expect(container.querySelector('[data-tour="guide-prereq"]')).toBeInTheDocument()
+      expect(container.querySelector('[data-tour="guide-quickstart"]')).toBeInTheDocument()
+      expect(container.querySelector('[data-tour="guide-how-it-works"]')).toBeInTheDocument()
+      expect(container.querySelector('[data-tour="guide-strategies"]')).toBeInTheDocument()
+      expect(container.querySelector('[data-tour="guide-exchanges"]')).toBeInTheDocument()
+    })
+  })
+
+  describe('GuidedTour', () => {
+    it('renders GuidedTour component', () => {
       renderPage()
-      expect(screen.getByText('guide.step1Title')).toBeInTheDocument()
-      expect(screen.getByText('guide.step2Title')).toBeInTheDocument()
-      expect(screen.getByText('guide.step3Title')).toBeInTheDocument()
-      expect(screen.getByText('guide.step4Title')).toBeInTheDocument()
-      expect(screen.getByText('guide.step5Title')).toBeInTheDocument()
-      expect(screen.getByText('guide.step6Title')).toBeInTheDocument()
+      expect(screen.getByTestId('guided-tour-getting-started')).toBeInTheDocument()
     })
 
-    it('renders all 6 step descriptions', () => {
+    it('renders TourHelpButton', () => {
       renderPage()
-      expect(screen.getByText('guide.step1Desc')).toBeInTheDocument()
-      expect(screen.getByText('guide.step2Desc')).toBeInTheDocument()
-      expect(screen.getByText('guide.step3Desc')).toBeInTheDocument()
-      expect(screen.getByText('guide.step4Desc')).toBeInTheDocument()
-      expect(screen.getByText('guide.step5Desc')).toBeInTheDocument()
-      expect(screen.getByText('guide.step6Desc')).toBeInTheDocument()
+      expect(screen.getByTestId('tour-help-getting-started')).toBeInTheDocument()
     })
+  })
 
-    it('renders detail items for all steps', () => {
+  describe('Risk Gauge', () => {
+    it('renders risk profile section', () => {
       renderPage()
-      for (let step = 1; step <= 6; step++) {
-        for (let detail = 1; detail <= 3; detail++) {
-          expect(
-            screen.getByText(`guide.step${step}Detail${detail}`),
-          ).toBeInTheDocument()
-        }
-      }
+      expect(screen.getByText('guide.riskTitle')).toBeInTheDocument()
+      expect(screen.getByText('guide.riskConservative')).toBeInTheDocument()
+      expect(screen.getByText('guide.riskModerate')).toBeInTheDocument()
+      expect(screen.getByText('guide.riskAggressive')).toBeInTheDocument()
     })
   })
 
