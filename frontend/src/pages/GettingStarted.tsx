@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
+import api from '../api/client'
 import {
   KeyRound,
   Layers,
@@ -22,8 +23,109 @@ import {
   Brain,
   Activity,
   Target,
+  AlertTriangle,
+  ExternalLink,
+  UserCheck,
 } from 'lucide-react'
 import { ExchangeIcon } from '../components/ui/ExchangeLogo'
+
+/* ─── Prerequisite Banner ─────────────────────────────────────────── */
+
+function PrerequisiteBanner() {
+  const { t } = useTranslation()
+  const [affiliateUrls, setAffiliateUrls] = useState<Record<string, string>>({})
+
+  useEffect(() => {
+    api.get('/affiliate-links').then((res) => {
+      const urls: Record<string, string> = {}
+      for (const link of res.data) {
+        if (link.affiliate_url) urls[link.exchange_type] = link.affiliate_url
+      }
+      setAffiliateUrls(urls)
+    }).catch(() => {})
+  }, [])
+
+  const exchanges = [
+    { key: 'bitget', name: 'Bitget', icon: <ExchangeIcon exchange="bitget" size={16} /> },
+    { key: 'weex', name: 'Weex', icon: <ExchangeIcon exchange="weex" size={16} /> },
+    { key: 'hyperliquid', name: 'Hyperliquid', icon: <ExchangeIcon exchange="hyperliquid" size={16} /> },
+  ]
+
+  return (
+    <div className="border border-amber-500/30 bg-gradient-to-r from-amber-500/10 to-amber-600/5 rounded-2xl p-5 mb-6">
+      <div className="flex items-start gap-3">
+        <div className="flex-shrink-0 w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-500/30 flex items-center justify-center">
+          <AlertTriangle size={20} className="text-amber-400" />
+        </div>
+        <div className="flex-1">
+          <h2 className="text-base font-bold text-amber-300 mb-1">{t('guide.prereqTitle')}</h2>
+          <p className="text-sm text-gray-300 mb-3">{t('guide.prereqDesc')}</p>
+
+          <div className="space-y-2">
+            {/* Step 1: Register */}
+            <div className="flex items-start gap-2">
+              <div className="flex-shrink-0 w-5 h-5 rounded-full bg-amber-500/20 border border-amber-500/30 flex items-center justify-center text-[10px] font-bold text-amber-400 mt-0.5">1</div>
+              <div>
+                <p className="text-sm text-gray-200 font-medium">{t('guide.prereqStep1')}</p>
+                <div className="flex flex-wrap gap-2 mt-1.5">
+                  {exchanges.map((ex) => {
+                    const url = affiliateUrls[ex.key]
+                    return url ? (
+                      <a
+                        key={ex.key}
+                        href={url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-white/5 border border-white/10 rounded-lg text-xs text-gray-300 hover:bg-emerald-500/10 hover:border-emerald-500/30 hover:text-emerald-300 transition-colors cursor-pointer"
+                      >
+                        {ex.icon}
+                        <span>{ex.name}</span>
+                        <ExternalLink size={10} />
+                      </a>
+                    ) : (
+                      <span key={ex.key} className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-white/5 border border-white/10 rounded-lg text-xs text-gray-500">
+                        {ex.icon}
+                        <span>{ex.name}</span>
+                      </span>
+                    )
+                  })}
+                </div>
+                <p className="text-xs text-gray-500 mt-1">{t('guide.prereqAffiliateHint')}</p>
+              </div>
+            </div>
+
+            {/* Step 2: API Keys */}
+            <div className="flex items-start gap-2">
+              <div className="flex-shrink-0 w-5 h-5 rounded-full bg-amber-500/20 border border-amber-500/30 flex items-center justify-center text-[10px] font-bold text-amber-400 mt-0.5">2</div>
+              <div>
+                <p className="text-sm text-gray-200 font-medium">{t('guide.prereqStep2')}</p>
+                <p className="text-xs text-gray-400 mt-0.5">{t('guide.prereqStep2Hint')}</p>
+              </div>
+            </div>
+
+            {/* Step 3: UID */}
+            <div className="flex items-start gap-2">
+              <div className="flex-shrink-0 w-5 h-5 rounded-full bg-amber-500/20 border border-amber-500/30 flex items-center justify-center text-[10px] font-bold text-amber-400 mt-0.5">3</div>
+              <div>
+                <p className="text-sm text-gray-200 font-medium">{t('guide.prereqStep3')}</p>
+                <p className="text-xs text-gray-400 mt-0.5">{t('guide.prereqStep3Hint')}</p>
+              </div>
+            </div>
+          </div>
+
+          <Link
+            to="/settings"
+            className="inline-flex items-center gap-1.5 mt-3 px-3 py-1.5 text-xs font-medium bg-amber-500/20 text-amber-300 rounded-lg hover:bg-amber-500/30 border border-amber-500/20 transition-colors"
+          >
+            <UserCheck size={14} />
+            {t('guide.prereqGoToSettings')}
+            <ArrowRight size={12} />
+          </Link>
+        </div>
+      </div>
+    </div>
+  )
+}
 
 /* ─── Quick-Start Flow ──────────────────────────────────────────────── */
 
@@ -392,6 +494,9 @@ export default function GettingStarted() {
     <div>
       <h1 className="text-2xl font-bold text-white mb-1">{t('guide.title')}</h1>
       <p className="text-gray-400 text-sm mb-6">{t('guide.subtitle')}</p>
+
+      {/* Prerequisite Info */}
+      <PrerequisiteBanner />
 
       {/* Quick Start Flow */}
       <QuickStartFlow />
