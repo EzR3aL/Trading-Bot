@@ -78,6 +78,8 @@ const STRATEGY_DISPLAY_NAMES: Record<string, string> = {
   sentiment_surfer: 'Sentiment Surfer',
   liquidation_hunter: 'Liquidation Hunter',
   degen: 'Degen',
+  edge_indicator: 'Edge Indicator',
+  claude_edge_indicator: 'Claude-Edge',
 }
 
 const STRATEGY_DESCRIPTIONS_DE: Record<string, string> = {
@@ -85,6 +87,8 @@ const STRATEGY_DESCRIPTIONS_DE: Record<string, string> = {
   sentiment_surfer: 'Kombiniert Marktstimmung mit technischen Indikatoren zur Vorhersage von Preisbewegungen. Nutzt News-Sentiment, Fear & Greed, VWAP, Supertrend und Spot-Daten. Erfordert Übereinstimmung mehrerer Quellen.',
   liquidation_hunter: 'Contrarian-Strategie, die gegen überfüllte Positionen handelt. Analysiert Long/Short-Verhältnisse, Funding Rates und Fear & Greed, um Liquidationskaskaden frühzeitig zu erkennen.',
   degen: 'KI-gesteuerte Arena-Strategie mit festem Prompt und 14 Datenquellen. Nutzt Derivatives, Order Book, Supertrend, VWAP und mehr fuer 1h BTC-Vorhersagen. Inspiriert vom Degen Prediction Bot.',
+  edge_indicator: 'Technische Analyse basierend auf dem TradingView "Trading Edge" Indikator. Kombiniert EMA 8/21 Ribbon, ADX-Chop-Filter und Predator Momentum Score (MACD + RSI Drift). Nur Kline-Daten, keine externen APIs.',
+  claude_edge_indicator: 'Erweiterte Edge Strategie mit ATR-basierten TP/SL, Volumen-Bestätigung, Multi-Timeframe (4h), Trailing Stop, regime-basierter Positionsgröße und RSI-Divergenz.',
 }
 
 function getStrategyDisplayName(name: string): string {
