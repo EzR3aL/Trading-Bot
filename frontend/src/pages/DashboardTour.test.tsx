@@ -3,8 +3,8 @@ import { describe, it, expect } from 'vitest';
 describe('Dashboard tour configuration', () => {
   const dashboardSteps = [
     { selector: '[data-tour="dash-stats"]', titleKey: 'tour.dashPnlTitle', descKey: 'tour.dashPnlDesc' },
-    { selector: '[data-tour="dash-charts"]', titleKey: 'tour.dashBotsTitle', descKey: 'tour.dashBotsDesc' },
-    { selector: '[data-tour="dash-trades"]', titleKey: 'tour.dashFilterTitle', descKey: 'tour.dashFilterDesc' },
+    { selector: '[data-tour="dash-charts"]', titleKey: 'tour.dashChartsTitle', descKey: 'tour.dashChartsDesc' },
+    { selector: '[data-tour="dash-trades"]', titleKey: 'tour.dashTradesTitle', descKey: 'tour.dashTradesDesc' },
   ];
 
   it('tour steps reference valid CSS selectors', () => {
@@ -46,8 +46,8 @@ describe('Bots page tour configuration', () => {
   it('Dashboard tour has 3 steps', () => {
     const dashboardSteps = [
       { selector: '[data-tour="dash-stats"]', titleKey: 'tour.dashPnlTitle', descKey: 'tour.dashPnlDesc' },
-      { selector: '[data-tour="dash-charts"]', titleKey: 'tour.dashBotsTitle', descKey: 'tour.dashBotsDesc' },
-      { selector: '[data-tour="dash-trades"]', titleKey: 'tour.dashFilterTitle', descKey: 'tour.dashFilterDesc' },
+      { selector: '[data-tour="dash-charts"]', titleKey: 'tour.dashChartsTitle', descKey: 'tour.dashChartsDesc' },
+      { selector: '[data-tour="dash-trades"]', titleKey: 'tour.dashTradesTitle', descKey: 'tour.dashTradesDesc' },
     ];
     expect(dashboardSteps).toHaveLength(3);
    });

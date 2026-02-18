@@ -738,18 +738,18 @@
     "done": "Done",
     "helpButton": "Help",
     "botsNewBotTitle": "Create a New Bot",
-    "botsNewBotDesc": "Click here to create your first trading bot. A 6-step wizard will guide you through setting up name, strategy, risk parameters and exchange.",
+    "botsNewBotDesc": "Click here to create a new trading bot. A wizard guides you through 6 steps: name, strategy, trading pairs & risk, exchange & mode, schedule and summary.",
     "botsBotCardTitle": "Your Bot Card",
-    "botsBotCardDesc": "Each card shows a bot with its status, exchange, mode (Demo/Live), strategy and trading pairs. Green dot = bot is actively running.",
+    "botsBotCardDesc": "Each card shows a bot with its status, exchange, mode (Demo/Live), strategy and trading pairs. Green dot = bot is actively running. Click the bot name for the detail page.",
     "botsStatsTitle": "Performance at a Glance",
-    "botsStatsDesc": "See total PnL, number of trades, and open positions for your bot. Click the bot name for detailed statistics.",
+    "botsStatsDesc": "Three key metrics per bot: total PnL (profit/loss), number of completed trades and currently open positions.",
     "botsActionsTitle": "Control Your Bot",
-    "botsActionsDesc": "Start/Stop the bot, view trade history, edit configuration or delete the bot. Cannot edit while running.",
-    "dashPnlTitle": "Your Performance",
-    "dashPnlDesc": "This chart shows your total trading performance across all bots. Switch between daily, weekly and monthly views.",
-    "dashBotsTitle": "Bot Overview",
-    "dashBotsDesc": "Status of all active bots at a glance — running bots, stopped bots and error messages.",
-    "dashFilterTitle": "Demo/Live Filter",
-    "dashFilterDesc": "Switch between Demo and Live view. In Demo mode you trade with simulated money."
+    "botsActionsDesc": "Start or stop the bot, view trade history, edit configuration, duplicate or delete it. Editing is locked while running.",
+    "dashPnlTitle": "Key Metrics",
+    "dashPnlDesc": "Four key metrics at a glance: total PnL (incl. fees and funding), win rate with wins/losses, best trade and worst trade in the selected period.",
+    "dashChartsTitle": "PnL & Win Rate",
+    "dashChartsDesc": "On the left you see PnL over time as bar and line chart. On the right the overall win rate across all trades with number of wins and losses.",
+    "dashTradesTitle": "Recent Trades",
+    "dashTradesDesc": "All recently executed trades with date, bot name, symbol, direction (Long/Short), entry price, PnL, mode (Demo/Live) and status."
   }
 }

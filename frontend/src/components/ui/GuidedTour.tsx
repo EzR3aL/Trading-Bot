@@ -259,32 +259,34 @@ export default function GuidedTour({ tourId, steps, autoStart = true, onComplete
         }}
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Close button */}
-        <button
-          onClick={handleSkip}
-          className="absolute top-3 right-3 text-gray-500 hover:text-gray-300 transition-colors"
-          aria-label={t('tour.skip')}
-        >
-          <X size={16} />
-        </button>
-
-        {/* Step indicator */}
-        <div className="flex items-center gap-1.5 mb-2">
-          {steps.map((_, i) => (
-            <div
-              key={i}
-              className={`h-1.5 rounded-full transition-all duration-300 ${
-                i === currentStep
-                  ? 'w-6 bg-primary-400'
-                  : i < currentStep
-                    ? 'w-1.5 bg-primary-600'
-                    : 'w-1.5 bg-gray-700'
-              }`}
-            />
-          ))}
-          <span className="ml-auto text-xs text-gray-500">
-            {currentStep + 1}/{steps.length}
-          </span>
+        {/* Step indicator + counter + close */}
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center gap-1.5">
+            {steps.map((_, i) => (
+              <div
+                key={i}
+                className={`h-1.5 rounded-full transition-all duration-300 ${
+                  i === currentStep
+                    ? 'w-6 bg-primary-400'
+                    : i < currentStep
+                      ? 'w-1.5 bg-primary-600'
+                      : 'w-1.5 bg-gray-700'
+                }`}
+              />
+            ))}
+          </div>
+          <div className="flex items-center gap-3">
+            <span className="text-xs text-gray-500">
+              {currentStep + 1}/{steps.length}
+            </span>
+            <button
+              onClick={handleSkip}
+              className="text-gray-500 hover:text-gray-300 transition-colors"
+              aria-label={t('tour.skip')}
+            >
+              <X size={16} />
+            </button>
+          </div>
         </div>
 
         {/* Content */}

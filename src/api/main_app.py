@@ -23,6 +23,7 @@ from slowapi.errors import RateLimitExceeded
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from src.api.routers import (
+    admin_logs,
     affiliate,
     auth,
     backtest,
@@ -103,9 +104,11 @@ async def lifespan(app: FastAPI):
     logger.info("Shutting down...")
     await orchestrator.shutdown_all()
 
-    # Drain pending audit writes before closing DB
+    # Drain pending audit + event writes before closing DB
     from src.api.middleware.audit_log import drain_pending_audit_tasks
+    from src.utils.event_logger import drain_pending_event_tasks
     await drain_pending_audit_tasks(timeout=5.0)
+    await drain_pending_event_tasks(timeout=5.0)
 
     await close_db()
     logger.info("Application shut down")
@@ -221,6 +224,7 @@ def create_app() -> FastAPI:
     app.include_router(tax_report.router)
     app.include_router(affiliate.router)
     app.include_router(backtest.router)
+    app.include_router(admin_logs.router)
 
     # Serve frontend static files (built React app)
     frontend_dir = Path("static/frontend")

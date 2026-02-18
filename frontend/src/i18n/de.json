@@ -738,18 +738,18 @@
     "done": "Fertig",
     "helpButton": "Hilfe",
     "botsNewBotTitle": "Neuen Bot erstellen",
-    "botsNewBotDesc": "Klicke hier um deinen ersten Trading Bot zu erstellen. Ein 6-Schritte-Assistent führt dich durch die Einrichtung von Name, Strategie, Risiko-Parametern und Exchange.",
+    "botsNewBotDesc": "Klicke hier um einen neuen Trading Bot zu erstellen. Ein Assistent führt dich durch 6 Schritte: Name, Strategie, Trading-Paare & Risiko, Exchange & Modus, Zeitplan und Zusammenfassung.",
     "botsBotCardTitle": "Deine Bot-Karte",
-    "botsBotCardDesc": "Jede Karte zeigt einen Bot mit Status, Exchange, Modus (Demo/Live), Strategie und Trading-Paaren. Grüner Punkt = Bot läuft aktiv.",
+    "botsBotCardDesc": "Jede Karte zeigt einen Bot mit Status, Exchange, Modus (Demo/Live), Strategie und Trading-Paaren. Grüner Punkt = Bot läuft aktiv. Klicke auf den Bot-Namen für die Detailseite.",
     "botsStatsTitle": "Performance auf einen Blick",
-    "botsStatsDesc": "Hier siehst du Gesamt-PnL, Anzahl der Trades und offene Positionen deines Bots. Klicke auf den Bot-Namen für detaillierte Statistiken.",
+    "botsStatsDesc": "Drei Kennzahlen pro Bot: Gesamt-PnL (Gewinn/Verlust), Anzahl abgeschlossener Trades und aktuell offene Positionen.",
     "botsActionsTitle": "Bot steuern",
-    "botsActionsDesc": "Starte/Stoppe den Bot, zeige Trade-Historie an, bearbeite die Konfiguration oder lösche den Bot. Im laufenden Betrieb kann nicht bearbeitet werden.",
-    "dashPnlTitle": "Deine Performance",
-    "dashPnlDesc": "Dieser Chart zeigt deine gesamte Trading-Performance über alle Bots hinweg. Wechsle zwischen Tages-, Wochen- und Monatsansicht.",
-    "dashBotsTitle": "Bot-Übersicht",
-    "dashBotsDesc": "Status aller aktiven Bots auf einen Blick — laufende Bots, gestoppte Bots und Fehlermeldungen.",
-    "dashFilterTitle": "Demo/Live Filter",
-    "dashFilterDesc": "Wechsle zwischen Demo- und Live-Ansicht. Im Demo-Modus handelst du mit simuliertem Geld."
+    "botsActionsDesc": "Starte oder stoppe den Bot, zeige die Trade-Historie an, bearbeite die Konfiguration, dupliziere oder lösche ihn. Im laufenden Betrieb ist Bearbeiten gesperrt.",
+    "dashPnlTitle": "Kennzahlen",
+    "dashPnlDesc": "Vier Kennzahlen auf einen Blick: Gesamt-PnL (inkl. Gebühren und Funding), Win-Rate mit Wins/Losses, bester Trade und schlechtester Trade im gewählten Zeitraum.",
+    "dashChartsTitle": "PnL & Gewinnrate",
+    "dashChartsDesc": "Links siehst du den PnL-Verlauf als Balken- und Liniendiagramm. Rechts die Gesamt-Gewinnrate über alle Trades mit Anzahl Wins und Losses.",
+    "dashTradesTitle": "Letzte Trades",
+    "dashTradesDesc": "Alle kürzlich ausgeführten Trades mit Datum, Bot-Name, Symbol, Richtung (Long/Short), Einstiegspreis, PnL, Modus (Demo/Live) und Status."
   }
 }

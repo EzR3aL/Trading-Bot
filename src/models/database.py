@@ -418,3 +418,17 @@ class AuditLog(Base):
     response_time_ms = Column(Float, nullable=False)
     client_ip = Column(String(45), nullable=False)
     created_at = Column(DateTime, server_default=func.now(), index=True)
+
+
+class EventLog(Base):
+    """Business event log for admin monitoring (bot lifecycle, trades, config changes)."""
+    __tablename__ = "event_logs"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, nullable=True, index=True)
+    bot_id = Column(Integer, nullable=True, index=True)
+    event_type = Column(String(50), nullable=False, index=True)
+    severity = Column(String(10), nullable=False, default="info")
+    message = Column(String(1000), nullable=False)
+    details = Column(Text, nullable=True)
+    created_at = Column(DateTime, server_default=func.now(), index=True)

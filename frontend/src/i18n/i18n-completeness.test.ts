@@ -49,8 +49,8 @@ describe('tour keys', () => {
   it('has dashboard tour step keys', () => {
     const dashKeys = [
       'dashPnlTitle', 'dashPnlDesc',
-      'dashBotsTitle', 'dashBotsDesc',
-      'dashFilterTitle', 'dashFilterDesc',
+      'dashChartsTitle', 'dashChartsDesc',
+      'dashTradesTitle', 'dashTradesDesc',
     ];
     for (const key of dashKeys) {
       expect(en.tour).toHaveProperty(key);

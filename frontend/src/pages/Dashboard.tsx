@@ -310,14 +310,14 @@ const dashboardTourSteps: TourStep[] = [
   },
   {
     target: '[data-tour="dash-charts"]',
-    titleKey: 'tour.dashBotsTitle',
-    descriptionKey: 'tour.dashBotsDesc',
+    titleKey: 'tour.dashChartsTitle',
+    descriptionKey: 'tour.dashChartsDesc',
     position: 'bottom',
   },
   {
     target: '[data-tour="dash-trades"]',
-    titleKey: 'tour.dashFilterTitle',
-    descriptionKey: 'tour.dashFilterDesc',
+    titleKey: 'tour.dashTradesTitle',
+    descriptionKey: 'tour.dashTradesDesc',
     position: 'top',
   },
 ]
