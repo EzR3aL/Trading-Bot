@@ -279,6 +279,52 @@ DATA_SOURCES: List[DataSourceDef] = [
         free=True,
         default=False,
     ),
+    # ── Velo-Replicated Sources ──
+    DataSourceDef(
+        id="cvd",
+        name="Cumulative Volume Delta",
+        description="Net taker buy vs sell pressure — positive CVD = aggressive buying dominance",
+        category="futures",
+        provider="Binance",
+        free=True,
+        default=False,
+    ),
+    DataSourceDef(
+        id="coinbase_premium",
+        name="Coinbase Premium Index",
+        description="Price spread between Coinbase and Binance — positive = US institutional buying",
+        category="spot",
+        provider="Coinbase",
+        free=True,
+        default=False,
+    ),
+    DataSourceDef(
+        id="bybit_futures",
+        name="Bybit Futures (OI/Funding)",
+        description="Bybit open interest, funding rate, and volume — cross-exchange comparison",
+        category="futures",
+        provider="Bybit",
+        free=True,
+        default=False,
+    ),
+    DataSourceDef(
+        id="deribit_options_extended",
+        name="Options IV & Skew",
+        description="Implied volatility, put/call ratio, and 25-delta skew from Deribit options",
+        category="options",
+        provider="Deribit",
+        free=True,
+        default=False,
+    ),
+    DataSourceDef(
+        id="deribit_dvol",
+        name="DVOL (Crypto VIX)",
+        description="Deribit Volatility Index — the crypto equivalent of the VIX fear gauge",
+        category="options",
+        provider="Deribit",
+        free=True,
+        default=False,
+    ),
 ]
 
 # Quick lookup by ID
@@ -301,6 +347,8 @@ PROVIDER_HEALTH_URLS: Dict[str, str] = {
     "Blockchain.info": "https://api.blockchain.info/stats",
     "Bitget": "https://api.bitget.com/api/v2/public/time",
     "FRED": "https://api.stlouisfed.org/fred/series?series_id=DFF&api_key=DEMO_KEY&file_type=json",
+    "Coinbase": "https://api.exchange.coinbase.com/products/BTC-USD/ticker",
+    "Bybit": "https://api.bybit.com/v5/market/time",
     # "Calculated" sources have no external dependency
 }
 
