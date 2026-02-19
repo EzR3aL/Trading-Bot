@@ -56,7 +56,7 @@ interface BotBuilderProps {
 }
 
 // Strategies that use market data and should show the data sources step
-const DATA_STRATEGIES = ['llm_signal', 'sentiment_surfer', 'liquidation_hunter', 'degen']
+const DATA_STRATEGIES = ['llm_signal', 'sentiment_surfer', 'liquidation_hunter', 'degen', 'edge_indicator', 'claude_edge', 'claude_edge_indicator']
 
 // Fixed data sources for non-LLM strategies (these strategies use hardcoded sources internally)
 const FIXED_STRATEGY_SOURCES: Record<string, string[]> = {
@@ -71,6 +71,16 @@ const FIXED_STRATEGY_SOURCES: Record<string, string[]> = {
     'long_short_ratio', 'order_book', 'liquidations', 'supertrend', 'vwap',
     'oiwap', 'spot_volume', 'volatility', 'coingecko_market',
   ],
+  edge_indicator: [
+    'spot_price', 'vwap', 'supertrend', 'spot_volume', 'volatility',
+  ],
+  claude_edge: [
+    'spot_price', 'fear_greed', 'news_sentiment', 'vwap', 'supertrend',
+    'spot_volume', 'volatility', 'funding_rate',
+  ],
+  claude_edge_indicator: [
+    'spot_price', 'vwap', 'supertrend', 'spot_volume', 'volatility',
+  ],
 }
 
 const STRATEGY_DISPLAY_NAMES: Record<string, string> = {
@@ -78,6 +88,9 @@ const STRATEGY_DISPLAY_NAMES: Record<string, string> = {
   sentiment_surfer: 'Sentiment Surfer',
   liquidation_hunter: 'Liquidation Hunter',
   degen: 'Degen',
+  edge_indicator: 'Edge Indicator',
+  claude_edge: 'Claude Edge',
+  claude_edge_indicator: 'Claude Edge Indicator',
 }
 
 const STRATEGY_DESCRIPTIONS_DE: Record<string, string> = {
@@ -85,6 +98,9 @@ const STRATEGY_DESCRIPTIONS_DE: Record<string, string> = {
   sentiment_surfer: 'Kombiniert Marktstimmung mit technischen Indikatoren zur Vorhersage von Preisbewegungen. Nutzt News-Sentiment, Fear & Greed, VWAP, Supertrend und Spot-Daten. Erfordert Übereinstimmung mehrerer Quellen.',
   liquidation_hunter: 'Contrarian-Strategie, die gegen überfüllte Positionen handelt. Analysiert Long/Short-Verhältnisse, Funding Rates und Fear & Greed, um Liquidationskaskaden frühzeitig zu erkennen.',
   degen: 'KI-gesteuerte Arena-Strategie mit festem Prompt und 14 Datenquellen. Nutzt Derivatives, Order Book, Supertrend, VWAP und mehr fuer 1h BTC-Vorhersagen. Inspiriert vom Degen Prediction Bot.',
+  edge_indicator: 'Technische Strategie basierend auf dem TradingView "Trading Edge" Indicator. EMA 8/21 Ribbon, ADX Chop-Filter und Predator Momentum Score (MACD + RSI Drift). Nur Kline-Daten.',
+  claude_edge: 'Hybrid: Technische Analyse + KI-Bewertung. Berechnet Indikatoren und lässt ein LLM bewerten, ob die Signale im Marktkontext sinnvoll sind. Das Beste aus beiden Welten.',
+  claude_edge_indicator: 'Erweiterter Edge Indicator mit ATR-basierten TP/SL, Volumen-Bestätigung, Multi-Timeframe (4h) Alignment, Trailing Stop, Regime-basierter Positionsgröße und RSI-Divergenz-Erkennung.',
 }
 
 function getStrategyDisplayName(name: string): string {
@@ -650,7 +666,7 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
             </div>
 
             {/* LLM info banner */}
-            {(strategyType === 'llm_signal' || strategyType === 'degen') && (
+            {(strategyType === 'llm_signal' || strategyType === 'degen' || strategyType === 'claude_edge') && (
               <div className="bg-blue-900/20 border border-blue-800 rounded-lg p-3">
                 <p className="text-xs text-blue-300">{b.llmNote || 'This bot uses AI for signal generation. Configure your API key in Settings → LLM Keys.'}</p>
               </div>

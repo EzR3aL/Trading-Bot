@@ -254,7 +254,11 @@ export default function BotDetail() {
                 {config.mode.toUpperCase()}
               </span>
               <span className="text-gray-600">·</span>
-              <span>{config.strategy_type === 'llm_signal' ? 'KI-Companion' : config.strategy_type.replace(/_/g, ' ')}</span>
+              <span>{{
+                llm_signal: 'KI-Companion', sentiment_surfer: 'Sentiment Surfer',
+                liquidation_hunter: 'Liquidation Hunter', degen: 'Degen',
+                edge_indicator: 'Edge Indicator', claude_edge: 'Claude Edge', claude_edge_indicator: 'Claude Edge Indicator',
+              }[config.strategy_type] || config.strategy_type.replace(/_/g, ' ')}</span>
               {config.strategy_type === 'llm_signal' && (
                 <Bot size={15} className="text-emerald-400" />
               )}

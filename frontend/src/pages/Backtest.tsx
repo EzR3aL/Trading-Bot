@@ -21,6 +21,9 @@ const STRATEGY_DISPLAY: Record<string, string> = {
   sentiment_surfer: 'Sentiment Surfer',
   llm_signal: 'KI-Companion',
   degen: 'Degen',
+  edge_indicator: 'Edge Indicator',
+  claude_edge: 'Claude Edge',
+  claude_edge_indicator: 'Claude Edge Indicator',
 }
 
 const TRADING_PAIRS = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'XRPUSDT', 'DOGEUSDT', 'AVAXUSDT']

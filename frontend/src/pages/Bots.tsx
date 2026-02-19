@@ -32,7 +32,7 @@ import {
   Bot,
 } from 'lucide-react'
 
-const STRATEGY_DISPLAY: Record<string, string> = { llm_signal: 'KI-Companion', sentiment_surfer: 'Sentiment Surfer', liquidation_hunter: 'Liquidation Hunter', degen: 'Degen' }
+const STRATEGY_DISPLAY: Record<string, string> = { llm_signal: 'KI-Companion', sentiment_surfer: 'Sentiment Surfer', liquidation_hunter: 'Liquidation Hunter', degen: 'Degen', edge_indicator: 'Edge Indicator', claude_edge: 'Claude Edge', claude_edge_indicator: 'Claude Edge Indicator' }
 function strategyLabel(name: string) { return STRATEGY_DISPLAY[name] || name.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) }
 
 interface BotStatus {
