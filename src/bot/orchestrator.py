@@ -12,6 +12,7 @@ import asyncio
 from datetime import datetime
 from typing import Dict, List, Optional
 
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from sqlalchemy import select, update
 
 from src.bot.bot_worker import BotWorker
@@ -38,6 +39,7 @@ class BotOrchestrator:
     def __init__(self):
         self._workers: Dict[int, BotWorker] = {}  # bot_config_id -> BotWorker
         self._lock = asyncio.Lock()
+        self._scheduler = AsyncIOScheduler()  # Shared scheduler for all bots
 
     async def start_bot(self, bot_config_id: int) -> bool:
         """
@@ -55,8 +57,12 @@ class BotOrchestrator:
         if bot_config_id in self._workers and self._workers[bot_config_id].status == "running":
             raise ValueError(f"Bot {bot_config_id} is already running")
 
-        # Create and initialize worker
-        worker = BotWorker(bot_config_id)
+        # Ensure shared scheduler is running
+        if not self._scheduler.running:
+            self._scheduler.start()
+
+        # Create and initialize worker with shared scheduler
+        worker = BotWorker(bot_config_id, scheduler=self._scheduler)
         success = await worker.initialize()
 
         if not success:
@@ -117,6 +123,10 @@ class BotOrchestrator:
         """
         logger.info("Orchestrator: Restoring bots from database...")
 
+        # Start shared scheduler if not already running
+        if not self._scheduler.running:
+            self._scheduler.start()
+
         async with get_session() as session:
             # Find all enabled bot configs
             result = await session.execute(
@@ -173,6 +183,10 @@ class BotOrchestrator:
                     )
             except Exception as e:
                 logger.error(f"Orchestrator: Error updating DB on shutdown: {e}")
+
+            # Shutdown shared scheduler
+            if self._scheduler.running:
+                self._scheduler.shutdown(wait=False)
 
             self._workers.clear()
             logger.info("Orchestrator: All bots shut down")

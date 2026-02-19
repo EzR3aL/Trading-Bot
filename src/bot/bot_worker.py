@@ -62,13 +62,14 @@ class BotWorker(
     4. Stopped by Orchestrator or on error (with auto-restart)
     """
 
-    def __init__(self, bot_config_id: int):
+    def __init__(self, bot_config_id: int, scheduler: Optional[AsyncIOScheduler] = None):
         self.bot_config_id = bot_config_id
         self._config: Optional[BotConfig] = None
         self._client: Optional[ExchangeClient] = None
         self._strategy: Optional[BaseStrategy] = None
         self._risk_manager: Optional[RiskManager] = None
-        self._scheduler: Optional[AsyncIOScheduler] = None
+        self._scheduler: Optional[AsyncIOScheduler] = scheduler
+        self._owns_scheduler = scheduler is None  # Only stop if we created it
         self._task: Optional[asyncio.Task] = None
 
         self.status = "idle"  # idle | starting | running | error | stopped
@@ -253,8 +254,9 @@ class BotWorker(
                 logger.warning(f"[Bot:{self.bot_config_id}] Could not fetch balance: {e}")
                 self._risk_manager.initialize_day(0)
 
-            # Setup scheduler
-            self._scheduler = AsyncIOScheduler()
+            # Setup scheduler (use shared if provided, else create own)
+            if self._owns_scheduler:
+                self._scheduler = AsyncIOScheduler()
             self._setup_schedule()
 
             logger.info(
@@ -350,7 +352,8 @@ class BotWorker(
         if self.status == "running":
             return
 
-        self._scheduler.start()
+        if self._owns_scheduler and self._scheduler and not self._scheduler.running:
+            self._scheduler.start()
         self.status = "running"
         self.started_at = datetime.utcnow()
         self.error_message = None
@@ -364,8 +367,19 @@ class BotWorker(
         """Stop the bot gracefully."""
         logger.info(f"[Bot:{self.bot_config_id}] Stopping...")
 
-        if self._scheduler and self._scheduler.running:
-            self._scheduler.shutdown(wait=False)
+        # Remove this bot's jobs from the scheduler
+        if self._scheduler:
+            prefix = f"bot_{self.bot_config_id}_"
+            for job in list(self._scheduler.get_jobs()):
+                if job.id.startswith(prefix):
+                    try:
+                        job.remove()
+                    except Exception:
+                        pass
+
+            # Only shutdown scheduler if we created it
+            if self._owns_scheduler and self._scheduler.running:
+                self._scheduler.shutdown(wait=False)
 
         if self._strategy:
             await self._strategy.close()
@@ -404,8 +418,8 @@ class BotWorker(
                 )
                 self.status = "error"
                 await asyncio.sleep(60)
-                # Verify scheduler is still alive — restart if crashed
-                if self._scheduler and not self._scheduler.running:
+                # Verify scheduler is still alive — restart if crashed (only if we own it)
+                if self._owns_scheduler and self._scheduler and not self._scheduler.running:
                     logger.warning(f"[Bot:{self.bot_config_id}] Scheduler died — restarting")
                     try:
                         self._scheduler.start()
