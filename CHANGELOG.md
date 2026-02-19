@@ -9,6 +9,108 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.5.0] - 2026-02-19
+
+### Production-Ready Sprint: Monitoring, WebSocket, Quality
+
+Komplettes Production-Hardening mit Prometheus Monitoring, Real-Time WebSocket-Updates,
+CI/CD Pipeline und umfassender Test Suite (3707 Tests). Vorbereitung fuer DigitalOcean Droplet Deployment.
+
+#### Hinzugefuegt
+
+##### Prometheus Monitoring (#75)
+- **Zentrales Metrics-Modul** (`src/monitoring/metrics.py`) — HTTP, Bot, Trade und System-Metriken
+  - `http_requests_total` (Counter), `http_request_duration_seconds` (Histogram)
+  - `bots_running_total`, `bots_by_status` (Gauges)
+  - `trades_total` (Counter), `trade_pnl_percent` (Histogram)
+  - `websocket_connections_active`, `db_query_duration_seconds`
+- **PrometheusMiddleware** (`src/monitoring/middleware.py`) — Request Count & Latency Tracking
+  - Pfad-Normalisierung (z.B. `/api/trades/123` → `/api/trades/{id}`) gegen Cardinality Explosion
+  - `/metrics` Endpoint wird uebersprungen
+- **`/metrics` Endpoint** (`src/api/routers/metrics.py`) — Prometheus-Format, unauthentifiziert
+- **Bot-Metrics Collector** (`src/monitoring/collectors.py`) — Background Task, alle 15s
+  - Liest Orchestrator-State: Running Count, Status-Verteilung, Consecutive Errors
+- **Docker Compose Services** — Prometheus + Grafana
+  - `prom/prometheus:latest` auf Port 9090 (nur localhost)
+  - `grafana/grafana:latest` auf Port 3000
+  - `monitoring/prometheus.yml` Scrape-Konfiguration
+- **Neue Dependency**: `prometheus-client>=0.20.0`
+
+##### WebSocket Real-Time Updates (#76)
+- **ConnectionManager** (`src/api/websocket/manager.py`) — Per-User Pub/Sub
+  - `connect()`, `disconnect()`, `broadcast_to_user()`, `broadcast_all()`
+  - Thread-safe via `asyncio.Lock`
+- **`/api/ws` Endpoint** (`src/api/routers/websocket.py`) — JWT-Authentifizierung via Query-Param
+  - Ping/Pong Keep-Alive, automatische Disconnect-Erkennung
+  - `WEBSOCKET_CONNECTIONS` Prometheus Gauge wird aktualisiert
+- **Event Broadcasting** im Backend:
+  - `BotOrchestrator`: `bot_started`, `bot_stopped` Events
+  - `TradeExecutorMixin`: `trade_opened` Events
+  - `PositionMonitorMixin`: `trade_closed` Events
+- **React `useWebSocket` Hook** (`frontend/src/hooks/useWebSocket.ts`)
+  - Auto-Reconnect nach 5s, Ping alle 30s
+  - Stabile Handler-Referenzen via `useMemo`
+- **Zustand `realtimeStore`** (`frontend/src/stores/realtimeStore.ts`)
+  - `lastEvent`, `botStatuses`, `pushEvent()`, `updateBotStatus()`
+- **AppLayout Integration** — Toast-Notifications bei Bot-Start/Stop und Trade-Events
+
+##### Codebase Quality Sprint (#58–#65)
+- **Code Cleanup** (#58) — Dead Code, unused Imports, unreachable Branches entfernt
+- **Silent Error Handling Fix** (#59) — Bare `except: pass` durch spezifische Handler ersetzt
+- **Notification Retry** (#60) — Exponential Backoff mit `tenacity` (3 Versuche, 1→2→4s)
+- **Structured Logging** (#61) — `%s`-Format statt f-Strings in allen Loggern
+- **Config Validation** (#62) — Startup-Validierung: JWT Key, DB URL, Encryption Key
+- **Offline Indicator** (#63) — Frontend-Banner bei Netzwerkverlust (auto-dismiss bei Reconnect)
+- **CI/CD Pipeline** (#64) — GitHub Actions: Lint, Tests, Frontend Build, Security Audit
+- **Comprehensive Test Suite** (#65) — 3707 Tests, alle bestehenden Bugs gefixt
+
+#### Geaendert
+
+| Datei | Aenderung |
+|-------|-----------|
+| `requirements.txt` | `prometheus-client>=0.20.0` hinzugefuegt |
+| `src/api/main_app.py` | PrometheusMiddleware, Metrics + WebSocket Router, Collector Task |
+| `src/bot/orchestrator.py` | `_broadcast_event()` fuer WebSocket Events |
+| `src/bot/trade_executor.py` | `trade_opened` WebSocket Broadcast |
+| `src/bot/position_monitor.py` | `trade_closed` WebSocket Broadcast |
+| `docker-compose.yml` | Prometheus + Grafana Services, neue Volumes |
+| `frontend/src/components/layout/AppLayout.tsx` | WebSocket Hook + Toast Notifications |
+
+#### Neue Dateien
+
+| Datei | Zweck |
+|-------|-------|
+| `src/monitoring/__init__.py` | Package Init |
+| `src/monitoring/metrics.py` | Prometheus Metric Definitionen |
+| `src/monitoring/middleware.py` | HTTP Request Metrics Middleware |
+| `src/monitoring/collectors.py` | Bot Metrics Background Collector |
+| `src/api/routers/metrics.py` | `/metrics` Endpoint |
+| `src/api/websocket/__init__.py` | Package Init |
+| `src/api/websocket/manager.py` | WebSocket Connection Manager |
+| `src/api/routers/websocket.py` | `/api/ws` WebSocket Endpoint |
+| `frontend/src/hooks/useWebSocket.ts` | React WebSocket Hook |
+| `frontend/src/stores/realtimeStore.ts` | Zustand Real-Time Store |
+| `monitoring/prometheus.yml` | Prometheus Scrape Config |
+
+#### Zugriff (DigitalOcean Droplet)
+
+Nach `docker compose up -d`:
+- **App**: `http://<droplet-ip>:8000`
+- **Grafana**: `http://<droplet-ip>:3000` (Login: admin/admin → Passwort aendern)
+- **Prometheus**: Nur intern via `http://prometheus:9090`
+- In Grafana: Data Sources → Prometheus → URL `http://prometheus:9090`
+
+#### Test-Ergebnis
+
+| Metrik | Wert |
+|--------|------|
+| Tests Passed | 3707 |
+| Tests Skipped | 5 |
+| Tests Failed | 0 |
+| Frontend Build | OK (9.76s) |
+
+---
+
 ## [3.4.0] - 2026-02-17
 
 ### PostgreSQL-Migration (Multi-User / 10k+ User Support)

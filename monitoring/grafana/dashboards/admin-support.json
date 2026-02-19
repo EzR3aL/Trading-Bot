@@ -1,0 +1,114 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "title": "Alle Bots — Aktueller Status",
+      "type": "table",
+      "datasource": { "type": "postgres", "uid": "" },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "rawSql": "SELECT bc.id AS bot_id, u.username, bc.name AS bot_name, bc.strategy_type, bc.exchange_type, bc.is_enabled, bi.is_running, bi.error_message, bi.started_at, bi.stopped_at FROM bot_configs bc JOIN users u ON u.id = bc.user_id LEFT JOIN bot_instances bi ON bi.bot_config_id = bc.id ORDER BY bi.is_running DESC NULLS LAST, bc.id DESC",
+          "format": "table",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "error_message" }, "properties": [{ "id": "custom.width", "value": 300 }] },
+          { "matcher": { "id": "byName", "options": "is_running" }, "properties": [{ "id": "mappings", "value": [{ "type": "value", "options": { "true": { "text": "RUNNING", "color": "green" }, "false": { "text": "STOPPED", "color": "red" } } }] }] }
+        ]
+      }
+    },
+    {
+      "title": "Letzte Fehler (Bot Instances)",
+      "type": "table",
+      "datasource": { "type": "postgres", "uid": "" },
+      "gridPos": { "h": 7, "w": 24, "x": 0, "y": 8 },
+      "targets": [
+        {
+          "rawSql": "SELECT bc.id AS bot_id, u.username, bc.name AS bot_name, bi.error_message, bi.stopped_at FROM bot_instances bi JOIN bot_configs bc ON bc.id = bi.bot_config_id JOIN users u ON u.id = bc.user_id WHERE bi.error_message IS NOT NULL AND bi.error_message != '' ORDER BY bi.stopped_at DESC NULLS LAST LIMIT 50",
+          "format": "table",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "title": "Letzte Trades (alle User)",
+      "type": "table",
+      "datasource": { "type": "postgres", "uid": "" },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 15 },
+      "targets": [
+        {
+          "rawSql": "SELECT tr.id, u.username, bc.name AS bot_name, tr.symbol, tr.side, tr.status, tr.entry_price, tr.exit_price, tr.pnl, tr.pnl_percent, tr.exit_reason, tr.leverage, tr.demo_mode, tr.entry_time, tr.exit_time FROM trade_records tr JOIN users u ON u.id = tr.user_id LEFT JOIN bot_configs bc ON bc.id = tr.bot_config_id ORDER BY tr.entry_time DESC LIMIT 100",
+          "format": "table",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "title": "User-Uebersicht",
+      "type": "table",
+      "datasource": { "type": "postgres", "uid": "" },
+      "gridPos": { "h": 6, "w": 12, "x": 0, "y": 23 },
+      "targets": [
+        {
+          "rawSql": "SELECT u.id, u.username, u.email, u.role, u.is_active, u.created_at, COUNT(DISTINCT bc.id) AS bots, COUNT(DISTINCT tr.id) AS trades FROM users u LEFT JOIN bot_configs bc ON bc.user_id = u.id LEFT JOIN trade_records tr ON tr.user_id = u.id WHERE u.is_deleted = false GROUP BY u.id ORDER BY u.created_at DESC",
+          "format": "table",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "title": "Audit Log — Letzte API-Aufrufe",
+      "type": "table",
+      "datasource": { "type": "postgres", "uid": "" },
+      "gridPos": { "h": 6, "w": 12, "x": 12, "y": 23 },
+      "targets": [
+        {
+          "rawSql": "SELECT al.created_at, u.username, al.method, al.path, al.status_code, al.response_time_ms, al.client_ip FROM audit_logs al LEFT JOIN users u ON u.id = al.user_id ORDER BY al.created_at DESC LIMIT 100",
+          "format": "table",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "title": "Trades pro Tag (alle User)",
+      "type": "timeseries",
+      "datasource": { "type": "postgres", "uid": "" },
+      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 29 },
+      "targets": [
+        {
+          "rawSql": "SELECT date_trunc('day', entry_time) AS time, COUNT(*) AS trades, SUM(CASE WHEN pnl > 0 THEN 1 ELSE 0 END) AS wins, SUM(CASE WHEN pnl <= 0 THEN 1 ELSE 0 END) AS losses FROM trade_records WHERE entry_time > NOW() - INTERVAL '30 days' GROUP BY 1 ORDER BY 1",
+          "format": "time_series",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "title": "PnL pro Tag (alle User)",
+      "type": "timeseries",
+      "datasource": { "type": "postgres", "uid": "" },
+      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 29 },
+      "targets": [
+        {
+          "rawSql": "SELECT date_trunc('day', exit_time) AS time, SUM(pnl) AS total_pnl, SUM(fees) AS total_fees FROM trade_records WHERE status = 'closed' AND exit_time > NOW() - INTERVAL '30 days' GROUP BY 1 ORDER BY 1",
+          "format": "time_series",
+          "refId": "A"
+        }
+      ]
+    }
+  ],
+  "schemaVersion": 39,
+  "tags": ["admin", "support"],
+  "templating": { "list": [] },
+  "time": { "from": "now-7d", "to": "now" },
+  "title": "Admin Support Dashboard",
+  "uid": "admin-support"
+}
