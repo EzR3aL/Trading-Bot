@@ -49,8 +49,33 @@ async def run_async_migrations() -> None:
 
 
 def run_migrations_online() -> None:
-    """Run migrations in 'online' mode (connects to the database)."""
-    asyncio.run(run_async_migrations())
+    """Run migrations in 'online' mode (connects to the database).
+
+    Handles both CLI invocation (no running loop) and being called from
+    within an async context like uvicorn's lifespan.
+    """
+    try:
+        asyncio.get_running_loop()
+        # Already inside an async event loop — run in a separate thread
+        import threading
+
+        exc = None
+
+        def _run():
+            nonlocal exc
+            try:
+                asyncio.run(run_async_migrations())
+            except Exception as e:
+                exc = e
+
+        t = threading.Thread(target=_run)
+        t.start()
+        t.join()
+        if exc:
+            raise exc
+    except RuntimeError:
+        # No running loop — normal CLI invocation
+        asyncio.run(run_async_migrations())
 
 
 if context.is_offline_mode():

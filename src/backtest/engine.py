@@ -135,8 +135,9 @@ class BacktestEngine:
     for improved signal generation.
     """
 
-    def __init__(self, config: Optional[BacktestConfig] = None):
+    def __init__(self, config: Optional[BacktestConfig] = None, strategy_type: str = "liquidation_hunter"):
         self.config = config or BacktestConfig()
+        self.strategy_type = strategy_type
         self.reset()
 
     def reset(self):
@@ -397,7 +398,275 @@ class BacktestEngine:
         return 0, f"USD Neutral (DXY={dxy:.1f})"
 
     # ------------------------------------------------------------------ #
-    #  SIGNAL GENERATION                                                  #
+    #  STRATEGY-SPECIFIC SIGNAL GENERATORS                                #
+    # ------------------------------------------------------------------ #
+
+    def _signal_sentiment_surfer(
+        self, data: HistoricalDataPoint, symbol: str
+    ) -> Tuple[TradeDirection, int, str]:
+        """
+        Sentiment Surfer: Weighted scoring from Fear & Greed, price momentum,
+        funding rate, volatility and volume analysis.
+        """
+        score = 0
+        reasons = []
+        price = data.btc_price if symbol == "BTC" else data.eth_price
+        price_change = data.btc_24h_change if symbol == "BTC" else data.eth_24h_change
+
+        # Fear & Greed (weight: 25)
+        fg = data.fear_greed_index
+        if fg < 25:
+            score += 25
+            reasons.append(f"Extreme Fear ({fg})")
+        elif fg < 40:
+            score += 12
+            reasons.append(f"Fear ({fg})")
+        elif fg > 75:
+            score -= 25
+            reasons.append(f"Extreme Greed ({fg})")
+        elif fg > 60:
+            score -= 12
+            reasons.append(f"Greed ({fg})")
+
+        # Funding rate (weight: 20)
+        fr = data.funding_rate_btc if symbol == "BTC" else data.funding_rate_eth
+        if fr < -0.0002:
+            score += 20
+            reasons.append(f"Neg Funding ({fr*100:.4f}%)")
+        elif fr > 0.0005:
+            score -= 20
+            reasons.append(f"High Funding ({fr*100:.4f}%)")
+
+        # Momentum / Price Change (weight: 20)
+        if price_change > 3:
+            score += 15
+            reasons.append(f"Strong Up ({price_change:+.1f}%)")
+        elif price_change < -3:
+            score -= 15
+            reasons.append(f"Strong Down ({price_change:+.1f}%)")
+        elif price_change > 0:
+            score += 5
+        else:
+            score -= 5
+
+        # Volatility (weight: 15)
+        vol = data.historical_volatility
+        if vol > 80:
+            score -= 10
+            reasons.append(f"High Vol ({vol:.0f}%)")
+        elif vol < 30:
+            score += 5
+
+        # Volume / Taker ratio (weight: 10)
+        ratio = data.taker_buy_sell_ratio
+        if ratio > 1.2:
+            score += 10
+            reasons.append(f"Buy Pressure ({ratio:.2f})")
+        elif ratio < 0.8:
+            score -= 10
+            reasons.append(f"Sell Pressure ({ratio:.2f})")
+
+        confidence = 50 + abs(score)
+        confidence = max(40, min(confidence, 95))
+        direction = TradeDirection.LONG if score >= 0 else TradeDirection.SHORT
+
+        return direction, confidence, " | ".join(reasons) or "Neutral"
+
+    def _signal_edge_indicator(
+        self, data: HistoricalDataPoint, symbol: str
+    ) -> Tuple[TradeDirection, int, str]:
+        """
+        Edge Indicator: Pure technical scoring using price data.
+        RSI-like, momentum, volatility, and volume scoring from historical data.
+        """
+        score = 0
+        reasons = []
+        price_change = data.btc_24h_change if symbol == "BTC" else data.eth_24h_change
+        price = data.btc_price if symbol == "BTC" else data.eth_price
+
+        # Momentum score (simulated RSI-like from 24h change) ±25
+        if price_change < -5:
+            score += 25
+            reasons.append(f"Oversold ({price_change:+.1f}%)")
+        elif price_change < -2:
+            score += 12
+            reasons.append(f"Dipping ({price_change:+.1f}%)")
+        elif price_change > 5:
+            score -= 25
+            reasons.append(f"Overbought ({price_change:+.1f}%)")
+        elif price_change > 2:
+            score -= 12
+            reasons.append(f"Extended ({price_change:+.1f}%)")
+
+        # Volatility band analysis ±20
+        vol = data.historical_volatility
+        if vol > 80:
+            score += 15 if price_change < 0 else -15
+            reasons.append(f"High Vol Reversal ({vol:.0f}%)")
+        elif vol < 25:
+            score += 5 if price_change > 0 else -5
+
+        # Volume confirmation ±15
+        ratio = data.taker_buy_sell_ratio
+        if ratio > 1.2 and score > 0:
+            score += 15
+            reasons.append("Volume Confirms Buy")
+        elif ratio < 0.8 and score < 0:
+            score += 15
+            reasons.append("Volume Confirms Sell")
+        elif ratio > 1.2:
+            score += 5
+        elif ratio < 0.8:
+            score -= 5
+
+        # Funding as trend proxy ±10
+        fr = data.funding_rate_btc if symbol == "BTC" else data.funding_rate_eth
+        if fr < -0.0003:
+            score += 10
+            reasons.append("Neg Funding")
+        elif fr > 0.0005:
+            score -= 10
+            reasons.append("High Funding")
+
+        min_score = self.config.__dict__.get("min_score", 30)
+        confidence = 50 + abs(score)
+        confidence = max(40, min(confidence, 95))
+
+        if abs(score) < min_score:
+            confidence = min(confidence, self.config.low_confidence_min - 1)
+
+        direction = TradeDirection.LONG if score >= 0 else TradeDirection.SHORT
+        return direction, confidence, " | ".join(reasons) or "Neutral"
+
+    def _signal_claude_edge(
+        self, data: HistoricalDataPoint, symbol: str
+    ) -> Tuple[TradeDirection, int, str]:
+        """
+        Claude Edge: Hybrid technical + sentiment.
+        Combines edge_indicator signals with fear/greed and funding context.
+        No actual LLM call in backtest — simulates the combined scoring.
+        """
+        # Start with edge indicator base signal
+        base_dir, base_conf, base_reason = self._signal_edge_indicator(data, symbol)
+        score = base_conf - 50 if base_dir == TradeDirection.LONG else -(base_conf - 50)
+        reasons = [base_reason]
+
+        # Add sentiment context (fear & greed)
+        fg = data.fear_greed_index
+        if fg < 25:
+            score += 15
+            reasons.append(f"Fear ({fg})")
+        elif fg > 75:
+            score -= 15
+            reasons.append(f"Greed ({fg})")
+
+        # News sentiment proxy: stablecoin flows
+        flow = data.stablecoin_flow_7d
+        if flow > 1_000_000_000:
+            score += 8
+            reasons.append("Inflows")
+        elif flow < -1_000_000_000:
+            score -= 8
+            reasons.append("Outflows")
+
+        # Macro overlay
+        dxy = data.dxy_index
+        if dxy > 107:
+            score -= 5
+            reasons.append(f"Strong USD ({dxy:.0f})")
+        elif dxy < 100:
+            score += 5
+
+        confidence = 50 + abs(score)
+        confidence = max(40, min(confidence, 95))
+        direction = TradeDirection.LONG if score >= 0 else TradeDirection.SHORT
+        return direction, confidence, " | ".join(reasons) or "Hybrid Signal"
+
+    def _signal_degen(
+        self, data: HistoricalDataPoint, symbol: str
+    ) -> Tuple[TradeDirection, int, str]:
+        """
+        Degen: All-data strategy. Uses every available data source
+        for maximum signal diversity. No LLM in backtest.
+        """
+        score = 0
+        reasons = []
+
+        # Fear & Greed
+        fg = data.fear_greed_index
+        if fg < 30:
+            score += 15
+        elif fg > 70:
+            score -= 15
+
+        # Long/Short Ratio (contrarian)
+        ls = data.long_short_ratio
+        if ls > 2.0:
+            score -= 20
+            reasons.append(f"Crowded Longs ({ls:.2f})")
+        elif ls < 0.5:
+            score += 20
+            reasons.append(f"Crowded Shorts ({ls:.2f})")
+
+        # Funding
+        fr = data.funding_rate_btc if symbol == "BTC" else data.funding_rate_eth
+        if fr > 0.0005:
+            score -= 10
+        elif fr < -0.0002:
+            score += 10
+
+        # Open Interest
+        oi_change = data.open_interest_change_24h
+        price_change = data.btc_24h_change if symbol == "BTC" else data.eth_24h_change
+        if oi_change > 3 and price_change > 0:
+            score -= 5  # contrarian
+        elif oi_change > 3 and price_change < 0:
+            score += 5
+
+        # Taker
+        ratio = data.taker_buy_sell_ratio
+        if ratio > 1.3:
+            score -= 8
+        elif ratio < 0.7:
+            score += 8
+
+        # Stablecoin flows
+        flow = data.stablecoin_flow_7d
+        if flow > 2_000_000_000:
+            score += 5
+        elif flow < -2_000_000_000:
+            score -= 5
+
+        # Volatility
+        vol = data.historical_volatility
+        if vol > 80:
+            score -= 5
+        elif vol < 30:
+            score += 3
+
+        # Macro
+        dxy = data.dxy_index
+        if dxy > 107:
+            score -= 3
+        elif dxy < 100:
+            score += 3
+
+        confidence = 50 + abs(score)
+        confidence = max(40, min(confidence, 95))
+        direction = TradeDirection.LONG if score >= 0 else TradeDirection.SHORT
+        return direction, confidence, " | ".join(reasons) or f"Degen Score {score:+d}"
+
+    def _signal_llm_signal(
+        self, data: HistoricalDataPoint, symbol: str
+    ) -> Tuple[TradeDirection, int, str]:
+        """
+        LLM Signal / AI Companion: Similar to degen but more balanced.
+        In backtest, uses weighted combination without actual LLM call.
+        """
+        return self._signal_degen(data, symbol)
+
+    # ------------------------------------------------------------------ #
+    #  SIGNAL GENERATION (dispatcher)                                     #
     # ------------------------------------------------------------------ #
 
     def _generate_signal(
@@ -405,22 +674,22 @@ class BacktestEngine:
     ) -> Tuple[TradeDirection, int, str]:
         """
         Generate a trade signal based on historical data point.
-
-        Combines analysis from all available data sources:
-        1. Long/Short Ratio (contrarian)
-        2. Fear & Greed Index (contrarian)
-        3. Funding Rate (trend confirmation)
-        4. Open Interest changes
-        5. Taker Buy/Sell Volume (contrarian)
-        6. Top Trader positioning (confirmation)
-        7. Cross-exchange funding divergence
-        8. Stablecoin flows (money flow)
-        9. Volatility (risk adjustment)
-        10. Macro indicators (DXY)
-
-        Returns:
-            Tuple of (direction, confidence, reason)
+        Dispatches to strategy-specific signal generator.
         """
+        # Strategy dispatch — each strategy has its own signal logic
+        dispatch = {
+            "sentiment_surfer": self._signal_sentiment_surfer,
+            "edge_indicator": self._signal_edge_indicator,
+            "claude_edge": self._signal_claude_edge,
+            "degen": self._signal_degen,
+            "llm_signal": self._signal_llm_signal,
+        }
+
+        handler = dispatch.get(self.strategy_type)
+        if handler:
+            return handler(data, symbol)
+
+        # Default: Liquidation Hunter (original multi-source contrarian logic)
         reasons = []
         confidence = 50
 

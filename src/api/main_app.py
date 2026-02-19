@@ -24,6 +24,7 @@ from slowapi.errors import RateLimitExceeded
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from src.api.routers import (
+    admin_logs,
     affiliate,
     auth,
     backtest,
@@ -246,6 +247,7 @@ def create_app() -> FastAPI:
     app.include_router(affiliate.router)
     app.include_router(backtest.router)
     app.include_router(websocket.router)
+    app.include_router(admin_logs.router)
 
     # Store WebSocket manager on app state for access
     from src.api.websocket.manager import ws_manager

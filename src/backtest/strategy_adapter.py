@@ -74,8 +74,8 @@ async def run_backtest_for_strategy(
             if key in strategy_params:
                 setattr(config, key, strategy_params[key])
 
-    # Run engine
-    engine = BacktestEngine(config)
+    # Run engine with strategy-specific signal generation
+    engine = BacktestEngine(config, strategy_type=strategy_type)
     result = engine.run(filtered)
 
     # Convert trades to serializable dicts
