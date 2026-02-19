@@ -5,6 +5,7 @@ Creates the main application with all routers, middleware,
 database lifecycle, and static file serving.
 """
 
+import asyncio
 import os
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -30,12 +31,14 @@ from src.api.routers import (
     config,
     exchanges,
     funding,
+    metrics,
     presets,
     statistics,
     status,
     tax_report,
     trades,
     users,
+    websocket,
 )
 from src.models.session import close_db, init_db
 from src.utils.logger import get_logger
@@ -104,11 +107,19 @@ async def lifespan(app: FastAPI):
     # Restore bots that were running before shutdown
     await orchestrator.restore_on_startup()
 
+    # Start Prometheus bot-metrics collector
+    from src.monitoring.collectors import collect_bot_metrics
+    from src.monitoring.metrics import APP_INFO
+
+    APP_INFO.info({"version": "3.0.0", "environment": environment})
+    collector_task = asyncio.create_task(collect_bot_metrics(app))
+
     logger.info("Application started successfully")
     yield
 
     # Shutdown
     logger.info("Shutting down...")
+    collector_task.cancel()
     await orchestrator.shutdown_all()
 
     # Drain pending audit writes before closing DB
@@ -167,6 +178,10 @@ def create_app() -> FastAPI:
         )
         return JSONResponse(status_code=422, content={"detail": exc.errors()})
 
+    # Prometheus metrics middleware
+    from src.monitoring.middleware import PrometheusMiddleware
+    app.add_middleware(PrometheusMiddleware)
+
     # Audit logging middleware
     from src.api.middleware.audit_log import AuditLogMiddleware
     app.add_middleware(AuditLogMiddleware)
@@ -216,6 +231,7 @@ def create_app() -> FastAPI:
     app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
     # Register routers
+    app.include_router(metrics.router)
     app.include_router(status.router)
     app.include_router(auth.router)
     app.include_router(users.router)
@@ -229,6 +245,11 @@ def create_app() -> FastAPI:
     app.include_router(tax_report.router)
     app.include_router(affiliate.router)
     app.include_router(backtest.router)
+    app.include_router(websocket.router)
+
+    # Store WebSocket manager on app state for access
+    from src.api.websocket.manager import ws_manager
+    app.state.ws_manager = ws_manager
 
     # Serve frontend static files (built React app)
     frontend_dir = Path("static/frontend")

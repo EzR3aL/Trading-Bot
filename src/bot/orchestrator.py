@@ -78,6 +78,14 @@ class BotOrchestrator:
         await self._update_instance_state(bot_config_id, True)
 
         logger.info(f"Orchestrator: Bot {bot_config_id} started")
+
+        # Broadcast event via WebSocket
+        self._broadcast_event(
+            worker.config.user_id,
+            "bot_started",
+            {"bot_id": bot_config_id, "status": worker.get_status_dict()},
+        )
+
         return True
 
     async def stop_bot(self, bot_config_id: int) -> bool:
@@ -96,12 +104,21 @@ class BotOrchestrator:
         if not worker or worker.status != "running":
             return False
 
+        user_id = worker.config.user_id if worker.config else None
+
         await worker.stop()
 
         # Update DB
         await self._update_instance_state(bot_config_id, False)
 
         logger.info(f"Orchestrator: Bot {bot_config_id} stopped")
+
+        # Broadcast event via WebSocket
+        if user_id is not None:
+            self._broadcast_event(
+                user_id, "bot_stopped", {"bot_id": bot_config_id}
+            )
+
         return True
 
     async def restart_bot(self, bot_config_id: int) -> bool:
@@ -258,3 +275,12 @@ class BotOrchestrator:
 
         except Exception as e:
             logger.error(f"Orchestrator: DB state update error: {e}")
+
+    @staticmethod
+    def _broadcast_event(user_id: int, event_type: str, data: dict) -> None:
+        """Fire-and-forget WebSocket broadcast."""
+        try:
+            from src.api.websocket.manager import ws_manager
+            asyncio.create_task(ws_manager.broadcast_to_user(user_id, event_type, data))
+        except Exception:
+            pass  # WebSocket failure must never crash bot operations
