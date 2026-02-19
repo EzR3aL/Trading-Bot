@@ -40,6 +40,8 @@ _defillama_breaker = circuit_registry.get("defillama_api", fail_threshold=3, res
 _blockchain_breaker = circuit_registry.get("blockchain_api", fail_threshold=3, reset_timeout=120)
 _bitget_breaker = circuit_registry.get("bitget_api", fail_threshold=3, reset_timeout=120)
 _fred_breaker = circuit_registry.get("fred_api", fail_threshold=3, reset_timeout=300)
+_coinbase_breaker = circuit_registry.get("coinbase_api", fail_threshold=3, reset_timeout=120)
+_bybit_breaker = circuit_registry.get("bybit_api", fail_threshold=3, reset_timeout=120)
 
 
 class DataFetchError(DataSourceError):
@@ -171,6 +173,9 @@ class MarketDataFetcher:
     BLOCKCHAIN_URL = "https://api.blockchain.info"
     BITGET_URL = "https://api.bitget.com/api/v2"
     FRED_URL = "https://api.stlouisfed.org/fred"
+    COINBASE_URL = "https://api.exchange.coinbase.com"
+    BINANCE_SPOT_URL = "https://api.binance.com"
+    BYBIT_URL = "https://api.bybit.com"
 
     def __init__(self):
         """Initialize the market data fetcher."""
@@ -1596,6 +1601,345 @@ class MarketDataFetcher:
 
         return {"gap_pct": 0.0, "friday_close": 0.0, "current_price": 0.0, "gap_direction": "none"}
 
+    # ==================== Cumulative Volume Delta (CVD) ====================
+
+    async def get_cvd(self, symbol: str = "BTCUSDT", interval: str = "1h", limit: int = 24) -> Dict[str, Any]:
+        """
+        Calculate Cumulative Volume Delta from Binance klines.
+
+        CVD = sum(taker_buy_volume - taker_sell_volume) over the period.
+        Positive CVD = aggressive buying dominance, negative = selling dominance.
+
+        Returns:
+            Dict with cvd_total, cvd_trend, taker_buy_ratio, data_points
+        """
+        try:
+            url = f"{self.BINANCE_FUTURES_URL}/fapi/v1/klines"
+            params = {"symbol": symbol, "interval": interval, "limit": limit}
+
+            async def _fetch():
+                return await self._get_with_retry(url, params)
+
+            data = await _binance_breaker.call(_fetch)
+
+            if not data or not isinstance(data, list):
+                return {"cvd_total": 0.0, "cvd_trend": "neutral", "taker_buy_ratio": 0.5, "data_points": 0}
+
+            cvd_values = []
+            cumulative = 0.0
+            total_volume = 0.0
+            total_taker_buy = 0.0
+
+            for k in data:
+                volume = float(k[5])       # total quote volume
+                taker_buy = float(k[9])    # taker buy base volume
+                taker_sell = float(k[5]) - float(k[9])  # taker sell = total - buy (base)
+                # Use base volumes for delta
+                taker_buy_base = float(k[9])
+                taker_sell_base = float(k[7]) - float(k[9])  # k[7] = total base vol
+                delta = taker_buy_base - taker_sell_base
+                cumulative += delta
+                cvd_values.append(cumulative)
+                total_volume += float(k[7])
+                total_taker_buy += taker_buy_base
+
+            buy_ratio = total_taker_buy / total_volume if total_volume > 0 else 0.5
+
+            # Determine trend from first half vs second half
+            mid = len(cvd_values) // 2
+            first_half_avg = sum(cvd_values[:mid]) / mid if mid > 0 else 0
+            second_half_avg = sum(cvd_values[mid:]) / len(cvd_values[mid:]) if cvd_values[mid:] else 0
+            trend = "bullish" if second_half_avg > first_half_avg else "bearish" if second_half_avg < first_half_avg else "neutral"
+
+            logger.info(f"CVD ({symbol}): total={cumulative:.2f}, trend={trend}, buy_ratio={buy_ratio:.2%}")
+            return {
+                "cvd_total": cumulative,
+                "cvd_trend": trend,
+                "taker_buy_ratio": round(buy_ratio, 4),
+                "data_points": len(data),
+            }
+
+        except CircuitBreakerError as e:
+            logger.warning(f"Binance API circuit open (CVD): {e}")
+        except Exception as e:
+            logger.error(f"Error fetching CVD: {e}")
+
+        return {"cvd_total": 0.0, "cvd_trend": "neutral", "taker_buy_ratio": 0.5, "data_points": 0}
+
+    # ==================== Coinbase Premium ====================
+
+    async def get_coinbase_premium(self, symbol: str = "BTCUSDT") -> Dict[str, Any]:
+        """
+        Calculate Coinbase Premium: price diff between Coinbase and Binance spot.
+
+        Positive premium = US institutional buying pressure.
+        Negative premium = selling pressure or arbitrage flow.
+
+        Returns:
+            Dict with premium_pct, coinbase_price, binance_price, signal
+        """
+        try:
+            # Map Binance symbol to Coinbase product
+            base = symbol.replace("USDT", "").replace("USD", "")
+            cb_product = f"{base}-USD"
+            binance_symbol = f"{base}USDT"
+
+            async def _fetch_coinbase():
+                url = f"{self.COINBASE_URL}/products/{cb_product}/ticker"
+                return await self._get_with_retry(url, timeout=8)
+
+            async def _fetch_binance():
+                url = f"{self.BINANCE_SPOT_URL}/api/v3/ticker/price"
+                return await self._get_with_retry(url, {"symbol": binance_symbol}, timeout=8)
+
+            cb_data, bn_data = await asyncio.gather(
+                _coinbase_breaker.call(_fetch_coinbase),
+                _binance_breaker.call(_fetch_binance),
+                return_exceptions=True,
+            )
+
+            if isinstance(cb_data, Exception) or isinstance(bn_data, Exception):
+                raise ValueError(f"Fetch failed: cb={cb_data}, bn={bn_data}")
+
+            cb_price = float(cb_data.get("price", 0))
+            bn_price = float(bn_data.get("price", 0))
+
+            if cb_price <= 0 or bn_price <= 0:
+                return {"premium_pct": 0.0, "coinbase_price": 0.0, "binance_price": 0.0, "signal": "neutral"}
+
+            premium_pct = ((cb_price - bn_price) / bn_price) * 100
+
+            # Signal interpretation
+            if premium_pct > 0.05:
+                signal = "bullish"
+            elif premium_pct < -0.05:
+                signal = "bearish"
+            else:
+                signal = "neutral"
+
+            logger.info(f"Coinbase Premium ({base}): {premium_pct:.4f}% (CB=${cb_price:,.2f}, BN=${bn_price:,.2f})")
+            return {
+                "premium_pct": round(premium_pct, 4),
+                "coinbase_price": cb_price,
+                "binance_price": bn_price,
+                "signal": signal,
+            }
+
+        except CircuitBreakerError as e:
+            logger.warning(f"Coinbase/Binance API circuit open: {e}")
+        except Exception as e:
+            logger.error(f"Error fetching Coinbase premium: {e}")
+
+        return {"premium_pct": 0.0, "coinbase_price": 0.0, "binance_price": 0.0, "signal": "neutral"}
+
+    # ==================== Bybit Futures Data ====================
+
+    async def get_bybit_futures(self, symbol: str = "BTCUSDT") -> Dict[str, Any]:
+        """
+        Fetch Bybit futures data: OI, funding rate, volume via Bybit V5 public API.
+
+        Returns:
+            Dict with open_interest, funding_rate, volume_24h, next_funding_time
+        """
+        try:
+            async def _fetch_ticker():
+                url = f"{self.BYBIT_URL}/v5/market/tickers"
+                return await self._get_with_retry(url, {"category": "linear", "symbol": symbol})
+
+            async def _fetch_funding():
+                url = f"{self.BYBIT_URL}/v5/market/funding/history"
+                return await self._get_with_retry(url, {"category": "linear", "symbol": symbol, "limit": "1"})
+
+            ticker_data, funding_data = await asyncio.gather(
+                _bybit_breaker.call(_fetch_ticker),
+                _bybit_breaker.call(_fetch_funding),
+                return_exceptions=True,
+            )
+
+            result = {
+                "open_interest": 0.0,
+                "funding_rate": 0.0,
+                "volume_24h": 0.0,
+                "next_funding_time": "",
+                "price": 0.0,
+            }
+
+            if not isinstance(ticker_data, Exception) and ticker_data:
+                tickers = ticker_data.get("result", {}).get("list", [])
+                if tickers:
+                    t = tickers[0]
+                    result["open_interest"] = float(t.get("openInterest", 0))
+                    result["volume_24h"] = float(t.get("volume24h", 0))
+                    result["price"] = float(t.get("lastPrice", 0))
+                    result["next_funding_time"] = t.get("nextFundingTime", "")
+
+            if not isinstance(funding_data, Exception) and funding_data:
+                funding_list = funding_data.get("result", {}).get("list", [])
+                if funding_list:
+                    result["funding_rate"] = float(funding_list[0].get("fundingRate", 0))
+
+            logger.info(
+                f"Bybit Futures ({symbol}): OI={result['open_interest']:.0f}, "
+                f"FR={result['funding_rate']:.6f}, Vol24h={result['volume_24h']:.0f}"
+            )
+            return result
+
+        except CircuitBreakerError as e:
+            logger.warning(f"Bybit API circuit open: {e}")
+        except Exception as e:
+            logger.error(f"Error fetching Bybit futures data: {e}")
+
+        return {"open_interest": 0.0, "funding_rate": 0.0, "volume_24h": 0.0, "next_funding_time": "", "price": 0.0}
+
+    # ==================== Deribit Options Extended ====================
+
+    async def get_deribit_options_extended(self, currency: str = "BTC") -> Dict[str, Any]:
+        """
+        Full options data from Deribit: IV per tenor, Skew, Put/Call Ratio.
+
+        Returns:
+            Dict with avg_iv, put_call_ratio, put_call_oi_ratio, skew_25delta,
+                  iv_by_tenor, total_call_oi, total_put_oi
+        """
+        try:
+            url = f"{self.DERIBIT_URL}/public/get_book_summary_by_currency"
+            params = {"currency": currency, "kind": "option"}
+
+            async def _fetch():
+                return await self._get_with_retry(url, params)
+
+            data = await _deribit_breaker.call(_fetch)
+
+            if not data or "result" not in data:
+                return self._empty_options_extended(currency)
+
+            instruments = data["result"]
+            if not instruments:
+                return self._empty_options_extended(currency)
+
+            total_call_oi = 0.0
+            total_put_oi = 0.0
+            iv_values = []
+            call_ivs = []
+            put_ivs = []
+
+            for inst in instruments:
+                name = inst.get("instrument_name", "")
+                oi = float(inst.get("open_interest", 0))
+                iv = float(inst.get("mark_iv", 0))
+
+                if iv > 0:
+                    iv_values.append(iv)
+
+                if "-C" in name:
+                    total_call_oi += oi
+                    if iv > 0:
+                        call_ivs.append(iv)
+                elif "-P" in name:
+                    total_put_oi += oi
+                    if iv > 0:
+                        put_ivs.append(iv)
+
+            total_oi = total_call_oi + total_put_oi
+            pc_ratio = total_put_oi / total_call_oi if total_call_oi > 0 else 0.0
+            avg_iv = sum(iv_values) / len(iv_values) if iv_values else 0.0
+
+            # 25-delta skew approximation: avg put IV - avg call IV
+            avg_call_iv = sum(call_ivs) / len(call_ivs) if call_ivs else 0.0
+            avg_put_iv = sum(put_ivs) / len(put_ivs) if put_ivs else 0.0
+            skew = avg_put_iv - avg_call_iv
+
+            logger.info(
+                f"Deribit Options Extended ({currency}): P/C={pc_ratio:.2f}, "
+                f"IV={avg_iv:.1f}%, Skew={skew:.1f}%"
+            )
+            return {
+                "avg_iv": round(avg_iv, 2),
+                "put_call_ratio": round(pc_ratio, 3),
+                "skew_25delta": round(skew, 2),
+                "total_call_oi": total_call_oi,
+                "total_put_oi": total_put_oi,
+                "total_oi": total_oi,
+                "currency": currency,
+            }
+
+        except CircuitBreakerError as e:
+            logger.warning(f"Deribit API circuit open (extended): {e}")
+        except Exception as e:
+            logger.error(f"Error fetching Deribit extended options: {e}")
+
+        return self._empty_options_extended(currency)
+
+    @staticmethod
+    def _empty_options_extended(currency: str) -> Dict[str, Any]:
+        return {
+            "avg_iv": 0.0, "put_call_ratio": 0.0, "skew_25delta": 0.0,
+            "total_call_oi": 0.0, "total_put_oi": 0.0, "total_oi": 0.0,
+            "currency": currency,
+        }
+
+    # ==================== Deribit DVOL (Volatility Index) ====================
+
+    async def get_deribit_dvol(self, currency: str = "BTC") -> Dict[str, Any]:
+        """
+        Fetch Deribit Volatility Index (DVOL) — the crypto VIX equivalent.
+
+        Returns:
+            Dict with dvol_current, dvol_24h_ago, dvol_change_pct, signal
+        """
+        try:
+            now_ms = int(time.time() * 1000)
+            day_ago_ms = now_ms - 86_400_000  # 24h ago
+
+            url = f"{self.DERIBIT_URL}/public/get_volatility_index_data"
+            params = {
+                "currency": currency,
+                "resolution": "3600",  # 1h candles
+                "start_timestamp": str(day_ago_ms),
+                "end_timestamp": str(now_ms),
+            }
+
+            async def _fetch():
+                return await self._get_with_retry(url, params)
+
+            data = await _deribit_breaker.call(_fetch)
+
+            if not data or "result" not in data:
+                return {"dvol_current": 0.0, "dvol_24h_ago": 0.0, "dvol_change_pct": 0.0, "signal": "neutral"}
+
+            candles = data["result"].get("data", [])
+            if not candles:
+                return {"dvol_current": 0.0, "dvol_24h_ago": 0.0, "dvol_change_pct": 0.0, "signal": "neutral"}
+
+            # Each candle: [timestamp, open, high, low, close]
+            dvol_current = float(candles[-1][4])  # last close
+            dvol_24h_ago = float(candles[0][1])    # first open
+
+            change_pct = ((dvol_current - dvol_24h_ago) / dvol_24h_ago * 100) if dvol_24h_ago > 0 else 0.0
+
+            # Rising DVOL = increasing fear/uncertainty, falling = complacency
+            if change_pct > 5:
+                signal = "fear_rising"
+            elif change_pct < -5:
+                signal = "complacency"
+            else:
+                signal = "stable"
+
+            logger.info(f"Deribit DVOL ({currency}): {dvol_current:.1f} ({change_pct:+.1f}% 24h)")
+            return {
+                "dvol_current": round(dvol_current, 2),
+                "dvol_24h_ago": round(dvol_24h_ago, 2),
+                "dvol_change_pct": round(change_pct, 2),
+                "signal": signal,
+            }
+
+        except CircuitBreakerError as e:
+            logger.warning(f"Deribit API circuit open (DVOL): {e}")
+        except Exception as e:
+            logger.error(f"Error fetching Deribit DVOL: {e}")
+
+        return {"dvol_current": 0.0, "dvol_24h_ago": 0.0, "dvol_change_pct": 0.0, "signal": "neutral"}
+
     # ==================== Selective Fetching ====================
 
     async def fetch_selected_metrics(
@@ -1668,6 +2012,18 @@ class MarketDataFetcher:
                 dispatch[src_id] = self.get_fred_series("DTWEXBGS")
             elif src_id == "fed_funds_rate":
                 dispatch[src_id] = self.get_fred_series("DFF")
+            elif src_id == "cvd":
+                dispatch[src_id] = self.get_cvd(symbol)
+            elif src_id == "coinbase_premium":
+                dispatch[src_id] = self.get_coinbase_premium(symbol)
+            elif src_id == "bybit_futures":
+                dispatch[src_id] = self.get_bybit_futures(symbol)
+            elif src_id == "deribit_options_extended":
+                currency = symbol.replace("USDT", "").replace("USD", "")
+                dispatch[src_id] = self.get_deribit_options_extended(currency)
+            elif src_id == "deribit_dvol":
+                currency = symbol.replace("USDT", "").replace("USD", "")
+                dispatch[src_id] = self.get_deribit_dvol(currency)
             # Technical indicators computed from klines are handled below
 
         # Fetch klines if needed for calculated indicators
