@@ -467,7 +467,8 @@ function BotTradeHistoryModal({ bot, onClose, t }: { bot: BotStatus; onClose: ()
               <div className="px-6 pt-3 pb-2">
                 <div className="text-xs text-gray-500 uppercase tracking-wider font-semibold">{t('bots.tradeHistory')}</div>
               </div>
-              <table className="w-full">
+              <div className="overflow-x-auto">
+              <table className="w-full min-w-[640px]">
                 <thead>
                   <tr className="border-t border-b border-white/5 bg-white/[0.02]">
                     <th className="text-left px-5 py-2.5 text-xs text-gray-500 uppercase font-semibold tracking-wider">{t('trades.date')}</th>
@@ -542,6 +543,7 @@ function BotTradeHistoryModal({ bot, onClose, t }: { bot: BotStatus; onClose: ()
                   ))}
                 </tbody>
               </table>
+              </div>
             </>
           )}
         </div>
