@@ -444,6 +444,7 @@ class TestRiskManagerSaveError:
         rm._open_positions = {}
         rm._per_symbol_daily_trades = {}
         rm._consecutive_losses = 0
+        rm._use_db = False
 
         # Initialize with stats
         rm._daily_stats = MagicMock()
