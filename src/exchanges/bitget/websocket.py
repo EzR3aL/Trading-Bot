@@ -187,5 +187,5 @@ class BitgetExchangeWebSocket(ExchangeWebSocket):
                     await self._ws_public.send("ping")
                 if self._ws_private:
                     await self._ws_private.send("ping")
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("Heartbeat ping failed: %s", e)

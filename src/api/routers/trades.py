@@ -230,8 +230,8 @@ async def sync_trades(
                                 entry_order_id=trade.order_id,
                                 close_order_id=trade.close_order_id,
                             )
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.warning("Failed to fetch trading fees for trade %s: %s", trade.id, e)
 
                     # Fetch funding fees (charged every 8h while position was open)
                     try:
@@ -243,8 +243,8 @@ async def sync_trades(
                                 start_time_ms=entry_ms,
                                 end_time_ms=exit_ms,
                             )
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.warning("Failed to fetch funding fees for trade %s: %s", trade.id, e)
 
                     # Update trade record
                     trade.status = "closed"

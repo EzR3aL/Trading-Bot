@@ -169,13 +169,15 @@ class LiquidationHunterStrategy(BaseStrategy):
         else:
             try:
                 funding_rate = await self.data_fetcher.get_funding_rate_binance(symbol) or 0.0
-            except Exception:
+            except Exception as e:
+                logger.warning("Failed to fetch funding rate for %s: %s", symbol, e)
                 funding_rate = 0.0
             try:
                 ticker = await self.data_fetcher.get_24h_ticker(symbol) or {}
                 current_price = ticker.get("price", 0)
                 price_change = ticker.get("price_change_percent", 0)
-            except Exception:
+            except Exception as e:
+                logger.warning("Failed to fetch ticker for %s: %s", symbol, e)
                 current_price = 0
                 price_change = 0
 

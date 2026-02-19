@@ -375,8 +375,8 @@ class BotWorker(
                 if job.id.startswith(prefix):
                     try:
                         job.remove()
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.debug("Job removal during cleanup: %s", e)
 
             # Only shutdown scheduler if we created it
             if self._owns_scheduler and self._scheduler.running:

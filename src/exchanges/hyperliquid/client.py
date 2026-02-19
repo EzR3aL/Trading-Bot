@@ -198,8 +198,8 @@ class HyperliquidClient(ExchangeClient):
                     if b.get("coin") == "USDC":
                         spot_usdc = float(b.get("total", 0))
                         break
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("Spot USDC balance fetch failed: %s", e)
 
         return Balance(
             total=perp_total + spot_usdc,
@@ -224,8 +224,8 @@ class HyperliquidClient(ExchangeClient):
                 try:
                     ticker = await self.get_ticker(coin)
                     current_price = ticker.last_price
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("Current price fetch failed for position, using entry price: %s", e)
                 return Position(
                     symbol=coin,
                     side="long" if szi > 0 else "short",
