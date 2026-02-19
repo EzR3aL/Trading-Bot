@@ -9,6 +9,128 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.6.0] - 2026-02-19
+
+### Realistic Backtest Engine, Pro Mode Redesign & New Strategies
+
+Komplette Ueberarbeitung der Backtest-Engine mit echten technischen Indikatoren,
+neue Strategien (Edge Indicator, Claude Edge Indicator), Guided Tour, GettingStarted Redesign
+und BotBuilder Pro Mode Neugestaltung.
+
+#### Hinzugefuegt
+
+##### Realistische Backtest-Engine
+- **Technische Indikatoren** in `src/backtest/engine.py` — Pure-Python Implementierung:
+  - `_ema()` — Exponential Moving Average
+  - `_rsi()` — Relative Strength Index (14)
+  - `_macd()` — MACD mit Signal Line und Histogram (12/26/9)
+  - `_adx()` — Average Directional Index (14)
+  - `_atr()` — Average True Range (14)
+  - `_stdev()` — Rolling Standard Deviation
+- **Signal-Methoden komplett ueberarbeitet**:
+  - `_signal_edge_indicator`: EMA Ribbon (8/21), ADX, MACD, RSI mit Drift, Predator Momentum Score
+  - `_signal_sentiment_surfer`: 6-Quellen gewichtetes Scoring (FGI 25%, Funding 20%, VWAP 15%, Supertrend 15%, Volume 10%, Momentum 15%)
+  - `_signal_degen`: 10 Datenquellen + RSI + EMA, Funding Divergence, Signal Strength Gate
+- **History-basierte Analyse**: `_generate_signal()` erhaelt kompletten Preisverlauf als `history` Parameter
+
+##### Neue Strategien
+- **Edge Indicator** (`src/strategy/edge_indicator.py`) — Rein technische Kline-Strategie
+  - RSI, MACD, Bollinger Bands, Volume Analysis
+  - Scoring-System mit konfigurierbarem Mindest-Score
+  - Data Sources: spot_price, vwap, supertrend, spot_volume, volatility
+- **Claude Edge Indicator** (`src/strategy/claude_edge_indicator.py`) — Hybrid-Strategie
+  - Technische Analyse + LLM-Bewertung
+  - Kombiniert Indikatoren mit Sentiment-Daten
+  - Data Sources: spot_price, fear_greed, news_sentiment, vwap, supertrend, spot_volume, volatility, funding_rate
+
+##### Guided Tour System
+- **GuidedTour Komponente** (`frontend/src/components/ui/GuidedTour.tsx`)
+  - Leichtgewichtiger Tour-Guide ohne externe Dependencies
+  - Highlight-Overlay, Tooltip-Box, Fortschrittsanzeige
+  - Scroll-to-Element, ESC zum Schliessen, localStorage Persistenz
+- **Tour Store** (`frontend/src/stores/tourStore.ts`) — Zustand Store fuer Tour-State
+- **Dashboard Tour** (4 Steps): Navigation, Demo/Live, KPI-Karten, Charts
+- **data-tour Attribute** auf Dashboard und AppLayout Elementen
+
+##### Backtest-Scripts
+- **`scripts/backtest_edge_indicator.py`** — 15 Konfigurationen, JSON-Export
+- **`scripts/backtest_timeframes.py`** — Multi-Timeframe + All-Strategy Vergleich
+
+##### Admin & Event Logging
+- **Admin Logs Router** (`src/api/routers/admin_logs.py`) — Audit-Log API
+- **Event Logger** (`src/utils/event_logger.py`) — Strukturiertes Event-Logging
+- **Kline Backtest Engine** (`src/backtest/kline_backtest_engine.py`) — Kline-basiertes Backtesting
+- **Market Data Module** (`src/data/market_data.py`) — Erweiterte Marktdaten
+
+#### Geaendert
+
+##### BotBuilder Pro Mode Redesign
+- **Numeric Params**: Range Bars entfernt, 2-Spalten Grid Layout
+  - Jeder Parameter in eigenem Card mit Label und Input
+  - `grid grid-cols-2 gap-2` statt vorheriger Range-Bar UI
+- **Timeframe Empfehlung**: Fuer Edge Indicator und Claude Edge Indicator
+  - Empfohlener Timeframe: **1h** (basierend auf 90-Tage Backtest)
+  - Anzeige als kompakte Zeile mit Clock-Icon
+
+##### GettingStarted Redesign
+- Kompaktes 3-Karten Layout (Verbinden, Konfigurieren, Handeln)
+- Workflow-Diagramm, Strategie-Uebersicht, Exchange-Vergleich
+- i18n: ~60 neue Keys in DE + EN
+
+##### Weitere Aenderungen
+| Datei | Aenderung |
+|-------|-----------|
+| `frontend/src/pages/BotDetail.tsx` | STRATEGY_DISPLAY fuer neue Strategien |
+| `frontend/src/pages/Bots.tsx` | STRATEGY_DISPLAY fuer neue Strategien |
+| `src/strategy/__init__.py` | Neue Strategy Imports |
+| `src/bot/bot_worker.py` | claude_edge_indicator als LLM-Strategie |
+| `docker-compose.yml` | Bereinigt (Prometheus/Grafana entfernt) |
+
+#### Backtest-Ergebnisse (90 Tage, BTCUSDT, $10k)
+
+| Strategie | Return | Win Rate | Max DD | Sharpe | Trades | PF |
+|-----------|--------|----------|--------|--------|--------|-----|
+| **Liquidation Hunter** | +26.2% | 53.9% | 4.7% | 5.51 | 104 | 1.98 |
+| **Edge Indicator** | +18.6% | 47.1% | 9.8% | 2.91 | 68 | 1.65 |
+| Claude Edge Indicator | +18.6% | 47.1% | 9.8% | 2.91 | 68 | 1.65 |
+| Degen | +0.8% | 40.0% | 3.8% | 0.43 | 35 | 1.08 |
+| LLM Signal | +0.8% | 40.0% | 4.5% | 0.51 | 25 | 1.12 |
+| Sentiment Surfer | -3.7% | 32.3% | 9.4% | -1.07 | 65 | 0.84 |
+
+**Bester Gesamtwert**: 1h Conservative (TP 2%, SL 1%) — Sharpe 6.09, +27.4%, nur 3.9% DD
+
+#### Neue Dateien
+
+| Datei | Zweck |
+|-------|-------|
+| `src/strategy/edge_indicator.py` | Edge Indicator Strategie |
+| `src/strategy/claude_edge_indicator.py` | Claude Edge Indicator Strategie |
+| `src/backtest/kline_backtest_engine.py` | Kline-basierte Backtest Engine |
+| `src/data/market_data.py` | Erweiterte Marktdaten |
+| `src/api/routers/admin_logs.py` | Admin Audit-Log API |
+| `src/api/schemas/admin_logs.py` | Admin Log Schemas |
+| `src/utils/event_logger.py` | Event Logger |
+| `frontend/src/components/ui/GuidedTour.tsx` | Guided Tour Komponente |
+| `frontend/src/stores/tourStore.ts` | Tour State Store |
+| `scripts/backtest_edge_indicator.py` | Edge Indicator Backtest Script |
+| `scripts/backtest_timeframes.py` | Multi-Timeframe Backtest Script |
+
+#### Tests
+
+| Datei | Zweck |
+|-------|-------|
+| `tests/unit/test_edge_indicator.py` | Edge Indicator Unit Tests |
+| `tests/unit/test_atr_and_divergence.py` | ATR + Divergence Tests |
+| `tests/backtest/test_edge_indicator_backtest.py` | Backtest Integration Tests |
+| `tests/integration/test_edge_indicator_integration.py` | Strategy Integration Tests |
+| `frontend/src/components/ui/GuidedTour.test.tsx` | Guided Tour Tests |
+| `frontend/src/stores/tourStore.test.ts` | Tour Store Tests |
+| `frontend/src/i18n/i18n-completeness.test.ts` | i18n Vollstaendigkeit Tests |
+| `frontend/src/pages/GettingStarted.test.tsx` | GettingStarted Tests |
+| `frontend/src/pages/DashboardTour.test.tsx` | Dashboard Tour Tests |
+
+---
+
 ## [3.5.0] - 2026-02-19
 
 ### Production-Ready Sprint: Monitoring, WebSocket, Quality
