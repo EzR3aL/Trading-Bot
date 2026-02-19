@@ -189,7 +189,7 @@ class BotWorker(
                 strategy_params.setdefault("stop_loss_percent", self._config.stop_loss_percent)
 
                 # If LLM strategy, inject decrypted API key from user's LLMConnection
-                if self._config.strategy_type in ("llm_signal", "degen", "claude_edge"):
+                if self._config.strategy_type in ("llm_signal", "degen"):
                     llm_provider = strategy_params.get("llm_provider", "groq")
                     llm_conn_result = await session.execute(
                         select(LLMConnection).where(

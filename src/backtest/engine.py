@@ -5,6 +5,7 @@ Simulates trading over historical data and calculates performance metrics.
 Uses multi-source data analysis for signal generation.
 """
 
+import math
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from enum import Enum
@@ -15,6 +16,144 @@ from src.utils.logger import get_logger
 from config import settings
 
 logger = get_logger(__name__)
+
+
+# ------------------------------------------------------------------ #
+#  Technical Indicator Helpers (pure math, no external deps)         #
+# ------------------------------------------------------------------ #
+
+def _ema(values: List[float], period: int) -> List[float]:
+    """Exponential Moving Average."""
+    if len(values) < period or period < 1:
+        return values[:]
+    k = 2.0 / (period + 1)
+    result = [0.0] * len(values)
+    result[period - 1] = sum(values[:period]) / period
+    for i in range(period, len(values)):
+        result[i] = values[i] * k + result[i - 1] * (1 - k)
+    return result
+
+
+def _rsi(closes: List[float], period: int = 14) -> List[float]:
+    """Relative Strength Index from close prices."""
+    if len(closes) < period + 1:
+        return [50.0] * len(closes)
+    result = [50.0] * len(closes)
+    gains = []
+    losses = []
+    for i in range(1, len(closes)):
+        delta = closes[i] - closes[i - 1]
+        gains.append(max(delta, 0))
+        losses.append(max(-delta, 0))
+    if len(gains) < period:
+        return result
+    avg_gain = sum(gains[:period]) / period
+    avg_loss = sum(losses[:period]) / period
+    if avg_loss == 0:
+        result[period] = 100.0
+    else:
+        rs = avg_gain / avg_loss
+        result[period] = 100.0 - (100.0 / (1.0 + rs))
+    for i in range(period, len(gains)):
+        avg_gain = (avg_gain * (period - 1) + gains[i]) / period
+        avg_loss = (avg_loss * (period - 1) + losses[i]) / period
+        if avg_loss == 0:
+            result[i + 1] = 100.0
+        else:
+            rs = avg_gain / avg_loss
+            result[i + 1] = 100.0 - (100.0 / (1.0 + rs))
+    return result
+
+
+def _macd(closes: List[float], fast: int = 12, slow: int = 26, signal: int = 9) -> Dict[str, float]:
+    """MACD line, signal, histogram (returns latest values)."""
+    if len(closes) < slow + signal:
+        return {"macd": 0, "signal": 0, "histogram": 0, "histogram_series": []}
+    ema_fast = _ema(closes, fast)
+    ema_slow = _ema(closes, slow)
+    macd_line = [ema_fast[i] - ema_slow[i] for i in range(len(closes))]
+    valid_macd = [m for i, m in enumerate(macd_line) if i >= slow - 1 and m != 0]
+    if len(valid_macd) < signal:
+        return {"macd": macd_line[-1], "signal": 0, "histogram": macd_line[-1], "histogram_series": []}
+    sig = _ema(valid_macd, signal)
+    hist_series = [valid_macd[i] - sig[i] for i in range(len(valid_macd))]
+    return {
+        "macd": valid_macd[-1] if valid_macd else 0,
+        "signal": sig[-1] if sig else 0,
+        "histogram": hist_series[-1] if hist_series else 0,
+        "histogram_series": hist_series,
+    }
+
+
+def _adx(highs: List[float], lows: List[float], closes: List[float], period: int = 14) -> float:
+    """Average Directional Index."""
+    if len(closes) < period + 1:
+        return 0.0
+    plus_dm_list = []
+    minus_dm_list = []
+    tr_list = []
+    for i in range(1, len(closes)):
+        high_diff = highs[i] - highs[i - 1]
+        low_diff = lows[i - 1] - lows[i]
+        plus_dm_list.append(max(high_diff, 0) if high_diff > low_diff else 0)
+        minus_dm_list.append(max(low_diff, 0) if low_diff > high_diff else 0)
+        tr = max(highs[i] - lows[i], abs(highs[i] - closes[i - 1]), abs(lows[i] - closes[i - 1]))
+        tr_list.append(tr)
+    if len(tr_list) < period:
+        return 0.0
+    atr = sum(tr_list[:period]) / period
+    plus_dm = sum(plus_dm_list[:period]) / period
+    minus_dm = sum(minus_dm_list[:period]) / period
+    dx_list = []
+    for i in range(period, len(tr_list)):
+        atr = (atr * (period - 1) + tr_list[i]) / period
+        plus_dm = (plus_dm * (period - 1) + plus_dm_list[i]) / period
+        minus_dm = (minus_dm * (period - 1) + minus_dm_list[i]) / period
+        if atr == 0:
+            continue
+        plus_di = 100 * plus_dm / atr
+        minus_di = 100 * minus_dm / atr
+        di_sum = plus_di + minus_di
+        dx = 100 * abs(plus_di - minus_di) / di_sum if di_sum > 0 else 0
+        dx_list.append(dx)
+    if not dx_list:
+        return 0.0
+    if len(dx_list) < period:
+        return sum(dx_list) / len(dx_list)
+    adx_val = sum(dx_list[:period]) / period
+    for i in range(period, len(dx_list)):
+        adx_val = (adx_val * (period - 1) + dx_list[i]) / period
+    return adx_val
+
+
+def _atr(highs: List[float], lows: List[float], closes: List[float], period: int = 14) -> float:
+    """Average True Range (latest value)."""
+    if len(closes) < 2:
+        return 0.0
+    tr_list = []
+    for i in range(1, len(closes)):
+        tr = max(highs[i] - lows[i], abs(highs[i] - closes[i - 1]), abs(lows[i] - closes[i - 1]))
+        tr_list.append(tr)
+    if len(tr_list) < period:
+        return sum(tr_list) / len(tr_list) if tr_list else 0
+    atr_val = sum(tr_list[:period]) / period
+    for i in range(period, len(tr_list)):
+        atr_val = (atr_val * (period - 1) + tr_list[i]) / period
+    return atr_val
+
+
+def _stdev(values: List[float], window: int) -> float:
+    """Standard deviation of last `window` values."""
+    if len(values) < 2:
+        return 1e-10
+    subset = values[-window:]
+    mean = sum(subset) / len(subset)
+    var = sum((v - mean) ** 2 for v in subset) / len(subset)
+    return max(math.sqrt(var), 1e-10)
+
+
+def _tanh(x: float) -> float:
+    return math.tanh(x)
 
 
 class TradeResult(Enum):
@@ -402,257 +541,421 @@ class BacktestEngine:
     # ------------------------------------------------------------------ #
 
     def _signal_sentiment_surfer(
-        self, data: HistoricalDataPoint, symbol: str
+        self, data: HistoricalDataPoint, symbol: str,
+        history: Optional[List[HistoricalDataPoint]] = None,
     ) -> Tuple[TradeDirection, int, str]:
         """
-        Sentiment Surfer: Weighted scoring from Fear & Greed, price momentum,
-        funding rate, volatility and volume analysis.
+        Sentiment Surfer: Realistic multi-source scoring.
+        Mirrors the live strategy: FGI + Funding + VWAP + Supertrend + Volume + Momentum.
+        Each source scores [-100, +100], weighted and aggregated.
         """
-        score = 0
+        scores = {}
         reasons = []
+        hist = history or [data]
         price = data.btc_price if symbol == "BTC" else data.eth_price
         price_change = data.btc_24h_change if symbol == "BTC" else data.eth_24h_change
 
-        # Fear & Greed (weight: 25)
+        # 1. Fear & Greed (contrarian, weight 25%)
         fg = data.fear_greed_index
-        if fg < 25:
-            score += 25
+        if fg < 20:
+            scores["fgi"] = 100
             reasons.append(f"Extreme Fear ({fg})")
-        elif fg < 40:
-            score += 12
+        elif fg < 30:
+            scores["fgi"] = 60
             reasons.append(f"Fear ({fg})")
-        elif fg > 75:
-            score -= 25
+        elif fg < 45:
+            scores["fgi"] = 20
+        elif fg > 80:
+            scores["fgi"] = -100
             reasons.append(f"Extreme Greed ({fg})")
-        elif fg > 60:
-            score -= 12
+        elif fg > 70:
+            scores["fgi"] = -60
             reasons.append(f"Greed ({fg})")
-
-        # Funding rate (weight: 20)
-        fr = data.funding_rate_btc if symbol == "BTC" else data.funding_rate_eth
-        if fr < -0.0002:
-            score += 20
-            reasons.append(f"Neg Funding ({fr*100:.4f}%)")
-        elif fr > 0.0005:
-            score -= 20
-            reasons.append(f"High Funding ({fr*100:.4f}%)")
-
-        # Momentum / Price Change (weight: 20)
-        if price_change > 3:
-            score += 15
-            reasons.append(f"Strong Up ({price_change:+.1f}%)")
-        elif price_change < -3:
-            score -= 15
-            reasons.append(f"Strong Down ({price_change:+.1f}%)")
-        elif price_change > 0:
-            score += 5
+        elif fg > 55:
+            scores["fgi"] = -20
         else:
-            score -= 5
+            scores["fgi"] = 0
 
-        # Volatility (weight: 15)
-        vol = data.historical_volatility
-        if vol > 80:
-            score -= 10
-            reasons.append(f"High Vol ({vol:.0f}%)")
-        elif vol < 30:
-            score += 5
+        # 2. Funding Rate (contrarian, weight 20%)
+        fr = data.funding_rate_btc if symbol == "BTC" else data.funding_rate_eth
+        if fr < -0.0003:
+            scores["funding"] = 80
+            reasons.append(f"Neg Funding ({fr*100:.4f}%)")
+        elif fr < -0.0001:
+            scores["funding"] = 40
+        elif fr > 0.0008:
+            scores["funding"] = -80
+            reasons.append(f"High Funding ({fr*100:.4f}%)")
+        elif fr > 0.0003:
+            scores["funding"] = -40
+        else:
+            scores["funding"] = 0
 
-        # Volume / Taker ratio (weight: 10)
+        # 3. VWAP-like fair value (from price and volume history, weight 15%)
+        if len(hist) >= 7:
+            closes = [h.btc_price if symbol == "BTC" else h.eth_price for h in hist[-20:]]
+            volumes = [h.btc_volume for h in hist[-20:]]
+            total_vol = sum(volumes) if sum(volumes) > 0 else 1
+            vwap = sum(c * v for c, v in zip(closes, volumes)) / total_vol
+            deviation = (price - vwap) / vwap * 100 if vwap > 0 else 0
+            if deviation < -3:
+                scores["vwap"] = 80
+                reasons.append(f"Below VWAP ({deviation:+.1f}%)")
+            elif deviation < -1:
+                scores["vwap"] = 30
+            elif deviation > 3:
+                scores["vwap"] = -80
+                reasons.append(f"Above VWAP ({deviation:+.1f}%)")
+            elif deviation > 1:
+                scores["vwap"] = -30
+            else:
+                scores["vwap"] = 0
+        else:
+            scores["vwap"] = 0
+
+        # 4. Supertrend proxy (ATR-based trend, weight 15%)
+        if len(hist) >= 14:
+            closes = [h.btc_price if symbol == "BTC" else h.eth_price for h in hist]
+            highs = [h.btc_high if symbol == "BTC" else h.eth_high for h in hist]
+            lows = [h.btc_low if symbol == "BTC" else h.eth_low for h in hist]
+            atr_val = _atr(highs, lows, closes, 10)
+            mid = (highs[-1] + lows[-1]) / 2
+            upper_band = mid + 3 * atr_val
+            lower_band = mid - 3 * atr_val
+            if price > upper_band:
+                scores["supertrend"] = -50
+            elif price < lower_band:
+                scores["supertrend"] = 50
+                reasons.append("Below Supertrend")
+            elif price > mid:
+                scores["supertrend"] = -20
+            else:
+                scores["supertrend"] = 20
+                reasons.append("Supertrend Bullish")
+        else:
+            scores["supertrend"] = 0
+
+        # 5. Volume / Taker Ratio (weight 10%)
         ratio = data.taker_buy_sell_ratio
-        if ratio > 1.2:
-            score += 10
-            reasons.append(f"Buy Pressure ({ratio:.2f})")
-        elif ratio < 0.8:
-            score -= 10
-            reasons.append(f"Sell Pressure ({ratio:.2f})")
+        if ratio > 1.3:
+            scores["volume"] = 80
+            reasons.append(f"Strong Buy Vol ({ratio:.2f})")
+        elif ratio > 1.1:
+            scores["volume"] = 30
+        elif ratio < 0.7:
+            scores["volume"] = -80
+            reasons.append(f"Strong Sell Vol ({ratio:.2f})")
+        elif ratio < 0.9:
+            scores["volume"] = -30
+        else:
+            scores["volume"] = 0
 
-        confidence = 50 + abs(score)
-        confidence = max(40, min(confidence, 95))
-        direction = TradeDirection.LONG if score >= 0 else TradeDirection.SHORT
+        # 6. Price Momentum (weight 15%)
+        if price_change > 5:
+            scores["momentum"] = 60
+            reasons.append(f"Strong Up ({price_change:+.1f}%)")
+        elif price_change > 2:
+            scores["momentum"] = 30
+        elif price_change < -5:
+            scores["momentum"] = -60
+            reasons.append(f"Strong Down ({price_change:+.1f}%)")
+        elif price_change < -2:
+            scores["momentum"] = -30
+        else:
+            scores["momentum"] = int(price_change * 10)
 
+        # Weighted aggregation (mirrors real strategy weights)
+        weights = {"fgi": 0.25, "funding": 0.20, "vwap": 0.15, "supertrend": 0.15, "volume": 0.10, "momentum": 0.15}
+        total_score = sum(scores.get(k, 0) * w for k, w in weights.items())
+
+        # Require minimum agreement (at least 3 sources same direction)
+        bullish_count = sum(1 for v in scores.values() if v > 10)
+        bearish_count = sum(1 for v in scores.values() if v < -10)
+        agreement = max(bullish_count, bearish_count)
+
+        confidence = 40 + int(abs(total_score) * 0.55)
+        if agreement >= 4:
+            confidence += 15
+        elif agreement >= 3:
+            confidence += 8
+
+        confidence = max(0, min(95, confidence))
+
+        # Need minimum agreement for trade
+        if agreement < 2:
+            confidence = min(confidence, self.config.low_confidence_min - 1)
+
+        direction = TradeDirection.LONG if total_score >= 0 else TradeDirection.SHORT
         return direction, confidence, " | ".join(reasons) or "Neutral"
 
     def _signal_edge_indicator(
-        self, data: HistoricalDataPoint, symbol: str
+        self, data: HistoricalDataPoint, symbol: str,
+        history: Optional[List[HistoricalDataPoint]] = None,
     ) -> Tuple[TradeDirection, int, str]:
         """
-        Edge Indicator: Pure technical scoring using price data.
-        RSI-like, momentum, volatility, and volume scoring from historical data.
+        Edge Indicator: Real technical indicator calculations from price history.
+        Mirrors the live strategy: EMA Ribbon + ADX + MACD + RSI Momentum.
         """
-        score = 0
+        if not history or len(history) < 30:
+            return TradeDirection.LONG, 0, "Insufficient history"
+
+        # Extract price series from history
+        closes = [h.btc_price if symbol == "BTC" else h.eth_price for h in history]
+        highs = [h.btc_high if symbol == "BTC" else h.eth_high for h in history]
+        lows = [h.btc_low if symbol == "BTC" else h.eth_low for h in history]
+
         reasons = []
-        price_change = data.btc_24h_change if symbol == "BTC" else data.eth_24h_change
-        price = data.btc_price if symbol == "BTC" else data.eth_price
+        confidence = 50
+        price = closes[-1]
 
-        # Momentum score (simulated RSI-like from 24h change) ±25
-        if price_change < -5:
-            score += 25
-            reasons.append(f"Oversold ({price_change:+.1f}%)")
-        elif price_change < -2:
-            score += 12
-            reasons.append(f"Dipping ({price_change:+.1f}%)")
-        elif price_change > 5:
-            score -= 25
-            reasons.append(f"Overbought ({price_change:+.1f}%)")
-        elif price_change > 2:
-            score -= 12
-            reasons.append(f"Extended ({price_change:+.1f}%)")
+        # --- Layer 1: EMA Ribbon (8/21) ---
+        ema_fast = _ema(closes, 8)
+        ema_slow = _ema(closes, 21)
+        ema_f = ema_fast[-1] if ema_fast[-1] != 0 else price
+        ema_s = ema_slow[-1] if ema_slow[-1] != 0 else price
+        upper_band = max(ema_f, ema_s)
+        lower_band = min(ema_f, ema_s)
+        ema_fast_above = ema_f > ema_s
 
-        # Volatility band analysis ±20
-        vol = data.historical_volatility
-        if vol > 80:
-            score += 15 if price_change < 0 else -15
-            reasons.append(f"High Vol Reversal ({vol:.0f}%)")
-        elif vol < 25:
-            score += 5 if price_change > 0 else -5
+        bull_trend = price > upper_band
+        bear_trend = price < lower_band
 
-        # Volume confirmation ±15
-        ratio = data.taker_buy_sell_ratio
-        if ratio > 1.2 and score > 0:
-            score += 15
-            reasons.append("Volume Confirms Buy")
-        elif ratio < 0.8 and score < 0:
-            score += 15
-            reasons.append("Volume Confirms Sell")
-        elif ratio > 1.2:
-            score += 5
-        elif ratio < 0.8:
-            score -= 5
+        # Detect entry crosses
+        if len(closes) >= 2 and len(ema_fast) >= 2:
+            prev_upper = max(ema_fast[-2], ema_slow[-2]) if ema_fast[-2] != 0 else upper_band
+            prev_lower = min(ema_fast[-2], ema_slow[-2]) if ema_fast[-2] != 0 else lower_band
+            bull_enter = price > upper_band and closes[-2] <= prev_upper
+            bear_enter = price < lower_band and closes[-2] >= prev_lower
+        else:
+            bull_enter = False
+            bear_enter = False
 
-        # Funding as trend proxy ±10
-        fr = data.funding_rate_btc if symbol == "BTC" else data.funding_rate_eth
-        if fr < -0.0003:
-            score += 10
-            reasons.append("Neg Funding")
-        elif fr > 0.0005:
-            score -= 10
-            reasons.append("High Funding")
+        if bull_trend:
+            reasons.append("EMA Bull Trend")
+        elif bear_trend:
+            reasons.append("EMA Bear Trend")
 
-        min_score = self.config.__dict__.get("min_score", 30)
-        confidence = 50 + abs(score)
-        confidence = max(40, min(confidence, 95))
+        # --- Layer 2: ADX Trend Strength ---
+        adx_val = _adx(highs, lows, closes, 14)
+        adx_threshold = 18.0
+        is_trending = adx_val >= adx_threshold
 
-        if abs(score) < min_score:
+        if is_trending:
+            adx_bonus = min(int((adx_val - adx_threshold) * 1.5), 25)
+            confidence += adx_bonus
+            reasons.append(f"ADX Trending ({adx_val:.0f})")
+        else:
+            chop_penalty = min(int((adx_threshold - adx_val) * 1.2), 20)
+            confidence -= chop_penalty
+            reasons.append(f"ADX Choppy ({adx_val:.0f})")
+
+        # --- Layer 3: Predator Momentum Score ---
+        # MACD component
+        macd_data = _macd(closes, 12, 26, 9)
+        hist = macd_data["histogram"]
+        hist_series = macd_data["histogram_series"]
+        stdev_macd = _stdev(hist_series, min(100, len(hist_series))) if hist_series else 1e-10
+        macd_norm = _tanh(hist / stdev_macd) if stdev_macd > 1e-10 else 0
+
+        # RSI drift component
+        rsi_values = _rsi(closes, 14)
+        rsi_smoothed = _ema(rsi_values, 5)
+        if len(rsi_smoothed) >= 2 and rsi_smoothed[-1] != 0 and rsi_smoothed[-2] != 0:
+            rsi_drift = rsi_smoothed[-1] - rsi_smoothed[-2]
+        else:
+            rsi_drift = 0.0
+        rsi_norm = _tanh(rsi_drift / 2.0)
+
+        # Trend bonus
+        trend_bonus = 0.6 if ema_fast_above else -0.6
+
+        # Composite momentum score
+        raw_score = macd_norm + rsi_norm + trend_bonus
+        momentum_score = max(-1.0, min(1.0, raw_score))
+
+        # Regime detection
+        pos_thresh = 0.20
+        neg_thresh = -0.20
+        if momentum_score > pos_thresh:
+            regime = 1
+            reasons.append(f"Momentum Bull ({momentum_score:+.2f})")
+        elif momentum_score < neg_thresh:
+            regime = -1
+            reasons.append(f"Momentum Bear ({momentum_score:+.2f})")
+        else:
+            regime = 0
+
+        # Momentum contribution to confidence
+        mom_mag = abs(momentum_score)
+        if mom_mag > 0.5:
+            confidence += 20
+        elif mom_mag > 0.3:
+            confidence += 12
+        elif mom_mag > 0.15:
+            confidence += 5
+
+        # Full alignment bonus
+        if bull_trend and is_trending and regime == 1:
+            confidence += 10
+            reasons.append("FULL ALIGNMENT LONG")
+        elif bear_trend and is_trending and regime == -1:
+            confidence += 10
+            reasons.append("FULL ALIGNMENT SHORT")
+
+        # Entry cross bonus
+        if bull_enter or bear_enter:
+            confidence += 10
+            reasons.append("Regime Flip")
+
+        confidence = max(0, min(95, confidence))
+
+        # --- Direction Logic (mirrors real strategy) ---
+        if bull_trend and is_trending and momentum_score >= 0:
+            direction = TradeDirection.LONG
+        elif bear_trend and is_trending and momentum_score <= 0:
+            direction = TradeDirection.SHORT
+        elif is_trending and regime == 1:
+            direction = TradeDirection.LONG
+        elif is_trending and regime == -1:
+            direction = TradeDirection.SHORT
+        elif ema_fast_above:
+            direction = TradeDirection.LONG
+        else:
+            direction = TradeDirection.SHORT
+
+        # If market is choppy and no strong signal, reduce confidence below threshold
+        if not is_trending and abs(momentum_score) < 0.3:
             confidence = min(confidence, self.config.low_confidence_min - 1)
 
-        direction = TradeDirection.LONG if score >= 0 else TradeDirection.SHORT
         return direction, confidence, " | ".join(reasons) or "Neutral"
 
-    def _signal_claude_edge(
-        self, data: HistoricalDataPoint, symbol: str
-    ) -> Tuple[TradeDirection, int, str]:
-        """
-        Claude Edge: Hybrid technical + sentiment.
-        Combines edge_indicator signals with fear/greed and funding context.
-        No actual LLM call in backtest — simulates the combined scoring.
-        """
-        # Start with edge indicator base signal
-        base_dir, base_conf, base_reason = self._signal_edge_indicator(data, symbol)
-        score = base_conf - 50 if base_dir == TradeDirection.LONG else -(base_conf - 50)
-        reasons = [base_reason]
-
-        # Add sentiment context (fear & greed)
-        fg = data.fear_greed_index
-        if fg < 25:
-            score += 15
-            reasons.append(f"Fear ({fg})")
-        elif fg > 75:
-            score -= 15
-            reasons.append(f"Greed ({fg})")
-
-        # News sentiment proxy: stablecoin flows
-        flow = data.stablecoin_flow_7d
-        if flow > 1_000_000_000:
-            score += 8
-            reasons.append("Inflows")
-        elif flow < -1_000_000_000:
-            score -= 8
-            reasons.append("Outflows")
-
-        # Macro overlay
-        dxy = data.dxy_index
-        if dxy > 107:
-            score -= 5
-            reasons.append(f"Strong USD ({dxy:.0f})")
-        elif dxy < 100:
-            score += 5
-
-        confidence = 50 + abs(score)
-        confidence = max(40, min(confidence, 95))
-        direction = TradeDirection.LONG if score >= 0 else TradeDirection.SHORT
-        return direction, confidence, " | ".join(reasons) or "Hybrid Signal"
-
     def _signal_degen(
-        self, data: HistoricalDataPoint, symbol: str
+        self, data: HistoricalDataPoint, symbol: str,
+        history: Optional[List[HistoricalDataPoint]] = None,
     ) -> Tuple[TradeDirection, int, str]:
         """
-        Degen: All-data strategy. Uses every available data source
-        for maximum signal diversity. No LLM in backtest.
+        Degen: All-data strategy simulating LLM analysis.
+        Uses every available data source + technical indicators from history.
         """
+        hist = history or [data]
         score = 0
         reasons = []
+        price_change = data.btc_24h_change if symbol == "BTC" else data.eth_24h_change
 
-        # Fear & Greed
+        # 1. Fear & Greed (contrarian)
         fg = data.fear_greed_index
-        if fg < 30:
-            score += 15
-        elif fg > 70:
-            score -= 15
+        if fg < 20:
+            score += 20
+            reasons.append(f"Extreme Fear ({fg})")
+        elif fg < 35:
+            score += 10
+        elif fg > 80:
+            score -= 20
+            reasons.append(f"Extreme Greed ({fg})")
+        elif fg > 65:
+            score -= 10
 
-        # Long/Short Ratio (contrarian)
+        # 2. Long/Short Ratio (contrarian)
         ls = data.long_short_ratio
-        if ls > 2.0:
+        if ls > 2.5:
             score -= 20
             reasons.append(f"Crowded Longs ({ls:.2f})")
-        elif ls < 0.5:
+        elif ls > 1.8:
+            score -= 10
+        elif ls < 0.4:
             score += 20
             reasons.append(f"Crowded Shorts ({ls:.2f})")
-
-        # Funding
-        fr = data.funding_rate_btc if symbol == "BTC" else data.funding_rate_eth
-        if fr > 0.0005:
-            score -= 10
-        elif fr < -0.0002:
+        elif ls < 0.6:
             score += 10
 
-        # Open Interest
-        oi_change = data.open_interest_change_24h
-        price_change = data.btc_24h_change if symbol == "BTC" else data.eth_24h_change
-        if oi_change > 3 and price_change > 0:
-            score -= 5  # contrarian
-        elif oi_change > 3 and price_change < 0:
-            score += 5
-
-        # Taker
-        ratio = data.taker_buy_sell_ratio
-        if ratio > 1.3:
+        # 3. Funding Rate (contrarian)
+        fr = data.funding_rate_btc if symbol == "BTC" else data.funding_rate_eth
+        if fr > 0.0008:
+            score -= 15
+            reasons.append(f"Very High Funding ({fr*100:.4f}%)")
+        elif fr > 0.0004:
             score -= 8
-        elif ratio < 0.7:
+        elif fr < -0.0003:
+            score += 15
+            reasons.append(f"Neg Funding ({fr*100:.4f}%)")
+        elif fr < -0.0001:
             score += 8
 
-        # Stablecoin flows
+        # 4. Open Interest trend
+        oi_change = data.open_interest_change_24h
+        if oi_change > 5 and price_change > 2:
+            score -= 8
+            reasons.append("OI Rising + Price Up (crowded)")
+        elif oi_change > 5 and price_change < -2:
+            score += 8
+            reasons.append("OI Rising + Price Down (squeeze)")
+        elif oi_change < -5:
+            score += 5
+
+        # 5. Taker volume
+        ratio = data.taker_buy_sell_ratio
+        if ratio > 1.3:
+            score += 10
+            reasons.append(f"Buy Pressure ({ratio:.2f})")
+        elif ratio < 0.7:
+            score -= 10
+            reasons.append(f"Sell Pressure ({ratio:.2f})")
+
+        # 6. Technical: RSI from price history
+        if len(hist) >= 20:
+            closes = [h.btc_price if symbol == "BTC" else h.eth_price for h in hist]
+            rsi_vals = _rsi(closes, 14)
+            rsi_now = rsi_vals[-1]
+            if rsi_now < 30:
+                score += 12
+                reasons.append(f"RSI Oversold ({rsi_now:.0f})")
+            elif rsi_now > 70:
+                score -= 12
+                reasons.append(f"RSI Overbought ({rsi_now:.0f})")
+
+            # EMA trend
+            ema_f = _ema(closes, 8)
+            ema_s = _ema(closes, 21)
+            if ema_f[-1] > ema_s[-1] and ema_f[-1] != 0:
+                score += 5
+            elif ema_f[-1] < ema_s[-1] and ema_f[-1] != 0:
+                score -= 5
+
+        # 7. Stablecoin flows
         flow = data.stablecoin_flow_7d
         if flow > 2_000_000_000:
             score += 5
         elif flow < -2_000_000_000:
             score -= 5
 
-        # Volatility
+        # 8. Volatility
         vol = data.historical_volatility
         if vol > 80:
             score -= 5
-        elif vol < 30:
+        elif vol < 25:
             score += 3
 
-        # Macro
+        # 9. Macro (DXY)
         dxy = data.dxy_index
         if dxy > 107:
-            score -= 3
-        elif dxy < 100:
-            score += 3
+            score -= 5
+            reasons.append(f"Strong USD ({dxy:.1f})")
+        elif dxy < 100 and dxy > 0:
+            score += 5
 
-        confidence = 50 + abs(score)
-        confidence = max(40, min(confidence, 95))
+        # 10. Funding divergence (Binance vs Bitget)
+        if data.funding_rate_bitget != 0:
+            spread = abs(fr - data.funding_rate_bitget)
+            if spread > 0.0003:
+                score += 5 if fr > data.funding_rate_bitget else -5
+
+        confidence = 45 + int(abs(score) * 0.8)
+        confidence = max(0, min(95, confidence))
+
+        # Require decent signal strength
+        if abs(score) < 15:
+            confidence = min(confidence, self.config.low_confidence_min - 1)
+
         direction = TradeDirection.LONG if score >= 0 else TradeDirection.SHORT
         return direction, confidence, " | ".join(reasons) or f"Degen Score {score:+d}"
 
@@ -660,34 +963,32 @@ class BacktestEngine:
         self, data: HistoricalDataPoint, symbol: str
     ) -> Tuple[TradeDirection, int, str]:
         """
-        LLM Signal / AI Companion: Similar to degen but more balanced.
-        In backtest, uses weighted combination without actual LLM call.
+        LLM Signal / AI Companion: Uses degen logic as proxy for LLM analysis.
         """
-        return self._signal_degen(data, symbol)
+        return self._signal_degen(data, symbol, history=None)
 
     # ------------------------------------------------------------------ #
     #  SIGNAL GENERATION (dispatcher)                                     #
     # ------------------------------------------------------------------ #
 
     def _generate_signal(
-        self, data: HistoricalDataPoint, symbol: str = "BTC"
+        self, data: HistoricalDataPoint, symbol: str = "BTC",
+        history: Optional[List[HistoricalDataPoint]] = None,
     ) -> Tuple[TradeDirection, int, str]:
         """
         Generate a trade signal based on historical data point.
         Dispatches to strategy-specific signal generator.
+        `history` contains all data points up to and including `data`.
         """
-        # Strategy dispatch — each strategy has its own signal logic
-        dispatch = {
-            "sentiment_surfer": self._signal_sentiment_surfer,
-            "edge_indicator": self._signal_edge_indicator,
-            "claude_edge": self._signal_claude_edge,
-            "degen": self._signal_degen,
-            "llm_signal": self._signal_llm_signal,
-        }
-
-        handler = dispatch.get(self.strategy_type)
-        if handler:
-            return handler(data, symbol)
+        # Strategies that need full history for indicator calculations
+        if self.strategy_type in ("edge_indicator", "claude_edge_indicator"):
+            return self._signal_edge_indicator(data, symbol, history or [data])
+        if self.strategy_type == "sentiment_surfer":
+            return self._signal_sentiment_surfer(data, symbol, history or [data])
+        if self.strategy_type == "degen":
+            return self._signal_degen(data, symbol, history or [data])
+        if self.strategy_type == "llm_signal":
+            return self._signal_llm_signal(data, symbol)
 
         # Default: Liquidation Hunter (original multi-source contrarian logic)
         reasons = []
@@ -967,7 +1268,8 @@ class BacktestEngine:
                 if entry_price <= 0:
                     continue
 
-                direction, confidence, reason = self._generate_signal(data, symbol)
+                history_slice = data_points[:i + 1]
+                direction, confidence, reason = self._generate_signal(data, symbol, history=history_slice)
 
                 if confidence < self.config.low_confidence_min:
                     continue

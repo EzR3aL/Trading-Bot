@@ -257,7 +257,7 @@ export default function BotDetail() {
               <span>{{
                 llm_signal: 'KI-Companion', sentiment_surfer: 'Sentiment Surfer',
                 liquidation_hunter: 'Liquidation Hunter', degen: 'Degen',
-                edge_indicator: 'Edge Indicator', claude_edge: 'Claude Edge', claude_edge_indicator: 'Claude Edge Indicator',
+                edge_indicator: 'Edge Indicator', claude_edge_indicator: 'Claude Edge Indicator',
               }[config.strategy_type] || config.strategy_type.replace(/_/g, ' ')}</span>
               {config.strategy_type === 'llm_signal' && (
                 <Bot size={15} className="text-emerald-400" />

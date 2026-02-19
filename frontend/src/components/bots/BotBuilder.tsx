@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
 import api from '../../api/client'
-import { ArrowLeft, ArrowRight, Check, Play, Brain, TrendingUp, BarChart3, DollarSign, Activity, Building, LayoutGrid, List, Bot, Zap } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Check, Play, Brain, TrendingUp, BarChart3, DollarSign, Activity, Building, LayoutGrid, List, Bot, Zap, Clock } from 'lucide-react'
 import ExchangeLogo from '../ui/ExchangeLogo'
 import FilterDropdown from '../ui/FilterDropdown'
 import NumInput from '../ui/NumInput'
@@ -56,7 +56,7 @@ interface BotBuilderProps {
 }
 
 // Strategies that use market data and should show the data sources step
-const DATA_STRATEGIES = ['llm_signal', 'sentiment_surfer', 'liquidation_hunter', 'degen', 'edge_indicator', 'claude_edge', 'claude_edge_indicator']
+const DATA_STRATEGIES = ['llm_signal', 'sentiment_surfer', 'liquidation_hunter', 'degen', 'edge_indicator', 'claude_edge_indicator']
 
 // Fixed data sources for non-LLM strategies (these strategies use hardcoded sources internally)
 const FIXED_STRATEGY_SOURCES: Record<string, string[]> = {
@@ -74,10 +74,6 @@ const FIXED_STRATEGY_SOURCES: Record<string, string[]> = {
   edge_indicator: [
     'spot_price', 'vwap', 'supertrend', 'spot_volume', 'volatility',
   ],
-  claude_edge: [
-    'spot_price', 'fear_greed', 'news_sentiment', 'vwap', 'supertrend',
-    'spot_volume', 'volatility', 'funding_rate',
-  ],
   claude_edge_indicator: [
     'spot_price', 'vwap', 'supertrend', 'spot_volume', 'volatility',
   ],
@@ -89,7 +85,6 @@ const STRATEGY_DISPLAY_NAMES: Record<string, string> = {
   liquidation_hunter: 'Liquidation Hunter',
   degen: 'Degen',
   edge_indicator: 'Edge Indicator',
-  claude_edge: 'Claude Edge',
   claude_edge_indicator: 'Claude Edge Indicator',
 }
 
@@ -99,7 +94,6 @@ const STRATEGY_DESCRIPTIONS_DE: Record<string, string> = {
   liquidation_hunter: 'Contrarian-Strategie, die gegen überfüllte Positionen handelt. Analysiert Long/Short-Verhältnisse, Funding Rates und Fear & Greed, um Liquidationskaskaden frühzeitig zu erkennen.',
   degen: 'KI-gesteuerte Arena-Strategie mit festem Prompt und 14 Datenquellen. Nutzt Derivatives, Order Book, Supertrend, VWAP und mehr fuer 1h BTC-Vorhersagen. Inspiriert vom Degen Prediction Bot.',
   edge_indicator: 'Technische Strategie basierend auf dem TradingView "Trading Edge" Indicator. EMA 8/21 Ribbon, ADX Chop-Filter und Predator Momentum Score (MACD + RSI Drift). Nur Kline-Daten.',
-  claude_edge: 'Hybrid: Technische Analyse + KI-Bewertung. Berechnet Indikatoren und lässt ein LLM bewerten, ob die Signale im Marktkontext sinnvoll sind. Das Beste aus beiden Welten.',
   claude_edge_indicator: 'Erweiterter Edge Indicator mit ATR-basierten TP/SL, Volumen-Bestätigung, Multi-Timeframe (4h) Alignment, Trailing Stop, Regime-basierter Positionsgröße und RSI-Divergenz-Erkennung.',
 }
 
@@ -115,6 +109,12 @@ const CATEGORY_ICONS: Record<string, typeof Brain> = {
   spot: DollarSign,
   technical: Activity,
   tradfi: Building,
+}
+
+// Backtest-based timeframe recommendations (90-day BTCUSDT backtest)
+const STRATEGY_RECOMMENDATIONS: Record<string, { bestTimeframe: string }> = {
+  edge_indicator: { bestTimeframe: '1h' },
+  claude_edge_indicator: { bestTimeframe: '1h' },
 }
 
 const EXCHANGES = ['bitget', 'weex', 'hyperliquid']
@@ -666,297 +666,239 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
             </div>
 
             {/* LLM info banner */}
-            {(strategyType === 'llm_signal' || strategyType === 'degen' || strategyType === 'claude_edge') && (
+            {(strategyType === 'llm_signal' || strategyType === 'degen') && (
               <div className="bg-blue-900/20 border border-blue-800 rounded-lg p-3">
                 <p className="text-xs text-blue-300">{b.llmNote || 'This bot uses AI for signal generation. Configure your API key in Settings → LLM Keys.'}</p>
               </div>
             )}
 
-            {selectedStrategy && Object.keys(selectedStrategy.param_schema).length > 0 && (
-              <div>
-                <label className="block text-sm text-gray-400 mb-3">{b.strategyParams}</label>
-                <div className="space-y-3">
-                  {(() => {
-                    const selectEntries = Object.entries(selectedStrategy.param_schema).filter(
-                      ([, def]) => (def as ParamDef).type === 'select' || (def as ParamDef).type === 'dependent_select'
-                    )
-                    const otherEntries = Object.entries(selectedStrategy.param_schema).filter(
-                      ([, def]) => (def as ParamDef).type !== 'select' && (def as ParamDef).type !== 'dependent_select'
-                    )
+            {/* Strategy Recommendations from Backtest */}
+            {strategyType && (strategyType === 'edge_indicator' || strategyType === 'claude_edge_indicator') && STRATEGY_RECOMMENDATIONS[strategyType] && (
+              <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-primary-500/10 border border-primary-500/20">
+                <Clock size={14} className="text-primary-400 shrink-0" />
+                <span className="text-xs text-primary-300">Empfohlener Timeframe: <strong>{STRATEGY_RECOMMENDATIONS[strategyType].bestTimeframe}</strong></span>
+                <span className="text-[10px] text-gray-500 ml-auto">90-Tage Backtest</span>
+              </div>
+            )}
 
-                    return (
-                      <>
-                        {/* Dropdowns (Model Family + Model) compact in one row */}
-                        {selectEntries.length > 0 && (
-                          <div className="flex items-end gap-3 flex-wrap">
-                            {selectEntries.map(([key, def]) => {
-                              const d = def as ParamDef
-                              if (d.type === 'select' && d.options) {
-                                const selectOptions = d.options.map(opt => ({
-                                  value: typeof opt === 'string' ? opt : opt.value,
-                                  label: typeof opt === 'string' ? opt : opt.label,
-                                }))
-                                return (
-                                  <div key={key}>
-                                    <label className="block text-xs text-gray-500 mb-1" title={d.description}>{d.label}</label>
-                                    <FilterDropdown
-                                      value={String(strategyParams[key] ?? d.default)}
-                                      onChange={val => setStrategyParams(prev => ({ ...prev, [key]: val }))}
-                                      options={selectOptions}
-                                      ariaLabel={d.label}
-                                    />
-                                  </div>
-                                )
-                              }
-                              if (d.type === 'dependent_select' && d.options_map && d.depends_on) {
-                                const parentValue = (strategyParams[d.depends_on] ?? '') as string
-                                const depOptions = (d.options_map[parentValue] || []).map((opt: ParamOption) => ({
-                                  value: opt.value,
-                                  label: opt.label,
-                                }))
-                                const currentValue = strategyParams[key] ?? ''
-                                const isValid = depOptions.some(opt => opt.value === currentValue)
-                                const displayValue = isValid ? String(currentValue) : (depOptions[0]?.value ?? '')
-                                return (
-                                  <div key={key}>
-                                    <label className="block text-xs text-gray-500 mb-1" title={d.description}>{d.label}</label>
-                                    <FilterDropdown
-                                      value={displayValue}
-                                      onChange={val => setStrategyParams(prev => ({ ...prev, [key]: val }))}
-                                      options={depOptions}
-                                      ariaLabel={d.label}
-                                    />
-                                  </div>
-                                )
-                              }
-                              return null
-                            })}
-                          </div>
-                        )}
+            {selectedStrategy && Object.keys(selectedStrategy.param_schema).length > 0 && (() => {
+              const selectEntries = Object.entries(selectedStrategy.param_schema).filter(
+                ([, def]) => (def as ParamDef).type === 'select' || (def as ParamDef).type === 'dependent_select'
+              )
+              const textareaEntries = Object.entries(selectedStrategy.param_schema).filter(
+                ([, def]) => (def as ParamDef).type === 'textarea'
+              )
+              // All non-select, non-textarea params go behind Pro Mode
+              const proModeEntries = Object.entries(selectedStrategy.param_schema).filter(
+                ([, def]) => {
+                  const d = def as ParamDef
+                  return d.type !== 'select' && d.type !== 'dependent_select' && d.type !== 'textarea'
+                }
+              )
+              const hasAlwaysVisible = selectEntries.length > 0 || textareaEntries.length > 0
+              const hasProParams = proModeEntries.length > 0
 
-                        {/* Special fields: Prompt + Temperature slider */}
-                        {otherEntries
-                          .filter(([, def]) => {
+              return (
+                <div>
+                  {/* Always visible: LLM provider/model selects + custom prompt textarea */}
+                  {hasAlwaysVisible && (
+                    <div className="space-y-3">
+                      {selectEntries.length > 0 && (
+                        <div className="flex items-end gap-3 flex-wrap">
+                          {selectEntries.map(([key, def]) => {
                             const d = def as ParamDef
-                            return d.type === 'textarea' || (d.type === 'float' && d.min !== undefined && d.max !== undefined && d.max <= 1)
-                          })
-                          .map(([key, def]) => {
-                            const d = def as ParamDef
-                            if (d.type === 'textarea') {
+                            if (d.type === 'select' && d.options) {
+                              const selectOptions = d.options.map(opt => ({
+                                value: typeof opt === 'string' ? opt : opt.value,
+                                label: typeof opt === 'string' ? opt : opt.label,
+                              }))
                               return (
                                 <div key={key}>
                                   <label className="block text-xs text-gray-500 mb-1" title={d.description}>{d.label}</label>
-                                  <textarea
-                                    value={strategyParams[key] ?? ''}
-                                    onChange={e => setStrategyParams(prev => ({ ...prev, [key]: e.target.value }))}
-                                    rows={6}
-                                    placeholder="Eigene Anweisungen für die KI-Analyse eingeben..."
-                                    className="filter-select w-full text-sm font-mono !h-auto"
+                                  <FilterDropdown
+                                    value={String(strategyParams[key] ?? d.default)}
+                                    onChange={val => setStrategyParams(prev => ({ ...prev, [key]: val }))}
+                                    options={selectOptions}
+                                    ariaLabel={d.label}
                                   />
                                 </div>
                               )
                             }
-                            const val = strategyParams[key] ?? d.default
-                            return (
-                              <div key={key} className="max-w-sm">
-                                <label className="block text-xs text-gray-500 mb-1" title={d.description}>
-                                  {d.label}: {Number(val).toFixed(1)}
-                                </label>
-                                <input
-                                  type="range"
-                                  min={d.min}
-                                  max={d.max}
-                                  step={0.1}
-                                  value={val}
-                                  onChange={e => setStrategyParams(prev => ({ ...prev, [key]: parseFloat(e.target.value) }))}
-                                  className="w-full accent-primary-500"
-                                />
-                                <p className="text-[11px] text-gray-600 mt-0.5">
-                                  Niedrig = konsistente Antworten · Hoch = kreativere Analysen · Empfohlen: 0.2–0.4
-                                </p>
-                              </div>
-                            )
+                            if (d.type === 'dependent_select' && d.options_map && d.depends_on) {
+                              const parentValue = (strategyParams[d.depends_on] ?? '') as string
+                              const depOptions = (d.options_map[parentValue] || []).map((opt: ParamOption) => ({
+                                value: opt.value,
+                                label: opt.label,
+                              }))
+                              const currentValue = strategyParams[key] ?? ''
+                              const isValid = depOptions.some(opt => opt.value === currentValue)
+                              const displayValue = isValid ? String(currentValue) : (depOptions[0]?.value ?? '')
+                              return (
+                                <div key={key}>
+                                  <label className="block text-xs text-gray-500 mb-1" title={d.description}>{d.label}</label>
+                                  <FilterDropdown
+                                    value={displayValue}
+                                    onChange={val => setStrategyParams(prev => ({ ...prev, [key]: val }))}
+                                    options={depOptions}
+                                    ariaLabel={d.label}
+                                  />
+                                </div>
+                              )
+                            }
+                            return null
                           })}
+                        </div>
+                      )}
 
-                        {/* Number inputs in 2-column grid */}
-                        {(() => {
-                          const numberEntries = otherEntries.filter(([, def]) => {
-                            const d = def as ParamDef
-                            return d.type !== 'textarea' && !(d.type === 'float' && d.min !== undefined && d.max !== undefined && d.max <= 1)
-                          })
-                          if (numberEntries.length === 0) return null
-                          return (
-                            <div className="grid grid-cols-2 gap-3">
-                              {numberEntries.map(([key, def]) => {
-                                const d = def as ParamDef
-                                return (
-                                  <div key={key}>
-                                    <label className="block text-xs text-gray-500 mb-1" title={d.description}>{d.label}</label>
-                                    <NumInput
-                                      value={strategyParams[key] ?? d.default}
-                                      onChange={e => setStrategyParams(prev => ({ ...prev, [key]: parseFloat(e.target.value) || 0 }))}
-                                      min={d.min}
-                                      max={d.max}
-                                      step={d.type === 'float' ? 0.0001 : 1}
-                                      className="filter-select w-full text-sm"
-                                    />
-                                  </div>
-                                )
-                              })}
-                            </div>
-                          )
-                        })()}
-                      </>
-                    )
-                  })()}
-                </div>
-              </div>
-            )}
-
-            {/* Pro Mode toggle for fixed-source strategies */}
-            {hasFixedSources && (
-              <div className="mt-6 border-t border-white/5 pt-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Zap size={15} className={proMode ? 'text-amber-400' : 'text-gray-500'} />
-                    <div>
-                      <span className="text-sm font-medium text-gray-300">Pro Mode</span>
-                      <p className="text-xs text-gray-500">
-                        {proMode
-                          ? (b.proModeActiveHint || 'Datenquellen-Einstellungen werden angezeigt')
-                          : (b.proModeHint || 'Datenquellen anpassen (für fortgeschrittene Nutzer)')}
-                      </p>
+                      {textareaEntries.map(([key, def]) => {
+                        const d = def as ParamDef
+                        return (
+                          <div key={key}>
+                            <label className="block text-xs text-gray-500 mb-1" title={d.description}>{d.label}</label>
+                            <textarea
+                              value={strategyParams[key] ?? ''}
+                              onChange={e => setStrategyParams(prev => ({ ...prev, [key]: e.target.value }))}
+                              rows={6}
+                              placeholder="Eigene Anweisungen für die KI-Analyse eingeben..."
+                              className="filter-select w-full text-sm font-mono !h-auto"
+                            />
+                          </div>
+                        )
+                      })}
                     </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={toggleProMode}
-                    className={`relative w-11 h-6 rounded-full transition-colors ${proMode ? 'bg-amber-500' : 'bg-gray-700'}`}
-                  >
-                    <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform ${proMode ? 'translate-x-5' : ''}`} />
-                  </button>
-                </div>
+                  )}
 
-                {/* Inline data sources editor (Pro Mode) */}
-                {proMode && (
-                  <div className="mt-4 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <p className="text-xs text-gray-500">
-                        {selectedSources.length} {b.sourcesSelected || 'sources selected'}
-                      </p>
-                      <div className="flex items-center gap-1 bg-white/5 rounded-lg p-0.5">
+                  {/* Pro Mode toggle — reveals ALL strategy params */}
+                  {hasProParams && (
+                    <div className={`${hasAlwaysVisible ? 'mt-6' : ''} border-t border-white/5 pt-4`}>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <Zap size={15} className={proMode ? 'text-amber-400' : 'text-gray-500'} />
+                          <div>
+                            <span className="text-sm font-medium text-gray-300">Pro Mode</span>
+                            <p className="text-xs text-gray-500">
+                              {proMode
+                                ? (b.proModeParamsActiveHint || 'Strategie-Parameter werden angezeigt')
+                                : (b.proModeParamsHint || 'Strategie-Parameter anpassen (für fortgeschrittene Nutzer)')}
+                            </p>
+                          </div>
+                        </div>
                         <button
                           type="button"
-                          onClick={() => setSourcesView('grid')}
-                          className={`p-1.5 rounded-md transition-colors ${sourcesView === 'grid' ? 'bg-white/10 text-white' : 'text-gray-500 hover:text-gray-300'}`}
+                          onClick={toggleProMode}
+                          className={`relative w-11 h-6 rounded-full transition-colors ${proMode ? 'bg-amber-500' : 'bg-gray-700'}`}
                         >
-                          <LayoutGrid size={14} />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setSourcesView('list')}
-                          className={`p-1.5 rounded-md transition-colors ${sourcesView === 'list' ? 'bg-white/10 text-white' : 'text-gray-500 hover:text-gray-300'}`}
-                        >
-                          <List size={14} />
+                          <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform ${proMode ? 'translate-x-5' : ''}`} />
                         </button>
                       </div>
-                    </div>
 
-                    {CATEGORY_ORDER.map(cat => {
-                      const sources = sourcesByCategory[cat]
-                      if (!sources) return null
-                      const Icon = CATEGORY_ICONS[cat] || Activity
-                      const catLabel = b[cat] || cat
-                      const allSelected = sources.every(s => selectedSources.includes(s.id))
+                      {proMode && (() => {
+                        const tempEntry = proModeEntries.find(([k]) => k === 'temperature')
+                        const boolEntries = proModeEntries.filter(([, def]) => (def as ParamDef).type === 'bool')
+                        const numericEntries = proModeEntries.filter(([k, def]) => {
+                          const d = def as ParamDef
+                          return k !== 'temperature' && d.type !== 'bool'
+                        })
 
-                      return (
-                        <div key={cat}>
-                          <div className="flex items-center justify-between mb-1.5">
-                            <div className="flex items-center gap-2">
-                              <Icon size={14} className="text-gray-400" />
-                              <span className="text-xs font-medium text-gray-400">{catLabel}</span>
-                            </div>
-                            <div className="flex gap-2">
-                              <button
-                                type="button"
-                                onClick={() => selectAllInCategory(cat)}
-                                className={`text-[10px] px-1.5 py-0.5 rounded ${allSelected ? 'text-gray-600' : 'text-primary-400 hover:text-primary-300'}`}
-                                disabled={allSelected}
-                              >
-                                {b.selectAll || 'All'}
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => clearCategory(cat)}
-                                className="text-[10px] px-1.5 py-0.5 rounded text-gray-500 hover:text-gray-400"
-                              >
-                                {b.clearAll || 'Clear'}
-                              </button>
-                            </div>
+                        // Range position as percentage (0-100)
+                        const rangePercent = (val: number, min: number, max: number) => {
+                          if (max === min) return 50
+                          return Math.max(0, Math.min(100, ((val - min) / (max - min)) * 100))
+                        }
+
+                        return (
+                          <div className="mt-4 space-y-3">
+                            {/* Temperature — dedicated slider */}
+                            {tempEntry && (() => {
+                              const [tKey, tDef] = tempEntry
+                              const td = tDef as ParamDef
+                              const tVal = Number(strategyParams[tKey] ?? td.default)
+                              const pct = rangePercent(tVal, td.min ?? 0, td.max ?? 1)
+                              return (
+                                <div className="relative overflow-hidden rounded-lg bg-gradient-to-r from-gray-800/40 to-gray-800/20 px-3 py-2 max-w-md">
+                                  <div className="flex items-center justify-between mb-1.5">
+                                    <span className="text-[10px] font-medium text-gray-400 uppercase tracking-wider">{td.label}</span>
+                                    <span className="text-xs font-mono font-semibold text-amber-400">{tVal.toFixed(1)}</span>
+                                  </div>
+                                  <div className="relative h-1.5 rounded-full bg-gray-900/60 overflow-hidden">
+                                    <div
+                                      className="absolute inset-y-0 left-0 rounded-full bg-gradient-to-r from-blue-500 via-amber-400 to-red-500 transition-all"
+                                      style={{ width: `${pct}%` }}
+                                    />
+                                  </div>
+                                  <input
+                                    type="range" min={td.min} max={td.max} step={0.1} value={tVal}
+                                    onChange={e => setStrategyParams(prev => ({ ...prev, [tKey]: parseFloat(e.target.value) }))}
+                                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                                  />
+                                  <div className="flex justify-between mt-1">
+                                    <span className="text-[9px] text-gray-600">Deterministisch</span>
+                                    <span className="text-[9px] text-gray-600">Kreativ</span>
+                                  </div>
+                                </div>
+                              )
+                            })()}
+
+                            {/* Bool toggles — compact inline pills */}
+                            {boolEntries.length > 0 && (
+                              <div className="flex flex-wrap gap-1.5">
+                                {boolEntries.map(([key, def]) => {
+                                  const d = def as ParamDef
+                                  const isOn = strategyParams[key] ?? d.default
+                                  return (
+                                    <button
+                                      key={key} type="button"
+                                      onClick={() => setStrategyParams(prev => ({ ...prev, [key]: !isOn }))}
+                                      title={d.description}
+                                      className={`inline-flex items-center gap-1.5 pl-2 pr-2.5 py-1.5 rounded-full text-[11px] font-medium transition-all ${
+                                        isOn
+                                          ? 'bg-emerald-500/15 text-emerald-400 ring-1 ring-emerald-500/25'
+                                          : 'bg-gray-800/40 text-gray-500 ring-1 ring-white/[0.04]'
+                                      }`}
+                                    >
+                                      <span className={`w-1.5 h-1.5 rounded-full ${isOn ? 'bg-emerald-400' : 'bg-gray-600'}`} />
+                                      {d.label}
+                                    </button>
+                                  )
+                                })}
+                              </div>
+                            )}
+
+                            {/* Numeric params — compact 2-col grid */}
+                            {numericEntries.length > 0 && (
+                              <div className="grid grid-cols-2 gap-2">
+                                {numericEntries.map(([key, def]) => {
+                                  const d = def as ParamDef
+                                  const val = Number(strategyParams[key] ?? d.default)
+
+                                  return (
+                                    <div
+                                      key={key}
+                                      title={d.description}
+                                      className="rounded-md bg-gray-800/30 px-2.5 py-2 border border-white/[0.04] hover:border-white/[0.08] transition-colors"
+                                    >
+                                      <label className="block text-[11px] text-gray-500 mb-1 truncate">{d.label}</label>
+                                      <NumInput
+                                        value={val}
+                                        onChange={e => setStrategyParams(prev => ({ ...prev, [key]: parseFloat(e.target.value) || 0 }))}
+                                        min={d.min}
+                                        max={d.max}
+                                        step={d.type === 'float' ? 0.0001 : 1}
+                                        className="filter-select text-sm !w-full text-gray-200"
+                                      />
+                                    </div>
+                                  )
+                                })}
+                              </div>
+                            )}
                           </div>
-
-                          {sourcesView === 'grid' ? (
-                            <div className="grid grid-cols-2 md:grid-cols-3 gap-1.5 mb-3">
-                              {sources.map(src => {
-                                const isSelected = selectedSources.includes(src.id)
-                                return (
-                                  <button
-                                    key={src.id}
-                                    type="button"
-                                    onClick={() => toggleSource(src.id)}
-                                    className={`text-left px-2.5 py-2 rounded-lg border transition-all duration-200 ${
-                                      isSelected
-                                        ? 'border-green-400/70 bg-green-950/30 shadow-[0_0_8px_rgba(74,222,128,0.08)]'
-                                        : 'border-white/10 bg-white/[0.03] hover:border-white/20'
-                                    }`}
-                                  >
-                                    <div className="flex items-center justify-between gap-1">
-                                      <span className={`text-xs font-medium ${isSelected ? 'text-green-300' : 'text-white'}`}>
-                                        {src.name}
-                                      </span>
-                                      <span className="text-[9px] text-gray-500 shrink-0">{src.provider}</span>
-                                    </div>
-                                    <div className="text-[10px] text-gray-500 mt-0.5 line-clamp-1">{src.description}</div>
-                                  </button>
-                                )
-                              })}
-                            </div>
-                          ) : (
-                            <div className="space-y-0.5 mb-3">
-                              {sources.map(src => {
-                                const isSelected = selectedSources.includes(src.id)
-                                return (
-                                  <button
-                                    key={src.id}
-                                    type="button"
-                                    onClick={() => toggleSource(src.id)}
-                                    className={`w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg border transition-all duration-200 ${
-                                      isSelected
-                                        ? 'border-green-400/70 bg-green-950/30'
-                                        : 'border-white/10 bg-white/[0.03] hover:border-white/20'
-                                    }`}
-                                  >
-                                    <div className={`w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0 ${
-                                      isSelected ? 'border-green-400 bg-green-500/20' : 'border-gray-600'
-                                    }`}>
-                                      {isSelected && <Check size={10} className="text-green-400" />}
-                                    </div>
-                                    <span className={`text-xs font-medium ${isSelected ? 'text-green-300' : 'text-white'}`}>
-                                      {src.name}
-                                    </span>
-                                    <span className="text-[10px] text-gray-500 truncate ml-auto">{src.provider}</span>
-                                  </button>
-                                )
-                              })}
-                            </div>
-                          )}
-                        </div>
-                      )
-                    })}
-                  </div>
-                )}
-              </div>
-            )}
+                        )
+                      })()}
+                    </div>
+                  )}
+                </div>
+              )
+            })()}
           </div>
         )}
 

@@ -22,7 +22,6 @@ const STRATEGY_DISPLAY: Record<string, string> = {
   llm_signal: 'KI-Companion',
   degen: 'Degen',
   edge_indicator: 'Edge Indicator',
-  claude_edge: 'Claude Edge',
   claude_edge_indicator: 'Claude Edge Indicator',
 }
 

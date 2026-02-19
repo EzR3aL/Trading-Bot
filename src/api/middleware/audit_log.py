@@ -117,7 +117,7 @@ def _get_audit_session_factory():
             def _set_pragma(dbapi_conn, _):  # pragma: no cover — SQLite-only event
                 c = dbapi_conn.cursor()
                 c.execute("PRAGMA journal_mode=WAL")
-                c.execute("PRAGMA busy_timeout=0")
+                c.execute("PRAGMA busy_timeout=500")
                 c.close()
         else:
             _audit_engine = _cae(
