@@ -13,6 +13,7 @@ from typing import Optional, Dict, Any
 
 import aiohttp
 
+from src.notifications.retry import async_retry
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -63,6 +64,7 @@ class DiscordNotifier:
         if self._session and not self._session.closed:
             await self._session.close()
 
+    @async_retry(max_retries=3)
     async def _send_webhook(self, payload: Dict[str, Any]) -> bool:
         """
         Send a message via Discord webhook.
@@ -79,23 +81,21 @@ class DiscordNotifier:
 
         await self._ensure_session()
 
-        try:
-            async with self._session.post(
-                self.webhook_url,
-                json=payload,
-                timeout=10,
-            ) as response:
-                if response.status == 204:
-                    logger.info("Discord notification sent successfully")
-                    return True
-                else:
-                    error_text = await response.text()
-                    logger.error(f"Discord webhook error: {response.status} - {error_text}")
-                    return False
-
-        except Exception as e:
-            logger.error(f"Error sending Discord notification: {e}")
-            return False
+        async with self._session.post(
+            self.webhook_url,
+            json=payload,
+            timeout=aiohttp.ClientTimeout(total=10),
+        ) as response:
+            if response.status == 204:
+                logger.info("Discord notification sent successfully")
+                return True
+            elif response.status == 429 or response.status >= 500:
+                error_text = await response.text()
+                raise RuntimeError(f"Discord webhook error {response.status}: {error_text}")
+            else:
+                error_text = await response.text()
+                logger.error("Discord webhook error: %s - %s", response.status, error_text)
+                return False
 
     def _create_embed(
         self,
