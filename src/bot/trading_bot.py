@@ -27,7 +27,7 @@ from apscheduler.triggers.cron import CronTrigger
 
 from src.exchanges.bitget.client import BitgetExchangeClient as BitgetClient, BitgetClientError
 from src.data.market_data import MarketDataFetcher, DataFetchError
-from src.strategy.liquidation_hunter import LiquidationHunterStrategy, TradeSignal, SignalDirection
+from src.strategy.liquidation_hunter import LiquidationHunterStrategy, TradeSignal
 from src.risk.risk_manager import RiskManager
 from src.notifications.discord_notifier import DiscordNotifier
 from src.models.trade_database import TradeDatabase
