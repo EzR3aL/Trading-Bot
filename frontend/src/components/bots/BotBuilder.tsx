@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
 import api from '../../api/client'
-import { ArrowLeft, ArrowRight, Check, Play, Brain, TrendingUp, BarChart3, DollarSign, Activity, Building, LayoutGrid, List, Bot } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Check, Play, Brain, TrendingUp, BarChart3, DollarSign, Activity, Building, LayoutGrid, List, Bot, Zap } from 'lucide-react'
 import ExchangeLogo from '../ui/ExchangeLogo'
 import FilterDropdown from '../ui/FilterDropdown'
 import NumInput from '../ui/NumInput'
@@ -145,6 +145,9 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
   const [sourcesView, setSourcesView] = useState<'grid' | 'list'>('grid')
   const [scheduleView, setScheduleView] = useState<'grid' | 'list'>('grid')
 
+  // Pro Mode: show data source customization for fixed-source strategies
+  const [proMode, setProMode] = useState(() => localStorage.getItem('botBuilder_proMode') === 'true')
+
   // Presets
   const [presets, setPresets] = useState<Preset[]>([])
   const [selectedPresetId, setSelectedPresetId] = useState<number | null>(null)
@@ -277,6 +280,16 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
   const activePairs = isHyperliquid ? PAIRS_HL : PAIRS_CEX
 
   const selectedStrategy = strategies.find(s => s.name === strategyType)
+
+  const toggleProMode = () => {
+    const next = !proMode
+    setProMode(next)
+    localStorage.setItem('botBuilder_proMode', String(next))
+    // Reset to fixed sources when disabling Pro Mode
+    if (!next && FIXED_STRATEGY_SOURCES[strategyType]) {
+      setSelectedSources(FIXED_STRATEGY_SOURCES[strategyType])
+    }
+  }
 
   const handleStrategyChange = (name: string) => {
     setStrategyType(name)
@@ -781,6 +794,151 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
                     )
                   })()}
                 </div>
+              </div>
+            )}
+
+            {/* Pro Mode toggle for fixed-source strategies */}
+            {hasFixedSources && (
+              <div className="mt-6 border-t border-white/5 pt-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Zap size={15} className={proMode ? 'text-amber-400' : 'text-gray-500'} />
+                    <div>
+                      <span className="text-sm font-medium text-gray-300">Pro Mode</span>
+                      <p className="text-xs text-gray-500">
+                        {proMode
+                          ? (b.proModeActiveHint || 'Datenquellen-Einstellungen werden angezeigt')
+                          : (b.proModeHint || 'Datenquellen anpassen (für fortgeschrittene Nutzer)')}
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={toggleProMode}
+                    className={`relative w-11 h-6 rounded-full transition-colors ${proMode ? 'bg-amber-500' : 'bg-gray-700'}`}
+                  >
+                    <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform ${proMode ? 'translate-x-5' : ''}`} />
+                  </button>
+                </div>
+
+                {/* Inline data sources editor (Pro Mode) */}
+                {proMode && (
+                  <div className="mt-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs text-gray-500">
+                        {selectedSources.length} {b.sourcesSelected || 'sources selected'}
+                      </p>
+                      <div className="flex items-center gap-1 bg-white/5 rounded-lg p-0.5">
+                        <button
+                          type="button"
+                          onClick={() => setSourcesView('grid')}
+                          className={`p-1.5 rounded-md transition-colors ${sourcesView === 'grid' ? 'bg-white/10 text-white' : 'text-gray-500 hover:text-gray-300'}`}
+                        >
+                          <LayoutGrid size={14} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setSourcesView('list')}
+                          className={`p-1.5 rounded-md transition-colors ${sourcesView === 'list' ? 'bg-white/10 text-white' : 'text-gray-500 hover:text-gray-300'}`}
+                        >
+                          <List size={14} />
+                        </button>
+                      </div>
+                    </div>
+
+                    {CATEGORY_ORDER.map(cat => {
+                      const sources = sourcesByCategory[cat]
+                      if (!sources) return null
+                      const Icon = CATEGORY_ICONS[cat] || Activity
+                      const catLabel = b[cat] || cat
+                      const allSelected = sources.every(s => selectedSources.includes(s.id))
+
+                      return (
+                        <div key={cat}>
+                          <div className="flex items-center justify-between mb-1.5">
+                            <div className="flex items-center gap-2">
+                              <Icon size={14} className="text-gray-400" />
+                              <span className="text-xs font-medium text-gray-400">{catLabel}</span>
+                            </div>
+                            <div className="flex gap-2">
+                              <button
+                                type="button"
+                                onClick={() => selectAllInCategory(cat)}
+                                className={`text-[10px] px-1.5 py-0.5 rounded ${allSelected ? 'text-gray-600' : 'text-primary-400 hover:text-primary-300'}`}
+                                disabled={allSelected}
+                              >
+                                {b.selectAll || 'All'}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => clearCategory(cat)}
+                                className="text-[10px] px-1.5 py-0.5 rounded text-gray-500 hover:text-gray-400"
+                              >
+                                {b.clearAll || 'Clear'}
+                              </button>
+                            </div>
+                          </div>
+
+                          {sourcesView === 'grid' ? (
+                            <div className="grid grid-cols-2 md:grid-cols-3 gap-1.5 mb-3">
+                              {sources.map(src => {
+                                const isSelected = selectedSources.includes(src.id)
+                                return (
+                                  <button
+                                    key={src.id}
+                                    type="button"
+                                    onClick={() => toggleSource(src.id)}
+                                    className={`text-left px-2.5 py-2 rounded-lg border transition-all duration-200 ${
+                                      isSelected
+                                        ? 'border-green-400/70 bg-green-950/30 shadow-[0_0_8px_rgba(74,222,128,0.08)]'
+                                        : 'border-white/10 bg-white/[0.03] hover:border-white/20'
+                                    }`}
+                                  >
+                                    <div className="flex items-center justify-between gap-1">
+                                      <span className={`text-xs font-medium ${isSelected ? 'text-green-300' : 'text-white'}`}>
+                                        {src.name}
+                                      </span>
+                                      <span className="text-[9px] text-gray-500 shrink-0">{src.provider}</span>
+                                    </div>
+                                    <div className="text-[10px] text-gray-500 mt-0.5 line-clamp-1">{src.description}</div>
+                                  </button>
+                                )
+                              })}
+                            </div>
+                          ) : (
+                            <div className="space-y-0.5 mb-3">
+                              {sources.map(src => {
+                                const isSelected = selectedSources.includes(src.id)
+                                return (
+                                  <button
+                                    key={src.id}
+                                    type="button"
+                                    onClick={() => toggleSource(src.id)}
+                                    className={`w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg border transition-all duration-200 ${
+                                      isSelected
+                                        ? 'border-green-400/70 bg-green-950/30'
+                                        : 'border-white/10 bg-white/[0.03] hover:border-white/20'
+                                    }`}
+                                  >
+                                    <div className={`w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0 ${
+                                      isSelected ? 'border-green-400 bg-green-500/20' : 'border-gray-600'
+                                    }`}>
+                                      {isSelected && <Check size={10} className="text-green-400" />}
+                                    </div>
+                                    <span className={`text-xs font-medium ${isSelected ? 'text-green-300' : 'text-white'}`}>
+                                      {src.name}
+                                    </span>
+                                    <span className="text-[10px] text-gray-500 truncate ml-auto">{src.provider}</span>
+                                  </button>
+                                )
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
               </div>
             )}
           </div>
