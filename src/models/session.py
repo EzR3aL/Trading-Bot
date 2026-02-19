@@ -202,13 +202,43 @@ async def _run_sqlite_migrations(conn) -> None:
 
 
 async def init_db() -> None:
-    """Create all tables. Call once at application startup."""
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+    """Create/migrate all tables. Call once at application startup.
 
-        # SQLite-only inline migrations for legacy databases
+    Strategy:
+    - Fresh database: run ``alembic upgrade head`` to create schema
+    - Existing database (pre-Alembic): stamp as ``head`` then run SQLite patches
+    - Existing database (with Alembic): run ``alembic upgrade head`` for pending migrations
+    """
+    from alembic import command as alembic_cmd
+    from alembic.config import Config as AlembicConfig
+
+    alembic_cfg = AlembicConfig("alembic.ini")
+
+    async with engine.begin() as conn:
+        # Check whether the database already has tables (pre-Alembic legacy)
+        has_tables = await conn.run_sync(
+            lambda sync_conn: engine.dialect.has_table(sync_conn, "users")
+        )
+
+        # Check whether Alembic version table exists
+        has_alembic = await conn.run_sync(
+            lambda sync_conn: engine.dialect.has_table(sync_conn, "alembic_version")
+        )
+
+    if has_tables and not has_alembic:
+        # Legacy database: ensure schema is up to date, then stamp
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+            if _is_sqlite:
+                await _run_sqlite_migrations(conn)
+        alembic_cmd.stamp(alembic_cfg, "head")
+    else:
+        # Fresh or already-migrated database
+        alembic_cmd.upgrade(alembic_cfg, "head")
+        # Run SQLite-only patches that Alembic migrations don't cover
         if _is_sqlite:
-            await _run_sqlite_migrations(conn)
+            async with engine.begin() as conn:
+                await _run_sqlite_migrations(conn)
 
 
 async def close_db() -> None:
