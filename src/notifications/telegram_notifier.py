@@ -5,6 +5,8 @@ import aiohttp
 from typing import Optional
 from datetime import datetime
 
+from src.notifications.retry import async_retry
+
 logger = logging.getLogger(__name__)
 
 TELEGRAM_API_BASE = "https://api.telegram.org/bot{token}"
@@ -24,28 +26,29 @@ class TelegramNotifier:
     async def __aexit__(self, *args):
         pass
 
+    @async_retry(max_retries=3)
     async def _send_message(self, text: str, parse_mode: str = "HTML") -> bool:
         """Send a message via Telegram Bot API."""
-        try:
-            async with aiohttp.ClientSession() as session:
-                payload = {
-                    "chat_id": self.chat_id,
-                    "text": text,
-                    "parse_mode": parse_mode,
-                }
-                async with session.post(
-                    f"{self._api_url}/sendMessage",
-                    json=payload,
-                    timeout=aiohttp.ClientTimeout(total=10),
-                ) as resp:
-                    if resp.status == 200:
-                        return True
+        async with aiohttp.ClientSession() as session:
+            payload = {
+                "chat_id": self.chat_id,
+                "text": text,
+                "parse_mode": parse_mode,
+            }
+            async with session.post(
+                f"{self._api_url}/sendMessage",
+                json=payload,
+                timeout=aiohttp.ClientTimeout(total=10),
+            ) as resp:
+                if resp.status == 200:
+                    return True
+                elif resp.status == 429 or resp.status >= 500:
                     error_text = await resp.text()
-                    logger.warning(f"Telegram API error {resp.status}: {error_text}")
+                    raise RuntimeError(f"Telegram API error {resp.status}: {error_text}")
+                else:
+                    error_text = await resp.text()
+                    logger.warning("Telegram API error %s: %s", resp.status, error_text)
                     return False
-        except Exception as e:
-            logger.error(f"Telegram send failed: {e}")
-            return False
 
     async def send_trade_entry(
         self,
