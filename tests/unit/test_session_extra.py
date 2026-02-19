@@ -39,7 +39,9 @@ class TestInitDbMigrationErrors:
         mock_begin_ctx.__aexit__ = AsyncMock(return_value=False)
 
         with patch("src.models.session.engine") as mock_engine, \
-             patch("src.models.session.DATABASE_URL", "sqlite+aiosqlite:///test.db"):
+             patch("src.models.session.DATABASE_URL", "sqlite+aiosqlite:///test.db"), \
+             patch("alembic.command.upgrade"), \
+             patch("alembic.command.stamp"):
             mock_engine.begin = MagicMock(return_value=mock_begin_ctx)
 
             from src.models.session import init_db
@@ -69,7 +71,9 @@ class TestInitDbMigrationErrors:
         mock_begin_ctx.__aexit__ = AsyncMock(return_value=False)
 
         with patch("src.models.session.engine") as mock_engine, \
-             patch("src.models.session.DATABASE_URL", "sqlite+aiosqlite:///test.db"):
+             patch("src.models.session.DATABASE_URL", "sqlite+aiosqlite:///test.db"), \
+             patch("alembic.command.upgrade"), \
+             patch("alembic.command.stamp"):
             mock_engine.begin = MagicMock(return_value=mock_begin_ctx)
 
             from src.models.session import init_db
@@ -110,7 +114,9 @@ class TestInitDbMigrationErrors:
         mock_begin_ctx.__aexit__ = AsyncMock(return_value=False)
 
         with patch("src.models.session.engine") as mock_engine, \
-             patch("src.models.session.DATABASE_URL", "sqlite+aiosqlite:///test.db"):
+             patch("src.models.session.DATABASE_URL", "sqlite+aiosqlite:///test.db"), \
+             patch("alembic.command.upgrade"), \
+             patch("alembic.command.stamp"):
             mock_engine.begin = MagicMock(return_value=mock_begin_ctx)
 
             from src.models.session import init_db
@@ -145,7 +151,9 @@ class TestInitDbMigrationErrors:
         mock_begin_ctx.__aexit__ = AsyncMock(return_value=False)
 
         with patch("src.models.session.engine") as mock_engine, \
-             patch("src.models.session.DATABASE_URL", "sqlite+aiosqlite:///test.db"):
+             patch("src.models.session.DATABASE_URL", "sqlite+aiosqlite:///test.db"), \
+             patch("alembic.command.upgrade"), \
+             patch("alembic.command.stamp"):
             mock_engine.begin = MagicMock(return_value=mock_begin_ctx)
 
             from src.models.session import init_db
@@ -177,7 +185,9 @@ class TestInitDbMigrationErrors:
         mock_begin_ctx.__aexit__ = AsyncMock(return_value=False)
 
         with patch("src.models.session.engine") as mock_engine, \
-             patch("src.models.session.DATABASE_URL", "sqlite+aiosqlite:///test.db"):
+             patch("src.models.session.DATABASE_URL", "sqlite+aiosqlite:///test.db"), \
+             patch("alembic.command.upgrade"), \
+             patch("alembic.command.stamp"):
             mock_engine.begin = MagicMock(return_value=mock_begin_ctx)
 
             from src.models.session import init_db
@@ -203,6 +213,8 @@ class TestInitDbMigrationErrors:
 
         with patch("src.models.session.engine") as mock_engine, \
              patch("src.models.session.DATABASE_URL", "sqlite+aiosqlite:///test.db"), \
+             patch("alembic.command.upgrade"), \
+             patch("alembic.command.stamp"), \
              patch.dict("os.environ", {"HL_BUILDER_FEE": "10"}):
             mock_engine.begin = MagicMock(return_value=mock_begin_ctx)
 
@@ -238,6 +250,8 @@ class TestInitDbMigrationErrors:
 
         with patch("src.models.session.engine") as mock_engine, \
              patch("src.models.session.DATABASE_URL", "sqlite+aiosqlite:///test.db"), \
+             patch("alembic.command.upgrade"), \
+             patch("alembic.command.stamp"), \
              patch.dict("os.environ", {"HL_BUILDER_FEE": "50"}):
             mock_engine.begin = MagicMock(return_value=mock_begin_ctx)
 
@@ -248,7 +262,7 @@ class TestInitDbMigrationErrors:
     async def test_postgresql_skips_sqlite_migrations(self):
         """PostgreSQL DATABASE_URL skips all SQLite migrations."""
         mock_conn = AsyncMock()
-        mock_conn.run_sync = AsyncMock()
+        mock_conn.run_sync = AsyncMock(return_value=False)
         mock_conn.execute = AsyncMock()
 
         mock_begin_ctx = AsyncMock()
@@ -256,12 +270,18 @@ class TestInitDbMigrationErrors:
         mock_begin_ctx.__aexit__ = AsyncMock(return_value=False)
 
         with patch("src.models.session.engine") as mock_engine, \
-             patch("src.models.session.DATABASE_URL", "postgresql+asyncpg://localhost/testdb"):
+             patch("src.models.session.DATABASE_URL", "postgresql+asyncpg://localhost/testdb"), \
+             patch("src.models.session._is_sqlite", False), \
+             patch("alembic.command.upgrade") as mock_upgrade, \
+             patch("alembic.command.stamp"):
             mock_engine.begin = MagicMock(return_value=mock_begin_ctx)
+            mock_engine.dialect = MagicMock()
+            mock_engine.dialect.has_table = MagicMock(return_value=False)
 
             from src.models.session import init_db
             await init_db()
 
-            # Only run_sync for table creation, no execute calls
-            mock_conn.run_sync.assert_awaited_once()
+            # Alembic upgrade should have been called
+            mock_upgrade.assert_called_once()
+            # No execute calls (no SQLite migrations)
             mock_conn.execute.assert_not_awaited()

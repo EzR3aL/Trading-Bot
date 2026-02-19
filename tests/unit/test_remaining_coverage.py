@@ -982,6 +982,7 @@ class TestOrchestratorRestoreFailure:
         orch = BotOrchestrator.__new__(BotOrchestrator)
         orch._lock = asyncio.Lock()
         orch._workers = {}
+        orch._scheduler = MagicMock(running=False)
         orch._start_bot_locked = AsyncMock(return_value=False)
 
         # Mock the DB query to return one enabled config

@@ -128,13 +128,19 @@ class TestInitDb:
         mock_begin_ctx.__aexit__ = AsyncMock(return_value=False)
 
         with patch("src.models.session.engine") as mock_engine, \
-             patch("src.models.session.DATABASE_URL", "postgresql+asyncpg://localhost/test"):
+             patch("src.models.session.DATABASE_URL", "postgresql+asyncpg://localhost/test"), \
+             patch("alembic.command.upgrade") as mock_upgrade, \
+             patch("alembic.command.stamp"):
             mock_engine.begin = MagicMock(return_value=mock_begin_ctx)
+            mock_engine.dialect = MagicMock()
+            mock_engine.dialect.has_table = MagicMock(return_value=False)
+            # run_sync calls the lambda with sync_conn; simulate has_table returning False
+            mock_conn.run_sync = AsyncMock(return_value=False)
 
             from src.models.session import init_db
             await init_db()
 
-            mock_conn.run_sync.assert_awaited_once()
+            mock_upgrade.assert_called_once()
 
     async def test_runs_sqlite_migrations(self):
         mock_conn = AsyncMock()
@@ -154,12 +160,16 @@ class TestInitDb:
         mock_begin_ctx.__aexit__ = AsyncMock(return_value=False)
 
         with patch("src.models.session.engine") as mock_engine, \
-             patch("src.models.session.DATABASE_URL", "sqlite+aiosqlite:///test.db"):
+             patch("src.models.session.DATABASE_URL", "sqlite+aiosqlite:///test.db"), \
+             patch("alembic.command.upgrade"), \
+             patch("alembic.command.stamp"):
             mock_engine.begin = MagicMock(return_value=mock_begin_ctx)
+            mock_engine.dialect = MagicMock()
+            mock_engine.dialect.has_table = MagicMock(return_value=False)
+            mock_conn.run_sync = AsyncMock(return_value=False)
 
             from src.models.session import init_db
             await init_db()
 
-            # Should have called run_sync for table creation + multiple execute calls for migrations
-            mock_conn.run_sync.assert_awaited_once()
-            assert mock_conn.execute.await_count > 1
+            # Should have called execute for sqlite migrations
+            assert mock_conn.execute.await_count >= 1
