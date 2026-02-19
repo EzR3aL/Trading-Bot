@@ -73,6 +73,14 @@ async def lifespan(app: FastAPI):
     from src.auth.jwt_handler import validate_jwt_config
     validate_jwt_config()
 
+    # Validate general configuration
+    from src.utils.config_validator import validate_startup_config, ConfigValidationError
+    try:
+        validate_startup_config()
+    except ConfigValidationError as e:
+        logger.error("Startup aborted: %s", e)
+        raise
+
     # Startup check: warn if running in production without explicit encryption key
     environment = os.getenv("ENVIRONMENT", "development").lower()
     if environment == "production" and not os.getenv("ENCRYPTION_KEY"):
