@@ -21,6 +21,7 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import { useThemeStore } from '../../stores/themeStore'
+import OfflineIndicator from '../ui/OfflineIndicator'
 
 const navItems: { path: string; key: string; icon: LucideIcon }[] = [
   { path: '/', key: 'dashboard', icon: LayoutDashboard },
@@ -174,6 +175,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="min-h-screen bg-gradient-dark">
+      <OfflineIndicator />
       {/* Mobile hamburger */}
       <div className="lg:hidden fixed top-0 left-0 right-0 z-40 bg-[#0a0e17]/90 backdrop-blur-xl border-b border-white/5 px-4 py-3 flex items-center justify-between">
         <div className="flex items-center gap-2">
