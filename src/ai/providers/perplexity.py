@@ -80,7 +80,8 @@ class PerplexityProvider(BaseLLMProvider):
                     timeout=aiohttp.ClientTimeout(total=10),
                 ) as resp:
                     return resp.status == 200
-        except Exception:
+        except Exception as e:
+            logger.warning("Provider validation failed: %s", e)
             return False
 
     @classmethod
