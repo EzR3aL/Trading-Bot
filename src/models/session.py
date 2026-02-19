@@ -104,6 +104,9 @@ async def _run_sqlite_migrations(conn) -> None:
         "CREATE TABLE IF NOT EXISTS backtest_runs (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, strategy_type VARCHAR(50) NOT NULL, symbol VARCHAR(50) NOT NULL DEFAULT 'BTCUSDT', timeframe VARCHAR(10) NOT NULL DEFAULT '1d', start_date DATETIME NOT NULL, end_date DATETIME NOT NULL, initial_capital FLOAT NOT NULL DEFAULT 10000.0, strategy_params TEXT, status VARCHAR(20) NOT NULL DEFAULT 'pending', error_message TEXT, result_metrics TEXT, equity_curve TEXT, trades TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, completed_at DATETIME)",
         # Per-asset configuration column
         "ALTER TABLE bot_configs ADD COLUMN per_asset_config TEXT",
+        # Risk stats table (database-backed daily stats)
+        "CREATE TABLE IF NOT EXISTS risk_stats (id INTEGER PRIMARY KEY AUTOINCREMENT, bot_config_id INTEGER NOT NULL REFERENCES bot_configs(id) ON DELETE CASCADE, date VARCHAR(10) NOT NULL, stats_json TEXT NOT NULL, daily_pnl FLOAT DEFAULT 0.0, trades_count INTEGER DEFAULT 0, is_halted BOOLEAN DEFAULT 0, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME)",
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_risk_stats_bot_date ON risk_stats(bot_config_id, date)",
     ]
     for migration in migrations:
         try:

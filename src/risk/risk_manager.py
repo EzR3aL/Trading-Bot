@@ -18,6 +18,15 @@ from typing import Optional, Dict, List
 from src.utils.logger import get_logger, TradeLogger
 from config import settings
 
+# Lazy imports for async DB — only used when bot_config_id is set
+_db_available = True
+try:
+    from sqlalchemy import select
+    from src.models.database import RiskStats
+    from src.models.session import get_session
+except ImportError:
+    _db_available = False
+
 logger = get_logger(__name__)
 
 
@@ -108,6 +117,7 @@ class RiskManager:
         profit_lock_percent: float = 75.0,
         min_profit_floor: float = 0.5,
         per_symbol_limits: Optional[Dict[str, Dict]] = None,
+        bot_config_id: Optional[int] = None,
     ):
         """
         Initialize the risk manager.
@@ -116,9 +126,10 @@ class RiskManager:
             max_trades_per_day: Global max trades (fallback if no per-symbol limit)
             daily_loss_limit_percent: Global loss limit (fallback if no per-symbol limit)
             position_size_percent: Default position size as percentage of balance
-            data_dir: Directory to store risk data
+            data_dir: Directory to store risk data (fallback for file-based storage)
             per_symbol_limits: Per-symbol overrides, e.g.
                 {"BTCUSDT": {"max_trades": 5, "loss_limit": 3.0}}
+            bot_config_id: If set, use database storage instead of JSON files
         """
         # Fall back to settings when not explicitly provided
         self.max_trades = max_trades_per_day if max_trades_per_day is not None else getattr(getattr(settings, 'trading', None), 'max_trades_per_day', None)
@@ -130,6 +141,9 @@ class RiskManager:
         self.enable_profit_lock = enable_profit_lock
         self.profit_lock_percent = profit_lock_percent  # Lock 75% of gains
         self.min_profit_floor = min_profit_floor  # Minimum profit to keep (0.5%)
+
+        self.bot_config_id = bot_config_id
+        self._use_db = bot_config_id is not None and _db_available
 
         self.data_dir = Path(data_dir)
         self.data_dir.mkdir(parents=True, exist_ok=True)
@@ -177,18 +191,107 @@ class RiskManager:
             json.dump(data, f, indent=2)
 
     def _save_daily_stats(self) -> None:
-        """Save current daily stats to file.
+        """Save current daily stats to file (synchronous fallback).
 
-        Called from synchronous methods (record_trade_entry/exit, can_trade).
-        Uses synchronous I/O since callers are not async. The files are small
-        (<1 KB) so blocking is negligible in practice.
+        Also schedules an async DB write if bot_config_id is set.
         """
-        if self._daily_stats:
-            stats_file = self._get_stats_file(self._daily_stats.date)
+        if not self._daily_stats:
+            return
+
+        # Always write JSON file as fallback
+        stats_file = self._get_stats_file(self._daily_stats.date)
+        try:
+            self._write_stats_file(stats_file, self._daily_stats.to_dict())
+        except Exception as e:
+            logger.error(f"Error saving daily stats: {e}")
+
+        # Schedule async DB write if available
+        if self._use_db:
+            import asyncio
             try:
-                self._write_stats_file(stats_file, self._daily_stats.to_dict())
-            except Exception as e:
-                logger.error(f"Error saving daily stats: {e}")
+                loop = asyncio.get_running_loop()
+                loop.create_task(self._save_stats_to_db())
+            except RuntimeError:
+                pass  # No running loop — skip DB write
+
+    async def _save_stats_to_db(self) -> None:
+        """Persist current daily stats to the risk_stats table."""
+        if not self._daily_stats or not self._use_db:
+            return
+        try:
+            stats_dict = self._daily_stats.to_dict()
+            async with get_session() as session:
+                result = await session.execute(
+                    select(RiskStats).where(
+                        RiskStats.bot_config_id == self.bot_config_id,
+                        RiskStats.date == self._daily_stats.date,
+                    )
+                )
+                existing = result.scalar_one_or_none()
+
+                if existing:
+                    existing.stats_json = json.dumps(stats_dict)
+                    existing.daily_pnl = self._daily_stats.net_pnl
+                    existing.trades_count = self._daily_stats.trades_executed
+                    existing.is_halted = self._daily_stats.is_trading_halted
+                else:
+                    row = RiskStats(
+                        bot_config_id=self.bot_config_id,
+                        date=self._daily_stats.date,
+                        stats_json=json.dumps(stats_dict),
+                        daily_pnl=self._daily_stats.net_pnl,
+                        trades_count=self._daily_stats.trades_executed,
+                        is_halted=self._daily_stats.is_trading_halted,
+                    )
+                    session.add(row)
+        except Exception as e:
+            logger.warning("Failed to save risk stats to DB: %s", e)
+
+    async def load_stats_from_db(self) -> None:
+        """Load today's stats from DB (call after async init)."""
+        if not self._use_db:
+            return
+        today = datetime.now().strftime("%Y-%m-%d")
+        try:
+            async with get_session() as session:
+                result = await session.execute(
+                    select(RiskStats).where(
+                        RiskStats.bot_config_id == self.bot_config_id,
+                        RiskStats.date == today,
+                    )
+                )
+                row = result.scalar_one_or_none()
+                if row:
+                    data = json.loads(row.stats_json)
+                    for key in ("net_pnl", "return_percent", "win_rate"):
+                        data.pop(key, None)
+                    self._daily_stats = DailyStats(**data)
+                    logger.info(
+                        "Loaded risk stats from DB: %d trades, PnL: $%.2f",
+                        self._daily_stats.trades_executed,
+                        self._daily_stats.net_pnl,
+                    )
+        except Exception as e:
+            logger.warning("Failed to load risk stats from DB: %s", e)
+
+    async def get_historical_stats_from_db(self, days: int = 30) -> List[Dict]:
+        """Get historical stats from the database."""
+        if not self._use_db:
+            return self.get_historical_stats(days)
+        try:
+            cutoff = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
+            async with get_session() as session:
+                result = await session.execute(
+                    select(RiskStats).where(
+                        RiskStats.bot_config_id == self.bot_config_id,
+                        RiskStats.date >= cutoff,
+                    ).order_by(RiskStats.date.desc())
+                )
+                rows = result.scalars().all()
+                return [json.loads(r.stats_json) for r in rows]
+        except Exception as e:
+            logger.warning("Failed to load historical stats from DB: %s", e)
+            return self.get_historical_stats(days)
 
     def initialize_day(self, starting_balance: float) -> DailyStats:
         """

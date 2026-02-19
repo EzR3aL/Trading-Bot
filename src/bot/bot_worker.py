@@ -226,13 +226,14 @@ class BotWorker(
                     if sym_lim:
                         per_symbol_limits[sym] = sym_lim
 
-                # Initialize risk manager with bot-specific params
+                # Initialize risk manager with bot-specific params + DB storage
                 self._risk_manager = RiskManager(
                     max_trades_per_day=self._config.max_trades_per_day,
                     daily_loss_limit_percent=self._config.daily_loss_limit_percent,
                     position_size_percent=self._config.position_size_percent,
                     data_dir=f"data/risk/bot_{self.bot_config_id}",
                     per_symbol_limits=per_symbol_limits if per_symbol_limits else None,
+                    bot_config_id=self.bot_config_id,
                 )
 
             # ── Hyperliquid pre-start checks ──────────────────────────
