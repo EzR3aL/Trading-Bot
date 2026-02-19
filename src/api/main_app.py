@@ -38,6 +38,7 @@ from src.api.routers import (
     tax_report,
     trades,
     users,
+    websocket,
 )
 from src.models.session import close_db, init_db
 from src.utils.logger import get_logger
@@ -244,6 +245,11 @@ def create_app() -> FastAPI:
     app.include_router(tax_report.router)
     app.include_router(affiliate.router)
     app.include_router(backtest.router)
+    app.include_router(websocket.router)
+
+    # Store WebSocket manager on app state for access
+    from src.api.websocket.manager import ws_manager
+    app.state.ws_manager = ws_manager
 
     # Serve frontend static files (built React app)
     frontend_dir = Path("static/frontend")

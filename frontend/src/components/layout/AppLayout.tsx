@@ -1,8 +1,11 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '../../stores/authStore'
 import { useFilterStore, type DemoFilter } from '../../stores/filterStore'
+import { useRealtimeStore } from '../../stores/realtimeStore'
+import { useToastStore } from '../../stores/toastStore'
+import { useWebSocket } from '../../hooks/useWebSocket'
 import {
   LayoutDashboard,
   ArrowLeftRight,
@@ -42,6 +45,37 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const { demoFilter, setDemoFilter } = useFilterStore()
   const { theme, toggleTheme } = useThemeStore()
   const [mobileOpen, setMobileOpen] = useState(false)
+  const { pushEvent, updateBotStatus } = useRealtimeStore()
+  const { addToast } = useToastStore()
+
+  // WebSocket handlers — memoised so the hook doesn't reconnect on every render
+  const wsHandlers = useMemo(() => ({
+    bot_started: (data: unknown) => {
+      const d = data as { bot_id: number; status?: unknown }
+      pushEvent('bot_started', d)
+      if (d.status) updateBotStatus(d.bot_id, d.status)
+      addToast('info', t('ws.botStarted', { defaultValue: 'Bot started' }))
+    },
+    bot_stopped: (data: unknown) => {
+      const d = data as { bot_id: number }
+      pushEvent('bot_stopped', d)
+      updateBotStatus(d.bot_id, null)
+      addToast('info', t('ws.botStopped', { defaultValue: 'Bot stopped' }))
+    },
+    trade_opened: (data: unknown) => {
+      const d = data as { symbol?: string }
+      pushEvent('trade_opened', d)
+      addToast('success', t('ws.tradeOpened', { symbol: d.symbol ?? '', defaultValue: `Trade opened: ${d.symbol ?? ''}` }))
+    },
+    trade_closed: (data: unknown) => {
+      const d = data as { symbol?: string; pnl?: number }
+      pushEvent('trade_closed', d)
+      const pnl = typeof d.pnl === 'number' ? ` ($${d.pnl.toFixed(2)})` : ''
+      addToast('info', t('ws.tradeClosed', { symbol: d.symbol ?? '', pnl, defaultValue: `Trade closed: ${d.symbol ?? ''}${pnl}` }))
+    },
+  }), [pushEvent, updateBotStatus, addToast, t])
+
+  useWebSocket(wsHandlers)
 
   const filterOptions: { value: DemoFilter; labelKey: string }[] = [
     { value: 'all', labelKey: 'common.all' },

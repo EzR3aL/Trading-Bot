@@ -1,5 +1,6 @@
 """Position monitoring logic for BotWorker (mixin)."""
 
+import asyncio
 from datetime import datetime
 
 from src.bot.pnl import calculate_pnl
@@ -145,6 +146,28 @@ class PositionMonitorMixin:
                 f"{log_prefix} Trade #{trade.id} closed: {exit_reason} | "
                 f"PnL: ${pnl:.2f} ({pnl_percent:+.2f}%)"
             )
+
+            # Broadcast via WebSocket
+            try:
+                from src.api.websocket.manager import ws_manager
+                asyncio.create_task(ws_manager.broadcast_to_user(
+                    self._config.user_id,
+                    "trade_closed",
+                    {
+                        "bot_id": self.bot_config_id,
+                        "trade_id": trade.id,
+                        "symbol": trade.symbol,
+                        "side": trade.side,
+                        "entry_price": trade.entry_price,
+                        "exit_price": exit_price,
+                        "pnl": pnl,
+                        "pnl_percent": pnl_percent,
+                        "exit_reason": exit_reason,
+                        "demo_mode": trade.demo_mode,
+                    },
+                ))
+            except Exception:
+                pass
 
             # Send notifications (Discord + Telegram)
             duration_minutes = None

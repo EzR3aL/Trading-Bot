@@ -1,5 +1,6 @@
 """Trade execution logic for BotWorker (mixin)."""
 
+import asyncio
 import json
 from datetime import datetime
 from typing import Optional
@@ -146,6 +147,25 @@ class TradeExecutorMixin:
                 f"{log_prefix} [{mode_str}] Trade opened: {signal.direction.value.upper()} "
                 f"{signal.symbol} @ ${fill_price:,.2f} (conf: {signal.confidence}%)"
             )
+
+            # Broadcast via WebSocket
+            try:
+                from src.api.websocket.manager import ws_manager
+                asyncio.create_task(ws_manager.broadcast_to_user(
+                    self._config.user_id,
+                    "trade_opened",
+                    {
+                        "bot_id": self.bot_config_id,
+                        "symbol": signal.symbol,
+                        "side": signal.direction.value,
+                        "entry_price": fill_price,
+                        "size": position_size,
+                        "leverage": leverage,
+                        "demo_mode": demo_mode,
+                    },
+                ))
+            except Exception:
+                pass
 
             # Send notifications (Discord + Telegram)
             await self._send_notification(lambda n: n.send_trade_entry(
