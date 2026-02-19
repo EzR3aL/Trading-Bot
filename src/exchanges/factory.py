@@ -1,6 +1,7 @@
 """Factory for creating exchange client and websocket instances."""
 
 from src.exchanges.base import ExchangeClient, ExchangeWebSocket
+from src.exchanges.rate_limiter import ExchangeRateLimiter
 
 
 def create_exchange_client(
@@ -30,6 +31,9 @@ def create_exchange_client(
     """
     exchange_type = exchange_type.lower().strip()
 
+    # Shared rate limiter per exchange type
+    rate_limiter = ExchangeRateLimiter.get(exchange_type)
+
     if exchange_type == "bitget":
         from src.exchanges.bitget.client import BitgetExchangeClient
         return BitgetExchangeClient(
@@ -37,6 +41,7 @@ def create_exchange_client(
             api_secret=api_secret,
             passphrase=passphrase,
             demo_mode=demo_mode,
+            rate_limiter=rate_limiter,
             **kwargs,
         )
     elif exchange_type == "weex":
@@ -46,6 +51,7 @@ def create_exchange_client(
             api_secret=api_secret,
             passphrase=passphrase,
             demo_mode=demo_mode,
+            rate_limiter=rate_limiter,
             **kwargs,
         )
     elif exchange_type == "hyperliquid":
@@ -54,6 +60,7 @@ def create_exchange_client(
             api_key=api_key,
             api_secret=api_secret,
             demo_mode=demo_mode,
+            rate_limiter=rate_limiter,
             **kwargs,
         )
     else:
