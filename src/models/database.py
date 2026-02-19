@@ -407,6 +407,24 @@ class BacktestRun(Base):
     user = relationship("User", back_populates="backtest_runs")
 
 
+class RiskStats(Base):
+    """Daily risk stats per bot, replacing JSON file storage."""
+    __tablename__ = "risk_stats"
+    __table_args__ = (
+        Index("idx_risk_stats_bot_date", "bot_config_id", "date", unique=True),
+    )
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    bot_config_id = Column(Integer, ForeignKey("bot_configs.id", ondelete="CASCADE"), nullable=False)
+    date = Column(String(10), nullable=False)  # YYYY-MM-DD
+    stats_json = Column(Text, nullable=False)  # Full DailyStats serialized
+    daily_pnl = Column(Float, default=0.0)
+    trades_count = Column(Integer, default=0)
+    is_halted = Column(Boolean, default=False)
+    created_at = Column(DateTime, server_default=func.now())
+    updated_at = Column(DateTime, onupdate=func.now())
+
+
 class AuditLog(Base):
     """Request audit log for security and compliance tracking."""
     __tablename__ = "audit_logs"
