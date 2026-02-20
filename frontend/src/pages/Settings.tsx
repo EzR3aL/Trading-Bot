@@ -4,7 +4,7 @@ import { ChevronDown, Search, CheckCircle, Clock, Users, Activity, Wifi, WifiOff
 import Pagination from '../components/ui/Pagination'
 import api from '../api/client'
 import { useAuthStore } from '../stores/authStore'
-import type { ConnectionsStatusResponse, ExchangeConnectionStatus, ExchangeInfo, ServiceStatus } from '../types'
+import type { ConnectionsStatusResponse, ExchangeConnectionStatus, ExchangeInfo, ServiceStatus, LlmConnection, AdminUidEntry, HlRevenueInfo } from '../types'
 import { ExchangeIcon } from '../components/ui/ExchangeLogo'
 import FilterDropdown from '../components/ui/FilterDropdown'
 
@@ -151,7 +151,7 @@ export default function Settings() {
   const [keyForms, setKeyForms] = useState<Record<string, ExchangeKeyForm>>({})
 
   // LLM connections
-  const [llmConnections, setLlmConnections] = useState<{provider_type: string; api_key_configured: boolean; display_name: string; free_tier: boolean; family_name?: string; models?: {id: string; name: string; default?: boolean}[]}[]>([])
+  const [llmConnections, setLlmConnections] = useState<LlmConnection[]>([])
   const [llmKeyForms, setLlmKeyForms] = useState<Record<string, string>>({})
 
   // Accordion state
@@ -167,7 +167,7 @@ export default function Settings() {
   const [hlVerifying, setHlVerifying] = useState(false)
 
   // Hyperliquid revenue
-  const [hlRevenue, setHlRevenue] = useState<any>(null)
+  const [hlRevenue, setHlRevenue] = useState<HlRevenueInfo | null>(null)
   const [hlLoading, setHlLoading] = useState(false)
   const [hlApproving, setHlApproving] = useState(false)
 
@@ -189,7 +189,7 @@ export default function Settings() {
   const [uidForms, setUidForms] = useState<Record<string, string>>({})
 
   // Admin UID management (paginated)
-  const [adminUids, setAdminUids] = useState<any[]>([])
+  const [adminUids, setAdminUids] = useState<AdminUidEntry[]>([])
   const [adminUidPage, setAdminUidPage] = useState(1)
   const [adminUidPages, setAdminUidPages] = useState(1)
   const [adminUidTotal, setAdminUidTotal] = useState(0)
@@ -1127,7 +1127,7 @@ export default function Settings() {
                           </tr>
                         </thead>
                         <tbody>
-                          {adminUids.map((item: any) => (
+                          {adminUids.map((item) => (
                             <tr key={item.connection_id} className="border-b border-white/[0.04] hover:bg-white/[0.03] transition-colors">
                               <td className="py-2 px-3 text-white text-xs font-medium">{item.username}</td>
                               <td className="py-2 px-3">

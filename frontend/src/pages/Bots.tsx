@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom'
 import { toBlob } from 'html-to-image'
 import api from '../api/client'
 import { useFilterStore } from '../stores/filterStore'
+import type { LlmConnection } from '../types'
 import { useThemeStore } from '../stores/themeStore'
 import { useToastStore } from '../stores/toastStore'
 import { ExchangeIcon } from '../components/ui/ExchangeLogo'
@@ -584,7 +585,7 @@ export default function Bots() {
   const [presets, setPresets] = useState<Preset[]>([])
   const [presetDropdownOpen, setPresetDropdownOpen] = useState<number | null>(null)
   const [builderFeeModalBotId, setBuilderFeeModalBotId] = useState<number | null>(null)
-  const [llmConnections, setLlmConnections] = useState<any[]>([])
+  const [llmConnections, setLlmConnections] = useState<LlmConnection[]>([])
 
   // Build lookup: model_id → display name, provider_type → family_name
   const modelNameMap = useMemo(() => {

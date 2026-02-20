@@ -19,11 +19,13 @@ function AnimatedNumber({ value, prefix = '', suffix = '', decimals = 2 }: {
 }) {
   const [display, setDisplay] = useState(0)
   const frameRef = useRef<number>(0)
+  const displayRef = useRef(0)
+  displayRef.current = display
 
   useEffect(() => {
     const duration = 600
     const startTime = performance.now()
-    const startValue = display
+    const startValue = displayRef.current
 
     const animate = (currentTime: number) => {
       const elapsed = currentTime - startTime
@@ -67,6 +69,7 @@ function StatCard({ label, value, numericValue, color, sub, isPositive }: {
 
 
 const PERIODS = [7, 14, 30, 90] as const
+const PERIOD_LABELS: Record<number, string> = { 7: 'dashboard.days7', 14: 'dashboard.days14', 30: 'dashboard.days30', 90: 'dashboard.days90' }
 
 export default function Dashboard() {
   const { t } = useTranslation()
@@ -101,7 +104,7 @@ export default function Dashboard() {
       }
     }
     load()
-  }, [period, demoFilter])
+  }, [period, demoFilter, t])
 
   if (loading) {
     return <DashboardSkeleton />
@@ -126,14 +129,14 @@ export default function Dashboard() {
             <button
               key={p}
               onClick={() => setPeriod(p)}
-              aria-label={t(`dashboard.days${p}` as any)}
+              aria-label={t(PERIOD_LABELS[p])}
               className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all duration-200 ${
                 period === p
                   ? 'bg-gradient-to-r from-primary-600 to-primary-500 text-white shadow-glow-sm'
                   : 'text-gray-400 hover:text-white hover:bg-white/5'
               }`}
             >
-              {t(`dashboard.days${p}` as any)}
+              {t(PERIOD_LABELS[p])}
             </button>
           ))}
         </div>

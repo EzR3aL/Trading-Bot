@@ -1,4 +1,5 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react'
+import i18n from '../../i18n/config'
 
 interface Props {
   children: ReactNode
@@ -18,7 +19,9 @@ export default class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
-    console.error('ErrorBoundary caught:', error, info.componentStack)
+    if (import.meta.env.DEV) {
+      console.error('ErrorBoundary caught:', error, info.componentStack)
+    }
   }
 
   handleReset = () => {
@@ -32,7 +35,9 @@ export default class ErrorBoundary extends Component<Props, State> {
       return (
         <div className="flex flex-col items-center justify-center min-h-[60vh] p-8">
           <div className="bg-[#1a1a2e] border border-red-500/30 rounded-xl p-8 max-w-md text-center">
-            <h2 className="text-xl font-bold text-red-400 mb-3">Something went wrong</h2>
+            <h2 className="text-xl font-bold text-red-400 mb-3">
+              {i18n.t('common.errorBoundaryTitle')}
+            </h2>
             <p className="text-gray-400 mb-4 text-sm">
               {this.state.error?.message || 'An unexpected error occurred.'}
             </p>
@@ -40,7 +45,7 @@ export default class ErrorBoundary extends Component<Props, State> {
               onClick={this.handleReset}
               className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors"
             >
-              Try again
+              {i18n.t('common.tryAgain')}
             </button>
           </div>
         </div>

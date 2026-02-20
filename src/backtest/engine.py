@@ -9,7 +9,7 @@ import math
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from enum import Enum
-from typing import List, Optional, Dict, Tuple
+from typing import Any, List, Optional, Dict, Tuple
 
 from src.backtest.historical_data import HistoricalDataPoint
 from src.utils.logger import get_logger
@@ -187,6 +187,8 @@ def _supertrend_direction(
 
     for i in range(atr_period, len(tr_list)):
         close_idx = i + 1  # Corresponding close index
+        if close_idx >= len(closes):
+            break
         mid = (highs[close_idx] + lows[close_idx]) / 2
         atr = atr_vals[i]
 
@@ -384,6 +386,9 @@ class BacktestEngine:
         self.trade_counter = 0
         self.daily_trades_count = 0
         self.daily_pnl = 0.0
+        self.daily_closed_count = 0
+        self.daily_fees = 0.0
+        self.daily_funding = 0.0
         self.current_date = ""
         self._signal_metadata = {}
 
@@ -749,7 +754,10 @@ class BacktestEngine:
         vwap_window = min(candles_24h, len(hist))
         if vwap_window >= 7:
             vwap_closes = [h.btc_price if symbol == "BTC" else h.eth_price for h in hist[-vwap_window:]]
-            vwap_volumes = [h.btc_volume for h in hist[-vwap_window:]]
+            vwap_volumes = [
+                h.btc_volume if symbol == "BTC" else getattr(h, "eth_volume", h.btc_volume)
+                for h in hist[-vwap_window:]
+            ]
             total_vol = sum(vwap_volumes)
             vwap = sum(c * v for c, v in zip(vwap_closes, vwap_volumes)) / total_vol if total_vol > 0 else price
             deviation = (price - vwap) / vwap if vwap > 0 else 0
@@ -1387,9 +1395,9 @@ class BacktestEngine:
             funding_rate = data.funding_rate_eth
             price_change = data.eth_24h_change
 
-        # Step 1: Analyze Leverage (live: crowded_longs=2.5, crowded_shorts=0.4)
-        crowded_longs = 2.5
-        crowded_shorts = 0.4
+        # Step 1: Analyze Leverage — use config values (user-configurable)
+        crowded_longs = self.config.long_short_crowded_longs
+        crowded_shorts = self.config.long_short_crowded_shorts
         leverage_dir = None
 
         if data.long_short_ratio > crowded_longs:
@@ -1518,19 +1526,23 @@ class BacktestEngine:
             return self.config.daily_loss_limit_percent
 
         locked_profit = daily_return * (self.config.profit_lock_percent / 100)
-        min_floor = self.config.min_profit_floor
 
-        max_allowed_loss = daily_return - min_floor
+        # Allow losses only down to the locked profit level
+        max_allowed_loss = daily_return - locked_profit
         new_limit = min(self.config.daily_loss_limit_percent, max_allowed_loss)
 
-        return max(new_limit, 0.5)
+        return max(new_limit, self.config.min_profit_floor)
 
     def _can_trade(self) -> Tuple[bool, str]:
         """Check if trading is allowed based on limits."""
         if self.daily_trades_count >= self.config.max_trades_per_day:
             return False, f"Daily trade limit ({self.config.max_trades_per_day})"
 
-        daily_return = (self.daily_pnl / self.config.starting_capital) * 100
+        day_start_balance = self.capital - self.daily_pnl
+        if day_start_balance > 0:
+            daily_return = (self.daily_pnl / day_start_balance) * 100
+        else:
+            daily_return = 0.0
         loss_limit = self._get_dynamic_loss_limit()
 
         if daily_return < -loss_limit:
@@ -1571,6 +1583,10 @@ class BacktestEngine:
         self, trade: BacktestTrade, exit_date: str, exit_price: float, result: TradeResult, funding_rate: float
     ):
         """Close a trade and update statistics."""
+        if trade.entry_price <= 0:
+            logger.error(f"Cannot close trade {trade.id}: entry_price is {trade.entry_price}")
+            return
+
         trade.exit_date = exit_date
         trade.exit_price = exit_price
         trade.result = result
@@ -1589,6 +1605,9 @@ class BacktestEngine:
 
         self.capital += trade.net_pnl
         self.daily_pnl += trade.net_pnl
+        self.daily_closed_count += 1
+        self.daily_fees += trade.fees
+        self.daily_funding += trade.funding_paid
 
         if trade.symbol in self.open_positions:
             del self.open_positions[trade.symbol]
@@ -1625,6 +1644,9 @@ class BacktestEngine:
                 self.current_date = data.date_str
                 self.daily_trades_count = 0
                 self.daily_pnl = 0.0
+                self.daily_closed_count = 0
+                self.daily_fees = 0.0
+                self.daily_funding = 0.0
 
             next_data = data_points[i + 1] if i + 1 < len(data_points) else None
 
@@ -1651,7 +1673,7 @@ class BacktestEngine:
                 if entry_price <= 0:
                     continue
 
-                history_slice = data_points[:i + 1]
+                history_slice = data_points[max(0, i - 200):i + 1]
                 direction, confidence, reason = self._generate_signal(data, symbol, history=history_slice)
                 signal_meta = dict(self._signal_metadata)
                 self._signal_metadata = {}
@@ -1721,17 +1743,20 @@ class BacktestEngine:
 
         starting = self.capital - self.daily_pnl
         daily_return = (self.daily_pnl / starting) * 100 if starting > 0 else 0
-        cumulative_return = ((self.capital - self.config.starting_capital) / self.config.starting_capital) * 100
+        cumulative_return = (
+            ((self.capital - self.config.starting_capital) / self.config.starting_capital) * 100
+            if self.config.starting_capital > 0 else 0
+        )
 
         stats = DailyBacktestStats(
             date=self.current_date,
             starting_balance=starting,
             ending_balance=self.capital,
             trades_opened=self.daily_trades_count,
-            trades_closed=sum(1 for t in self.trades if t.exit_date == self.current_date),
+            trades_closed=self.daily_closed_count,
             daily_pnl=self.daily_pnl,
-            daily_fees=sum(t.fees for t in self.trades if t.exit_date == self.current_date),
-            daily_funding=sum(t.funding_paid for t in self.trades if t.exit_date == self.current_date),
+            daily_fees=self.daily_fees,
+            daily_funding=self.daily_funding,
             daily_return_percent=daily_return,
             cumulative_return_percent=cumulative_return,
         )
@@ -1754,7 +1779,9 @@ class BacktestEngine:
         max_drawdown = 0.0
         equity = self.config.starting_capital
 
-        for trade in closed_trades:
+        # Sort by exit date for correct chronological drawdown calculation
+        sorted_closed = sorted(closed_trades, key=lambda t: t.exit_date or "")
+        for trade in sorted_closed:
             equity += trade.net_pnl
             if equity > peak:
                 peak = equity

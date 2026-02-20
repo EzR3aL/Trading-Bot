@@ -9,6 +9,118 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.8.5] - 2026-02-20
+
+### Code Quality & Type Safety (Review — Runde 5)
+
+#### Behoben
+- **Backtest Polling Stale setState** — Polling-Interval in `Backtest.tsx` konnte nach Unmount State-Updates ausloesen, jetzt `cancelled`-Flag verhindert veraltete Updates
+- **Dashboard `as any` Casts** — Dynamische i18n-Keys `t(\`dashboard.days${p}\` as any)` durch typisierte `PERIOD_LABELS`-Map ersetzt
+- **CORS-Logging zu laut** — `logger.info("CORS allowed origins: ...")` auf `logger.debug` reduziert (kein Spam in Production-Logs)
+
+#### Verbessert (Type Safety)
+- **`LlmConnection` Interface** — Neuer Typ in `types/index.ts` statt `useState<any[]>` in `BotDetail`, `BotPerformance`, `Bots`, `Settings`
+- **`AdminUidEntry` Interface** — Typisiert statt `useState<any[]>` in `Settings.tsx`
+- **`HlRevenueInfo` Interface** — Typisiert statt `useState<any>(null)` in `Settings.tsx`
+- Alle `useState<any>` Deklarationen im Frontend durch typisierte Interfaces ersetzt
+
+---
+
+## [3.8.4] - 2026-02-20
+
+### Frontend UX Fixes (Code Review)
+
+#### Behoben (Critical)
+- **WebSocket nie verbunden** — `useWebSocket.ts` las `localStorage.getItem('token')` statt `'access_token'`, Echtzeit-Benachrichtigungen waren komplett kaputt
+- **Presets Duplicate/Delete ohne Error-Handling** — API-Fehler crashten ohne Feedback, jetzt try/catch + Toast
+- **BotDetail fetchData nicht awaited** — Nach Start/Stop wurde Bot-Status nicht aktualisiert (Fire-and-forget), jetzt `await fetchData()`
+- **BotPerformance Stale Closure** — `loadCompareData`/`loadBotDetail` schlossen ueber veralteten `demoParam`, jetzt `useCallback` mit korrekten Dependencies
+- **BotDetail Bar in AreaChart** — `<Bar>` innerhalb von `<AreaChart>` (ungueltig), jetzt `<ComposedChart>` fuer korrektes Rendering
+
+#### Behoben (i18n)
+- **ErrorBoundary** — Hardcoded Englisch "Something went wrong" / "Try again" → `i18n.t()` mit `common.errorBoundaryTitle`/`common.tryAgain`
+- **BotPerformance "Netto"** — Hardcoded Deutsch → `t('common.net')`
+- **AdminUsers** — "Create", "Keine Benutzer vorhanden.", Placeholders (Username/Password/Email) waren nicht uebersetzt
+- **BotDetail Fehlermeldung** — Hardcoded "Failed to load bot data" → `t('common.error')`
+- **TaxReport t() Fallback** — Falscher Fallback-Syntax `t('key', 'default')`, Key `tax.downloadError` in beiden JSON-Dateien ergaenzt
+- Neue i18n-Keys: `common.net`, `common.errorBoundaryTitle`, `common.tryAgain`, `admin.create`, `admin.noUsers`, `admin.usernamePlaceholder`, `admin.passwordPlaceholder`, `admin.emailPlaceholder`, `tax.downloadError`
+
+---
+
+## [3.8.3] - 2026-02-20
+
+### Backtest Engine Fixes (Deep Code Review — Runde 2)
+
+#### Behoben
+- **Drawdown-Berechnung falsche Reihenfolge** — Drawdown wurde in Trade-Eroeffnungsreihenfolge statt nach Exit-Datum berechnet, jetzt chronologisch sortiert
+- **Division by Zero bei starting_capital=0** — `_save_daily_stats` und `_close_trade` konnten bei Kapital=0 crashen, Guards eingefuegt
+- **ETH VWAP nutzte BTC-Volumen** — Sentiment Surfer berechnete VWAP fuer ETH mit BTC-Handelsvolumen, neues `eth_volume` Feld eingefuegt
+- **Liquidation Hunter ignorierte Config-Thresholds** — `crowded_longs`/`crowded_shorts` waren hardcoded (2.5/0.4) statt aus BacktestConfig (user-konfigurierbar)
+- **O(N²) in _save_daily_stats** — Taegliche Fees/Funding wurden per O(N)-Scan ueber alle Trades berechnet, jetzt inkrementelle Akkumulatoren
+- **bot_worker.stop() AttributeError** — `self._config.name` wurde ohne None-Guard aufgerufen, Crash bei fehlgeschlagener Initialisierung
+- **Degen TP/SL Fallback auf entry_price** — TP und SL fielen auf `current_price` zurueck (sofortige Ausloesung), jetzt +3%/-2% Defaults
+
+---
+
+## [3.8.2] - 2026-02-20
+
+### Architecture Fixes (Mentor Review — Runde 3)
+
+#### Behoben
+- **Encryption Key Auto-Write entfernt** — `_get_or_create_key()` schrieb Auto-Keys direkt in `.env` (Race Condition, unerwartete Datei-Mutation). Jetzt nur noch in-memory + Warning-Log
+- **BotWorker Error→Running ohne Log** — Bot wechselte nach Cooldown von `error` zu `running` ohne Log-Eintrag, Debugging erschwert
+- **WebSocket Exception Swallowing** — 3 Stellen (`orchestrator.py`, `trade_executor.py`, `position_monitor.py`) verschluckten WS-Fehler komplett (`except: pass`), jetzt `logger.debug()`
+- **Stale Backtests nach Server-Restart** — Backtests im Status `pending`/`running` blieben nach Crash/Restart fuer immer haengen. Startup markiert sie jetzt als `failed`
+- **AdminRoute Flash-Redirect** — Admin-Seite redirectete beim Page-Refresh sofort zu `/`, weil `user` noch nicht geladen war. Zeigt jetzt Loader bis `fetchUser()` abschliesst
+- **Frontend Build brach wegen Test-Files** — `tsconfig.json` inkludierte Test-Dateien im Build-Check, fehlende vitest-Types blockierten `tsc`. Tests jetzt in `exclude`
+
+---
+
+## [3.8.1] - 2026-02-20
+
+### Code Quality, Security & Bug Fixes (Mentor Review)
+
+Umfassender Code-Review mit Fixes fuer 4 kritische, 9 wichtige und 2 kleinere Bugs plus Frontend/Security-Verbesserungen.
+
+#### Behoben (Critical)
+- **NameError in BacktestEngine** — `Any` fehlte im typing-Import, Engine-Instantiierung schlug fehl
+- **Stale Worker State im Orchestrator** — `_stop_bot_locked` entfernte Worker nicht aus dem Dict, Memory Leak bei jedem Stop/Start-Zyklus
+- **Kein HTTP-Timeout bei API-Requests** — `aiohttp` timeout als Integer statt `ClientTimeout`-Objekt, Requests konnten endlos haengen
+- **HistoricalDataPoint.from_dict Crash** — Fehlende Pflichtfelder in Cache-Daten fuehrten zu TypeError statt klarer Fehlermeldung
+
+#### Behoben (Major)
+- **Loss Limit zu lasch** — Berechnung nutzte `starting_capital` statt aktuellen Tages-Startwert, Limit griff nicht bei geschrumpftem Konto
+- **Profit-Lock-Feature kaputt** — `locked_profit` wurde berechnet aber nie verwendet, Verluste bis 87.5% statt 25% des Tagesgewinns erlaubt
+- **O(n²) Memory bei Intraday-Backtests** — History-Slice wurde pro Candle komplett kopiert, jetzt auf 200 Candles begrenzt
+- **Bot-Crash bei korrupter trading_pairs JSON** — `json.loads` ohne Error-Handling im Worker und Status-Endpoint
+- **Warmup-Candles verworfen** — Strategy Adapter filterte Warmup-Daten vor Engine-Run, Indikatoren hatten keine Initialisierung
+- **Supertrend Boundary Guard** — `close_idx` konnte Array-Grenzen ueberschreiten
+- **Pagination-Endlosschleifen** — 5 API-Pagination-Loops hatten keinen Iterations-Cap und keinen Fortschritts-Check
+- **Exchange-Seeding nicht idempotent** — Neue Exchanges (z.B. Weex) wurden nie eingefuegt wenn bereits ein Exchange existierte
+
+#### Behoben (Minor)
+- **ETH Mock-Daten unrealistisch** — ETH-Preis hatte keinen persistenten State, jetzt eigener Random Walk
+- **json.loads in get_status_dict** — Fehlende Error-Behandlung im Bot-Status-Endpoint
+
+#### Behoben (Security)
+- **SQL Injection in session.py** — f-String mit Environment-Variable in SQL-Query, ersetzt durch gebundenen Parameter (`:rate`)
+- **console.error in Production** — ErrorBoundary loggte Stack-Traces in Browser-Console, jetzt nur noch in DEV-Modus
+- **i18n-Keys fehlend** — `proModeParamsHint` und `proModeParamsActiveHint` in de.json und en.json ergaenzt
+- **Dashboard Animation Stale Closure** — AnimatedNumber nutzte veralteten Display-Wert bei schnellen Updates, jetzt via useRef
+- **Dashboard useEffect Dependency** — `t` fehlte in Dependency-Array
+
+#### Behoben (Security Audit — Runde 2)
+- **Tax Report Endpoints ohne Auth** — 3 Endpoints (`/api/tax-report/years`, `/{year}`, `/{year}/download`) waren ohne Authentifizierung aufrufbar, `Depends(verify_api_key)` ergaenzt
+- **innerHTML XSS im Dashboard** — Health-Check-Modal injizierte Server-Daten ohne Escaping, `escapeHtml()` Funktion eingefuegt
+- **Health-Check leakt Exception-Details** — Unauthentifizierter `/api/health` Endpoint zeigte interne Fehlermeldungen, jetzt nur "healthy"/"unhealthy"
+- **db.commit() fehlend bei Affiliate UID** — Aenderung wurde nur geflusht aber nie committed, ging beim Session-Ende verloren
+- **db.commit() fehlend bei User-Loeschung** — Token-Revocation (token_version Increment) wurde nicht persistiert, geloeschte User blieben eingeloggt
+- **Exception-Details in HTTP-Responses** — `str(e)` in 400-Antworten konnte interne Details leaken, ersetzt durch generische Meldung mit Server-Log
+- **Rate Limiting auf Trades-Endpoint** — `GET /api/trades` hatte kein Rate Limit, jetzt 60/Minute
+- **trading_pairs Input-Validation** — Keine Validierung auf Inhalt der Pair-Strings, jetzt Regex `^[A-Z0-9_-]{1,30}$`
+
+---
+
 ## [3.8.0] - 2026-02-20
 
 ### Backtest Timeframe-Support

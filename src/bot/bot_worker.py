@@ -16,7 +16,17 @@ Decomposed into focused mixins:
 import asyncio
 import json
 from datetime import datetime, timedelta
-from typing import Optional
+from typing import Any, List, Optional
+
+
+def _safe_json_loads(value: Any, default: List = None) -> List:
+    """Safely parse JSON, returning default on error."""
+    if default is None:
+        default = []
+    try:
+        return json.loads(value)
+    except (json.JSONDecodeError, TypeError):
+        return default
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -387,10 +397,11 @@ class BotWorker(
         logger.info(f"[Bot:{self.bot_config_id}] Stopping...")
 
         # Send stop notification before tearing down resources
-        await self._send_notification(lambda n: n.send_bot_status(
-            status="STOPPED", message=f"{self._config.name} has been stopped",
-            bot_name=self._config.name,
-        ))
+        if self._config:
+            await self._send_notification(lambda n: n.send_bot_status(
+                status="STOPPED", message=f"{self._config.name} has been stopped",
+                bot_name=self._config.name,
+            ))
 
         # Remove this bot's jobs from the scheduler
         if self._scheduler:
@@ -459,6 +470,10 @@ class BotWorker(
                         self._scheduler.start()
                     except Exception as sched_err:
                         logger.error(f"[Bot:{self.bot_config_id}] Scheduler restart failed: {sched_err}")
+                logger.info(
+                    f"[Bot:{self.bot_config_id}] Resuming from error state after cooldown "
+                    f"(allowing 2 more attempts before next pause)"
+                )
                 self.status = "running"
                 self._consecutive_errors = 3  # Allow 2 more tries before next pause
 
@@ -522,7 +537,11 @@ class BotWorker(
             return
 
         # Parse trading pairs
-        trading_pairs = json.loads(self._config.trading_pairs)
+        try:
+            trading_pairs = json.loads(self._config.trading_pairs)
+        except (json.JSONDecodeError, TypeError) as e:
+            logger.error(f"{log_prefix} Invalid trading_pairs JSON: {e}")
+            return
 
         # Calculate per-asset budgets
         balance = await self._client.get_account_balance()
@@ -659,7 +678,7 @@ class BotWorker(
             "strategy_type": config.strategy_type if config else "",
             "exchange_type": config.exchange_type if config else "",
             "mode": config.mode if config else "",
-            "trading_pairs": json.loads(config.trading_pairs) if config else [],
+            "trading_pairs": _safe_json_loads(config.trading_pairs) if config else [],
             "status": self.status,
             "error_message": self.error_message,
             "started_at": self.started_at.isoformat() if self.started_at else None,

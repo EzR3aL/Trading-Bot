@@ -57,15 +57,9 @@ async def run_backtest_for_strategy(
     finally:
         await fetcher.close()
 
-    # Filter to user-requested date range (warmup candles before start_date are discarded)
-    filtered = [
-        dp for dp in data_points
-        if start_date <= dp.timestamp <= end_date
-    ]
-
-    if not filtered:
+    if not data_points:
         from src.backtest.mock_data import generate_mock_historical_data
-        filtered = generate_mock_historical_data(days=days, interval=timeframe)
+        data_points = generate_mock_historical_data(days=fetch_days, interval=timeframe)
 
     # Build config from strategy_params
     config = BacktestConfig(starting_capital=initial_capital)
@@ -85,14 +79,17 @@ async def run_backtest_for_strategy(
     # Map symbol (e.g. "BTCUSDT" → "BTC") for the engine
     engine_symbol = symbol.replace("USDT", "").replace("USDC", "")
 
-    # Run engine with strategy-specific signal generation and selected symbol
+    # Run engine on FULL data (including warmup) for proper indicator initialization
     engine = BacktestEngine(config, strategy_type=strategy_type, symbol=engine_symbol)
-    result = engine.run(filtered)
+    result = engine.run(data_points)
 
-    # Convert trades to serializable dicts
+    # Filter trades to user-requested date range (exclude warmup trades)
+    start_str = start_date.strftime("%Y-%m-%d")
+    end_str = end_date.strftime("%Y-%m-%d")
     trades_list = []
     for t in result.trades:
-        trades_list.append(t.to_dict())
+        if t.entry_date >= start_str:
+            trades_list.append(t.to_dict())
 
     # Build equity curve from daily stats
     equity_curve = []

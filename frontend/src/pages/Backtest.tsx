@@ -91,10 +91,12 @@ export default function Backtest() {
 
   // Poll for active run status
   useEffect(() => {
+    let cancelled = false
     if (activeRun && (activeRun.status === 'pending' || activeRun.status === 'running')) {
       pollRef.current = setInterval(async () => {
         try {
           const res = await api.get(`/backtest/${activeRun.id}`)
+          if (cancelled) return
           setActiveRun(res.data)
           if (res.data.status === 'completed' || res.data.status === 'failed') {
             fetchHistory()
@@ -102,7 +104,7 @@ export default function Backtest() {
         } catch { /* ignore */ }
       }, 2000)
     }
-    return () => { if (pollRef.current) clearInterval(pollRef.current) }
+    return () => { cancelled = true; if (pollRef.current) clearInterval(pollRef.current) }
   }, [activeRun?.id, activeRun?.status, fetchHistory])
 
   // Check for celebration-worthy results

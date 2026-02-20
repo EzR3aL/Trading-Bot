@@ -239,7 +239,8 @@
     "trades": "Trades",
     "pnl": "PnL",
     "fees": "Transaction Fee",
-    "net": "Net"
+    "net": "Net",
+    "downloadError": "Download failed"
   },
   "guide": {
     "title": "Getting Started",
@@ -538,6 +539,8 @@
       "viewGrid": "Grid",
       "viewList": "List",
       "temperatureHint": "Low = consistent answers · High = more creative analysis · Recommended: 0.2–0.4",
+      "proModeParamsHint": "Customize strategy parameters (for advanced users)",
+      "proModeParamsActiveHint": "Strategy parameters are shown",
       "errors": {
         "nameRequired": "Please enter a bot name",
         "strategyRequired": "Please select a strategy",
@@ -642,7 +645,10 @@
     "of": "of",
     "lightMode": "Light",
     "darkMode": "Dark",
-    "total": "Total"
+    "total": "Total",
+    "net": "Net",
+    "errorBoundaryTitle": "Something went wrong",
+    "tryAgain": "Try again"
   },
   "admin": {
     "users": "Users",
@@ -655,7 +661,12 @@
     "inactive": "Inactive",
     "deactivate": "Deactivate",
     "activate": "Activate",
-    "deleteUser": "Delete user?"
+    "deleteUser": "Delete user?",
+    "create": "Create",
+    "noUsers": "No users found.",
+    "usernamePlaceholder": "Username",
+    "passwordPlaceholder": "Password (min 8)",
+    "emailPlaceholder": "Email (optional)"
   },
   "affiliate": {
     "uid": "Exchange UID",

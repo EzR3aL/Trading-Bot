@@ -18,7 +18,6 @@ previously encrypted API keys unreadable.
 """
 
 import os
-from pathlib import Path
 
 from cryptography.fernet import Fernet, InvalidToken
 
@@ -65,22 +64,16 @@ def _get_or_create_key() -> bytes:
             "Then add ENCRYPTION_KEY=<key> to your environment."
         )
 
-    # Auto-generate and append to .env (development only)
-    _encryption_logger.warning(
-        "ENCRYPTION_KEY not set — auto-generating for development. "
-        "Set ENCRYPTION_KEY explicitly for production use."
-    )
+    # Auto-generate in-memory only (development convenience).
+    # The key lives only for this process — restart generates a new one.
+    # For persistent encryption, set ENCRYPTION_KEY in your .env explicitly.
     new_key = Fernet.generate_key()
-    env_path = Path(".env")
-    if env_path.exists():
-        with open(env_path, "a") as f:
-            f.write(f"\n# Auto-generated encryption key for API key storage\n")
-            f.write(f"ENCRYPTION_KEY={new_key.decode()}\n")
-    else:
-        with open(env_path, "w") as f:
-            f.write(f"ENCRYPTION_KEY={new_key.decode()}\n")
-
     os.environ["ENCRYPTION_KEY"] = new_key.decode()
+    _encryption_logger.warning(
+        "ENCRYPTION_KEY not set — auto-generated ephemeral key for development. "
+        "Data encrypted with this key will be unreadable after restart. "
+        "Set ENCRYPTION_KEY in .env for persistent encryption."
+    )
     return new_key
 
 

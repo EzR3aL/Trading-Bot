@@ -111,3 +111,5 @@ async def delete_user(
     user.is_deleted = True
     user.is_active = False
     user.token_version = (user.token_version or 0) + 1
+    await db.flush()
+    await db.commit()

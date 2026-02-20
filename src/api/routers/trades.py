@@ -23,7 +23,9 @@ router = APIRouter(prefix="/api/trades", tags=["trades"])
 
 
 @router.get("", response_model=TradeListResponse)
+@limiter.limit("60/minute")
 async def list_trades(
+    request: Request,
     status: Optional[str] = Query(None, pattern="^(open|closed|cancelled)$"),
     symbol: Optional[str] = None,
     exchange: Optional[str] = None,

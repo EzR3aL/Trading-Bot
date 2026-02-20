@@ -107,6 +107,7 @@ class BotOrchestrator:
         user_id = worker.config.user_id if worker.config else None
 
         await worker.stop()
+        del self._workers[bot_config_id]
 
         # Update DB
         await self._update_instance_state(bot_config_id, False)
@@ -282,5 +283,5 @@ class BotOrchestrator:
         try:
             from src.api.websocket.manager import ws_manager
             asyncio.create_task(ws_manager.broadcast_to_user(user_id, event_type, data))
-        except Exception:
-            pass  # WebSocket failure must never crash bot operations
+        except Exception as e:
+            logger.debug("WS broadcast failed: %s", e)

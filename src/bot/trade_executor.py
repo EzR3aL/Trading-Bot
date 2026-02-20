@@ -164,8 +164,8 @@ class TradeExecutorMixin:
                         "demo_mode": demo_mode,
                     },
                 ))
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("WS broadcast failed: %s", e)
 
             # Send notifications (Discord + Telegram)
             await self._send_notification(lambda n: n.send_trade_entry(

@@ -195,17 +195,18 @@ async def _run_sqlite_migrations(conn) -> None:
     try:
         builder_fee_rate = int(os.environ.get("HL_BUILDER_FEE", "0"))
         if 1 <= builder_fee_rate <= 100:
-            await conn.execute(text(
-                f"""
-                UPDATE trade_records
-                SET builder_fee = (entry_price * size + exit_price * size)
-                    * ({builder_fee_rate} / 1000000.0)
-                WHERE exchange = 'hyperliquid'
-                  AND status = 'closed'
-                  AND (builder_fee IS NULL OR builder_fee = 0)
-                  AND exit_price IS NOT NULL
-                """
-            ))
+            await conn.execute(
+                text("""
+                    UPDATE trade_records
+                    SET builder_fee = (entry_price * size + exit_price * size)
+                        * (:rate / 1000000.0)
+                    WHERE exchange = 'hyperliquid'
+                      AND status = 'closed'
+                      AND (builder_fee IS NULL OR builder_fee = 0)
+                      AND exit_price IS NOT NULL
+                """),
+                {"rate": builder_fee_rate}
+            )
     except Exception as e:
         _log.warning("Builder fee backfill failed: %s", e)
 

@@ -109,15 +109,15 @@ export default function AdminUsers() {
           <h2 className="text-sm font-semibold text-white mb-3">{t('admin.newUser')}</h2>
           <div className="space-y-3">
             <div className="grid grid-cols-2 gap-3">
-              <input type="text" placeholder="Username" value={username}
+              <input type="text" placeholder={t('admin.usernamePlaceholder')} value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 className="filter-select w-full text-sm" />
-              <input type="password" placeholder="Password (min 8)" value={password}
+              <input type="password" placeholder={t('admin.passwordPlaceholder')} value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className="filter-select w-full text-sm" />
             </div>
             <div className="grid grid-cols-2 gap-3">
-              <input type="email" placeholder="Email (optional)" value={email}
+              <input type="email" placeholder={t('admin.emailPlaceholder')} value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 className="filter-select w-full text-sm" />
               <FilterDropdown
@@ -133,7 +133,7 @@ export default function AdminUsers() {
             <div className="flex gap-2 pt-1">
               <button onClick={createUser}
                 className="px-3 py-1.5 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors">
-                Create
+                {t('admin.create')}
               </button>
               <button onClick={() => setShowForm(false)}
                 className="px-3 py-1.5 text-sm bg-white/5 border border-white/10 text-gray-300 rounded-lg hover:bg-white/10 transition-colors">
@@ -251,7 +251,7 @@ export default function AdminUsers() {
 
       {users.length === 0 && (
         <div className="text-center text-gray-500 py-12 text-sm">
-          Keine Benutzer vorhanden.
+          {t('admin.noUsers')}
         </div>
       )}
     </div>

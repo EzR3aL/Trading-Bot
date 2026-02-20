@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import {
-  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
+  ComposedChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, Bar,
 } from 'recharts'
 import {
@@ -13,6 +13,7 @@ import api from '../api/client'
 import { useFilterStore } from '../stores/filterStore'
 import { ExchangeIcon } from '../components/ui/ExchangeLogo'
 import PnlCell from '../components/ui/PnlCell'
+import type { LlmConnection } from '../types'
 
 interface BotConfig {
   id: number
@@ -120,7 +121,7 @@ export default function BotDetail() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [days, setDays] = useState(30)
-  const [llmConnections, setLlmConnections] = useState<any[]>([])
+  const [llmConnections, setLlmConnections] = useState<LlmConnection[]>([])
 
   const modelNameMap = useMemo(() => {
     const map: Record<string, string> = {}
@@ -162,7 +163,7 @@ export default function BotDetail() {
       }
       setError('')
     } catch (err: any) {
-      setError(err.response?.data?.detail || 'Failed to load bot data')
+      setError(err.response?.data?.detail || t('common.error'))
     } finally {
       setLoading(false)
     }
@@ -183,7 +184,7 @@ export default function BotDetail() {
   const handleStart = async () => {
     try {
       await api.post(`/bots/${botId}/start`)
-      fetchData()
+      await fetchData()
     } catch (err: any) {
       setError(err.response?.data?.detail || t('bots.failedStart'))
     }
@@ -192,7 +193,7 @@ export default function BotDetail() {
   const handleStop = async () => {
     try {
       await api.post(`/bots/${botId}/stop`)
-      fetchData()
+      await fetchData()
     } catch (err: any) {
       setError(err.response?.data?.detail || t('bots.failedStop'))
     }
@@ -320,7 +321,7 @@ export default function BotDetail() {
             </div>
           </div>
           <ResponsiveContainer width="100%" height={260}>
-            <AreaChart data={stats.daily_series}>
+            <ComposedChart data={stats.daily_series}>
               <defs>
                 <linearGradient id="pnlGradient" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="5%" stopColor="#6366f1" stopOpacity={0.3} />
@@ -337,7 +338,7 @@ export default function BotDetail() {
               />
               <Area type="monotone" dataKey="cumulative_pnl" stroke="#6366f1" fill="url(#pnlGradient)" strokeWidth={2} />
               <Bar dataKey="pnl" fill="#4f46e5" opacity={0.4} />
-            </AreaChart>
+            </ComposedChart>
           </ResponsiveContainer>
         </div>
       )}

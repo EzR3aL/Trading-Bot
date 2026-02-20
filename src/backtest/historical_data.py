@@ -95,6 +95,7 @@ class HistoricalDataPoint:
     # Calculated Metrics
     historical_volatility: float = 0.0
     btc_volume: float = 0.0
+    eth_volume: float = 0.0
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary."""
@@ -109,7 +110,10 @@ class HistoricalDataPoint:
         data["timestamp"] = datetime.fromisoformat(data["timestamp"])
         valid_fields = {f.name for f in dataclasses.fields(cls)}
         filtered = {k: v for k, v in data.items() if k in valid_fields}
-        return cls(**filtered)
+        try:
+            return cls(**filtered)
+        except TypeError as e:
+            raise ValueError(f"Incomplete historical data point (missing required fields): {e}") from e
 
 
 class HistoricalDataFetcher:
@@ -153,7 +157,7 @@ class HistoricalDataFetcher:
         """Make a GET request with error handling."""
         await self._ensure_session()
         try:
-            async with self._session.get(url, params=params, timeout=30) as response:
+            async with self._session.get(url, params=params, timeout=aiohttp.ClientTimeout(total=30)) as response:
                 if response.status == 200:
                     return await response.json()
                 else:
@@ -242,8 +246,11 @@ class HistoricalDataFetcher:
 
         all_data = []
         current_end = end_time
+        max_iterations = 500
 
-        while current_end > start_time:
+        for _ in range(max_iterations):
+            if current_end <= start_time:
+                break
             params = {
                 "symbol": symbol,
                 "endTime": current_end,
@@ -256,7 +263,10 @@ class HistoricalDataFetcher:
                 break
 
             all_data.extend(data)
-            current_end = int(data[-1]["fundingTime"]) - 1
+            new_end = int(data[-1]["fundingTime"]) - 1
+            if new_end >= current_end:
+                break  # No progress — stop to avoid infinite loop
+            current_end = new_end
             await asyncio.sleep(0.2)
 
         all_data.sort(key=lambda x: x["fundingTime"])
@@ -416,7 +426,9 @@ class HistoricalDataFetcher:
 
         current_end = end_time
 
-        while current_end > start_time:
+        for _ in range(500):
+            if current_end <= start_time:
+                break
             params = {
                 "symbol": symbol,
                 "period": "1d",
@@ -430,7 +442,10 @@ class HistoricalDataFetcher:
                 break
 
             all_data.extend(data)
-            current_end = int(data[-1]["timestamp"]) - 1
+            new_end = int(data[-1]["timestamp"]) - 1
+            if new_end >= current_end:
+                break
+            current_end = new_end
             await asyncio.sleep(0.2)
 
         all_data.sort(key=lambda x: x["timestamp"])
@@ -471,7 +486,9 @@ class HistoricalDataFetcher:
         start_time = int((datetime.now() - timedelta(days=days)).timestamp() * 1000)
         current_end = end_time
 
-        while current_end > start_time:
+        for _ in range(500):
+            if current_end <= start_time:
+                break
             params = {
                 "symbol": symbol,
                 "period": "1d",
@@ -485,7 +502,10 @@ class HistoricalDataFetcher:
 
             all_data.extend(data)
             oldest_ts = min(int(d["timestamp"]) for d in data)
-            current_end = oldest_ts - 1
+            new_end = oldest_ts - 1
+            if new_end >= current_end:
+                break
+            current_end = new_end
             await asyncio.sleep(0.2)
 
         all_data.sort(key=lambda x: x["timestamp"])
@@ -524,7 +544,9 @@ class HistoricalDataFetcher:
         start_time = int((datetime.now() - timedelta(days=days)).timestamp() * 1000)
         current_end = end_time
 
-        while current_end > start_time:
+        for _ in range(500):
+            if current_end <= start_time:
+                break
             params = {
                 "symbol": symbol,
                 "period": "1d",
@@ -538,7 +560,10 @@ class HistoricalDataFetcher:
 
             all_data.extend(data)
             oldest_ts = min(int(d["timestamp"]) for d in data)
-            current_end = oldest_ts - 1
+            new_end = oldest_ts - 1
+            if new_end >= current_end:
+                break
+            current_end = new_end
             await asyncio.sleep(0.2)
 
         all_data.sort(key=lambda x: x["timestamp"])
@@ -578,7 +603,9 @@ class HistoricalDataFetcher:
         start_time = int((datetime.now() - timedelta(days=days)).timestamp() * 1000)
         current_end = end_time
 
-        while current_end > start_time:
+        for _ in range(500):
+            if current_end <= start_time:
+                break
             params = {
                 "symbol": symbol,
                 "period": "1d",
@@ -592,7 +619,10 @@ class HistoricalDataFetcher:
 
             all_data.extend(data)
             oldest_ts = min(int(d["timestamp"]) for d in data)
-            current_end = oldest_ts - 1
+            new_end = oldest_ts - 1
+            if new_end >= current_end:
+                break
+            current_end = new_end
             await asyncio.sleep(0.2)
 
         all_data.sort(key=lambda x: x["timestamp"])
@@ -1117,6 +1147,7 @@ class HistoricalDataFetcher:
                 btc_hashrate=hr.get("hashrate", 0),
                 historical_volatility=vol,
                 btc_volume=kline.get("volume", 0),
+                eth_volume=eth_kline.get("volume", 0),
             )
 
             data_points.append(data_point)

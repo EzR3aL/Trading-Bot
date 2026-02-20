@@ -239,7 +239,8 @@
     "trades": "Trades",
     "pnl": "PnL",
     "fees": "Transaktionsgebühr",
-    "net": "Netto"
+    "net": "Netto",
+    "downloadError": "Download fehlgeschlagen"
   },
   "guide": {
     "title": "Erste Schritte",
@@ -538,6 +539,8 @@
       "viewGrid": "Kacheln",
       "viewList": "Liste",
       "temperatureHint": "Niedrig = konsistente Antworten · Hoch = kreativere Analysen · Empfohlen: 0.2–0.4",
+      "proModeParamsHint": "Strategie-Parameter anpassen (für fortgeschrittene Nutzer)",
+      "proModeParamsActiveHint": "Strategie-Parameter werden angezeigt",
       "errors": {
         "nameRequired": "Bitte gib einen Bot-Namen ein",
         "strategyRequired": "Bitte wähle eine Strategie",
@@ -642,7 +645,10 @@
     "of": "von",
     "lightMode": "Hell",
     "darkMode": "Dunkel",
-    "total": "Gesamt"
+    "total": "Gesamt",
+    "net": "Netto",
+    "errorBoundaryTitle": "Etwas ist schiefgelaufen",
+    "tryAgain": "Erneut versuchen"
   },
   "admin": {
     "users": "Benutzer",
@@ -655,7 +661,12 @@
     "inactive": "Inaktiv",
     "deactivate": "Deaktivieren",
     "activate": "Aktivieren",
-    "deleteUser": "Benutzer löschen?"
+    "deleteUser": "Benutzer löschen?",
+    "create": "Erstellen",
+    "noUsers": "Keine Benutzer vorhanden.",
+    "usernamePlaceholder": "Benutzername",
+    "passwordPlaceholder": "Passwort (min. 8)",
+    "emailPlaceholder": "E-Mail (optional)"
   },
   "affiliate": {
     "uid": "Exchange UID",

@@ -235,7 +235,8 @@ def generate_mock_historical_data(days: int = 180, seed: int = 42, interval: str
         # Per-candle price movement (scaled for interval)
         btc_change = random.uniform(-2, 3) * change_scale if cpd > 1 else daily_vals["daily_btc_change"]
         btc_price *= (1 + btc_change / 100)
-        eth_price = btc_price * random.uniform(0.045, 0.055)
+        eth_change = btc_change * random.uniform(0.8, 1.3)
+        eth_price *= (1 + eth_change / 100)
 
         # OHLC
         btc_volatility = abs(btc_change) * 0.5 + random.uniform(0.5, 2) * change_scale
@@ -247,6 +248,7 @@ def generate_mock_historical_data(days: int = 180, seed: int = 42, interval: str
         eth_low = eth_price * (1 - eth_volatility / 100)
 
         btc_volume = btc_price * random.uniform(50000, 200000) / cpd
+        eth_volume = eth_price * random.uniform(30000, 120000) / cpd
 
         data_point = HistoricalDataPoint(
             timestamp=current_date,
@@ -279,6 +281,7 @@ def generate_mock_historical_data(days: int = 180, seed: int = 42, interval: str
             btc_hashrate=round(daily_vals["btc_hashrate"], 2),
             historical_volatility=round(daily_vals["hist_vol"], 2),
             btc_volume=round(btc_volume, 2),
+            eth_volume=round(eth_volume, 2),
         )
 
         data_points.append(data_point)

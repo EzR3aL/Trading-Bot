@@ -65,7 +65,7 @@ export default function TaxReport() {
       link.remove()
       window.URL.revokeObjectURL(url)
     } catch {
-      setError(t('tax.downloadError', 'Download fehlgeschlagen'))
+      setError(t('tax.downloadError'))
     } finally {
       setDownloading(false)
     }

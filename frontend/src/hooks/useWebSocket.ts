@@ -23,7 +23,7 @@ export function useWebSocket(handlers: Record<string, EventHandler>) {
   const stableHandlers = useMemo(() => handlers, [handlerKeys]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const connect = useCallback(() => {
-    const token = localStorage.getItem('token')
+    const token = localStorage.getItem('access_token')
     if (!token) return
 
     // Close any existing connection first

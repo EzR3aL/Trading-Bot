@@ -37,6 +37,9 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 
 function AdminRoute({ children }: { children: React.ReactNode }) {
   const user = useAuthStore((s) => s.user)
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated)
+  // User data still loading after page refresh — show loader instead of redirecting
+  if (isAuthenticated && !user) return <PageLoader />
   if (!user || user.role !== 'admin') return <Navigate to="/" replace />
   return <>{children}</>
 }

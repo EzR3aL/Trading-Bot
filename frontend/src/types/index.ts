@@ -245,6 +245,53 @@ export interface BacktestHistoryItem {
   created_at: string
 }
 
+// LLM connection types
+export interface LlmModel {
+  id: string
+  name: string
+  default?: boolean
+}
+
+export interface LlmConnection {
+  provider_type: string
+  api_key_configured: boolean
+  display_name: string
+  free_tier: boolean
+  family_name?: string
+  models?: LlmModel[]
+}
+
+// Admin UID entry
+export interface AdminUidEntry {
+  connection_id: number
+  username: string
+  exchange_type: string
+  affiliate_uid: string
+  affiliate_verified: boolean
+  submitted_at: string | null
+}
+
+// Hyperliquid revenue info
+export interface HlRevenueInfo {
+  builder?: {
+    configured: boolean
+    user_approved: boolean
+    address?: string
+    fee_percent?: string
+  }
+  referral?: {
+    configured: boolean
+    user_referred: boolean
+    code?: string
+    link?: string
+  }
+  earnings?: {
+    total_builder_fees_30d: number
+    trades_with_builder_fee: number
+    monthly_estimate: number
+  }
+}
+
 // Portfolio types
 export interface ExchangeSummary {
   exchange: string

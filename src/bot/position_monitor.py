@@ -166,8 +166,8 @@ class PositionMonitorMixin:
                         "demo_mode": trade.demo_mode,
                     },
                 ))
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("WS broadcast failed: %s", e)
 
             # Send notifications (Discord + Telegram)
             duration_minutes = None

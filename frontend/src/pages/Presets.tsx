@@ -97,14 +97,22 @@ export default function Presets() {
   }
 
   const duplicate = async (id: number) => {
-    const res = await api.post(`/presets/${id}/duplicate`)
-    setPresets(prev => [...prev, res.data])
+    try {
+      const res = await api.post(`/presets/${id}/duplicate`)
+      setPresets(prev => [...prev, res.data])
+    } catch {
+      setError(t('common.error'))
+    }
   }
 
   const deletePreset = async (id: number) => {
     if (!confirm(t('presets.confirmDelete'))) return
-    await api.delete(`/presets/${id}`)
-    setPresets(prev => prev.filter(p => p.id !== id))
+    try {
+      await api.delete(`/presets/${id}`)
+      setPresets(prev => prev.filter(p => p.id !== id))
+    } catch {
+      setError(t('common.error'))
+    }
   }
 
   const startEdit = (preset: Preset) => {
