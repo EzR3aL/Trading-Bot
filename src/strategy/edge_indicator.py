@@ -570,58 +570,58 @@ class EdgeIndicatorStrategy(BaseStrategy):
     def get_param_schema(cls) -> Dict[str, Any]:
         return {
             "ema_fast_period": {
-                "type": "int", "label": "EMA Fast Period",
-                "description": "Fast EMA period for trend ribbon (default 8)",
+                "type": "int", "label": "EMA Schnell-Periode",
+                "description": "Schnelle EMA-Periode für das Trend-Ribbon (Standard 8)",
                 "default": 8, "min": 2, "max": 200,
             },
             "ema_slow_period": {
-                "type": "int", "label": "EMA Slow Period",
-                "description": "Slow EMA period for trend ribbon (default 21)",
+                "type": "int", "label": "EMA Langsam-Periode",
+                "description": "Langsame EMA-Periode für das Trend-Ribbon (Standard 21)",
                 "default": 21, "min": 5, "max": 400,
             },
             "adx_period": {
-                "type": "int", "label": "ADX Period",
-                "description": "ADX calculation period (default 14)",
+                "type": "int", "label": "ADX Periode",
+                "description": "Berechnungsperiode für den ADX-Indikator (Standard 14)",
                 "default": 14, "min": 2, "max": 100,
             },
             "adx_chop_threshold": {
-                "type": "float", "label": "ADX Chop Threshold",
-                "description": "ADX below this = choppy market, no trading (default 18)",
+                "type": "float", "label": "ADX Chop-Schwelle",
+                "description": "ADX unter diesem Wert = seitwärts, kein Trading (Standard 18)",
                 "default": 18.0, "min": 5.0, "max": 50.0,
             },
             "use_adx_filter": {
-                "type": "bool", "label": "Use ADX Filter",
-                "description": "Enable ADX-based chop filter to avoid ranging markets",
+                "type": "bool", "label": "ADX Filter aktiv",
+                "description": "ADX-basierten Chop-Filter aktivieren um Seitwärtsmärkte zu meiden",
                 "default": True,
             },
             "momentum_bull_threshold": {
-                "type": "float", "label": "Momentum Bull Threshold",
-                "description": "Momentum score above this = bullish regime (default 0.20)",
+                "type": "float", "label": "Momentum Bull-Schwelle",
+                "description": "Momentum-Score über diesem Wert = bullisches Regime (Standard 0.20)",
                 "default": 0.20, "min": 0.0, "max": 1.0,
             },
             "momentum_bear_threshold": {
-                "type": "float", "label": "Momentum Bear Threshold",
-                "description": "Momentum score below this = bearish regime (default -0.20)",
+                "type": "float", "label": "Momentum Bear-Schwelle",
+                "description": "Momentum-Score unter diesem Wert = bärisches Regime (Standard -0.20)",
                 "default": -0.20, "min": -1.0, "max": 0.0,
             },
             "min_confidence": {
-                "type": "int", "label": "Min Confidence",
-                "description": "Minimum confidence score to execute a trade",
+                "type": "int", "label": "Min. Konfidenz",
+                "description": "Minimaler Konfidenz-Score um einen Trade auszuführen",
                 "default": 40, "min": 10, "max": 80,
             },
             "kline_interval": {
-                "type": "select", "label": "Kline Interval",
-                "description": "Candle interval for indicator calculations",
+                "type": "select", "label": "Kline Intervall",
+                "description": "Kerzen-Zeitrahmen für die Indikator-Berechnung. Tipp: Analyse-Takt (Zeitplan) sollte nicht deutlich kürzer sein als das Kline Intervall.",
                 "default": "1h", "options": ["15m", "30m", "1h", "4h"],
             },
             "take_profit_percent": {
                 "type": "float", "label": "Take Profit %",
-                "description": "Take profit target as percentage of entry price",
+                "description": "Take-Profit-Ziel in Prozent vom Einstiegspreis",
                 "default": 3.0, "min": 0.5, "max": 20.0,
             },
             "stop_loss_percent": {
                 "type": "float", "label": "Stop Loss %",
-                "description": "Stop loss as percentage of entry price",
+                "description": "Stop-Loss in Prozent vom Einstiegspreis",
                 "default": 1.5, "min": 0.5, "max": 10.0,
             },
         }

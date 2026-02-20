@@ -15,6 +15,9 @@ from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
+# Candles per day for each supported interval
+CANDLES_PER_DAY = {"1m": 1440, "5m": 288, "15m": 96, "30m": 48, "1h": 24, "4h": 6, "1d": 1}
+
 
 async def run_backtest_for_strategy(
     strategy_type: str,
@@ -34,30 +37,35 @@ async def run_backtest_for_strategy(
     if days < 1:
         raise ValueError("Backtest period must be at least 1 day")
 
-    # Fetch historical data
+    # Warmup buffer: extra days so indicators have enough candles to initialize
+    cpd = CANDLES_PER_DAY.get(timeframe, 1)
+    min_warmup_candles = 50
+    warmup_days = math.ceil(min_warmup_candles / cpd) + 1
+    fetch_days = days + warmup_days
+
+    # Fetch historical data with correct interval
     fetcher = HistoricalDataFetcher()
     data_sources = []
     try:
-        data_points = await fetcher.fetch_all_historical_data(days=days)
+        data_points = await fetcher.fetch_all_historical_data(days=fetch_days, interval=timeframe)
         data_sources = fetcher.data_sources
     except Exception as e:
         logger.warning(f"Failed to fetch live data, using mock: {e}")
         from src.backtest.mock_data import generate_mock_historical_data
-        data_points = generate_mock_historical_data(days=days)
+        data_points = generate_mock_historical_data(days=fetch_days, interval=timeframe)
         data_sources = ["Mock Data Generator"]
     finally:
         await fetcher.close()
 
-    # Filter to date range
+    # Filter to user-requested date range (warmup candles before start_date are discarded)
     filtered = [
         dp for dp in data_points
         if start_date <= dp.timestamp <= end_date
     ]
 
     if not filtered:
-        # If filtering emptied the list, use mock data
         from src.backtest.mock_data import generate_mock_historical_data
-        filtered = generate_mock_historical_data(days=days)
+        filtered = generate_mock_historical_data(days=days, interval=timeframe)
 
     # Build config from strategy_params
     config = BacktestConfig(starting_capital=initial_capital)
@@ -74,8 +82,11 @@ async def run_backtest_for_strategy(
             if key in strategy_params:
                 setattr(config, key, strategy_params[key])
 
-    # Run engine with strategy-specific signal generation
-    engine = BacktestEngine(config, strategy_type=strategy_type)
+    # Map symbol (e.g. "BTCUSDT" → "BTC") for the engine
+    engine_symbol = symbol.replace("USDT", "").replace("USDC", "")
+
+    # Run engine with strategy-specific signal generation and selected symbol
+    engine = BacktestEngine(config, strategy_type=strategy_type, symbol=engine_symbol)
     result = engine.run(filtered)
 
     # Convert trades to serializable dicts

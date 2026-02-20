@@ -58,7 +58,6 @@ class User(Base):
     llm_connections = relationship("LLMConnection", back_populates="user", cascade="all")
     bot_configs = relationship("BotConfig", back_populates="user", cascade="all")
     backtest_runs = relationship("BacktestRun", back_populates="user", cascade="all")
-    alerts = relationship("Alert", back_populates="user", cascade="all")
 
 
 class UserConfig(Base):
@@ -438,50 +437,6 @@ class AuditLog(Base):
     response_time_ms = Column(Float, nullable=False)
     client_ip = Column(String(45), nullable=False)
     created_at = Column(DateTime, server_default=func.now(), index=True)
-
-
-class Alert(Base):
-    """User-defined alerts (price, strategy, portfolio). Can be global or bot-specific."""
-    __tablename__ = "alerts"
-    __table_args__ = (
-        Index("ix_alert_user_enabled", "user_id", "is_enabled"),
-    )
-
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
-    bot_config_id = Column(Integer, ForeignKey("bot_configs.id", ondelete="SET NULL"), nullable=True)
-
-    alert_type = Column(String(20), nullable=False)  # price | strategy | portfolio
-    category = Column(String(50), nullable=False)  # e.g. price_above, daily_loss, signal_missed
-    symbol = Column(String(50), nullable=True)  # only for price alerts
-    threshold = Column(Float, nullable=False)
-    direction = Column(String(10), nullable=True)  # above | below (price alerts)
-
-    is_enabled = Column(Boolean, default=True, nullable=False, server_default=text("true"))
-    cooldown_minutes = Column(Integer, default=15, nullable=False)
-    last_triggered_at = Column(DateTime, nullable=True)
-    trigger_count = Column(Integer, default=0, nullable=False)
-
-    created_at = Column(DateTime, server_default=func.now())
-    updated_at = Column(DateTime, onupdate=func.now())
-
-    # Relationships
-    user = relationship("User", back_populates="alerts")
-    history = relationship("AlertHistory", back_populates="alert", cascade="all, delete-orphan")
-
-
-class AlertHistory(Base):
-    """Audit trail for triggered alerts."""
-    __tablename__ = "alert_history"
-
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    alert_id = Column(Integer, ForeignKey("alerts.id", ondelete="CASCADE"), nullable=False, index=True)
-    triggered_at = Column(DateTime, nullable=False, server_default=func.now())
-    current_value = Column(Float, nullable=True)
-    message = Column(Text, nullable=False)
-
-    # Relationships
-    alert = relationship("Alert", back_populates="history")
 
 
 class EventLog(Base):

@@ -33,6 +33,7 @@ import {
 } from 'lucide-react'
 
 const STRATEGY_DISPLAY: Record<string, string> = { llm_signal: 'KI-Companion', sentiment_surfer: 'Sentiment Surfer', liquidation_hunter: 'Liquidation Hunter', degen: 'Degen', edge_indicator: 'Edge Indicator', claude_edge_indicator: 'Claude Edge Indicator' }
+const AI_STRATEGIES = new Set(['llm_signal', 'degen'])
 function strategyLabel(name: string) { return STRATEGY_DISPLAY[name] || name.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) }
 
 interface BotStatus {
@@ -311,7 +312,7 @@ function BotTradeHistoryModal({ bot, onClose, t }: { bot: BotStatus; onClose: ()
               <h2 className="text-lg font-bold text-white">{bot.name}</h2>
               <div className="flex items-center gap-2 mt-0.5">
                 <span className="text-xs text-gray-500">{strategyLabel(bot.strategy_type)}</span>
-                {bot.strategy_type === 'llm_signal' && (
+                {AI_STRATEGIES.has(bot.strategy_type) && (
                   <Bot size={13} className="text-emerald-400" />
                 )}
                 <span className="text-gray-700">|</span>
@@ -813,7 +814,7 @@ export default function Bots() {
                         {bot.mode.toUpperCase()}
                       </span>
                       <span className="text-xs text-gray-500">{strategyLabel(bot.strategy_type)}</span>
-                      {bot.strategy_type === 'llm_signal' && (
+                      {AI_STRATEGIES.has(bot.strategy_type) && (
                         <Bot size={15} className="text-emerald-400" />
                       )}
                     </div>
@@ -924,7 +925,7 @@ export default function Bots() {
                 </div>
 
                 {/* LLM Metrics */}
-                {bot.strategy_type === 'llm_signal' && (
+                {AI_STRATEGIES.has(bot.strategy_type) && (
                   <div className="mb-3 pt-3 border-t border-white/5 space-y-2.5">
                     <div className="flex items-center gap-2 text-sm">
                       <span className="text-gray-500">{t('bots.llmLastSignal')}</span>

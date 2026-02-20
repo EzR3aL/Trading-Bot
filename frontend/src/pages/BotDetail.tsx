@@ -259,7 +259,7 @@ export default function BotDetail() {
                 liquidation_hunter: 'Liquidation Hunter', degen: 'Degen',
                 edge_indicator: 'Edge Indicator', claude_edge_indicator: 'Claude Edge Indicator',
               }[config.strategy_type] || config.strategy_type.replace(/_/g, ' ')}</span>
-              {config.strategy_type === 'llm_signal' && (
+              {['llm_signal', 'degen'].includes(config.strategy_type) && (
                 <Bot size={15} className="text-emerald-400" />
               )}
               {runtime?.llm_provider && (

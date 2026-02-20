@@ -501,23 +501,23 @@ class DegenStrategy(BaseStrategy):
         return {
             "llm_provider": {
                 "type": "select",
-                "label": "Model Family",
-                "description": "Which AI provider to use for the Degen analysis",
+                "label": "Modell-Familie",
+                "description": "Welcher KI-Anbieter für die Degen-Analyse verwendet wird",
                 "default": "groq",
                 "options": family_options,
             },
             "llm_model": {
                 "type": "dependent_select",
-                "label": "Model",
-                "description": "Which model to use from the selected provider",
+                "label": "Modell",
+                "description": "Welches Modell vom gewählten Anbieter verwendet wird",
                 "default": "",
                 "depends_on": "llm_provider",
                 "options_map": model_options_map,
             },
             "temperature": {
                 "type": "float",
-                "label": "Temperature",
-                "description": "0.0 = deterministic, 1.0 = creative (recommended: 0.3)",
+                "label": "Temperatur",
+                "description": "0.0 = deterministisch, 1.0 = kreativ (empfohlen: 0.3)",
                 "default": 0.3,
                 "min": 0.0,
                 "max": 1.0,
@@ -529,7 +529,7 @@ class DegenStrategy(BaseStrategy):
         return (
             "KI-gesteuerte Arena-Strategie mit festem Prompt und 14 Datenquellen. "
             "Nutzt Binance-Derivatives, Order Book, Supertrend, VWAP und mehr "
-            "fuer 1h BTC-Vorhersagen. Inspiriert vom Degen Prediction Bot."
+            "für 1h BTC-Vorhersagen. Inspiriert vom Degen Prediction Bot."
         )
 
     async def close(self):

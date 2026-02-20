@@ -245,42 +245,6 @@ export interface BacktestHistoryItem {
   created_at: string
 }
 
-// Alert types
-export interface Alert {
-  id: number
-  user_id: number
-  bot_config_id: number | null
-  alert_type: 'price' | 'strategy' | 'portfolio'
-  category: string
-  symbol: string | null
-  threshold: number
-  direction: 'above' | 'below' | null
-  is_enabled: boolean
-  cooldown_minutes: number
-  last_triggered_at: string | null
-  trigger_count: number
-  created_at: string | null
-  updated_at: string | null
-}
-
-export interface AlertHistory {
-  id: number
-  alert_id: number
-  triggered_at: string
-  current_value: number | null
-  message: string
-}
-
-export interface AlertCreate {
-  bot_config_id?: number | null
-  alert_type: 'price' | 'strategy' | 'portfolio'
-  category: string
-  symbol?: string | null
-  threshold: number
-  direction?: 'above' | 'below' | null
-  cooldown_minutes?: number
-}
-
 // Portfolio types
 export interface ExchangeSummary {
   exchange: string

@@ -180,7 +180,7 @@ function BotCard({ bot, color, isSelected, isHovered, onClick, onMouseEnter, onM
       </div>
 
       {/* LLM Provider + Model */}
-      {bot.strategy_type === 'llm_signal' && bot.llm_provider && (
+      {['llm_signal', 'degen'].includes(bot.strategy_type) && bot.llm_provider && (
         <div className="flex items-center gap-1.5 mb-2 ml-4 text-[10px] text-gray-500">
           <Bot size={11} className="text-emerald-400" />
           <span>{providerNameMap[bot.llm_provider] || bot.llm_provider}</span>
@@ -286,7 +286,7 @@ function SmallMultipleCard({ bot, color, yDomain, chartGridColor, chartTickColor
       </div>
 
       {/* LLM Provider + Model */}
-      {bot.strategy_type === 'llm_signal' && bot.llm_provider && (
+      {['llm_signal', 'degen'].includes(bot.strategy_type) && bot.llm_provider && (
         <div className="flex items-center gap-1.5 mb-1 ml-4 text-[10px] text-gray-500">
           <Bot size={11} className="text-emerald-400" />
           <span>{providerNameMap[bot.llm_provider] || bot.llm_provider}</span>

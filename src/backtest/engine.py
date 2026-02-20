@@ -156,6 +156,100 @@ def _tanh(x: float) -> float:
     return math.tanh(x)
 
 
+def _supertrend_direction(
+    highs: List[float], lows: List[float], closes: List[float],
+    atr_period: int = 10, multiplier: float = 3.0,
+) -> str:
+    """Calculate Supertrend trend direction: 'bullish', 'bearish', or 'neutral'."""
+    n = len(closes)
+    if n < atr_period + 2:
+        return "neutral"
+
+    # True Range series (index 0 corresponds to closes[1])
+    tr_list = []
+    for i in range(1, n):
+        tr = max(highs[i] - lows[i], abs(highs[i] - closes[i - 1]), abs(lows[i] - closes[i - 1]))
+        tr_list.append(tr)
+
+    if len(tr_list) < atr_period:
+        return "neutral"
+
+    # ATR series (Wilder smoothing)
+    atr_vals = [0.0] * len(tr_list)
+    atr_vals[atr_period - 1] = sum(tr_list[:atr_period]) / atr_period
+    for i in range(atr_period, len(tr_list)):
+        atr_vals[i] = (atr_vals[i - 1] * (atr_period - 1) + tr_list[i]) / atr_period
+
+    # Walk through price series computing Supertrend bands and direction
+    trend = 1  # 1 = bullish, -1 = bearish
+    prev_upper = 0.0
+    prev_lower = 0.0
+
+    for i in range(atr_period, len(tr_list)):
+        close_idx = i + 1  # Corresponding close index
+        mid = (highs[close_idx] + lows[close_idx]) / 2
+        atr = atr_vals[i]
+
+        basic_upper = mid + multiplier * atr
+        basic_lower = mid - multiplier * atr
+
+        if i == atr_period:
+            final_upper = basic_upper
+            final_lower = basic_lower
+        else:
+            # Upper band can only decrease unless price broke above
+            final_upper = basic_upper if (basic_upper < prev_upper or closes[close_idx - 1] > prev_upper) else prev_upper
+            # Lower band can only increase unless price broke below
+            final_lower = basic_lower if (basic_lower > prev_lower or closes[close_idx - 1] < prev_lower) else prev_lower
+
+        # Trend flips
+        if trend == 1 and closes[close_idx] < final_lower:
+            trend = -1
+        elif trend == -1 and closes[close_idx] > final_upper:
+            trend = 1
+
+        prev_upper = final_upper
+        prev_lower = final_lower
+
+    return "bullish" if trend == 1 else "bearish"
+
+
+def _detect_rsi_divergence(
+    closes: List[float], rsi_values: List[float], lookback: int = 20,
+) -> Dict[str, bool]:
+    """Detect bullish/bearish RSI divergence over a lookback window."""
+    result = {"bullish_divergence": False, "bearish_divergence": False}
+
+    if len(closes) < lookback + 2 or len(rsi_values) < lookback + 2:
+        return result
+
+    recent_closes = closes[-lookback:]
+    recent_rsi = rsi_values[-lookback:]
+    half = lookback // 2
+
+    first_half_c = recent_closes[:half]
+    second_half_c = recent_closes[half:]
+    first_half_r = recent_rsi[:half]
+    second_half_r = recent_rsi[half:]
+
+    if not first_half_c or not second_half_c:
+        return result
+
+    # Bullish divergence: price lower low, RSI higher low
+    first_low_idx = first_half_c.index(min(first_half_c))
+    second_low_idx = second_half_c.index(min(second_half_c))
+    if min(second_half_c) < min(first_half_c) and second_half_r[second_low_idx] > first_half_r[first_low_idx]:
+        result["bullish_divergence"] = True
+
+    # Bearish divergence: price higher high, RSI lower high
+    first_high_idx = first_half_c.index(max(first_half_c))
+    second_high_idx = second_half_c.index(max(second_half_c))
+    if max(second_half_c) > max(first_half_c) and second_half_r[second_high_idx] < first_half_r[first_high_idx]:
+        result["bearish_divergence"] = True
+
+    return result
+
+
 class TradeResult(Enum):
     """Trade outcome."""
     TAKE_PROFIT = "take_profit"
@@ -274,9 +368,11 @@ class BacktestEngine:
     for improved signal generation.
     """
 
-    def __init__(self, config: Optional[BacktestConfig] = None, strategy_type: str = "liquidation_hunter"):
+    def __init__(self, config: Optional[BacktestConfig] = None, strategy_type: str = "liquidation_hunter", symbol: str = "BTC"):
         self.config = config or BacktestConfig()
         self.strategy_type = strategy_type
+        self.symbol = symbol
+        self._signal_metadata: Dict[str, Any] = {}
         self.reset()
 
     def reset(self):
@@ -289,6 +385,72 @@ class BacktestEngine:
         self.daily_trades_count = 0
         self.daily_pnl = 0.0
         self.current_date = ""
+        self._signal_metadata = {}
+
+    def _get_min_confidence(self) -> int:
+        """Per-strategy minimum confidence, matching live defaults."""
+        if self.strategy_type in ("edge_indicator", "claude_edge_indicator", "sentiment_surfer"):
+            return 40
+        if self.strategy_type == "liquidation_hunter":
+            return 60
+        return self.config.low_confidence_min
+
+    def _build_score_series_backtest(self, closes: List[float]) -> List[float]:
+        """Build the full momentum score series for EMA smoothing (matches live)."""
+        macd_slow = 26
+        macd_signal = 9
+
+        if len(closes) < macd_slow + macd_signal + 10:
+            return []
+
+        # Full MACD histogram series
+        ema_f_macd = _ema(closes, 12)
+        ema_s_macd = _ema(closes, 26)
+        macd_line = [ema_f_macd[i] - ema_s_macd[i] for i in range(len(closes))]
+        valid_macd = [m for i, m in enumerate(macd_line) if i >= 25 and m != 0]
+        if len(valid_macd) < macd_signal:
+            return []
+        sig_line = _ema(valid_macd, macd_signal)
+        hist_series = [valid_macd[i] - sig_line[i] for i in range(len(valid_macd))]
+
+        # Full RSI smoothed series
+        rsi_vals = _rsi(closes, 14)
+        rsi_smoothed = _ema(rsi_vals, 5)
+
+        # Full EMA 8/21 series
+        ema_f = _ema(closes, 8)
+        ema_s = _ema(closes, 21)
+
+        min_len = min(len(hist_series), len(rsi_smoothed) - 1, len(ema_f), len(ema_s))
+        if min_len <= 1:
+            return []
+
+        scores = []
+        for i in range(1, min_len):
+            hist_val = hist_series[i] if i < len(hist_series) else 0.0
+            hist_window = hist_series[max(0, i - 99):i + 1]
+            sd = _stdev(hist_window, min(100, len(hist_window)))
+            m_norm = _tanh(hist_val / sd) if sd > 1e-10 else 0
+
+            rsi_idx = len(rsi_smoothed) - min_len + i
+            rsi_prev_idx = rsi_idx - 1
+            if rsi_idx < len(rsi_smoothed) and rsi_prev_idx >= 0:
+                drift = rsi_smoothed[rsi_idx] - rsi_smoothed[rsi_prev_idx]
+            else:
+                drift = 0.0
+            r_norm = _tanh(drift / 2.0)
+
+            ema_f_idx = len(ema_f) - min_len + i
+            ema_s_idx = len(ema_s) - min_len + i
+            if ema_f_idx < len(ema_f) and ema_s_idx < len(ema_s):
+                t_bonus = 0.6 if ema_f[ema_f_idx] > ema_s[ema_s_idx] else -0.6
+            else:
+                t_bonus = 0.0
+
+            raw = m_norm + r_norm + t_bonus
+            scores.append(max(-1.0, min(1.0, raw)))
+
+        return scores
 
     # ------------------------------------------------------------------ #
     #  SIGNAL ANALYSIS COMPONENTS                                        #
@@ -545,168 +707,143 @@ class BacktestEngine:
         history: Optional[List[HistoricalDataPoint]] = None,
     ) -> Tuple[TradeDirection, int, str]:
         """
-        Sentiment Surfer: Realistic multi-source scoring.
-        Mirrors the live strategy: FGI + Funding + VWAP + Supertrend + Volume + Momentum.
-        Each source scores [-100, +100], weighted and aggregated.
+        Sentiment Surfer: Exact match of live SentimentSurferStrategy.
+        6 sources scored [-100, +100], weighted with live weights, agreement gate.
         """
-        scores = {}
-        reasons = []
         hist = history or [data]
         price = data.btc_price if symbol == "BTC" else data.eth_price
-        price_change = data.btc_24h_change if symbol == "BTC" else data.eth_24h_change
 
-        # 1. Fear & Greed (contrarian, weight 25%)
+        # Calculate actual 24h price change from history (not per-candle change)
+        candles_24h = 1
+        if len(hist) >= 3:
+            time_diff = (hist[-1].timestamp - hist[0].timestamp).total_seconds()
+            candle_secs = time_diff / (len(hist) - 1) if len(hist) > 1 else 86400
+            candles_24h = max(1, int(86400 / candle_secs))
+
+        lookback_24h = candles_24h + 1  # +1 because hist[-1] is current candle
+        if len(hist) > lookback_24h:
+            price_24h_ago = hist[-lookback_24h].btc_price if symbol == "BTC" else hist[-lookback_24h].eth_price
+            price_change = (price - price_24h_ago) / price_24h_ago * 100 if price_24h_ago > 0 else 0
+        else:
+            price_change = data.btc_24h_change if symbol == "BTC" else data.eth_24h_change
+
+        all_scores = []  # (score, reason, weight_key)
+
+        # Source 1: News Sentiment (GDELT) — not available in backtest
+        all_scores.append((0.0, "News N/A (backtest)", "news"))
+
+        # Source 2: Fear & Greed (contrarian) — matches live _score_fear_greed
         fg = data.fear_greed_index
-        if fg < 20:
-            scores["fgi"] = 100
-            reasons.append(f"Extreme Fear ({fg})")
-        elif fg < 30:
-            scores["fgi"] = 60
-            reasons.append(f"Fear ({fg})")
-        elif fg < 45:
-            scores["fgi"] = 20
-        elif fg > 80:
-            scores["fgi"] = -100
-            reasons.append(f"Extreme Greed ({fg})")
-        elif fg > 70:
-            scores["fgi"] = -60
-            reasons.append(f"Greed ({fg})")
-        elif fg > 55:
-            scores["fgi"] = -20
+        extreme_fear, extreme_greed = 25, 75
+        if fg < extreme_fear:
+            fg_score = min(float((extreme_fear - fg) * 3), 100.0)
+            fg_reason = f"Extreme Fear ({fg}) - contrarian bullish"
+        elif fg > extreme_greed:
+            fg_score = max(float(-(fg - extreme_greed) * 3), -100.0)
+            fg_reason = f"Extreme Greed ({fg}) - contrarian bearish"
         else:
-            scores["fgi"] = 0
+            fg_score, fg_reason = 0.0, f"Sentiment neutral (FGI={fg})"
+        all_scores.append((fg_score, fg_reason, "fear_greed"))
 
-        # 2. Funding Rate (contrarian, weight 20%)
-        fr = data.funding_rate_btc if symbol == "BTC" else data.funding_rate_eth
-        if fr < -0.0003:
-            scores["funding"] = 80
-            reasons.append(f"Neg Funding ({fr*100:.4f}%)")
-        elif fr < -0.0001:
-            scores["funding"] = 40
-        elif fr > 0.0008:
-            scores["funding"] = -80
-            reasons.append(f"High Funding ({fr*100:.4f}%)")
-        elif fr > 0.0003:
-            scores["funding"] = -40
-        else:
-            scores["funding"] = 0
-
-        # 3. VWAP-like fair value (from price and volume history, weight 15%)
-        if len(hist) >= 7:
-            closes = [h.btc_price if symbol == "BTC" else h.eth_price for h in hist[-20:]]
-            volumes = [h.btc_volume for h in hist[-20:]]
-            total_vol = sum(volumes) if sum(volumes) > 0 else 1
-            vwap = sum(c * v for c, v in zip(closes, volumes)) / total_vol
-            deviation = (price - vwap) / vwap * 100 if vwap > 0 else 0
-            if deviation < -3:
-                scores["vwap"] = 80
-                reasons.append(f"Below VWAP ({deviation:+.1f}%)")
-            elif deviation < -1:
-                scores["vwap"] = 30
-            elif deviation > 3:
-                scores["vwap"] = -80
-                reasons.append(f"Above VWAP ({deviation:+.1f}%)")
-            elif deviation > 1:
-                scores["vwap"] = -30
+        # Source 3: VWAP — matches live _score_vwap
+        vwap_window = min(candles_24h, len(hist))
+        if vwap_window >= 7:
+            vwap_closes = [h.btc_price if symbol == "BTC" else h.eth_price for h in hist[-vwap_window:]]
+            vwap_volumes = [h.btc_volume for h in hist[-vwap_window:]]
+            total_vol = sum(vwap_volumes)
+            vwap = sum(c * v for c, v in zip(vwap_closes, vwap_volumes)) / total_vol if total_vol > 0 else price
+            deviation = (price - vwap) / vwap if vwap > 0 else 0
+            if abs(deviation) < 0.005:
+                vwap_score, vwap_reason = 0.0, f"Price near VWAP ({deviation:+.2%})"
             else:
-                scores["vwap"] = 0
+                vwap_score = max(min(deviation * 2000, 100), -100)
+                vwap_reason = f"Price {'above' if vwap_score > 0 else 'below'} VWAP ({deviation:+.2%})"
         else:
-            scores["vwap"] = 0
+            vwap_score, vwap_reason = 0.0, "VWAP insufficient data"
+        all_scores.append((vwap_score, vwap_reason, "vwap"))
 
-        # 4. Supertrend proxy (ATR-based trend, weight 15%)
-        if len(hist) >= 14:
-            closes = [h.btc_price if symbol == "BTC" else h.eth_price for h in hist]
-            highs = [h.btc_high if symbol == "BTC" else h.eth_high for h in hist]
-            lows = [h.btc_low if symbol == "BTC" else h.eth_low for h in hist]
-            atr_val = _atr(highs, lows, closes, 10)
-            mid = (highs[-1] + lows[-1]) / 2
-            upper_band = mid + 3 * atr_val
-            lower_band = mid - 3 * atr_val
-            if price > upper_band:
-                scores["supertrend"] = -50
-            elif price < lower_band:
-                scores["supertrend"] = 50
-                reasons.append("Below Supertrend")
-            elif price > mid:
-                scores["supertrend"] = -20
+        # Source 4: Supertrend — matches live _score_supertrend
+        if len(hist) >= max(14, candles_24h):
+            st_closes = [h.btc_price if symbol == "BTC" else h.eth_price for h in hist]
+            st_highs = [h.btc_high if symbol == "BTC" else h.eth_high for h in hist]
+            st_lows = [h.btc_low if symbol == "BTC" else h.eth_low for h in hist]
+            st_dir = _supertrend_direction(st_highs, st_lows, st_closes, 10, 3.0)
+            if st_dir == "bullish":
+                st_score, st_reason = 70.0, "Supertrend GREEN (uptrend)"
+            elif st_dir == "bearish":
+                st_score, st_reason = -70.0, "Supertrend RED (downtrend)"
             else:
-                scores["supertrend"] = 20
-                reasons.append("Supertrend Bullish")
+                st_score, st_reason = 0.0, "Supertrend neutral"
         else:
-            scores["supertrend"] = 0
+            st_score, st_reason = 0.0, "Supertrend insufficient data"
+        all_scores.append((st_score, st_reason, "supertrend"))
 
-        # 5. Volume / Taker Ratio (weight 10%)
-        ratio = data.taker_buy_sell_ratio
-        if ratio > 1.3:
-            scores["volume"] = 80
-            reasons.append(f"Strong Buy Vol ({ratio:.2f})")
-        elif ratio > 1.1:
-            scores["volume"] = 30
-        elif ratio < 0.7:
-            scores["volume"] = -80
-            reasons.append(f"Strong Sell Vol ({ratio:.2f})")
-        elif ratio < 0.9:
-            scores["volume"] = -30
+        # Source 5: Spot Volume — matches live _score_spot_volume
+        taker_ratio = data.taker_buy_sell_ratio
+        buy_ratio = taker_ratio / (taker_ratio + 1) if taker_ratio > 0 else 0.5
+        if abs(buy_ratio - 0.5) < 0.05:
+            vol_score, vol_reason = 0.0, f"Volume balanced (buy={buy_ratio:.1%})"
         else:
-            scores["volume"] = 0
+            vol_score = max(min((buy_ratio - 0.5) * 400, 100), -100)
+            vol_reason = f"Volume {'accumulation' if vol_score > 0 else 'distribution'} (buy={buy_ratio:.1%})"
+        all_scores.append((vol_score, vol_reason, "volume"))
 
-        # 6. Price Momentum (weight 15%)
-        if price_change > 5:
-            scores["momentum"] = 60
-            reasons.append(f"Strong Up ({price_change:+.1f}%)")
-        elif price_change > 2:
-            scores["momentum"] = 30
-        elif price_change < -5:
-            scores["momentum"] = -60
-            reasons.append(f"Strong Down ({price_change:+.1f}%)")
-        elif price_change < -2:
-            scores["momentum"] = -30
+        # Source 6: Price Momentum — matches live _score_momentum
+        if abs(price_change) < 0.5:
+            mom_score, mom_reason = 0.0, f"Momentum flat ({price_change:+.2f}%)"
+        elif abs(price_change) > 2.0:
+            mom_score = max(min(price_change * 20, 100), -100)
+            mom_reason = f"Momentum {'bullish' if mom_score > 0 else 'bearish'} ({price_change:+.2f}%)"
         else:
-            scores["momentum"] = int(price_change * 10)
+            mom_score = price_change * 15
+            mom_reason = f"Momentum {'bullish' if mom_score > 0 else 'bearish'} ({price_change:+.2f}%)"
+        all_scores.append((mom_score, mom_reason, "momentum"))
 
-        # Weighted aggregation (mirrors real strategy weights)
-        weights = {"fgi": 0.25, "funding": 0.20, "vwap": 0.15, "supertrend": 0.15, "volume": 0.10, "momentum": 0.15}
-        total_score = sum(scores.get(k, 0) * w for k, w in weights.items())
+        # Weighted aggregation — matches live weights exactly
+        weights = {
+            "news": 1.0, "fear_greed": 1.0, "vwap": 1.2,
+            "supertrend": 1.2, "volume": 0.8, "momentum": 0.8,
+        }
+        total_weighted = sum(s * weights.get(k, 1.0) for s, _, k in all_scores)
+        total_weight = sum(weights.get(k, 1.0) for _, _, k in all_scores)
+        weighted_score = total_weighted / total_weight if total_weight > 0 else 0
 
-        # Require minimum agreement (at least 3 sources same direction)
-        bullish_count = sum(1 for v in scores.values() if v > 10)
-        bearish_count = sum(1 for v in scores.values() if v < -10)
-        agreement = max(bullish_count, bearish_count)
+        direction = TradeDirection.LONG if weighted_score >= 0 else TradeDirection.SHORT
 
-        confidence = 40 + int(abs(total_score) * 0.55)
-        if agreement >= 4:
-            confidence += 15
-        elif agreement >= 3:
-            confidence += 8
+        # Confidence = absolute weighted score, capped at 95 (matches live)
+        confidence = min(int(abs(weighted_score)), 95)
 
-        confidence = max(0, min(95, confidence))
+        # Agreement count (matches live _aggregate_scores)
+        if direction == TradeDirection.LONG:
+            agreement = sum(1 for s, _, _ in all_scores if s > 0)
+        else:
+            agreement = sum(1 for s, _, _ in all_scores if s < 0)
 
-        # Need minimum agreement for trade
-        if agreement < 2:
-            confidence = min(confidence, self.config.low_confidence_min - 1)
+        # Gate: need min 3/6 agreement AND confidence >= 40 (matches live should_trade)
+        if agreement < 3 or confidence < 40:
+            confidence = 0
 
-        direction = TradeDirection.LONG if total_score >= 0 else TradeDirection.SHORT
-        return direction, confidence, " | ".join(reasons) or "Neutral"
+        reasons = [r for _, r, _ in all_scores]
+        reasons.append(f"Agreement: {agreement}/6")
+        return direction, confidence, " | ".join(reasons)
 
     def _signal_edge_indicator(
         self, data: HistoricalDataPoint, symbol: str,
         history: Optional[List[HistoricalDataPoint]] = None,
     ) -> Tuple[TradeDirection, int, str]:
         """
-        Edge Indicator: Real technical indicator calculations from price history.
-        Mirrors the live strategy: EMA Ribbon + ADX + MACD + RSI Momentum.
+        Edge Indicator: Exact match of live EdgeIndicatorStrategy.
+        EMA Ribbon (8/21) + ADX Chop Filter (0.8 multiplier) +
+        Predator Momentum with EMA(3) smoothing + regime flip detection.
         """
         if not history or len(history) < 30:
             return TradeDirection.LONG, 0, "Insufficient history"
 
-        # Extract price series from history
         closes = [h.btc_price if symbol == "BTC" else h.eth_price for h in history]
         highs = [h.btc_high if symbol == "BTC" else h.eth_high for h in history]
         lows = [h.btc_low if symbol == "BTC" else h.eth_low for h in history]
-
-        reasons = []
-        confidence = 50
         price = closes[-1]
+        reasons = []
 
         # --- Layer 1: EMA Ribbon (8/21) ---
         ema_fast = _ema(closes, 8)
@@ -720,16 +857,6 @@ class BacktestEngine:
         bull_trend = price > upper_band
         bear_trend = price < lower_band
 
-        # Detect entry crosses
-        if len(closes) >= 2 and len(ema_fast) >= 2:
-            prev_upper = max(ema_fast[-2], ema_slow[-2]) if ema_fast[-2] != 0 else upper_band
-            prev_lower = min(ema_fast[-2], ema_slow[-2]) if ema_fast[-2] != 0 else lower_band
-            bull_enter = price > upper_band and closes[-2] <= prev_upper
-            bear_enter = price < lower_band and closes[-2] >= prev_lower
-        else:
-            bull_enter = False
-            bear_enter = False
-
         if bull_trend:
             reasons.append("EMA Bull Trend")
         elif bear_trend:
@@ -740,24 +867,13 @@ class BacktestEngine:
         adx_threshold = 18.0
         is_trending = adx_val >= adx_threshold
 
-        if is_trending:
-            adx_bonus = min(int((adx_val - adx_threshold) * 1.5), 25)
-            confidence += adx_bonus
-            reasons.append(f"ADX Trending ({adx_val:.0f})")
-        else:
-            chop_penalty = min(int((adx_threshold - adx_val) * 1.2), 20)
-            confidence -= chop_penalty
-            reasons.append(f"ADX Choppy ({adx_val:.0f})")
-
         # --- Layer 3: Predator Momentum Score ---
-        # MACD component
         macd_data = _macd(closes, 12, 26, 9)
-        hist = macd_data["histogram"]
+        hist_val = macd_data["histogram"]
         hist_series = macd_data["histogram_series"]
         stdev_macd = _stdev(hist_series, min(100, len(hist_series))) if hist_series else 1e-10
-        macd_norm = _tanh(hist / stdev_macd) if stdev_macd > 1e-10 else 0
+        macd_norm = _tanh(hist_val / stdev_macd) if stdev_macd > 1e-10 else 0
 
-        # RSI drift component
         rsi_values = _rsi(closes, 14)
         rsi_smoothed = _ema(rsi_values, 5)
         if len(rsi_smoothed) >= 2 and rsi_smoothed[-1] != 0 and rsi_smoothed[-2] != 0:
@@ -766,66 +882,331 @@ class BacktestEngine:
             rsi_drift = 0.0
         rsi_norm = _tanh(rsi_drift / 2.0)
 
-        # Trend bonus
         trend_bonus = 0.6 if ema_fast_above else -0.6
-
-        # Composite momentum score
         raw_score = macd_norm + rsi_norm + trend_bonus
         momentum_score = max(-1.0, min(1.0, raw_score))
 
-        # Regime detection
+        # --- Score Series & EMA(3) Smoothing (matches live) ---
+        score_series = self._build_score_series_backtest(closes)
+        smooth_len = 3
+        if score_series and len(score_series) >= smooth_len:
+            smoothed_series = _ema(score_series, smooth_len)
+            smoothed_score = smoothed_series[-1] if smoothed_series[-1] != 0 else momentum_score
+        else:
+            smoothed_score = momentum_score
+
+        # --- Regime Detection (from smoothed score, matches live) ---
         pos_thresh = 0.20
         neg_thresh = -0.20
-        if momentum_score > pos_thresh:
+        if smoothed_score > pos_thresh:
             regime = 1
-            reasons.append(f"Momentum Bull ({momentum_score:+.2f})")
-        elif momentum_score < neg_thresh:
+            reasons.append(f"Momentum Bull ({smoothed_score:+.2f})")
+        elif smoothed_score < neg_thresh:
             regime = -1
-            reasons.append(f"Momentum Bear ({momentum_score:+.2f})")
+            reasons.append(f"Momentum Bear ({smoothed_score:+.2f})")
         else:
             regime = 0
 
-        # Momentum contribution to confidence
-        mom_mag = abs(momentum_score)
-        if mom_mag > 0.5:
+        # --- Regime Flip Detection (matches live _get_previous_regime) ---
+        prev_regime = 0
+        if score_series and len(score_series) >= smooth_len + 1:
+            prev_series = score_series[:-1]
+            if len(prev_series) >= smooth_len:
+                prev_smoothed = _ema(prev_series, smooth_len)
+                prev_val = prev_smoothed[-1] if prev_smoothed and prev_smoothed[-1] != 0 else 0.0
+                if prev_val > pos_thresh:
+                    prev_regime = 1
+                elif prev_val < neg_thresh:
+                    prev_regime = -1
+
+        regime_flip_bull = regime == 1 and prev_regime != 1
+        regime_flip_bear = regime == -1 and prev_regime != -1
+
+        # --- Confidence (matches live _calculate_confidence exactly) ---
+        confidence = 50
+
+        # ADX: live uses 0.8 multiplier (not 1.5), int(deficit) penalty (not *1.2)
+        if is_trending:
+            adx_bonus = min(int((adx_val - adx_threshold) * 0.8), 25)
+            confidence += adx_bonus
+            reasons.append(f"ADX Trending ({adx_val:.0f})")
+        else:
+            chop_penalty = min(int(adx_threshold - adx_val), 20)
+            confidence -= chop_penalty
+            reasons.append(f"ADX Choppy ({adx_val:.0f})")
+
+        # Momentum magnitude (uses smoothed score, matches live)
+        abs_score = abs(smoothed_score)
+        if abs_score > 0.5:
             confidence += 20
-        elif mom_mag > 0.3:
+        elif abs_score > 0.3:
             confidence += 12
-        elif mom_mag > 0.15:
+        elif abs_score > 0.15:
             confidence += 5
 
         # Full alignment bonus
-        if bull_trend and is_trending and regime == 1:
+        if (bull_trend and regime == 1 and is_trending) or \
+           (bear_trend and regime == -1 and is_trending):
             confidence += 10
-            reasons.append("FULL ALIGNMENT LONG")
-        elif bear_trend and is_trending and regime == -1:
-            confidence += 10
-            reasons.append("FULL ALIGNMENT SHORT")
+            reasons.append("FULL ALIGNMENT")
 
-        # Entry cross bonus
-        if bull_enter or bear_enter:
+        # Regime flip bonus (matches live, NOT entry cross)
+        if regime_flip_bull or regime_flip_bear:
             confidence += 10
-            reasons.append("Regime Flip")
+            reasons.append("REGIME FLIP")
 
         confidence = max(0, min(95, confidence))
 
-        # --- Direction Logic (mirrors real strategy) ---
-        if bull_trend and is_trending and momentum_score >= 0:
+        # --- Direction Logic (matches live _determine_direction) ---
+        if bull_trend and is_trending and smoothed_score >= 0:
             direction = TradeDirection.LONG
-        elif bear_trend and is_trending and momentum_score <= 0:
+        elif bear_trend and is_trending and smoothed_score <= 0:
             direction = TradeDirection.SHORT
-        elif is_trending and regime == 1:
+        elif is_trending and regime == 1 and not bear_trend:
             direction = TradeDirection.LONG
-        elif is_trending and regime == -1:
+        elif is_trending and regime == -1 and not bull_trend:
             direction = TradeDirection.SHORT
-        elif ema_fast_above:
-            direction = TradeDirection.LONG
         else:
-            direction = TradeDirection.SHORT
+            if regime == 1:
+                direction = TradeDirection.LONG
+            elif regime == -1:
+                direction = TradeDirection.SHORT
+            elif ema_fast_above:
+                direction = TradeDirection.LONG
+            else:
+                direction = TradeDirection.SHORT
 
-        # If market is choppy and no strong signal, reduce confidence below threshold
-        if not is_trending and abs(momentum_score) < 0.3:
-            confidence = min(confidence, self.config.low_confidence_min - 1)
+        # Gate: ADX chop filter (matches live should_trade — choppy = no trade)
+        if not is_trending:
+            confidence = 0
+
+        return direction, confidence, " | ".join(reasons) or "Neutral"
+
+    def _signal_claude_edge_indicator(
+        self, data: HistoricalDataPoint, symbol: str,
+        history: Optional[List[HistoricalDataPoint]] = None,
+    ) -> Tuple[TradeDirection, int, str]:
+        """
+        Claude Edge Indicator: Exact match of live ClaudeEdgeIndicatorStrategy.
+        Edge base + 6 enhancements: ATR TP/SL, Volume confirmation,
+        HTF proxy (EMA 21/50), RSI divergence, Regime sizing, Trailing stop.
+        """
+        if not history or len(history) < 30:
+            return TradeDirection.LONG, 0, "Insufficient history"
+
+        closes = [h.btc_price if symbol == "BTC" else h.eth_price for h in history]
+        highs = [h.btc_high if symbol == "BTC" else h.eth_high for h in history]
+        lows = [h.btc_low if symbol == "BTC" else h.eth_low for h in history]
+        price = closes[-1]
+        reasons = []
+
+        # === BASE LAYERS (same as Edge Indicator) ===
+
+        # Layer 1: EMA Ribbon (8/21)
+        ema_fast = _ema(closes, 8)
+        ema_slow = _ema(closes, 21)
+        ema_f = ema_fast[-1] if ema_fast[-1] != 0 else price
+        ema_s = ema_slow[-1] if ema_slow[-1] != 0 else price
+        upper_band = max(ema_f, ema_s)
+        lower_band = min(ema_f, ema_s)
+        ema_fast_above = ema_f > ema_s
+        bull_trend = price > upper_band
+        bear_trend = price < lower_band
+
+        if bull_trend:
+            reasons.append("EMA Bull Trend")
+        elif bear_trend:
+            reasons.append("EMA Bear Trend")
+
+        # Layer 2: ADX
+        adx_val = _adx(highs, lows, closes, 14)
+        adx_threshold = 18.0
+        is_trending = adx_val >= adx_threshold
+
+        # Layer 3: Predator Momentum
+        macd_data = _macd(closes, 12, 26, 9)
+        hist_val = macd_data["histogram"]
+        hist_series = macd_data["histogram_series"]
+        stdev_macd = _stdev(hist_series, min(100, len(hist_series))) if hist_series else 1e-10
+        macd_norm = _tanh(hist_val / stdev_macd) if stdev_macd > 1e-10 else 0
+
+        rsi_values = _rsi(closes, 14)
+        rsi_smoothed = _ema(rsi_values, 5)
+        if len(rsi_smoothed) >= 2 and rsi_smoothed[-1] != 0 and rsi_smoothed[-2] != 0:
+            rsi_drift = rsi_smoothed[-1] - rsi_smoothed[-2]
+        else:
+            rsi_drift = 0.0
+        rsi_norm = _tanh(rsi_drift / 2.0)
+        trend_bonus = 0.6 if ema_fast_above else -0.6
+
+        raw_score = macd_norm + rsi_norm + trend_bonus
+        momentum_score = max(-1.0, min(1.0, raw_score))
+
+        # Score Series & EMA(3) Smoothing
+        score_series = self._build_score_series_backtest(closes)
+        smooth_len = 3
+        if score_series and len(score_series) >= smooth_len:
+            smoothed_series = _ema(score_series, smooth_len)
+            smoothed_score = smoothed_series[-1] if smoothed_series[-1] != 0 else momentum_score
+        else:
+            smoothed_score = momentum_score
+
+        pos_thresh, neg_thresh = 0.20, -0.20
+        if smoothed_score > pos_thresh:
+            regime = 1
+        elif smoothed_score < neg_thresh:
+            regime = -1
+        else:
+            regime = 0
+
+        # Regime flip
+        prev_regime = 0
+        if score_series and len(score_series) >= smooth_len + 1:
+            prev_series = score_series[:-1]
+            if len(prev_series) >= smooth_len:
+                prev_smoothed = _ema(prev_series, smooth_len)
+                prev_val = prev_smoothed[-1] if prev_smoothed and prev_smoothed[-1] != 0 else 0.0
+                if prev_val > pos_thresh:
+                    prev_regime = 1
+                elif prev_val < neg_thresh:
+                    prev_regime = -1
+
+        regime_flip_bull = regime == 1 and prev_regime != 1
+        regime_flip_bear = regime == -1 and prev_regime != -1
+
+        # === CONFIDENCE (base, same as Edge) ===
+        confidence = 50
+
+        if is_trending:
+            adx_bonus = min(int((adx_val - adx_threshold) * 0.8), 25)
+            confidence += adx_bonus
+            reasons.append(f"ADX Trending ({adx_val:.0f})")
+        else:
+            chop_penalty = min(int(adx_threshold - adx_val), 20)
+            confidence -= chop_penalty
+            reasons.append(f"ADX Choppy ({adx_val:.0f})")
+
+        abs_score = abs(smoothed_score)
+        if abs_score > 0.5:
+            confidence += 20
+        elif abs_score > 0.3:
+            confidence += 12
+        elif abs_score > 0.15:
+            confidence += 5
+
+        if (bull_trend and regime == 1 and is_trending) or \
+           (bear_trend and regime == -1 and is_trending):
+            confidence += 10
+
+        if regime_flip_bull or regime_flip_bear:
+            confidence += 10
+            reasons.append("REGIME FLIP")
+
+        # === ENHANCEMENT #2: Volume Confirmation ===
+        taker_ratio = data.taker_buy_sell_ratio
+        buy_ratio = taker_ratio / (taker_ratio + 1) if taker_ratio > 0 else 0.5
+        strong_thresh, weak_thresh = 0.58, 0.42
+        if buy_ratio >= strong_thresh:
+            vol_score = min((buy_ratio - 0.5) / (strong_thresh - 0.5), 1.0)
+        elif buy_ratio <= weak_thresh:
+            vol_score = max((buy_ratio - 0.5) / (0.5 - weak_thresh), -1.0)
+        else:
+            vol_score = (buy_ratio - 0.5) * 2.0
+
+        # Volume confirms or contradicts momentum direction
+        if (regime >= 0 and vol_score > 0.3) or (regime <= 0 and vol_score < -0.3):
+            vol_bonus = min(int(abs(vol_score) * 10), 8)
+            confidence += vol_bonus
+            reasons.append(f"Vol Confirms ({vol_score:+.2f})")
+        elif (regime > 0 and vol_score < -0.3) or (regime < 0 and vol_score > 0.3):
+            confidence -= 3
+
+        # === ENHANCEMENT #3: Multi-Timeframe (sync proxy using EMA 21/50) ===
+        if len(closes) >= 50:
+            htf_ema_fast = _ema(closes, 21)
+            htf_ema_slow = _ema(closes, 50)
+            htf_f = htf_ema_fast[-1]
+            htf_s = htf_ema_slow[-1]
+            if htf_f != 0 and htf_s != 0:
+                htf_upper = max(htf_f, htf_s)
+                htf_lower = min(htf_f, htf_s)
+                htf_bullish = price > htf_upper
+                htf_bearish = price < htf_lower
+                if (regime >= 0 and htf_bullish) or (regime <= 0 and htf_bearish):
+                    confidence += 5
+                    reasons.append("HTF Aligned")
+                elif (regime > 0 and htf_bearish) or (regime < 0 and htf_bullish):
+                    confidence -= 3
+
+        # === ENHANCEMENT #6: RSI Divergence ===
+        div_data = _detect_rsi_divergence(closes, rsi_values, 20)
+        if div_data["bullish_divergence"] and regime >= 0:
+            confidence += 8
+            reasons.append("Bullish Divergence")
+        elif div_data["bearish_divergence"] and regime <= 0:
+            confidence += 8
+            reasons.append("Bearish Divergence")
+        elif div_data["bearish_divergence"] and regime > 0:
+            confidence -= 10
+        elif div_data["bullish_divergence"] and regime < 0:
+            confidence -= 10
+
+        confidence = max(0, min(95, confidence))
+
+        # === Direction (same as Edge) ===
+        if bull_trend and is_trending and smoothed_score >= 0:
+            direction = TradeDirection.LONG
+        elif bear_trend and is_trending and smoothed_score <= 0:
+            direction = TradeDirection.SHORT
+        elif is_trending and regime == 1 and not bear_trend:
+            direction = TradeDirection.LONG
+        elif is_trending and regime == -1 and not bull_trend:
+            direction = TradeDirection.SHORT
+        else:
+            if regime == 1:
+                direction = TradeDirection.LONG
+            elif regime == -1:
+                direction = TradeDirection.SHORT
+            elif ema_fast_above:
+                direction = TradeDirection.LONG
+            else:
+                direction = TradeDirection.SHORT
+
+        # Gate: ADX chop filter
+        if not is_trending:
+            confidence = 0
+
+        # === ENHANCEMENT #1: ATR-based TP/SL ===
+        atr_val = _atr(highs, lows, closes, 14)
+        if atr_val <= 0:
+            atr_val = price * 0.015  # Fallback estimate
+        tp_dist = atr_val * 2.5
+        sl_dist = atr_val * 1.5
+        if direction == TradeDirection.LONG:
+            tp_price = price + tp_dist
+            sl_price = price - sl_dist
+        else:
+            tp_price = price - tp_dist
+            sl_price = price + sl_dist
+
+        # === ENHANCEMENT #5: Regime-based position sizing ===
+        conf_clamped = max(40, min(95, confidence))
+        position_scale = round(0.5 + (conf_clamped - 40) / 55.0 * 0.5, 2)
+
+        # === ENHANCEMENT #4: Trailing stop metadata ===
+        breakeven_dist = atr_val * 1.0
+        trail_dist = atr_val * 1.5
+        breakeven_trigger = (price + breakeven_dist) if direction == TradeDirection.LONG else (price - breakeven_dist)
+
+        # Store metadata for engine to use
+        self._signal_metadata = {
+            "take_profit": round(tp_price, 2),
+            "stop_loss": round(sl_price, 2),
+            "position_scale": position_scale,
+            "trailing_enabled": True,
+            "breakeven_trigger": round(breakeven_trigger, 2),
+            "trail_distance": round(trail_dist, 2),
+        }
 
         return direction, confidence, " | ".join(reasons) or "Neutral"
 
@@ -981,8 +1362,10 @@ class BacktestEngine:
         `history` contains all data points up to and including `data`.
         """
         # Strategies that need full history for indicator calculations
-        if self.strategy_type in ("edge_indicator", "claude_edge_indicator"):
+        if self.strategy_type == "edge_indicator":
             return self._signal_edge_indicator(data, symbol, history or [data])
+        if self.strategy_type == "claude_edge_indicator":
+            return self._signal_claude_edge_indicator(data, symbol, history or [data])
         if self.strategy_type == "sentiment_surfer":
             return self._signal_sentiment_surfer(data, symbol, history or [data])
         if self.strategy_type == "degen":
@@ -990,7 +1373,10 @@ class BacktestEngine:
         if self.strategy_type == "llm_signal":
             return self._signal_llm_signal(data, symbol)
 
-        # Default: Liquidation Hunter (original multi-source contrarian logic)
+        # Default: Liquidation Hunter — matches live 3-step logic exactly
+        # Live uses ONLY: Leverage + Sentiment + Funding
+        # Live thresholds: crowded_longs=2.5, crowded_shorts=0.4,
+        #   extreme_fear=20, extreme_greed=80, high_conf=85, low_conf=60
         reasons = []
         confidence = 50
 
@@ -1001,23 +1387,55 @@ class BacktestEngine:
             funding_rate = data.funding_rate_eth
             price_change = data.eth_24h_change
 
-        # Step 1: Primary - Analyze Leverage
-        leverage_dir, leverage_conf, leverage_reason = self._analyze_leverage(data.long_short_ratio)
-        reasons.append(leverage_reason)
-        confidence += leverage_conf
+        # Step 1: Analyze Leverage (live: crowded_longs=2.5, crowded_shorts=0.4)
+        crowded_longs = 2.5
+        crowded_shorts = 0.4
+        leverage_dir = None
 
-        # Step 2: Primary - Analyze Sentiment
-        sentiment_dir, sentiment_conf, sentiment_reason = self._analyze_sentiment(data.fear_greed_index)
-        reasons.append(sentiment_reason)
-        confidence += sentiment_conf
+        if data.long_short_ratio > crowded_longs:
+            excess = (data.long_short_ratio - crowded_longs) / crowded_longs * 100
+            leverage_conf = min(int(excess * 2), 30)
+            leverage_dir = TradeDirection.SHORT
+            reasons.append(f"Crowded Longs (L/S={data.long_short_ratio:.2f})")
+            confidence += leverage_conf
+        elif data.long_short_ratio < crowded_shorts:
+            excess = (crowded_shorts - data.long_short_ratio) / crowded_shorts * 100
+            leverage_conf = min(int(excess * 2), 30)
+            leverage_dir = TradeDirection.LONG
+            reasons.append(f"Crowded Shorts (L/S={data.long_short_ratio:.2f})")
+            confidence += leverage_conf
+        else:
+            reasons.append(f"L/S Neutral ({data.long_short_ratio:.2f})")
 
-        # Step 3: Determine Base Direction
+        # Step 2: Analyze Sentiment (live: extreme_fear=20, extreme_greed=80)
+        extreme_fear = 20
+        extreme_greed = 80
+        sentiment_dir = None
+
+        if data.fear_greed_index > extreme_greed:
+            excess = data.fear_greed_index - extreme_greed
+            sentiment_conf = min(excess, 20)
+            sentiment_dir = TradeDirection.SHORT
+            reasons.append(f"Extreme Greed (FGI={data.fear_greed_index})")
+            confidence += sentiment_conf
+        elif data.fear_greed_index < extreme_fear:
+            excess = extreme_fear - data.fear_greed_index
+            sentiment_conf = min(excess, 20)
+            sentiment_dir = TradeDirection.LONG
+            reasons.append(f"Extreme Fear (FGI={data.fear_greed_index})")
+            confidence += sentiment_conf
+        else:
+            reasons.append(f"Sentiment Neutral (FGI={data.fear_greed_index})")
+
+        # Step 3: Determine Direction (live: high_confidence_min=85)
         final_direction = None
+        high_confidence_min = 85
+        low_confidence_min = 60
 
         if leverage_dir and sentiment_dir:
             if leverage_dir == sentiment_dir:
                 final_direction = leverage_dir
-                confidence = max(confidence, self.config.high_confidence_min)
+                confidence = max(confidence, high_confidence_min)
                 reasons.append(f"ALIGNMENT: {leverage_dir.value.upper()}")
             else:
                 final_direction = leverage_dir
@@ -1029,58 +1447,23 @@ class BacktestEngine:
             final_direction = sentiment_dir
         else:
             final_direction = TradeDirection.LONG if price_change > 0 else TradeDirection.SHORT
-            confidence = max(self.config.low_confidence_min, min(confidence, 65))
+            confidence = max(low_confidence_min, min(confidence, 65))
             reasons.append(f"Trend: {price_change:+.2f}%")
 
-        # Step 4: Funding Rate Adjustment
-        funding_adj, funding_reason = self._analyze_funding_rate(funding_rate, final_direction)
-        confidence += funding_adj
-        reasons.append(funding_reason)
+        # Step 4: Funding Rate Adjustment (live: 0.0005 / -0.0002)
+        if funding_rate > 0.0005:
+            adjustment = 20 if final_direction == TradeDirection.SHORT else -10
+            confidence += adjustment
+            reasons.append(f"High Funding ({funding_rate*100:.4f}%)")
+        elif funding_rate < -0.0002:
+            adjustment = 20 if final_direction == TradeDirection.LONG else -10
+            confidence += adjustment
+            reasons.append(f"Neg Funding ({funding_rate*100:.4f}%)")
+        else:
+            reasons.append(f"Funding Neutral ({funding_rate*100:.4f}%)")
 
-        # Step 5: Open Interest Analysis
-        oi_adj, oi_reason = self._analyze_open_interest(data, final_direction)
-        confidence += oi_adj
-        if oi_adj != 0:
-            reasons.append(oi_reason)
-
-        # Step 6: Taker Volume Analysis
-        taker_adj, taker_reason = self._analyze_taker_volume(data, final_direction)
-        confidence += taker_adj
-        if taker_adj != 0:
-            reasons.append(taker_reason)
-
-        # Step 7: Top Trader Analysis
-        top_adj, top_reason = self._analyze_top_traders(data, final_direction)
-        confidence += top_adj
-        if top_adj != 0:
-            reasons.append(top_reason)
-
-        # Step 8: Cross-Exchange Funding Divergence
-        div_adj, div_reason = self._analyze_funding_divergence(data, final_direction)
-        confidence += div_adj
-        if div_adj != 0:
-            reasons.append(div_reason)
-
-        # Step 9: Stablecoin Flows
-        stable_adj, stable_reason = self._analyze_stablecoin_flows(data, final_direction)
-        confidence += stable_adj
-        if stable_adj != 0:
-            reasons.append(stable_reason)
-
-        # Step 10: Volatility Risk Adjustment
-        vol_adj, vol_reason = self._analyze_volatility(data)
-        confidence += vol_adj
-        if vol_adj != 0:
-            reasons.append(vol_reason)
-
-        # Step 11: Macro (DXY)
-        macro_adj, macro_reason = self._analyze_macro(data, final_direction)
-        confidence += macro_adj
-        if macro_adj != 0:
-            reasons.append(macro_reason)
-
-        # Clamp confidence
-        confidence = max(self.config.low_confidence_min, min(confidence, 95))
+        # Step 5: Clamp (live: low_confidence_min=60)
+        confidence = max(low_confidence_min, min(confidence, 95))
 
         return final_direction, confidence, " | ".join(reasons)
 
@@ -1233,7 +1616,7 @@ class BacktestEngine:
         logger.info(f"Period: {data_points[0].date_str} to {data_points[-1].date_str}")
         logger.info(f"Data points: {len(data_points)}")
 
-        symbols = ["BTC", "ETH"]
+        symbols = [self.symbol]
 
         for i, data in enumerate(data_points):
             if data.date_str != self.current_date:
@@ -1270,16 +1653,27 @@ class BacktestEngine:
 
                 history_slice = data_points[:i + 1]
                 direction, confidence, reason = self._generate_signal(data, symbol, history=history_slice)
+                signal_meta = dict(self._signal_metadata)
+                self._signal_metadata = {}
 
-                if confidence < self.config.low_confidence_min:
+                if confidence < self._get_min_confidence():
                     continue
 
                 _, position_usdt = self._calculate_position_size(confidence)
 
+                # Apply strategy-specific position scale (Claude Edge regime sizing)
+                if signal_meta.get("position_scale"):
+                    position_usdt *= signal_meta["position_scale"]
+
                 if position_usdt < 10:
                     continue
 
-                take_profit, stop_loss = self._calculate_targets(direction, entry_price)
+                # Strategy-specific target overrides (Claude Edge ATR-based TP/SL)
+                if signal_meta.get("take_profit"):
+                    take_profit = signal_meta["take_profit"]
+                    stop_loss = signal_meta["stop_loss"]
+                else:
+                    take_profit, stop_loss = self._calculate_targets(direction, entry_price)
 
                 self.trade_counter += 1
                 position_size = (position_usdt * self.config.leverage) / entry_price

@@ -26,7 +26,6 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from src.api.routers import (
     admin_logs,
     affiliate,
-    alerts,
     auth,
     backtest,
     bots,
@@ -247,7 +246,6 @@ def create_app() -> FastAPI:
     app.include_router(bots.router)
     app.include_router(tax_report.router)
     app.include_router(affiliate.router)
-    app.include_router(alerts.router)
     app.include_router(backtest.router)
     app.include_router(portfolio.router)
     app.include_router(websocket.router)

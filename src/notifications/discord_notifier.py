@@ -339,6 +339,7 @@ class DiscordNotifier:
         total_fees: float,
         total_funding: float,
         max_drawdown: float,
+        **kwargs,
     ) -> bool:
         """
         Send a daily trading summary.
@@ -500,7 +501,7 @@ class DiscordNotifier:
 
         return await self._send_webhook(payload)
 
-    async def send_error(self, error_type: str, error_message: str, details: Optional[str] = None) -> bool:
+    async def send_error(self, error_type: str, error_message: str, details: Optional[str] = None, **kwargs) -> bool:
         """
         Send an error notification.
 
@@ -584,7 +585,7 @@ class DiscordNotifier:
 
         return await self._send_webhook(payload)
 
-    async def send_bot_status(self, status: str, message: str, stats: Optional[Dict] = None) -> bool:
+    async def send_bot_status(self, status: str, message: str, stats: Optional[Dict] = None, **kwargs) -> bool:
         """
         Send a bot status update.
 

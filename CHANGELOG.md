@@ -9,6 +9,92 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.8.0] - 2026-02-20
+
+### Backtest Timeframe-Support
+
+#### Hinzugefuegt
+- Backtest unterstuetzt jetzt alle Zeitfenster (1m, 5m, 15m, 30m, 1h, 4h, 1d) — der Frontend Timeframe-Selector funktioniert jetzt wie vorgesehen
+- Klines werden im gewaehlten Interval von Binance Futures geholt (mit Pagination fuer >1500 Candles)
+- Taegliche Daten (FGI, L/S, OI, Taker, etc.) werden auf Intraday-Candles forward-gefuellt
+- ETH-Klines werden per exaktem Timestamp statt Date gemappt (korrekte Intraday-Zuordnung)
+- Backtest respektiert jetzt das gewaehlte Handelspaar (nur BTC oder ETH statt immer beide)
+- Mock-Daten unterstuetzen Intraday-Generierung fuer Offline-Backtests
+- Warmup-Buffer im Strategy Adapter stellt sicher, dass Indikatoren genug Candles zum Initialisieren haben
+
+#### Behoben
+- Backtest Timeframe-Parameter wurde ignoriert — Klines wurden immer als Daily (1d) geholt, Intraday-Strategien waren unmoeglich
+- Edge Indicator / Claude Edge Indicator lieferten 0 Trades bei kurzen Zeitraeumen weil Daily-Candles fuer Indikator-Warmup nicht ausreichten
+- ETH-Kline-Daten gingen bei Intraday-Intervallen verloren (mehrere Candles pro Tag auf einen kollabiert durch Date-Key Deduplizierung)
+
+### Backtest Signal-Generatoren — Live-Matching Rewrite
+
+Alle 4 nicht-KI Strategien im Backtest wurden komplett neu geschrieben, damit sie exakt die gleiche Logik wie ihre Live-Pendants verwenden.
+
+#### Geaendert
+
+- **Edge Indicator** — ADX-Multiplier von 1.5 auf 0.8 korrigiert (Live-Wert), ADX-Penalty nutzt `int()` statt `*1.2`, Score-Series mit EMA(3)-Smoothing fuer Regime-Erkennung, Regime-Flip wird durch Vergleich mit vorherigem Regime erkannt (nicht Entry-Crosses), Choppy-Market → Confidence = 0
+- **Claude Edge Indicator** — Eigener Signal-Generator (war vorher identisch mit Edge Indicator), implementiert alle 6 Live-Enhancements: ATR-basierte TP/SL (ATR×2.5/ATR×1.5), Volume Confirmation via Taker Buy/Sell Ratio, HTF-Proxy ueber EMA 21/50, Trailing-Stop Metadata, Regime-basierte Positionsgroesse (0.5–1.0), RSI-Divergenz-Erkennung (+8/−10 Confidence)
+- **Sentiment Surfer** — 6 Scoring-Quellen exakt wie Live: News (0, nicht verfuegbar), FGI (kontaer, threshold_distance×3), VWAP (deviation×2000), Supertrend (+70/−70 via eigener Berechnung), Volume ((buy_ratio−0.5)×400), Momentum (price_change×20/×15). Gewichte: news=1.0, fg=1.0, vwap=1.2, supertrend=1.2, volume=0.8, momentum=0.8. Gate: 3/6 Uebereinstimmung UND Confidence ≥ 40
+- **Liquidation Hunter** — Von 11 Schritten auf 3 reduziert (Live-Logik): Leverage + Sentiment + Funding. Live-Schwellenwerte: crowded_longs=2.5, crowded_shorts=0.4, extreme_fear=20, extreme_greed=80, high_confidence_min=85, low_confidence_min=60
+
+#### Hinzugefuegt
+
+- **`_supertrend_direction()`** — Modul-Level Hilfsfunktion fuer Supertrend-Indikator-Berechnung (ATR-basiert mit Band-Tracking)
+- **`_detect_rsi_divergence()`** — Erkennung von bullischen/baerischen RSI-Divergenzen ueber konfigurierbares Lookback-Fenster
+- **`_build_score_series_backtest()`** — Baut Momentum-Score-Serie fuer EMA(3)-Smoothing (Predator Momentum Score: MACD Histogram + RSI Drift + Trend Bonus)
+- **`_get_min_confidence()`** — Per-Strategie Mindest-Confidence: Edge/Claude Edge/Sentiment = 40, Liquidation Hunter = 60
+- **`_signal_metadata`** — Neues Dict fuer strategie-spezifische TP/SL-Overrides und Positionsgroessen-Skalierung (genutzt von Claude Edge Indicator)
+- **Signal-Dispatcher** — Separates Routing fuer `claude_edge_indicator` (war vorher auf `edge_indicator` gemappt)
+- **24h-Preisaenderung aus Historie** — Sentiment Surfer berechnet echte 24h-Preisaenderung aus der Candle-Historie statt per-Candle `btc_24h_change` (korrektes Intraday-Verhalten)
+
+#### Behoben
+
+- Edge Indicator und Claude Edge Indicator lieferten identische Ergebnisse — Claude Edge hat jetzt eigenen Signal-Generator mit 6 zusaetzlichen Enhancements
+- Sentiment Surfer erzeugte 0 Trades auf Intraday-Timeframes — `btc_24h_change` war per-Candle (±0.3% bei 30m) statt echte 24h-Aenderung (±2–5%)
+- VWAP-Fenster war fuer Intraday zu klein (hardcoded 24 Candles) — jetzt dynamisch basierend auf `candles_24h`
+- Liquidation Hunter nutzte 11 Schritte die in der Live-Strategie nicht existieren — reduziert auf die 3 echten Live-Schritte
+
+### Bot-Lifecycle & Risk Notifications
+
+#### Hinzugefügt
+- **Bot-Start/Stop Notifications** via Discord & Telegram — beim Starten wird Name, Strategie und Modus gesendet, beim Stoppen eine Bestätigung
+- **Error Notifications** bei 5+ aufeinanderfolgenden Fehlern — einmalig beim Übergang in den Error-Status (kein Spam bei jedem Zyklus)
+- **Risk Alert Notifications** bei Trading-Halt durch Limit-Überschreitung — einmalig pro Halt-Grund pro Tag (global und per Symbol), Set wird täglich zurückgesetzt
+- **Tägliche Zusammenfassung (Daily Summary)** um 23:55 UTC — automatischer Cron-Job sendet Tagesstatistiken (Trades, PnL, Win-Rate, Fees, Funding, Max Drawdown) via Discord & Telegram
+- **Telegram `send_daily_summary()`** — neue HTML-formatierte Tagesübersicht mit Emoji-basiertem Layout
+- **Telegram `send_risk_alert()`** — neue Risiko-Warnung mit Alert-Typ, Nachricht und optionalen Schwellenwerten
+
+#### Behoben
+- **Discord Notification Crash** — `send_bot_status`, `send_error`, `send_daily_summary` akzeptieren jetzt `**kwargs` für cross-notifier Kompatibilität (vorher TypeError bei unbekannten Parametern)
+- **Telegram Status-Emoji** — case-insensitiver Vergleich (STARTED/STOPPED statt started/stopped)
+- **Stop-Notification Reihenfolge** — wird jetzt VOR dem Client-Shutdown gesendet statt danach
+- **Risk-Alert-Typ** — dynamisch `TRADE_LIMIT` vs. `DAILY_LOSS_LIMIT` je nach Halt-Grund (statt immer `DAILY_LOSS_LIMIT`)
+- **Bot-Name in Telegram Daily Summary** — zeigt jetzt an, welcher Bot die Zusammenfassung sendet
+
+### Alerts-Feature entfernt (verschoben auf späteres Release)
+
+#### Entfernt
+- **Gesamtes Alerts-System** temporär entfernt und als GitHub Issue für zukünftiges Feature angelegt
+  - Backend: AlertEngine, Alert-Router, Alert-Schemas, Alert/AlertHistory DB-Modelle
+  - Frontend: Alerts-Seite, Navigation, i18n-Keys, TypeScript-Typen
+  - Tests: Alle Alert-bezogenen Unit-Tests
+  - Orchestrator: AlertEngine-Integration und Bot-Alert-Trigger
+- DB-Tabellen `alerts` und `alert_history` bleiben bestehen (keine destruktive Migration)
+
+#### Behoben
+- **KI-Bot Icon** wird jetzt bei allen KI-Strategien angezeigt (`llm_signal` und `degen`), nicht nur bei `llm_signal`
+  - Betrifft: Bot-Karten, Bot-Detail, Bot-Builder, Bot-Performance
+- **Umlaute in Strategie-Beschreibungen** — "ue"/"oe"/"ae" durch echte Umlaute (ü/ö/ä) ersetzt in allen 6 Strategien und BotBuilder-Fallback-Texten
+
+#### Geändert
+- **Strategie-Parameter auf Deutsch übersetzt** — alle Labels und Beschreibungen in den 6 Strategien (Edge Indicator, Claude Edge Indicator, Degen, KI-Companion, Sentiment Surfer, Liquidation Hunter) sind jetzt deutschsprachig
+- **Kline Intervall Info-Hinweis** — bei Edge Indicator und Claude Edge Indicator wird im Kline-Intervall-Feld ein Tipp angezeigt, dass der Analyse-Takt (Zeitplan) nicht deutlich kürzer als das Kline Intervall sein sollte
+- **Parameter-Beschreibungen sichtbar** — Descriptions werden jetzt als Text unter den Feldern angezeigt (statt nur als unsichtbarer Hover-Tooltip)
+- **BotBuilder Fallback-Strings auf Deutsch** — alle englischen Fallback-Texte im BotBuilder durch deutsche ersetzt
+
+---
+
 ## [3.7.0] - 2026-02-20
 
 ### Advanced Alerting, Multi-Exchange Portfolio, Technical Fixes, Docs & Tests

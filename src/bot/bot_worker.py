@@ -91,6 +91,9 @@ class BotWorker(
         # Signal deduplication cache
         self._last_signal_keys: dict[str, datetime] = {}
 
+        # Risk alert deduplication (reset daily)
+        self._risk_alerts_sent: set[str] = set()
+
     def _get_client(self, demo_mode: bool) -> Optional[ExchangeClient]:
         """Return the exchange client for the given mode."""
         return self._demo_client if demo_mode else self._live_client
@@ -348,6 +351,15 @@ class BotWorker(
                 f"every {rotation_mins}min (anchor: {start_time} UTC)"
             )
 
+        # Daily summary at 23:55 UTC
+        self._scheduler.add_job(
+            self._send_daily_summary,
+            CronTrigger(hour=23, minute=55),
+            id=f"bot_{self.bot_config_id}_daily_summary",
+            name=f"Bot {self.bot_config_id} Daily Summary",
+            replace_existing=True,
+        )
+
     async def start(self):
         """Start the bot's strategy loop."""
         if self.status == "running":
@@ -364,9 +376,21 @@ class BotWorker(
 
         logger.info(f"[Bot:{self.bot_config_id}] Started: {self._config.name}")
 
+        await self._send_notification(lambda n: n.send_bot_status(
+            status="STARTED", message=f"{self._config.name} is now running",
+            bot_name=self._config.name,
+            stats={"Strategy": self._config.strategy_type, "Mode": self._config.mode},
+        ))
+
     async def stop(self):
         """Stop the bot gracefully."""
         logger.info(f"[Bot:{self.bot_config_id}] Stopping...")
+
+        # Send stop notification before tearing down resources
+        await self._send_notification(lambda n: n.send_bot_status(
+            status="STOPPED", message=f"{self._config.name} has been stopped",
+            bot_name=self._config.name,
+        ))
 
         # Remove this bot's jobs from the scheduler
         if self._scheduler:
@@ -417,6 +441,15 @@ class BotWorker(
                     f"[Bot:{self.bot_config_id}] Too many consecutive errors ({self._consecutive_errors}). "
                     f"Pausing for 60s before next attempt."
                 )
+                # Only notify once at the transition to error status
+                if self.status != "error":
+                    err_msg = f"5 consecutive errors: {str(e)[:300]}"
+                    bot_ctx = f"Bot: {self._config.name}"
+                    await self._send_notification(lambda n, m=err_msg, c=bot_ctx: n.send_error(
+                        error_type="CONSECUTIVE_ERRORS",
+                        error_message=m,
+                        details=c, context=c,
+                    ))
                 self.status = "error"
                 await asyncio.sleep(60)
                 # Verify scheduler is still alive — restart if crashed (only if we own it)
@@ -477,6 +510,15 @@ class BotWorker(
         can_trade, reason = self._risk_manager.can_trade()
         if not can_trade:
             logger.warning(f"{log_prefix} Cannot trade: {reason}")
+            reason_lower = reason.lower()
+            if "halted" in reason_lower or "limit" in reason_lower:
+                alert_key = f"global_{reason}"
+                if alert_key not in self._risk_alerts_sent:
+                    self._risk_alerts_sent.add(alert_key)
+                    alert_type = "TRADE_LIMIT" if "trade limit" in reason_lower else "DAILY_LOSS_LIMIT"
+                    await self._send_notification(lambda n, at=alert_type: n.send_risk_alert(
+                        alert_type=at, message=reason,
+                    ))
             return
 
         # Parse trading pairs
@@ -491,6 +533,16 @@ class BotWorker(
             can_trade_sym, sym_reason = self._risk_manager.can_trade(symbol)
             if not can_trade_sym:
                 logger.info(f"{log_prefix} Skipping {symbol}: {sym_reason}")
+                sym_reason_lower = sym_reason.lower()
+                if "halted" in sym_reason_lower or "limit" in sym_reason_lower:
+                    alert_key = f"{symbol}_{sym_reason}"
+                    if alert_key not in self._risk_alerts_sent:
+                        self._risk_alerts_sent.add(alert_key)
+                        sym_alert_type = "TRADE_LIMIT" if "trade limit" in sym_reason_lower else "DAILY_LOSS_LIMIT"
+                        msg = f"{symbol}: {sym_reason}"
+                        await self._send_notification(lambda n, at=sym_alert_type, m=msg: n.send_risk_alert(
+                            alert_type=at, message=m,
+                        ))
                 continue
 
             try:
@@ -569,6 +621,34 @@ class BotWorker(
             await self._execute_trade(signal, self._demo_client, demo_mode=True, asset_budget=asset_budget)
         if mode in ("live", "both") and self._live_client:
             await self._execute_trade(signal, self._live_client, demo_mode=False, asset_budget=asset_budget)
+
+    async def _send_daily_summary(self):
+        """Send daily trading summary at end of day and reset risk alerts."""
+        log_prefix = f"[Bot:{self.bot_config_id}]"
+        try:
+            stats = self._risk_manager.get_daily_stats()
+            if stats and stats.trades_executed > 0:
+                ending_balance = stats.starting_balance + stats.net_pnl
+
+                await self._send_notification(lambda n: n.send_daily_summary(
+                    date=stats.date,
+                    starting_balance=stats.starting_balance,
+                    ending_balance=ending_balance,
+                    total_trades=stats.trades_executed,
+                    winning_trades=stats.winning_trades,
+                    losing_trades=stats.losing_trades,
+                    total_pnl=stats.total_pnl,
+                    total_fees=stats.total_fees,
+                    total_funding=stats.total_funding,
+                    max_drawdown=stats.max_drawdown,
+                    bot_name=self._config.name,
+                ))
+                logger.info(f"{log_prefix} Daily summary sent")
+        except Exception as e:
+            logger.warning(f"{log_prefix} Failed to send daily summary: {e}")
+
+        # Reset risk alert deduplication for the new day
+        self._risk_alerts_sent.clear()
 
     def get_status_dict(self) -> dict:
         """Return status info for API responses."""

@@ -276,45 +276,62 @@ class HistoricalDataFetcher:
     async def fetch_klines_history(
         self, symbol: str = "BTCUSDT", interval: str = "1d", days: int = 180
     ) -> List[Dict]:
-        """Fetch OHLCV candlestick data from Binance Futures."""
+        """Fetch OHLCV candlestick data from Binance Futures with pagination."""
         cache_name = f"klines_{symbol}_{interval}_{days}d"
         cached = self._load_cache(cache_name)
         if cached:
             return cached
 
-        logger.info(f"Fetching price history for {symbol} ({days} days)...")
+        logger.info(f"Fetching {interval} price history for {symbol} ({days} days)...")
 
         url = f"{self.BINANCE_FUTURES_URL}/fapi/v1/klines"
 
-        end_time = int(datetime.now().timestamp() * 1000)
-        start_time = int((datetime.now() - timedelta(days=days)).timestamp() * 1000)
+        end_ms = int(datetime.now().timestamp() * 1000)
+        start_ms = int((datetime.now() - timedelta(days=days)).timestamp() * 1000)
 
-        params = {
-            "symbol": symbol,
-            "interval": interval,
-            "startTime": start_time,
-            "endTime": end_time,
-            "limit": 1000
-        }
+        all_candles = []
+        seen_ts = set()
+        current_start = start_ms
 
-        data = await self._get(url, params)
+        while current_start < end_ms:
+            params = {
+                "symbol": symbol,
+                "interval": interval,
+                "startTime": current_start,
+                "endTime": end_ms,
+                "limit": 1500
+            }
 
-        if not data:
-            return []
+            data = await self._get(url, params)
 
-        result = []
-        for candle in data:
-            result.append({
-                "timestamp": int(candle[0]) // 1000,
-                "open": float(candle[1]),
-                "high": float(candle[2]),
-                "low": float(candle[3]),
-                "close": float(candle[4]),
-                "volume": float(candle[5])
-            })
+            if not data:
+                break
 
-        self._save_cache(cache_name, result)
-        return result
+            for candle in data:
+                ts = int(candle[0]) // 1000
+                if ts not in seen_ts:
+                    seen_ts.add(ts)
+                    all_candles.append({
+                        "timestamp": ts,
+                        "open": float(candle[1]),
+                        "high": float(candle[2]),
+                        "low": float(candle[3]),
+                        "close": float(candle[4]),
+                        "volume": float(candle[5])
+                    })
+
+            if len(data) < 1500:
+                break
+
+            # Next page starts after the last candle
+            current_start = int(data[-1][0]) + 1
+            await asyncio.sleep(0.2)
+
+        if all_candles:
+            self._save_cache(cache_name, all_candles)
+            logger.info(f"Fetched {len(all_candles)} {interval} candles for {symbol}")
+
+        return all_candles
 
     async def fetch_coingecko_history(
         self, coin_id: str = "bitcoin", days: int = 180
@@ -361,21 +378,23 @@ class HistoricalDataFetcher:
         return result
 
     async def fetch_klines_with_fallback(
-        self, symbol: str = "BTCUSDT", days: int = 180
+        self, symbol: str = "BTCUSDT", days: int = 180, interval: str = "1d"
     ) -> List[Dict]:
         """Fetch price data with fallback to CoinGecko."""
-        data = await self.fetch_klines_history(symbol, "1d", days)
+        data = await self.fetch_klines_history(symbol, interval, days)
         if data:
-            logger.info(f"Got {len(data)} candles from Binance for {symbol}")
+            logger.info(f"Got {len(data)} {interval} candles from Binance for {symbol}")
             return data
 
-        coin_id = "bitcoin" if "BTC" in symbol else "ethereum"
-        data = await self.fetch_coingecko_history(coin_id, days)
-        if data:
-            logger.info(f"Got {len(data)} candles from CoinGecko for {coin_id}")
-            return data
+        # CoinGecko fallback only available for daily data
+        if interval == "1d":
+            coin_id = "bitcoin" if "BTC" in symbol else "ethereum"
+            data = await self.fetch_coingecko_history(coin_id, days)
+            if data:
+                logger.info(f"Got {len(data)} candles from CoinGecko for {coin_id}")
+                return data
 
-        logger.warning(f"All price sources failed for {symbol}")
+        logger.warning(f"All price sources failed for {symbol} ({interval})")
         return []
 
     async def fetch_long_short_history(
@@ -834,23 +853,28 @@ class HistoricalDataFetcher:
     #  COMBINED DATA FETCH                                                #
     # ------------------------------------------------------------------ #
 
-    async def fetch_all_historical_data(self, days: int = 180) -> List[HistoricalDataPoint]:
+    async def fetch_all_historical_data(self, days: int = 180, interval: str = "1d") -> List[HistoricalDataPoint]:
         """
         Fetch all historical data and combine into data points.
+
+        Args:
+            days: Number of days of history to fetch
+            interval: Candle interval (1m, 5m, 15m, 30m, 1h, 4h, 1d)
 
         Returns:
             List of combined historical data points with all available fields
         """
-        logger.info(f"Fetching all historical data for {days} days...")
+        logger.info(f"Fetching all historical data for {days} days, interval={interval}...")
         self._data_sources = []
 
         # Phase 1: Core data (Binance + Alternative.me)
+        # Klines use the requested interval; all other sources remain daily
         core_results = await asyncio.gather(
             self.fetch_fear_greed_history(days),
             self.fetch_funding_rate_history("BTCUSDT", days),
             self.fetch_funding_rate_history("ETHUSDT", days),
-            self.fetch_klines_with_fallback("BTCUSDT", days),
-            self.fetch_klines_with_fallback("ETHUSDT", days),
+            self.fetch_klines_with_fallback("BTCUSDT", days, interval),
+            self.fetch_klines_with_fallback("ETHUSDT", days, interval),
             self.fetch_long_short_history("BTCUSDT", days),
             return_exceptions=True
         )
@@ -926,8 +950,13 @@ class HistoricalDataFetcher:
             f"Hash:{len(btc_hashrate)} DXY:{len(fred_dxy)} FFR:{len(fred_ffr)}"
         )
 
-        # Calculate volatility from BTC klines
-        volatility_map = self.calculate_volatility(klines_btc) if klines_btc else {}
+        # Calculate volatility from daily klines (not intraday)
+        if interval != "1d" and klines_btc:
+            # Fetch separate daily klines for volatility calculation
+            daily_klines_btc = await self.fetch_klines_history("BTCUSDT", "1d", days)
+            volatility_map = self.calculate_volatility(daily_klines_btc) if daily_klines_btc else {}
+        else:
+            volatility_map = self.calculate_volatility(klines_btc) if klines_btc else {}
 
         # Build lookup dictionaries by date
         def to_date_key(ts: int) -> str:
@@ -946,7 +975,8 @@ class HistoricalDataFetcher:
             dk = to_date_key(item["timestamp"])
             funding_eth_by_date.setdefault(dk, []).append(item["rate"])
 
-        klines_btc_by_date = {to_date_key(item["timestamp"]): item for item in klines_btc}
+        # ETH klines: exact timestamp match for intraday, date fallback for CoinGecko
+        klines_eth_by_ts = {item["timestamp"]: item for item in klines_eth}
         klines_eth_by_date = {to_date_key(item["timestamp"]): item for item in klines_eth}
         ls_by_date = {to_date_key(item["timestamp"]): item for item in long_short}
 
@@ -1011,14 +1041,17 @@ class HistoricalDataFetcher:
         data_points = []
 
         for kline in klines_btc:
-            date_key = to_date_key(kline["timestamp"])
-            timestamp = datetime.fromtimestamp(kline["timestamp"])
+            ts = kline["timestamp"]
+            date_key = to_date_key(ts)
+            timestamp = datetime.fromtimestamp(ts)
 
-            # Core data
+            # Core data — daily sources use date_key (forward-fill for intraday)
             fg = fg_by_date.get(date_key, {"value": 50, "classification": "Neutral"})
             btc_funding_rates = funding_btc_by_date.get(date_key, [0])
             eth_funding_rates = funding_eth_by_date.get(date_key, [0])
-            eth_kline = klines_eth_by_date.get(date_key, {"close": 0, "high": 0, "low": 0, "open": 0})
+            # ETH klines: exact timestamp match first, date fallback for CoinGecko
+            eth_default = {"close": 0, "high": 0, "low": 0, "open": 0}
+            eth_kline = klines_eth_by_ts.get(ts) or klines_eth_by_date.get(date_key, eth_default)
             ls = ls_by_date.get(date_key, {"ratio": 1.0})
 
             btc_change = ((kline["close"] - kline["open"]) / kline["open"] * 100) if kline["open"] > 0 else 0
