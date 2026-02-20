@@ -50,9 +50,9 @@ Be decisive. Always pick either LONG or SHORT."""
 class LLMSignalStrategy(BaseStrategy):
     """Strategy that uses an LLM provider for signal generation."""
 
-    def __init__(self, params: Optional[Dict[str, Any]] = None):
+    def __init__(self, params: Optional[Dict[str, Any]] = None, data_fetcher: Optional[MarketDataFetcher] = None):
         super().__init__(params)
-        self.data_fetcher: Optional[MarketDataFetcher] = None
+        self.data_fetcher: Optional[MarketDataFetcher] = data_fetcher
 
         # Extract LLM-specific params
         self.llm_provider_name = self.params.get("llm_provider", "groq")

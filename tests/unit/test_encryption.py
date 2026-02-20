@@ -74,23 +74,15 @@ class TestGetOrCreateKey:
                 with pytest.raises(RuntimeError, match="FATAL"):
                     enc_module._get_or_create_key()
 
-    def test_dev_auto_generates_key_with_existing_env(self, tmp_path):
-        env_file = tmp_path / ".env"
-        env_file.write_text("SOME_VAR=value\n")
-
+    def test_dev_auto_generates_key_with_existing_env(self):
+        """In dev mode without ENCRYPTION_KEY, an ephemeral key is auto-generated in memory."""
         env = os.environ.copy()
         env.pop("ENCRYPTION_KEY", None)
         env["ENVIRONMENT"] = "development"
 
         with patch.dict(os.environ, env, clear=True):
-            with patch("src.utils.encryption.Path") as MockPath:
-                mock_env = MagicMock()
-                mock_env.exists.return_value = True
-                mock_open = MagicMock()
-                mock_env.open = mock_open
-                MockPath.return_value = mock_env
-                with patch("builtins.open", MagicMock()):
-                    result = enc_module._get_or_create_key()
+            result = enc_module._get_or_create_key()
+
         assert len(result) > 0
         assert os.environ.get("ENCRYPTION_KEY") is not None
 

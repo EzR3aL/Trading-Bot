@@ -774,7 +774,11 @@
     "celebrationMessage": "Deine Strategie zeigt exzellente Performance-Kennzahlen. Prüfe die Ergebnisse sorgfältig, bevor du echtes Kapital einsetzt.",
     "celebrationClose": "Verstanden",
     "dataSources": "Datenquellen",
-    "activeApis": "aktive APIs"
+    "activeApis": "aktive APIs",
+    "dateLimitInfo": "Max. {{maxDays}} Tage fuer {{timeframe}} | Daten ab 01.01.2020 verfuegbar",
+    "dateLimitExceeded": "Zeitraum zu lang: max. {{maxDays}} Tage fuer {{timeframe}} (gewaehlt: {{actualDays}} Tage)",
+    "dateBeforeEarliest": "Startdatum muss nach dem 01.01.2020 liegen",
+    "dateFuture": "Enddatum darf nicht in der Zukunft liegen"
   },
   "tour": {
     "skip": "Überspringen",

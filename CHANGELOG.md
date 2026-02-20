@@ -9,6 +9,179 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.12.0] - 2026-02-20
+
+### Freie Datumswahl im Backtesting (Option A)
+
+**Problem geloest:** Der Backtest-Fetcher holte historische Daten immer ab "heute rueckwaerts". Nutzer konnten keine beliebigen historischen Zeitraeume (z.B. Jan 2024 bis Maerz 2024) testen — es wurden immer die letzten N Tage verwendet.
+
+**Loesung:** Komplette Date-Range-Unterstuetzung durch den gesamten Stack: Frontend → API → Strategy-Adapter → HistoricalDataFetcher.
+
+#### Hinzugefuegt
+- **`HistoricalDataFetcher.set_date_range(start_date, end_date)`** — Setzt den Datumbereich fuer alle Sub-Fetcher (Binance, CoinGecko, Alternative.me, etc.)
+- **`_get_time_range_ms(days)`** — Helper der start_ms/end_ms aus Datumbereich oder Fallback (now-days) berechnet
+- **`_cache_suffix()`** — Cache-Keys enthalten jetzt den Datumbereich, damit verschiedene Perioden unabhaengig gecacht werden
+- **`GET /api/backtest/date-limits`** — Neuer API-Endpoint der Timeframe-spezifische Limits zurueckgibt
+- **Timeframe-spezifische Validierung** im Backend:
+  - 1m: max. 7 Tage
+  - 5m: max. 30 Tage
+  - 15m: max. 90 Tage
+  - 30m: max. 180 Tage
+  - 1h/4h/1d: max. 365 Tage
+  - Fruehestes Datum: 01.01.2020 (Binance Futures Start)
+  - Kein Enddatum in der Zukunft
+- **DatePicker min/max Constraints** — Deaktiviert Tage ausserhalb des erlaubten Bereichs
+- **Frontend-Validierung** — Zeigt Timeframe-Limit-Info und Fehlermeldungen in Echtzeit
+- **i18n-Keys** fuer de.json und en.json (dateLimitInfo, dateLimitExceeded, dateBeforeEarliest, dateFuture)
+- **13 neue Tests** (`tests/backtest/test_date_range.py`) — Date-Range-Helpers, API-Validierung, Adapter-Propagation, Integration
+
+#### Geaendert
+- `HistoricalDataFetcher.__init__()` speichert `_start_ms` und `_end_ms` Attribute
+- Alle 11 Sub-Fetcher verwenden `_get_time_range_ms()` statt `datetime.now() - timedelta(days)`
+- `strategy_adapter.run_backtest_for_strategy()` berechnet `fetch_start` (mit Warmup-Buffer) und `fetch_end`, uebergibt sie an den Fetcher
+- `BacktestRunRequest` API-Validation prueft Datumgrenzen und Timeframe-Limits
+- Cache-Keys aller Sub-Fetcher enthalten optionalen Datums-Suffix fuer Range-Caching
+
+#### Timeframe-Limit-Matrix
+| Timeframe | Max. Tage | Candles (30d) | Grund |
+|---|---|---|---|
+| 1m | 7 | 10.080 | Extrem viele Datenpunkte |
+| 5m | 30 | 8.640 | Viele Datenpunkte, API-Pagination |
+| 15m | 90 | 8.640 | Moderate Datenmenge |
+| 30m | 180 | 8.640 | Moderate Datenmenge |
+| 1h | 365 | 8.760 | Gute Balance |
+| 4h | 365 | 2.190 | Wenig Datenpunkte |
+| 1d | 365 | 365 | Minimale Datenmenge |
+
+---
+
+## [3.11.0] - 2026-02-20
+
+### ExecutionSimulator — Realistische Handelskosten im Backtest
+
+**Problem geloest:** Das Backtest-Kostenmodell verwendete fest kodierte Werte (Slippage 0.03%, Fees 0.04%×2, Funding 1/3-Wahrscheinlichkeit), die erheblich von den tatsaechlichen Live-Trading-Kosten abwichen. Insbesondere wurden Funding-Kosten bei Mehrtages-Positionen um Faktor 9× unterschaetzt.
+
+**Loesung:** Neuer `ExecutionSimulator` der die Exchange-Ausfuehrungsschicht 1:1 nachbildet.
+
+#### Hinzugefuegt
+- **`ExecutionSimulator`** (`src/backtest/execution_simulator.py`) — Professionelles Kostenmodell:
+  - **Volatilitaets-basierte Slippage**: `slip = base + factor × (high-low)/close` statt fester 0.03%. Ruhiger Markt (0.2% Range) = 0.02% Slippage, volatiler Markt (3% Range) = 0.16%.
+  - **Exchange-spezifische Fees**: Bitget Taker 0.06%, Hyperliquid 0.035%, Binance 0.04% — statt pauschaler 0.04%. Unterstuetzt VIP-Tiers und Hyperliquid Builder-Fee.
+  - **Exakte 8h-Funding-Windows**: Zaehlt praezise wie viele 00:00/08:00/16:00 UTC-Grenzen eine Position kreuzt. Ersetzt die alte Heuristik (Intraday: rate×0.33, Multi-Day: rate×1) die Funding massiv unterschaetzte.
+- **`entry_timestamp` und `entry_candle_range`** in `BacktestTrade` — Speichert Einstiegszeitpunkt und Candle-Volatilitaet fuer praezise Kostenberechnung beim Schliessen.
+- **`_close_trade_simulated()`** in `BacktestEngine` — Schliesst Trades ueber den ExecutionSimulator. Automatisch aktiviert im Unified Mode, Legacy Mode bleibt unveraendert.
+- **Exchange-Parameter** (`exchange`, `fee_tier`) in Strategy-Adapter — Konfigurierbar ueber `strategy_params`.
+- **48 neue Tests** (`tests/backtest/test_execution_simulator.py`) — Slippage-Modell, Fee-Modell, Funding-Windows, Complete PnL, Old-vs-New-Vergleich.
+
+#### Geaendert
+- `BacktestEngine._close_trade()` prueft auf vorhandenen ExecutionSimulator und delegiert automatisch.
+- `BacktestEngine.run_unified()` speichert Entry-Timestamp und Entry-Candle-Range auf jedem Trade, uebergibt Exit-Candle beim Schliessen.
+- `strategy_adapter._run_unified_backtest()` erstellt automatisch einen ExecutionSimulator (Standard: Bitget).
+
+#### Kostenvergleich Alt vs. Neu
+| Kosten | Alt (fest) | Neu (ExecutionSimulator) |
+|---|---|---|
+| Slippage | 0.03% pauschal | 0.02%-0.16% je nach Volatilitaet |
+| Fees (Bitget) | 0.08% RT | 0.12% RT (realer Taker-Satz) |
+| Fees (Hyperliquid) | 0.08% RT | 0.07% RT |
+| Funding (3-Tage-Hold) | rate × 1.0 | rate × 9.0 (9 Windows) |
+| Funding (Intraday) | rate × 0.33 | rate × 0 oder 1 (exakt) |
+
+---
+
+## [3.10.0] - 2026-02-20
+
+### Unified Backtest Architecture — Live Strategy Code wiederverwenden
+
+**Problem geloest:** Bisher war jede Strategie DOPPELT implementiert — einmal fuer Live-Trading und einmal als Kopie im Backtest-Engine. Das fuehrte zu 5-50% Abweichung zwischen Backtest- und Live-Ergebnissen.
+
+**Loesung:** Dependency Injection. Der Backtest ruft jetzt den **exakt gleichen** Strategy-Code auf wie das Live-Trading, nur mit historischen Daten statt API-Calls.
+
+#### Hinzugefuegt
+- **`BacktestMarketDataFetcher`** (`src/backtest/backtest_data_provider.py`) — Drop-in Replacement fuer `MarketDataFetcher`, das historische Daten im Binance-API-Format zurueckgibt. Erbt alle statischen Indicator-Methoden (EMA, RSI, ADX, etc.).
+- **`BacktestEngine.run_unified()`** — Neue async Methode, die Live-Strategy-Code mit Mock-Daten ausfuehrt. Gleiche Position-Management-Logik wie `run()` (TP/SL, Fees, Slippage, Daily Limits, Next-Candle-Open Entry).
+- **Unified Mode im Strategy Adapter** — Nicht-LLM-Strategien (EdgeIndicator, ClaudeEdgeIndicator, SentimentSurfer, LiquidationHunter) nutzen automatisch den Unified Mode. LLM-Strategien (Degen, LLMSignal) fallen auf den Legacy Mode zurueck.
+- **Timeframe-Synchronisation** — `kline_interval` wird automatisch auf das Backtest-Timeframe gesetzt, damit Strategien Klines im korrekten Interval anfordern.
+- **`data_fetcher` Parameter** fuer Degen und LLMSignal Strategien (Vorbereitung fuer zukuenftigen Unified-Support).
+- **Umfangreiche Tests** (`tests/backtest/test_unified_backtest.py`) — Kline-Format, MarketMetrics, alle Timeframes, Legacy-Fallback, Constructor-Kompatibilitaet.
+
+#### Erwartete Genauigkeitsverbesserung
+| Strategie | Vorher (Kopie) | Nachher (Unified) |
+|---|---|---|
+| EdgeIndicator | ~95% | ~99% |
+| ClaudeEdgeIndicator | ~85% | ~97% |
+| SentimentSurfer | ~70% | ~95% |
+| LiquidationHunter | ~90% | ~99% |
+| Degen / LLMSignal | ~60% | ~60% (Legacy, LLM nicht wiederholbar) |
+
+#### Behoben (Tests)
+- **BacktestConfig `trading_fee_percent`** — Test erwartete 0.06 statt dem aktuellen Wert 0.04 (seit v3.9.0)
+- **`btc_open`/`eth_open` in Tests** — Fehlende Pflichtfelder in `test_backtest_data.py`, `test_historical_data_extra.py`, `test_remaining_coverage.py` und `test_backtest_engine.py` ergaenzt
+- **`_generate_signal()` Signatur** — `history` Parameter in Mock-Funktionen ergaenzt
+- **Obsolete Strategie-Referenz** — `"contrarian"` durch `"liquidation_hunter"` ersetzt (6 Stellen)
+- **Funding Rate Pagination Test** — Page-Size auf 1000 gesetzt damit Pagination ausgeloest wird
+- **`_get()` Timeout-Test** — `aiohttp.ClientTimeout(total=30)` statt `timeout=30`
+- **Encryption Test** — An aktuelle `_get_or_create_key()` Logik angepasst (kein `.env` File mehr, ephemerer Key)
+- **Signal Reason Test** — An aktuelle Liquidation-Hunter 3-Schritt-Logik angepasst (Leverage + Sentiment statt OI + TopTraders)
+
+#### Unveraendert
+- `BacktestEngine.run()` bleibt vollstaendig erhalten (Legacy Mode)
+- Alle `_signal_*()` Methoden in `engine.py` bleiben bestehen
+- `KlineBacktestEngine` bleibt unveraendert
+- Position Management (TP/SL, Fees, Slippage, Funding) bleibt identisch
+- Frontend und API-Endpoints bleiben unveraendert
+
+---
+
+## [3.9.1] - 2026-02-20
+
+### Backtest: Look-Ahead Bias eliminiert & Open-Price-Realismus
+
+#### Behoben (Critical)
+- **Look-Ahead Bias im Entry** — Backtest nutzte den Close-Preis des Signal-Candles als Entry-Preis. In der Realitaet kann man erst zum Open des NAECHSTEN Candles einsteigen. Jetzt: `next_candle.btc_open` statt `current_candle.btc_price`.
+- **Funding Rate zu hoch bei Intraday-Trades** — Volle Daily-Funding-Rate auch fuer Trades die < 8h offen waren. Jetzt skaliert: Intraday = 33% der Funding-Rate (1/3 Chance eine Funding-Periode zu kreuzen), Multi-Day = 100%.
+- **Mock-Daten ohne Open-Preis** — `btc_open`/`eth_open` fehlten in Mock-Daten. OHLC-Kontinuitaet: `next_candle.open == prev_candle.close` verifiziert.
+- **Mock-Daten OHLC unrealistisch** — High/Low wurden nur vom Close abgeleitet. Jetzt: High = max(Open, Close) + Volatility, Low = min(Open, Close) - Volatility.
+
+#### Hinzugefuegt
+- `btc_open`/`eth_open` Felder in `HistoricalDataPoint` und Mock-Daten-Generator
+- Open-Price Kontinuitaetstest fuer alle Timeframes (1d, 4h, 1h, 30m)
+
+---
+
+## [3.9.0] - 2026-02-20
+
+### Backtest-Realismus: Produktions-reife Handels-Simulation
+
+#### Behoben (Critical)
+- **Funding Rate nie geladen** — Binance Funding Rate API wurde ohne `startTime` aufgerufen, lieferte Daten ab 2019 die alle rausgefiltert wurden. Funding-Kosten waren IMMER $0.00. Jetzt Forward-Pagination von `startTime`, 90+ Datenpunkte (3x/Tag).
+- **Sentiment Surfer 0 Trades** — VWAP-Berechnung erforderte min. 7 Candles/24h, aber 4h-Candles liefern nur 6. News-Quelle (nicht verfuegbar im Backtest) wurde trotzdem im Agreement-Gate gezaehlt (3/6 statt 2/5). Beides gefixt.
+- **Metrics inkonsistent mit Trade-Liste** — Metrics kamen vom gesamten Engine-Lauf inkl. Warmup-Trades. Jetzt Neuberechnung aus gefilterten Trades: PnL, Win Rate, Drawdown, Equity Curve, Sharpe Ratio.
+- **Profit Factor bei 0 Trades** — Zeigte 999.99 statt 0.0 an.
+
+#### Hinzugefuegt (Realismus)
+- **Slippage-Modell** — 0.03% pro Seite (Entry + Exit), realistisch fuer BTC/ETH Futures. Macht Backtest konservativer.
+- **TP/SL Same-Candle: Konservativ** — Wenn TP und SL im selben Candle getroffen werden, wird SL angenommen (Worst Case statt Best Case).
+- **Binance-realistische Fees** — 0.04% Taker (vorher 0.06%) entspricht Binance Futures VIP0.
+
+#### Geaendert
+- **Equity Curve** — Startet jetzt mit User-Startkapital, nicht Engine-internem Kapital
+- **Max Drawdown** — Wird nur aus gefilterten Trades berechnet
+- **Funding Rate** — Jetzt als eigene Datenquelle (10 statt 9 Sources)
+
+#### Verifizierte Strategien
+Alle 6 Strategien generieren realistisch Trades mit Fees, Funding und Slippage:
+| Strategie | Trades | Win Rate | Funding |
+|---|---|---|---|
+| Claude Edge Indicator | 15 | 53% | realistische Kosten |
+| Edge Indicator | 35 | 37% | realistische Kosten |
+| Sentiment Surfer | 7 | 43% | realistische Kosten |
+| Liquidation Hunter | 33 | 36% | realistische Kosten |
+| Degen | 7 | 14% | realistische Kosten |
+| LLM Signal | 4 | 25% | realistische Kosten |
+
+---
+
 ## [3.8.5] - 2026-02-20
 
 ### Code Quality & Type Safety (Review — Runde 5)

@@ -233,6 +233,10 @@ def generate_mock_historical_data(days: int = 180, seed: int = 42, interval: str
             }
 
         # Per-candle price movement (scaled for interval)
+        # Open = previous close (realistic OHLC)
+        btc_open = btc_price
+        eth_open = eth_price
+
         btc_change = random.uniform(-2, 3) * change_scale if cpd > 1 else daily_vals["daily_btc_change"]
         btc_price *= (1 + btc_change / 100)
         eth_change = btc_change * random.uniform(0.8, 1.3)
@@ -240,12 +244,12 @@ def generate_mock_historical_data(days: int = 180, seed: int = 42, interval: str
 
         # OHLC
         btc_volatility = abs(btc_change) * 0.5 + random.uniform(0.5, 2) * change_scale
-        btc_high = btc_price * (1 + btc_volatility / 100)
-        btc_low = btc_price * (1 - btc_volatility / 100)
+        btc_high = max(btc_open, btc_price) * (1 + btc_volatility / 200)
+        btc_low = min(btc_open, btc_price) * (1 - btc_volatility / 200)
 
         eth_volatility = btc_volatility * 1.2
-        eth_high = eth_price * (1 + eth_volatility / 100)
-        eth_low = eth_price * (1 - eth_volatility / 100)
+        eth_high = max(eth_open, eth_price) * (1 + eth_volatility / 200)
+        eth_low = min(eth_open, eth_price) * (1 - eth_volatility / 200)
 
         btc_volume = btc_price * random.uniform(50000, 200000) / cpd
         eth_volume = eth_price * random.uniform(30000, 120000) / cpd
@@ -260,6 +264,8 @@ def generate_mock_historical_data(days: int = 180, seed: int = 42, interval: str
             funding_rate_eth=round(daily_vals["funding_eth"], 6),
             btc_price=round(btc_price, 2),
             eth_price=round(eth_price, 2),
+            btc_open=round(btc_open, 2),
+            eth_open=round(eth_open, 2),
             btc_high=round(btc_high, 2),
             btc_low=round(btc_low, 2),
             eth_high=round(eth_high, 2),

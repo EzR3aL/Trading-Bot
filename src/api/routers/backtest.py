@@ -1,7 +1,7 @@
 """Backtest API endpoints."""
 
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request
 from sqlalchemy import func, select
@@ -29,12 +29,38 @@ router = APIRouter(prefix="/api/backtest", tags=["backtest"])
 
 MAX_CONCURRENT_BACKTESTS = 3
 
+# Timeframe-specific maximum backtest duration (in days)
+# Smaller candles = more data points = stricter limit
+TIMEFRAME_MAX_DAYS = {
+    "1m": 7,
+    "5m": 30,
+    "15m": 90,
+    "30m": 180,
+    "1h": 365,
+    "4h": 365,
+    "1d": 365,
+}
+
+# Earliest date for backtesting (Binance Futures launched Sep 2019)
+EARLIEST_DATE = datetime(2020, 1, 1)
+
 
 @router.get("/strategies")
 async def list_strategies(user: User = Depends(get_current_user)):
     """List all available strategies for backtesting."""
     strategies = StrategyRegistry.list_available()
     return {"strategies": strategies}
+
+
+@router.get("/date-limits")
+async def get_date_limits(user: User = Depends(get_current_user)):
+    """Return timeframe-specific date limits for the frontend."""
+    today = datetime.now().strftime("%Y-%m-%d")
+    return {
+        "timeframe_max_days": TIMEFRAME_MAX_DAYS,
+        "earliest_date": EARLIEST_DATE.strftime("%Y-%m-%d"),
+        "latest_date": today,
+    }
 
 
 @router.post("/run")
@@ -75,6 +101,26 @@ async def start_backtest(
 
     if end_dt <= start_dt:
         raise HTTPException(status_code=400, detail="end_date must be after start_date")
+
+    # Date range validation
+    today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+    if end_dt > today + timedelta(days=1):
+        raise HTTPException(status_code=400, detail="end_date cannot be in the future")
+
+    if start_dt < EARLIEST_DATE:
+        raise HTTPException(
+            status_code=400,
+            detail=f"start_date cannot be before {EARLIEST_DATE.strftime('%Y-%m-%d')} (Binance Futures data start)",
+        )
+
+    # Timeframe-specific maximum duration
+    max_days = TIMEFRAME_MAX_DAYS.get(body.timeframe, 365)
+    actual_days = (end_dt - start_dt).days
+    if actual_days > max_days:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Maximum {max_days} days for {body.timeframe} timeframe (requested {actual_days} days)",
+        )
 
     # Create DB record
     run = BacktestRun(

@@ -37,6 +37,13 @@ const TIMEFRAMES = [
   { value: '1d', label: '1D' },
 ]
 
+// Fallback date limits (overridden by API response)
+const DEFAULT_TIMEFRAME_MAX_DAYS: Record<string, number> = {
+  '1m': 7, '5m': 30, '15m': 90, '30m': 180,
+  '1h': 365, '4h': 365, '1d': 365,
+}
+const EARLIEST_DATE = '2020-01-01'
+
 function strategyLabel(type: string): string {
   return STRATEGY_DISPLAY[type] || type.replace(/_/g, ' ')
 }
@@ -61,6 +68,8 @@ export default function Backtest() {
   const [initialCapital, setInitialCapital] = useState(10000)
   const [customPrompt, setCustomPrompt] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  const [timeframeMaxDays, setTimeframeMaxDays] = useState<Record<string, number>>(DEFAULT_TIMEFRAME_MAX_DAYS)
+  const [dateError, setDateError] = useState('')
 
   // Results state
   const [activeRun, setActiveRun] = useState<BacktestRun | null>(null)
@@ -70,12 +79,17 @@ export default function Backtest() {
   const pollRef = useRef<ReturnType<typeof setInterval>>()
   const celebratedRunsRef = useRef<Set<number>>(new Set())
 
-  // Fetch strategies on mount
+  // Fetch strategies and date limits on mount
   useEffect(() => {
     api.get('/backtest/strategies').then(res => {
       setStrategies(res.data.strategies || [])
       if (res.data.strategies?.length > 0 && !strategyType) {
         setStrategyType(res.data.strategies[0].name)
+      }
+    }).catch(() => {})
+    api.get('/backtest/date-limits').then(res => {
+      if (res.data.timeframe_max_days) {
+        setTimeframeMaxDays(res.data.timeframe_max_days)
       }
     }).catch(() => {})
   }, [])
@@ -132,8 +146,31 @@ export default function Backtest() {
     }
   }, [activeRun?.id, activeRun?.status, activeRun?.metrics])
 
+  // Validate dates when they change
+  const maxDays = timeframeMaxDays[timeframe] || 365
+  const todayStr = new Date().toISOString().slice(0, 10)
+
+  useEffect(() => {
+    if (!startDate || !endDate) { setDateError(''); return }
+    const start = new Date(startDate + 'T00:00:00')
+    const end = new Date(endDate + 'T00:00:00')
+    const diffDays = Math.round((end.getTime() - start.getTime()) / (86400 * 1000))
+
+    if (startDate < EARLIEST_DATE) {
+      setDateError(t('backtest.dateBeforeEarliest'))
+    } else if (endDate > todayStr) {
+      setDateError(t('backtest.dateFuture'))
+    } else if (diffDays <= 0) {
+      setDateError(t('backtest.dateLimitExceeded', { maxDays, timeframe, actualDays: diffDays }))
+    } else if (diffDays > maxDays) {
+      setDateError(t('backtest.dateLimitExceeded', { maxDays, timeframe, actualDays: diffDays }))
+    } else {
+      setDateError('')
+    }
+  }, [startDate, endDate, timeframe, maxDays, t, todayStr])
+
   const handleSubmit = async () => {
-    if (!strategyType || !startDate || !endDate) return
+    if (!strategyType || !startDate || !endDate || dateError) return
     setSubmitting(true)
     try {
       const params: Record<string, any> = {}
@@ -245,6 +282,8 @@ export default function Backtest() {
                 onChange={setStartDate}
                 label={t('backtest.startDate')}
                 placeholder={t('backtest.startDate')}
+                minDate={EARLIEST_DATE}
+                maxDate={todayStr}
               />
               <span className="text-gray-500 text-sm">&ndash;</span>
               <DatePicker
@@ -252,9 +291,19 @@ export default function Backtest() {
                 onChange={setEndDate}
                 label={t('backtest.endDate')}
                 placeholder={t('backtest.endDate')}
+                minDate={startDate || EARLIEST_DATE}
+                maxDate={todayStr}
               />
             </div>
-            <p className="text-[11px] text-gray-500 mt-1">{t('backtest.periodDesc')}</p>
+            <div className="flex items-center gap-2 mt-1.5">
+              <Info size={12} className="text-gray-500 shrink-0" />
+              <p className="text-[11px] text-gray-500">
+                {t('backtest.dateLimitInfo', { maxDays, timeframe })}
+              </p>
+            </div>
+            {dateError && (
+              <p className="text-[11px] text-red-400 mt-1">{dateError}</p>
+            )}
           </div>
 
           {/* Initial Capital */}
@@ -295,7 +344,7 @@ export default function Backtest() {
         <div className="mt-6">
           <button
             onClick={handleSubmit}
-            disabled={submitting || isRunning || !strategyType || !startDate || !endDate}
+            disabled={submitting || isRunning || !strategyType || !startDate || !endDate || !!dateError}
             className="btn-gradient px-6 py-2.5 rounded-lg flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
           >
             {submitting || isRunning ? (

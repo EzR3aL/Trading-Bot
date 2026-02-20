@@ -49,6 +49,9 @@ DEFAULTS = {
     "low_confidence_min": 60,
     "take_profit_percent": 4.0,
     "stop_loss_percent": 1.5,
+    # Data
+    "kline_interval": "1h",
+    "kline_count": 200,
 }
 
 

@@ -57,6 +57,9 @@ DEFAULTS = {
     # Risk
     "take_profit_percent": 3.5,
     "stop_loss_percent": 1.5,
+    # Data
+    "kline_interval": "1h",
+    "kline_count": 200,
 }
 
 
@@ -248,12 +251,14 @@ class SentimentSurferStrategy(BaseStrategy):
         logger.info(f"=== SentimentSurfer: Generating Signal for {symbol} ===")
 
         period = self._p["vwap_period_hours"]
+        interval = self._p["kline_interval"]
+        kline_count = self._p["kline_count"]
 
         # Fetch all data in parallel
         results = await asyncio.gather(
             self.data_fetcher.fetch_all_metrics(require_reliable=False),
             self.data_fetcher.get_news_sentiment(lookback_hours=self._p["news_lookback_hours"]),
-            self.data_fetcher.get_binance_klines(symbol, "1h", max(period, 24)),
+            self.data_fetcher.get_binance_klines(symbol, interval, max(period, kline_count)),
             return_exceptions=True,
         )
 

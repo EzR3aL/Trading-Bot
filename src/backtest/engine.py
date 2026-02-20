@@ -292,6 +292,10 @@ class BacktestTrade:
     take_profit_price: float = 0.0
     stop_loss_price: float = 0.0
 
+    # ExecutionSimulator fields (populated in unified mode)
+    entry_timestamp: Optional[datetime] = None
+    entry_candle_range: float = 0.0  # (high-low)/close of entry candle
+
     def to_dict(self) -> Dict:
         """Convert to dictionary."""
         return {
@@ -343,7 +347,8 @@ class BacktestConfig:
     max_trades_per_day: int = 3
     daily_loss_limit_percent: float = 5.0
     position_size_percent: float = 10.0
-    trading_fee_percent: float = 0.06
+    trading_fee_percent: float = 0.04
+    slippage_percent: float = 0.03  # 0.03% per trade (entry + exit)
 
     # Strategy thresholds
     fear_greed_extreme_fear: int = 25
@@ -375,6 +380,7 @@ class BacktestEngine:
         self.strategy_type = strategy_type
         self.symbol = symbol
         self._signal_metadata: Dict[str, Any] = {}
+        self.execution_simulator = None  # Set by strategy_adapter for unified mode
         self.reset()
 
     def reset(self):
@@ -734,8 +740,8 @@ class BacktestEngine:
 
         all_scores = []  # (score, reason, weight_key)
 
-        # Source 1: News Sentiment (GDELT) — not available in backtest
-        all_scores.append((0.0, "News N/A (backtest)", "news"))
+        # Source 1: News Sentiment (GDELT) — not available in backtest (excluded from agreement count)
+        news_unavailable = True
 
         # Source 2: Fear & Greed (contrarian) — matches live _score_fear_greed
         fg = data.fear_greed_index
@@ -752,7 +758,7 @@ class BacktestEngine:
 
         # Source 3: VWAP — matches live _score_vwap
         vwap_window = min(candles_24h, len(hist))
-        if vwap_window >= 7:
+        if vwap_window >= 3:
             vwap_closes = [h.btc_price if symbol == "BTC" else h.eth_price for h in hist[-vwap_window:]]
             vwap_volumes = [
                 h.btc_volume if symbol == "BTC" else getattr(h, "eth_volume", h.btc_volume)
@@ -821,18 +827,25 @@ class BacktestEngine:
         # Confidence = absolute weighted score, capped at 95 (matches live)
         confidence = min(int(abs(weighted_score)), 95)
 
-        # Agreement count (matches live _aggregate_scores)
+        # Agreement count — exclude unavailable sources (News in backtest)
+        available_sources = len(all_scores)
+        if news_unavailable:
+            available_sources = len(all_scores)  # News not in all_scores
+            min_agreement = max(2, available_sources // 2)  # 2/5 or 3/6
+        else:
+            min_agreement = 3
+
         if direction == TradeDirection.LONG:
             agreement = sum(1 for s, _, _ in all_scores if s > 0)
         else:
             agreement = sum(1 for s, _, _ in all_scores if s < 0)
 
-        # Gate: need min 3/6 agreement AND confidence >= 40 (matches live should_trade)
-        if agreement < 3 or confidence < 40:
+        # Gate: need min agreement AND confidence >= 40 (matches live should_trade)
+        if agreement < min_agreement or confidence < 40:
             confidence = 0
 
         reasons = [r for _, r, _ in all_scores]
-        reasons.append(f"Agreement: {agreement}/6")
+        reasons.append(f"Agreement: {agreement}/{available_sources}")
         return direction, confidence, " | ".join(reasons)
 
     def _signal_edge_indicator(
@@ -1553,7 +1566,11 @@ class BacktestEngine:
     def _check_exit(
         self, trade: BacktestTrade, current_data: HistoricalDataPoint, next_data: Optional[HistoricalDataPoint]
     ) -> Tuple[bool, TradeResult, float]:
-        """Check if a trade should be exited using intraday high/low."""
+        """Check if a trade should be exited using intraday high/low.
+
+        Conservative approach: if BOTH TP and SL are hit within the
+        same candle, assume SL was hit first (worst case).
+        """
         if trade.symbol == "BTC":
             high = current_data.btc_high
             low = current_data.btc_low
@@ -1564,14 +1581,23 @@ class BacktestEngine:
             close = current_data.eth_price
 
         if trade.direction == TradeDirection.LONG:
-            if high >= trade.take_profit_price:
+            tp_hit = high >= trade.take_profit_price
+            sl_hit = low <= trade.stop_loss_price
+            if tp_hit and sl_hit:
+                # Both hit in same candle — conservative: assume SL first
+                return True, TradeResult.STOP_LOSS, trade.stop_loss_price
+            if tp_hit:
                 return True, TradeResult.TAKE_PROFIT, trade.take_profit_price
-            if low <= trade.stop_loss_price:
+            if sl_hit:
                 return True, TradeResult.STOP_LOSS, trade.stop_loss_price
         else:
-            if low <= trade.take_profit_price:
+            tp_hit = low <= trade.take_profit_price
+            sl_hit = high >= trade.stop_loss_price
+            if tp_hit and sl_hit:
+                return True, TradeResult.STOP_LOSS, trade.stop_loss_price
+            if tp_hit:
                 return True, TradeResult.TAKE_PROFIT, trade.take_profit_price
-            if high >= trade.stop_loss_price:
+            if sl_hit:
                 return True, TradeResult.STOP_LOSS, trade.stop_loss_price
 
         if next_data is None:
@@ -1580,27 +1606,55 @@ class BacktestEngine:
         return False, TradeResult.OPEN, 0.0
 
     def _close_trade(
-        self, trade: BacktestTrade, exit_date: str, exit_price: float, result: TradeResult, funding_rate: float
+        self, trade: BacktestTrade, exit_date: str, exit_price: float, result: TradeResult,
+        funding_rate: float, exit_candle: Optional[HistoricalDataPoint] = None,
     ):
-        """Close a trade and update statistics."""
+        """Close a trade and update statistics.
+
+        If self.execution_simulator is set and exit_candle is provided,
+        uses the simulator for realistic volatility-based costs.
+        Otherwise falls back to the legacy fixed-rate model.
+        """
         if trade.entry_price <= 0:
             logger.error(f"Cannot close trade {trade.id}: entry_price is {trade.entry_price}")
             return
 
+        if self.execution_simulator and exit_candle:
+            self._close_trade_simulated(trade, exit_date, exit_price, result, funding_rate, exit_candle)
+            return
+
+        # --- Legacy cost model (fixed rates) ---
         trade.exit_date = exit_date
         trade.exit_price = exit_price
         trade.result = result
 
+        # Apply slippage: fills are worse than target price
+        slip = self.config.slippage_percent / 100
         if trade.direction == TradeDirection.LONG:
-            price_pnl = (exit_price - trade.entry_price) / trade.entry_price
+            effective_entry = trade.entry_price * (1 + slip)
+            effective_exit = exit_price * (1 - slip)
+            price_pnl = (effective_exit - effective_entry) / trade.entry_price
         else:
-            price_pnl = (trade.entry_price - exit_price) / trade.entry_price
+            effective_entry = trade.entry_price * (1 - slip)
+            effective_exit = exit_price * (1 + slip)
+            price_pnl = (effective_entry - effective_exit) / trade.entry_price
 
         trade.pnl_percent = price_pnl * 100 * trade.leverage
         trade.pnl = trade.position_value * (price_pnl * trade.leverage)
 
         trade.fees = trade.position_value * (self.config.trading_fee_percent / 100) * 2
-        trade.funding_paid = abs(trade.position_value * funding_rate)
+
+        # Funding: estimate based on holding duration
+        # Binance charges 3x/day (every 8h). If trade is open < 8h,
+        # there's a chance no funding was paid. For realism, scale by
+        # how many 8h periods the trade was open.
+        if trade.entry_date and trade.exit_date and trade.entry_date != trade.exit_date:
+            # Multi-day hold: full daily funding rate applies
+            trade.funding_paid = abs(trade.position_value * funding_rate)
+        else:
+            # Intraday hold: ~1/3 chance of crossing a funding window
+            trade.funding_paid = abs(trade.position_value * funding_rate) * 0.33
+
         trade.net_pnl = trade.pnl - trade.fees - trade.funding_paid
 
         self.capital += trade.net_pnl
@@ -1615,6 +1669,66 @@ class BacktestEngine:
         logger.debug(
             f"Closed {trade.direction.value} {trade.symbol} @ ${exit_price:.2f} | "
             f"Result: {result.value} | PnL: ${trade.net_pnl:.2f} ({trade.pnl_percent:+.2f}%)"
+        )
+
+    def _close_trade_simulated(
+        self, trade: BacktestTrade, exit_date: str, exit_price: float,
+        result: TradeResult, funding_rate: float, exit_candle: HistoricalDataPoint,
+    ):
+        """Close trade using ExecutionSimulator for realistic costs.
+
+        Uses volatility-based slippage, exchange-specific fees,
+        and exact 8h funding window counting.
+        """
+        sim = self.execution_simulator
+
+        # Exit candle volatility: (high - low) / close
+        if trade.symbol == "ETH":
+            exit_close = exit_candle.eth_price
+            exit_range = ((exit_candle.eth_high - exit_candle.eth_low) / exit_close) if exit_close > 0 else 0.0
+        else:
+            exit_close = exit_candle.btc_price
+            exit_range = ((exit_candle.btc_high - exit_candle.btc_low) / exit_close) if exit_close > 0 else 0.0
+
+        exit_is_trigger = result in (TradeResult.TAKE_PROFIT, TradeResult.STOP_LOSS)
+        direction = trade.direction.value  # "long" or "short"
+
+        pnl_result = sim.calculate_trade_pnl(
+            entry_price=trade.entry_price,
+            exit_price=exit_price,
+            direction=direction,
+            position_value=trade.position_value,
+            leverage=trade.leverage,
+            funding_rate=funding_rate,
+            entry_timestamp=trade.entry_timestamp,
+            exit_timestamp=exit_candle.timestamp,
+            entry_candle_range=trade.entry_candle_range,
+            exit_candle_range=exit_range,
+            exit_is_trigger=exit_is_trigger,
+        )
+
+        trade.exit_date = exit_date
+        trade.exit_price = exit_price
+        trade.result = result
+        trade.pnl = pnl_result["pnl"]
+        trade.pnl_percent = pnl_result["pnl_percent"]
+        trade.fees = pnl_result["fees"]
+        trade.funding_paid = pnl_result["funding_paid"]
+        trade.net_pnl = pnl_result["net_pnl"]
+
+        self.capital += trade.net_pnl
+        self.daily_pnl += trade.net_pnl
+        self.daily_closed_count += 1
+        self.daily_fees += trade.fees
+        self.daily_funding += trade.funding_paid
+
+        if trade.symbol in self.open_positions:
+            del self.open_positions[trade.symbol]
+
+        logger.debug(
+            f"Closed [SIM] {trade.direction.value} {trade.symbol} @ ${exit_price:.2f} | "
+            f"Result: {result.value} | PnL: ${trade.net_pnl:.2f} ({trade.pnl_percent:+.2f}%) | "
+            f"Fees: ${trade.fees:.2f} | Funding: ${trade.funding_paid:.2f}"
         )
 
     # ------------------------------------------------------------------ #
@@ -1669,16 +1783,23 @@ class BacktestEngine:
                 if self.daily_trades_count >= self.config.max_trades_per_day:
                     break
 
-                entry_price = data.btc_price if symbol == "BTC" else data.eth_price
-                if entry_price <= 0:
-                    continue
-
                 history_slice = data_points[max(0, i - 200):i + 1]
                 direction, confidence, reason = self._generate_signal(data, symbol, history=history_slice)
                 signal_meta = dict(self._signal_metadata)
                 self._signal_metadata = {}
 
                 if confidence < self._get_min_confidence():
+                    continue
+
+                # Realistic entry: use NEXT candle's open (not current close)
+                # This prevents look-ahead bias — you can't enter at the
+                # price used to generate the signal.
+                if next_data is not None:
+                    entry_price = next_data.btc_open if symbol == "BTC" else next_data.eth_open
+                else:
+                    entry_price = data.btc_price if symbol == "BTC" else data.eth_price
+
+                if entry_price <= 0:
                     continue
 
                 _, position_usdt = self._calculate_position_size(confidence)
@@ -1731,6 +1852,194 @@ class BacktestEngine:
             exit_price = last_data.btc_price if symbol == "BTC" else last_data.eth_price
             funding_rate = last_data.funding_rate_btc if symbol == "BTC" else last_data.funding_rate_eth
             self._close_trade(trade, last_data.date_str, exit_price, TradeResult.TIME_EXIT, funding_rate)
+
+        self._save_daily_stats()
+
+        return self._generate_result(data_points)
+
+    async def run_unified(
+        self,
+        data_points: List[HistoricalDataPoint],
+        strategy,
+        mock_fetcher,
+        interval: str = "1h",
+    ) -> "BacktestResult":
+        """Run backtest using LIVE strategy code with injected historical data.
+
+        Same position management logic as run() (TP/SL, fees, slippage,
+        daily limits, next-candle-open entry) but signal generation uses
+        the actual strategy's generate_signal() + should_trade() methods.
+
+        Args:
+            data_points: Historical data (including warmup buffer)
+            strategy: Live strategy instance (e.g. EdgeIndicatorStrategy)
+            mock_fetcher: BacktestMarketDataFetcher instance to inject data
+        """
+        from src.backtest.report import BacktestResult
+        from src.strategy.base import SignalDirection
+
+        self.reset()
+
+        if not data_points:
+            logger.error("No data points provided for unified backtest")
+            return BacktestResult.empty()
+
+        logger.info(f"Starting UNIFIED backtest with ${self.config.starting_capital:,.2f}")
+        logger.info(f"Period: {data_points[0].date_str} to {data_points[-1].date_str}")
+        logger.info(f"Data points: {len(data_points)}, Strategy: {type(strategy).__name__}")
+
+        symbols = [self.symbol]
+        full_symbol = f"{self.symbol}USDT"
+
+        for i, data in enumerate(data_points):
+            if data.date_str != self.current_date:
+                if self.current_date:
+                    self._save_daily_stats()
+                self.current_date = data.date_str
+                self.daily_trades_count = 0
+                self.daily_pnl = 0.0
+                self.daily_closed_count = 0
+                self.daily_fees = 0.0
+                self.daily_funding = 0.0
+
+            next_data = data_points[i + 1] if i + 1 < len(data_points) else None
+
+            # Check exits for open positions (same logic as run())
+            for symbol in list(self.open_positions.keys()):
+                trade = self.open_positions[symbol]
+                should_exit, result, exit_price = self._check_exit(trade, data, next_data)
+
+                if should_exit:
+                    funding_rate = data.funding_rate_btc if symbol == "BTC" else data.funding_rate_eth
+                    self._close_trade(trade, data.date_str, exit_price, result, funding_rate, exit_candle=data)
+
+            can_trade, reason = self._can_trade()
+            if not can_trade:
+                continue
+
+            for symbol in symbols:
+                if symbol in self.open_positions:
+                    continue
+
+                if self.daily_trades_count >= self.config.max_trades_per_day:
+                    break
+
+                # Inject historical data into mock fetcher
+                history_slice = data_points[max(0, i - 200):i + 1]
+                mock_fetcher.set_state(data, history_slice, symbol, interval)
+
+                # Use LIVE strategy code for signal generation
+                try:
+                    signal = await strategy.generate_signal(full_symbol)
+                    should_trade, trade_reason = await strategy.should_trade(signal)
+                except Exception as e:
+                    logger.debug(f"Signal generation failed at {data.date_str}: {e}")
+                    continue
+
+                if not should_trade:
+                    continue
+
+                # Map signal direction to engine direction
+                if signal.direction == SignalDirection.LONG:
+                    direction = TradeDirection.LONG
+                else:
+                    direction = TradeDirection.SHORT
+
+                confidence = signal.confidence
+
+                # Next-candle-open entry (prevents look-ahead bias)
+                if next_data is not None:
+                    entry_price = next_data.btc_open if symbol == "BTC" else next_data.eth_open
+                else:
+                    entry_price = data.btc_price if symbol == "BTC" else data.eth_price
+
+                if entry_price <= 0:
+                    continue
+
+                _, position_usdt = self._calculate_position_size(confidence)
+
+                # Use strategy's TP/SL directly (e.g. ATR-based for ClaudeEdge)
+                take_profit = signal.target_price
+                stop_loss = signal.stop_loss
+
+                # Validate TP/SL — recalculate from entry if strategy returned
+                # targets based on signal-time price (not next-candle-open)
+                if take_profit > 0 and stop_loss > 0 and signal.entry_price > 0:
+                    price_ratio = entry_price / signal.entry_price
+                    if abs(price_ratio - 1.0) > 0.001:
+                        # Adjust TP/SL proportionally to the actual entry price
+                        if direction == TradeDirection.LONG:
+                            tp_dist = (take_profit - signal.entry_price) / signal.entry_price
+                            sl_dist = (signal.entry_price - stop_loss) / signal.entry_price
+                            take_profit = entry_price * (1 + tp_dist)
+                            stop_loss = entry_price * (1 - sl_dist)
+                        else:
+                            tp_dist = (signal.entry_price - take_profit) / signal.entry_price
+                            sl_dist = (stop_loss - signal.entry_price) / signal.entry_price
+                            take_profit = entry_price * (1 - tp_dist)
+                            stop_loss = entry_price * (1 + sl_dist)
+
+                # Fallback: if strategy didn't provide TP/SL, use config defaults
+                if take_profit <= 0 or stop_loss <= 0:
+                    take_profit, stop_loss = self._calculate_targets(direction, entry_price)
+
+                # Position scale from strategy metadata (if available)
+                if hasattr(signal, 'metrics_snapshot') and signal.metrics_snapshot:
+                    pos_scale = signal.metrics_snapshot.get("position_scale")
+                    if pos_scale:
+                        position_usdt *= pos_scale
+
+                if position_usdt < 10:
+                    continue
+
+                self.trade_counter += 1
+                position_size = (position_usdt * self.config.leverage) / entry_price
+
+                # Compute entry candle volatility for ExecutionSimulator
+                entry_candle = next_data if next_data is not None else data
+                if symbol == "ETH":
+                    _ec = entry_candle.eth_price
+                    _entry_range = ((entry_candle.eth_high - entry_candle.eth_low) / _ec) if _ec > 0 else 0.0
+                else:
+                    _ec = entry_candle.btc_price
+                    _entry_range = ((entry_candle.btc_high - entry_candle.btc_low) / _ec) if _ec > 0 else 0.0
+
+                trade = BacktestTrade(
+                    id=self.trade_counter,
+                    symbol=symbol,
+                    direction=direction,
+                    entry_date=data.date_str,
+                    entry_price=entry_price,
+                    position_size=position_size,
+                    position_value=position_usdt,
+                    leverage=self.config.leverage,
+                    confidence=confidence,
+                    reason=signal.reason,
+                    take_profit_price=take_profit,
+                    stop_loss_price=stop_loss,
+                    entry_timestamp=entry_candle.timestamp,
+                    entry_candle_range=_entry_range,
+                )
+
+                self.trades.append(trade)
+                self.open_positions[symbol] = trade
+                self.daily_trades_count += 1
+
+                logger.debug(
+                    f"[UNIFIED] Opened {direction.value} {symbol} @ ${entry_price:.2f} | "
+                    f"Confidence: {confidence}% | TP: ${take_profit:.2f} | SL: ${stop_loss:.2f}"
+                )
+
+        # Close remaining open positions at last price
+        last_data = data_points[-1]
+        for symbol in list(self.open_positions.keys()):
+            trade = self.open_positions[symbol]
+            exit_price = last_data.btc_price if symbol == "BTC" else last_data.eth_price
+            funding_rate = last_data.funding_rate_btc if symbol == "BTC" else last_data.funding_rate_eth
+            self._close_trade(
+                trade, last_data.date_str, exit_price, TradeResult.TIME_EXIT,
+                funding_rate, exit_candle=last_data,
+            )
 
         self._save_daily_stats()
 

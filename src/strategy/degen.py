@@ -89,9 +89,9 @@ MIN_CONFIDENCE = 55
 class DegenStrategy(BaseStrategy):
     """Pre-configured LLM strategy with fixed prompt and 14 data sources."""
 
-    def __init__(self, params: Optional[Dict[str, Any]] = None):
+    def __init__(self, params: Optional[Dict[str, Any]] = None, data_fetcher: Optional[MarketDataFetcher] = None):
         super().__init__(params)
-        self.data_fetcher: Optional[MarketDataFetcher] = None
+        self.data_fetcher: Optional[MarketDataFetcher] = data_fetcher
 
         # LLM config (user-selectable)
         self.llm_provider_name = self.params.get("llm_provider", "groq")

@@ -774,7 +774,11 @@
     "celebrationMessage": "Your strategy shows excellent performance metrics. Review the results carefully before risking real capital.",
     "celebrationClose": "Got it",
     "dataSources": "Data Sources",
-    "activeApis": "active APIs"
+    "activeApis": "active APIs",
+    "dateLimitInfo": "Max. {{maxDays}} days for {{timeframe}} | Data available from 2020-01-01",
+    "dateLimitExceeded": "Period too long: max. {{maxDays}} days for {{timeframe}} (selected: {{actualDays}} days)",
+    "dateBeforeEarliest": "Start date must be after 2020-01-01",
+    "dateFuture": "End date cannot be in the future"
   },
   "tour": {
     "skip": "Skip",

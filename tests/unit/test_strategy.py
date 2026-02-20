@@ -634,9 +634,9 @@ class TestDegenStrategySignalGeneration:
 
         signal = await strategy.generate_signal("BTCUSDT")
 
-        # Without TP/SL percents, both default to current price
-        assert signal.target_price == signal.entry_price
-        assert signal.stop_loss == signal.entry_price
+        # Without TP/SL percents, strategy applies sensible defaults (3% TP, 2% SL)
+        assert signal.target_price == round(signal.entry_price * 1.03, 2)
+        assert signal.stop_loss == round(signal.entry_price * 0.98, 2)
 
     @pytest.mark.asyncio
     async def test_generate_signal_metrics_snapshot_contains_llm_info(self):
