@@ -107,6 +107,12 @@ async def _run_sqlite_migrations(conn) -> None:
         # Risk stats table (database-backed daily stats)
         "CREATE TABLE IF NOT EXISTS risk_stats (id INTEGER PRIMARY KEY AUTOINCREMENT, bot_config_id INTEGER NOT NULL REFERENCES bot_configs(id) ON DELETE CASCADE, date VARCHAR(10) NOT NULL, stats_json TEXT NOT NULL, daily_pnl FLOAT DEFAULT 0.0, trades_count INTEGER DEFAULT 0, is_halted BOOLEAN DEFAULT 0, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME)",
         "CREATE UNIQUE INDEX IF NOT EXISTS idx_risk_stats_bot_date ON risk_stats(bot_config_id, date)",
+        # Alerts table
+        "CREATE TABLE IF NOT EXISTS alerts (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, bot_config_id INTEGER REFERENCES bot_configs(id) ON DELETE SET NULL, alert_type VARCHAR(20) NOT NULL, category VARCHAR(50) NOT NULL, symbol VARCHAR(50), threshold FLOAT NOT NULL, direction VARCHAR(10), is_enabled BOOLEAN NOT NULL DEFAULT 1, cooldown_minutes INTEGER NOT NULL DEFAULT 15, last_triggered_at DATETIME, trigger_count INTEGER NOT NULL DEFAULT 0, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME)",
+        "CREATE INDEX IF NOT EXISTS ix_alert_user_enabled ON alerts(user_id, is_enabled)",
+        # Alert history table
+        "CREATE TABLE IF NOT EXISTS alert_history (id INTEGER PRIMARY KEY AUTOINCREMENT, alert_id INTEGER NOT NULL REFERENCES alerts(id) ON DELETE CASCADE, triggered_at DATETIME DEFAULT CURRENT_TIMESTAMP, current_value FLOAT, message TEXT NOT NULL)",
+        "CREATE INDEX IF NOT EXISTS ix_alert_history_alert ON alert_history(alert_id)",
     ]
     for migration in migrations:
         try:

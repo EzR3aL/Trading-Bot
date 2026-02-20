@@ -1,89 +1,47 @@
-# Zukuenftige Features
+# Zukuenftige Features / Future Features
 
-Sammlung von Feature-Ideen die aktuell out of scope sind, aber fuer zukuenftige Releases interessant sein koennten.
+## Deutsch
 
----
-
-## Strategy Marketplace
-
-**Prioritaet:** Mittel | **Aufwand:** XL
-
-Nutzer koennen eigene Strategien erstellen, teilen und von anderen Nutzern uebernehmen.
-
-### Konzept
-- Nutzer erstellen Custom Strategies ueber einen visuellen Builder oder Code-Editor
-- Strategien koennen veroeffentlicht werden (oeffentlich oder privat)
-- Bewertungssystem: Sterne, Reviews, Backtest-Ergebnisse
-- Kategorien: Trend-Following, Mean-Reversion, Sentiment-Based, KI-gestuetzt
-- Jede Strategie wird automatisch mit dem Backtesting-Modul validiert
-
-### Technische Anforderungen
-- Strategy DSL (Domain Specific Language) oder Plugin-System
-- Sandbox-Umgebung fuer Custom Code (Sicherheit)
-- Versionierung von Strategien
-- Automatisches Backtesting bei Veroeffentlichung
-- Lizenz-/Monetarisierungsmodell (kostenlos, Premium, Abo)
-
-### Abhaengigkeiten
-- Backtesting-Modul (in Entwicklung)
-- User-Community Features (Profiles, Followers)
+### Uebersicht
+Dieses Dokument beschreibt geplante Features fuer den Trading-Bot, die in zukuenftigen Versionen umgesetzt werden sollen.
 
 ---
 
-## Social Trading / Copy Trading
+### 1. Strategy Marketplace
+- **Prioritaet:** Mittel
+- **Aufwand:** XL
+- **Beschreibung:** Ein Marktplatz, auf dem Benutzer eigene Trading-Strategien erstellen, teilen und verkaufen koennen. Andere Benutzer koennen diese Strategien abonnieren und direkt in ihrem Bot einsetzen. Der Marketplace soll ein Bewertungssystem und Performance-Statistiken enthalten.
 
-**Prioritaet:** Niedrig | **Aufwand:** XL
+### 2. Social/Copy Trading mit Leaderboard
+- **Prioritaet:** Niedrig
+- **Aufwand:** XL
+- **Beschreibung:** Eine Social-Trading-Funktion, die es Benutzern ermoeglicht, die Trades erfolgreicher Trader automatisch zu kopieren. Ein Leaderboard zeigt die besten Trader basierend auf Performance, Risikomanagement und Konsistenz. Benutzer koennen Trader folgen und deren Strategien automatisch replizieren.
 
-Nutzer koennen die Trades erfolgreicher Trader automatisch kopieren.
-
-### Konzept
-- Leaderboard der erfolgreichsten Trader
-- One-Click Copy: Automatisches Spiegeln von Trades
-- Konfigurierbares Risikomanagement (max. Position, max. Verlust)
-- Gebuehrenmodell fuer Signal-Provider
-
----
-
-## Multi-Exchange Portfolio View
-
-**Prioritaet:** Mittel | **Aufwand:** L
-
-Zentrales Dashboard das Positionen ueber alle verbundenen Exchanges hinweg zeigt.
-
-### Konzept
-- Aggregierte PnL ueber alle Exchanges
-- Cross-Exchange Rebalancing
-- Einheitliche Trade-History
+### 3. Native Mobile App (React Native)
+- **Prioritaet:** Niedrig
+- **Aufwand:** XXL
+- **Beschreibung:** Eine native Mobile App fuer iOS und Android, entwickelt mit React Native. Die App soll alle wesentlichen Funktionen des Web-Dashboards bieten: Bot-Steuerung, Revenue-Dashboard, Benachrichtigungen (Push-Notifications) und Echtzeit-Monitoring der laufenden Bots.
 
 ---
 
-## Mobile App (React Native)
+## English
 
-**Prioritaet:** Niedrig | **Aufwand:** XXL
-
-Native Mobile App fuer iOS und Android.
-
-### Konzept
-- Push-Notifications fuer Trades und Alerts
-- Quick Actions: Bot starten/stoppen
-- Portfolio-Uebersicht
-- Basierend auf dem bestehenden React-Frontend
+### Overview
+This document describes planned features for the Trading Bot that are intended to be implemented in future versions.
 
 ---
 
-## Advanced Alerting System
+### 1. Strategy Marketplace
+- **Priority:** Medium
+- **Effort:** XL
+- **Description:** A marketplace where users can create, share, and sell custom trading strategies. Other users can subscribe to these strategies and deploy them directly in their bot. The marketplace will include a rating system and performance statistics.
 
-**Prioritaet:** Hoch | **Aufwand:** M
+### 2. Social/Copy Trading with Leaderboard
+- **Priority:** Low
+- **Effort:** XL
+- **Description:** A social trading feature that allows users to automatically copy trades from successful traders. A leaderboard ranks the best traders based on performance, risk management, and consistency. Users can follow traders and automatically replicate their strategies.
 
-Erweiterte Benachrichtigungen ueber verschiedene Kanaele.
-
-### Konzept
-- Preis-Alerts (ueber/unter Schwelle)
-- Strategie-Alerts (Signal erkannt)
-- Portfolio-Alerts (Drawdown, Gewinnziel)
-- Kanaele: Discord, Telegram, E-Mail, Push
-- Anpassbare Regeln pro Bot
-
----
-
-*Dokument wird laufend erweitert. Neue Ideen bitte mit Prioritaet und geschaetztem Aufwand hinzufuegen.*
+### 3. Native Mobile App (React Native)
+- **Priority:** Low
+- **Effort:** XXL
+- **Description:** A native mobile app for iOS and Android, built with React Native. The app should provide all essential features of the web dashboard: bot control, revenue dashboard, notifications (push notifications), and real-time monitoring of running bots.

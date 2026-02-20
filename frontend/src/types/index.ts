@@ -244,3 +244,85 @@ export interface BacktestHistoryItem {
   total_trades: number | null
   created_at: string
 }
+
+// Alert types
+export interface Alert {
+  id: number
+  user_id: number
+  bot_config_id: number | null
+  alert_type: 'price' | 'strategy' | 'portfolio'
+  category: string
+  symbol: string | null
+  threshold: number
+  direction: 'above' | 'below' | null
+  is_enabled: boolean
+  cooldown_minutes: number
+  last_triggered_at: string | null
+  trigger_count: number
+  created_at: string | null
+  updated_at: string | null
+}
+
+export interface AlertHistory {
+  id: number
+  alert_id: number
+  triggered_at: string
+  current_value: number | null
+  message: string
+}
+
+export interface AlertCreate {
+  bot_config_id?: number | null
+  alert_type: 'price' | 'strategy' | 'portfolio'
+  category: string
+  symbol?: string | null
+  threshold: number
+  direction?: 'above' | 'below' | null
+  cooldown_minutes?: number
+}
+
+// Portfolio types
+export interface ExchangeSummary {
+  exchange: string
+  total_pnl: number
+  total_trades: number
+  winning_trades: number
+  win_rate: number
+  total_fees: number
+  total_funding: number
+}
+
+export interface PortfolioSummary {
+  total_pnl: number
+  total_trades: number
+  overall_win_rate: number
+  total_fees: number
+  total_funding: number
+  exchanges: ExchangeSummary[]
+}
+
+export interface PortfolioPosition {
+  exchange: string
+  symbol: string
+  side: string
+  size: number
+  entry_price: number
+  current_price: number
+  unrealized_pnl: number
+  leverage: number
+  margin: number
+}
+
+export interface PortfolioDaily {
+  date: string
+  exchange: string
+  pnl: number
+  trades: number
+  fees: number
+}
+
+export interface PortfolioAllocation {
+  exchange: string
+  balance: number
+  currency: string
+}

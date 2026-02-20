@@ -1,21 +1,45 @@
-# Häufig gestellte Fragen (FAQ)
+# Haeufig gestellte Fragen (FAQ)
 
 ## Allgemein
 
 ### Was macht dieser Bot genau?
 
-Der Bot analysiert Kryptomärkte (BTC, ETH) und sucht nach Situationen, in denen die Mehrheit der Trader falsch positioniert ist. Er wettet dann gegen die Masse und profitiert von Liquidations-Kaskaden.
+Der Bot ist ein Multi-Exchange Trading System, das Kryptomaerkte analysiert und automatisch handelt. Er unterstuetzt **6 verschiedene Strategien** und **3 Exchanges** (Bitget, Weex, Hyperliquid). Du kannst mehrere Bots parallel laufen lassen, jeden mit einer eigenen Strategie, eigenem Trading-Paar und eigener Exchange.
+
+### Welche Strategien stehen zur Verfuegung?
+
+| # | Strategie | Typ | Beschreibung |
+|---|-----------|-----|-------------|
+| 1 | **LiquidationHunter** | Contrarian | Wettet gegen ueberladene Positionen, nutzt L/S Ratio + Fear & Greed |
+| 2 | **LLM Signal** | KI-gesteuert | Konfigurierbarer LLM-Provider analysiert Marktdaten und generiert Signale |
+| 3 | **Sentiment Surfer** | Hybrid | Kombiniert 6 Datenquellen (News, Sentiment, VWAP, Supertrend, Volume, Momentum) |
+| 4 | **Degen** | KI-Arena | Fester Prompt mit 19 Datenquellen fuer aggressive 1h BTC-Predictions |
+| 5 | **Edge Indicator** | Technisch | EMA Ribbon + ADX Filter + Predator Momentum Score (nur Kline-Daten) |
+| 6 | **Claude Edge Indicator** | Technisch+ | Edge Indicator erweitert um ATR-TP/SL, Volume, Multi-TF, Trailing Stop |
+
+### Welche Exchanges werden unterstuetzt?
+
+| Exchange | Demo-Modus | Auth-Typ | Passphrase |
+|----------|------------|----------|------------|
+| **Bitget** | Ja | API Key | Ja |
+| **Weex** | Ja | API Key | Ja |
+| **Hyperliquid** | Ja | Wallet | Nein |
 
 ### Ist der Bot profitabel?
 
-Der Bot ist auf eine **60%+ Win Rate** mit einem **1.75:1 Risk/Reward** Verhältnis ausgelegt. Dies bedeutet theoretisch profitables Trading, aber:
-- Vergangene Performance garantiert keine Zukunft
-- Marktbedingungen ändern sich
-- Teste immer erst auf Testnet
+Der Bot bietet mehrere Strategien mit unterschiedlichen Risikoprofilen. Backtest-Ergebnisse (90 Tage, BTCUSDT, $10k):
+
+| Strategie | Return | Win Rate | Max DD | Sharpe |
+|-----------|--------|----------|--------|--------|
+| LiquidationHunter | +26.2% | 53.9% | 4.7% | 5.51 |
+| Edge Indicator | +18.6% | 47.1% | 9.8% | 2.91 |
+| Claude Edge Indicator | +18.6% | 47.1% | 9.8% | 2.91 |
+
+**Vergangene Performance garantiert keine zukuenftige Rendite.** Teste immer erst im Demo-Modus.
 
 ### Wie viel Geld brauche ich?
 
-**Empfohlen:** Mindestens $500-1000 für sinnvolles Trading mit dem Standard-Setup. Mit kleineren Beträgen werden die Fees prozentual zu hoch.
+**Empfohlen:** Mindestens $500-1000 fuer sinnvolles Trading. Mit kleineren Betraegen werden die Fees prozentual zu hoch.
 
 ---
 
@@ -23,226 +47,195 @@ Der Bot ist auf eine **60%+ Win Rate** mit einem **1.75:1 Risk/Reward** Verhält
 
 ### Warum brauche ich Python 3.10+?
 
-Der Bot verwendet moderne Python-Features wie:
-- `match` Statements
-- Type Hints mit `|` Union Syntax
-- Async/Await Patterns
-
-Ältere Versionen unterstützen diese nicht.
+Der Bot verwendet moderne Python-Features wie `match` Statements, `|` Union Syntax und Async/Await Patterns. Aeltere Versionen unterstuetzen diese nicht.
 
 ### Kann ich den Bot auf Windows laufen lassen?
 
-Ja, aber Linux/macOS wird empfohlen für:
-- Bessere Stabilität im 24/7 Betrieb
+Ja, aber Linux/macOS wird empfohlen fuer:
+- Bessere Stabilitaet im 24/7 Betrieb
 - Einfacheres Deployment
 - Weniger Encoding-Probleme
 
 ### Wie halte ich den Bot 24/7 am Laufen?
 
 **Empfohlen:** Verwende einen VPS (Virtual Private Server) oder Cloud-Instanz:
-- AWS EC2 (Free Tier möglich)
+- AWS EC2 (Free Tier moeglich)
 - DigitalOcean Droplet ($5/Monat)
-- Hetzner Cloud (€3.29/Monat)
+- Hetzner Cloud (3.29 EUR/Monat)
 
-Dann mit `systemd` als Service einrichten (siehe [SETUP.md](SETUP.md)).
+Dann mit Docker Compose deployen (siehe [DEPLOYMENT.md](DEPLOYMENT.md)).
+
+### Unterstuetzt der Bot mehrere Benutzer?
+
+**Ja.** Seit v3.0.0 gibt es ein vollstaendiges Multi-User-System:
+- JWT-basierte Authentifizierung
+- Rollenbasierte Zugriffskontrolle (User / Admin)
+- Jeder User hat eigene Bots, Trades und Einstellungen
+- Admin kann Benutzer verwalten
 
 ---
 
 ## Trading & Strategie
 
-### Warum nur BTC und ETH?
+### Kann ich Backtesting verwenden?
 
-- **Höchste Liquidität** = Geringerer Slippage
-- **Beste Datenverfügbarkeit** für L/S Ratio, Funding, etc.
-- **ETF-Flows** betreffen hauptsächlich BTC
-- Andere Assets haben oft zu wenig Volumen für die Strategie
+**Ja!** Seit v3.3.1 ist ein vollstaendiges Backtesting-System eingebaut:
+- Im Frontend unter "Backtest" erreichbar
+- Alle 6 Strategien koennen getestet werden
+- Konfigurierbare Zeitraeume, Timeframes und Parameter
+- Equity Curve, Trade Log und Metriken
+- Siehe [Anleitungen/Backtesting.md](../Anleitungen/Backtesting.md)
 
-### Kann ich andere Coins hinzufügen?
+### Welche Coins kann ich handeln?
 
-Ja, in der `.env`:
-```env
-TRADING_PAIRS=BTCUSDT,ETHUSDT,SOLUSDT
-```
+Unterstuetzte Trading Pairs: BTCUSDT, ETHUSDT, SOLUSDT, XRPUSDT, DOGEUSDT, AVAXUSDT.
 
-**Aber beachte:**
-- Nicht alle Coins haben L/S Ratio Daten
-- Geringere Liquidität = Höherer Slippage
-- Die Strategie ist für BTC/ETH optimiert
+**Empfohlen:** BTCUSDT und ETHUSDT wegen:
+- Hoechste Liquiditaet = geringerer Slippage
+- Beste Datenverfuegbarkeit fuer Indikatoren
+- Strategien sind primaer dafuer optimiert
 
 ### Warum nur 3 Trades pro Tag?
 
-- **Overtrading vermeiden** - Mehr Trades ≠ Mehr Profit
-- **Qualität vor Quantität** - Nur bei starken Signalen traden
-- **Fees sparen** - Jeder Trade kostet Gebühren
-- **Emotionale Stabilität** - Weniger Entscheidungen = Weniger Stress
+- **Overtrading vermeiden** - Mehr Trades bedeuten nicht mehr Profit
+- **Qualitaet vor Quantitaet** - Nur bei starken Signalen traden
+- **Fees sparen** - Jeder Trade kostet Gebuehren
+- **Emotionale Stabilitaet** - Weniger Entscheidungen
 
-### Was bedeutet "NO NEUTRALITY"?
+### Warum Leverage 3x und nicht hoeher?
 
-Der Bot **muss** immer eine Richtung wählen. Wenn alle Signale neutral sind:
-1. Er folgt dem 24h-Trend
-2. Mit niedriger Confidence (55-65%)
-3. Mit kleinerer Position Size
-
-**Warum?** Neutralität = Verpasste Chancen. Selbst ein leichter Edge ist besser als kein Trade.
-
-### Warum Leverage 3x und nicht höher?
-
-| Leverage | Liquidations-Risiko | Position Size Effekt |
+| Leverage | Liquidations-Risiko | Bei 2% Stop Loss |
 |----------|--------------------|--------------------|
-| 1x | Sehr niedrig | Kleine Gewinne |
-| 3x | Moderat | Gutes Verhältnis |
-| 5x | Erhöht | Größere Gewinne, aber... |
-| 10x+ | Hoch | Schnelle Liquidation möglich |
+| 1x | Sehr niedrig | ~2% Verlust |
+| 3x | Moderat | ~6% Verlust |
+| 5x | Erhoeht | ~10% Verlust |
+| 10x+ | Hoch | ~20% Verlust |
 
-Mit 3x und 2% Stop Loss verlierst du maximal ~6% pro Trade. Mit 10x wären es ~20%.
+### Kann ich mehrere Bots gleichzeitig laufen lassen?
+
+**Ja!** Das Multi-Bot-System (v3.0.0+) erlaubt bis zu 10 Bots pro User. Jeder Bot kann:
+- Eine eigene Strategie verwenden
+- Auf einer anderen Exchange handeln
+- Unterschiedliche Trading Pairs handeln
+- Im Demo- oder Live-Modus laufen
+
+---
+
+## Alerts & Benachrichtigungen
+
+### Gibt es ein Alert-System?
+
+**Ja.** Es gibt drei Typen von Alerts:
+
+| Alert-Typ | Beispiele |
+|-----------|-----------|
+| **Price Alerts** | Preis ueber/unter einem Schwellenwert |
+| **Strategy Alerts** | Signal verpasst, niedrige Confidence, aufeinanderfolgende Verluste |
+| **Portfolio Alerts** | Tagesverlust, Drawdown, Gewinnziel erreicht |
+
+Alerts koennen per **Discord** und **Telegram** gesendet werden. Siehe [Anleitungen/Alerts-einrichten.md](../Anleitungen/Alerts-einrichten.md).
+
+### Wie richte ich Telegram-Benachrichtigungen ein?
+
+Siehe [Anleitungen/Telegram Benachrichtigungen einrichten.md](../Anleitungen/Telegram%20Benachrichtigungen%20einrichten.md).
+
+---
+
+## Portfolio & Dashboard
+
+### Gibt es eine Portfolio-Uebersicht?
+
+**Ja.** Die Portfolio View (v3.6.0+) zeigt:
+- Multi-Exchange Uebersicht aller verbundenen Exchanges
+- Live-Positionen von allen Exchanges
+- Taegliche PnL-Charts pro Exchange
+- Kapital-Allokation (Allocation View)
+
+Siehe [Anleitungen/Portfolio-View.md](../Anleitungen/Portfolio-View.md).
+
+### Wo sehe ich meine Trade-Historie?
+
+1. **Dashboard** - Charts und Statistiken
+2. **Trades-Seite** - Filterbarer Trade-Log mit Pagination
+3. **Discord/Telegram** - Echtzeit-Benachrichtigungen
+4. **Tax Report** - Jaehrlicher Steuer-Export (CSV)
+
+### Wie berechne ich meine Win Rate?
+
+Das Dashboard zeigt automatisch:
+- Win Rate (gesamt und pro Zeitraum)
+- PnL Chart (taeglich und kumulativ)
+- Best/Worst Trade
+- Fees und Funding
 
 ---
 
 ## Risiko & Sicherheit
 
-### Was passiert wenn der Bot abstürzt?
+### Was passiert wenn der Bot abstuerzt?
 
-- **Offene Positionen bleiben offen** auf Bitget
+- **Offene Positionen bleiben offen** auf der Exchange
 - **TP/SL Orders bleiben aktiv** auf der Exchange
-- Der Bot erkennt offene Trades beim Neustart
-
-**Empfehlung:** Richte Monitoring ein (z.B. mit UptimeRobot).
+- Der Bot erkennt offene Trades beim Neustart (Auto-Restore)
 
 ### Was ist die "Daily Loss Limit"?
 
 Wenn der Bot am Tag mehr als X% verliert (Standard: 5%), stoppt er automatisch:
 - Keine neuen Trades
 - Offene Positionen bleiben (mit TP/SL)
-- Nächster Tag = Neustart
-
-**Warum?** Verhindert Spirale aus Verlusten und emotionalem Trading.
+- Naechster Tag = Neustart
 
 ### Kann jemand mein Geld stehlen mit dem API Key?
 
 **Nein**, wenn du richtig konfiguriert hast:
-- ❌ Keine Withdrawal-Berechtigung geben
-- ✅ IP-Whitelist aktivieren
-- ✅ API Key sicher aufbewahren (.env nie committen!)
+- Keine Withdrawal-Berechtigung geben
+- IP-Whitelist aktivieren
+- API Key sicher aufbewahren (.env nie committen!)
 
-Mit nur Trade-Berechtigung kann der Schlimmstfall ein schlechter Trade sein - aber kein Geld kann abgehoben werden.
-
-### Wie sicher ist die Discord-Webhook-URL?
-
-Die URL sollte geheim bleiben, aber:
-- Jemand mit der URL kann nur **Nachrichten senden**
-- Kein Zugriff auf Server/Channel-Einstellungen
-- Keine Leseberechtigung
-
-**Trotzdem:** Nicht öffentlich teilen.
+API Keys werden verschluesselt in der Datenbank gespeichert (Fernet Encryption).
 
 ---
 
 ## Performance & Monitoring
 
-### Wo sehe ich meine Trade-Historie?
-
-1. **Discord** - Alle Trades werden gepostet
-2. **Datenbank** - `data/trades.db` (SQLite)
-3. **Logs** - `logs/trading_bot.log`
-
-### Wie berechne ich meine Win Rate?
-
-```bash
-python main.py --status
-```
-
-Zeigt 30-Tage Statistiken inkl. Win Rate.
-
 ### Der Bot macht keine Trades - warum?
 
-Mögliche Gründe:
-
-| Problem | Lösung |
+| Problem | Loesung |
 |---------|--------|
 | Daily Limit erreicht | Warte bis morgen |
 | Confidence zu niedrig | Normale Marktbedingungen, kein Signal |
-| Bereits offene Position | Warte auf Schließung |
-| API-Fehler | Prüfe Logs |
-| Testnet aktiv | Prüfe BITGET_TESTNET in .env |
+| Bereits offene Position | Warte auf Schliessung |
+| API-Fehler | Pruefe Logs und Health-Check |
+| Demo-Modus aktiv | `DEMO_MODE=true` ist gewollt! |
+| Exchange nicht verbunden | Pruefe Settings > API Keys |
 
 ### Wie oft sollte der Bot profitabel sein?
 
-**Erwartung bei 60% Win Rate:**
-- 10 Trades → 6 Wins, 4 Losses
-- Monatlich bei 3 Trades/Tag → ~60 Trades
-- Davon ~36 Wins, ~24 Losses
+**Erwartung bei 60% Win Rate mit R/R 1.75:1:**
+- 10 Trades: 6 Wins, 4 Losses
+- Expected Value: ~1.3% pro Trade (vor Fees)
 
-**Aber:** Varianz existiert. Du kannst 5 Losses in Folge haben und trotzdem langfristig profitabel sein.
-
----
-
-## Technische Fragen
-
-### Wie ändere ich die Trading-Zeiten?
-
-In `src/bot/trading_bot.py`, Methode `_setup_scheduled_jobs()`:
-
-```python
-self.scheduler.add_job(
-    self.analyze_and_trade,
-    CronTrigger(hour="1,8,14,21", minute=0),  # Ändere hier
-    ...
-)
-```
-
-### Wie füge ich einen neuen Indikator hinzu?
-
-1. Daten holen in `src/data/market_data.py`
-2. Analyse in `src/strategy/liquidation_hunter.py`
-3. Signal-Logik anpassen
-
-### Kann ich die Strategie backtesten?
-
-Aktuell nicht eingebaut. Geplant für zukünftige Versionen.
-
-**Workaround:** Sammle Daten über Zeit und analysiere manuell.
-
-### Wie debugge ich Probleme?
-
-```bash
-# Ausführliche Logs
-python main.py --log-level DEBUG
-
-# Nur Analyse, kein Trading
-python main.py --test
-
-# Logs live verfolgen
-tail -f logs/trading_bot.log
-```
+**Varianz existiert.** Du kannst 5 Losses in Folge haben und trotzdem langfristig profitabel sein.
 
 ---
 
-## Kosten & Gebühren
+## Kosten & Gebuehren
 
-### Welche Gebühren fallen an?
+### Welche Gebuehren fallen an?
 
-| Gebührenart | Typischer Wert |
+| Gebuehrenart | Typischer Wert |
 |-------------|----------------|
 | Trading Fee (Maker) | 0.02% |
 | Trading Fee (Taker) | 0.06% |
 | Funding (alle 8h) | -0.03% bis +0.03% |
 
-**Bei $1000 Position:**
-- Entry: ~$0.60 (Taker)
-- Exit: ~$0.60 (Taker)
-- Funding: ~$0.30 pro 8h
-- **Total pro Trade:** ~$1.50-3.00
+### Wie kann ich die Kosten tracken?
 
-### Lohnt sich das bei kleinen Beträgen?
-
-| Balance | Position (10%) | Fees | Mindest-Gewinn für Break-Even |
-|---------|----------------|------|------------------------------|
-| $100 | $10 | ~$0.15 | 1.5% |
-| $500 | $50 | ~$0.75 | 1.5% |
-| $1000 | $100 | ~$1.50 | 1.5% |
-| $5000 | $500 | ~$7.50 | 1.5% |
-
-Mit TP bei 3.5% und ~1.5% Fees bleibt ~2% Netto-Gewinn.
+Das Dashboard zeigt:
+- **Fee Tracking** pro Trade und aggregiert
+- **Funding Payments** mit Historie
+- **Builder Fees** (bei Hyperliquid)
+- **Tax Report** mit Jahresuebersicht inkl. aller Kosten
 
 ---
 
@@ -256,10 +249,12 @@ pip install -r requirements.txt
 # Bot neustarten
 ```
 
+Oder mit Docker:
+```bash
+docker compose pull
+docker compose up -d
+```
+
 ### Wo sehe ich neue Features?
 
-Siehe [CHANGELOG.md](../CHANGELOG.md) für alle Änderungen.
-
-### Kann ich zur Entwicklung beitragen?
-
-Ja! Fork das Repository, erstelle einen Branch, und öffne einen Pull Request.
+Siehe [CHANGELOG.md](../CHANGELOG.md) fuer alle Aenderungen.

@@ -140,6 +140,31 @@ class TelegramNotifier:
         lines.append(f"\n\U0001f550 {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}")
         return await self._send_message("\n".join(lines))
 
+    async def send_alert(
+        self,
+        alert_type: str,
+        symbol: str | None,
+        current_value: float,
+        threshold: float,
+        message: str,
+        **kwargs,
+    ) -> bool:
+        """Send an alert notification."""
+        type_emoji = {"price": "\U0001f4b0", "strategy": "\U0001f9e0", "portfolio": "\U0001f4ca"}.get(alert_type, "\U0001f514")
+        lines = [
+            f"{type_emoji} <b>Alert — {alert_type.upper()}</b>",
+            "",
+        ]
+        if symbol:
+            lines.append(f"Symbol: <code>{symbol}</code>")
+        lines.extend([
+            f"Current: <code>{current_value:,.2f}</code>",
+            f"Threshold: <code>{threshold:,.2f}</code>",
+            f"\n{message}",
+            f"\n\U0001f550 {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}",
+        ])
+        return await self._send_message("\n".join(lines))
+
     async def send_test_message(self) -> bool:
         """Send a test message to verify configuration."""
         return await self._send_message(

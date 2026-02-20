@@ -34,6 +34,7 @@ class DiscordNotifier:
     COLOR_INFO = 0x0099FF  # Blue for info
     COLOR_WARNING = 0xFFCC00  # Yellow for warnings
     COLOR_ERROR = 0xFF0000  # Red for errors
+    COLOR_ALERT = 0xFF6600  # Orange for alerts
 
     def __init__(self, webhook_url: Optional[str] = None):
         """
@@ -525,6 +526,55 @@ class DiscordNotifier:
             color=self.COLOR_ERROR,
             fields=fields,
             footer="Please check the logs for more information",
+        )
+
+        payload = {
+            "username": "Bitget Trading Bot",
+            "embeds": [embed],
+        }
+
+        return await self._send_webhook(payload)
+
+    async def send_alert(
+        self,
+        alert_type: str,
+        symbol: Optional[str],
+        current_value: float,
+        threshold: float,
+        message: str,
+    ) -> bool:
+        """
+        Send an alert notification.
+
+        Args:
+            alert_type: Type of alert (price, strategy, portfolio)
+            symbol: Trading pair (for price alerts)
+            current_value: Value that triggered the alert
+            threshold: Configured threshold
+            message: Alert message
+
+        Returns:
+            True if sent successfully
+        """
+        type_emoji = {"price": "💰", "strategy": "🧠", "portfolio": "📊"}.get(alert_type, "🔔")
+
+        fields = [
+            {"name": "🔔 Alert Type", "value": f"`{alert_type.upper()}`", "inline": True},
+        ]
+        if symbol:
+            fields.append({"name": "📊 Symbol", "value": f"`{symbol}`", "inline": True})
+        fields.extend([
+            {"name": "📈 Current Value", "value": f"`{current_value:,.2f}`", "inline": True},
+            {"name": "🎯 Threshold", "value": f"`{threshold:,.2f}`", "inline": True},
+            {"name": "📝 Details", "value": f"```{message[:500]}```", "inline": False},
+        ])
+
+        embed = self._create_embed(
+            title=f"{type_emoji} ALERT TRIGGERED — {alert_type.upper()}",
+            description=message[:200],
+            color=self.COLOR_ALERT,
+            fields=fields,
+            footer="Trading Bot Alert System",
         )
 
         payload = {

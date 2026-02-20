@@ -9,6 +9,146 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.7.0] - 2026-02-20
+
+### Advanced Alerting, Multi-Exchange Portfolio, Technical Fixes, Docs & Tests
+
+Grosses Feature-Update: Advanced Alerting System (Preis/Strategie/Portfolio Alerts mit Discord+Telegram),
+Multi-Exchange Portfolio View (aggregiertes PnL ueber alle Exchanges), 5 technische Luecken behoben,
+Dokumentation aktualisiert, und umfangreiche Test-Abdeckung fuer alle neuen Features.
+
+#### Hinzugefuegt
+
+##### Advanced Alerting System (Backend)
+
+- **Datenbank-Modelle** (`src/models/database.py`):
+  - Neues `Alert` Modell: user_id, bot_config_id (nullable), alert_type (price/strategy/portfolio),
+    category, symbol, threshold, direction, is_enabled, cooldown_minutes, last_triggered_at, trigger_count
+  - Neues `AlertHistory` Modell: alert_id, triggered_at, current_value, message (Audit-Trail)
+  - Index `ix_alert_user_enabled` fuer schnelle Abfragen
+  - SQLite-Migrationen fuer beide Tabellen in `src/models/session.py`
+
+- **API Schemas** (`src/api/schemas/alerts.py`):
+  - `AlertCreate` mit model_validator: Preis-Alerts erfordern symbol+direction, threshold > 0
+  - `AlertUpdate` fuer partielle Aktualisierungen
+  - `AlertResponse` und `AlertHistoryResponse` mit from_attributes
+
+- **API Router** (`src/api/routers/alerts.py`):
+  - `GET /api/alerts` — Liste aller Alerts (optional Filter by type)
+  - `POST /api/alerts` — Alert erstellen (max 50 pro User)
+  - `GET /api/alerts/{id}` — Alert Details
+  - `PUT /api/alerts/{id}` — Alert aktualisieren
+  - `DELETE /api/alerts/{id}` — Alert loeschen
+  - `PATCH /api/alerts/{id}/toggle` — Aktivieren/Deaktivieren
+  - `GET /api/alerts/history` — Globale Alert-History (letzte 50)
+  - Rate Limit: 30/min auf Schreib-Endpoints
+
+- **Alert Engine** (`src/bot/alert_engine.py`):
+  - `AlertEngine` Klasse als Background Task im Orchestrator
+  - `_check_price_alerts()`: Alle 60s, nutzt MarketDataFetcher, gruppiert nach Symbol
+  - `_check_portfolio_alerts()`: Alle 5min, aggregiert Tages-PnL pro User
+  - `_trigger_alert()`: Cooldown-Check, DB-Update, AlertHistory-Eintrag, Notification, WebSocket
+  - `check_strategy_alerts()`: Inline-Funktion fuer BotWorker (low_confidence, consecutive_losses, signal_missed)
+
+- **Notification Erweiterung**:
+  - `DiscordNotifier.send_alert()` — Eigene Embed-Farbe `COLOR_ALERT = 0xFF6600` (Orange),
+    typspezifische Emojis (Preis, Strategie, Portfolio)
+  - `TelegramNotifier.send_alert()` — HTML-formatierte Alert-Nachrichten
+
+- **Orchestrator Integration** (`src/bot/orchestrator.py`):
+  - AlertEngine startet in `restore_on_startup()`, stoppt in `shutdown_all()`
+
+##### Multi-Exchange Portfolio View (Backend)
+
+- **API Schemas** (`src/api/schemas/portfolio.py`):
+  - `ExchangeSummary`, `PortfolioSummary`, `PortfolioPosition`, `PortfolioAllocation`, `PortfolioDaily`
+
+- **API Router** (`src/api/routers/portfolio.py`):
+  - `GET /api/portfolio/summary?days=30` — Aggregiertes PnL gruppiert nach Exchange
+  - `GET /api/portfolio/positions` — Live Positionen von allen verbundenen Exchanges (parallel, 10s Timeout)
+  - `GET /api/portfolio/daily?days=30` — Taegliche PnL-Aufschluesselung pro Exchange
+  - `GET /api/portfolio/allocation` — Balance-Verteilung pro Exchange
+
+- **Exchange Factory** (`src/exchanges/factory.py`):
+  - Neue Funktion `get_all_user_clients(user_id, db)` — Erstellt Client-Instanzen fuer alle verbundenen Exchanges
+
+##### Alerts Frontend
+
+- **Alerts-Seite** (`frontend/src/pages/Alerts.tsx`):
+  - Drei Tabs: Preis, Strategie, Portfolio (plus "Alle") zum Filtern
+  - Alert-Liste mit Toggle On/Off und Loeschen
+  - Erstellungs-Dialog mit typspezifischen Feldern (Symbol, Schwellenwert, Richtung, Cooldown)
+  - Verlaufs-Sektion mit den letzten 20 ausgeloesten Alerts
+  - Live WebSocket-Unterstuetzung fuer `alert_triggered` Events
+
+##### Portfolio Frontend
+
+- **Portfolio-Seite** (`frontend/src/pages/Portfolio.tsx`):
+  - Header mit Gesamtguthaben und Tages-PnL (farbkodiert)
+  - Exchange-Karten (Bitget=Blau, Hyperliquid=Gruen, Weex=Orange)
+  - Gestapeltes Flaechendiagramm: Taeglicher PnL pro Exchange (Recharts AreaChart)
+  - Positionstabelle: sortierbar nach PnL, alle Exchanges
+  - Allokations-Donut (Recharts PieChart)
+  - Periodenwahl (7/14/30/90 Tage)
+
+##### Navigation & Routing
+
+- **Routing** (`frontend/src/App.tsx`): Lazy-Imports und Routen fuer `/portfolio` und `/alerts`
+- **Navigation** (`frontend/src/components/layout/AppLayout.tsx`): Portfolio (Briefcase) und Alerts (Bell) Links
+- **TypeScript Interfaces** (`frontend/src/types/index.ts`): Alert, AlertHistory, AlertCreate,
+  PortfolioSummary, ExchangeSummary, PortfolioPosition, PortfolioDaily, PortfolioAllocation
+- **i18n** (`frontend/src/i18n/de.json` + `en.json`): ~70 neue Keys fuer alerts.* und portfolio.* Namespaces
+
+##### Technical Fixes
+
+- **Affiliate UID Verification** (`src/api/routers/affiliate.py`):
+  - `POST /api/affiliate-links/verify-uid` — Validiert UID-Format (Bitget: numerisch, Weex: alphanumerisch)
+  - Setzt `affiliate_verified = True` in ExchangeConnection
+- **Affiliate UID Gate** (`src/bot/hyperliquid_gates.py`):
+  - Blockiert Bot-Start wenn UID nicht verifiziert
+- **AI Module Exports** (`src/ai/__init__.py`):
+  - Vollstaendige `__all__` mit BaseLLMProvider, PROVIDER_REGISTRY, MODEL_CATALOG, etc.
+
+##### Tests
+
+- **Backend Tests (15 neue Dateien)**:
+  - `tests/unit/api/test_alerts_router.py` — 15 Tests: CRUD, Toggle, Filter, Validierung, Auth
+  - `tests/unit/api/test_portfolio_router.py` — 9 Tests: Summary, Positions, Daily, Allocation
+  - `tests/unit/api/test_affiliate_verification.py` — 9 Tests: UID-Format, Verification Flow
+  - `tests/unit/api/test_funding_case_fix.py` — 8 Tests: func.case Kompatibilitaet
+  - `tests/unit/bot/test_alert_engine.py` — 18 Tests: Lifecycle, Price/Portfolio/Strategy Checks, Cooldown, Trigger
+  - `tests/unit/test_alert_notifications.py` — 12 Tests: Discord/Telegram Alert Formatierung
+  - `tests/unit/test_claude_edge_backtest.py` — 6 Tests: HTF Sync/Async Routing, Backtest-Modus
+
+- **Frontend Tests (2 neue Dateien)**:
+  - `frontend/src/pages/__tests__/Alerts.test.tsx` — 10 Tests: Render, Tabs, Create Modal, Alerts Display
+  - `frontend/src/pages/__tests__/Portfolio.test.tsx` — 10 Tests: Render, Summary, Exchange Cards, Positions, Charts
+
+##### Dokumentation
+
+- **docs/API.md** — Komplett neu geschrieben mit allen aktuellen Endpoints
+- **docs/FAQ.md** — Aktualisiert fuer v3.7.0 Features
+- **docs/STRATEGY.md** — Alle 6 Strategien dokumentiert
+- **6 neue Anleitungen** in `Anleitungen/`:
+  - Backtesting, LLM Provider, Alerts, Portfolio, Strategien, Weex Setup
+
+#### Geaendert
+
+- **ClaudeEdge Backtest Fix** (`src/strategy/claude_edge_indicator.py`):
+  - `backtest_mode=False` Parameter: nutzt `_check_htf_alignment_sync()` im Backtest-Modus
+
+#### Behoben
+
+- **SQLAlchemy `case()` Workarounds entfernt** — `pytest.skip()` Workarounds in Tests entfernt
+
+#### Entfernt / Verschoben
+
+- **Legacy Test Cleanup**:
+  - `tests/test_auth.py` geloescht (redundant)
+  - `tests/test_bots.py`, `test_statistics.py`, `test_trades.py` nach `tests/integration/` verschoben
+
+---
+
 ## [3.6.0] - 2026-02-19
 
 ### Realistic Backtest Engine, Pro Mode Redesign & New Strategies
@@ -128,6 +268,57 @@ und BotBuilder Pro Mode Neugestaltung.
 | `frontend/src/i18n/i18n-completeness.test.ts` | i18n Vollstaendigkeit Tests |
 | `frontend/src/pages/GettingStarted.test.tsx` | GettingStarted Tests |
 | `frontend/src/pages/DashboardTour.test.tsx` | Dashboard Tour Tests |
+
+---
+
+## [3.5.1] - 2026-02-19
+
+### Grafana Admin Dashboard & Infrastructure Modernization
+
+Infrastruktur-Modernisierung mit Alembic Migrations, Shared Scheduler, Exchange Rate Limiter,
+Risk Stats in DB und neue Datenquellen. Grafana Admin Support Dashboard fuer PostgreSQL.
+
+#### Hinzugefuegt
+
+##### Grafana Admin Support Dashboard (#78)
+- **Admin Support Dashboard** (`monitoring/grafana/dashboards/admin-support.json`)
+  - Vorkonfiguriertes Grafana Dashboard fuer PostgreSQL-Daten
+  - Provisioning-Konfiguration fuer automatisches Dashboard-Loading
+  - PostgreSQL Datasource Auto-Provisioning (`monitoring/grafana/provisioning/datasources/datasources.yml`)
+
+##### Alembic Async Migration Framework (#44)
+- **Alembic Integration** — Async-faehiges Migrations-Framework
+  - `alembic.ini` + `migrations/env.py` mit async Engine Support
+  - `migrations/versions/001_initial_schema.py` — Initiale Schema-Migration
+  - Ersetzt die bisherigen inline SQLite-Migrationen fuer PostgreSQL
+
+##### Shared APScheduler (#46)
+- **Gemeinsamer Scheduler** — Ein APScheduler fuer alle BotWorker
+  - Reduziert Thread-Overhead bei vielen parallel laufenden Bots
+  - Zentrale Scheduler-Instanz im Orchestrator
+
+##### Exchange Rate Limiter (#47)
+- **Token Bucket Rate Limiter** (`src/exchanges/rate_limiter.py`)
+  - Per-Exchange Rate Limiting (shared ueber alle Bots)
+  - Verhindert API-Bans bei hoher Bot-Anzahl
+
+##### Risk Stats in Datenbank (#48)
+- **RiskManager Stats Migration** — Von JSON-Dateien in die Datenbank
+  - `RiskDailyStats` DB-Modell fuer persistente Risiko-Statistiken
+  - Migrations-Script: `scripts/migrate_risk_json.py`
+  - Eliminiert Filesystem-basierte State-Haltung
+
+##### Neue Datenquellen (#42)
+- **5 Velo-replizierte Datenquellen** (kostenlose Alternativen zu Velo-Daten)
+  - Neue Fetcher in `src/data/market_data.py` und `data_source_registry.py`
+  - Verfuegbar in Bot Builder und Backtesting
+
+##### Pro Mode Toggle (#56)
+- **UI Pro Mode** — Toggle fuer erweiterte Datenquellen-Anzeige
+  - Responsive Fix fuer mobile Darstellung
+
+#### Behoben
+- **Optimistic Preset Updates** (#41) — Preset-Speichern dauert nicht mehr 3-5s (IPv6/Vite Proxy Delay auf Windows)
 
 ---
 
@@ -276,6 +467,255 @@ fuer Multi-User-Betrieb mit Connection Pooling eingefuehrt.
 | `.env.example` | Pool-Parameter Dokumentation |
 | `.env` | `DATABASE_URL` auf PostgreSQL |
 | `tests/conftest.py` | `TEST_DATABASE_URL` Support |
+
+---
+
+## [3.3.5] - 2026-02-17
+
+### Architecture Hardening — BotWorker Decomposition & 3683 Tests
+
+Grosse Architektur-Ueberarbeitung: BotWorker von 1286 Zeilen in 5 fokussierte Mixins zerlegt,
+einheitliche Exception-Hierarchie, Security-Fixes und massive Test-Suite Erweiterung.
+
+#### Hinzugefuegt
+
+##### BotWorker Decomposition (#41)
+- **5 Mixins** extrahiert aus `bot_worker.py` (1286 → 648 Zeilen):
+  - `TradeExecutorMixin` (`src/bot/trade_executor.py`) — Trade-Ausfuehrung
+  - `PositionMonitorMixin` (`src/bot/position_monitor.py`) — Position-Ueberwachung
+  - `RotationManagerMixin` (`src/bot/rotation_manager.py`) — Symbol-Rotation
+  - `HyperliquidGatesMixin` (`src/bot/hyperliquid_gates.py`) — HL Builder/Referral Gates
+  - `NotificationsMixin` (`src/bot/notifications.py`) — Benachrichtigungs-Dispatch
+- **Bots Router Split** — `bots.py` (1259 → 648 Zeilen) aufgeteilt in:
+  - `bots_lifecycle.py` (327 Zeilen) — Start/Stop/Restart/Create/Delete
+  - `bots_statistics.py` (323 Zeilen) — Performance, Compare, Statistiken
+
+##### Exception & Error Handling
+- **Globaler Error Handler** (`src/api/middleware/error_handler.py`)
+  - Exception→HTTP Status Mapping: `ExchangeError`→502, `AuthError`→401, etc.
+- **Einheitliche Exception-Hierarchie** (`src/exceptions.py`)
+  - `BitgetClientError`, `HyperliquidClientError`, `WeexClientError` → `ExchangeError`
+  - `DataFetchError` → `DataSourceError`
+  - `CircuitBreakerError` → `TradingBotError`
+
+##### Security Hardening
+- **Refresh Token Rotation** mit `token_version` Revocation
+- **JSON Field Size Limits** (10KB) auf Bot Config Dicts
+- **Cross-Field Strategy Validation** (LLM erfordert Provider, Rotation erfordert Interval)
+- **Auth Audit Logging** mit Client IP fuer Login/Refresh Events
+- **FastAPI DI** — Globaler Orchestrator ersetzt durch `app.state`
+
+##### Shared Utilities
+- **`src/api/rate_limit.py`** — Zentraler Rate Limiter (8 Router aktualisiert)
+- **`src/utils/json_helpers.py`** — `parse_json_field()` Helper (4 Duplikate → 1)
+- **`src/utils/settings.py`** — `get_settings_batch()` batcht N+1 DB-Queries
+
+##### Frontend Unit Tests
+- **Vitest Konfiguration** (`frontend/vitest.config.ts`)
+- **Unit Tests** fuer API Client, UI Components, Pages, Stores
+- **ESLint Config** fuer Test-Dateien
+
+##### Backend Test Suite
+- **3683 Tests** (5 skipped, 0 failures) — Massive Erweiterung:
+  - 139 neue Test-Dateien
+  - Unit Tests fuer alle Router, Exchanges, Strategies, Providers
+  - Integration Tests fuer Bot Worker, Orchestrator, Dashboard
+
+| Datei | Aenderung |
+|-------|-----------|
+| `src/bot/bot_worker.py` | 1286 → 648 Zeilen, Mixins extrahiert |
+| `src/api/routers/bots.py` | Aufgeteilt in lifecycle + statistics |
+| `src/api/middleware/error_handler.py` | Exception→HTTP Mapping |
+| `src/exceptions.py` | Einheitliche Hierarchie |
+| `src/auth/jwt_handler.py` | Token Rotation + Revocation |
+| `src/api/main_app.py` | FastAPI DI statt globaler State |
+
+---
+
+## [3.3.4] - 2026-02-15
+
+### Degen Strategy & Settings Redesign
+
+Neue "Degen" Strategie mit festem LLM-Prompt und 14 Datenquellen, komplett ueberarbeitete
+Settings-Seite und verbesserter Tax Report.
+
+#### Hinzugefuegt
+- **Degen Strategy** (`src/strategy/degen.py`) — Fixed LLM Prompt fuer 1h BTC Predictions
+  - 14 Datenquellen, aggressives Confidence-Mapping
+  - Registriert in Strategy Registry mit eigenem Parameter-Schema
+- **Order Book Depth Fetcher** — Binance Futures Depth API Integration in `market_data.py`
+- **NumInput Komponente** (`frontend/src/components/ui/NumInput.tsx`)
+- **Pagination Komponente** (`frontend/src/components/ui/Pagination.tsx`)
+- **Strategy Display Names** im Frontend (Bot Cards, Grid View)
+
+#### Geaendert
+
+##### Settings Redesign
+- **Tabbed Layout** — 3 Tabs: API Keys, LLM Keys, Affiliate Links
+  - Komplett ueberarbeitete Settings-Seite (1781 → strukturierter)
+  - Verbesserte LLM-Key-Verwaltung mit Model Chips
+
+##### Tax Report
+- **CSV Format Fix** — Verbesserter Export
+- **Hyperliquid Builder Fee Signing Flow** Verbesserungen
+
+##### Weitere Aenderungen
+| Datei | Aenderung |
+|-------|-----------|
+| `src/strategy/degen.py` | NEU: Degen Strategy |
+| `src/bot/bot_worker.py` | LLM Key Injection fuer Degen |
+| `src/risk/risk_manager.py` | Multi-Bot Support Erweiterungen |
+| `frontend/src/pages/Settings.tsx` | Tabbed Redesign |
+| `frontend/src/pages/Presets.tsx` | Verbesserungen |
+| `src/api/routers/tax_report.py` | CSV Fix + verbesserter Export |
+
+---
+
+## [3.3.3] - 2026-02-13
+
+### Model Family Selection & Design System Overhaul
+
+LLM Model-Auswahl pro Provider, einheitliches Design System und standardisierte Trade-Tabellen.
+
+#### Hinzugefuegt
+- **MODEL_CATALOG** — Per-Provider Model-Auswahl (je 3 Modelle)
+  - Dependent Select im BotBuilder: Family → Model Kaskade
+  - `model_override` Support fuer alle 7+ LLM Provider
+  - LLM Connections API erweitert mit `family_name` und Models-Liste
+- **DeepSeek Provider** (`src/ai/providers/deepseek.py`) — Neuer LLM-Provider
+- **Latest Trade Hero Card** — Kopierbar, auf Bots Modal und Performance Page
+- **Confidence/Reasoning/Details Spalten** in Trade-Tabellen
+- **Legacy Bot LLM Detection** — Fallback aus Trade Reason Text
+
+#### Geaendert
+- **Trade-Tabellen standardisiert** — Dashboard-Format auf allen Seiten
+  - Einheitliches `table-premium` Styling
+- **Design System** — Konsistentes Glassmorphism, Badges, Table Styling
+- **Settings LLM Accordion** mit Model Chips
+- **Bots Modal** — Kompaktes Layout fuer scroll-freie Trade History
+- i18n: Model Selection Keys in DE + EN
+
+| Datei | Aenderung |
+|-------|-----------|
+| `src/ai/providers/__init__.py` | MODEL_CATALOG, Family Support |
+| `src/ai/providers/deepseek.py` | NEU: DeepSeek Provider |
+| `src/strategy/llm_signal.py` | model_override Support |
+| `src/api/routers/config.py` | LLM Connections + Models API |
+| `frontend/src/components/bots/BotBuilder.tsx` | Dependent Select |
+| `frontend/src/pages/Bots.tsx` | Trade Table Standardisierung |
+| `frontend/src/pages/BotPerformance.tsx` | Hero Card + Spalten |
+| `frontend/src/pages/Settings.tsx` | LLM Accordion + Chips |
+
+---
+
+## [3.3.2] - 2026-02-13
+
+### Quality & Security Sprint
+
+Umfassender Quality-Sprint: i18n-Bereinigung, Exception-Hierarchie, Security-Fixes,
+Circuit Breaker Erweiterung und erweiterte Test-Suite.
+
+#### Hinzugefuegt
+
+##### Exception Hierarchy (#20)
+- **Zentralisierte Exception-Hierarchie** (`src/exceptions.py`)
+  - Inheritance Tree: `TradingBotError` → `ExchangeError`, `DataSourceError`, etc.
+  - Debug Logging fuer stille Exception-Handler in `bot_worker.py`
+- **103 neue Tests**:
+  - 29 Bot Worker Tests (Lifecycle, Trading, Monitoring)
+  - 20 Discord Notifier Tests (Embeds, Webhooks)
+  - 29 Circuit Breaker Tests (State Transitions, Recovery)
+  - 25 Exception Hierarchy Tests (Inheritance, Catchability)
+
+##### Circuit Breaker Erweiterung (#20)
+- **Neue Circuit Breakers** fuer Top Trader L/S Ratio, OI History, Liquidations
+- **Data Freshness Tracking** via `fetch_timestamps` in DataQuality
+- **Performance Indexes** fuer `trade_records` und `bot_configs` Queries
+
+##### HL Builder & Affiliate Tests (#28)
+- **35 Tests** fuer Builder Fee Berechnung, Builder Kwargs Injection, Referral Gates
+- Builder Check: Soft-Warning → Hard-Gate (blockiert Bot-Start)
+
+#### Behoben
+
+##### Security Hardening (#39)
+- **C1 CRITICAL**: Admin-Query mit nicht-existierendem `User.is_admin` behoben
+- **H1 HIGH**: Legacy Plaintext Key Loading aus BitgetConfig entfernt
+- **H2 HIGH**: Rate Limit (10/min) auf `/api/auth/refresh` Endpoint
+- **H3 HIGH**: Deprecated Plaintext Webhook URLs via Migration bereinigt
+- **30 Security Regression Tests** hinzugefuegt
+
+##### Frontend i18n (#19)
+- **50+ i18n Keys** hinzugefuegt — Hardcoded Strings in BotDetail, Settings, Trades, Bots ersetzt
+- **Responsive Layout** — Modal 4-col → 2-col auf Mobile, Flex-Wrap fuer Bot Card Actions
+- **Light Mode** — Skeleton Opacity verbessert (0.06 → 0.10), Info Box Backgrounds
+
+##### Preset & Telegram i18n (#31, #32)
+- Telegram i18n Keys + Anleitung (#31)
+- Preset i18n Keys + Anleitung (#32)
+
+##### Discord Webhook (#30)
+- Globaler Discord Webhook Fallback entfernt (nur noch per-Bot)
+
+---
+
+## [3.3.1] - 2026-02-12
+
+### Backtesting Module
+
+Vollstaendiges Backtesting-System mit Frontend und Backend, erweiterbare Datenquellen
+und 11-Faktor Signal-Analyse.
+
+#### Hinzugefuegt
+
+##### Backend
+- **BacktestRun DB-Modell** — Persistente Backtest-Ergebnisse
+- **Backtest API Router** (`src/api/routers/backtest.py`) — 5 Endpoints
+  - Backtest starten, Status abfragen, Ergebnisse laden, History, Loeschen
+- **Strategy Adapter** (`src/backtest/strategy_adapter.py`) — Verbindet Strategien mit Backtest Engine
+- **Background Task Execution** mit BacktestEngine
+- **Pydantic Schemas** (`src/api/schemas/backtest.py`)
+
+##### Erweiterte Backtest Engine
+- **11-Faktor Signal-Analyse** — OI, Taker Volume, Top Trader L/S, Funding Divergence, Stablecoin Flows, Volatility, Macro
+- **8 neue API-Integrationen** in Historical Data Fetcher:
+  - Binance OI, Taker Buy/Sell, Top Trader L/S
+  - Bitget Funding, DefiLlama, CoinGecko, Blockchain.info, FRED
+- **5 neue Bot-Datenquellen** (jetzt 26 total):
+  - Stablecoin Flows (DefiLlama), BTC Hashrate (Blockchain.info)
+  - Bitget Funding Rate, DXY + Fed Funds Rate (FRED)
+
+##### Frontend
+- **Backtest Page** (`frontend/src/pages/Backtest.tsx`) — Vollstaendige UI:
+  - Config Card mit FilterDropdown (Strategie, Trading Pairs, Timeframe)
+  - DatePicker Side-by-Side, Equity Curve Chart
+  - Metrics Cards, Trade Log Table, History mit Status Badges
+  - Profit/Loss Spalte in Backtest History
+- **Neue UI-Komponenten**: DatePicker, FilterDropdown
+- **Unterstuetzte Timeframes**: 1m, 5m, 15m, 30m, 1h, 4h, 1D
+- **Trading Pairs**: BTCUSDT, ETHUSDT, SOLUSDT, XRPUSDT, DOGEUSDT, AVAXUSDT
+- **Active Data Sources als Badges** in Backtest-Ergebnissen
+
+##### Weitere Verbesserungen
+- **Trades Page Filter** Verbesserungen
+- **Win-Rate 3-Tier Colors** — Farbkodierung nach Performance
+- **KI-Companion Custom Prompt** Support mit LLM Note
+- **SQLite WAL Mode Fix** fuer concurrent Backtest Writes
+- i18n: Vollstaendige DE/EN Uebersetzungen
+
+| Datei | Aenderung |
+|-------|-----------|
+| `src/api/routers/backtest.py` | NEU: 5 Endpoints |
+| `src/api/schemas/backtest.py` | NEU: Pydantic Schemas |
+| `src/backtest/strategy_adapter.py` | NEU: Strategy Adapter |
+| `src/backtest/engine.py` | 11-Faktor Signal-Analyse |
+| `src/backtest/historical_data.py` | 8 neue API-Integrationen |
+| `src/data/data_source_registry.py` | 5 neue Datenquellen |
+| `src/data/market_data.py` | Neue Fetch-Methoden |
+| `src/models/database.py` | BacktestRun Modell |
+| `frontend/src/pages/Backtest.tsx` | NEU: Backtest UI |
+| `frontend/src/components/ui/DatePicker.tsx` | NEU |
+| `frontend/src/components/ui/FilterDropdown.tsx` | NEU |
 
 ---
 

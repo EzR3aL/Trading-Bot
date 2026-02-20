@@ -17,6 +17,8 @@ import {
   BookOpen,
   TrendingUp,
   FlaskConical,
+  Bell,
+  Briefcase,
   Menu,
   X,
   Sun,
@@ -28,9 +30,11 @@ import OfflineIndicator from '../ui/OfflineIndicator'
 
 const navItems: { path: string; key: string; icon: LucideIcon }[] = [
   { path: '/', key: 'dashboard', icon: LayoutDashboard },
+  { path: '/portfolio', key: 'portfolio', icon: Briefcase },
   { path: '/bots', key: 'myBots', icon: Bot },
   { path: '/performance', key: 'performance', icon: TrendingUp },
   { path: '/backtest', key: 'backtest', icon: FlaskConical },
+  { path: '/alerts', key: 'alerts', icon: Bell },
   { path: '/trades', key: 'trades', icon: ArrowLeftRight },
   { path: '/presets', key: 'presets', icon: Layers },
   { path: '/settings', key: 'settings', icon: Settings },
@@ -72,6 +76,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       pushEvent('trade_closed', d)
       const pnl = typeof d.pnl === 'number' ? ` ($${d.pnl.toFixed(2)})` : ''
       addToast('info', t('ws.tradeClosed', { symbol: d.symbol ?? '', pnl, defaultValue: `Trade closed: ${d.symbol ?? ''}${pnl}` }))
+    },
+    alert_triggered: (data: unknown) => {
+      const d = data as { message?: string }
+      pushEvent('alert_triggered', d)
+      addToast('info', d.message ?? t('ws.alertTriggered', { defaultValue: 'Alert triggered' }))
     },
   }), [pushEvent, updateBotStatus, addToast, t])
 

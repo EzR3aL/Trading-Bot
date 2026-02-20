@@ -109,9 +109,11 @@ class ClaudeEdgeIndicatorStrategy(BaseStrategy):
         self,
         params: Optional[Dict[str, Any]] = None,
         data_fetcher: Optional[MarketDataFetcher] = None,
+        backtest_mode: bool = False,
     ):
         super().__init__(params)
         self.data_fetcher = data_fetcher
+        self.backtest_mode = backtest_mode
         self._p = {**DEFAULTS, **self.params}
 
     async def _ensure_fetcher(self):
@@ -750,7 +752,12 @@ class ClaudeEdgeIndicatorStrategy(BaseStrategy):
         )
 
         # Enhancement #3: Multi-timeframe alignment
-        htf_data = await self._check_htf_alignment(symbol)
+        # In backtest mode, use sync HTF check with existing klines
+        # to avoid async API calls that are unavailable during backtesting
+        if self.backtest_mode:
+            htf_data = self._check_htf_alignment_sync(klines)
+        else:
+            htf_data = await self._check_htf_alignment(symbol)
 
         # Determine direction
         direction, reason = self._determine_direction(ribbon, momentum, adx_data)

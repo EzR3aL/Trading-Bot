@@ -1,8 +1,10 @@
 """
-Tests for multibot management endpoints.
+Integration tests for multibot management endpoints.
 
 Covers CRUD operations (create, list, get, update, delete),
 bot statistics, bot comparison performance, and demo_mode filtering.
+
+Migrated from tests/test_bots.py to tests/integration/.
 """
 
 import json
@@ -13,7 +15,7 @@ from pathlib import Path
 import pytest
 
 os.environ.setdefault("JWT_SECRET_KEY", "test-secret-key-for-testing-only-not-for-production")
-sys.path.insert(0, str(Path(__file__).parent.parent))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 
 # ---------------------------------------------------------------------------

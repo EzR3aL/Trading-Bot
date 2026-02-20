@@ -15,6 +15,7 @@ from typing import Dict, List, Optional
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from sqlalchemy import select, update
 
+from src.bot.alert_engine import AlertEngine
 from src.bot.bot_worker import BotWorker
 from src.models.database import BotConfig, BotInstance
 from src.models.session import get_session
@@ -40,6 +41,7 @@ class BotOrchestrator:
         self._workers: Dict[int, BotWorker] = {}  # bot_config_id -> BotWorker
         self._lock = asyncio.Lock()
         self._scheduler = AsyncIOScheduler()  # Shared scheduler for all bots
+        self._alert_engine = AlertEngine()
 
     async def start_bot(self, bot_config_id: int) -> bool:
         """
@@ -144,6 +146,9 @@ class BotOrchestrator:
         if not self._scheduler.running:
             self._scheduler.start()
 
+        # Start alert engine
+        await self._alert_engine.start()
+
         async with get_session() as session:
             # Find all enabled bot configs
             result = await session.execute(
@@ -200,6 +205,9 @@ class BotOrchestrator:
                     )
             except Exception as e:
                 logger.error(f"Orchestrator: Error updating DB on shutdown: {e}")
+
+            # Shutdown alert engine
+            await self._alert_engine.stop()
 
             # Shutdown shared scheduler
             if self._scheduler.running:
