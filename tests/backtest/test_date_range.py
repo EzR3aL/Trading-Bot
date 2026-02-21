@@ -9,6 +9,7 @@ Validates:
 """
 
 import math
+import os
 import pytest
 
 import sys
@@ -17,6 +18,9 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from datetime import datetime, timedelta
 from unittest.mock import AsyncMock, patch
+
+# Skip tests that call external APIs when running in CI
+_in_ci = os.environ.get("CI") == "true" or os.environ.get("GITHUB_ACTIONS") == "true"
 
 from src.backtest.historical_data import HistoricalDataFetcher
 
@@ -240,8 +244,9 @@ class TestStrategyAdapterDatePropagation:
 # ── Integration: date range with mock data ────────────────────────────────
 
 
+@pytest.mark.skipif(_in_ci, reason="Binance Futures API returns HTTP 451 on US-based CI runners")
 class TestDateRangeWithMockData:
-    """End-to-end tests with mock data fallback."""
+    """End-to-end tests with mock data fallback (requires Binance API access)."""
 
     @pytest.mark.asyncio
     async def test_backtest_with_historical_dates(self):
