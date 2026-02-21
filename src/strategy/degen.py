@@ -300,7 +300,7 @@ class DegenStrategy(BaseStrategy):
         liq_ctx: Dict[str, Any] = {}
         if "liquidations" in fetched and isinstance(fetched["liquidations"], list):
             liqs = fetched["liquidations"]
-            buy_liqs = sum(1 for l in liqs if l.get("side", "").upper() == "BUY")
+            buy_liqs = sum(1 for liq in liqs if liq.get("side", "").upper() == "BUY")
             sell_liqs = len(liqs) - buy_liqs
             risk = "high" if len(liqs) > 50 else "moderate" if len(liqs) > 20 else "low"
             liq_ctx = {

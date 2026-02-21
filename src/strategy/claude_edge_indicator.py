@@ -15,7 +15,6 @@ DATA SOURCE: Binance kline data (OHLCV) - same as Edge Indicator.
 Multi-timeframe uses a second kline fetch for 4h data (skipped in backtest).
 """
 
-import asyncio
 import math
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple

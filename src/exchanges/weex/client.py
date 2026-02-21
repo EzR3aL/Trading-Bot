@@ -5,7 +5,6 @@ Weex API is similar to Bitget with HMAC-SHA256 auth.
 Uses ccxt-compatible symbol format (e.g. BTC/USDT:USDT).
 """
 
-import asyncio
 import base64
 import hashlib
 import hmac

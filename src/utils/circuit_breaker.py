@@ -15,9 +15,9 @@ States:
 
 import asyncio
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
-from typing import Callable, Optional, Dict, Any, TypeVar, Generic
+from typing import Callable, Optional, Dict, Any, TypeVar
 from functools import wraps
 
 from tenacity import (

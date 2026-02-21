@@ -5,8 +5,6 @@ Defines all database tables: users, user_configs, config_presets,
 trades, funding_payments, bot_instances, exchanges.
 """
 
-from datetime import datetime
-from typing import Optional
 
 from sqlalchemy import (
     Boolean,

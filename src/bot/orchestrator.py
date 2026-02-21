@@ -148,7 +148,7 @@ class BotOrchestrator:
         async with get_session() as session:
             # Find all enabled bot configs
             result = await session.execute(
-                select(BotConfig).where(BotConfig.is_enabled == True)
+                select(BotConfig).where(BotConfig.is_enabled.is_(True))
             )
             enabled_configs = result.scalars().all()
 
@@ -196,7 +196,7 @@ class BotOrchestrator:
                 async with get_session() as session:
                     await session.execute(
                         update(BotInstance).where(
-                            BotInstance.is_running == True
+                            BotInstance.is_running.is_(True)
                         ).values(is_running=False, stopped_at=datetime.utcnow())
                     )
             except Exception as e:

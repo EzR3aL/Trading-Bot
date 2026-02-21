@@ -17,14 +17,13 @@ import base64
 import json
 import time
 from datetime import datetime
-from typing import Optional, Callable, Dict, Any, List
+from typing import Optional, Callable, Dict, List
 from dataclasses import dataclass, field
 
 import websockets
 from websockets.exceptions import ConnectionClosed
 
 from src.utils.logger import get_logger
-from config.settings import settings
 
 logger = get_logger(__name__)
 
@@ -426,7 +425,7 @@ class BitgetWebSocket:
 
             # Handle data updates
             if "action" in data and "data" in data:
-                action = data["action"]
+                _action = data["action"]
                 channel = data.get("arg", {}).get("channel", "")
 
                 if channel == "positions":

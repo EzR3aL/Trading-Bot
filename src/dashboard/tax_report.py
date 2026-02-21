@@ -5,9 +5,8 @@ Generates comprehensive tax reports for German tax compliance with support
 for both German and English languages.
 """
 from dataclasses import dataclass
-from typing import List, Dict, Optional, Any
+from typing import List, Dict, Any
 from datetime import datetime
-from collections import defaultdict
 import csv
 from io import StringIO
 import logging
@@ -479,7 +478,7 @@ class TaxReportGenerator:
 
     def _write_header_section(self, writer, data: Dict, language: str):
         """Write CSV header section."""
-        t = lambda key: translate(key, language)
+        def t(key): return translate(key, language)
         year = data['year']
 
         # Bilingual title
@@ -501,7 +500,7 @@ class TaxReportGenerator:
 
     def _write_summary_section(self, writer, data: Dict, language: str):
         """Write summary section."""
-        t = lambda key: translate(key, language)
+        def t(key): return translate(key, language)
         summary = data['summary']
 
         # Section header (bilingual)
@@ -530,7 +529,7 @@ class TaxReportGenerator:
 
     def _write_trades_section(self, writer, data: Dict, language: str):
         """Write detailed trades section."""
-        t = lambda key: translate(key, language)
+        def t(key): return translate(key, language)
         trades = data['trades']
 
         # Section header (bilingual)
@@ -571,7 +570,7 @@ class TaxReportGenerator:
 
     def _write_monthly_section(self, writer, data: Dict, language: str):
         """Write monthly breakdown section."""
-        t = lambda key: translate(key, language)
+        def t(key): return translate(key, language)
         monthly = data['monthly_breakdown']
 
         # Section header (bilingual)
@@ -607,7 +606,7 @@ class TaxReportGenerator:
 
     def _write_funding_section(self, writer, data: Dict, language: str):
         """Write funding payments section."""
-        t = lambda key: translate(key, language)
+        def t(key): return translate(key, language)
         funding = data['funding_payments']
 
         # Section header (bilingual)

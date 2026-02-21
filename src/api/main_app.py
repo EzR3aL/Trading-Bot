@@ -14,16 +14,16 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from fastapi import FastAPI, Request, Response
-from fastapi.exceptions import RequestValidationError
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
-from fastapi.staticfiles import StaticFiles
-from slowapi import _rate_limit_exceeded_handler
-from slowapi.errors import RateLimitExceeded
-from starlette.middleware.base import BaseHTTPMiddleware
+from fastapi import FastAPI, Request, Response  # noqa: E402
+from fastapi.exceptions import RequestValidationError  # noqa: E402
+from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
+from fastapi.responses import JSONResponse  # noqa: E402
+from fastapi.staticfiles import StaticFiles  # noqa: E402
+from slowapi import _rate_limit_exceeded_handler  # noqa: E402
+from slowapi.errors import RateLimitExceeded  # noqa: E402
+from starlette.middleware.base import BaseHTTPMiddleware  # noqa: E402
 
-from src.api.routers import (
+from src.api.routers import (  # noqa: E402
     admin_logs,
     affiliate,
     auth,
@@ -42,8 +42,8 @@ from src.api.routers import (
     users,
     websocket,
 )
-from src.models.session import close_db, init_db
-from src.utils.logger import get_logger
+from src.models.session import close_db, init_db  # noqa: E402
+from src.utils.logger import get_logger  # noqa: E402
 
 logger = get_logger(__name__)
 

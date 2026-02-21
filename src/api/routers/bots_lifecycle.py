@@ -1,7 +1,6 @@
 """Bot lifecycle endpoints: start, stop, restart, test notifications, apply presets."""
 
 import json
-from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import select
@@ -66,8 +65,8 @@ async def _enforce_affiliate_gate(exchange_type: str, user: User, db: AsyncSessi
     link_result = await db.execute(
         select(AffiliateLink).where(
             AffiliateLink.exchange_type == exchange_type,
-            AffiliateLink.is_active == True,
-            AffiliateLink.uid_required == True,
+            AffiliateLink.is_active.is_(True),
+            AffiliateLink.uid_required.is_(True),
         )
     )
     aff_link = link_result.scalar_one_or_none()

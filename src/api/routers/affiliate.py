@@ -37,7 +37,7 @@ async def list_affiliate_links(
 ):
     """List all active affiliate links (any authenticated user)."""
     result = await db.execute(
-        select(AffiliateLink).where(AffiliateLink.is_active == True)
+        select(AffiliateLink).where(AffiliateLink.is_active.is_(True))
     )
     return [AffiliateLinkResponse.model_validate(link) for link in result.scalars().all()]
 

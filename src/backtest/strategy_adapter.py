@@ -10,13 +10,18 @@ with a BacktestMarketDataFetcher, ensuring identical signal generation.
 LLM strategies fall back to LEGACY mode with engine-internal signal generators.
 """
 
+from __future__ import annotations
+
 import math
 from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from src.backtest.engine import BacktestConfig, BacktestEngine
 from src.backtest.historical_data import HistoricalDataFetcher
 from src.utils.logger import get_logger
+
+if TYPE_CHECKING:
+    from src.backtest.report import BacktestResult
 
 logger = get_logger(__name__)
 

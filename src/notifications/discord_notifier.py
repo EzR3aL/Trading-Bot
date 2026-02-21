@@ -285,7 +285,7 @@ class DiscordNotifier:
             color = self.COLOR_LOSS
 
         # Direction emoji
-        direction_emoji = "📈" if side.lower() == "long" else "📉"
+        _direction_emoji = "📈" if side.lower() == "long" else "📉"
 
         fields = [
             {"name": "🔸 Mode", "value": f"**`{mode_badge}`**", "inline": True},
