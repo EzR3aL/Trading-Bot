@@ -10,19 +10,19 @@ Validates:
 
 import math
 import os
+import sys
+from datetime import datetime, timedelta
+from pathlib import Path
+from unittest.mock import AsyncMock, patch
+
 import pytest
 
-import sys
-from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from datetime import datetime, timedelta
-from unittest.mock import AsyncMock, patch
+from src.backtest.historical_data import HistoricalDataFetcher  # noqa: E402
 
 # Skip tests that call external APIs when running in CI
 _in_ci = os.environ.get("CI") == "true" or os.environ.get("GITHUB_ACTIONS") == "true"
-
-from src.backtest.historical_data import HistoricalDataFetcher
 
 
 # ── HistoricalDataFetcher date range helpers ──────────────────────────────
