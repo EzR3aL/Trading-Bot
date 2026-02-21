@@ -9,6 +9,21 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.15.1] - 2026-02-21
+
+### Hinzugefuegt
+- **Portfolio In-Memory Cache:** 10s TTL-Cache fuer `/positions` und `/allocation` Endpoints — wiederholte Aufrufe werden sofort bedient
+- **Portfolio Cache Tests:** 4 Unit-Tests fuer Cache-Logik (hit, miss, TTL-Ablauf, Key-Isolation)
+
+### Geaendert
+- **Portfolio progressive Loading:** Schnelle DB-Queries (Summary, Daily) laden sofort, Exchange-API-Calls (Positions, Allocation) im Hintergrund mit eigenem Spinner
+- **Settings resilientes Laden:** `Promise.allSettled` statt `Promise.all` — einzelne API-Fehler blockieren nicht mehr die gesamte Seite
+- **Settings Verbindungen-Tab:** Nur noch fuer Admins sichtbar, nicht mehr in der User-Ansicht
+- **OfflineIndicator robuster:** Erfordert 2 aufeinanderfolgende Fehler bevor Banner erscheint, Pruefintervall von 30s auf 15s verkuerzt
+- **Axios Timeout:** 15s globaler Timeout hinzugefuegt um endloses Haengen zu verhindern
+
+---
+
 ## [3.15.0] - 2026-02-21
 
 ### Hinzugefuegt

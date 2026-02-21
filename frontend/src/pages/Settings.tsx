@@ -10,8 +10,8 @@ import { ExchangeIcon } from '../components/ui/ExchangeLogo'
 import FilterDropdown from '../components/ui/FilterDropdown'
 import GuidedTour, { TourHelpButton, type TourStep } from '../components/ui/GuidedTour'
 
-const BASE_TABS = ['apiKeys', 'llmKeys', 'connections'] as const
-const ADMIN_TABS = [...BASE_TABS, 'affiliateLinks', 'hyperliquid'] as const
+const BASE_TABS = ['apiKeys', 'llmKeys'] as const
+const ADMIN_TABS = [...BASE_TABS, 'connections', 'affiliateLinks', 'hyperliquid'] as const
 
 /* ------------------------------------------------------------------ */
 /*  Inline Key Form (used inside accordion)                           */
@@ -201,25 +201,39 @@ export default function Settings() {
 
   useEffect(() => {
     const load = async () => {
+      // Fetch exchanges first (no auth needed) -- always works
       try {
-        const [, exchRes, connRes, llmRes, affRes] = await Promise.all([
-          api.get('/config'),
-          api.get('/exchanges'),
-          api.get('/config/exchange-connections'),
-          api.get('/config/llm-connections'),
-          api.get('/affiliate-links'),
-        ])
+        const exchRes = await api.get('/exchanges')
         setExchanges(exchRes.data.exchanges)
-        setConnections(connRes.data.connections || [])
-        setLlmConnections(llmRes.data.connections || [])
+      } catch {
+        setMessage(t('common.error'))
+      }
 
+      // Fetch auth-required data independently so one failure doesn't block others
+      const [configRes, connRes, llmRes, affRes] = await Promise.allSettled([
+        api.get('/config'),
+        api.get('/config/exchange-connections'),
+        api.get('/config/llm-connections'),
+        api.get('/affiliate-links'),
+      ])
+
+      if (connRes.status === 'fulfilled') {
+        setConnections(connRes.value.data.connections || [])
+      }
+      if (llmRes.status === 'fulfilled') {
+        setLlmConnections(llmRes.value.data.connections || [])
+      }
+      if (affRes.status === 'fulfilled') {
         const affMap: Record<string, { affiliate_url: string; label: string | null; uid_required: boolean }> = {}
-        for (const link of affRes.data) {
+        for (const link of affRes.value.data) {
           affMap[link.exchange_type] = link
         }
         setUserAffiliateLinks(affMap)
+      }
 
-      } catch {
+      // Show error only if all auth requests failed
+      const authResults = [configRes, connRes, llmRes, affRes]
+      if (authResults.every(r => r.status === 'rejected')) {
         setMessage(t('common.error'))
       }
     }

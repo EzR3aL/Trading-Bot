@@ -16,18 +16,26 @@ export default function OfflineIndicator() {
     }
   }, [])
 
-  // Periodic API health check (every 30s)
+  // Periodic API health check (every 15s, require 2 consecutive failures)
   useEffect(() => {
+    let failCount = 0
     const check = async () => {
       try {
         const res = await fetch('/api/health', { signal: AbortSignal.timeout(5000) })
-        setApiDown(!res.ok)
+        if (res.ok) {
+          failCount = 0
+          setApiDown(false)
+        } else {
+          failCount++
+          if (failCount >= 2) setApiDown(true)
+        }
       } catch {
-        setApiDown(true)
+        failCount++
+        if (failCount >= 2) setApiDown(true)
       }
     }
     check()
-    const interval = setInterval(check, 30_000)
+    const interval = setInterval(check, 15_000)
     return () => clearInterval(interval)
   }, [])
 

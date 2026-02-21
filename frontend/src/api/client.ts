@@ -3,6 +3,7 @@ import axios from 'axios'
 const api = axios.create({
   baseURL: '/api',
   headers: { 'Content-Type': 'application/json' },
+  timeout: 15_000,
 })
 
 // Refresh lock to prevent multiple simultaneous refresh attempts

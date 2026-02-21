@@ -1,7 +1,8 @@
 """Multi-exchange portfolio view endpoints."""
 
 import asyncio
-from typing import Optional
+import time
+from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import case, func, select
@@ -22,6 +23,21 @@ from src.utils.logger import get_logger
 logger = get_logger(__name__)
 
 router = APIRouter(prefix="/api/portfolio", tags=["portfolio"])
+
+# --- In-memory cache for exchange API responses (positions, allocation) ---
+_cache: dict[str, tuple[float, Any]] = {}
+CACHE_TTL = 10  # seconds
+
+
+def _cache_get(key: str) -> Any | None:
+    entry = _cache.get(key)
+    if entry and (time.monotonic() - entry[0]) < CACHE_TTL:
+        return entry[1]
+    return None
+
+
+def _cache_set(key: str, value: Any) -> None:
+    _cache[key] = (time.monotonic(), value)
 
 
 @router.get("/summary", response_model=PortfolioSummary)
@@ -104,6 +120,11 @@ async def get_portfolio_positions(
     db: AsyncSession = Depends(get_db),
 ):
     """Fetch live positions from all connected exchanges."""
+    cache_key = f"positions:{user.id}"
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
+
     clients = await _get_all_user_clients(user.id, db)
     if not clients:
         return []
@@ -136,6 +157,7 @@ async def get_portfolio_positions(
         *(fetch_positions(ex, cl) for ex, cl in clients.items())
     )
 
+    _cache_set(cache_key, positions)
     return positions
 
 
@@ -190,6 +212,11 @@ async def get_portfolio_allocation(
     db: AsyncSession = Depends(get_db),
 ):
     """Balance distribution per exchange (for pie/donut chart)."""
+    cache_key = f"allocation:{user.id}"
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
+
     clients = await _get_all_user_clients(user.id, db)
     if not clients:
         return []
@@ -215,6 +242,7 @@ async def get_portfolio_allocation(
         *(fetch_balance(ex, cl) for ex, cl in clients.items())
     )
 
+    _cache_set(cache_key, allocations)
     return allocations
 
 

@@ -1,6 +1,42 @@
 """Tests for the portfolio API router."""
 
+import time
+
 import pytest
+
+from src.api.routers.portfolio import CACHE_TTL, _cache, _cache_get, _cache_set
+
+
+@pytest.fixture(autouse=True)
+def clear_portfolio_cache():
+    """Ensure each test starts with a clean cache."""
+    _cache.clear()
+    yield
+    _cache.clear()
+
+
+class TestPortfolioCache:
+    """Test in-memory cache helpers."""
+
+    def test_cache_miss_returns_none(self):
+        assert _cache_get("nonexistent") is None
+
+    def test_cache_hit_returns_value(self):
+        _cache_set("key", [1, 2, 3])
+        assert _cache_get("key") == [1, 2, 3]
+
+    def test_cache_expires_after_ttl(self):
+        _cache_set("key", "value")
+        # Manually expire the entry
+        ts, val = _cache["key"]
+        _cache["key"] = (ts - CACHE_TTL - 1, val)
+        assert _cache_get("key") is None
+
+    def test_cache_isolates_keys(self):
+        _cache_set("positions:1", "pos1")
+        _cache_set("positions:2", "pos2")
+        assert _cache_get("positions:1") == "pos1"
+        assert _cache_get("positions:2") == "pos2"
 
 
 class TestPortfolioSummary:

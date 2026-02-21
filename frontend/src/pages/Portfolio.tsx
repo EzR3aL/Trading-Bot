@@ -63,6 +63,7 @@ export default function Portfolio() {
   const [allocation, setAllocation] = useState<PortfolioAllocation[]>([])
   const [period, setPeriod] = useState<number>(30)
   const [loading, setLoading] = useState(true)
+  const [loadingExchange, setLoadingExchange] = useState(true)
   const [error, setError] = useState('')
 
   // Sorting state for positions
@@ -70,29 +71,46 @@ export default function Portfolio() {
 
   /* ── Data Fetching ──────────────────────────────────────── */
 
+  // Phase 1: Fast DB queries (summary + daily) -- renders page instantly
   useEffect(() => {
-    const load = async () => {
+    const loadFast = async () => {
       setLoading(true)
       setError('')
       try {
-        const [sumRes, posRes, dailyRes, allocRes] = await Promise.all([
+        const [sumRes, dailyRes] = await Promise.all([
           api.get(`/portfolio/summary?days=${period}`),
-          api.get('/portfolio/positions'),
           api.get(`/portfolio/daily?days=${period}`),
-          api.get('/portfolio/allocation'),
         ])
         setSummary(sumRes.data)
-        setPositions(posRes.data.positions || posRes.data || [])
         setDailyData(dailyRes.data.daily || dailyRes.data || [])
-        setAllocation(allocRes.data.allocations || allocRes.data || [])
       } catch {
         setError(t('common.error'))
       } finally {
         setLoading(false)
       }
     }
-    load()
+    loadFast()
   }, [period, t])
+
+  // Phase 2: Slow exchange API calls (positions + allocation) -- loads in background
+  useEffect(() => {
+    const loadExchange = async () => {
+      setLoadingExchange(true)
+      try {
+        const [posRes, allocRes] = await Promise.all([
+          api.get('/portfolio/positions'),
+          api.get('/portfolio/allocation'),
+        ])
+        setPositions(posRes.data.positions || posRes.data || [])
+        setAllocation(allocRes.data.allocations || allocRes.data || [])
+      } catch {
+        // Exchange data is optional -- don't block the page
+      } finally {
+        setLoadingExchange(false)
+      }
+    }
+    loadExchange()
+  }, [t])
 
   /* ── Derived Data ───────────────────────────────────────── */
 
@@ -191,8 +209,11 @@ export default function Portfolio() {
             <div className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-1">
               {t('portfolio.totalBalance')}
             </div>
-            <div className="text-3xl font-bold text-white">
+            <div className="text-3xl font-bold text-white flex items-center gap-3">
               ${totalBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              {loadingExchange && (
+                <div className="w-4 h-4 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+              )}
             </div>
             {summary && (
               <div className={`flex items-center gap-1 mt-1 text-sm ${summary.total_pnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
@@ -336,7 +357,11 @@ export default function Portfolio() {
           <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-4">
             {t('portfolio.allocation')}
           </h3>
-          {pieData.length === 0 ? (
+          {loadingExchange ? (
+            <div className="flex items-center justify-center h-48">
+              <div className="w-6 h-6 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+            </div>
+          ) : pieData.length === 0 ? (
             <div className="flex items-center justify-center h-48 text-gray-500 text-sm">
               {t('portfolio.noData')}
             </div>
@@ -396,7 +421,11 @@ export default function Portfolio() {
             <span className="text-xs text-gray-400">{positions.length} open</span>
           )}
         </div>
-        {sortedPositions.length === 0 ? (
+        {loadingExchange ? (
+          <div className="p-8 flex items-center justify-center">
+            <div className="w-6 h-6 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+          </div>
+        ) : sortedPositions.length === 0 ? (
           <div className="p-8 text-center text-gray-500">{t('portfolio.noPositions')}</div>
         ) : (
           <div className="overflow-x-auto">
