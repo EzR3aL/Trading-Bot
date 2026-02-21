@@ -12,6 +12,7 @@ import asyncio
 from datetime import datetime
 from typing import Dict, List, Optional
 
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from sqlalchemy import select, update
 
 from src.bot.bot_worker import BotWorker
@@ -38,6 +39,7 @@ class BotOrchestrator:
     def __init__(self):
         self._workers: Dict[int, BotWorker] = {}  # bot_config_id -> BotWorker
         self._lock = asyncio.Lock()
+        self._scheduler = AsyncIOScheduler()  # Shared scheduler for all bots
 
     async def start_bot(self, bot_config_id: int) -> bool:
         """
@@ -55,8 +57,12 @@ class BotOrchestrator:
         if bot_config_id in self._workers and self._workers[bot_config_id].status == "running":
             raise ValueError(f"Bot {bot_config_id} is already running")
 
-        # Create and initialize worker
-        worker = BotWorker(bot_config_id)
+        # Ensure shared scheduler is running
+        if not self._scheduler.running:
+            self._scheduler.start()
+
+        # Create and initialize worker with shared scheduler
+        worker = BotWorker(bot_config_id, scheduler=self._scheduler)
         success = await worker.initialize()
 
         if not success:
@@ -72,6 +78,14 @@ class BotOrchestrator:
         await self._update_instance_state(bot_config_id, True)
 
         logger.info(f"Orchestrator: Bot {bot_config_id} started")
+
+        # Broadcast event via WebSocket
+        self._broadcast_event(
+            worker.config.user_id,
+            "bot_started",
+            {"bot_id": bot_config_id, "status": worker.get_status_dict()},
+        )
+
         return True
 
     async def stop_bot(self, bot_config_id: int) -> bool:
@@ -90,12 +104,22 @@ class BotOrchestrator:
         if not worker or worker.status != "running":
             return False
 
+        user_id = worker.config.user_id if worker.config else None
+
         await worker.stop()
+        del self._workers[bot_config_id]
 
         # Update DB
         await self._update_instance_state(bot_config_id, False)
 
         logger.info(f"Orchestrator: Bot {bot_config_id} stopped")
+
+        # Broadcast event via WebSocket
+        if user_id is not None:
+            self._broadcast_event(
+                user_id, "bot_stopped", {"bot_id": bot_config_id}
+            )
+
         return True
 
     async def restart_bot(self, bot_config_id: int) -> bool:
@@ -116,6 +140,10 @@ class BotOrchestrator:
         and starts them.
         """
         logger.info("Orchestrator: Restoring bots from database...")
+
+        # Start shared scheduler if not already running
+        if not self._scheduler.running:
+            self._scheduler.start()
 
         async with get_session() as session:
             # Find all enabled bot configs
@@ -173,6 +201,10 @@ class BotOrchestrator:
                     )
             except Exception as e:
                 logger.error(f"Orchestrator: Error updating DB on shutdown: {e}")
+
+            # Shutdown shared scheduler
+            if self._scheduler.running:
+                self._scheduler.shutdown(wait=False)
 
             self._workers.clear()
             logger.info("Orchestrator: All bots shut down")
@@ -244,3 +276,12 @@ class BotOrchestrator:
 
         except Exception as e:
             logger.error(f"Orchestrator: DB state update error: {e}")
+
+    @staticmethod
+    def _broadcast_event(user_id: int, event_type: str, data: dict) -> None:
+        """Fire-and-forget WebSocket broadcast."""
+        try:
+            from src.api.websocket.manager import ws_manager
+            asyncio.create_task(ws_manager.broadcast_to_user(user_id, event_type, data))
+        except Exception as e:
+            logger.debug("WS broadcast failed: %s", e)

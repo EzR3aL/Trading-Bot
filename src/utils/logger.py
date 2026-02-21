@@ -1,8 +1,9 @@
 """
 Logging configuration for the Bitget Trading Bot.
-Provides colored console output and file logging.
+Provides colored console output, file logging, and optional JSON output.
 """
 
+import json as json_lib
 import logging
 import os
 import sys
@@ -12,12 +13,33 @@ from pathlib import Path
 import colorlog
 
 
+class JSONFormatter(logging.Formatter):
+    """Structured JSON log formatter for production."""
+
+    def format(self, record):
+        log_entry = {
+            "timestamp": self.formatTime(record),
+            "level": record.levelname,
+            "logger": record.name,
+            "message": record.getMessage(),
+            "module": record.module,
+            "function": record.funcName,
+            "line": record.lineno,
+        }
+        if record.exc_info and record.exc_info[0]:
+            log_entry["exception"] = self.formatException(record.exc_info)
+        return json_lib.dumps(log_entry)
+
+
 def setup_logging(
     log_level: str = "INFO",
     log_file: str = "logs/trading_bot.log",
 ) -> logging.Logger:
     """
     Set up logging configuration with colored console output and file logging.
+
+    Set LOG_FORMAT=json environment variable to enable structured JSON logging
+    for production deployments (e.g. log aggregators like ELK, Datadog).
 
     Args:
         log_level: Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
@@ -37,33 +59,44 @@ def setup_logging(
     # Remove existing handlers
     root_logger.handlers = []
 
-    # Console handler with colors
-    console_handler = colorlog.StreamHandler(sys.stdout)
+    # Check if JSON mode is enabled
+    use_json = os.getenv("LOG_FORMAT", "text").lower() == "json"
+
+    # Console handler
+    console_handler = logging.StreamHandler(sys.stdout) if use_json else colorlog.StreamHandler(sys.stdout)
     console_handler.setLevel(logging.DEBUG)
 
-    console_format = colorlog.ColoredFormatter(
-        "%(log_color)s%(asctime)s | %(levelname)-8s | %(name)s | %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
-        log_colors={
-            "DEBUG": "cyan",
-            "INFO": "green",
-            "WARNING": "yellow",
-            "ERROR": "red",
-            "CRITICAL": "red,bg_white",
-        },
-    )
-    console_handler.setFormatter(console_format)
+    if use_json:
+        console_handler.setFormatter(JSONFormatter())
+    else:
+        console_format = colorlog.ColoredFormatter(
+            "%(log_color)s%(asctime)s | %(levelname)-8s | %(name)s | %(message)s",
+            datefmt="%Y-%m-%d %H:%M:%S",
+            log_colors={
+                "DEBUG": "cyan",
+                "INFO": "green",
+                "WARNING": "yellow",
+                "ERROR": "red",
+                "CRITICAL": "red,bg_white",
+            },
+        )
+        console_handler.setFormatter(console_format)
+
     root_logger.addHandler(console_handler)
 
     # File handler
     file_handler = logging.FileHandler(log_file, encoding="utf-8")
     file_handler.setLevel(logging.DEBUG)
 
-    file_format = logging.Formatter(
-        "%(asctime)s | %(levelname)-8s | %(name)s | %(funcName)s:%(lineno)d | %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
-    )
-    file_handler.setFormatter(file_format)
+    if use_json:
+        file_handler.setFormatter(JSONFormatter())
+    else:
+        file_format = logging.Formatter(
+            "%(asctime)s | %(levelname)-8s | %(name)s | %(funcName)s:%(lineno)d | %(message)s",
+            datefmt="%Y-%m-%d %H:%M:%S",
+        )
+        file_handler.setFormatter(file_format)
+
     root_logger.addHandler(file_handler)
 
     return root_logger

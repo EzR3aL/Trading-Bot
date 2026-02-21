@@ -1,8 +1,10 @@
 """
-Tests for trade history endpoints.
+Integration tests for trade history endpoints.
 
 Covers listing trades with pagination, filtering by status, symbol,
 demo_mode, and the trade sync endpoint.
+
+Migrated from tests/test_trades.py to tests/integration/.
 """
 
 import os
@@ -12,7 +14,7 @@ from pathlib import Path
 import pytest
 
 os.environ.setdefault("JWT_SECRET_KEY", "test-secret-key-for-testing-only-not-for-production")
-sys.path.insert(0, str(Path(__file__).parent.parent))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 
 # ---------------------------------------------------------------------------

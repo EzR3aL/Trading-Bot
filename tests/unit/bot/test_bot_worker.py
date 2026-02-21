@@ -277,8 +277,8 @@ class TestScheduleSetup:
 
         worker._setup_schedule()
 
-        # Should add analysis job and monitor job (+ no rotation)
-        assert worker._scheduler.add_job.call_count == 2
+        # Should add analysis job + monitor job + daily summary
+        assert worker._scheduler.add_job.call_count == 3
 
     def test_custom_cron_schedule(self):
         worker = BotWorker(bot_config_id=1)
@@ -290,7 +290,7 @@ class TestScheduleSetup:
 
         worker._setup_schedule()
 
-        assert worker._scheduler.add_job.call_count == 2
+        assert worker._scheduler.add_job.call_count == 3
 
     def test_rotation_only_no_analysis_job(self):
         worker = BotWorker(bot_config_id=1)
@@ -303,12 +303,12 @@ class TestScheduleSetup:
 
         worker._setup_schedule()
 
-        # Should add monitor job + rotation job (no regular analysis)
+        # Should add monitor job + rotation job + daily summary (no regular analysis)
         job_ids = [
             call.kwargs.get("id", call.args[2] if len(call.args) > 2 else "")
             for call in worker._scheduler.add_job.call_args_list
         ]
-        assert worker._scheduler.add_job.call_count == 2  # monitor + rotation
+        assert worker._scheduler.add_job.call_count == 3  # monitor + rotation + daily_summary
 
     def test_default_market_sessions(self):
         worker = BotWorker(bot_config_id=1)
@@ -320,7 +320,7 @@ class TestScheduleSetup:
 
         worker._setup_schedule()
 
-        assert worker._scheduler.add_job.call_count == 2
+        assert worker._scheduler.add_job.call_count == 3
 
 
 # ---------------------------------------------------------------------------

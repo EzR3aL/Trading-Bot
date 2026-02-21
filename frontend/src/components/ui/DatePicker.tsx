@@ -7,6 +7,8 @@ interface Props {
   onChange: (value: string) => void
   placeholder?: string
   label?: string
+  minDate?: string  // YYYY-MM-DD
+  maxDate?: string  // YYYY-MM-DD
 }
 
 const WEEKDAYS_DE = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So']
@@ -24,7 +26,7 @@ function getFirstDayOfWeek(year: number, month: number) {
   return day === 0 ? 6 : day - 1 // Monday = 0
 }
 
-export default function DatePicker({ value, onChange, placeholder, label }: Props) {
+export default function DatePicker({ value, onChange, placeholder, label, minDate, maxDate }: Props) {
   const theme = useThemeStore((s) => s.theme)
   const isLight = theme === 'light'
   const [isOpen, setIsOpen] = useState(false)
@@ -82,6 +84,13 @@ export default function DatePicker({ value, onChange, placeholder, label }: Prop
 
   const isSelected = (day: number) =>
     parsed && viewYear === parsed.getFullYear() && viewMonth === parsed.getMonth() && day === parsed.getDate()
+
+  const isDisabledDay = (day: number) => {
+    const dateStr = `${viewYear}-${String(viewMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+    if (minDate && dateStr < minDate) return true
+    if (maxDate && dateStr > maxDate) return true
+    return false
+  }
 
   const displayValue = parsed
     ? parsed.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' })
@@ -169,26 +178,34 @@ export default function DatePicker({ value, onChange, placeholder, label }: Prop
             ))}
 
             {/* Current month days */}
-            {Array.from({ length: daysInMonth }, (_, i) => i + 1).map((day) => (
-              <button
-                key={day}
-                type="button"
-                onClick={() => selectDay(day)}
-                className={`text-center text-xs py-1.5 rounded-lg font-medium transition-all duration-150 ${
-                  isSelected(day)
-                    ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/30'
-                    : isToday(day)
+            {Array.from({ length: daysInMonth }, (_, i) => i + 1).map((day) => {
+              const disabled = isDisabledDay(day)
+              return (
+                <button
+                  key={day}
+                  type="button"
+                  onClick={() => !disabled && selectDay(day)}
+                  disabled={disabled}
+                  className={`text-center text-xs py-1.5 rounded-lg font-medium transition-all duration-150 ${
+                    disabled
                       ? isLight
-                        ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200'
-                        : 'bg-emerald-500/15 text-emerald-400 ring-1 ring-emerald-500/30'
-                      : isLight
-                        ? 'text-gray-700 hover:bg-gray-100'
-                        : 'text-gray-300 hover:bg-white/10'
-                }`}
-              >
-                {day}
-              </button>
-            ))}
+                        ? 'text-gray-300 cursor-not-allowed'
+                        : 'text-gray-700 cursor-not-allowed'
+                      : isSelected(day)
+                        ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/30'
+                        : isToday(day)
+                          ? isLight
+                            ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200'
+                            : 'bg-emerald-500/15 text-emerald-400 ring-1 ring-emerald-500/30'
+                          : isLight
+                            ? 'text-gray-700 hover:bg-gray-100'
+                            : 'text-gray-300 hover:bg-white/10'
+                  }`}
+                >
+                  {day}
+                </button>
+              )
+            })}
 
             {/* Next month leading days */}
             {Array.from({ length: leadingDays }, (_, i) => i + 1).map((day) => (

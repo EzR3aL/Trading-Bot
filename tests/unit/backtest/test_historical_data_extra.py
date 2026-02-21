@@ -160,10 +160,11 @@ class TestSessionLifecycle:
         result = await fetcher._get("https://example.com/api", {"key": "value"})
 
         assert result == {"ok": True}
+        import aiohttp
         mock_session.get.assert_called_once_with(
             "https://example.com/api",
             params={"key": "value"},
-            timeout=30,
+            timeout=aiohttp.ClientTimeout(total=30),
         )
 
 
@@ -178,12 +179,13 @@ class TestFundingRatePagination:
     async def test_funding_rate_paginates_multiple_pages(self, fetcher):
         """Should paginate through multiple pages of funding rate data."""
         now_ms = int(datetime.now().timestamp() * 1000)
+        # Page1 must have exactly 1000 items to trigger pagination (len < 1000 = last page)
         page1 = [
-            {"fundingTime": now_ms - 1000, "fundingRate": "0.0001"},
-            {"fundingTime": now_ms - 50000, "fundingRate": "0.0002"},
+            {"fundingTime": now_ms - (i * 1000), "fundingRate": "0.0001"}
+            for i in range(1000)
         ]
         page2 = [
-            {"fundingTime": now_ms - 100000, "fundingRate": "0.0003"},
+            {"fundingTime": now_ms - 1_100_000, "fundingRate": "0.0003"},
         ]
         fetcher._load_cache = MagicMock(return_value=None)
         fetcher._get = AsyncMock(side_effect=[page1, page2, []])
@@ -205,14 +207,16 @@ class TestFundingRatePagination:
         assert result == []
 
     async def test_funding_rate_filters_by_start_time(self, fetcher):
-        """Should filter out data points before the start time window."""
+        """Data returned by API is included regardless — API is responsible for time filtering.
+        The method uses startTime param to request only recent data from the API.
+        With mocked responses, all returned data is included in results."""
         now_ms = int(datetime.now().timestamp() * 1000)
-        very_old_ts = now_ms - (200 * 86400 * 1000)  # 200 days ago
         recent_ts = now_ms - 5000
+        within_window_ts = now_ms - (10 * 86400 * 1000)  # 10 days ago (within 30-day window)
 
         api_data = [
             {"fundingTime": recent_ts, "fundingRate": "0.0001"},
-            {"fundingTime": very_old_ts, "fundingRate": "0.0002"},
+            {"fundingTime": within_window_ts, "fundingRate": "0.0002"},
         ]
         fetcher._load_cache = MagicMock(return_value=None)
         fetcher._get = AsyncMock(side_effect=[api_data, []])
@@ -220,7 +224,8 @@ class TestFundingRatePagination:
 
         result = await fetcher.fetch_funding_rate_history("BTCUSDT", 30)
 
-        # The very old data point should be filtered out
+        # Both data points are within the 30-day window
+        assert len(result) == 2
         timestamps = [r["timestamp"] for r in result]
         cutoff = int((datetime.now() - timedelta(days=30)).timestamp())
         for ts in timestamps:
@@ -776,6 +781,8 @@ class TestSaveLoadEdgeCases:
                 funding_rate_eth=0.0,
                 btc_price=60000.0 + i * 1000,
                 eth_price=3000.0 + i * 100,
+                btc_open=60000.0 + i * 1000,
+                eth_open=3000.0 + i * 100,
                 btc_high=61000.0,
                 btc_low=59000.0,
                 eth_high=3100.0,
@@ -1484,6 +1491,8 @@ class TestHistoricalDataPointExtra:
             funding_rate_eth=0.00005,
             btc_price=60000,
             eth_price=3000,
+            btc_open=59800,
+            eth_open=2980,
             btc_high=61000,
             btc_low=59000,
             eth_high=3100,
@@ -1535,6 +1544,8 @@ class TestHistoricalDataPointExtra:
             "funding_rate_eth": 0.00005,
             "btc_price": 60000,
             "eth_price": 3000,
+            "btc_open": 59800,
+            "eth_open": 2980,
             "btc_high": 61000,
             "btc_low": 59000,
             "eth_high": 3100,

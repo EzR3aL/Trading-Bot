@@ -50,9 +50,9 @@ Be decisive. Always pick either LONG or SHORT."""
 class LLMSignalStrategy(BaseStrategy):
     """Strategy that uses an LLM provider for signal generation."""
 
-    def __init__(self, params: Optional[Dict[str, Any]] = None):
+    def __init__(self, params: Optional[Dict[str, Any]] = None, data_fetcher: Optional[MarketDataFetcher] = None):
         super().__init__(params)
-        self.data_fetcher: Optional[MarketDataFetcher] = None
+        self.data_fetcher: Optional[MarketDataFetcher] = data_fetcher
 
         # Extract LLM-specific params
         self.llm_provider_name = self.params.get("llm_provider", "groq")
@@ -304,29 +304,29 @@ class LLMSignalStrategy(BaseStrategy):
         return {
             "llm_provider": {
                 "type": "select",
-                "label": "Model Family",
-                "description": "Which AI provider to use for analysis",
+                "label": "Modell-Familie",
+                "description": "Welcher KI-Anbieter für die Analyse verwendet wird",
                 "default": "groq",
                 "options": family_options,
             },
             "llm_model": {
                 "type": "dependent_select",
-                "label": "Model",
-                "description": "Which model to use from the selected provider",
+                "label": "Modell",
+                "description": "Welches Modell vom gewählten Anbieter verwendet wird",
                 "default": "",
                 "depends_on": "llm_provider",
                 "options_map": model_options_map,
             },
             "custom_prompt": {
                 "type": "textarea",
-                "label": "Analysis Prompt",
-                "description": "Custom instructions for the AI (leave empty for default)",
+                "label": "Analyse-Prompt",
+                "description": "Eigene Anweisungen für die KI (leer lassen für Standard-Prompt)",
                 "default": "",
             },
             "temperature": {
                 "type": "float",
-                "label": "Temperature",
-                "description": "0.0 = deterministic, 1.0 = creative",
+                "label": "Temperatur",
+                "description": "0.0 = deterministisch, 1.0 = kreativ",
                 "default": 0.3,
                 "min": 0.0,
                 "max": 1.0,

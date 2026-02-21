@@ -296,11 +296,12 @@ class TestSendMessage:
             with patch("src.notifications.telegram_notifier.logger") as mock_logger:
                 await notifier._send_message("Test")
 
-        # Assert
+        # Assert — logger uses %s formatting, so check all positional args
         mock_logger.warning.assert_called_once()
-        warning_msg = mock_logger.warning.call_args[0][0]
-        assert "403" in warning_msg
-        assert "Forbidden" in warning_msg
+        warning_args = mock_logger.warning.call_args[0]
+        full_msg = warning_args[0] % warning_args[1:]
+        assert "403" in full_msg
+        assert "Forbidden" in full_msg
 
     async def test_logs_error_on_exception(self):
         # Arrange
@@ -311,15 +312,18 @@ class TestSendMessage:
         mock_session.__aexit__ = AsyncMock(return_value=False)
         mock_session_cls = MagicMock(return_value=mock_session)
 
-        # Act
+        # Act — retry decorator handles error logging on its own logger
         with patch("src.notifications.telegram_notifier.aiohttp.ClientSession", mock_session_cls):
-            with patch("src.notifications.telegram_notifier.logger") as mock_logger:
-                await notifier._send_message("Test")
+            with patch("src.notifications.retry.logger") as mock_retry_logger, \
+                 patch("src.notifications.retry.asyncio.sleep", new_callable=AsyncMock):
+                result = await notifier._send_message("Test")
 
-        # Assert
-        mock_logger.error.assert_called_once()
-        error_msg = mock_logger.error.call_args[0][0]
-        assert "Network down" in error_msg
+        # Assert — retry exhaustion logs error on retry logger
+        assert result is False
+        mock_retry_logger.error.assert_called_once()
+        error_args = mock_retry_logger.error.call_args[0]
+        full_msg = error_args[0] % error_args[1:]
+        assert "Network down" in full_msg
 
     async def test_sets_timeout_of_10_seconds(self):
         # Arrange

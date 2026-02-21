@@ -1,18 +1,33 @@
 """Affiliate link CRUD endpoints (admin-managed, globally visible)."""
 
+import re
+from datetime import datetime
+
 from fastapi import APIRouter, Depends, HTTPException, Request
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.rate_limit import limiter
 from src.api.schemas.affiliate import AffiliateLinkResponse, AffiliateLinkUpdate
 from src.auth.dependencies import get_current_admin, get_current_user
-from src.models.database import AffiliateLink, User
+from src.models.database import AffiliateLink, ExchangeConnection, User
 from src.models.session import get_db
 
 router = APIRouter(prefix="/api/affiliate-links", tags=["affiliate"])
 
 VALID_EXCHANGES = {"bitget", "weex", "hyperliquid"}
+
+# UID format validators per exchange
+_UID_VALIDATORS = {
+    "bitget": re.compile(r"^\d+$"),           # numeric only
+    "weex": re.compile(r"^[A-Za-z0-9]+$"),    # alphanumeric
+}
+
+
+class VerifyUIDRequest(BaseModel):
+    exchange_type: str
+    uid: str
 
 
 @router.get("", response_model=list[AffiliateLinkResponse])
@@ -82,3 +97,69 @@ async def delete_affiliate_link(
 
     await db.delete(link)
     return {"detail": "deleted"}
+
+
+@router.post("/verify-uid")
+@limiter.limit("10/minute")
+async def verify_uid(
+    request: Request,
+    data: VerifyUIDRequest,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Verify a user's UID for an affiliate-linked exchange.
+
+    Validates UID format (Bitget: numeric only, Weex: alphanumeric)
+    and marks the ExchangeConnection as affiliate-verified.
+    """
+    exchange = data.exchange_type.lower()
+    uid = data.uid.strip()
+
+    if exchange not in VALID_EXCHANGES:
+        raise HTTPException(status_code=400, detail=f"Invalid exchange: {exchange}")
+
+    if not uid:
+        raise HTTPException(status_code=400, detail="UID must not be empty")
+
+    # Validate UID format per exchange
+    validator = _UID_VALIDATORS.get(exchange)
+    if validator and not validator.match(uid):
+        if exchange == "bitget":
+            raise HTTPException(
+                status_code=422,
+                detail="Bitget UID must be numeric only",
+            )
+        elif exchange == "weex":
+            raise HTTPException(
+                status_code=422,
+                detail="Weex UID must be alphanumeric",
+            )
+
+    # Find or create ExchangeConnection for this user + exchange
+    result = await db.execute(
+        select(ExchangeConnection).where(
+            ExchangeConnection.user_id == user.id,
+            ExchangeConnection.exchange_type == exchange,
+        )
+    )
+    conn = result.scalar_one_or_none()
+
+    if not conn:
+        conn = ExchangeConnection(
+            user_id=user.id,
+            exchange_type=exchange,
+        )
+        db.add(conn)
+
+    conn.affiliate_uid = uid
+    conn.affiliate_verified = True
+    conn.affiliate_verified_at = datetime.utcnow()
+
+    await db.flush()
+
+    return {
+        "exchange_type": exchange,
+        "uid": uid,
+        "affiliate_verified": True,
+        "affiliate_verified_at": conn.affiliate_verified_at.isoformat(),
+    }

@@ -16,7 +16,17 @@ Decomposed into focused mixins:
 import asyncio
 import json
 from datetime import datetime, timedelta
-from typing import Optional
+from typing import Any, List, Optional
+
+
+def _safe_json_loads(value: Any, default: List = None) -> List:
+    """Safely parse JSON, returning default on error."""
+    if default is None:
+        default = []
+    try:
+        return json.loads(value)
+    except (json.JSONDecodeError, TypeError):
+        return default
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -62,13 +72,14 @@ class BotWorker(
     4. Stopped by Orchestrator or on error (with auto-restart)
     """
 
-    def __init__(self, bot_config_id: int):
+    def __init__(self, bot_config_id: int, scheduler: Optional[AsyncIOScheduler] = None):
         self.bot_config_id = bot_config_id
         self._config: Optional[BotConfig] = None
         self._client: Optional[ExchangeClient] = None
         self._strategy: Optional[BaseStrategy] = None
         self._risk_manager: Optional[RiskManager] = None
-        self._scheduler: Optional[AsyncIOScheduler] = None
+        self._scheduler: Optional[AsyncIOScheduler] = scheduler
+        self._owns_scheduler = scheduler is None  # Only stop if we created it
         self._task: Optional[asyncio.Task] = None
 
         self.status = "idle"  # idle | starting | running | error | stopped
@@ -89,6 +100,9 @@ class BotWorker(
 
         # Signal deduplication cache
         self._last_signal_keys: dict[str, datetime] = {}
+
+        # Risk alert deduplication (reset daily)
+        self._risk_alerts_sent: set[str] = set()
 
     def _get_client(self, demo_mode: bool) -> Optional[ExchangeClient]:
         """Return the exchange client for the given mode."""
@@ -225,13 +239,14 @@ class BotWorker(
                     if sym_lim:
                         per_symbol_limits[sym] = sym_lim
 
-                # Initialize risk manager with bot-specific params
+                # Initialize risk manager with bot-specific params + DB storage
                 self._risk_manager = RiskManager(
                     max_trades_per_day=self._config.max_trades_per_day,
                     daily_loss_limit_percent=self._config.daily_loss_limit_percent,
                     position_size_percent=self._config.position_size_percent,
                     data_dir=f"data/risk/bot_{self.bot_config_id}",
                     per_symbol_limits=per_symbol_limits if per_symbol_limits else None,
+                    bot_config_id=self.bot_config_id,
                 )
 
             # ── Hyperliquid pre-start checks ──────────────────────────
@@ -253,8 +268,9 @@ class BotWorker(
                 logger.warning(f"[Bot:{self.bot_config_id}] Could not fetch balance: {e}")
                 self._risk_manager.initialize_day(0)
 
-            # Setup scheduler
-            self._scheduler = AsyncIOScheduler()
+            # Setup scheduler (use shared if provided, else create own)
+            if self._owns_scheduler:
+                self._scheduler = AsyncIOScheduler()
             self._setup_schedule()
 
             logger.info(
@@ -345,12 +361,22 @@ class BotWorker(
                 f"every {rotation_mins}min (anchor: {start_time} UTC)"
             )
 
+        # Daily summary at 23:55 UTC
+        self._scheduler.add_job(
+            self._send_daily_summary,
+            CronTrigger(hour=23, minute=55),
+            id=f"bot_{self.bot_config_id}_daily_summary",
+            name=f"Bot {self.bot_config_id} Daily Summary",
+            replace_existing=True,
+        )
+
     async def start(self):
         """Start the bot's strategy loop."""
         if self.status == "running":
             return
 
-        self._scheduler.start()
+        if self._owns_scheduler and self._scheduler and not self._scheduler.running:
+            self._scheduler.start()
         self.status = "running"
         self.started_at = datetime.utcnow()
         self.error_message = None
@@ -360,12 +386,36 @@ class BotWorker(
 
         logger.info(f"[Bot:{self.bot_config_id}] Started: {self._config.name}")
 
+        await self._send_notification(lambda n: n.send_bot_status(
+            status="STARTED", message=f"{self._config.name} is now running",
+            bot_name=self._config.name,
+            stats={"Strategy": self._config.strategy_type, "Mode": self._config.mode},
+        ))
+
     async def stop(self):
         """Stop the bot gracefully."""
         logger.info(f"[Bot:{self.bot_config_id}] Stopping...")
 
-        if self._scheduler and self._scheduler.running:
-            self._scheduler.shutdown(wait=False)
+        # Send stop notification before tearing down resources
+        if self._config:
+            await self._send_notification(lambda n: n.send_bot_status(
+                status="STOPPED", message=f"{self._config.name} has been stopped",
+                bot_name=self._config.name,
+            ))
+
+        # Remove this bot's jobs from the scheduler
+        if self._scheduler:
+            prefix = f"bot_{self.bot_config_id}_"
+            for job in list(self._scheduler.get_jobs()):
+                if job.id.startswith(prefix):
+                    try:
+                        job.remove()
+                    except Exception as e:
+                        logger.debug("Job removal during cleanup: %s", e)
+
+            # Only shutdown scheduler if we created it
+            if self._owns_scheduler and self._scheduler.running:
+                self._scheduler.shutdown(wait=False)
 
         if self._strategy:
             await self._strategy.close()
@@ -402,15 +452,28 @@ class BotWorker(
                     f"[Bot:{self.bot_config_id}] Too many consecutive errors ({self._consecutive_errors}). "
                     f"Pausing for 60s before next attempt."
                 )
+                # Only notify once at the transition to error status
+                if self.status != "error":
+                    err_msg = f"5 consecutive errors: {str(e)[:300]}"
+                    bot_ctx = f"Bot: {self._config.name}"
+                    await self._send_notification(lambda n, m=err_msg, c=bot_ctx: n.send_error(
+                        error_type="CONSECUTIVE_ERRORS",
+                        error_message=m,
+                        details=c, context=c,
+                    ))
                 self.status = "error"
                 await asyncio.sleep(60)
-                # Verify scheduler is still alive — restart if crashed
-                if self._scheduler and not self._scheduler.running:
+                # Verify scheduler is still alive — restart if crashed (only if we own it)
+                if self._owns_scheduler and self._scheduler and not self._scheduler.running:
                     logger.warning(f"[Bot:{self.bot_config_id}] Scheduler died — restarting")
                     try:
                         self._scheduler.start()
                     except Exception as sched_err:
                         logger.error(f"[Bot:{self.bot_config_id}] Scheduler restart failed: {sched_err}")
+                logger.info(
+                    f"[Bot:{self.bot_config_id}] Resuming from error state after cooldown "
+                    f"(allowing 2 more attempts before next pause)"
+                )
                 self.status = "running"
                 self._consecutive_errors = 3  # Allow 2 more tries before next pause
 
@@ -462,10 +525,23 @@ class BotWorker(
         can_trade, reason = self._risk_manager.can_trade()
         if not can_trade:
             logger.warning(f"{log_prefix} Cannot trade: {reason}")
+            reason_lower = reason.lower()
+            if "halted" in reason_lower or "limit" in reason_lower:
+                alert_key = f"global_{reason}"
+                if alert_key not in self._risk_alerts_sent:
+                    self._risk_alerts_sent.add(alert_key)
+                    alert_type = "TRADE_LIMIT" if "trade limit" in reason_lower else "DAILY_LOSS_LIMIT"
+                    await self._send_notification(lambda n, at=alert_type: n.send_risk_alert(
+                        alert_type=at, message=reason,
+                    ))
             return
 
         # Parse trading pairs
-        trading_pairs = json.loads(self._config.trading_pairs)
+        try:
+            trading_pairs = json.loads(self._config.trading_pairs)
+        except (json.JSONDecodeError, TypeError) as e:
+            logger.error(f"{log_prefix} Invalid trading_pairs JSON: {e}")
+            return
 
         # Calculate per-asset budgets
         balance = await self._client.get_account_balance()
@@ -476,6 +552,16 @@ class BotWorker(
             can_trade_sym, sym_reason = self._risk_manager.can_trade(symbol)
             if not can_trade_sym:
                 logger.info(f"{log_prefix} Skipping {symbol}: {sym_reason}")
+                sym_reason_lower = sym_reason.lower()
+                if "halted" in sym_reason_lower or "limit" in sym_reason_lower:
+                    alert_key = f"{symbol}_{sym_reason}"
+                    if alert_key not in self._risk_alerts_sent:
+                        self._risk_alerts_sent.add(alert_key)
+                        sym_alert_type = "TRADE_LIMIT" if "trade limit" in sym_reason_lower else "DAILY_LOSS_LIMIT"
+                        msg = f"{symbol}: {sym_reason}"
+                        await self._send_notification(lambda n, at=sym_alert_type, m=msg: n.send_risk_alert(
+                            alert_type=at, message=m,
+                        ))
                 continue
 
             try:
@@ -555,6 +641,34 @@ class BotWorker(
         if mode in ("live", "both") and self._live_client:
             await self._execute_trade(signal, self._live_client, demo_mode=False, asset_budget=asset_budget)
 
+    async def _send_daily_summary(self):
+        """Send daily trading summary at end of day and reset risk alerts."""
+        log_prefix = f"[Bot:{self.bot_config_id}]"
+        try:
+            stats = self._risk_manager.get_daily_stats()
+            if stats and stats.trades_executed > 0:
+                ending_balance = stats.starting_balance + stats.net_pnl
+
+                await self._send_notification(lambda n: n.send_daily_summary(
+                    date=stats.date,
+                    starting_balance=stats.starting_balance,
+                    ending_balance=ending_balance,
+                    total_trades=stats.trades_executed,
+                    winning_trades=stats.winning_trades,
+                    losing_trades=stats.losing_trades,
+                    total_pnl=stats.total_pnl,
+                    total_fees=stats.total_fees,
+                    total_funding=stats.total_funding,
+                    max_drawdown=stats.max_drawdown,
+                    bot_name=self._config.name,
+                ))
+                logger.info(f"{log_prefix} Daily summary sent")
+        except Exception as e:
+            logger.warning(f"{log_prefix} Failed to send daily summary: {e}")
+
+        # Reset risk alert deduplication for the new day
+        self._risk_alerts_sent.clear()
+
     def get_status_dict(self) -> dict:
         """Return status info for API responses."""
         config = self._config
@@ -564,7 +678,7 @@ class BotWorker(
             "strategy_type": config.strategy_type if config else "",
             "exchange_type": config.exchange_type if config else "",
             "mode": config.mode if config else "",
-            "trading_pairs": json.loads(config.trading_pairs) if config else [],
+            "trading_pairs": _safe_json_loads(config.trading_pairs) if config else [],
             "status": self.status,
             "error_message": self.error_message,
             "started_at": self.started_at.isoformat() if self.started_at else None,

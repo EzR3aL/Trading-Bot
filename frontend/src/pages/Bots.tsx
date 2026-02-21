@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom'
 import { toBlob } from 'html-to-image'
 import api from '../api/client'
 import { useFilterStore } from '../stores/filterStore'
+import type { LlmConnection } from '../types'
 import { useThemeStore } from '../stores/themeStore'
 import { useToastStore } from '../stores/toastStore'
 import { ExchangeIcon } from '../components/ui/ExchangeLogo'
@@ -34,6 +35,7 @@ import {
 import GuidedTour, { TourHelpButton, type TourStep } from '../components/ui/GuidedTour'
 
 const STRATEGY_DISPLAY: Record<string, string> = { llm_signal: 'KI-Companion', sentiment_surfer: 'Sentiment Surfer', liquidation_hunter: 'Liquidation Hunter', degen: 'Degen', edge_indicator: 'Edge Indicator', claude_edge_indicator: 'Claude-Edge' }
+const AI_STRATEGIES = new Set(['llm_signal', 'degen'])
 function strategyLabel(name: string) { return STRATEGY_DISPLAY[name] || name.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) }
 
 interface BotStatus {
@@ -312,7 +314,7 @@ function BotTradeHistoryModal({ bot, onClose, t }: { bot: BotStatus; onClose: ()
               <h2 className="text-lg font-bold text-white">{bot.name}</h2>
               <div className="flex items-center gap-2 mt-0.5">
                 <span className="text-xs text-gray-500">{strategyLabel(bot.strategy_type)}</span>
-                {bot.strategy_type === 'llm_signal' && (
+                {AI_STRATEGIES.has(bot.strategy_type) && (
                   <Bot size={13} className="text-emerald-400" />
                 )}
                 <span className="text-gray-700">|</span>
@@ -468,7 +470,8 @@ function BotTradeHistoryModal({ bot, onClose, t }: { bot: BotStatus; onClose: ()
               <div className="px-6 pt-3 pb-2">
                 <div className="text-xs text-gray-500 uppercase tracking-wider font-semibold">{t('bots.tradeHistory')}</div>
               </div>
-              <table className="w-full">
+              <div className="overflow-x-auto">
+              <table className="w-full min-w-[640px]">
                 <thead>
                   <tr className="border-t border-b border-white/5 bg-white/[0.02]">
                     <th className="text-left px-5 py-2.5 text-xs text-gray-500 uppercase font-semibold tracking-wider">{t('trades.date')}</th>
@@ -543,6 +546,7 @@ function BotTradeHistoryModal({ bot, onClose, t }: { bot: BotStatus; onClose: ()
                   ))}
                 </tbody>
               </table>
+              </div>
             </>
           )}
         </div>
@@ -582,7 +586,7 @@ export default function Bots() {
   const [presets, setPresets] = useState<Preset[]>([])
   const [presetDropdownOpen, setPresetDropdownOpen] = useState<number | null>(null)
   const [builderFeeModalBotId, setBuilderFeeModalBotId] = useState<number | null>(null)
-  const [llmConnections, setLlmConnections] = useState<any[]>([])
+  const [llmConnections, setLlmConnections] = useState<LlmConnection[]>([])
 
   // Build lookup: model_id → display name, provider_type → family_name
   const modelNameMap = useMemo(() => {
@@ -815,7 +819,7 @@ export default function Bots() {
                         {bot.mode.toUpperCase()}
                       </span>
                       <span className="text-xs text-gray-500">{strategyLabel(bot.strategy_type)}</span>
-                      {bot.strategy_type === 'llm_signal' && (
+                      {AI_STRATEGIES.has(bot.strategy_type) && (
                         <Bot size={15} className="text-emerald-400" />
                       )}
                     </div>
@@ -926,7 +930,7 @@ export default function Bots() {
                 </div>
 
                 {/* LLM Metrics */}
-                {bot.strategy_type === 'llm_signal' && (
+                {AI_STRATEGIES.has(bot.strategy_type) && (
                   <div className="mb-3 pt-3 border-t border-white/5 space-y-2.5">
                     <div className="flex items-center gap-2 text-sm">
                       <span className="text-gray-500">{t('bots.llmLastSignal')}</span>

@@ -1,9 +1,12 @@
 """Abstract base classes for exchange clients and websockets."""
 
 from abc import ABC, abstractmethod
-from typing import Callable, List, Optional
+from typing import TYPE_CHECKING, Callable, List, Optional
 
 from src.exchanges.types import Balance, FundingRateInfo, Order, Position, Ticker
+
+if TYPE_CHECKING:
+    from src.exchanges.rate_limiter import ExchangeRateLimiter
 
 
 class ExchangeClient(ABC):
@@ -20,12 +23,20 @@ class ExchangeClient(ABC):
         api_secret: str,
         passphrase: str = "",
         demo_mode: bool = True,
+        rate_limiter: Optional["ExchangeRateLimiter"] = None,
         **kwargs,
     ):
         self.api_key = api_key
         self.api_secret = api_secret
         self.passphrase = passphrase
         self.demo_mode = demo_mode
+        self._rate_limiter = rate_limiter
+
+    async def _rate_limited_request(self, coro):
+        """Acquire a rate limit token before executing the coroutine."""
+        if self._rate_limiter:
+            await self._rate_limiter.acquire()
+        return await coro
 
     @abstractmethod
     async def get_account_balance(self) -> Balance:

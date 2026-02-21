@@ -2,7 +2,6 @@
 
 import asyncio
 import json
-import os
 import re
 import time
 from datetime import datetime
@@ -364,6 +363,7 @@ async def set_affiliate_uid(
         _config_logger.warning(f"Affiliate UID auto-verify failed for user {user.id}: {type(e).__name__}")
 
     await db.flush()
+    await db.commit()
 
     return {
         "uid": uid,
@@ -969,7 +969,8 @@ async def get_referral_status(
     except HTTPException:  # pragma: no cover — re-raise HTTP errors
         raise
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Failed to check referral: {str(e)}")
+        _config_logger.error("Referral check failed: %s", e, exc_info=True)
+        raise HTTPException(status_code=400, detail="Failed to check referral. Check server logs.")
 
 
 @router.get("/hyperliquid/revenue-summary")
@@ -1056,7 +1057,8 @@ async def get_revenue_summary(
     except HTTPException:  # pragma: no cover — re-raise HTTP errors
         raise
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Failed to get revenue summary: {str(e)}")
+        _config_logger.error("Revenue summary failed: %s", e, exc_info=True)
+        raise HTTPException(status_code=400, detail="Failed to get revenue summary. Check server logs.")
 
 
 async def _async_none():

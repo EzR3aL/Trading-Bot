@@ -1,8 +1,10 @@
 """
-Tests for statistics endpoints.
+Integration tests for statistics endpoints.
 
 Covers aggregate statistics, daily stats, demo_mode filtering,
 and empty results.
+
+Migrated from tests/test_statistics.py to tests/integration/.
 """
 
 import os
@@ -12,7 +14,7 @@ from pathlib import Path
 import pytest
 
 os.environ.setdefault("JWT_SECRET_KEY", "test-secret-key-for-testing-only-not-for-production")
-sys.path.insert(0, str(Path(__file__).parent.parent))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 
 # ---------------------------------------------------------------------------

@@ -1,6 +1,7 @@
 """Multibot system schemas."""
 
 import json as _json
+import re
 from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field, field_validator, model_validator
@@ -19,6 +20,15 @@ class BotConfigCreate(BaseModel):
 
     # Trading parameters (all optional — empty = equal split, no TP/SL)
     trading_pairs: List[str] = Field(default=["BTCUSDT"], max_length=20)
+
+    @field_validator("trading_pairs")
+    @classmethod
+    def validate_trading_pairs(cls, v: List[str]) -> List[str]:
+        for pair in v:
+            if not re.match(r'^[A-Z0-9_-]{1,30}$', pair):
+                raise ValueError(f"Invalid trading pair format: {pair}")
+        return v
+
     leverage: Optional[int] = Field(default=None, ge=1, le=20)
     position_size_percent: Optional[float] = Field(default=None, ge=1, le=25)
     max_trades_per_day: Optional[int] = Field(default=None, ge=1, le=10)

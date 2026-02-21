@@ -466,16 +466,8 @@ async def test_list_funding_payments_ordered_by_timestamp_desc(
 
 
 async def test_funding_summary(client, user_headers, regular_user, funding_payments):
-    """Funding summary returns aggregated totals.
-
-    Note: May raise TypeError on some SQLAlchemy versions due to func.case
-    syntax incompatibility. The test verifies the endpoint is reachable.
-    """
-    try:
-        resp = await client.get("/api/funding/summary", headers=user_headers)
-    except TypeError:
-        pytest.skip("func.case syntax not compatible with installed SQLAlchemy version")
-        return
+    """Funding summary returns aggregated totals."""
+    resp = await client.get("/api/funding/summary", headers=user_headers)
     assert resp.status_code == 200
     data = resp.json()
     assert data["period_days"] == 30
@@ -488,11 +480,7 @@ async def test_funding_summary(client, user_headers, regular_user, funding_payme
 
 async def test_funding_summary_custom_days(client, user_headers, regular_user, funding_payments):
     """Funding summary with custom days period."""
-    try:
-        resp = await client.get("/api/funding/summary", headers=user_headers, params={"days": 7})
-    except TypeError:
-        pytest.skip("func.case syntax not compatible with installed SQLAlchemy version")
-        return
+    resp = await client.get("/api/funding/summary", headers=user_headers, params={"days": 7})
     assert resp.status_code == 200
     data = resp.json()
     assert data["period_days"] == 7
@@ -500,11 +488,7 @@ async def test_funding_summary_custom_days(client, user_headers, regular_user, f
 
 async def test_funding_summary_empty(client, user_headers, regular_user):
     """Funding summary with no payments returns zeroed values."""
-    try:
-        resp = await client.get("/api/funding/summary", headers=user_headers)
-    except TypeError:
-        pytest.skip("func.case syntax not compatible with installed SQLAlchemy version")
-        return
+    resp = await client.get("/api/funding/summary", headers=user_headers)
     assert resp.status_code == 200
     data = resp.json()
     assert data["total_payments"] == 0
@@ -524,11 +508,7 @@ async def test_funding_summary_response_fields(
     client, user_headers, regular_user, funding_payments
 ):
     """Summary has all expected response fields."""
-    try:
-        resp = await client.get("/api/funding/summary", headers=user_headers)
-    except TypeError:
-        pytest.skip("func.case syntax not compatible with installed SQLAlchemy version")
-        return
+    resp = await client.get("/api/funding/summary", headers=user_headers)
     data = resp.json()
     expected = {"period_days", "total_payments", "total_amount", "total_received", "total_paid", "net"}
     assert expected.issubset(set(data.keys()))

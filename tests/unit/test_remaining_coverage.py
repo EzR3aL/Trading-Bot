@@ -136,43 +136,26 @@ class TestSessionPragma:
 
 class TestEncryptionKeyGeneration:
 
-    def test_get_or_create_key_creates_env_file(self, tmp_path):
-        """Cover lines 57-58: .env file creation when it doesn't exist."""
+    def test_get_or_create_key_auto_generates_in_dev(self):
+        """Cover lines 67-77: auto-generate ephemeral key in development mode."""
         import src.utils.encryption as enc_mod
-
-        env_file = tmp_path / ".env"
 
         # Reset singleton so _get_or_create_key is actually called
         original_fernet = enc_mod._fernet
         enc_mod._fernet = None
 
         try:
-            with patch.dict(os.environ, {"ENVIRONMENT": "development"}, clear=False):
-                # Remove ENCRYPTION_KEY so auto-generation triggers
-                env_copy = os.environ.copy()
-                env_copy.pop("ENCRYPTION_KEY", None)
-                with patch.dict(os.environ, env_copy, clear=True):
-                    # Mock Path(".env") to use our tmp file path
-                    mock_path = MagicMock()
-                    mock_path.exists.return_value = False
+            # Remove ENCRYPTION_KEY so auto-generation triggers
+            env_copy = os.environ.copy()
+            env_copy.pop("ENCRYPTION_KEY", None)
+            env_copy["ENVIRONMENT"] = "development"
+            with patch.dict(os.environ, env_copy, clear=True):
+                key = enc_mod._get_or_create_key()
 
-                    import builtins
-                    original_open = builtins.open
-
-                    def mock_open(path, mode="r"):
-                        if isinstance(path, MagicMock) or str(path) == ".env":
-                            return original_open(str(env_file), mode)
-                        return original_open(path, mode)
-
-                    with patch("src.utils.encryption.Path", return_value=mock_path):
-                        with patch("builtins.open", side_effect=mock_open):
-                            key = enc_mod._get_or_create_key()
-
-                    assert key is not None
-                    assert len(key) > 0
-                    assert env_file.exists()
-                    content = env_file.read_text()
-                    assert "ENCRYPTION_KEY=" in content
+                assert key is not None
+                assert len(key) > 0
+                # Key should be set in environment after auto-generation
+                assert "ENCRYPTION_KEY" in os.environ
         finally:
             enc_mod._fernet = original_fernet
             # Restore ENCRYPTION_KEY
@@ -444,6 +427,7 @@ class TestRiskManagerSaveError:
         rm._open_positions = {}
         rm._per_symbol_daily_trades = {}
         rm._consecutive_losses = 0
+        rm._use_db = False
 
         # Initialize with stats
         rm._daily_stats = MagicMock()
@@ -675,6 +659,8 @@ class TestBacktestEngineEdgeCases:
             funding_rate_eth=0.0001,
             btc_price=42000,
             eth_price=2200,
+            btc_open=42000,
+            eth_open=2200,
             btc_high=42500,
             btc_low=41500,
             eth_high=2250,
@@ -733,23 +719,22 @@ class TestBacktestEngineEdgeCases:
         assert adj2 == 5
         assert "TopTraders Long" in reason2
 
-    def test_generate_signal_appends_oi_and_top_reasons(self):
-        """Cover lines 474, 486: non-zero OI and top-trader adjustments
+    def test_generate_signal_appends_leverage_and_sentiment_reasons(self):
+        """Cover liquidation_hunter 3-step logic: crowded longs + sentiment
         get their reasons appended to the signal reasons list."""
         from src.backtest.engine import BacktestEngine
 
         engine = BacktestEngine()
-        # Set up data where OI is rising+price up and top traders are long
+        # Set up data with crowded longs and extreme greed
         data = self._make_data_point(
-            open_interest_change_24h=5.0,
-            btc_24h_change=2.0,
-            top_trader_long_short_ratio=2.0,
             long_short_ratio=2.5,  # crowded longs → SHORT signal
-            fear_greed_index=80,  # Greed → SHORT
+            fear_greed_index=85,  # Extreme Greed → SHORT
+            btc_24h_change=2.0,
         )
         direction, confidence, reason = engine._generate_signal(data, "BTC")
-        # Reason should contain OI and TopTraders entries
-        assert "OI" in reason or "TopTraders" in reason
+        # Reason should contain Crowded Longs and Extreme Greed entries
+        assert "Crowded Longs" in reason
+        assert "Extreme Greed" in reason
 
     def test_backtest_run_can_trade_false_skips(self):
         """Cover line 688: _can_trade returns False, loop continues."""
@@ -780,7 +765,7 @@ class TestBacktestEngineEdgeCases:
         # Force _generate_signal to always return low confidence
         original_generate = engine._generate_signal
 
-        def low_confidence_signal(data_point, symbol):
+        def low_confidence_signal(data_point, symbol, history=None):
             return TradeDirection.LONG, 10, "Low confidence test"
 
         engine._generate_signal = low_confidence_signal
@@ -981,6 +966,7 @@ class TestOrchestratorRestoreFailure:
         orch = BotOrchestrator.__new__(BotOrchestrator)
         orch._lock = asyncio.Lock()
         orch._workers = {}
+        orch._scheduler = MagicMock(running=False)
         orch._start_bot_locked = AsyncMock(return_value=False)
 
         # Mock the DB query to return one enabled config

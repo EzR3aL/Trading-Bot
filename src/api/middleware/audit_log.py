@@ -103,21 +103,29 @@ _audit_session_factory = None
 
 
 def _get_audit_session_factory():
-    """Lazy-init a dedicated audit engine with busy_timeout=0."""
+    """Lazy-init a dedicated audit engine (SQLite: busy_timeout=0, PostgreSQL: small pool)."""
     global _audit_engine, _audit_session_factory
     if _audit_session_factory is None:
         import os
         from sqlalchemy.ext.asyncio import AsyncSession as _AS, async_sessionmaker as _asm, create_async_engine as _cae
         from sqlalchemy import event as _ev
         db_url = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///data/bot.db")
-        _audit_engine = _cae(db_url, connect_args={"check_same_thread": False} if "sqlite" in db_url else {})
-        if "sqlite" in db_url:
+        _is_sqlite = db_url.startswith("sqlite")
+        if _is_sqlite:
+            _audit_engine = _cae(db_url, connect_args={"check_same_thread": False})
             @_ev.listens_for(_audit_engine.sync_engine, "connect")
             def _set_pragma(dbapi_conn, _):  # pragma: no cover — SQLite-only event
                 c = dbapi_conn.cursor()
                 c.execute("PRAGMA journal_mode=WAL")
-                c.execute("PRAGMA busy_timeout=0")
+                c.execute("PRAGMA busy_timeout=500")
                 c.close()
+        else:
+            _audit_engine = _cae(
+                db_url,
+                pool_size=5,
+                max_overflow=10,
+                pool_pre_ping=True,
+            )
         _audit_session_factory = _asm(_audit_engine, class_=_AS, expire_on_commit=False)
     return _audit_session_factory
 

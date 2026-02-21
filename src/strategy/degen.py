@@ -3,7 +3,7 @@ Degen Strategy — Pre-configured LLM prediction arena strategy.
 
 Inspired by myquant.gg's Degen bot:
 - Fixed system prompt optimised for 1h BTC directional calls
-- 14 fixed data sources (no user selection)
+- 19 fixed data sources (no user selection)
 - User only configures LLM provider, model, and temperature
 
 Data sources used (all free):
@@ -21,6 +21,11 @@ Data sources used (all free):
   12. Supertrend Indicator (calculated from klines)
   13. Binance Long/Short Ratio (Binance futures)
   14. Liquidation Risk Score (Binance forceOrders + funding)
+  15. Cumulative Volume Delta (Binance klines)
+  16. Coinbase Premium Index (Coinbase vs Binance spread)
+  17. Bybit Futures OI + Funding + Volume (Bybit V5 API)
+  18. Deribit Options Extended: IV, Skew, Put/Call Ratio
+  19. Deribit DVOL — Crypto Volatility Index
 """
 
 import json
@@ -57,20 +62,25 @@ REASONING: [2-3 sentences explaining your analysis]"""
 # ── Fixed data sources ────────────────────────────────────────────────────────
 
 DEGEN_SOURCES: List[str] = [
-    "spot_price",        # 1.  Bitcoin price & 24h change
-    "fear_greed",        #     Bonus: Fear & Greed Index
-    "news_sentiment",    #     Bonus: News headlines
-    "funding_rate",      # 3.  Futures premium / funding rate
-    "open_interest",     # 2.  Open interest (for futures context)
-    "long_short_ratio",  # 13. Binance Long/Short Ratio
-    "order_book",        # 6.  Order Book Depth
-    "liquidations",      # 14. Liquidation Risk Score
-    "supertrend",        # 12. Supertrend (requires klines)
-    "vwap",              # 9.  VWAP (requires klines)
-    "oiwap",             # 9.  OIWAP (requires klines)
-    "spot_volume",       # 4+5. Tape/Trade flow & Spot Volume
-    "volatility",        # 10. Realized Volatility
-    "coingecko_market",  # 8.  Market Cap & Float
+    "spot_price",              # 1.  Bitcoin price & 24h change
+    "fear_greed",              #     Bonus: Fear & Greed Index
+    "news_sentiment",          #     Bonus: News headlines
+    "funding_rate",            # 3.  Futures premium / funding rate
+    "open_interest",           # 2.  Open interest (for futures context)
+    "long_short_ratio",        # 13. Binance Long/Short Ratio
+    "order_book",              # 6.  Order Book Depth
+    "liquidations",            # 14. Liquidation Risk Score
+    "supertrend",              # 12. Supertrend (requires klines)
+    "vwap",                    # 9.  VWAP (requires klines)
+    "oiwap",                   # 9.  OIWAP (requires klines)
+    "spot_volume",             # 4+5. Tape/Trade flow & Spot Volume
+    "volatility",              # 10. Realized Volatility
+    "coingecko_market",        # 8.  Market Cap & Float
+    "cvd",                     # 15. Cumulative Volume Delta
+    "coinbase_premium",        # 16. Coinbase Premium Index
+    "bybit_futures",           # 17. Bybit OI + Funding + Volume
+    "deribit_options_extended", # 18. Options IV, Skew, Put/Call
+    "deribit_dvol",            # 19. Deribit Volatility Index (DVOL)
 ]
 
 MIN_CONFIDENCE = 55
@@ -79,9 +89,9 @@ MIN_CONFIDENCE = 55
 class DegenStrategy(BaseStrategy):
     """Pre-configured LLM strategy with fixed prompt and 14 data sources."""
 
-    def __init__(self, params: Optional[Dict[str, Any]] = None):
+    def __init__(self, params: Optional[Dict[str, Any]] = None, data_fetcher: Optional[MarketDataFetcher] = None):
         super().__init__(params)
-        self.data_fetcher: Optional[MarketDataFetcher] = None
+        self.data_fetcher: Optional[MarketDataFetcher] = data_fetcher
 
         # LLM config (user-selectable)
         self.llm_provider_name = self.params.get("llm_provider", "groq")
@@ -191,8 +201,8 @@ class DegenStrategy(BaseStrategy):
             confidence=llm_response.confidence,
             symbol=symbol,
             entry_price=current_price,
-            target_price=round(target_price, 2) if target_price else current_price,
-            stop_loss=round(stop_loss, 2) if stop_loss else current_price,
+            target_price=round(target_price, 2) if target_price else round(current_price * 1.03, 2),
+            stop_loss=round(stop_loss, 2) if stop_loss else round(current_price * 0.98, 2),
             reason=reason,
             metrics_snapshot=metrics_snapshot,
             timestamp=datetime.utcnow(),
@@ -393,6 +403,68 @@ class DegenStrategy(BaseStrategy):
                 "netReturn24h_pct": round(change_24h - funding_drag, 3),
             }
 
+        # ── CVD (Cumulative Volume Delta) ──
+        if "cvd" in fetched and isinstance(fetched["cvd"], dict):
+            cvd = fetched["cvd"]
+            ctx["cvd"] = {
+                "total": cvd.get("cvd_total", 0),
+                "trend": cvd.get("cvd_trend", "neutral"),
+                "takerBuyRatio": cvd.get("taker_buy_ratio", 0.5),
+                "interpretation": (
+                    f"CVD is {cvd.get('cvd_trend', 'neutral')}. "
+                    f"Taker buy ratio: {cvd.get('taker_buy_ratio', 0.5):.1%}"
+                ),
+            }
+
+        # ── Coinbase Premium ──
+        if "coinbase_premium" in fetched and isinstance(fetched["coinbase_premium"], dict):
+            cp = fetched["coinbase_premium"]
+            ctx["coinbasePremium"] = {
+                "premiumPct": cp.get("premium_pct", 0),
+                "signal": cp.get("signal", "neutral"),
+                "interpretation": (
+                    f"Coinbase premium: {cp.get('premium_pct', 0):.4f}%. "
+                    f"{'US institutional buying pressure.' if cp.get('signal') == 'bullish' else 'US selling pressure.' if cp.get('signal') == 'bearish' else 'Neutral flow.'}"
+                ),
+            }
+
+        # ── Bybit Futures ──
+        if "bybit_futures" in fetched and isinstance(fetched["bybit_futures"], dict):
+            bf = fetched["bybit_futures"]
+            ctx["bybitFutures"] = {
+                "openInterest": bf.get("open_interest", 0),
+                "fundingRate": bf.get("funding_rate", 0),
+                "volume24h": bf.get("volume_24h", 0),
+            }
+
+        # ── Deribit Options Extended ──
+        if "deribit_options_extended" in fetched and isinstance(fetched["deribit_options_extended"], dict):
+            dox = fetched["deribit_options_extended"]
+            ctx["optionsExtended"] = {
+                "avgIV": dox.get("avg_iv", 0),
+                "putCallRatio": dox.get("put_call_ratio", 0),
+                "skew25Delta": dox.get("skew_25delta", 0),
+                "interpretation": (
+                    f"Avg IV: {dox.get('avg_iv', 0):.1f}%, "
+                    f"P/C ratio: {dox.get('put_call_ratio', 0):.2f}, "
+                    f"Skew: {dox.get('skew_25delta', 0):.1f}%"
+                ),
+            }
+
+        # ── Deribit DVOL ──
+        if "deribit_dvol" in fetched and isinstance(fetched["deribit_dvol"], dict):
+            dv = fetched["deribit_dvol"]
+            ctx["dvol"] = {
+                "current": dv.get("dvol_current", 0),
+                "change24hPct": dv.get("dvol_change_pct", 0),
+                "signal": dv.get("signal", "neutral"),
+                "interpretation": (
+                    f"DVOL at {dv.get('dvol_current', 0):.1f} "
+                    f"({dv.get('dvol_change_pct', 0):+.1f}% 24h). "
+                    f"{'Rising fear/uncertainty.' if dv.get('signal') == 'fear_rising' else 'Complacency building.' if dv.get('signal') == 'complacency' else 'Volatility stable.'}"
+                ),
+            }
+
         return ctx
 
     # ── Gate ──────────────────────────────────────────────────────────────────
@@ -429,23 +501,23 @@ class DegenStrategy(BaseStrategy):
         return {
             "llm_provider": {
                 "type": "select",
-                "label": "Model Family",
-                "description": "Which AI provider to use for the Degen analysis",
+                "label": "Modell-Familie",
+                "description": "Welcher KI-Anbieter für die Degen-Analyse verwendet wird",
                 "default": "groq",
                 "options": family_options,
             },
             "llm_model": {
                 "type": "dependent_select",
-                "label": "Model",
-                "description": "Which model to use from the selected provider",
+                "label": "Modell",
+                "description": "Welches Modell vom gewählten Anbieter verwendet wird",
                 "default": "",
                 "depends_on": "llm_provider",
                 "options_map": model_options_map,
             },
             "temperature": {
                 "type": "float",
-                "label": "Temperature",
-                "description": "0.0 = deterministic, 1.0 = creative (recommended: 0.3)",
+                "label": "Temperatur",
+                "description": "0.0 = deterministisch, 1.0 = kreativ (empfohlen: 0.3)",
                 "default": 0.3,
                 "min": 0.0,
                 "max": 1.0,
@@ -457,7 +529,7 @@ class DegenStrategy(BaseStrategy):
         return (
             "KI-gesteuerte Arena-Strategie mit festem Prompt und 14 Datenquellen. "
             "Nutzt Binance-Derivatives, Order Book, Supertrend, VWAP und mehr "
-            "fuer 1h BTC-Vorhersagen. Inspiriert vom Degen Prediction Bot."
+            "für 1h BTC-Vorhersagen. Inspiriert vom Degen Prediction Bot."
         )
 
     async def close(self):

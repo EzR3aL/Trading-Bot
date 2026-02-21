@@ -9,6 +9,7 @@
     "guide": "Anleitung",
     "performance": "Performance",
     "backtest": "Backtest Labor",
+    "portfolio": "Portfolio",
     "admin": "Admin",
     "logout": "Abmelden"
   },
@@ -238,7 +239,8 @@
     "trades": "Trades",
     "pnl": "PnL",
     "fees": "Transaktionsgebühr",
-    "net": "Netto"
+    "net": "Netto",
+    "downloadError": "Download fehlgeschlagen"
   },
   "guide": {
     "title": "Erste Schritte",
@@ -537,6 +539,8 @@
       "viewGrid": "Kacheln",
       "viewList": "Liste",
       "temperatureHint": "Niedrig = konsistente Antworten · Hoch = kreativere Analysen · Empfohlen: 0.2–0.4",
+      "proModeParamsHint": "Strategie-Parameter anpassen (für fortgeschrittene Nutzer)",
+      "proModeParamsActiveHint": "Strategie-Parameter werden angezeigt",
       "errors": {
         "nameRequired": "Bitte gib einen Bot-Namen ein",
         "strategyRequired": "Bitte wähle eine Strategie",
@@ -641,7 +645,10 @@
     "of": "von",
     "lightMode": "Hell",
     "darkMode": "Dunkel",
-    "total": "Gesamt"
+    "total": "Gesamt",
+    "net": "Netto",
+    "errorBoundaryTitle": "Etwas ist schiefgelaufen",
+    "tryAgain": "Erneut versuchen"
   },
   "admin": {
     "users": "Benutzer",
@@ -654,7 +661,12 @@
     "inactive": "Inaktiv",
     "deactivate": "Deaktivieren",
     "activate": "Aktivieren",
-    "deleteUser": "Benutzer löschen?"
+    "deleteUser": "Benutzer löschen?",
+    "create": "Erstellen",
+    "noUsers": "Keine Benutzer vorhanden.",
+    "usernamePlaceholder": "Benutzername",
+    "passwordPlaceholder": "Passwort (min. 8)",
+    "emailPlaceholder": "E-Mail (optional)"
   },
   "affiliate": {
     "uid": "Exchange UID",
@@ -762,7 +774,11 @@
     "celebrationMessage": "Deine Strategie zeigt exzellente Performance-Kennzahlen. Prüfe die Ergebnisse sorgfältig, bevor du echtes Kapital einsetzt.",
     "celebrationClose": "Verstanden",
     "dataSources": "Datenquellen",
-    "activeApis": "aktive APIs"
+    "activeApis": "aktive APIs",
+    "dateLimitInfo": "Max. {{maxDays}} Tage fuer {{timeframe}} | Daten ab 01.01.2020 verfuegbar",
+    "dateLimitExceeded": "Zeitraum zu lang: max. {{maxDays}} Tage fuer {{timeframe}} (gewaehlt: {{actualDays}} Tage)",
+    "dateBeforeEarliest": "Startdatum muss nach dem 01.01.2020 liegen",
+    "dateFuture": "Enddatum darf nicht in der Zukunft liegen"
   },
   "tour": {
     "skip": "Überspringen",
@@ -800,5 +816,36 @@
     "settingsApiKeysDesc": "Trage hier deine Exchange-API-Schlüssel ein. Jede Exchange hat einen eigenen Bereich mit Live- und Demo-Formularen.",
     "settingsTestConnTitle": "Verbindung testen",
     "settingsTestConnDesc": "Klicke nach dem Speichern auf 'Verbindung testen', um zu prüfen, ob alles korrekt konfiguriert ist."
+  },
+  "portfolio": {
+    "title": "Portfolio",
+    "subtitle": "Multi-Exchange Übersicht über alle Konten",
+    "totalBalance": "Gesamtguthaben",
+    "dailyPnl": "Tages-PnL",
+    "totalPnl": "Gesamt-PnL",
+    "totalTrades": "Trades gesamt",
+    "winRate": "Gewinnrate",
+    "fees": "Gebühren",
+    "funding": "Funding",
+    "exchange": "Exchange",
+    "positions": "Offene Positionen",
+    "noPositions": "Keine offenen Positionen",
+    "symbol": "Symbol",
+    "side": "Richtung",
+    "size": "Größe",
+    "entryPrice": "Einstieg",
+    "currentPrice": "Aktuell",
+    "pnl": "PnL",
+    "leverage": "Hebel",
+    "allocation": "Verteilung",
+    "dailyChart": "Täglicher PnL pro Exchange",
+    "noData": "Keine Daten vorhanden",
+    "period": "Zeitraum",
+    "days7": "7 Tage",
+    "days14": "14 Tage",
+    "days30": "30 Tage",
+    "days90": "90 Tage",
+    "loadingPositions": "Lade Positionen...",
+    "exchangeCards": "Exchange-Übersicht"
   }
 }

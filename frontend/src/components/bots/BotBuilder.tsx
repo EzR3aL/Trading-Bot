@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
 import api from '../../api/client'
-import { ArrowLeft, ArrowRight, Check, Play, Brain, TrendingUp, BarChart3, DollarSign, Activity, Building, LayoutGrid, List, Bot, Info } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Check, Play, Brain, TrendingUp, BarChart3, DollarSign, Activity, Building, LayoutGrid, List, Bot, Info, Zap, Clock } from 'lucide-react'
 import ExchangeLogo from '../ui/ExchangeLogo'
 import FilterDropdown from '../ui/FilterDropdown'
 import NumInput from '../ui/NumInput'
@@ -56,7 +56,7 @@ interface BotBuilderProps {
 }
 
 // Strategies that use market data and should show the data sources step
-const DATA_STRATEGIES = ['llm_signal', 'sentiment_surfer', 'liquidation_hunter', 'degen']
+const DATA_STRATEGIES = ['llm_signal', 'sentiment_surfer', 'liquidation_hunter', 'degen', 'edge_indicator', 'claude_edge_indicator']
 
 // Fixed data sources for non-LLM strategies (these strategies use hardcoded sources internally)
 const FIXED_STRATEGY_SOURCES: Record<string, string[]> = {
@@ -70,6 +70,12 @@ const FIXED_STRATEGY_SOURCES: Record<string, string[]> = {
     'spot_price', 'fear_greed', 'news_sentiment', 'funding_rate', 'open_interest',
     'long_short_ratio', 'order_book', 'liquidations', 'supertrend', 'vwap',
     'oiwap', 'spot_volume', 'volatility', 'coingecko_market',
+  ],
+  edge_indicator: [
+    'spot_price', 'vwap', 'supertrend', 'spot_volume', 'volatility',
+  ],
+  claude_edge_indicator: [
+    'spot_price', 'vwap', 'supertrend', 'spot_volume', 'volatility',
   ],
 }
 
@@ -116,6 +122,12 @@ const CATEGORY_ICONS: Record<string, typeof Brain> = {
   tradfi: Building,
 }
 
+// Backtest-based timeframe recommendations (90-day BTCUSDT backtest)
+const STRATEGY_RECOMMENDATIONS: Record<string, { bestTimeframe: string }> = {
+  edge_indicator: { bestTimeframe: '1h' },
+  claude_edge_indicator: { bestTimeframe: '1h' },
+}
+
 const EXCHANGES = ['bitget', 'weex', 'hyperliquid']
 const PAIRS_CEX = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'XRPUSDT', 'DOGEUSDT', 'AVAXUSDT']
 const PAIRS_HL = ['BTC', 'ETH', 'SOL', 'XRP', 'DOGE', 'AVAX']
@@ -159,6 +171,9 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
   const [strategyView, setStrategyView] = useState<'grid' | 'list'>('grid')
   const [sourcesView, setSourcesView] = useState<'grid' | 'list'>('grid')
   const [scheduleView, setScheduleView] = useState<'grid' | 'list'>('grid')
+
+  // Pro Mode: show data source customization for fixed-source strategies
+  const [proMode, setProMode] = useState(() => localStorage.getItem('botBuilder_proMode') === 'true')
 
   // Presets
   const [presets, setPresets] = useState<Preset[]>([])
@@ -292,6 +307,16 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
   const activePairs = isHyperliquid ? PAIRS_HL : PAIRS_CEX
 
   const selectedStrategy = strategies.find(s => s.name === strategyType)
+
+  const toggleProMode = () => {
+    const next = !proMode
+    setProMode(next)
+    localStorage.setItem('botBuilder_proMode', String(next))
+    // Reset to fixed sources when disabling Pro Mode
+    if (!next && FIXED_STRATEGY_SOURCES[strategyType]) {
+      setSelectedSources(FIXED_STRATEGY_SOURCES[strategyType])
+    }
+  }
 
   const handleStrategyChange = (name: string) => {
     setStrategyType(name)
@@ -441,7 +466,7 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
       }
       onDone()
     } catch (err: any) {
-      setError(err.response?.data?.detail || 'Save failed')
+      setError(err.response?.data?.detail || 'Speichern fehlgeschlagen')
     }
     setSaving(false)
   }
@@ -611,7 +636,7 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
                       >
                         <div className={`flex items-center gap-1.5 text-sm font-medium ${isSelected ? 'text-primary-400' : 'text-white'}`}>
                           {getStrategyDisplayName(s.name)}
-                          {s.name === 'llm_signal' && <Bot size={14} className="text-emerald-400" />}
+                          {['llm_signal', 'degen'].includes(s.name) && <Bot size={14} className="text-emerald-400" />}
                         </div>
                         <div className="text-xs text-gray-500 mt-1 line-clamp-2">
                           {STRATEGY_DESCRIPTIONS_DE[s.name] || s.description}
@@ -639,7 +664,7 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
                           <span className={`text-sm font-medium ${isSelected ? 'text-primary-400' : 'text-white'}`}>
                             {getStrategyDisplayName(s.name)}
                           </span>
-                          {s.name === 'llm_signal' && <Bot size={14} className="text-emerald-400" />}
+                          {['llm_signal', 'degen'].includes(s.name) && <Bot size={14} className="text-emerald-400" />}
                         </div>
                         <p className="text-xs text-gray-500 leading-relaxed">
                           {STRATEGY_DESCRIPTIONS_DE[s.name] || s.description}
@@ -654,161 +679,240 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
             {/* LLM info banner */}
             {(strategyType === 'llm_signal' || strategyType === 'degen') && (
               <div className="bg-blue-900/20 border border-blue-800 rounded-lg p-3">
-                <p className="text-xs text-blue-300">{b.llmNote || 'This bot uses AI for signal generation. Configure your API key in Settings → LLM Keys.'}</p>
+                <p className="text-xs text-blue-300">{b.llmNote || 'Dieser Bot nutzt KI zur Signalgenerierung. Konfiguriere deinen API-Schluessel unter Einstellungen.'}</p>
               </div>
             )}
 
-            {selectedStrategy && Object.keys(selectedStrategy.param_schema).length > 0 && (
-              <div>
-                <label className="block text-sm text-gray-400 mb-3">{b.strategyParams}</label>
-                <div className="space-y-3">
-                  {(() => {
-                    const selectEntries = Object.entries(selectedStrategy.param_schema).filter(
-                      ([, def]) => (def as ParamDef).type === 'select' || (def as ParamDef).type === 'dependent_select'
-                    )
-                    const otherEntries = Object.entries(selectedStrategy.param_schema).filter(
-                      ([, def]) => (def as ParamDef).type !== 'select' && (def as ParamDef).type !== 'dependent_select'
-                    )
+            {/* Strategy Recommendations from Backtest */}
+            {strategyType && (strategyType === 'edge_indicator' || strategyType === 'claude_edge_indicator') && STRATEGY_RECOMMENDATIONS[strategyType] && (
+              <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-primary-500/10 border border-primary-500/20">
+                <Clock size={14} className="text-primary-400 shrink-0" />
+                <span className="text-xs text-primary-300">Empfohlener Timeframe: <strong>{STRATEGY_RECOMMENDATIONS[strategyType].bestTimeframe}</strong></span>
+                <span className="text-[10px] text-gray-500 ml-auto">90-Tage Backtest</span>
+              </div>
+            )}
 
-                    return (
-                      <>
-                        {/* Dropdowns (Model Family + Model) compact in one row */}
-                        {selectEntries.length > 0 && (
-                          <div className="flex items-end gap-3 flex-wrap">
-                            {selectEntries.map(([key, def]) => {
-                              const d = def as ParamDef
-                              if (d.type === 'select' && d.options) {
-                                const selectOptions = d.options.map(opt => ({
-                                  value: typeof opt === 'string' ? opt : opt.value,
-                                  label: typeof opt === 'string' ? opt : opt.label,
-                                }))
-                                const backtestHint = key === 'kline_interval' ? INTERVAL_BACKTEST_HINTS[strategyType] : undefined
-                                return (
-                                  <div key={key}>
-                                    <label className="flex items-center gap-1 text-xs text-gray-500 mb-1" title={d.description}>
-                                      {d.label}
-                                      {backtestHint && (
-                                        <span className="relative group">
-                                          <Info size={13} className="text-blue-400 cursor-help" />
-                                          <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 hidden group-hover:block w-64 p-2 text-xs text-gray-200 bg-gray-800 border border-gray-600 rounded-lg shadow-lg z-50 whitespace-normal leading-relaxed">
-                                            {backtestHint.hint}
-                                          </span>
-                                        </span>
-                                      )}
-                                    </label>
-                                    <FilterDropdown
-                                      value={String(strategyParams[key] ?? d.default)}
-                                      onChange={val => setStrategyParams(prev => ({ ...prev, [key]: val }))}
-                                      options={selectOptions}
-                                      ariaLabel={d.label}
-                                    />
-                                  </div>
-                                )
-                              }
-                              if (d.type === 'dependent_select' && d.options_map && d.depends_on) {
-                                const parentValue = (strategyParams[d.depends_on] ?? '') as string
-                                const depOptions = (d.options_map[parentValue] || []).map((opt: ParamOption) => ({
-                                  value: opt.value,
-                                  label: opt.label,
-                                }))
-                                const currentValue = strategyParams[key] ?? ''
-                                const isValid = depOptions.some(opt => opt.value === currentValue)
-                                const displayValue = isValid ? String(currentValue) : (depOptions[0]?.value ?? '')
-                                return (
-                                  <div key={key}>
-                                    <label className="block text-xs text-gray-500 mb-1" title={d.description}>{d.label}</label>
-                                    <FilterDropdown
-                                      value={displayValue}
-                                      onChange={val => setStrategyParams(prev => ({ ...prev, [key]: val }))}
-                                      options={depOptions}
-                                      ariaLabel={d.label}
-                                    />
-                                  </div>
-                                )
-                              }
-                              return null
-                            })}
-                          </div>
-                        )}
+            {selectedStrategy && Object.keys(selectedStrategy.param_schema).length > 0 && (() => {
+              const selectEntries = Object.entries(selectedStrategy.param_schema).filter(
+                ([, def]) => (def as ParamDef).type === 'select' || (def as ParamDef).type === 'dependent_select'
+              )
+              const textareaEntries = Object.entries(selectedStrategy.param_schema).filter(
+                ([, def]) => (def as ParamDef).type === 'textarea'
+              )
+              // All non-select, non-textarea params go behind Pro Mode
+              const proModeEntries = Object.entries(selectedStrategy.param_schema).filter(
+                ([, def]) => {
+                  const d = def as ParamDef
+                  return d.type !== 'select' && d.type !== 'dependent_select' && d.type !== 'textarea'
+                }
+              )
+              const hasAlwaysVisible = selectEntries.length > 0 || textareaEntries.length > 0
+              const hasProParams = proModeEntries.length > 0
 
-                        {/* Special fields: Prompt + Temperature slider */}
-                        {otherEntries
-                          .filter(([, def]) => {
+              return (
+                <div>
+                  {/* Always visible: LLM provider/model selects + custom prompt textarea */}
+                  {hasAlwaysVisible && (
+                    <div className="space-y-3">
+                      {selectEntries.length > 0 && (
+                        <div className="flex items-end gap-3 flex-wrap">
+                          {selectEntries.map(([key, def]) => {
                             const d = def as ParamDef
-                            return d.type === 'textarea' || (d.type === 'float' && d.min !== undefined && d.max !== undefined && d.max <= 1)
-                          })
-                          .map(([key, def]) => {
-                            const d = def as ParamDef
-                            if (d.type === 'textarea') {
+                            if (d.type === 'select' && d.options) {
+                              const selectOptions = d.options.map(opt => ({
+                                value: typeof opt === 'string' ? opt : opt.value,
+                                label: typeof opt === 'string' ? opt : opt.label,
+                              }))
                               return (
                                 <div key={key}>
-                                  <label className="block text-xs text-gray-500 mb-1" title={d.description}>{d.label}</label>
-                                  <textarea
-                                    value={strategyParams[key] ?? ''}
-                                    onChange={e => setStrategyParams(prev => ({ ...prev, [key]: e.target.value }))}
-                                    rows={6}
-                                    placeholder={b.customPromptPlaceholder}
-                                    className="filter-select w-full text-sm font-mono !h-auto"
+                                  <label className="block text-xs text-gray-500 mb-1">{d.label}</label>
+                                  <FilterDropdown
+                                    value={String(strategyParams[key] ?? d.default)}
+                                    onChange={val => setStrategyParams(prev => ({ ...prev, [key]: val }))}
+                                    options={selectOptions}
+                                    ariaLabel={d.label}
                                   />
+                                  {d.description && <p className="text-[10px] text-gray-600 mt-1">{d.description}</p>}
                                 </div>
                               )
                             }
-                            const val = strategyParams[key] ?? d.default
-                            return (
-                              <div key={key} className="max-w-sm">
-                                <label className="block text-xs text-gray-500 mb-1" title={d.description}>
-                                  {d.label}: {Number(val).toFixed(1)}
-                                </label>
-                                <input
-                                  type="range"
-                                  min={d.min}
-                                  max={d.max}
-                                  step={0.1}
-                                  value={val}
-                                  onChange={e => setStrategyParams(prev => ({ ...prev, [key]: parseFloat(e.target.value) }))}
-                                  className="w-full accent-primary-500"
-                                />
-                                <p className="text-[11px] text-gray-600 mt-0.5">
-                                  {b.temperatureHint}
-                                </p>
-                              </div>
-                            )
+                            if (d.type === 'dependent_select' && d.options_map && d.depends_on) {
+                              const parentValue = (strategyParams[d.depends_on] ?? '') as string
+                              const depOptions = (d.options_map[parentValue] || []).map((opt: ParamOption) => ({
+                                value: opt.value,
+                                label: opt.label,
+                              }))
+                              const currentValue = strategyParams[key] ?? ''
+                              const isValid = depOptions.some(opt => opt.value === currentValue)
+                              const displayValue = isValid ? String(currentValue) : (depOptions[0]?.value ?? '')
+                              return (
+                                <div key={key}>
+                                  <label className="block text-xs text-gray-500 mb-1">{d.label}</label>
+                                  <FilterDropdown
+                                    value={displayValue}
+                                    onChange={val => setStrategyParams(prev => ({ ...prev, [key]: val }))}
+                                    options={depOptions}
+                                    ariaLabel={d.label}
+                                  />
+                                  {d.description && <p className="text-[10px] text-gray-600 mt-1">{d.description}</p>}
+                                </div>
+                              )
+                            }
+                            return null
                           })}
+                        </div>
+                      )}
 
-                        {/* Number inputs in 2-column grid */}
-                        {(() => {
-                          const numberEntries = otherEntries.filter(([, def]) => {
-                            const d = def as ParamDef
-                            return d.type !== 'textarea' && !(d.type === 'float' && d.min !== undefined && d.max !== undefined && d.max <= 1)
-                          })
-                          if (numberEntries.length === 0) return null
-                          return (
-                            <div className="grid grid-cols-2 gap-3">
-                              {numberEntries.map(([key, def]) => {
-                                const d = def as ParamDef
-                                return (
-                                  <div key={key}>
-                                    <label className="block text-xs text-gray-500 mb-1" title={d.description}>{d.label}</label>
-                                    <NumInput
-                                      value={strategyParams[key] ?? d.default}
-                                      onChange={e => setStrategyParams(prev => ({ ...prev, [key]: parseFloat(e.target.value) || 0 }))}
-                                      min={d.min}
-                                      max={d.max}
-                                      step={d.type === 'float' ? 0.0001 : 1}
-                                      className="filter-select w-full text-sm"
+                      {textareaEntries.map(([key, def]) => {
+                        const d = def as ParamDef
+                        return (
+                          <div key={key}>
+                            <label className="block text-xs text-gray-500 mb-1">{d.label}</label>
+                            {d.description && <p className="text-[10px] text-gray-600 mb-1.5">{d.description}</p>}
+                            <textarea
+                              value={strategyParams[key] ?? ''}
+                              onChange={e => setStrategyParams(prev => ({ ...prev, [key]: e.target.value }))}
+                              rows={6}
+                              placeholder="Eigene Anweisungen für die KI-Analyse eingeben..."
+                              className="filter-select w-full text-sm font-mono !h-auto"
+                            />
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+
+                  {/* Pro Mode toggle — reveals ALL strategy params */}
+                  {hasProParams && (
+                    <div className={`${hasAlwaysVisible ? 'mt-6' : ''} border-t border-white/5 pt-4`}>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <Zap size={15} className={proMode ? 'text-amber-400' : 'text-gray-500'} />
+                          <div>
+                            <span className="text-sm font-medium text-gray-300">Pro Mode</span>
+                            <p className="text-xs text-gray-500">
+                              {proMode
+                                ? (b.proModeParamsActiveHint || 'Strategie-Parameter werden angezeigt')
+                                : (b.proModeParamsHint || 'Strategie-Parameter anpassen (für fortgeschrittene Nutzer)')}
+                            </p>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={toggleProMode}
+                          className={`relative w-11 h-6 rounded-full transition-colors ${proMode ? 'bg-amber-500' : 'bg-gray-700'}`}
+                        >
+                          <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform ${proMode ? 'translate-x-5' : ''}`} />
+                        </button>
+                      </div>
+
+                      {proMode && (() => {
+                        const tempEntry = proModeEntries.find(([k]) => k === 'temperature')
+                        const boolEntries = proModeEntries.filter(([, def]) => (def as ParamDef).type === 'bool')
+                        const numericEntries = proModeEntries.filter(([k, def]) => {
+                          const d = def as ParamDef
+                          return k !== 'temperature' && d.type !== 'bool'
+                        })
+
+                        // Range position as percentage (0-100)
+                        const rangePercent = (val: number, min: number, max: number) => {
+                          if (max === min) return 50
+                          return Math.max(0, Math.min(100, ((val - min) / (max - min)) * 100))
+                        }
+
+                        return (
+                          <div className="mt-4 space-y-3">
+                            {/* Temperature — dedicated slider */}
+                            {tempEntry && (() => {
+                              const [tKey, tDef] = tempEntry
+                              const td = tDef as ParamDef
+                              const tVal = Number(strategyParams[tKey] ?? td.default)
+                              const pct = rangePercent(tVal, td.min ?? 0, td.max ?? 1)
+                              return (
+                                <div className="relative overflow-hidden rounded-lg bg-gradient-to-r from-gray-800/40 to-gray-800/20 px-3 py-2 max-w-md">
+                                  <div className="flex items-center justify-between mb-1.5">
+                                    <span className="text-[10px] font-medium text-gray-400 uppercase tracking-wider">{td.label}</span>
+                                    <span className="text-xs font-mono font-semibold text-amber-400">{tVal.toFixed(1)}</span>
+                                  </div>
+                                  <div className="relative h-1.5 rounded-full bg-gray-900/60 overflow-hidden">
+                                    <div
+                                      className="absolute inset-y-0 left-0 rounded-full bg-gradient-to-r from-blue-500 via-amber-400 to-red-500 transition-all"
+                                      style={{ width: `${pct}%` }}
                                     />
                                   </div>
-                                )
-                              })}
-                            </div>
-                          )
-                        })()}
-                      </>
-                    )
-                  })()}
+                                  <input
+                                    type="range" min={td.min} max={td.max} step={0.1} value={tVal}
+                                    onChange={e => setStrategyParams(prev => ({ ...prev, [tKey]: parseFloat(e.target.value) }))}
+                                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                                  />
+                                  <div className="flex justify-between mt-1">
+                                    <span className="text-[9px] text-gray-600">Deterministisch</span>
+                                    <span className="text-[9px] text-gray-600">Kreativ</span>
+                                  </div>
+                                </div>
+                              )
+                            })()}
+
+                            {/* Bool toggles — compact inline pills */}
+                            {boolEntries.length > 0 && (
+                              <div className="flex flex-wrap gap-1.5">
+                                {boolEntries.map(([key, def]) => {
+                                  const d = def as ParamDef
+                                  const isOn = strategyParams[key] ?? d.default
+                                  return (
+                                    <button
+                                      key={key} type="button"
+                                      onClick={() => setStrategyParams(prev => ({ ...prev, [key]: !isOn }))}
+                                      title={d.description}
+                                      className={`inline-flex items-center gap-1.5 pl-2 pr-2.5 py-1.5 rounded-full text-[11px] font-medium transition-all ${
+                                        isOn
+                                          ? 'bg-emerald-500/15 text-emerald-400 ring-1 ring-emerald-500/25'
+                                          : 'bg-gray-800/40 text-gray-500 ring-1 ring-white/[0.04]'
+                                      }`}
+                                    >
+                                      <span className={`w-1.5 h-1.5 rounded-full ${isOn ? 'bg-emerald-400' : 'bg-gray-600'}`} />
+                                      {d.label}
+                                    </button>
+                                  )
+                                })}
+                              </div>
+                            )}
+
+                            {/* Numeric params — compact 2-col grid */}
+                            {numericEntries.length > 0 && (
+                              <div className="grid grid-cols-2 gap-2">
+                                {numericEntries.map(([key, def]) => {
+                                  const d = def as ParamDef
+                                  const val = Number(strategyParams[key] ?? d.default)
+
+                                  return (
+                                    <div
+                                      key={key}
+                                      className="rounded-md bg-gray-800/30 px-2.5 py-2 border border-white/[0.04] hover:border-white/[0.08] transition-colors"
+                                    >
+                                      <label className="block text-[11px] text-gray-500 mb-1 truncate">{d.label}</label>
+                                      <NumInput
+                                        value={val}
+                                        onChange={e => setStrategyParams(prev => ({ ...prev, [key]: parseFloat(e.target.value) || 0 }))}
+                                        min={d.min}
+                                        max={d.max}
+                                        step={d.type === 'float' ? 0.0001 : 1}
+                                        className="filter-select text-sm !w-full text-gray-200"
+                                      />
+                                      {d.description && <p className="text-[9px] text-gray-600 mt-1 leading-tight">{d.description}</p>}
+                                    </div>
+                                  )
+                                })}
+                              </div>
+                            )}
+                          </div>
+                        )
+                      })()}
+                    </div>
+                  )}
                 </div>
-              </div>
-            )}
+              )
+            })()}
           </div>
         )}
 
@@ -817,7 +921,7 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <div>
-                <label className="block text-sm text-gray-400">{b.dataSources || 'Data Sources'}</label>
+                <label className="block text-sm text-gray-400">{b.dataSources || 'Datenquellen'}</label>
                 <p className="text-xs text-gray-500 mt-0.5">
                   {selectedSources.length} {b.sourcesSelected || 'sources selected'}
                 </p>
@@ -862,13 +966,13 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
                         className={`text-xs px-2 py-0.5 rounded ${allSelected ? 'text-gray-600' : 'text-primary-400 hover:text-primary-300'}`}
                         disabled={allSelected}
                       >
-                        {b.selectAll || 'Select All'}
+                        {b.selectAll || 'Alle auswaehlen'}
                       </button>
                       <button
                         onClick={() => clearCategory(cat)}
                         className="text-xs px-2 py-0.5 rounded text-gray-500 hover:text-gray-400"
                       >
-                        {b.clearAll || 'Clear'}
+                        {b.clearAll || 'Leeren'}
                       </button>
                     </div>
                   </div>
@@ -1172,16 +1276,16 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
               <div className="grid grid-cols-2 gap-2">
                 {(['rotation_only', 'market_sessions', 'interval', 'custom_cron'] as const).map(st => {
                   const labelMap: Record<string, string> = {
-                    rotation_only: b.rotationOnly || 'Trade Rotation Only',
+                    rotation_only: b.rotationOnly || 'Nur Trade-Rotation',
                     market_sessions: b.marketSessions,
                     interval: b.interval,
                     custom_cron: b.customCron,
                   }
                   const descMap: Record<string, string> = {
-                    rotation_only: b.rotationOnlyDesc || 'Auto-close and reopen at intervals',
+                    rotation_only: b.rotationOnlyDesc || 'Automatisch schliessen und in festen Intervallen neu eroeffnen',
                     market_sessions: '01, 08, 14, 21h UTC',
-                    interval: b.intervalDesc || 'Analysis at a custom minute interval',
-                    custom_cron: b.customCronDesc || 'Analysis at specific hours (UTC)',
+                    interval: b.intervalDesc || 'Analyse in frei waehlbarem Minutentakt',
+                    custom_cron: b.customCronDesc || 'Analyse zu festen Uhrzeiten (UTC)',
                   }
                   const isSelected = scheduleType === st
                   return (
@@ -1201,7 +1305,7 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
               <div className="space-y-1">
                 {(['rotation_only', 'market_sessions', 'interval', 'custom_cron'] as const).map(st => {
                   const labelMap: Record<string, string> = {
-                    rotation_only: b.rotationOnly || 'Trade Rotation Only',
+                    rotation_only: b.rotationOnly || 'Nur Trade-Rotation',
                     market_sessions: b.marketSessions,
                     interval: b.interval,
                     custom_cron: b.customCron,
@@ -1261,8 +1365,8 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
               <div className="mt-4 pt-4 border-t border-white/5">
                 <div className="flex items-center justify-between">
                   <div>
-                    <span className="text-sm text-gray-300">{b.tradeRotation || 'Trade Rotation'}</span>
-                    <p className="text-xs text-gray-500 mt-0.5">{b.tradeRotationDesc || 'Auto-close and reopen trades at fixed intervals'}</p>
+                    <span className="text-sm text-gray-300">{b.tradeRotation || 'Trade-Rotation'}</span>
+                    <p className="text-xs text-gray-500 mt-0.5">{b.tradeRotationDesc || 'Trades automatisch in festen Intervallen schliessen und neu eroeffnen'}</p>
                   </div>
                   <button onClick={() => setRotationEnabled(!rotationEnabled)}
                     className={`relative w-11 h-6 rounded-full transition-colors ${rotationEnabled ? 'bg-primary-600' : 'bg-gray-700'}`}>
@@ -1295,14 +1399,14 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
 
                 <div className="flex gap-4">
                   <div>
-                    <label className="block text-xs text-gray-500 mb-1.5">{b.customMinutes || 'Custom (minutes)'}</label>
+                    <label className="block text-xs text-gray-500 mb-1.5">{b.customMinutes || 'Eigener Wert (Minuten)'}</label>
                     <NumInput value={rotationMinutes}
                       onChange={e => setRotationMinutes(Math.max(5, parseInt(e.target.value) || 5))}
                       min={5} max={10080}
                       className="filter-select w-36 text-sm tabular-nums" />
                   </div>
                   <div>
-                    <label className="block text-xs text-gray-500 mb-1.5">{b.rotationStartTime || 'Start Time (UTC)'}</label>
+                    <label className="block text-xs text-gray-500 mb-1.5">{b.rotationStartTime || 'Startzeit (UTC)'}</label>
                     <FilterDropdown
                       value={rotationStartTime}
                       onChange={val => setRotationStartTime(val)}
@@ -1330,7 +1434,7 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
               <div><span className="text-gray-500">{b.mode}:</span> <span className="text-white ml-2">{mode}</span></div>
               <div><span className="text-gray-500">{b.tradingPairs}:</span> <span className="text-white ml-2">{tradingPairs.join(', ')}</span></div>
               {usesData && (
-                <div><span className="text-gray-500">{b.dataSources || 'Data Sources'}:</span> <span className="text-white ml-2">{hasFixedSources ? `${selectedSources.length} (${b.fixedSources || 'fixed'})` : `${selectedSources.length} ${b.sourcesSelected || 'selected'}`}</span></div>
+                <div><span className="text-gray-500">{b.dataSources || 'Datenquellen'}:</span> <span className="text-white ml-2">{hasFixedSources ? `${selectedSources.length} (${b.fixedSources || 'fest vorgegeben'})` : `${selectedSources.length} ${b.sourcesSelected || 'ausgewählt'}`}</span></div>
               )}
               {maxTrades != null && (
                 <div><span className="text-gray-500">{b.maxTrades}:</span> <span className="text-white ml-2">{maxTrades}</span></div>
@@ -1339,15 +1443,15 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
                 <div><span className="text-gray-500">{b.dailyLossLimit}:</span> <span className="text-white ml-2">{dailyLossLimit}%</span></div>
               )}
               <div><span className="text-gray-500">{b.schedule}:</span> <span className="text-white ml-2">
-                {scheduleType === 'rotation_only' ? (b.rotationOnly || 'Rotation Only') :
-                 scheduleType === 'interval' ? `Every ${intervalMinutes}min` :
+                {scheduleType === 'rotation_only' ? (b.rotationOnly || 'Nur Rotation') :
+                 scheduleType === 'interval' ? `Alle ${intervalMinutes} Min.` :
                  scheduleType === 'custom_cron' ? customHours.map(h => `${h}:00`).join(', ') :
                  '01:00, 08:00, 14:00, 21:00 UTC'}
               </span></div>
               {(rotationEnabled || scheduleType === 'rotation_only') && (
-                <div><span className="text-gray-500">{b.tradeRotation || 'Rotation'}:</span> <span className="text-white ml-2">
+                <div><span className="text-gray-500">{b.tradeRotation || 'Trade-Rotation'}:</span> <span className="text-white ml-2">
                   {rotationMinutes >= 60 ? `${rotationMinutes / 60}h` : `${rotationMinutes}min`}
-                  {rotationStartTime ? ` (${b.rotationStartTime || 'Start'}: ${rotationStartTime} UTC)` : ''}
+                  {rotationStartTime ? ` (${b.rotationStartTime || 'Startzeit'}: ${rotationStartTime} UTC)` : ''}
                 </span></div>
               )}
             </div>
@@ -1370,7 +1474,7 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
                       if (cfg.tp) parts.push(`TP ${cfg.tp}%`)
                       if (cfg.sl) parts.push(`SL ${cfg.sl}%`)
                       if (cfg.max_trades) parts.push(`${cfg.max_trades} Trades`)
-                      if (cfg.loss_limit) parts.push(`Loss ${cfg.loss_limit}%`)
+                      if (cfg.loss_limit) parts.push(`Verlust ${cfg.loss_limit}%`)
                       return (
                         <span key={p} className="bg-white/5 px-2 py-1 rounded">
                           <span className="text-white font-medium">{p}</span>

@@ -26,5 +26,5 @@ class UserProfile(BaseModel):
     username: str
     email: str | None = None
     role: str
-    language: str
+    language: str | None = "en"
     is_active: bool

@@ -1,6 +1,10 @@
+import dns from 'node:dns'
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import path from 'path'
+
+// Prefer IPv4 to avoid slow dual-stack DNS lookups on localhost
+dns.setDefaultResultOrder('ipv4first')
 
 export default defineConfig({
   plugins: [react()],

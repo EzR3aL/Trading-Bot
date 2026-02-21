@@ -75,6 +75,8 @@ def _make_data_point(
         funding_rate_eth=funding_eth,
         btc_price=btc_price,
         eth_price=eth_price,
+        btc_open=btc_price,
+        eth_open=eth_price,
         btc_high=btc_high,
         btc_low=btc_low,
         eth_high=eth_high,
@@ -108,7 +110,7 @@ class TestBacktestConfig:
         assert config.max_trades_per_day == 3
         assert config.daily_loss_limit_percent == 5.0
         assert config.position_size_percent == 10.0
-        assert config.trading_fee_percent == 0.06
+        assert config.trading_fee_percent == 0.04
 
     def test_custom_values(self):
         config = BacktestConfig(
@@ -1392,7 +1394,7 @@ class TestRunBacktestForStrategy:
         end = datetime(2024, 6, 1)
         with pytest.raises(ValueError, match="at least 1 day"):
             await run_backtest_for_strategy(
-                strategy_type="contrarian",
+                strategy_type="liquidation_hunter",
                 symbol="BTC",
                 timeframe="1d",
                 start_date=start,
@@ -1428,7 +1430,7 @@ class TestRunBacktestForStrategy:
         end = datetime(2024, 6, 6)
 
         result = await run_backtest_for_strategy(
-            strategy_type="contrarian",
+            strategy_type="liquidation_hunter",
             symbol="BTC",
             timeframe="1d",
             start_date=start,
@@ -1464,7 +1466,7 @@ class TestRunBacktestForStrategy:
         end = datetime(2024, 6, 10)
 
         result = await run_backtest_for_strategy(
-            strategy_type="contrarian",
+            strategy_type="liquidation_hunter",
             symbol="BTC",
             timeframe="1d",
             start_date=start,
@@ -1491,7 +1493,7 @@ class TestRunBacktestForStrategy:
         end = datetime(2024, 6, 4)
 
         result = await run_backtest_for_strategy(
-            strategy_type="contrarian",
+            strategy_type="liquidation_hunter",
             symbol="BTC",
             timeframe="1d",
             start_date=start,
@@ -1528,7 +1530,7 @@ class TestRunBacktestForStrategy:
         end = datetime(2024, 6, 10)
 
         result = await run_backtest_for_strategy(
-            strategy_type="contrarian",
+            strategy_type="liquidation_hunter",
             symbol="BTC",
             timeframe="1d",
             start_date=start,
@@ -1560,7 +1562,7 @@ class TestRunBacktestForStrategy:
 
         # Force high confidence threshold so no trades are made
         result = await run_backtest_for_strategy(
-            strategy_type="contrarian",
+            strategy_type="liquidation_hunter",
             symbol="BTC",
             timeframe="1d",
             start_date=start,

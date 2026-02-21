@@ -53,12 +53,17 @@ def event_loop():
 
 @pytest_asyncio.fixture
 async def test_engine():
-    """Create an in-memory SQLite engine for testing."""
-    engine = create_async_engine(
-        "sqlite+aiosqlite:///:memory:",
-        echo=False,
-        connect_args={"check_same_thread": False},
-    )
+    """Create a test database engine.
+
+    Uses TEST_DATABASE_URL env var if set (e.g. for PostgreSQL), otherwise
+    falls back to an in-memory SQLite database.
+    """
+    test_db_url = os.environ.get("TEST_DATABASE_URL", "sqlite+aiosqlite:///:memory:")
+    is_sqlite = test_db_url.startswith("sqlite")
+    engine_kwargs = {"echo": False}
+    if is_sqlite:
+        engine_kwargs["connect_args"] = {"check_same_thread": False}
+    engine = create_async_engine(test_db_url, **engine_kwargs)
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     yield engine
@@ -133,6 +138,7 @@ async def app(test_engine, mock_orchestrator):
         config,
         exchanges,
         funding,
+        portfolio,
         presets,
         statistics,
         status,
@@ -162,6 +168,7 @@ async def app(test_engine, mock_orchestrator):
     test_app.include_router(exchanges.router)
     test_app.include_router(bots.router)
     test_app.include_router(tax_report.router)
+    test_app.include_router(portfolio.router)
 
     # Override dependency
     test_app.dependency_overrides[get_db] = override_get_db

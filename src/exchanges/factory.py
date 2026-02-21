@@ -1,6 +1,7 @@
 """Factory for creating exchange client and websocket instances."""
 
 from src.exchanges.base import ExchangeClient, ExchangeWebSocket
+from src.exchanges.rate_limiter import ExchangeRateLimiter
 
 
 def create_exchange_client(
@@ -30,6 +31,9 @@ def create_exchange_client(
     """
     exchange_type = exchange_type.lower().strip()
 
+    # Shared rate limiter per exchange type
+    rate_limiter = ExchangeRateLimiter.get(exchange_type)
+
     if exchange_type == "bitget":
         from src.exchanges.bitget.client import BitgetExchangeClient
         return BitgetExchangeClient(
@@ -37,6 +41,7 @@ def create_exchange_client(
             api_secret=api_secret,
             passphrase=passphrase,
             demo_mode=demo_mode,
+            rate_limiter=rate_limiter,
             **kwargs,
         )
     elif exchange_type == "weex":
@@ -46,6 +51,7 @@ def create_exchange_client(
             api_secret=api_secret,
             passphrase=passphrase,
             demo_mode=demo_mode,
+            rate_limiter=rate_limiter,
             **kwargs,
         )
     elif exchange_type == "hyperliquid":
@@ -54,6 +60,7 @@ def create_exchange_client(
             api_key=api_key,
             api_secret=api_secret,
             demo_mode=demo_mode,
+            rate_limiter=rate_limiter,
             **kwargs,
         )
     else:
@@ -126,6 +133,53 @@ def create_exchange_websocket(
 def get_supported_exchanges() -> list:
     """Return list of supported exchange identifiers."""
     return ["bitget", "weex", "hyperliquid"]
+
+
+async def get_all_user_clients(user_id: int, db) -> dict:
+    """Load all ExchangeConnections for a user and create client instances.
+
+    Args:
+        user_id: User ID
+        db: AsyncSession
+
+    Returns:
+        Dict[str, ExchangeClient] mapping exchange_type to client instance
+    """
+    from sqlalchemy import select
+    from src.models.database import ExchangeConnection
+    from src.utils.encryption import decrypt_value
+
+    result = await db.execute(
+        select(ExchangeConnection).where(ExchangeConnection.user_id == user_id)
+    )
+    connections = result.scalars().all()
+
+    clients = {}
+    for conn in connections:
+        try:
+            api_key_enc = conn.api_key_encrypted or conn.demo_api_key_encrypted
+            api_secret_enc = conn.api_secret_encrypted or conn.demo_api_secret_encrypted
+            passphrase_enc = conn.passphrase_encrypted or conn.demo_passphrase_encrypted
+
+            if not api_key_enc or not api_secret_enc:
+                continue
+
+            api_key = decrypt_value(api_key_enc)
+            api_secret = decrypt_value(api_secret_enc)
+            passphrase = decrypt_value(passphrase_enc) if passphrase_enc else ""
+            demo_mode = not conn.api_key_encrypted
+
+            clients[conn.exchange_type] = create_exchange_client(
+                exchange_type=conn.exchange_type,
+                api_key=api_key,
+                api_secret=api_secret,
+                passphrase=passphrase,
+                demo_mode=demo_mode,
+            )
+        except Exception:
+            pass  # Skip failed connections
+
+    return clients
 
 
 def get_exchange_info(exchange_type: str) -> dict:

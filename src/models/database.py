@@ -20,6 +20,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     func,
+    text,
 )
 from sqlalchemy.orm import DeclarativeBase, relationship
 
@@ -154,7 +155,7 @@ class TradeRecord(Base):
     exit_time = Column(DateTime, nullable=True)
     exit_reason = Column(String(50), nullable=True)
     metrics_snapshot = Column(Text, nullable=True)  # JSON string
-    demo_mode = Column(Boolean, default=False, nullable=False, server_default="0")
+    demo_mode = Column(Boolean, default=False, nullable=False, server_default=text("false"))
 
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, onupdate=func.now())
@@ -231,16 +232,16 @@ class ExchangeConnection(Base):
     demo_passphrase_encrypted = Column(Text, nullable=True)
 
     # Builder fee approval tracking (Hyperliquid)
-    builder_fee_approved = Column(Boolean, default=False, nullable=False, server_default="0")
+    builder_fee_approved = Column(Boolean, default=False, nullable=False, server_default=text("false"))
     builder_fee_approved_at = Column(DateTime, nullable=True)
 
     # Referral verification tracking (Hyperliquid)
-    referral_verified = Column(Boolean, default=False, nullable=False, server_default="0")
+    referral_verified = Column(Boolean, default=False, nullable=False, server_default=text("false"))
     referral_verified_at = Column(DateTime, nullable=True)
 
     # Affiliate UID verification (Bitget / Weex)
     affiliate_uid = Column(String(100), nullable=True)
-    affiliate_verified = Column(Boolean, default=False, nullable=False, server_default="0")
+    affiliate_verified = Column(Boolean, default=False, nullable=False, server_default=text("false"))
     affiliate_verified_at = Column(DateTime, nullable=True)
 
     created_at = Column(DateTime, server_default=func.now())
@@ -368,7 +369,7 @@ class AffiliateLink(Base):
     affiliate_url = Column(Text, nullable=False)
     label = Column(String(200), nullable=True)
     is_active = Column(Boolean, default=True)
-    uid_required = Column(Boolean, default=False, nullable=False, server_default="0")
+    uid_required = Column(Boolean, default=False, nullable=False, server_default=text("false"))
 
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, onupdate=func.now())
@@ -404,6 +405,24 @@ class BacktestRun(Base):
 
     # Relationships
     user = relationship("User", back_populates="backtest_runs")
+
+
+class RiskStats(Base):
+    """Daily risk stats per bot, replacing JSON file storage."""
+    __tablename__ = "risk_stats"
+    __table_args__ = (
+        Index("idx_risk_stats_bot_date", "bot_config_id", "date", unique=True),
+    )
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    bot_config_id = Column(Integer, ForeignKey("bot_configs.id", ondelete="CASCADE"), nullable=False)
+    date = Column(String(10), nullable=False)  # YYYY-MM-DD
+    stats_json = Column(Text, nullable=False)  # Full DailyStats serialized
+    daily_pnl = Column(Float, default=0.0)
+    trades_count = Column(Integer, default=0)
+    is_halted = Column(Boolean, default=False)
+    created_at = Column(DateTime, server_default=func.now())
+    updated_at = Column(DateTime, onupdate=func.now())
 
 
 class AuditLog(Base):

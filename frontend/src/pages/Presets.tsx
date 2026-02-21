@@ -76,13 +76,17 @@ export default function Presets() {
     try {
       setError('')
       setSaving(true)
+      const res = editId
+        ? await api.put(`/presets/${editId}`, data)
+        : await api.post('/presets', data)
+
+      // Optimistic update — avoids a second HTTP roundtrip
       if (editId) {
-        await api.put(`/presets/${editId}`, data)
+        setPresets(prev => prev.map(p => p.id === editId ? res.data : p))
       } else {
-        await api.post('/presets', data)
+        setPresets(prev => [...prev, res.data])
       }
       resetForm()
-      loadPresets()
     } catch (err: any) {
       const detail = err.response?.data?.detail
       const msg = typeof detail === 'string' ? detail : detail ? JSON.stringify(detail) : (err.message || 'Unknown error')
@@ -93,14 +97,22 @@ export default function Presets() {
   }
 
   const duplicate = async (id: number) => {
-    await api.post(`/presets/${id}/duplicate`)
-    loadPresets()
+    try {
+      const res = await api.post(`/presets/${id}/duplicate`)
+      setPresets(prev => [...prev, res.data])
+    } catch {
+      setError(t('common.error'))
+    }
   }
 
   const deletePreset = async (id: number) => {
     if (!confirm(t('presets.confirmDelete'))) return
-    await api.delete(`/presets/${id}`)
-    loadPresets()
+    try {
+      await api.delete(`/presets/${id}`)
+      setPresets(prev => prev.filter(p => p.id !== id))
+    } catch {
+      setError(t('common.error'))
+    }
   }
 
   const startEdit = (preset: Preset) => {

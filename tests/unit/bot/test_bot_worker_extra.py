@@ -2396,8 +2396,8 @@ class TestScheduleSetupEdgeCases:
 
         worker._setup_schedule()
 
-        # analysis + monitor + rotation = 3
-        assert worker._scheduler.add_job.call_count == 3
+        # analysis + monitor + rotation + daily_summary = 4
+        assert worker._scheduler.add_job.call_count == 4
 
     def test_schedule_config_json_parsed(self):
         """Schedule config JSON is parsed correctly."""
@@ -2410,7 +2410,7 @@ class TestScheduleSetupEdgeCases:
 
         worker._setup_schedule()
 
-        assert worker._scheduler.add_job.call_count == 2
+        assert worker._scheduler.add_job.call_count == 3
 
 
 # ---------------------------------------------------------------------------
@@ -2479,6 +2479,9 @@ class TestAnalyzeAndTradeSafe:
         worker._consecutive_errors = 4  # Next error will be the 5th
         worker.status = "running"
         worker._analyze_and_trade = AsyncMock(side_effect=Exception("fail"))
+        # _analyze_and_trade_safe accesses self._config.name for notifications
+        worker._config = MagicMock()
+        worker._config.name = "TestBot"
 
         with patch("src.bot.bot_worker.asyncio.sleep", new_callable=AsyncMock) as mock_sleep:
             await worker._analyze_and_trade_safe()

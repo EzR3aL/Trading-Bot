@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo, useRef } from 'react'
+import { useEffect, useState, useMemo, useRef, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   XAxis, YAxis, CartesianGrid, Tooltip,
@@ -13,6 +13,7 @@ import { SkeletonChart, SkeletonTable } from '../components/ui/Skeleton'
 import PnlCell from '../components/ui/PnlCell'
 import { ExchangeIcon } from '../components/ui/ExchangeLogo'
 import { Eye, EyeOff, ArrowUpRight, ArrowDownRight, Trophy, Target, LayoutGrid, BarChart3, Bot, FileText, X, Copy } from 'lucide-react'
+import type { LlmConnection } from '../types'
 
 /* ── Colors ──────────────────────────────────────────────── */
 
@@ -180,7 +181,7 @@ function BotCard({ bot, color, isSelected, isHovered, onClick, onMouseEnter, onM
       </div>
 
       {/* LLM Provider + Model */}
-      {bot.strategy_type === 'llm_signal' && bot.llm_provider && (
+      {['llm_signal', 'degen'].includes(bot.strategy_type) && bot.llm_provider && (
         <div className="flex items-center gap-1.5 mb-2 ml-4 text-[10px] text-gray-500">
           <Bot size={11} className="text-emerald-400" />
           <span>{providerNameMap[bot.llm_provider] || bot.llm_provider}</span>
@@ -286,7 +287,7 @@ function SmallMultipleCard({ bot, color, yDomain, chartGridColor, chartTickColor
       </div>
 
       {/* LLM Provider + Model */}
-      {bot.strategy_type === 'llm_signal' && bot.llm_provider && (
+      {['llm_signal', 'degen'].includes(bot.strategy_type) && bot.llm_provider && (
         <div className="flex items-center gap-1.5 mb-1 ml-4 text-[10px] text-gray-500">
           <Bot size={11} className="text-emerald-400" />
           <span>{providerNameMap[bot.llm_provider] || bot.llm_provider}</span>
@@ -363,10 +364,11 @@ function SmallMultipleCard({ bot, color, yDomain, chartGridColor, chartTickColor
 
 /* ── Bot Detail PnL Tooltip ──────────────────────────────── */
 
-function BotPnlTooltip({ active, payload, label }: {
+function BotPnlTooltip({ active, payload, label, t }: {
   active?: boolean
   payload?: Array<{ name: string; value: number; dataKey: string }>
   label?: string
+  t: (key: string) => string
 }) {
   if (!active || !payload?.length) return null
 
@@ -403,7 +405,7 @@ function BotPnlTooltip({ active, payload, label }: {
       )}
       {(feesEntry || fundingEntry) && (fees > 0 || funding > 0) && (
         <div className="flex justify-between text-sm mt-1.5 pt-1.5 border-t border-white/10">
-          <span className="text-gray-400">Netto</span>
+          <span className="text-gray-400">{t('common.net')}</span>
           <span className="font-bold ml-4" style={{ color: total >= 0 ? PNL_POS : PNL_NEG }}>${total.toFixed(2)}</span>
         </div>
       )}
@@ -458,7 +460,7 @@ export default function BotPerformance() {
   const [latestCopied, setLatestCopied] = useState(false)
   const tradeCardRef = useRef<HTMLDivElement>(null)
   const latestCardRef = useRef<HTMLDivElement>(null)
-  const [llmConnections, setLlmConnections] = useState<any[]>([])
+  const [llmConnections, setLlmConnections] = useState<LlmConnection[]>([])
   const [affiliateLinks, setAffiliateLinks] = useState<{ exchange_type: string; affiliate_url: string; label: string | null }[]>([])
 
   const modelNameMap = useMemo(() => {
@@ -475,40 +477,40 @@ export default function BotPerformance() {
     return map
   }, [llmConnections])
 
-  const demoParam = demoFilter === 'demo' ? '&demo_mode=true' : demoFilter === 'live' ? '&demo_mode=false' : ''
-
-  useEffect(() => {
-    loadCompareData()
-    api.get('/config/llm-connections').then(res => setLlmConnections(res.data.connections || [])).catch(() => {})
-    api.get('/affiliate-links').then(res => setAffiliateLinks(res.data)).catch(() => {})
-  }, [days, demoFilter])
-
-  useEffect(() => {
-    if (selectedBot) loadBotDetail(selectedBot)
-    else setBotDetail(null)
-  }, [selectedBot, days, demoFilter])
-
-  const loadCompareData = async () => {
+  const loadCompareData = useCallback(async () => {
+    const dp = demoFilter === 'demo' ? '&demo_mode=true' : demoFilter === 'live' ? '&demo_mode=false' : ''
     setLoading(true)
     setError('')
     try {
-      const res = await api.get(`/bots/compare/performance?days=${days}${demoParam}`)
+      const res = await api.get(`/bots/compare/performance?days=${days}${dp}`)
       setCompareData(res.data.bots || [])
     } catch {
       setError(t('performance.loadError'))
     }
     setLoading(false)
-  }
+  }, [days, demoFilter, t])
 
-  const loadBotDetail = async (botId: number) => {
+  const loadBotDetail = useCallback(async (botId: number) => {
+    const dp = demoFilter === 'demo' ? '&demo_mode=true' : demoFilter === 'live' ? '&demo_mode=false' : ''
     setDetailError('')
     try {
-      const res = await api.get(`/bots/${botId}/statistics?days=${days}${demoParam}`)
+      const res = await api.get(`/bots/${botId}/statistics?days=${days}${dp}`)
       setBotDetail(res.data)
     } catch {
       setDetailError(t('performance.detailError'))
     }
-  }
+  }, [days, demoFilter, t])
+
+  useEffect(() => {
+    loadCompareData()
+    api.get('/config/llm-connections').then(res => setLlmConnections(res.data.connections || [])).catch(() => {})
+    api.get('/affiliate-links').then(res => setAffiliateLinks(res.data)).catch(() => {})
+  }, [loadCompareData])
+
+  useEffect(() => {
+    if (selectedBot) loadBotDetail(selectedBot)
+    else setBotDetail(null)
+  }, [selectedBot, loadBotDetail])
 
   // Build bot detail chart data
   const botChartData = useMemo(() => {
@@ -815,7 +817,7 @@ export default function BotPerformance() {
                         <CartesianGrid strokeDasharray="3 3" stroke={chartGridColor} vertical={false} />
                         <XAxis dataKey="date" tick={{ fill: chartTickColor, fontSize: 11 }} tickLine={false} />
                         <YAxis tick={{ fill: chartTickColor, fontSize: 11 }} tickLine={false} tickFormatter={(v) => `$${v}`} />
-                        <Tooltip content={<BotPnlTooltip />} />
+                        <Tooltip content={<BotPnlTooltip t={t} />} />
                         <ReferenceLine y={0} stroke={refColor} strokeDasharray="3 3" />
                         <Bar dataKey="dailyPnl" name={t('dashboard.dailyPnl')} stackId="pnl" maxBarSize={40}>
                           {botChartData.map((entry, index) => (

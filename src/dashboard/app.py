@@ -15,12 +15,11 @@ import json
 import os
 import secrets
 from contextlib import asynccontextmanager
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
-from typing import Optional, List, Dict, Any
+from typing import Optional, Dict, Any
 
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, Depends, Header, Request, Query
-from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi import Limiter, _rate_limit_exceeded_handler
@@ -188,8 +187,8 @@ def create_app() -> FastAPI:
                 # Simple query to verify DB is responsive
                 await app.state.trade_db.get_statistics(1)
                 health["components"]["database"] = "healthy"
-        except Exception as e:
-            health["components"]["database"] = f"unhealthy: {str(e)}"
+        except Exception:
+            health["components"]["database"] = "unhealthy"
             health["status"] = "degraded"
 
         # Check risk manager
@@ -197,16 +196,16 @@ def create_app() -> FastAPI:
             if app.state.risk_manager:
                 app.state.risk_manager.get_daily_stats()
                 health["components"]["risk_manager"] = "healthy"
-        except Exception as e:
-            health["components"]["risk_manager"] = f"unhealthy: {str(e)}"
+        except Exception:
+            health["components"]["risk_manager"] = "unhealthy"
             health["status"] = "degraded"
 
         # Check funding tracker
         try:
             if app.state.funding_tracker:
                 health["components"]["funding_tracker"] = "healthy"
-        except Exception as e:
-            health["components"]["funding_tracker"] = f"unhealthy: {str(e)}"
+        except Exception:
+            health["components"]["funding_tracker"] = "unhealthy"
             health["status"] = "degraded"
 
         # Return appropriate HTTP status
@@ -405,13 +404,13 @@ def create_app() -> FastAPI:
     # ==================== TAX REPORT ====================
 
     @app.get("/api/tax-report/years")
-    async def get_tax_report_years():
+    async def get_tax_report_years(auth: bool = Depends(verify_api_key)):
         """Get list of years with trade data for tax reporting."""
         years = await app.state.tax_generator.get_available_years()
         return {"years": years}
 
     @app.get("/api/tax-report/{year}")
-    async def get_tax_report_data(year: int, language: str = "de"):
+    async def get_tax_report_data(year: int, language: str = "de", auth: bool = Depends(verify_api_key)):
         """
         Get tax report data for a specific year.
 
@@ -429,7 +428,7 @@ def create_app() -> FastAPI:
         return data
 
     @app.get("/api/tax-report/{year}/download")
-    async def download_tax_report_csv(year: int, language: str = "de"):
+    async def download_tax_report_csv(year: int, language: str = "de", auth: bool = Depends(verify_api_key)):
         """
         Download tax report as CSV file.
 
@@ -1038,6 +1037,7 @@ def get_default_html() -> str:
                 const response = await fetch('/api/health/detailed');
                 const data = await response.json();
 
+                function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
                 let html = '';
 
                 // Components
@@ -1046,8 +1046,8 @@ def get_default_html() -> str:
                 for (const [name, status] of Object.entries(data.components)) {
                     const isHealthy = status === 'healthy';
                     html += `<div class="flex justify-between items-center py-1">
-                        <span class="text-gray-700">${name}</span>
-                        <span class="${isHealthy ? 'text-green-600' : 'text-red-600'}">${status}</span>
+                        <span class="text-gray-700">${esc(name)}</span>
+                        <span class="${isHealthy ? 'text-green-600' : 'text-red-600'}">${esc(status)}</span>
                     </div>`;
                 }
                 html += '</div>';
@@ -1068,8 +1068,8 @@ def get_default_html() -> str:
                             stateIcon = '~';
                         }
                         html += `<div class="flex justify-between items-center py-1">
-                            <span class="text-gray-700">${name}</span>
-                            <span class="${stateColor}">${stateIcon} ${state} (${breaker.stats.success_rate.toFixed(0)}% success)</span>
+                            <span class="text-gray-700">${esc(name)}</span>
+                            <span class="${stateColor}">${stateIcon} ${esc(state)} (${breaker.stats.success_rate.toFixed(0)}% success)</span>
                         </div>`;
                     }
                     html += '</div>';
@@ -1081,8 +1081,8 @@ def get_default_html() -> str:
                     html += '<h3 class="font-semibold mb-2 text-red-600">Active Issues</h3>';
                     for (const error of data.errors) {
                         html += `<div class="bg-red-50 p-2 rounded mb-2">
-                            <strong class="text-red-700">${error.component}</strong>
-                            <p class="text-sm text-red-600">${error.error}</p>
+                            <strong class="text-red-700">${esc(error.component)}</strong>
+                            <p class="text-sm text-red-600">${esc(error.error)}</p>
                         </div>`;
                     }
                     html += '</div>';

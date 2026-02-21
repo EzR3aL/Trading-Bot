@@ -13,6 +13,7 @@ from typing import Optional, Dict, Any
 
 import aiohttp
 
+from src.notifications.retry import async_retry
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -33,6 +34,7 @@ class DiscordNotifier:
     COLOR_INFO = 0x0099FF  # Blue for info
     COLOR_WARNING = 0xFFCC00  # Yellow for warnings
     COLOR_ERROR = 0xFF0000  # Red for errors
+    COLOR_ALERT = 0xFF6600  # Orange for alerts
 
     def __init__(self, webhook_url: Optional[str] = None):
         """
@@ -63,6 +65,7 @@ class DiscordNotifier:
         if self._session and not self._session.closed:
             await self._session.close()
 
+    @async_retry(max_retries=3)
     async def _send_webhook(self, payload: Dict[str, Any]) -> bool:
         """
         Send a message via Discord webhook.
@@ -79,23 +82,21 @@ class DiscordNotifier:
 
         await self._ensure_session()
 
-        try:
-            async with self._session.post(
-                self.webhook_url,
-                json=payload,
-                timeout=10,
-            ) as response:
-                if response.status == 204:
-                    logger.info("Discord notification sent successfully")
-                    return True
-                else:
-                    error_text = await response.text()
-                    logger.error(f"Discord webhook error: {response.status} - {error_text}")
-                    return False
-
-        except Exception as e:
-            logger.error(f"Error sending Discord notification: {e}")
-            return False
+        async with self._session.post(
+            self.webhook_url,
+            json=payload,
+            timeout=aiohttp.ClientTimeout(total=10),
+        ) as response:
+            if response.status == 204:
+                logger.info("Discord notification sent successfully")
+                return True
+            elif response.status == 429 or response.status >= 500:
+                error_text = await response.text()
+                raise RuntimeError(f"Discord webhook error {response.status}: {error_text}")
+            else:
+                error_text = await response.text()
+                logger.error("Discord webhook error: %s - %s", response.status, error_text)
+                return False
 
     def _create_embed(
         self,
@@ -338,6 +339,7 @@ class DiscordNotifier:
         total_fees: float,
         total_funding: float,
         max_drawdown: float,
+        **kwargs,
     ) -> bool:
         """
         Send a daily trading summary.
@@ -499,7 +501,7 @@ class DiscordNotifier:
 
         return await self._send_webhook(payload)
 
-    async def send_error(self, error_type: str, error_message: str, details: Optional[str] = None) -> bool:
+    async def send_error(self, error_type: str, error_message: str, details: Optional[str] = None, **kwargs) -> bool:
         """
         Send an error notification.
 
@@ -534,7 +536,56 @@ class DiscordNotifier:
 
         return await self._send_webhook(payload)
 
-    async def send_bot_status(self, status: str, message: str, stats: Optional[Dict] = None) -> bool:
+    async def send_alert(
+        self,
+        alert_type: str,
+        symbol: Optional[str],
+        current_value: float,
+        threshold: float,
+        message: str,
+    ) -> bool:
+        """
+        Send an alert notification.
+
+        Args:
+            alert_type: Type of alert (price, strategy, portfolio)
+            symbol: Trading pair (for price alerts)
+            current_value: Value that triggered the alert
+            threshold: Configured threshold
+            message: Alert message
+
+        Returns:
+            True if sent successfully
+        """
+        type_emoji = {"price": "💰", "strategy": "🧠", "portfolio": "📊"}.get(alert_type, "🔔")
+
+        fields = [
+            {"name": "🔔 Alert Type", "value": f"`{alert_type.upper()}`", "inline": True},
+        ]
+        if symbol:
+            fields.append({"name": "📊 Symbol", "value": f"`{symbol}`", "inline": True})
+        fields.extend([
+            {"name": "📈 Current Value", "value": f"`{current_value:,.2f}`", "inline": True},
+            {"name": "🎯 Threshold", "value": f"`{threshold:,.2f}`", "inline": True},
+            {"name": "📝 Details", "value": f"```{message[:500]}```", "inline": False},
+        ])
+
+        embed = self._create_embed(
+            title=f"{type_emoji} ALERT TRIGGERED — {alert_type.upper()}",
+            description=message[:200],
+            color=self.COLOR_ALERT,
+            fields=fields,
+            footer="Trading Bot Alert System",
+        )
+
+        payload = {
+            "username": "Bitget Trading Bot",
+            "embeds": [embed],
+        }
+
+        return await self._send_webhook(payload)
+
+    async def send_bot_status(self, status: str, message: str, stats: Optional[Dict] = None, **kwargs) -> bool:
         """
         Send a bot status update.
 

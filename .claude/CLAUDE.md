@@ -486,9 +486,13 @@ Community marketplace with 32,000+ agent skills using the open SKILL.md format. 
 - Branch-Name enthaelt immer die Issue-Nummer: `feature/123-beschreibung`
 - Commits referenzieren die Issue-Nummer: `feat: add telegram (#123)`
 
-### Changelog
-- CHANGELOG.md wird bei jedem Release/Sprint aktualisiert.
+### Changelog (PFLICHT)
+- **CHANGELOG.md MUSS bei JEDEM Commit und Push aktualisiert werden** — keine Ausnahme
+- Vor dem Push pruefen: Ist der Changelog aktuell? Falls nein, erst updaten, dann committen und pushen
 - Format: Keep a Changelog + Semantic Versioning
+- Neue Eintraege immer oben (neueste Version zuerst)
+- Jeder Eintrag enthaelt: Versionsnummer, Datum, Zusammenfassung, Details (Hinzugefuegt/Geaendert/Behoben/Entfernt)
+- Bei kleinen Fixes reicht ein kurzer Eintrag, bei Features ausfuehrlich dokumentieren
 
 ## Version
 

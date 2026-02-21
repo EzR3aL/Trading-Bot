@@ -9,6 +9,7 @@
     "guide": "Guide",
     "performance": "Performance",
     "backtest": "Backtest Lab",
+    "portfolio": "Portfolio",
     "admin": "Admin",
     "logout": "Logout"
   },
@@ -238,7 +239,8 @@
     "trades": "Trades",
     "pnl": "PnL",
     "fees": "Transaction Fee",
-    "net": "Net"
+    "net": "Net",
+    "downloadError": "Download failed"
   },
   "guide": {
     "title": "Getting Started",
@@ -537,6 +539,8 @@
       "viewGrid": "Grid",
       "viewList": "List",
       "temperatureHint": "Low = consistent answers · High = more creative analysis · Recommended: 0.2–0.4",
+      "proModeParamsHint": "Customize strategy parameters (for advanced users)",
+      "proModeParamsActiveHint": "Strategy parameters are shown",
       "errors": {
         "nameRequired": "Please enter a bot name",
         "strategyRequired": "Please select a strategy",
@@ -641,7 +645,10 @@
     "of": "of",
     "lightMode": "Light",
     "darkMode": "Dark",
-    "total": "Total"
+    "total": "Total",
+    "net": "Net",
+    "errorBoundaryTitle": "Something went wrong",
+    "tryAgain": "Try again"
   },
   "admin": {
     "users": "Users",
@@ -654,7 +661,12 @@
     "inactive": "Inactive",
     "deactivate": "Deactivate",
     "activate": "Activate",
-    "deleteUser": "Delete user?"
+    "deleteUser": "Delete user?",
+    "create": "Create",
+    "noUsers": "No users found.",
+    "usernamePlaceholder": "Username",
+    "passwordPlaceholder": "Password (min 8)",
+    "emailPlaceholder": "Email (optional)"
   },
   "affiliate": {
     "uid": "Exchange UID",
@@ -762,7 +774,11 @@
     "celebrationMessage": "Your strategy shows excellent performance metrics. Review the results carefully before risking real capital.",
     "celebrationClose": "Got it",
     "dataSources": "Data Sources",
-    "activeApis": "active APIs"
+    "activeApis": "active APIs",
+    "dateLimitInfo": "Max. {{maxDays}} days for {{timeframe}} | Data available from 2020-01-01",
+    "dateLimitExceeded": "Period too long: max. {{maxDays}} days for {{timeframe}} (selected: {{actualDays}} days)",
+    "dateBeforeEarliest": "Start date must be after 2020-01-01",
+    "dateFuture": "End date cannot be in the future"
   },
   "tour": {
     "skip": "Skip",
@@ -800,5 +816,36 @@
     "settingsApiKeysDesc": "Enter your exchange API keys here. Each exchange has its own section with Live and Demo key forms.",
     "settingsTestConnTitle": "Test Connection",
     "settingsTestConnDesc": "After saving your keys, click 'Test Connection' to verify everything is configured correctly."
+  },
+  "portfolio": {
+    "title": "Portfolio",
+    "subtitle": "Multi-exchange overview across all accounts",
+    "totalBalance": "Total Balance",
+    "dailyPnl": "Daily PnL",
+    "totalPnl": "Total PnL",
+    "totalTrades": "Total Trades",
+    "winRate": "Win Rate",
+    "fees": "Fees",
+    "funding": "Funding",
+    "exchange": "Exchange",
+    "positions": "Open Positions",
+    "noPositions": "No open positions",
+    "symbol": "Symbol",
+    "side": "Side",
+    "size": "Size",
+    "entryPrice": "Entry",
+    "currentPrice": "Current",
+    "pnl": "PnL",
+    "leverage": "Leverage",
+    "allocation": "Allocation",
+    "dailyChart": "Daily PnL per Exchange",
+    "noData": "No data available",
+    "period": "Period",
+    "days7": "7 Days",
+    "days14": "14 Days",
+    "days30": "30 Days",
+    "days90": "90 Days",
+    "loadingPositions": "Loading positions...",
+    "exchangeCards": "Exchange Overview"
   }
 }

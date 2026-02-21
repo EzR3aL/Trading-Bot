@@ -26,6 +26,7 @@ colorlog>=6.7.0
 
 # Database
 aiosqlite>=0.19.0
+asyncpg>=0.29.0
 sqlalchemy[asyncio]>=2.0.0
 alembic>=1.13.0
 
@@ -55,6 +56,9 @@ slowapi>=0.1.9
 # Resilience & Retry
 pybreaker>=1.0.0
 tenacity>=8.2.0
+
+# Monitoring
+prometheus-client>=0.20.0
 
 # Hyperliquid DEX (EIP-712 wallet signing)
 hyperliquid-python-sdk>=0.21.0

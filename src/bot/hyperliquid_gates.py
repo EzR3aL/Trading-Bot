@@ -133,3 +133,62 @@ class HyperliquidGatesMixin:
             self.error_message = f"Builder Fee Pruefung fehlgeschlagen: {e}"
             self.status = "error"
             return False
+
+    async def _check_affiliate_uid_gate(self, db) -> bool:
+        """HARD gate: block bot start if affiliate UID verification is required
+        but the user has not verified their UID yet.
+
+        Checks the AffiliateLink.uid_required flag for the exchange and verifies
+        that ExchangeConnection.affiliate_verified is True.
+        Returns True if OK to proceed, False if blocked.
+        """
+        log_prefix = f"[Bot:{self.bot_config_id}]"
+        try:
+            from src.models.database import AffiliateLink, ExchangeConnection
+            from sqlalchemy import select as sa_select
+
+            exchange_type = getattr(self._config, "exchange_type", None)
+            if not exchange_type:
+                return True
+
+            # Check if this exchange has an active affiliate link with uid_required
+            result = await db.execute(
+                sa_select(AffiliateLink).where(
+                    AffiliateLink.exchange_type == exchange_type,
+                    AffiliateLink.is_active == True,
+                    AffiliateLink.uid_required == True,
+                )
+            )
+            affiliate_link = result.scalar_one_or_none()
+
+            if not affiliate_link:
+                # No UID requirement for this exchange
+                return True
+
+            # Check if user has verified their affiliate UID
+            result = await db.execute(
+                sa_select(ExchangeConnection).where(
+                    ExchangeConnection.user_id == self._config.user_id,
+                    ExchangeConnection.exchange_type == exchange_type,
+                )
+            )
+            conn = result.scalar_one_or_none()
+
+            if conn and conn.affiliate_verified:
+                logger.info(f"{log_prefix} Affiliate UID verified (DB flag)")
+                return True
+
+            # NOT VERIFIED — block bot start
+            self.error_message = (
+                f"Affiliate UID-Verifizierung erforderlich fuer {exchange_type}. "
+                f"Bitte gib deine UID unter 'Affiliate Links' ein und verifiziere sie, "
+                f"bevor du einen Bot starten kannst."
+            )
+            self.status = "error"
+            logger.warning(f"{log_prefix} Affiliate UID not verified — bot start blocked")
+            return False
+
+        except Exception as e:
+            logger.warning(f"{log_prefix} Affiliate UID check failed: {e}")
+            # Fail open on unexpected errors to avoid blocking users
+            return True

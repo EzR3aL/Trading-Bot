@@ -15,6 +15,7 @@ const Bots = lazy(() => import('./pages/Bots'))
 const BotDetail = lazy(() => import('./pages/BotDetail'))
 const BotPerformance = lazy(() => import('./pages/BotPerformance'))
 const Backtest = lazy(() => import('./pages/Backtest'))
+const Portfolio = lazy(() => import('./pages/Portfolio'))
 const TaxReport = lazy(() => import('./pages/TaxReport'))
 const GettingStarted = lazy(() => import('./pages/GettingStarted'))
 const AdminUsers = lazy(() => import('./pages/AdminUsers'))
@@ -36,6 +37,9 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 
 function AdminRoute({ children }: { children: React.ReactNode }) {
   const user = useAuthStore((s) => s.user)
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated)
+  // User data still loading after page refresh — show loader instead of redirecting
+  if (isAuthenticated && !user) return <PageLoader />
   if (!user || user.role !== 'admin') return <Navigate to="/" replace />
   return <>{children}</>
 }
@@ -62,6 +66,7 @@ export default function App() {
                 <Suspense fallback={<PageLoader />}>
                   <Routes>
                     <Route path="/" element={<Dashboard />} />
+                    <Route path="/portfolio" element={<Portfolio />} />
                     <Route path="/trades" element={<Trades />} />
                     <Route path="/settings" element={<Settings />} />
                     <Route path="/presets" element={<Presets />} />
