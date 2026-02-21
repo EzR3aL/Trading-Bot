@@ -10,7 +10,6 @@ Covers:
 - OIWAP calculation in fetch_selected_metrics
 """
 
-import asyncio
 import sys
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -20,8 +19,6 @@ import pytest
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from src.data.market_data import (
-    DataFetchError,
-    DataQuality,
     MarketDataFetcher,
     MarketMetrics,
 )

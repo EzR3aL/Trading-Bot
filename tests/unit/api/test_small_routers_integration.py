@@ -1462,7 +1462,7 @@ async def test_affiliate_delete_then_list_excludes(
     await client.delete("/api/affiliate-links/bitget", headers=admin_headers)
     resp = await client.get("/api/affiliate-links", headers=admin_headers)
     data = resp.json()
-    exchanges = [l["exchange_type"] for l in data]
+    exchanges = [item["exchange_type"] for item in data]
     assert "bitget" not in exchanges
 
 

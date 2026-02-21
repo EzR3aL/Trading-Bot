@@ -10,12 +10,179 @@ Migrated from tests/test_bots.py to tests/integration/.
 import json
 import os
 import sys
+from datetime import datetime, timedelta
 from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+import pytest_asyncio
 
 os.environ.setdefault("JWT_SECRET_KEY", "test-secret-key-for-testing-only-not-for-production")
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+
+from tests.integration.conftest import auth_header
+
+from src.models.database import BotConfig, TradeRecord
+from src.models.session import get_session
+
+
+# ---------------------------------------------------------------------------
+# Local fixtures (use integration conftest's DB via monkeypatched get_session)
+# ---------------------------------------------------------------------------
+
+
+@pytest_asyncio.fixture
+async def test_user_obj(admin_token):
+    """Return the admin user object created by admin_token fixture."""
+    from sqlalchemy import select
+    from src.models.database import User
+
+    async with get_session() as session:
+        result = await session.execute(select(User).where(User.username == "admin"))
+        return result.scalar_one()
+
+
+@pytest_asyncio.fixture
+async def auth_headers(admin_token):
+    """Build auth headers from the admin token."""
+    return auth_header(admin_token)
+
+
+@pytest.fixture
+def mock_orchestrator(test_app):
+    """Provide a mock orchestrator patched onto the test app state."""
+    orch = MagicMock()
+    orch.get_bot_status = MagicMock(return_value=None)
+    orch.is_running = MagicMock(return_value=False)
+    orch.start_bot = AsyncMock(return_value=True)
+    orch.stop_bot = AsyncMock(return_value=True)
+    orch.restart_bot = AsyncMock(return_value=True)
+    orch.stop_all_for_user = AsyncMock(return_value=0)
+    orch.restore_on_startup = AsyncMock()
+    orch.shutdown_all = AsyncMock()
+    test_app.state.orchestrator = orch
+    return orch
+
+
+@pytest_asyncio.fixture
+async def sample_bot_config(test_user_obj):
+    """Insert a sample bot configuration via the monkeypatched session."""
+    _register_test_strategy()
+
+    config = BotConfig(
+        user_id=test_user_obj.id,
+        name="Test Bot Alpha",
+        description="A test bot for unit testing",
+        strategy_type="test_strategy",
+        exchange_type="bitget",
+        mode="demo",
+        trading_pairs=json.dumps(["BTCUSDT", "ETHUSDT"]),
+        leverage=4,
+        position_size_percent=7.5,
+        max_trades_per_day=2,
+        take_profit_percent=4.0,
+        stop_loss_percent=1.5,
+        daily_loss_limit_percent=5.0,
+        is_enabled=False,
+    )
+    async with get_session() as session:
+        session.add(config)
+
+    return config
+
+
+@pytest_asyncio.fixture
+async def sample_bot_with_trades(test_user_obj, sample_bot_config):
+    """Create trades linked to the sample bot config."""
+    now = datetime.utcnow()
+    trades = [
+        TradeRecord(
+            user_id=test_user_obj.id,
+            bot_config_id=sample_bot_config.id,
+            symbol="BTCUSDT",
+            side="long",
+            size=0.01,
+            entry_price=95000.0,
+            exit_price=96000.0,
+            take_profit=97000.0,
+            stop_loss=94000.0,
+            leverage=4,
+            confidence=75,
+            reason="Bot trade 1",
+            order_id="bot_order_001",
+            status="closed",
+            pnl=10.0,
+            pnl_percent=1.05,
+            fees=0.5,
+            funding_paid=0.1,
+            entry_time=now - timedelta(days=5),
+            exit_time=now - timedelta(days=4),
+            exit_reason="TAKE_PROFIT",
+            exchange="bitget",
+            demo_mode=True,
+        ),
+        TradeRecord(
+            user_id=test_user_obj.id,
+            bot_config_id=sample_bot_config.id,
+            symbol="BTCUSDT",
+            side="short",
+            size=0.01,
+            entry_price=96000.0,
+            exit_price=96500.0,
+            take_profit=95000.0,
+            stop_loss=97000.0,
+            leverage=4,
+            confidence=65,
+            reason="Bot trade 2",
+            order_id="bot_order_002",
+            status="closed",
+            pnl=-5.0,
+            pnl_percent=-0.52,
+            fees=0.3,
+            funding_paid=0.05,
+            entry_time=now - timedelta(days=3),
+            exit_time=now - timedelta(days=2),
+            exit_reason="STOP_LOSS",
+            exchange="bitget",
+            demo_mode=True,
+        ),
+    ]
+    async with get_session() as session:
+        session.add_all(trades)
+
+    return sample_bot_config
+
+
+def _register_test_strategy():
+    """Register a minimal test strategy for bot CRUD tests."""
+    from src.strategy.base import BaseStrategy, StrategyRegistry, TradeSignal
+
+    if "test_strategy" in StrategyRegistry._strategies:
+        return
+
+    class TestStrategy(BaseStrategy):
+        async def generate_signal(self, symbol: str) -> TradeSignal:
+            raise NotImplementedError("Test strategy does not generate signals")
+
+        async def should_trade(self, signal) -> tuple:
+            return False, "Test strategy never trades"
+
+        @classmethod
+        def get_param_schema(cls) -> dict:
+            return {
+                "test_param": {
+                    "type": "int",
+                    "label": "Test Parameter",
+                    "description": "A test parameter",
+                    "default": 42,
+                }
+            }
+
+        @classmethod
+        def get_description(cls) -> str:
+            return "Test strategy for unit testing"
+
+    StrategyRegistry.register("test_strategy", TestStrategy)
 
 
 # ---------------------------------------------------------------------------
@@ -24,8 +191,9 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 
 @pytest.mark.asyncio
-async def test_create_bot(client, auth_headers, test_user):
+async def test_create_bot(client, auth_headers, mock_orchestrator, test_user_obj):
     """Creating a bot returns the bot configuration."""
+    _register_test_strategy()
     body = {
         "name": "My Test Bot",
         "description": "A bot for testing",
@@ -54,7 +222,7 @@ async def test_create_bot(client, auth_headers, test_user):
 
 
 @pytest.mark.asyncio
-async def test_create_bot_with_invalid_strategy(client, auth_headers, test_user):
+async def test_create_bot_with_invalid_strategy(client, auth_headers, mock_orchestrator, test_user_obj):
     """Creating a bot with an unregistered strategy returns 400."""
     body = {
         "name": "Bad Strategy Bot",
@@ -67,7 +235,7 @@ async def test_create_bot_with_invalid_strategy(client, auth_headers, test_user)
 
 
 @pytest.mark.asyncio
-async def test_create_bot_with_invalid_exchange(client, auth_headers, test_user):
+async def test_create_bot_with_invalid_exchange(client, auth_headers, mock_orchestrator, test_user_obj):
     """Creating a bot with an invalid exchange returns 422."""
     body = {
         "name": "Bad Exchange Bot",
@@ -85,7 +253,7 @@ async def test_create_bot_with_invalid_exchange(client, auth_headers, test_user)
 
 
 @pytest.mark.asyncio
-async def test_list_bots(client, auth_headers, sample_bot_config):
+async def test_list_bots(client, auth_headers, mock_orchestrator, sample_bot_config):
     """List bots returns all bots for the user."""
     response = await client.get("/api/bots", headers=auth_headers)
     assert response.status_code == 200
@@ -101,7 +269,7 @@ async def test_list_bots(client, auth_headers, sample_bot_config):
 
 
 @pytest.mark.asyncio
-async def test_list_bots_empty(client, auth_headers, test_user):
+async def test_list_bots_empty(client, auth_headers, mock_orchestrator, test_user_obj):
     """List bots with no bots returns empty list."""
     response = await client.get("/api/bots", headers=auth_headers)
     assert response.status_code == 200
@@ -110,7 +278,7 @@ async def test_list_bots_empty(client, auth_headers, test_user):
 
 
 @pytest.mark.asyncio
-async def test_list_bots_demo_mode_filter(client, auth_headers, sample_bot_config):
+async def test_list_bots_demo_mode_filter(client, auth_headers, mock_orchestrator, sample_bot_config):
     """List bots with demo_mode=true returns bots in demo or both mode."""
     response = await client.get(
         "/api/bots", headers=auth_headers, params={"demo_mode": True}
@@ -124,7 +292,7 @@ async def test_list_bots_demo_mode_filter(client, auth_headers, sample_bot_confi
 
 
 @pytest.mark.asyncio
-async def test_list_bots_live_mode_filter(client, auth_headers, sample_bot_config):
+async def test_list_bots_live_mode_filter(client, auth_headers, mock_orchestrator, sample_bot_config):
     """List bots with demo_mode=false returns bots in live or both mode."""
     response = await client.get(
         "/api/bots", headers=auth_headers, params={"demo_mode": False}
@@ -142,7 +310,7 @@ async def test_list_bots_live_mode_filter(client, auth_headers, sample_bot_confi
 
 
 @pytest.mark.asyncio
-async def test_get_bot_by_id(client, auth_headers, sample_bot_config):
+async def test_get_bot_by_id(client, auth_headers, mock_orchestrator, sample_bot_config):
     """Get a specific bot by its ID."""
     bot_id = sample_bot_config.id
     response = await client.get(f"/api/bots/{bot_id}", headers=auth_headers)
@@ -154,7 +322,7 @@ async def test_get_bot_by_id(client, auth_headers, sample_bot_config):
 
 
 @pytest.mark.asyncio
-async def test_get_bot_not_found(client, auth_headers, test_user):
+async def test_get_bot_not_found(client, auth_headers, mock_orchestrator, test_user_obj):
     """Getting a nonexistent bot returns 404."""
     response = await client.get("/api/bots/99999", headers=auth_headers)
     assert response.status_code == 404
@@ -167,7 +335,7 @@ async def test_get_bot_not_found(client, auth_headers, test_user):
 
 
 @pytest.mark.asyncio
-async def test_update_bot(client, auth_headers, sample_bot_config):
+async def test_update_bot(client, auth_headers, mock_orchestrator, sample_bot_config):
     """Updating a bot changes its configuration."""
     bot_id = sample_bot_config.id
     response = await client.put(
@@ -182,7 +350,7 @@ async def test_update_bot(client, auth_headers, sample_bot_config):
 
 
 @pytest.mark.asyncio
-async def test_update_bot_not_found(client, auth_headers, test_user):
+async def test_update_bot_not_found(client, auth_headers, mock_orchestrator, test_user_obj):
     """Updating a nonexistent bot returns 404."""
     response = await client.put(
         "/api/bots/99999",
@@ -193,7 +361,7 @@ async def test_update_bot_not_found(client, auth_headers, test_user):
 
 
 @pytest.mark.asyncio
-async def test_update_bot_while_running(client, auth_headers, sample_bot_config, mock_orchestrator):
+async def test_update_bot_while_running(client, auth_headers, mock_orchestrator, sample_bot_config):
     """Updating a running bot returns 400."""
     mock_orchestrator.is_running.return_value = True
     bot_id = sample_bot_config.id
@@ -214,7 +382,7 @@ async def test_update_bot_while_running(client, auth_headers, sample_bot_config,
 
 
 @pytest.mark.asyncio
-async def test_delete_bot(client, auth_headers, sample_bot_config):
+async def test_delete_bot(client, auth_headers, mock_orchestrator, sample_bot_config):
     """Deleting a bot removes it."""
     bot_id = sample_bot_config.id
     response = await client.delete(f"/api/bots/{bot_id}", headers=auth_headers)
@@ -227,7 +395,7 @@ async def test_delete_bot(client, auth_headers, sample_bot_config):
 
 
 @pytest.mark.asyncio
-async def test_delete_bot_not_found(client, auth_headers, test_user):
+async def test_delete_bot_not_found(client, auth_headers, mock_orchestrator, test_user_obj):
     """Deleting a nonexistent bot returns 404."""
     response = await client.delete("/api/bots/99999", headers=auth_headers)
     assert response.status_code == 404
@@ -239,7 +407,7 @@ async def test_delete_bot_not_found(client, auth_headers, test_user):
 
 
 @pytest.mark.asyncio
-async def test_get_bot_statistics(client, auth_headers, sample_bot_with_trades):
+async def test_get_bot_statistics(client, auth_headers, mock_orchestrator, sample_bot_with_trades):
     """Get statistics for a specific bot."""
     bot_id = sample_bot_with_trades.id
     response = await client.get(
@@ -261,7 +429,7 @@ async def test_get_bot_statistics(client, auth_headers, sample_bot_with_trades):
 
 
 @pytest.mark.asyncio
-async def test_get_bot_statistics_not_found(client, auth_headers, test_user):
+async def test_get_bot_statistics_not_found(client, auth_headers, mock_orchestrator, test_user_obj):
     """Bot statistics for nonexistent bot returns 404."""
     response = await client.get("/api/bots/99999/statistics", headers=auth_headers)
     assert response.status_code == 404
@@ -269,7 +437,7 @@ async def test_get_bot_statistics_not_found(client, auth_headers, test_user):
 
 @pytest.mark.asyncio
 async def test_get_bot_statistics_with_demo_mode_filter(
-    client, auth_headers, sample_bot_with_trades
+    client, auth_headers, mock_orchestrator, sample_bot_with_trades
 ):
     """Bot statistics with demo_mode filter."""
     bot_id = sample_bot_with_trades.id
@@ -285,7 +453,7 @@ async def test_get_bot_statistics_with_demo_mode_filter(
 
 
 @pytest.mark.asyncio
-async def test_get_bot_statistics_cumulative_pnl(client, auth_headers, sample_bot_with_trades):
+async def test_get_bot_statistics_cumulative_pnl(client, auth_headers, mock_orchestrator, sample_bot_with_trades):
     """Bot statistics daily series has cumulative PnL calculation."""
     bot_id = sample_bot_with_trades.id
     response = await client.get(
@@ -309,7 +477,7 @@ async def test_get_bot_statistics_cumulative_pnl(client, auth_headers, sample_bo
 
 
 @pytest.mark.asyncio
-async def test_compare_bots_performance(client, auth_headers, sample_bot_with_trades):
+async def test_compare_bots_performance(client, auth_headers, mock_orchestrator, sample_bot_with_trades):
     """Compare bots endpoint returns data for all user bots."""
     response = await client.get(
         "/api/bots/compare/performance", headers=auth_headers
@@ -332,7 +500,7 @@ async def test_compare_bots_performance(client, auth_headers, sample_bot_with_tr
 
 @pytest.mark.asyncio
 async def test_compare_bots_performance_with_demo_filter(
-    client, auth_headers, sample_bot_with_trades
+    client, auth_headers, mock_orchestrator, sample_bot_with_trades
 ):
     """Compare bots with demo_mode filter returns filtered results."""
     response = await client.get(
@@ -349,7 +517,7 @@ async def test_compare_bots_performance_with_demo_filter(
 
 
 @pytest.mark.asyncio
-async def test_compare_bots_empty(client, auth_headers, test_user):
+async def test_compare_bots_empty(client, auth_headers, mock_orchestrator, test_user_obj):
     """Compare bots with no bots returns empty list."""
     response = await client.get(
         "/api/bots/compare/performance", headers=auth_headers
@@ -365,7 +533,7 @@ async def test_compare_bots_empty(client, auth_headers, test_user):
 
 
 @pytest.mark.asyncio
-async def test_bots_requires_auth(client, test_user):
+async def test_bots_requires_auth(client, test_user_obj):
     """Bots endpoints require authentication."""
     response = await client.get("/api/bots")
     assert response.status_code == 401

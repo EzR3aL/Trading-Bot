@@ -9,12 +9,138 @@ Migrated from tests/test_trades.py to tests/integration/.
 
 import os
 import sys
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import pytest
+import pytest_asyncio
 
 os.environ.setdefault("JWT_SECRET_KEY", "test-secret-key-for-testing-only-not-for-production")
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+
+from tests.integration.conftest import auth_header
+
+from src.models.database import TradeRecord
+from src.models.session import get_session
+
+
+@pytest_asyncio.fixture
+async def test_user_obj(admin_token):
+    """Return the admin user object created by admin_token fixture."""
+    from sqlalchemy import select
+    from src.models.database import User
+
+    async with get_session() as session:
+        result = await session.execute(select(User).where(User.username == "admin"))
+        return result.scalar_one()
+
+
+@pytest_asyncio.fixture
+async def auth_headers(admin_token):
+    """Build auth headers from the admin token."""
+    return auth_header(admin_token)
+
+
+@pytest_asyncio.fixture
+async def sample_trades(test_user_obj):
+    """Insert sample trade records via the monkeypatched session."""
+    now = datetime.utcnow()
+    trades_data = [
+        TradeRecord(
+            user_id=test_user_obj.id,
+            symbol="BTCUSDT",
+            side="long",
+            size=0.01,
+            entry_price=95000.0,
+            exit_price=96000.0,
+            take_profit=97000.0,
+            stop_loss=94000.0,
+            leverage=4,
+            confidence=75,
+            reason="Test trade 1",
+            order_id="order_001",
+            status="closed",
+            pnl=10.0,
+            pnl_percent=1.05,
+            fees=0.5,
+            funding_paid=0.1,
+            entry_time=now - timedelta(days=5),
+            exit_time=now - timedelta(days=4),
+            exit_reason="TAKE_PROFIT",
+            exchange="bitget",
+            demo_mode=True,
+        ),
+        TradeRecord(
+            user_id=test_user_obj.id,
+            symbol="ETHUSDT",
+            side="short",
+            size=0.1,
+            entry_price=3500.0,
+            exit_price=3400.0,
+            take_profit=3300.0,
+            stop_loss=3600.0,
+            leverage=4,
+            confidence=80,
+            reason="Test trade 2",
+            order_id="order_002",
+            status="closed",
+            pnl=10.0,
+            pnl_percent=2.86,
+            fees=0.3,
+            funding_paid=0.05,
+            entry_time=now - timedelta(days=3),
+            exit_time=now - timedelta(days=2),
+            exit_reason="TAKE_PROFIT",
+            exchange="bitget",
+            demo_mode=True,
+        ),
+        TradeRecord(
+            user_id=test_user_obj.id,
+            symbol="BTCUSDT",
+            side="long",
+            size=0.02,
+            entry_price=94000.0,
+            exit_price=93000.0,
+            take_profit=96000.0,
+            stop_loss=93000.0,
+            leverage=4,
+            confidence=60,
+            reason="Test trade 3 - losing",
+            order_id="order_003",
+            status="closed",
+            pnl=-20.0,
+            pnl_percent=-1.06,
+            fees=0.4,
+            funding_paid=0.08,
+            entry_time=now - timedelta(days=2),
+            exit_time=now - timedelta(days=1),
+            exit_reason="STOP_LOSS",
+            exchange="bitget",
+            demo_mode=False,
+        ),
+        TradeRecord(
+            user_id=test_user_obj.id,
+            symbol="BTCUSDT",
+            side="long",
+            size=0.01,
+            entry_price=95500.0,
+            take_profit=97000.0,
+            stop_loss=94500.0,
+            leverage=4,
+            confidence=70,
+            reason="Test trade 4 - open",
+            order_id="order_004",
+            status="open",
+            entry_time=now - timedelta(hours=2),
+            exchange="bitget",
+            demo_mode=True,
+        ),
+    ]
+
+    async with get_session() as session:
+        session.add_all(trades_data)
+
+    return trades_data
 
 
 # ---------------------------------------------------------------------------
@@ -202,7 +328,7 @@ async def test_get_trade_not_found(client, auth_headers, sample_trades):
 
 
 @pytest.mark.asyncio
-async def test_sync_trades_no_open_trades(client, auth_headers, test_user):
+async def test_sync_trades_no_open_trades(client, auth_headers, test_user_obj):
     """Sync with no open trades returns synced=0."""
     response = await client.post("/api/trades/sync", headers=auth_headers)
     assert response.status_code == 200

@@ -11,7 +11,6 @@ Covers the remaining ~12% uncovered lines across all providers:
 - gemini.py (lines 27-29, 88-89, 93, 97)
 """
 
-import pytest
 from unittest.mock import patch, MagicMock, AsyncMock
 
 import sys

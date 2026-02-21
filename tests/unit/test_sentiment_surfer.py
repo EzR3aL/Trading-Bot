@@ -1054,7 +1054,7 @@ class TestGenerateSignal:
             "src.strategy.sentiment_surfer.MarketDataFetcher.get_spot_volume_analysis",
             return_value={"buy_ratio": 0.5},
         ):
-            signal = await strategy.generate_signal("BTCUSDT")
+            _signal = await strategy.generate_signal("BTCUSDT")
 
         # calculate_oiwap should not be called when klines is empty
         mock_fetcher.calculate_oiwap.assert_not_awaited()
@@ -1080,7 +1080,7 @@ class TestGenerateSignal:
             "src.strategy.sentiment_surfer.MarketDataFetcher.get_spot_volume_analysis",
             return_value={"buy_ratio": 0.55},
         ):
-            signal = await strategy.generate_signal("BTCUSDT")
+            _signal = await strategy.generate_signal("BTCUSDT")
 
         mock_fetcher.calculate_oiwap.assert_not_awaited()
 

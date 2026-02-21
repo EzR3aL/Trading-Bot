@@ -5,7 +5,6 @@ Verifies that malicious inputs (SQL injection, XSS, SSRF attempts)
 are safely handled by the API schemas and database layer.
 """
 
-import json
 import os
 import sys
 from pathlib import Path
@@ -24,7 +23,7 @@ from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from starlette.requests import Request
 
-from src.models.database import Base, BotConfig, User
+from src.models.database import Base, User
 from src.auth.password import hash_password
 from src.api.schemas.bots import BotConfigCreate, BotConfigUpdate
 from src.api.schemas.user import UserCreate
@@ -34,12 +33,9 @@ from src.api.schemas.config import ApiKeysUpdate
 from src.api.routers.auth import limiter
 limiter.enabled = False
 
-from src.api.routers import bots as bots_module
-from src.api.routers.bots import (
+from src.api.routers.bots import (  # noqa: E402
     create_bot,
-    get_bot,
     update_bot,
-    get_orchestrator,
 )
 
 

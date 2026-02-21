@@ -10,8 +10,7 @@ Tests cover:
 """
 
 import pytest
-from datetime import datetime
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock
 
 import sys
 from pathlib import Path
@@ -28,11 +27,11 @@ def _make_klines(closes, highs=None, lows=None):
     result = []
     for i, c in enumerate(closes):
         h = highs[i] if highs else c * 1.005
-        l = lows[i] if lows else c * 0.995
+        low = lows[i] if lows else c * 0.995
         o = closes[i - 1] if i > 0 else c
         result.append([
             1700000000000 + i * 3600000,
-            str(o), str(h), str(l), str(c), "150.0",
+            str(o), str(h), str(low), str(c), "150.0",
             1700003600000 + i * 3600000,
             str(c * 150), 2000, "82.5", str(c * 82.5), "0",
         ])

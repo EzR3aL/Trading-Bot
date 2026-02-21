@@ -2,6 +2,9 @@
 
 from src.exchanges.base import ExchangeClient, ExchangeWebSocket
 from src.exchanges.rate_limiter import ExchangeRateLimiter
+from src.utils.logger import get_logger
+
+logger = get_logger(__name__)
 
 
 def create_exchange_client(
@@ -176,8 +179,8 @@ async def get_all_user_clients(user_id: int, db) -> dict:
                 passphrase=passphrase,
                 demo_mode=demo_mode,
             )
-        except Exception:
-            pass  # Skip failed connections
+        except Exception as e:
+            logger.warning(f"Failed to initialize exchange: {e}")
 
     return clients
 

@@ -165,7 +165,7 @@ async def test_download_tax_report_csv(client, auth_headers, sample_trades):
     assert trade_header_found
 
     # Should contain the 3 closed trades in the detail section
-    trade_data_lines = [l for l in lines if "BTCUSDT" in l or "ETHUSDT" in l]
+    trade_data_lines = [line for line in lines if "BTCUSDT" in line or "ETHUSDT" in line]
     assert len(trade_data_lines) == 3
 
 
@@ -182,9 +182,9 @@ async def test_download_csv_with_demo_filter(client, auth_headers, sample_trades
     lines = content.strip().split("\n")
 
     # Bilingual format has sections; trade detail section has 2 demo trades
-    trade_data_lines = [l for l in lines if "BTCUSDT" in l or "ETHUSDT" in l]
+    trade_data_lines = [line for line in lines if "BTCUSDT" in line or "ETHUSDT" in line]
     # Filter out header row that contains these as column names
-    trade_data_lines = [l for l in trade_data_lines if "Richtung" not in l and "Side" not in l]
+    trade_data_lines = [line for line in trade_data_lines if "Richtung" not in line and "Side" not in line]
     assert len(trade_data_lines) == 2
 
 

@@ -12,7 +12,7 @@ import sys
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import AsyncGenerator
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 import pytest_asyncio
@@ -27,23 +27,21 @@ os.environ["ENCRYPTION_KEY"] = _TEST_FERNET_KEY
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
-from httpx import ASGITransport, AsyncClient
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from httpx import ASGITransport, AsyncClient  # noqa: E402
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine  # noqa: E402
 
-from src.models.database import (
-    AffiliateLink,
+from src.models.database import (  # noqa: E402
     Base,
     BotConfig,
     ConfigPreset,
-    ExchangeConnection,
     TradeRecord,
     User,
 )
-from src.auth.password import hash_password
-from src.auth.jwt_handler import create_access_token
+from src.auth.password import hash_password  # noqa: E402
+from src.auth.jwt_handler import create_access_token  # noqa: E402
 
 # Reset Fernet singleton so it uses our test key
-import src.utils.encryption as _enc_mod
+import src.utils.encryption as _enc_mod  # noqa: E402
 _enc_mod._fernet = None
 
 

@@ -33,10 +33,13 @@ export function useWebSocket(handlers: Record<string, EventHandler>) {
     }
 
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-    const wsUrl = `${protocol}//${window.location.host}/api/ws?token=${token}`
+    const wsUrl = `${protocol}//${window.location.host}/api/ws`
     const socket = new WebSocket(wsUrl)
 
     socket.onopen = () => {
+      // Send JWT as first message (instead of URL query param)
+      socket.send(token)
+
       // Start keep-alive pings
       pingInterval.current = window.setInterval(() => {
         if (socket.readyState === WebSocket.OPEN) {
@@ -46,7 +49,7 @@ export function useWebSocket(handlers: Record<string, EventHandler>) {
     }
 
     socket.onmessage = (event) => {
-      if (event.data === 'pong') return
+      if (event.data === 'pong' || event.data === 'authenticated') return
       try {
         const msg = JSON.parse(event.data) as { type: string; data: unknown }
         const handler = stableHandlers[msg.type]

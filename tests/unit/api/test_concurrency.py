@@ -18,7 +18,6 @@ os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
-import pytest
 import pytest_asyncio
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
@@ -32,15 +31,13 @@ from src.api.schemas.bots import BotConfigCreate, BotConfigUpdate
 from src.api.routers.auth import limiter
 limiter.enabled = False
 
-from src.api.routers import bots as bots_module
-from src.api.routers.bots import (
+from src.api.routers.bots import (  # noqa: E402
     create_bot,
     delete_bot,
     duplicate_bot,
     start_bot,
     stop_bot,
     update_bot,
-    get_orchestrator,
 )
 
 
@@ -322,7 +319,7 @@ class TestConcurrentLifecycle:
             *[start_one(bid) for bid in bot_ids],
             return_exceptions=True,
         )
-        stop_results = await asyncio.gather(
+        _stop_results = await asyncio.gather(
             *[stop_one(bid) for bid in bot_ids],
             return_exceptions=True,
         )
@@ -457,7 +454,7 @@ class TestSessionIsolation:
             )
             s1.add(config)
             await s1.flush()
-            uncommitted_id = config.id
+            _uncommitted_id = config.id
 
             # Another session should NOT see it (SQLite WAL may or may not)
             # But we verify the session at least works without error

@@ -16,7 +16,7 @@ Covers:
 """
 
 import os
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -119,7 +119,7 @@ class TestHyperliquidClientInit:
         mock_exchange_instance.info = MagicMock()
         mock_exchange.return_value = mock_exchange_instance
 
-        client = HyperliquidClient(
+        _client = HyperliquidClient(
             api_key="0xBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
             api_secret="0x" + "cd" * 32,
             demo_mode=True,
@@ -142,7 +142,7 @@ class TestHyperliquidClientInit:
         mock_exchange_instance.info = MagicMock()
         mock_exchange.return_value = mock_exchange_instance
 
-        client = HyperliquidClient(
+        _client = HyperliquidClient(
             api_key=same_address,
             api_secret="0x" + "ab" * 32,
             demo_mode=True,

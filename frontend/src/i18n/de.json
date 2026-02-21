@@ -648,7 +648,8 @@
     "total": "Gesamt",
     "net": "Netto",
     "errorBoundaryTitle": "Etwas ist schiefgelaufen",
-    "tryAgain": "Erneut versuchen"
+    "tryAgain": "Erneut versuchen",
+    "saveFailed": "Speichern fehlgeschlagen"
   },
   "admin": {
     "users": "Benutzer",

@@ -19,8 +19,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
-import math
-from datetime import datetime, timedelta
+from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -29,7 +28,6 @@ from src.backtest.engine import (
     BacktestConfig,
     BacktestEngine,
     BacktestTrade,
-    DailyBacktestStats,
     TradeDirection,
     TradeResult,
 )

@@ -10,12 +10,10 @@ Tests cover:
 """
 
 import json
-import math
 import os
-import tempfile
 from datetime import datetime, timedelta
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, mock_open, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -261,7 +259,7 @@ class TestHistoricalDataFetcherInit:
         cache_dir = tmp_path / "new_cache_dir"
         assert not cache_dir.exists()
 
-        fetcher = HistoricalDataFetcher(cache_dir=str(cache_dir))
+        _fetcher = HistoricalDataFetcher(cache_dir=str(cache_dir))
 
         assert cache_dir.exists()
 
@@ -634,7 +632,7 @@ class TestFetchKlinesWithFallback:
         fetcher.fetch_klines_history = AsyncMock(return_value=[])
         fetcher.fetch_coingecko_history = AsyncMock(return_value=coingecko_data)
 
-        result = await fetcher.fetch_klines_with_fallback("ETHUSDT", 30)
+        _result = await fetcher.fetch_klines_with_fallback("ETHUSDT", 30)
 
         fetcher.fetch_coingecko_history.assert_called_with("ethereum", 30)
 
@@ -1139,7 +1137,7 @@ class TestCalculateVolatility:
         )
 
         # Should not raise
-        result = HistoricalDataFetcher.calculate_volatility(klines, window=20)
+        _result = HistoricalDataFetcher.calculate_volatility(klines, window=20)
 
 
 # ===========================================================================

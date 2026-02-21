@@ -3,40 +3,43 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import Portfolio from '../Portfolio'
 
+// Stable t function reference to prevent useEffect re-firing
+const mockT = (key: string) => {
+  const translations: Record<string, string> = {
+    'portfolio.title': 'Portfolio',
+    'portfolio.subtitle': 'Multi-Exchange Overview',
+    'portfolio.totalBalance': 'Total Balance',
+    'portfolio.totalPnl': 'Total PnL',
+    'portfolio.totalTrades': 'Total Trades',
+    'portfolio.winRate': 'Win Rate',
+    'portfolio.fees': 'Fees',
+    'portfolio.positions': 'Open Positions',
+    'portfolio.noPositions': 'No open positions',
+    'portfolio.exchange': 'Exchange',
+    'portfolio.symbol': 'Symbol',
+    'portfolio.side': 'Side',
+    'portfolio.size': 'Size',
+    'portfolio.entryPrice': 'Entry Price',
+    'portfolio.currentPrice': 'Current Price',
+    'portfolio.pnl': 'PnL',
+    'portfolio.leverage': 'Leverage',
+    'portfolio.allocation': 'Allocation',
+    'portfolio.noData': 'No data',
+    'portfolio.exchangeCards': 'Exchange Breakdown',
+    'portfolio.dailyChart': 'Daily PnL',
+    'portfolio.days7': '7D',
+    'portfolio.days14': '14D',
+    'portfolio.days30': '30D',
+    'portfolio.days90': '90D',
+    'common.error': 'An error occurred',
+  }
+  return translations[key] || key
+}
+
 // Mock react-i18next
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
-    t: (key: string) => {
-      const translations: Record<string, string> = {
-        'portfolio.title': 'Portfolio',
-        'portfolio.subtitle': 'Multi-Exchange Overview',
-        'portfolio.totalBalance': 'Total Balance',
-        'portfolio.totalPnl': 'Total PnL',
-        'portfolio.totalTrades': 'Total Trades',
-        'portfolio.winRate': 'Win Rate',
-        'portfolio.fees': 'Fees',
-        'portfolio.positions': 'Open Positions',
-        'portfolio.noPositions': 'No open positions',
-        'portfolio.exchange': 'Exchange',
-        'portfolio.symbol': 'Symbol',
-        'portfolio.side': 'Side',
-        'portfolio.size': 'Size',
-        'portfolio.entryPrice': 'Entry Price',
-        'portfolio.currentPrice': 'Current Price',
-        'portfolio.pnl': 'PnL',
-        'portfolio.leverage': 'Leverage',
-        'portfolio.allocation': 'Allocation',
-        'portfolio.noData': 'No data',
-        'portfolio.exchangeCards': 'Exchange Breakdown',
-        'portfolio.dailyChart': 'Daily PnL',
-        'portfolio.days7': '7D',
-        'portfolio.days14': '14D',
-        'portfolio.days30': '30D',
-        'portfolio.days90': '90D',
-        'common.error': 'An error occurred',
-      }
-      return translations[key] || key
-    },
+    t: mockT,
   }),
 }))
 
@@ -169,7 +172,8 @@ describe('Portfolio Page', () => {
 
     await waitFor(() => {
       // $8,000 = 5000 + 3000 from allocation
-      expect(screen.getByText('$8,000.00')).toBeInTheDocument()
+      // Use regex to handle locale-dependent number formatting (e.g. $8,000.00 vs $8.000,00)
+      expect(screen.getByText(/\$8[,.]000[,.]00/)).toBeInTheDocument()
     })
   })
 
@@ -179,8 +183,9 @@ describe('Portfolio Page', () => {
     await waitFor(() => {
       expect(screen.getByText('Exchange Breakdown')).toBeInTheDocument()
     })
-    expect(screen.getByText('bitget')).toBeInTheDocument()
-    expect(screen.getByText('hyperliquid')).toBeInTheDocument()
+    // Exchange names appear multiple times (icon mock + card label), so use getAllByText
+    expect(screen.getAllByText('bitget').length).toBeGreaterThanOrEqual(1)
+    expect(screen.getAllByText('hyperliquid').length).toBeGreaterThanOrEqual(1)
   })
 
   it('should render summary stats', async () => {

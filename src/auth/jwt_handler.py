@@ -4,7 +4,8 @@ import os
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from jose import JWTError, jwt
+import jwt
+from jwt.exceptions import PyJWTError
 
 from src.utils.logger import get_logger
 
@@ -101,5 +102,5 @@ def decode_token(token: str, expected_type: Optional[str] = None) -> Optional[di
         if expected_type and payload.get("type") != expected_type:
             return None
         return payload
-    except JWTError:
+    except PyJWTError:
         return None

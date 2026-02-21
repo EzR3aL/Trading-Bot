@@ -1,9 +1,8 @@
 """Tests for src/auth/jwt_handler.py - JWT token creation and validation."""
 
 from datetime import timedelta
-from unittest.mock import patch
 
-from jose import jwt
+import jwt
 
 from src.auth.jwt_handler import (
     ALGORITHM,

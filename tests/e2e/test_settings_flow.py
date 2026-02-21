@@ -8,7 +8,7 @@ import pytest
 
 playwright = pytest.importorskip("playwright")
 
-from tests.e2e.conftest import _server_available
+from tests.e2e.conftest import _server_available  # noqa: E402
 
 pytestmark = [
     pytest.mark.e2e,

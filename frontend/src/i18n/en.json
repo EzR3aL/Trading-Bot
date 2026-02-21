@@ -648,7 +648,8 @@
     "total": "Total",
     "net": "Net",
     "errorBoundaryTitle": "Something went wrong",
-    "tryAgain": "Try again"
+    "tryAgain": "Try again",
+    "saveFailed": "Save failed"
   },
   "admin": {
     "users": "Users",

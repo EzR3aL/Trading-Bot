@@ -19,7 +19,7 @@ import csv
 import os
 import sys
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime
 from io import StringIO
 from typing import Optional
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -1078,7 +1078,7 @@ class TestGenerateCsvContent:
         # Assert - 2025-01 should NOT appear in monthly data rows (only in header row if at all)
         lines = csv_content.split("\n")
         # Find lines that contain monthly data
-        monthly_data_lines = [l for l in lines if "2025-02" in l]
+        monthly_data_lines = [line for line in lines if "2025-02" in line]
         assert len(monthly_data_lines) >= 1
 
     @pytest.mark.asyncio
@@ -1655,8 +1655,8 @@ class TestFullCsvScenario:
 
         # Trade detail
         assert any("EINZELTRANSAKTIONEN" in line for line in lines)
-        btc_lines = [l for l in lines if "BTCUSDT" in l and "EINZELTRANSAKTIONEN" not in l and "Symbol" not in l]
-        eth_lines = [l for l in lines if "ETHUSDT" in l and "Symbol" not in l]
+        btc_lines = [line for line in lines if "BTCUSDT" in line and "EINZELTRANSAKTIONEN" not in line and "Symbol" not in line]
+        eth_lines = [line for line in lines if "ETHUSDT" in line and "Symbol" not in line]
         # 2 BTCUSDT trades + 1 in funding = 3, 1 ETHUSDT trade = 1
         assert len(btc_lines) >= 2
         assert len(eth_lines) >= 1
@@ -1703,11 +1703,11 @@ class TestFullCsvScenario:
         lines = csv_content.split("\n")
         # Count trade data lines (exclude headers and section titles)
         trade_data_lines = [
-            l for l in lines
-            if ("BTCUSDT" in l or "ETHUSDT" in l)
-            and "Symbol" not in l
-            and "DETAILED" not in l
-            and "EINZELTRANSAKTIONEN" not in l
+            line for line in lines
+            if ("BTCUSDT" in line or "ETHUSDT" in line)
+            and "Symbol" not in line
+            and "DETAILED" not in line
+            and "EINZELTRANSAKTIONEN" not in line
         ]
         assert len(trade_data_lines) == 100
 

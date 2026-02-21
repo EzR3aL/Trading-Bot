@@ -10,14 +10,10 @@ Covers:
 - Dev mode warning logs (lines 58-61)
 """
 
-import asyncio
-import os
 import sys
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch, PropertyMock
+from unittest.mock import AsyncMock, MagicMock, patch
 from dataclasses import dataclass
-from datetime import datetime
-from typing import Optional
 
 import pytest
 import pytest_asyncio
@@ -407,7 +403,7 @@ class TestRunDashboard:
              patch("src.dashboard.app.DASHBOARD_DEV_MODE", True), \
              patch("src.dashboard.app.DASHBOARD_API_KEY", ""), \
              patch("src.dashboard.app.create_app") as mock_create, \
-             patch("src.dashboard.app.uvicorn") as mock_uvicorn, \
+             patch("src.dashboard.app.uvicorn") as _mock_uvicorn, \
              patch("src.dashboard.app.logger") as mock_logger:
             mock_create.return_value = MagicMock()
             from src.dashboard.app import run_dashboard
@@ -422,7 +418,7 @@ class TestRunDashboard:
              patch("src.dashboard.app.DASHBOARD_DEV_MODE", False), \
              patch("src.dashboard.app.DASHBOARD_API_KEY", "valid-key"), \
              patch("src.dashboard.app.create_app") as mock_create, \
-             patch("src.dashboard.app.uvicorn") as mock_uvicorn, \
+             patch("src.dashboard.app.uvicorn") as _mock_uvicorn, \
              patch("src.dashboard.app.logger") as mock_logger:
             mock_create.return_value = MagicMock()
             from src.dashboard.app import run_dashboard

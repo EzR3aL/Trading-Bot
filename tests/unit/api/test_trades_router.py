@@ -13,7 +13,6 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import pytest
 import pytest_asyncio
 
 os.environ.setdefault("JWT_SECRET_KEY", "test-secret-key-for-testing-only-not-for-production")
@@ -25,7 +24,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-from src.models.database import Base, BotConfig, ExchangeConnection, TradeRecord, User, UserConfig
+from src.models.database import Base, BotConfig, ExchangeConnection, TradeRecord, User
 from src.auth.password import hash_password
 from src.auth.jwt_handler import create_access_token
 
@@ -753,7 +752,7 @@ async def test_sync_trades_uses_live_keys_when_no_demo_keys(
     mock_client.get_funding_fees = AsyncMock(return_value=0.1)
     mock_client.close = AsyncMock()
 
-    with patch("src.api.routers.trades.decrypt_value", return_value="decrypted") as mock_decrypt, \
+    with patch("src.api.routers.trades.decrypt_value", return_value="decrypted") as _mock_decrypt, \
          patch("src.api.routers.trades.create_exchange_client", return_value=mock_client) as mock_create:
         resp = await client.post("/api/trades/sync", headers=auth_headers)
 

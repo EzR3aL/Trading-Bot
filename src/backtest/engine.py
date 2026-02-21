@@ -1759,7 +1759,8 @@ class BacktestEngine:
     # ------------------------------------------------------------------ #
 
     def _signal_degen(
-        self, data: HistoricalDataPoint, symbol: str = "BTC"
+        self, data: HistoricalDataPoint, symbol: str = "BTC",
+        history: Optional[List[HistoricalDataPoint]] = None,
     ) -> Tuple[TradeDirection, int, str]:
         """
         Aggressive 1h-style signal: trend-following, NOT contrarian.

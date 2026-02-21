@@ -97,17 +97,6 @@ const STRATEGY_DESCRIPTIONS_DE: Record<string, string> = {
   claude_edge_indicator: 'Erweiterte Edge Strategie mit ATR-basierten TP/SL, Volumen-Bestätigung, Multi-Timeframe (4h), Trailing Stop, regime-basierter Positionsgröße und RSI-Divergenz.',
 }
 
-const INTERVAL_BACKTEST_HINTS: Record<string, Record<string, string>> = {
-  edge_indicator: {
-    best: '1h',
-    hint: 'Backtest-Empfehlung: 1h erzielt die beste Performance (höchste Rendite, bester Sharpe Ratio). 30m ist die zweitbeste Option.',
-  },
-  claude_edge_indicator: {
-    best: '1h',
-    hint: 'Backtest-Empfehlung: 1h erzielt die beste Performance (+45% Rendite, 55.9% Win Rate, Sharpe 4.02). 30m ist die zweitbeste Option.',
-  },
-}
-
 function getStrategyDisplayName(name: string): string {
   return STRATEGY_DISPLAY_NAMES[name] || name.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
 }
@@ -466,7 +455,7 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
       }
       onDone()
     } catch (err: any) {
-      setError(err.response?.data?.detail || 'Speichern fehlgeschlagen')
+      setError(err.response?.data?.detail || t('common.saveFailed'))
     }
     setSaving(false)
   }

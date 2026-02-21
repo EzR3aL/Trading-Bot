@@ -346,14 +346,13 @@ class TestStrategyRegistry:
 
     def _make_concrete_strategy(self, name="Concrete"):
         """Build a concrete BaseStrategy subclass dynamically."""
-        attrs = {
+        _attrs = {
             "generate_signal": lambda self, symbol: None,
             "should_trade": lambda self, signal: (True, "ok"),
             "get_param_schema": classmethod(lambda cls: {}),
             "get_description": classmethod(lambda cls: f"{name} strategy"),
         }
         # We need async methods — use proper async defs
-        import types
 
         class _Strat(BaseStrategy):
             async def generate_signal(self, symbol):

@@ -23,9 +23,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi import HTTPException
-from jose import jwt
+import jwt
 from starlette.requests import Request as StarletteRequest
-from starlette.datastructures import Headers
 
 # Ensure env vars are set before any src imports
 os.environ.setdefault("JWT_SECRET_KEY", "test-secret-key-for-testing-only-not-for-production-minimum-32-chars")
@@ -34,18 +33,19 @@ os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from src.auth.jwt_handler import (
+from src.api.rate_limit import limiter  # noqa: E402
+limiter.enabled = False
+
+from src.auth.jwt_handler import (  # noqa: E402
     ALGORITHM,
     _get_secret_key,
-    ACCESS_TOKEN_EXPIRE_MINUTES,
-    REFRESH_TOKEN_EXPIRE_DAYS,
     create_access_token,
     create_refresh_token,
     decode_token,
     validate_jwt_config,
 )
-from src.auth.password import hash_password, verify_password
-from src.auth.dependencies import get_current_user, get_current_admin
+from src.auth.password import hash_password, verify_password  # noqa: E402
+from src.auth.dependencies import get_current_user, get_current_admin  # noqa: E402
 
 
 # ---------------------------------------------------------------------------

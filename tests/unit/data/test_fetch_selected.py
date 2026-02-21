@@ -1,6 +1,5 @@
 """Tests for selective data fetching in MarketDataFetcher."""
 
-import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -103,7 +102,7 @@ class TestFetchSelectedMetrics:
         """Options sources should strip USDT from symbol."""
         with patch.object(fetcher, "get_options_oi_deribit", new_callable=AsyncMock) as mock_oi:
             mock_oi.return_value = {"total_oi": 1000.0, "num_instruments": 50, "currency": "BTC"}
-            result = await fetcher.fetch_selected_metrics(["options_oi"], "BTCUSDT")
+            _result = await fetcher.fetch_selected_metrics(["options_oi"], "BTCUSDT")
             mock_oi.assert_called_once_with("BTC")
 
     @pytest.mark.asyncio

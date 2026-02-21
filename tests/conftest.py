@@ -9,10 +9,10 @@ import asyncio
 import json
 import os
 import sys
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import AsyncGenerator
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 import pytest_asyncio
@@ -133,6 +133,7 @@ async def app(test_engine, mock_orchestrator):
     from slowapi.errors import RateLimitExceeded
     from src.api.routers.auth import limiter
     from src.api.routers import (
+        affiliate,
         auth,
         bots,
         config,
@@ -168,6 +169,7 @@ async def app(test_engine, mock_orchestrator):
     test_app.include_router(exchanges.router)
     test_app.include_router(bots.router)
     test_app.include_router(tax_report.router)
+    test_app.include_router(affiliate.router)
     test_app.include_router(portfolio.router)
 
     # Override dependency
