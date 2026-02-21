@@ -13,9 +13,6 @@ from datetime import datetime, timezone
 
 from src.backtest.execution_simulator import (
     ExecutionSimulator,
-    FillResult,
-    FEE_SCHEDULES,
-    EIGHT_HOURS_SECONDS,
 )
 
 

@@ -79,7 +79,6 @@ class CircuitBreakerError(TradingBotError):
         self.service_name = service_name
         self.state = state
         self.retry_after = retry_after
-        super().__init__(f"Circuit breaker open for {service_name} (state={state.value})")
         super().__init__(
             f"Circuit breaker for '{service_name}' is {state.value}. "
             f"Retry after {retry_after:.1f}s"

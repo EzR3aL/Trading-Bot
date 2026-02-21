@@ -9,7 +9,7 @@ Covers:
 """
 
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch, PropertyMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import sys
 from pathlib import Path
@@ -48,7 +48,7 @@ class TestGetSession:
         with patch("src.models.session.async_session_factory", mock_factory):
             from src.models.session import get_session
             with pytest.raises(ValueError):
-                async with get_session() as session:
+                async with get_session() as _session:
                     raise ValueError("test error")
 
             mock_session.rollback.assert_awaited_once()
@@ -93,7 +93,7 @@ class TestGetDb:
         with patch("src.models.session.async_session_factory", mock_factory):
             from src.models.session import get_db
             gen = get_db()
-            session = await gen.__anext__()
+            _session = await gen.__anext__()
 
             # Throw an exception into the generator
             try:

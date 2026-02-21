@@ -24,7 +24,6 @@ class ConnectionManager:
         self._lock = asyncio.Lock()
 
     async def connect(self, websocket: WebSocket, user_id: int) -> None:
-        await websocket.accept()
         async with self._lock:
             if user_id not in self._connections:
                 self._connections[user_id] = set()

@@ -8,7 +8,6 @@ from src.data.data_source_registry import (
     DATA_SOURCES,
     DEFAULT_SOURCES,
     PROVIDER_HEALTH_URLS,
-    DataSourceDef,
     get_sources_by_category,
     get_unique_providers,
 )
@@ -23,7 +22,7 @@ class TestDataSourceRegistry:
 
     def test_all_sources_have_required_fields(self):
         for ds in DATA_SOURCES:
-            assert ds.id, f"Source missing id"
+            assert ds.id, "Source missing id"
             assert ds.name, f"Source {ds.id} missing name"
             assert ds.description, f"Source {ds.id} missing description"
             assert ds.category in CATEGORIES, f"Source {ds.id} has invalid category: {ds.category}"

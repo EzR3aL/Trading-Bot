@@ -13,7 +13,6 @@ import json
 from datetime import datetime, timedelta
 from pathlib import Path
 
-import pytest
 import pytest_asyncio
 
 os.environ.setdefault("JWT_SECRET_KEY", "test-secret-key-for-testing-only-not-for-production")
@@ -374,7 +373,7 @@ async def test_activate_deactivates_others(client, auth_headers, preset, session
         session.add(p2)
         await session.commit()
         await session.refresh(p2)
-        p2_id = p2.id
+        _p2_id = p2.id
 
     # Activate the first preset
     resp = await client.post(

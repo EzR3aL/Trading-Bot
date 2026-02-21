@@ -16,7 +16,6 @@ import sys
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import pytest
 from httpx import ASGITransport, AsyncClient
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
@@ -269,15 +268,12 @@ async def test_seed_exchanges_inserts_data():
     """_seed_exchanges inserts exchange records into an empty table."""
     from contextlib import asynccontextmanager
 
-    mock_scalars = MagicMock()
-    mock_scalars.first.return_value = None  # No existing data
-
-    mock_result = MagicMock()
-    mock_result.scalars.return_value = mock_scalars
+    mock_scalar_result = MagicMock()
+    mock_scalar_result.scalar_one_or_none.return_value = None  # No existing data
 
     mock_session = AsyncMock()
-    mock_session.execute = AsyncMock(return_value=mock_result)
-    mock_session.add_all = MagicMock()
+    mock_session.execute = AsyncMock(return_value=mock_scalar_result)
+    mock_session.add = MagicMock()
 
     @asynccontextmanager
     async def mock_get_session():
@@ -287,9 +283,8 @@ async def test_seed_exchanges_inserts_data():
         from src.api.main_app import _seed_exchanges
         await _seed_exchanges()
 
-    mock_session.add_all.assert_called_once()
-    exchanges = mock_session.add_all.call_args[0][0]
-    assert len(exchanges) == 3
+    assert mock_session.add.call_count == 3
+    exchanges = [call.args[0] for call in mock_session.add.call_args_list]
     names = [e.name for e in exchanges]
     assert "bitget" in names
     assert "weex" in names
@@ -300,15 +295,12 @@ async def test_seed_exchanges_skips_when_data_exists():
     """_seed_exchanges does nothing if exchanges already exist."""
     from contextlib import asynccontextmanager
 
-    mock_scalars = MagicMock()
-    mock_scalars.first.return_value = MagicMock()  # Existing data
-
-    mock_result = MagicMock()
-    mock_result.scalars.return_value = mock_scalars
+    mock_scalar_result = MagicMock()
+    mock_scalar_result.scalar_one_or_none.return_value = MagicMock()  # Existing data
 
     mock_session = AsyncMock()
-    mock_session.execute = AsyncMock(return_value=mock_result)
-    mock_session.add_all = MagicMock()
+    mock_session.execute = AsyncMock(return_value=mock_scalar_result)
+    mock_session.add = MagicMock()
 
     @asynccontextmanager
     async def mock_get_session():
@@ -318,7 +310,7 @@ async def test_seed_exchanges_skips_when_data_exists():
         from src.api.main_app import _seed_exchanges
         await _seed_exchanges()
 
-    mock_session.add_all.assert_not_called()
+    mock_session.add.assert_not_called()
 
 
 # ---------------------------------------------------------------------------

@@ -13,9 +13,7 @@ Tests cover:
 - ATR-based TP/SL for ClaudeEdge strategy
 """
 
-import math
 import random
-import asyncio
 import pytest
 
 import sys
@@ -29,8 +27,6 @@ from src.backtest.backtest_data_provider import BacktestMarketDataFetcher
 from src.backtest.engine import (
     BacktestConfig,
     BacktestEngine,
-    BacktestTrade,
-    TradeDirection,
     TradeResult,
 )
 from src.backtest.historical_data import HistoricalDataPoint
@@ -529,7 +525,7 @@ class TestStrategyConstructors:
     def test_degen_accepts_data_fetcher(self):
         """Degen now accepts data_fetcher param (for future unified support)."""
         from src.strategy.degen import DegenStrategy
-        fetcher = BacktestMarketDataFetcher()
+        _fetcher = BacktestMarketDataFetcher()
         # Degen requires llm_api_key, so we can't fully instantiate it,
         # but we verify the parameter is accepted in the signature
         import inspect

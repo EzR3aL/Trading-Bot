@@ -1,9 +1,12 @@
 """
 WebSocket endpoint with JWT authentication.
 
-Clients connect via /api/ws?token=<jwt> and receive real-time events
-such as bot_started, bot_stopped, trade_opened, trade_closed.
+Clients connect via /api/ws and send the JWT token as the first message
+(avoids exposing tokens in URL query strings / server logs).
+Receives real-time events: bot_started, bot_stopped, trade_opened, trade_closed.
 """
+
+import asyncio
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
@@ -16,13 +19,21 @@ logger = get_logger(__name__)
 
 router = APIRouter()
 
+AUTH_TIMEOUT_SECONDS = 10
+
 
 @router.websocket("/api/ws")
 async def websocket_endpoint(websocket: WebSocket):
     """Authenticated WebSocket endpoint for real-time events."""
-    token = websocket.query_params.get("token")
-    if not token:
-        await websocket.close(code=4001, reason="Missing token")
+    await websocket.accept()
+
+    # Wait for auth message (first message must be the JWT token)
+    try:
+        token = await asyncio.wait_for(
+            websocket.receive_text(), timeout=AUTH_TIMEOUT_SECONDS
+        )
+    except asyncio.TimeoutError:
+        await websocket.close(code=4001, reason="Auth timeout")
         return
 
     payload = decode_token(token)
@@ -35,7 +46,6 @@ async def websocket_endpoint(websocket: WebSocket):
         await websocket.close(code=4001, reason="Invalid token payload")
         return
 
-    # Ensure user_id is int
     try:
         user_id = int(user_id)
     except (TypeError, ValueError):
@@ -44,6 +54,7 @@ async def websocket_endpoint(websocket: WebSocket):
 
     await ws_manager.connect(websocket, user_id)
     WEBSOCKET_CONNECTIONS.set(ws_manager.total_connections)
+    await websocket.send_text("authenticated")
 
     try:
         while True:

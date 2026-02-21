@@ -1,7 +1,7 @@
 """Tests for the encryption utility."""
 
 import os
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 import pytest
 from cryptography.fernet import Fernet

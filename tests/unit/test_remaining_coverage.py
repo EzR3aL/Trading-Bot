@@ -17,11 +17,11 @@ import asyncio
 import json
 import os
 import sys
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 from enum import Enum
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch, PropertyMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 os.environ.setdefault("JWT_SECRET_KEY", "test-secret-key-for-testing-only-not-for-production")
 os.environ["ENCRYPTION_KEY"] = "iDh4DatDZy2cb_esIAoNk_blWkQx3zDG14cj1lq8Rgo="
@@ -319,7 +319,7 @@ class TestDashboardApp:
                     with client.websocket_connect(
                         "/ws",
                         headers={"sec-websocket-protocol": "token.test-key-123"},
-                    ) as ws:
+                    ) as _ws:
                         pass
                 except Exception:
                     pass
@@ -347,7 +347,7 @@ class TestDashboardApp:
             app.state.risk_manager.get_daily_stats.return_value = MagicMock(to_dict=MagicMock(return_value={}))
             with TestClient(app) as client:
                 try:
-                    with client.websocket_connect("/ws?token=test-key-456") as ws:
+                    with client.websocket_connect("/ws?token=test-key-456") as _ws:
                         pass
                 except Exception:
                     pass

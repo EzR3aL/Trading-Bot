@@ -1,6 +1,5 @@
 """Tests for the symbol mapping utility."""
 
-import pytest
 
 from src.exchanges.symbol_map import (
     SYMBOL_MAP,

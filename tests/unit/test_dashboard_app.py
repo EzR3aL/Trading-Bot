@@ -20,15 +20,12 @@ Tests cover:
 - Error handling paths
 """
 
-import asyncio
-import os
 import sys
 from dataclasses import dataclass
 from datetime import datetime
-from io import BytesIO
 from pathlib import Path
 from typing import Optional
-from unittest.mock import AsyncMock, MagicMock, patch, PropertyMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 import pytest_asyncio
@@ -1083,7 +1080,7 @@ class TestCreateApp:
 
     def test_create_app_returns_fastapi_instance(self):
         """create_app should return a configured FastAPI app."""
-        with patch("src.dashboard.app.settings") as mock_s, \
+        with patch("src.dashboard.app.settings") as _mock_s, \
              patch("src.dashboard.app.DASHBOARD_DEV_MODE", True):
             from src.dashboard.app import create_app
             app = create_app()
@@ -1094,7 +1091,7 @@ class TestCreateApp:
 
     def test_create_app_initializes_state(self):
         """create_app should initialize shared state to None/empty."""
-        with patch("src.dashboard.app.settings") as mock_s, \
+        with patch("src.dashboard.app.settings") as _mock_s, \
              patch("src.dashboard.app.DASHBOARD_DEV_MODE", True):
             from src.dashboard.app import create_app
             app = create_app()

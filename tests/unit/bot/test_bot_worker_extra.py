@@ -12,13 +12,13 @@ import asyncio
 import json
 import pytest
 from datetime import datetime, timedelta
-from unittest.mock import AsyncMock, MagicMock, patch, PropertyMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
-from src.bot.bot_worker import BotWorker, DEFAULT_MARKET_HOURS
+from src.bot.bot_worker import BotWorker
 from src.strategy.base import SignalDirection, TradeSignal
 
 

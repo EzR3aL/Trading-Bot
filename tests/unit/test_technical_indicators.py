@@ -28,12 +28,12 @@ def _make_klines(closes: list, highs=None, lows=None, opens=None, volumes=None):
     result = []
     for i, c in enumerate(closes):
         h = highs[i] if highs else c * 1.01
-        l = lows[i] if lows else c * 0.99
+        low = lows[i] if lows else c * 0.99
         o = opens[i] if opens else c
         v = volumes[i] if volumes else 100.0
         result.append([
             1700000000000 + i * 3600000,  # open_time
-            str(o), str(h), str(l), str(c), str(v),
+            str(o), str(h), str(low), str(c), str(v),
             1700003600000 + i * 3600000,  # close_time
             str(c * v), 1000, str(v * 0.55), str(c * v * 0.55), "0",
         ])

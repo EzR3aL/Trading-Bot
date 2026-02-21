@@ -1,10 +1,9 @@
 """Tests for exchange base classes."""
 
 import pytest
-from unittest.mock import MagicMock
 
 from src.exchanges.base import ExchangeClient, ExchangeWebSocket
-from src.exchanges.types import Balance, Order, Position, Ticker, FundingRateInfo
+from src.exchanges.types import Balance, Order, Ticker, FundingRateInfo
 
 
 class ConcreteClient(ExchangeClient):

@@ -1,7 +1,7 @@
 """Tests for the global error handler middleware."""
 
 import os
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 

@@ -4,7 +4,6 @@ Extra tests for session.py — migration error paths, SQLite pragma, backfill.
 Covers uncovered lines: 30-33, 95-98, 108-163, 174-175, 192-193
 """
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import sys

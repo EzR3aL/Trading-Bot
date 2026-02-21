@@ -29,9 +29,6 @@ async def test_login_success(client, admin_token):
     assert admin_token is not None
 
     # Also verify the full response shape.
-    from src.auth.password import hash_password
-    from src.models.database import User
-    from src.models.session import get_session
 
     response = await client.post(
         "/api/auth/login",

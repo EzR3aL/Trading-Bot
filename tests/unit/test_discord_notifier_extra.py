@@ -16,7 +16,7 @@ Tests cover the methods and branches NOT exercised in test_discord_notifier.py:
 """
 
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch, PropertyMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import sys
 from pathlib import Path
@@ -893,7 +893,7 @@ class TestSendSignalAlert:
         """
         # Arrange
         notifier = _make_notifier()
-        mock_webhook = _stub_send_webhook(notifier)
+        _mock_webhook = _stub_send_webhook(notifier)
         metrics = {}  # Empty metrics dict
 
         # Act / Assert

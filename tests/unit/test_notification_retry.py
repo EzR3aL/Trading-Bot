@@ -2,7 +2,6 @@
 
 import asyncio
 import pytest
-from unittest.mock import AsyncMock, patch
 
 from src.notifications.retry import async_retry
 

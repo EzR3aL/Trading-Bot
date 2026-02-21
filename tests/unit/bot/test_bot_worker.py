@@ -17,14 +17,14 @@ Tests cover:
 import asyncio
 import json
 import pytest
-from datetime import datetime, timedelta
-from unittest.mock import AsyncMock, MagicMock, patch, PropertyMock
+from datetime import datetime
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from src.bot.bot_worker import BotWorker, DEFAULT_MARKET_HOURS
+from src.bot.bot_worker import BotWorker
 
 
 # ---------------------------------------------------------------------------
@@ -304,7 +304,7 @@ class TestScheduleSetup:
         worker._setup_schedule()
 
         # Should add monitor job + rotation job + daily summary (no regular analysis)
-        job_ids = [
+        _job_ids = [
             call.kwargs.get("id", call.args[2] if len(call.args) > 2 else "")
             for call in worker._scheduler.add_job.call_args_list
         ]

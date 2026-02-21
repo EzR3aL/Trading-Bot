@@ -8,9 +8,7 @@ Tests cover:
 - Risk metrics validation
 """
 
-import math
 import random
-import pytest
 
 import sys
 from pathlib import Path
@@ -19,7 +17,6 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from src.backtest.kline_backtest_engine import (
     KlineBacktestConfig,
     KlineBacktestEngine,
-    KlineBacktestResult,
     KlineTradeResult,
 )
 from src.strategy.claude_edge_indicator import ClaudeEdgeIndicatorStrategy
@@ -28,10 +25,10 @@ from src.strategy.edge_indicator import EdgeIndicatorStrategy
 
 # ── Data Generators ──────────────────────────────────────────────────────
 
-def _make_kline(timestamp_ms: int, o: float, h: float, l: float, c: float, v: float = 100.0):
+def _make_kline(timestamp_ms: int, o: float, h: float, low: float, c: float, v: float = 100.0):
     buy_vol = v * 0.55
     return [
-        timestamp_ms, str(o), str(h), str(l), str(c), str(v),
+        timestamp_ms, str(o), str(h), str(low), str(c), str(v),
         timestamp_ms + 3600000, str(c * v), 1000, str(buy_vol), str(c * buy_vol), "0",
     ]
 
@@ -327,7 +324,7 @@ class TestEdgeVsClaudeEdgeComparison:
         edge = engine.run(klines, EdgeIndicatorStrategy, interval="1h", lookback=200)
         claude = engine.run(klines, ClaudeEdgeIndicatorStrategy, interval="1h", lookback=200)
 
-        print(f"\n  STRONG UPTREND COMPARISON (1h)")
+        print("\n  STRONG UPTREND COMPARISON (1h)")
         print(f"  Edge:       Return={edge.total_return_percent:+.2f}% WR={edge.win_rate:.1f}% Trades={edge.total_trades}")
         print(f"  Claude-Edge: Return={claude.total_return_percent:+.2f}% WR={claude.win_rate:.1f}% Trades={claude.total_trades}")
 
@@ -343,7 +340,7 @@ class TestEdgeVsClaudeEdgeComparison:
         edge = engine.run(klines, EdgeIndicatorStrategy, interval="1h", lookback=200)
         claude = engine.run(klines, ClaudeEdgeIndicatorStrategy, interval="1h", lookback=200)
 
-        print(f"\n  SIDEWAYS MARKET COMPARISON (1h)")
+        print("\n  SIDEWAYS MARKET COMPARISON (1h)")
         print(f"  Edge:       Return={edge.total_return_percent:+.2f}% DD={edge.max_drawdown_percent:.2f}% Trades={edge.total_trades}")
         print(f"  Claude-Edge: Return={claude.total_return_percent:+.2f}% DD={claude.max_drawdown_percent:.2f}% Trades={claude.total_trades}")
 

@@ -11,8 +11,7 @@ Tests cover:
 
 import math
 import pytest
-from datetime import datetime
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock
 
 import sys
 from pathlib import Path
@@ -29,13 +28,13 @@ def _make_klines(closes, highs=None, lows=None, buy_ratio=0.55):
     result = []
     for i, c in enumerate(closes):
         h = highs[i] if highs else c * 1.005
-        l = lows[i] if lows else c * 0.995
+        low = lows[i] if lows else c * 0.995
         o = closes[i - 1] if i > 0 else c
         vol = 150.0
         buy_vol = vol * buy_ratio
         result.append([
             1700000000000 + i * 3600000,
-            str(o), str(h), str(l), str(c), str(vol),
+            str(o), str(h), str(low), str(c), str(vol),
             1700003600000 + i * 3600000,
             str(c * vol), 2000, str(buy_vol), str(c * buy_vol), "0",
         ])

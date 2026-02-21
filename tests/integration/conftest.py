@@ -13,8 +13,6 @@ If the lifespan introduces side effects that interfere with tests (e.g.
 BotManager), those may need additional mocking in the future.
 """
 
-import os
-import pytest
 import pytest_asyncio
 from httpx import AsyncClient, ASGITransport
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine

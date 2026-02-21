@@ -19,7 +19,6 @@ Tests cover:
 - Strategy registry registration
 """
 
-import math
 import pytest
 from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -65,10 +64,10 @@ def _make_klines(closes, highs=None, lows=None):
     result = []
     for i, c in enumerate(closes):
         h = highs[i] if highs else c * 1.01
-        l = lows[i] if lows else c * 0.99
+        low = lows[i] if lows else c * 0.99
         result.append([
             1700000000000 + i * 3600000,
-            str(c), str(h), str(l), str(c), "100",
+            str(c), str(h), str(low), str(c), "100",
             1700003600000 + i * 3600000,
             str(c * 100), 1000, "55", str(c * 55), "0",
         ])

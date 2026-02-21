@@ -16,10 +16,9 @@ import base64
 import hashlib
 import hmac
 import json
-import os
 import sys
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch, PropertyMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import aiohttp
 import pytest
@@ -33,8 +32,6 @@ from src.exchanges.bitget.client import (
 )
 from src.exchanges.bitget.constants import (
     BASE_URL,
-    ENDPOINTS,
-    PRODUCT_TYPE_USDT,
     SUCCESS_CODE,
     TESTNET_URL,
 )
@@ -735,7 +732,7 @@ class TestClosePosition:
                 client, "_request", new_callable=AsyncMock,
                 return_value={"orderId": "close-order-2"},
             ) as mock_req:
-                order = await client.close_position("ETHUSDT", "short")
+                _order = await client.close_position("ETHUSDT", "short")
 
         # Verify side mapping: closing short = buy
         call_data = mock_req.call_args.kwargs["data"]
@@ -1446,7 +1443,7 @@ class TestPlaceRawOrder:
         mock_result = {"orderId": "raw-order-2"}
 
         with patch.object(client, "_request", new_callable=AsyncMock, return_value=mock_result) as mock_req:
-            result = await client.place_raw_order(
+            _result = await client.place_raw_order(
                 symbol="BTCUSDT",
                 side="sell",
                 trade_side="close",

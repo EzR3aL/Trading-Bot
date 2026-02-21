@@ -9,6 +9,30 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.13.0] - 2026-02-21
+
+### Sicherheit
+- **python-jose durch PyJWT ersetzt:** python-jose ist unmaintained mit bekannten CVEs — Migration auf PyJWT[crypto] v2.11+
+- **WebSocket JWT-Token nicht mehr in URL:** Token wird jetzt als erste Nachricht nach Connect gesendet, nicht mehr als Query-Parameter (verhindert Log-Exposure)
+- **Login Rate Limit verschaerft:** Von 30/min auf 10/min reduziert
+
+### Behoben
+- **Frontend Build repariert:** Unused `INTERVAL_BACKTEST_HINTS` Konstante entfernt (blockierte `tsc`)
+- **13 failing Frontend-Tests gefixt:** ErrorBoundary i18n-Mock + Portfolio Test-Stabilisierung
+- **54 failing Backend-Tests gefixt:** Integration-Test Fixture-Mismatch (DB Engine), Affiliate-Router fehlte, seed_exchanges Mock, FundingPayment Schema
+- **CircuitBreakerError:** Doppelter `super().__init__()` Aufruf entfernt
+- **Silent Exception Swallowing:** `except Exception: pass` in exchange factory durch Logging ersetzt
+- **aiohttp Session Leak:** Context Manager Support fuer LLM Provider hinzugefuegt
+- **_signal_degen TypeError:** Fehlender `history` Parameter in zweiter Definition ergaenzt
+- **50+ Test-Lint-Fehler behoben:** E741, F841, E402, F401 in 28 Test-Dateien
+
+### Geaendert
+- **CI linted jetzt auch tests/:** `ruff check src/ tests/` statt nur `src/`
+- **Hardcoded German String entfernt:** `'Speichern fehlgeschlagen'` durch `t('common.saveFailed')` ersetzt
+- **Leere Komponentenverzeichnisse entfernt:** `components/bot/` und `components/exchanges/`
+
+---
+
 ## [3.12.1] - 2026-02-21
 
 ### Behoben

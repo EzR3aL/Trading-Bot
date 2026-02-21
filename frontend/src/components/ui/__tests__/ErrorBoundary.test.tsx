@@ -1,5 +1,19 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
+
+// Mock i18n config (ErrorBoundary uses i18n.t() directly, not useTranslation)
+vi.mock('../../../i18n/config', () => ({
+  default: {
+    t: (key: string) => {
+      const translations: Record<string, string> = {
+        'common.errorBoundaryTitle': 'Something went wrong',
+        'common.tryAgain': 'Try again',
+      }
+      return translations[key] || key
+    },
+  },
+}))
+
 import ErrorBoundary from '../ErrorBoundary'
 
 // Component that throws an error on demand

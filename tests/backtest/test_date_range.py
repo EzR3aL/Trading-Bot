@@ -8,7 +8,6 @@ Validates:
 - Cache key uniqueness for different date ranges
 """
 
-import asyncio
 import math
 import pytest
 
@@ -17,7 +16,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from datetime import datetime, timedelta
-from unittest.mock import AsyncMock, patch, MagicMock
+from unittest.mock import AsyncMock, patch
 
 from src.backtest.historical_data import HistoricalDataFetcher
 
@@ -192,7 +191,7 @@ class TestStrategyAdapterDatePropagation:
 
         with patch.object(HistoricalDataFetcher, 'fetch_all_historical_data', mock_fetch_all), \
              patch.object(HistoricalDataFetcher, 'close', new_callable=AsyncMock):
-            result = await run_backtest_for_strategy(
+            _result = await run_backtest_for_strategy(
                 strategy_type="liquidation_hunter",
                 symbol="BTCUSDT",
                 timeframe="4h",

@@ -3,7 +3,7 @@
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from src.ai.providers.base import RateLimiter, _GLOBAL_RATE_LIMITERS, _HttpError
+from src.ai.providers.base import _GLOBAL_RATE_LIMITERS, _HttpError
 
 
 # ── Fixtures ────────────────────────────────────────────────────────

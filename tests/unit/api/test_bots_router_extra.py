@@ -41,8 +41,7 @@ from src.auth.password import hash_password
 from src.api.routers.auth import limiter
 limiter.enabled = False
 
-from src.api.routers import bots as bots_module
-from src.api.routers.bots import (
+from src.api.routers.bots import (  # noqa: E402
     _config_to_response,
     _enforce_affiliate_gate,
     _enforce_hl_gates,
@@ -64,7 +63,7 @@ from src.api.routers.bots import (
     test_telegram as send_test_telegram,
     update_bot,
 )
-from src.api.schemas.bots import BotConfigCreate, BotConfigUpdate
+from src.api.schemas.bots import BotConfigCreate, BotConfigUpdate  # noqa: E402
 
 
 # ---------------------------------------------------------------------------

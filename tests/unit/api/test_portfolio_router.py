@@ -1,7 +1,6 @@
 """Tests for the portfolio API router."""
 
 import pytest
-import pytest_asyncio
 
 
 class TestPortfolioSummary:

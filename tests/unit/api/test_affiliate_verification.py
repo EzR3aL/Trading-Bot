@@ -4,7 +4,7 @@ import pytest
 import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from src.models.database import AffiliateLink, ExchangeConnection
+from src.models.database import AffiliateLink
 
 
 @pytest_asyncio.fixture

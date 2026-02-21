@@ -8,9 +8,7 @@ Tests cover:
 - Risk metrics (drawdown, profit factor, win rate)
 """
 
-import math
 import random
-import pytest
 
 import sys
 from pathlib import Path
@@ -19,7 +17,6 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from src.backtest.kline_backtest_engine import (
     KlineBacktestConfig,
     KlineBacktestEngine,
-    KlineBacktestResult,
     KlineTradeResult,
 )
 from src.strategy.edge_indicator import EdgeIndicatorStrategy
@@ -27,10 +24,10 @@ from src.strategy.edge_indicator import EdgeIndicatorStrategy
 
 # ── Data Generators ──────────────────────────────────────────────────────
 
-def _make_kline(timestamp_ms: int, o: float, h: float, l: float, c: float, v: float = 100.0):
+def _make_kline(timestamp_ms: int, o: float, h: float, low: float, c: float, v: float = 100.0):
     """Build a single kline row."""
     return [
-        timestamp_ms, str(o), str(h), str(l), str(c), str(v),
+        timestamp_ms, str(o), str(h), str(low), str(c), str(v),
         timestamp_ms + 3600000, str(c * v), 1000, str(v * 0.55), str(c * v * 0.55), "0",
     ]
 

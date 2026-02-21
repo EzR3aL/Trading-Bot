@@ -12,9 +12,8 @@ Tests cover:
 """
 
 import asyncio
-import time
 import pytest
-from unittest.mock import patch, AsyncMock
+from unittest.mock import AsyncMock
 
 import sys
 from pathlib import Path

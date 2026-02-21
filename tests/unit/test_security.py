@@ -12,11 +12,8 @@ Tests cover:
 """
 
 import os
-import json
 import pytest
-import pytest_asyncio
-from datetime import datetime
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock
 
 import sys
 from pathlib import Path
@@ -29,8 +26,8 @@ os.environ["ENCRYPTION_KEY"] = _TEST_FERNET_KEY
 os.environ.setdefault("JWT_SECRET_KEY", "test-secret-key-for-testing-only-not-for-production")
 os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
-from src.utils.encryption import encrypt_value, decrypt_value, mask_value
-import src.utils.encryption as _enc_module
+from src.utils.encryption import encrypt_value, decrypt_value, mask_value  # noqa: E402
+import src.utils.encryption as _enc_module  # noqa: E402
 
 
 # ---------------------------------------------------------------------------
@@ -193,8 +190,8 @@ class TestLegacyPlaintextKeysRemoved:
             from config.settings import BitgetConfig
             config = BitgetConfig()
             assert config.api_key == "", f"BitgetConfig.api_key should be empty, got: {config.api_key}"
-            assert config.api_secret == "", f"BitgetConfig.api_secret should be empty"
-            assert config.passphrase == "", f"BitgetConfig.passphrase should be empty"
+            assert config.api_secret == "", "BitgetConfig.api_secret should be empty"
+            assert config.passphrase == "", "BitgetConfig.passphrase should be empty"
         finally:
             os.environ.pop("BITGET_API_KEY", None)
             os.environ.pop("BITGET_API_SECRET", None)
@@ -239,7 +236,7 @@ class TestRefreshTokenRateLimit:
         from src.api.routers.auth import refresh_token
 
         # Check the function is decorated (slowapi adds __wrapped__ or modifies __dict__)
-        source = inspect.getsource(refresh_token)
+        _source = inspect.getsource(refresh_token)
         # Also verify by checking the route registration - the source should show the decorator
         # We check the auth module source for the decorator above the function
         import src.api.routers.auth as auth_module
@@ -333,7 +330,6 @@ class TestEncryptionKeyManagement:
 
     def test_production_requires_explicit_key(self):
         """In production, missing ENCRYPTION_KEY must raise RuntimeError."""
-        import importlib
         # We can't easily test this without reloading the module, but we can
         # verify the source code contains the check
         import inspect

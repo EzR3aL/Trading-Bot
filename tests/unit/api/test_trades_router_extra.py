@@ -11,7 +11,6 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import pytest
 import pytest_asyncio
 
 os.environ.setdefault("JWT_SECRET_KEY", "test-secret-key-for-testing-only-not-for-production")
@@ -23,7 +22,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-from src.models.database import Base, BotConfig, ExchangeConnection, TradeRecord, User, UserConfig
+from src.models.database import Base, BotConfig, ExchangeConnection, TradeRecord, User
 from src.auth.password import hash_password
 from src.auth.jwt_handler import create_access_token
 from src.utils.encryption import encrypt_value

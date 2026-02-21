@@ -23,11 +23,11 @@ def _make_klines(closes, highs=None, lows=None, volumes=None):
     result = []
     for i, c in enumerate(closes):
         h = highs[i] if highs else c * 1.01
-        l = lows[i] if lows else c * 0.99
+        low = lows[i] if lows else c * 0.99
         v = volumes[i] if volumes else 100.0
         result.append([
             1700000000000 + i * 3600000,
-            str(c), str(h), str(l), str(c), str(v),
+            str(c), str(h), str(low), str(c), str(v),
             1700003600000 + i * 3600000,
             str(c * v), 1000, str(v * 0.55), str(c * v * 0.55), "0",
         ])
@@ -181,7 +181,7 @@ class TestDetectRsiDivergence:
         """Price higher high + RSI lower high = bearish divergence."""
         # Build data where price makes higher highs but RSI weakens
         # Start with moderate uptrend, then push to higher price but with weaker momentum
-        n = 60
+        _n = 60
         closes = []
         highs = []
         lows = []
@@ -224,7 +224,7 @@ class TestDetectRsiDivergence:
 
     def test_bullish_divergence_detection(self):
         """Price lower low + RSI higher low = bullish divergence."""
-        n = 60
+        _n = 60
         closes = []
         highs = []
         lows = []

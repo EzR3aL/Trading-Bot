@@ -213,6 +213,15 @@ class BaseLLMProvider(ABC):
         self.model_override = model_override
         self._session: Optional[aiohttp.ClientSession] = None
 
+    async def __aenter__(self):
+        """Async context manager entry — ensures session is created."""
+        await self._get_session()
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        """Async context manager exit — ensures session is closed."""
+        await self.close()
+
     @property
     def active_model(self) -> str:
         """Return the model to use: override if set, otherwise class default."""

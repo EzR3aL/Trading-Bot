@@ -22,11 +22,10 @@ Tests cover:
 - Configuration validation flows
 """
 
-import asyncio
 import json
 import pytest
 from datetime import datetime, timedelta
-from unittest.mock import AsyncMock, MagicMock, patch, PropertyMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import sys
 from pathlib import Path
@@ -156,7 +155,7 @@ class TestTradingBotInit:
         with patch("src.bot.trading_bot.settings", mock_settings), \
              patch("src.bot.trading_bot.setup_logging") as mock_setup:
             from src.bot.trading_bot import TradingBot
-            bot = TradingBot()
+            _bot = TradingBot()
 
             mock_setup.assert_called_once_with(
                 log_level=mock_settings.logging.level,

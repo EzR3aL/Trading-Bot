@@ -7,7 +7,7 @@ demo_mode filtering, empty year, edge cases, and auth requirements.
 
 import os
 import sys
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
 
 import pytest
@@ -451,9 +451,9 @@ async def test_download_csv_contains_trade_data(client, auth_headers, closed_tra
     resp = await client.get("/api/tax-report/csv", headers=auth_headers)
     content = resp.text
     lines = content.strip().split("\n")
-    trade_lines = [l for l in lines if "BTCUSDT" in l or "ETHUSDT" in l]
+    trade_lines = [line for line in lines if "BTCUSDT" in line or "ETHUSDT" in line]
     # Filter out header row
-    trade_lines = [l for l in trade_lines if "Richtung" not in l and "Side" not in l]
+    trade_lines = [line for line in trade_lines if "Richtung" not in line and "Side" not in line]
     assert len(trade_lines) == 3
 
 
@@ -483,8 +483,8 @@ async def test_download_csv_with_demo_filter(client, auth_headers, closed_trades
     resp = await client.get("/api/tax-report/csv", headers=auth_headers, params={"demo_mode": True})
     content = resp.text
     lines = content.strip().split("\n")
-    trade_data_lines = [l for l in lines if "BTCUSDT" in l or "ETHUSDT" in l]
-    trade_data_lines = [l for l in trade_data_lines if "Richtung" not in l and "Side" not in l]
+    trade_data_lines = [line for line in lines if "BTCUSDT" in line or "ETHUSDT" in line]
+    trade_data_lines = [line for line in trade_data_lines if "Richtung" not in line and "Side" not in line]
     assert len(trade_data_lines) == 2
 
 

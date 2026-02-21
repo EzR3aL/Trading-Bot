@@ -6,7 +6,6 @@ daily series aggregation, cumulative PnL calculation,
 and demo_mode filtering in performance contexts.
 """
 
-import json
 import os
 import sys
 from datetime import datetime, timedelta
@@ -19,7 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 os.environ.setdefault("JWT_SECRET_KEY", "test-secret-key-for-testing-only-not-for-production")
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from src.models.database import BotConfig, TradeRecord
+from src.models.database import TradeRecord
 
 
 # ---------------------------------------------------------------------------

@@ -3,7 +3,6 @@
 import json
 import logging
 from pathlib import Path
-from unittest.mock import patch
 
 import pytest
 
@@ -76,7 +75,7 @@ class TestTradeLogger:
 
     def test_init_creates_directory(self, tmp_path):
         log_dir = str(tmp_path / "trade_logs")
-        tl = TradeLogger(log_dir=log_dir)
+        _tl = TradeLogger(log_dir=log_dir)
         assert Path(log_dir).exists()
 
     def test_log_trade_entry(self, tmp_path):

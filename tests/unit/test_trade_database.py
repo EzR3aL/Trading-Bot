@@ -17,7 +17,7 @@ All aiosqlite interactions are mocked so no real database is used.
 import sys
 from datetime import datetime
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch, PropertyMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -958,7 +958,7 @@ class TestGetRecentTrades:
         db._initialized = True
 
         # Act
-        trades = await db.get_recent_trades(limit=10)
+        _trades = await db.get_recent_trades(limit=10)
 
         # Assert
         execute_call = mock_db.execute.call_args
