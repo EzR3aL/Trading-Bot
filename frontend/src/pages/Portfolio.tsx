@@ -25,8 +25,6 @@ const EXCHANGE_COLORS: Record<string, string> = {
   weex: '#f97316',
 }
 
-const PIE_COLORS = ['#3b82f6', '#22c55e', '#f97316', '#a855f7', '#ec4899']
-
 function exchangeColor(name: string): string {
   return EXCHANGE_COLORS[name.toLowerCase()] || '#6b7280'
 }
@@ -154,6 +152,29 @@ export default function Portfolio() {
     value: a.balance,
   }))
 
+  // Merge exchange cards: DB trades + live balances (so all exchanges appear)
+  // Merge exchange cards: DB trades + live balances (so all exchanges appear)
+  const mergedExchanges = (() => {
+    const byName = new Map<string, { exchange: string; total_pnl: number; win_rate: number; total_trades: number; total_fees: number; balance?: number }>()
+    if (summary) {
+      for (const ex of summary.exchanges) {
+        byName.set(ex.exchange.toLowerCase(), { ...ex, exchange: ex.exchange.toLowerCase() })
+      }
+    }
+    for (const a of allocation) {
+      const key = a.exchange.toLowerCase()
+      if (byName.has(key)) {
+        byName.get(key)!.balance = a.balance
+      } else {
+        byName.set(key, {
+          exchange: key, total_pnl: 0, win_rate: 0, total_trades: 0,
+          total_fees: 0, balance: a.balance,
+        })
+      }
+    }
+    return Array.from(byName.values())
+  })()
+
   /* ── Loading State ──────────────────────────────────────── */
 
   if (loading) {
@@ -252,13 +273,13 @@ export default function Portfolio() {
       </div>
 
       {/* Exchange Cards */}
-      {summary && summary.exchanges.length > 0 && (
+      {mergedExchanges.length > 0 && (
         <div className="mb-6">
           <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">
             {t('portfolio.exchangeCards')}
           </h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {summary.exchanges.map((ex) => {
+            {mergedExchanges.map((ex) => {
               const color = exchangeColor(ex.exchange)
               return (
                 <div
@@ -269,6 +290,11 @@ export default function Portfolio() {
                   <div className="flex items-center gap-3 mb-3">
                     <ExchangeIcon exchange={ex.exchange} size={24} />
                     <span className="text-white font-semibold capitalize">{ex.exchange}</span>
+                    {ex.balance !== undefined && (
+                      <span className="ml-auto text-xs text-gray-400">
+                        ${ex.balance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </span>
+                    )}
                   </div>
                   <div className="grid grid-cols-2 gap-3 text-sm">
                     <div>
@@ -379,15 +405,18 @@ export default function Portfolio() {
                   nameKey="name"
                   stroke="none"
                 >
-                  {pieData.map((_entry, idx) => (
+                  {pieData.map((entry, idx) => (
                     <Cell
                       key={idx}
-                      fill={PIE_COLORS[idx % PIE_COLORS.length]}
+                      fill={exchangeColor(entry.name)}
                     />
                   ))}
                 </Pie>
                 <Tooltip
-                  formatter={(value: number) => [`$${value.toFixed(2)}`, '']}
+                  formatter={(value: number, name: string) => [
+                    `$${value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+                    name.charAt(0).toUpperCase() + name.slice(1),
+                  ]}
                   contentStyle={{
                     background: 'rgba(13,17,23,0.95)',
                     border: '1px solid rgba(255,255,255,0.1)',

@@ -120,7 +120,9 @@ async def refresh_token(request: Request, body: RefreshRequest, db: AsyncSession
             detail="User not found or inactive",
         )
 
-    # Reject refresh tokens issued before a token revocation
+    # Reject refresh tokens issued before a security event (password change,
+    # forced logout). Do NOT bump token_version here — routine refreshes must
+    # not invalidate tokens in other tabs / concurrent requests.
     token_tv = payload.get("tv")
     user_tv = getattr(user, "token_version", 0) or 0
     if token_tv is not None and token_tv < user_tv:
@@ -130,12 +132,7 @@ async def refresh_token(request: Request, body: RefreshRequest, db: AsyncSession
             detail="Token revoked — please log in again",
         )
 
-    # Refresh token rotation: increment token_version so the old refresh
-    # token is invalidated. Only the newly issued tokens will work.
-    user.token_version = user_tv + 1
-    await db.commit()
-
-    token_data = {"sub": str(user.id), "role": user.role, "tv": user.token_version}
+    token_data = {"sub": str(user.id), "role": user.role, "tv": user_tv}
     access_token = create_access_token(token_data)
     refresh_token = create_refresh_token(token_data)
 

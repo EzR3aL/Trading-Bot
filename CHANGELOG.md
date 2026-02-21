@@ -9,6 +9,26 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.15.2] - 2026-02-21
+
+### Hinzugefuegt
+- **Backtest-Ergebnisse BTC:** Vollstaendige Ergebnisse aller 42 Backtests als Markdown (DE + EN) in Anleitungen/
+- **Strategie-Empfehlungen:** Backtest-basierte Hinweise in jeder Strategiebeschreibung (i18n DE + EN) mit Disclaimer
+- **Portfolio Exchange-Merge:** Exchange-Karten zeigen nun alle Exchanges (auch ohne Trades, z.B. nur mit Live-Balance)
+- **OfflineIndicator i18n:** Banner-Texte uebersetzt (DE/EN), Dismiss-Button hinzugefuegt
+
+### Geaendert
+- **Token-Refresh ohne Rotation:** `token_version` wird beim Refresh nicht mehr inkrementiert — verhindert ungewollte Logouts bei mehreren Tabs/Requests
+- **OfflineIndicator weniger aggressiv:** 3 statt 2 konsekutive Fehler, 30s Intervall, 8s Timeout, 5s Verzoegerung beim Start, gelbes statt rotes Banner
+- **Portfolio Donut-Chart:** Tooltip zeigt jetzt Exchange-Name + formatierte Zahl; Farben sind Exchange-spezifisch statt Index-basiert
+- **GettingStarted Timeframes:** Empfohlene Intervalle aktualisiert basierend auf Backtest-Daten (Edge: 1h/4h, Degen: 4h, Liquidation: 15m)
+- **Settings Hyperliquid-Tab:** User-Status-Karten (Builder Code, Empfehlung) entfernt — nur Admin-relevante Inhalte (Earnings, Konfiguration) bleiben
+
+### Behoben
+- **Auth Token-Rotation Bug:** Refresh inkrementierte token_version, was parallele Requests und Multi-Tab-Sessions sofort invalidierte
+
+---
+
 ## [3.15.1] - 2026-02-21
 
 ### Hinzugefuegt

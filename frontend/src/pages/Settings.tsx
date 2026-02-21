@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { ChevronDown, Search, CheckCircle, Clock, Users, Activity, Wifi, WifiOff, Shield, Zap, BarChart3, TrendingUp, Database, Cpu, Hammer, UserCheck, DollarSign, ExternalLink, Settings2 } from 'lucide-react'
+import { ChevronDown, Search, CheckCircle, Clock, Users, Activity, Wifi, WifiOff, Shield, Zap, BarChart3, TrendingUp, Database, Cpu, DollarSign, ExternalLink, Settings2 } from 'lucide-react'
 import Pagination from '../components/ui/Pagination'
 import api from '../api/client'
 import { getApiErrorMessage } from '../utils/api-error'
@@ -171,8 +171,6 @@ export default function Settings() {
   // Hyperliquid revenue
   const [hlRevenue, setHlRevenue] = useState<HlRevenueInfo | null>(null)
   const [hlLoading, setHlLoading] = useState(false)
-  const [hlApproving, setHlApproving] = useState(false)
-
   // Hyperliquid admin settings
   const [hlAdminSettings, setHlAdminSettings] = useState<{
     builder_address: string; builder_fee: number; referral_code: string;
@@ -343,16 +341,6 @@ export default function Settings() {
       setHlRevenue(res.data)
     } catch { /* HL not configured - OK */ }
     setHlLoading(false)
-  }
-
-  const approveBuilderFee = async () => {
-    setHlApproving(true)
-    try {
-      await api.post('/config/hyperliquid/approve-builder-fee')
-      showMessage(t('settings.hlBuilderFeeApproved'))
-      loadHlRevenue()
-    } catch { showMessage(t('common.error')) }
-    setHlApproving(false)
   }
 
   const loadHlAdminSettings = async () => {
@@ -1297,146 +1285,6 @@ export default function Settings() {
                     {t('settings.refreshStatus')}
                   </button>
                 )}
-              </div>
-            </div>
-          )}
-
-          {/* ── Builder & Referral Status Cards ── */}
-          {hlRevenue && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* Builder Code Card */}
-              <div className="border border-white/[0.08] bg-white/[0.02] rounded-xl overflow-hidden">
-                <div className={`px-4 py-2.5 flex items-center justify-between border-b ${
-                  hlRevenue.builder?.configured && hlRevenue.builder?.user_approved
-                    ? 'border-emerald-500/10 bg-emerald-500/[0.03]'
-                    : hlRevenue.builder?.configured
-                      ? 'border-yellow-500/10 bg-yellow-500/[0.03]'
-                      : 'border-red-500/10 bg-red-500/[0.03]'
-                }`}>
-                  <div className="flex items-center gap-2">
-                    <Hammer size={14} className={
-                      hlRevenue.builder?.configured && hlRevenue.builder?.user_approved
-                        ? 'text-emerald-400/70'
-                        : hlRevenue.builder?.configured ? 'text-yellow-400/70' : 'text-red-400/70'
-                    } />
-                    <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
-                      {t('settings.hlBuilderCode')}
-                    </span>
-                  </div>
-                  <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${
-                    hlRevenue.builder?.configured && hlRevenue.builder?.user_approved
-                      ? 'bg-emerald-500/10 text-emerald-400'
-                      : hlRevenue.builder?.configured
-                        ? 'bg-yellow-500/10 text-yellow-400'
-                        : 'bg-red-500/10 text-red-400'
-                  }`}>
-                    {hlRevenue.builder?.configured && hlRevenue.builder?.user_approved
-                      ? t('settings.hlApproved')
-                      : hlRevenue.builder?.configured
-                        ? t('settings.hlNotApproved')
-                        : t('settings.notConfigured')
-                    }
-                  </span>
-                </div>
-                <div className="px-4 py-3 space-y-1">
-                  {hlRevenue.builder?.configured ? (
-                    <>
-                      <div className="flex items-center justify-between py-1.5 px-1.5 rounded-lg hover:bg-white/[0.04] transition-colors">
-                        <span className="text-xs text-gray-400">{t('settings.hlBuilderAddressLabel')}</span>
-                        <span className="text-xs text-white font-mono truncate max-w-[180px]">{hlRevenue.builder.address}</span>
-                      </div>
-                      <div className="flex items-center justify-between py-1.5 px-1.5 rounded-lg hover:bg-white/[0.04] transition-colors">
-                        <span className="text-xs text-gray-400">{t('settings.hlFeeRate')}</span>
-                        <span className="text-xs text-white">{hlRevenue.builder.fee_percent}</span>
-                      </div>
-                      <div className="flex items-center justify-between py-1.5 px-1.5 rounded-lg hover:bg-white/[0.04] transition-colors">
-                        <span className="text-xs text-gray-400">{t('settings.hlUserApproved')}</span>
-                        <div className="flex items-center gap-1.5">
-                          <span className={`w-1.5 h-1.5 rounded-full ${hlRevenue.builder.user_approved ? 'bg-emerald-400' : 'bg-red-400 animate-pulse'}`} />
-                          <span className={`text-xs ${hlRevenue.builder.user_approved ? 'text-emerald-400' : 'text-red-400'}`}>
-                            {hlRevenue.builder.user_approved ? t('settings.hlApproved') : t('settings.hlNotApproved')}
-                          </span>
-                        </div>
-                      </div>
-                      {!hlRevenue.builder.user_approved && (
-                        <button onClick={approveBuilderFee} disabled={hlApproving}
-                          className="w-full mt-2 px-3 py-2 text-xs bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 transition-colors">
-                          {hlApproving ? t('settings.hlApproving') : t('settings.hlApproveBuilderFee')}
-                        </button>
-                      )}
-                    </>
-                  ) : (
-                    <div className="py-4 text-center text-xs text-gray-600">
-                      {t('settings.hlNotConfiguredBuilder')}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Referral Card */}
-              <div className="border border-white/[0.08] bg-white/[0.02] rounded-xl overflow-hidden">
-                <div className={`px-4 py-2.5 flex items-center justify-between border-b ${
-                  hlRevenue.referral?.configured && hlRevenue.referral?.user_referred
-                    ? 'border-emerald-500/10 bg-emerald-500/[0.03]'
-                    : hlRevenue.referral?.configured
-                      ? 'border-yellow-500/10 bg-yellow-500/[0.03]'
-                      : 'border-red-500/10 bg-red-500/[0.03]'
-                }`}>
-                  <div className="flex items-center gap-2">
-                    <UserCheck size={14} className={
-                      hlRevenue.referral?.configured && hlRevenue.referral?.user_referred
-                        ? 'text-emerald-400/70'
-                        : hlRevenue.referral?.configured ? 'text-yellow-400/70' : 'text-red-400/70'
-                    } />
-                    <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
-                      {t('settings.hlReferral')}
-                    </span>
-                  </div>
-                  <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${
-                    hlRevenue.referral?.configured && hlRevenue.referral?.user_referred
-                      ? 'bg-emerald-500/10 text-emerald-400'
-                      : hlRevenue.referral?.configured
-                        ? 'bg-yellow-500/10 text-yellow-400'
-                        : 'bg-red-500/10 text-red-400'
-                  }`}>
-                    {hlRevenue.referral?.configured && hlRevenue.referral?.user_referred
-                      ? t('settings.hlReferred')
-                      : hlRevenue.referral?.configured
-                        ? t('settings.hlNotReferred')
-                        : t('settings.notConfigured')
-                    }
-                  </span>
-                </div>
-                <div className="px-4 py-3 space-y-1">
-                  {hlRevenue.referral?.configured ? (
-                    <>
-                      <div className="flex items-center justify-between py-1.5 px-1.5 rounded-lg hover:bg-white/[0.04] transition-colors">
-                        <span className="text-xs text-gray-400">{t('settings.hlReferralCodeLabel')}</span>
-                        <span className="text-xs text-white font-mono">{hlRevenue.referral.code}</span>
-                      </div>
-                      <div className="flex items-center justify-between py-1.5 px-1.5 rounded-lg hover:bg-white/[0.04] transition-colors">
-                        <span className="text-xs text-gray-400">{t('settings.hlUserReferred')}</span>
-                        <div className="flex items-center gap-1.5">
-                          <span className={`w-1.5 h-1.5 rounded-full ${hlRevenue.referral.user_referred ? 'bg-emerald-400' : 'bg-yellow-400 animate-pulse'}`} />
-                          <span className={`text-xs ${hlRevenue.referral.user_referred ? 'text-emerald-400' : 'text-yellow-400'}`}>
-                            {hlRevenue.referral.user_referred ? t('settings.hlReferred') : t('settings.hlNotReferred')}
-                          </span>
-                        </div>
-                      </div>
-                      {!hlRevenue.referral.user_referred && hlRevenue.referral.link && (
-                        <a href={hlRevenue.referral.link} target="_blank" rel="noopener noreferrer"
-                          className="flex items-center justify-center gap-2 w-full mt-2 px-3 py-2 text-xs bg-blue-600/20 text-blue-400 rounded-lg border border-blue-600/30 hover:bg-blue-600/30 transition-colors">
-                          <ExternalLink size={12} />
-                          {t('settings.hlRegisterReferral')}
-                        </a>
-                      )}
-                    </>
-                  ) : (
-                    <div className="py-4 text-center text-xs text-gray-600">
-                      {t('settings.hlNotConfiguredReferral')}
-                    </div>
-                  )}
-                </div>
               </div>
             </div>
           )}

@@ -781,17 +781,18 @@ class TestRefreshEndpointLogic:
 
         result = await refresh_endpoint(request=mock_request, body=body, db=mock_db)
 
-        # Verify new access token has correct data (tv incremented by rotation)
+        # Verify new access token has correct data (tv stays the same —
+        # token_version is only bumped for security events, not routine refreshes)
         access_payload = decode_token(result.access_token)
         assert access_payload["sub"] == "10"
         assert access_payload["role"] == "admin"
-        assert access_payload["tv"] == 8  # rotated: 7 + 1
+        assert access_payload["tv"] == 7  # unchanged: no rotation on refresh
         assert access_payload["type"] == "access"
 
-        # Verify new refresh token has correct data (tv incremented by rotation)
+        # Verify new refresh token has correct data (tv unchanged)
         refresh_payload = decode_token(result.refresh_token)
         assert refresh_payload["sub"] == "10"
-        assert refresh_payload["tv"] == 8  # rotated: 7 + 1
+        assert refresh_payload["tv"] == 7  # unchanged: no rotation on refresh
         assert refresh_payload["type"] == "refresh"
 
 
