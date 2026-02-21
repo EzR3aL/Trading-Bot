@@ -9,6 +9,25 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.15.0] - 2026-02-21
+
+### Hinzugefuegt
+- **Englische Anleitungen:** Alle 13 Guides vollstaendig ins Englische uebersetzt (Anleitungen/en/)
+- **Anleitungen-Index:** README.md mit Links zu allen Guides (DE + EN)
+- **PDF-Export Template:** generate-pdf.html mit Trading Department Branding
+- **Professional README.md:** GitHub-Uebersicht komplett neu geschrieben
+
+### Entfernt
+- **execute_signal.py geloescht:** Deprecated Datei die geloeschtes TradingBot-Modul referenzierte
+- **_write_test.js geloescht:** Temporaeres Test-Generator-Skript
+- **35 __pycache__ Verzeichnisse bereinigt**
+- **9 stale Remote-Branches geloescht**
+
+### Geaendert
+- **.gitignore/.dockerignore:** .ruff_cache/ hinzugefuegt
+
+---
+
 ## [3.14.1] - 2026-02-21
 
 ### Sicherheit
