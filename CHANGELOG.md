@@ -9,6 +9,15 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.14.1] - 2026-02-21
+
+### Sicherheit
+- **Login Rate Limit verschaerft:** Von 10/min auf 5/min fuer Brute-Force-Schutz
+- **Exchange-Test Rate Limit verschaerft:** Von 10/min auf 3/min
+- **SQL Injection Fix:** Migration-Code verwendet jetzt Whitelist-validierte Identifier mit Quoting
+
+---
+
 ## [3.14.0] - 2026-02-21
 
 ### Sicherheit
