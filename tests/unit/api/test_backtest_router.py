@@ -8,7 +8,7 @@ delete_run, concurrent limit, validation, and auth requirements.
 import json
 import os
 import sys
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import patch
 
@@ -170,8 +170,8 @@ async def completed_run(session_factory, user, sample_metrics):
                 "reason": "Signal detected",
                 "confidence": 80,
             }]),
-            created_at=datetime.utcnow() - timedelta(hours=1),
-            completed_at=datetime.utcnow(),
+            created_at=datetime.now(timezone.utc) - timedelta(hours=1),
+            completed_at=datetime.now(timezone.utc),
         )
         session.add(run)
         await session.commit()
@@ -192,7 +192,7 @@ async def other_user_run(session_factory, other_user):
             end_date=datetime(2025, 3, 1),
             initial_capital=5000.0,
             status="completed",
-            created_at=datetime.utcnow(),
+            created_at=datetime.now(timezone.utc),
         )
         session.add(run)
         await session.commit()
@@ -215,7 +215,7 @@ async def pending_runs(session_factory, user):
                 end_date=datetime(2025, 6, 1),
                 initial_capital=10000.0,
                 status="pending" if i < 2 else "running",
-                created_at=datetime.utcnow(),
+                created_at=datetime.now(timezone.utc),
             )
             session.add(run)
             runs.append(run)

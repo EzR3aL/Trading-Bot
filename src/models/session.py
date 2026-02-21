@@ -98,6 +98,9 @@ async def _run_sqlite_migrations(conn) -> None:
         "ALTER TABLE exchange_connections ADD COLUMN affiliate_verified_at DATETIME",
         # Affiliate link UID requirement flag
         "ALTER TABLE affiliate_links ADD COLUMN uid_required BOOLEAN NOT NULL DEFAULT 0",
+        # Account lockout columns (v3.13)
+        "ALTER TABLE users ADD COLUMN failed_login_attempts INTEGER DEFAULT 0",
+        "ALTER TABLE users ADD COLUMN locked_until DATETIME",
         # Security: clear deprecated plaintext webhook URLs from user_configs
         "UPDATE user_configs SET discord_webhook_url = NULL WHERE discord_webhook_url IS NOT NULL",
         # Backtest runs table

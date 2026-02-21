@@ -15,7 +15,7 @@ Decomposed into focused mixins:
 
 import asyncio
 import json
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, List, Optional
 
 
@@ -37,11 +37,13 @@ from src.bot.notifications import NotificationsMixin  # noqa: E402
 from src.bot.pnl import calculate_pnl  # noqa: F401, E402 — re-export for backward compat
 from src.bot.position_monitor import PositionMonitorMixin  # noqa: E402
 from src.bot.rotation_manager import RotationManagerMixin  # noqa: E402
+from src.bot.trade_closer import TradeCloserMixin  # noqa: E402
 from src.bot.trade_executor import TradeExecutorMixin  # noqa: E402
 
 from src.exchanges.base import ExchangeClient  # noqa: E402
 from src.exchanges.factory import create_exchange_client  # noqa: E402
 from src.models.database import BotConfig, ExchangeConnection, LLMConnection, TradeRecord  # noqa: E402
+from src.models.enums import BotStatus  # noqa: E402
 from src.models.session import get_session  # noqa: E402
 from src.risk.risk_manager import RiskManager  # noqa: E402
 from src.strategy import BaseStrategy, StrategyRegistry  # noqa: E402
@@ -59,6 +61,7 @@ class BotWorker(
     TradeExecutorMixin,
     PositionMonitorMixin,
     RotationManagerMixin,
+    TradeCloserMixin,
     HyperliquidGatesMixin,
     NotificationsMixin,
 ):
@@ -82,7 +85,7 @@ class BotWorker(
         self._owns_scheduler = scheduler is None  # Only stop if we created it
         self._task: Optional[asyncio.Task] = None
 
-        self.status = "idle"  # idle | starting | running | error | stopped
+        self.status = BotStatus.IDLE
         self.error_message: Optional[str] = None
         self.started_at: Optional[datetime] = None
         self.last_analysis: Optional[datetime] = None
@@ -119,7 +122,7 @@ class BotWorker(
         Returns:
             True if initialization succeeded
         """
-        self.status = "starting"
+        self.status = BotStatus.STARTING
 
         try:
             # Load bot config
@@ -132,7 +135,7 @@ class BotWorker(
 
                 if not self._config:
                     self.error_message = f"BotConfig {self.bot_config_id} not found"
-                    self.status = "error"
+                    self.status = BotStatus.ERROR
                     return False
 
                 # Load exchange connection
@@ -146,7 +149,7 @@ class BotWorker(
 
                 if not conn:
                     self.error_message = f"No API keys for {self._config.exchange_type}"
-                    self.status = "error"
+                    self.status = BotStatus.ERROR
                     return False
 
                 # Create exchange client(s) based on mode
@@ -164,7 +167,7 @@ class BotWorker(
                 if mode in ("demo", "both"):
                     if not conn.demo_api_key_encrypted:
                         self.error_message = f"No demo API keys for {self._config.exchange_type}"
-                        self.status = "error"
+                        self.status = BotStatus.ERROR
                         return False
                     self._demo_client = create_exchange_client(
                         exchange_type=self._config.exchange_type,
@@ -178,7 +181,7 @@ class BotWorker(
                 if mode in ("live", "both"):
                     if not conn.api_key_encrypted:
                         self.error_message = f"No live API keys for {self._config.exchange_type}"
-                        self.status = "error"
+                        self.status = BotStatus.ERROR
                         return False
                     self._live_client = create_exchange_client(
                         exchange_type=self._config.exchange_type,
@@ -213,7 +216,7 @@ class BotWorker(
                     llm_conn = llm_conn_result.scalar_one_or_none()
                     if not llm_conn:
                         self.error_message = f"No API key configured for LLM provider: {llm_provider}. Go to Settings → LLM Keys."
-                        self.status = "error"
+                        self.status = BotStatus.ERROR
                         return False
                     strategy_params["llm_api_key"] = decrypt_value(llm_conn.api_key_encrypted)
 
@@ -282,7 +285,7 @@ class BotWorker(
 
         except Exception as e:
             self.error_message = str(e)
-            self.status = "error"
+            self.status = BotStatus.ERROR
             logger.error(f"[Bot:{self.bot_config_id}] Init failed: {e}")
             return False
 
@@ -372,13 +375,13 @@ class BotWorker(
 
     async def start(self):
         """Start the bot's strategy loop."""
-        if self.status == "running":
+        if self.status == BotStatus.RUNNING:
             return
 
         if self._owns_scheduler and self._scheduler and not self._scheduler.running:
             self._scheduler.start()
-        self.status = "running"
-        self.started_at = datetime.utcnow()
+        self.status = BotStatus.RUNNING
+        self.started_at = datetime.now(timezone.utc)
         self.error_message = None
 
         # Run initial analysis
@@ -432,7 +435,7 @@ class BotWorker(
             except Exception as e:
                 logger.debug("Error closing live client for bot %s: %s", self.bot_config_id, e)
 
-        self.status = "stopped"
+        self.status = BotStatus.STOPPED
         logger.info(f"[Bot:{self.bot_config_id}] Stopped")
 
     async def _analyze_and_trade_safe(self):
@@ -453,7 +456,7 @@ class BotWorker(
                     f"Pausing for 60s before next attempt."
                 )
                 # Only notify once at the transition to error status
-                if self.status != "error":
+                if self.status != BotStatus.ERROR:
                     err_msg = f"5 consecutive errors: {str(e)[:300]}"
                     bot_ctx = f"Bot: {self._config.name}"
                     await self._send_notification(lambda n, m=err_msg, c=bot_ctx: n.send_error(
@@ -461,7 +464,7 @@ class BotWorker(
                         error_message=m,
                         details=c, context=c,
                     ))
-                self.status = "error"
+                self.status = BotStatus.ERROR
                 await asyncio.sleep(60)
                 # Verify scheduler is still alive — restart if crashed (only if we own it)
                 if self._owns_scheduler and self._scheduler and not self._scheduler.running:
@@ -474,7 +477,7 @@ class BotWorker(
                     f"[Bot:{self.bot_config_id}] Resuming from error state after cooldown "
                     f"(allowing 2 more attempts before next pause)"
                 )
-                self.status = "running"
+                self.status = BotStatus.RUNNING
                 self._consecutive_errors = 3  # Allow 2 more tries before next pause
 
     def _calculate_asset_budgets(self, total_balance: float, trading_pairs: list[str]) -> dict[str, float]:
@@ -569,7 +572,7 @@ class BotWorker(
             except Exception as e:
                 logger.error(f"{log_prefix} Error analyzing {symbol}: {e}")
 
-        self.last_analysis = datetime.utcnow()
+        self.last_analysis = datetime.now(timezone.utc)
 
     def _get_symbol_lock(self, symbol: str) -> asyncio.Lock:
         """Get or create a per-symbol lock to prevent duplicate position opening."""
@@ -625,13 +628,13 @@ class BotWorker(
         # Signal deduplication — prevent duplicate trades from rapid re-analysis
         dedup_key = f"{symbol}:{signal.direction.value}:{signal.entry_price:.2f}"
         if dedup_key in self._last_signal_keys:
-            elapsed = (datetime.utcnow() - self._last_signal_keys[dedup_key]).total_seconds()
+            elapsed = (datetime.now(timezone.utc) - self._last_signal_keys[dedup_key]).total_seconds()
             if elapsed < 60:  # Ignore duplicate signals within 60s
                 logger.info(f"{log_prefix} Duplicate signal for {dedup_key} ({elapsed:.0f}s ago), skipping")
                 return
-        self._last_signal_keys[dedup_key] = datetime.utcnow()
+        self._last_signal_keys[dedup_key] = datetime.now(timezone.utc)
         # Prune stale entries (>5min old) to prevent unbounded growth
-        cutoff = datetime.utcnow() - timedelta(minutes=5)
+        cutoff = datetime.now(timezone.utc) - timedelta(minutes=5)
         self._last_signal_keys = {k: v for k, v in self._last_signal_keys.items() if v > cutoff}
 
         # Execute on appropriate clients

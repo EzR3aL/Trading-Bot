@@ -9,7 +9,7 @@ providers, settings helpers). This ensures actual router code is exercised.
 import json
 import os
 import sys
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import AsyncGenerator
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -1738,7 +1738,7 @@ class TestGetRevenueSummary:
                     order_id=f"order_{i}",
                     status="closed",
                     builder_fee=0.5,
-                    entry_time=datetime.utcnow() - timedelta(days=5),
+                    entry_time=datetime.now(timezone.utc) - timedelta(days=5),
                 ))
             await session.commit()
 
@@ -1847,7 +1847,7 @@ class TestListAffiliateUids:
                 user_id=admin_user.id, exchange_type="weex",
                 affiliate_uid="22222",
                 affiliate_verified=True,
-                affiliate_verified_at=datetime.utcnow(),
+                affiliate_verified_at=datetime.now(timezone.utc),
             ))
             await session.commit()
 
@@ -1873,7 +1873,7 @@ class TestListAffiliateUids:
             session.add(ExchangeConnection(
                 user_id=admin_user.id, exchange_type="weex",
                 affiliate_uid="22222", affiliate_verified=True,
-                affiliate_verified_at=datetime.utcnow(),
+                affiliate_verified_at=datetime.now(timezone.utc),
             ))
             await session.commit()
 
@@ -1897,7 +1897,7 @@ class TestListAffiliateUids:
             session.add(ExchangeConnection(
                 user_id=admin_user.id, exchange_type="weex",
                 affiliate_uid="22222", affiliate_verified=True,
-                affiliate_verified_at=datetime.utcnow(),
+                affiliate_verified_at=datetime.now(timezone.utc),
             ))
             await session.commit()
 
@@ -2037,7 +2037,7 @@ class TestVerifyAffiliateUid:
             conn = ExchangeConnection(
                 user_id=user.id, exchange_type="bitget",
                 affiliate_uid="12345", affiliate_verified=True,
-                affiliate_verified_at=datetime.utcnow(),
+                affiliate_verified_at=datetime.now(timezone.utc),
             )
             session.add(conn)
             await session.commit()

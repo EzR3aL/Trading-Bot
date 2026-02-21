@@ -32,9 +32,9 @@ async def get_portfolio_summary(
     db: AsyncSession = Depends(get_db),
 ):
     """Aggregated PnL summary grouped by exchange."""
-    from datetime import datetime, timedelta
+    from datetime import datetime, timedelta, timezone
 
-    since = datetime.utcnow() - timedelta(days=days)
+    since = datetime.now(timezone.utc) - timedelta(days=days)
 
     filters = [
         TradeRecord.user_id == user.id,
@@ -147,9 +147,9 @@ async def get_portfolio_daily(
     db: AsyncSession = Depends(get_db),
 ):
     """Daily PnL breakdown per exchange for stacked charts."""
-    from datetime import datetime, timedelta
+    from datetime import datetime, timedelta, timezone
 
-    since = datetime.utcnow() - timedelta(days=days)
+    since = datetime.now(timezone.utc) - timedelta(days=days)
 
     filters = [
         TradeRecord.user_id == user.id,

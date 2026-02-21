@@ -10,6 +10,7 @@ import {
   Activity, AlertCircle, CheckCircle, Bot,
 } from 'lucide-react'
 import api from '../api/client'
+import { getApiErrorMessage } from '../utils/api-error'
 import { useFilterStore } from '../stores/filterStore'
 import { ExchangeIcon } from '../components/ui/ExchangeLogo'
 import PnlCell from '../components/ui/PnlCell'
@@ -174,8 +175,8 @@ export default function BotDetail() {
         })
       }
       setError('')
-    } catch (err: any) {
-      setError(err.response?.data?.detail || t('common.error'))
+    } catch (err) {
+      setError(getApiErrorMessage(err, t('common.error')))
     } finally {
       setLoading(false)
     }
@@ -197,8 +198,8 @@ export default function BotDetail() {
     try {
       await api.post(`/bots/${botId}/start`)
       await fetchData()
-    } catch (err: any) {
-      setError(err.response?.data?.detail || t('bots.failedStart'))
+    } catch (err) {
+      setError(getApiErrorMessage(err, t('bots.failedStart')))
     }
   }
 
@@ -206,8 +207,8 @@ export default function BotDetail() {
     try {
       await api.post(`/bots/${botId}/stop`)
       await fetchData()
-    } catch (err: any) {
-      setError(err.response?.data?.detail || t('bots.failedStop'))
+    } catch (err) {
+      setError(getApiErrorMessage(err, t('bots.failedStop')))
     }
   }
 

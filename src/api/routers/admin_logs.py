@@ -1,6 +1,6 @@
 """Admin-only endpoints for querying audit logs and event logs."""
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Query
@@ -101,7 +101,7 @@ async def purge_audit_logs(
     db: AsyncSession = Depends(get_db),
 ):
     """Purge audit logs older than N days."""
-    cutoff = datetime.utcnow() - timedelta(days=days)
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
     result = await db.execute(
         delete(AuditLog).where(AuditLog.created_at < cutoff)
     )
@@ -185,7 +185,7 @@ async def event_stats(
     db: AsyncSession = Depends(get_db),
 ):
     """Event counts by type and severity for last 24h, 7d, 30d."""
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     periods = [
         ("24h", now - timedelta(hours=24)),
         ("7d", now - timedelta(days=7)),
@@ -228,7 +228,7 @@ async def purge_events(
     db: AsyncSession = Depends(get_db),
 ):
     """Purge event logs older than N days."""
-    cutoff = datetime.utcnow() - timedelta(days=days)
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
     result = await db.execute(
         delete(EventLog).where(EventLog.created_at < cutoff)
     )

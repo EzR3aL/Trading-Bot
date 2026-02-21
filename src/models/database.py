@@ -39,6 +39,8 @@ class User(Base):
     is_active = Column(Boolean, default=True)
     token_version = Column(Integer, default=0, nullable=False, server_default="0")
     language = Column(String(10), default="de")  # de | en
+    failed_login_attempts = Column(Integer, default=0, server_default="0")
+    locked_until = Column(DateTime(timezone=True), nullable=True)
     is_deleted = Column(Boolean, default=False)
     deleted_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, server_default=func.now())

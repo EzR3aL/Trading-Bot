@@ -1,9 +1,7 @@
 """Position monitoring logic for BotWorker (mixin)."""
 
-import asyncio
-from datetime import datetime
+from datetime import datetime, timezone
 
-from src.bot.pnl import calculate_pnl
 from src.exchanges.base import ExchangeClient
 from src.models.database import TradeRecord
 from src.models.session import get_session
@@ -71,8 +69,6 @@ class PositionMonitorMixin:
             ticker = await client.get_ticker(trade.symbol)
             exit_price = ticker.last_price if ticker else trade.entry_price
 
-            pnl, pnl_percent = calculate_pnl(trade.side, trade.entry_price, exit_price, trade.size)
-
             # Determine exit reason
             if abs(exit_price - trade.take_profit) < trade.entry_price * 0.002:
                 exit_reason = "TAKE_PROFIT"
@@ -82,113 +78,55 @@ class PositionMonitorMixin:
                 exit_reason = "EXTERNAL_CLOSE"
 
             # Fetch trading fees from exchange (entry + exit via orders-history)
+            fees = trade.fees
             try:
                 if trade.order_id:
-                    trade.fees = await client.get_trade_total_fees(
+                    fees = await client.get_trade_total_fees(
                         symbol=trade.symbol,
                         entry_order_id=trade.order_id,
                         close_order_id=trade.close_order_id,
                     )
             except Exception as e:
                 logger.debug(f"{log_prefix} Could not fetch fees for trade #{trade.id}: {e}")
-                trade.fees = 0
+                fees = 0
 
             # Fetch funding fees (charged every 8h while position was open)
+            funding_paid = trade.funding_paid
             try:
                 if trade.entry_time:
                     entry_ms = int(trade.entry_time.timestamp() * 1000)
-                    exit_ms = int(datetime.utcnow().timestamp() * 1000)
-                    trade.funding_paid = await client.get_funding_fees(
+                    exit_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
+                    funding_paid = await client.get_funding_fees(
                         symbol=trade.symbol,
                         start_time_ms=entry_ms,
                         end_time_ms=exit_ms,
                     )
             except Exception as e:
                 logger.debug(f"{log_prefix} Could not fetch funding fees for trade #{trade.id}: {e}")
-                trade.funding_paid = 0
+                funding_paid = 0
 
             # Calculate builder fee revenue (Hyperliquid only)
+            builder_fee = 0
             try:
                 if hasattr(client, 'calculate_builder_fee'):
-                    trade.builder_fee = client.calculate_builder_fee(
+                    builder_fee = client.calculate_builder_fee(
                         entry_price=trade.entry_price,
                         exit_price=exit_price,
                         size=trade.size,
                     )
-                else:
-                    trade.builder_fee = 0
-            except Exception as e:  # pragma: no cover — defensive fee calc fallback
+            except Exception as e:  # pragma: no cover -- defensive fee calc fallback
                 logger.debug(f"{log_prefix} Could not calculate builder fee for trade #{trade.id}: {e}")
-                trade.builder_fee = 0
 
-            # Update trade record
-            trade.exit_price = exit_price
-            trade.pnl = pnl
-            trade.pnl_percent = pnl_percent
-            trade.exit_time = datetime.utcnow()
-            trade.exit_reason = exit_reason
-            trade.status = "closed"
-
-            # Record in risk manager
-            self._risk_manager.record_trade_exit(
-                symbol=trade.symbol,
-                side=trade.side,
-                size=trade.size,
-                entry_price=trade.entry_price,
-                exit_price=exit_price,
-                fees=trade.fees or 0,
-                funding_paid=trade.funding_paid or 0,
-                reason=exit_reason,
-                order_id=trade.order_id,
-            )
-
-            logger.info(
-                f"{log_prefix} Trade #{trade.id} closed: {exit_reason} | "
-                f"PnL: ${pnl:.2f} ({pnl_percent:+.2f}%)"
-            )
-
-            # Broadcast via WebSocket
-            try:
-                from src.api.websocket.manager import ws_manager
-                asyncio.create_task(ws_manager.broadcast_to_user(
-                    self._config.user_id,
-                    "trade_closed",
-                    {
-                        "bot_id": self.bot_config_id,
-                        "trade_id": trade.id,
-                        "symbol": trade.symbol,
-                        "side": trade.side,
-                        "entry_price": trade.entry_price,
-                        "exit_price": exit_price,
-                        "pnl": pnl,
-                        "pnl_percent": pnl_percent,
-                        "exit_reason": exit_reason,
-                        "demo_mode": trade.demo_mode,
-                    },
-                ))
-            except Exception as e:
-                logger.debug("WS broadcast failed: %s", e)
-
-            # Send notifications (Discord + Telegram)
-            duration_minutes = None
-            if trade.entry_time:
-                duration_minutes = int((datetime.utcnow() - trade.entry_time).total_seconds() / 60)
-            await self._send_notification(lambda n: n.send_trade_exit(
-                symbol=trade.symbol,
-                side=trade.side,
-                size=trade.size,
-                entry_price=trade.entry_price,
-                exit_price=exit_price,
-                pnl=pnl,
-                pnl_percent=pnl_percent,
-                fees=trade.fees or 0,
-                funding_paid=trade.funding_paid or 0,
-                reason=exit_reason,
-                order_id=trade.order_id or "",
-                duration_minutes=duration_minutes,
-                demo_mode=trade.demo_mode,
+            # Use shared close-and-record logic
+            await self._close_and_record_trade(
+                trade,
+                exit_price,
+                exit_reason,
+                fees=fees,
+                funding_paid=funding_paid,
+                builder_fee=builder_fee,
                 strategy_reason=f"[{self._config.name}]",
-            ))
+            )
 
         except Exception as e:
             logger.error(f"{log_prefix} Handle closed position error: {e}")

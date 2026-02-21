@@ -21,7 +21,7 @@ All aiosqlite interactions are mocked so no real database is used.
 """
 
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
@@ -974,7 +974,7 @@ class TestGetFundingStats:
         # Assert - default days=30 cutoff
         call_args = mock_db.execute.call_args
         params = call_args[0][1]
-        # The cutoff is computed as (utcnow - 30 days).isoformat()
+        # The cutoff is computed as (now(timezone.utc) - 30 days).isoformat()
         # We verify it's a single-element tuple (no symbol filter)
         assert len(params) == 1
 
@@ -1161,7 +1161,7 @@ class TestGetFundingRateHistory:
         assert params[0] == "BTCUSDT"
         # cutoff should be about 7 days before now
         cutoff = datetime.fromisoformat(params[1])
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         diff = now - cutoff
         assert 6.9 < diff.total_seconds() / 86400 < 7.1
 
@@ -1177,7 +1177,7 @@ class TestIsFundingTime:
     @patch("src.data.funding_tracker.datetime")
     def test_is_funding_time_at_midnight(self, mock_datetime, mock_mkdir):
         # Arrange - 00:02 UTC
-        mock_datetime.utcnow.return_value = datetime(2025, 6, 1, 0, 2, 0)
+        mock_datetime.now.return_value = datetime(2025, 6, 1, 0, 2, 0)
         tracker = FundingTracker()
 
         # Act
@@ -1190,7 +1190,7 @@ class TestIsFundingTime:
     @patch("src.data.funding_tracker.datetime")
     def test_is_funding_time_at_8am(self, mock_datetime, mock_mkdir):
         # Arrange - 08:03 UTC
-        mock_datetime.utcnow.return_value = datetime(2025, 6, 1, 8, 3, 0)
+        mock_datetime.now.return_value = datetime(2025, 6, 1, 8, 3, 0)
         tracker = FundingTracker()
 
         # Act
@@ -1203,7 +1203,7 @@ class TestIsFundingTime:
     @patch("src.data.funding_tracker.datetime")
     def test_is_funding_time_at_4pm(self, mock_datetime, mock_mkdir):
         # Arrange - 16:04 UTC
-        mock_datetime.utcnow.return_value = datetime(2025, 6, 1, 16, 4, 0)
+        mock_datetime.now.return_value = datetime(2025, 6, 1, 16, 4, 0)
         tracker = FundingTracker()
 
         # Act
@@ -1216,7 +1216,7 @@ class TestIsFundingTime:
     @patch("src.data.funding_tracker.datetime")
     def test_is_funding_time_at_exact_funding_hour(self, mock_datetime, mock_mkdir):
         # Arrange - 00:00 UTC (exactly)
-        mock_datetime.utcnow.return_value = datetime(2025, 6, 1, 0, 0, 0)
+        mock_datetime.now.return_value = datetime(2025, 6, 1, 0, 0, 0)
         tracker = FundingTracker()
 
         # Act
@@ -1229,7 +1229,7 @@ class TestIsFundingTime:
     @patch("src.data.funding_tracker.datetime")
     def test_is_not_funding_time_after_5_minutes(self, mock_datetime, mock_mkdir):
         # Arrange - 00:05 UTC (5 minutes past, should be False)
-        mock_datetime.utcnow.return_value = datetime(2025, 6, 1, 0, 5, 0)
+        mock_datetime.now.return_value = datetime(2025, 6, 1, 0, 5, 0)
         tracker = FundingTracker()
 
         # Act
@@ -1242,7 +1242,7 @@ class TestIsFundingTime:
     @patch("src.data.funding_tracker.datetime")
     def test_is_not_funding_time_random_hour(self, mock_datetime, mock_mkdir):
         # Arrange - 10:30 UTC (not near any funding time)
-        mock_datetime.utcnow.return_value = datetime(2025, 6, 1, 10, 30, 0)
+        mock_datetime.now.return_value = datetime(2025, 6, 1, 10, 30, 0)
         tracker = FundingTracker()
 
         # Act
@@ -1255,7 +1255,7 @@ class TestIsFundingTime:
     @patch("src.data.funding_tracker.datetime")
     def test_is_not_funding_time_just_before_funding_hour(self, mock_datetime, mock_mkdir):
         # Arrange - 07:59 UTC (1 minute before 8am funding)
-        mock_datetime.utcnow.return_value = datetime(2025, 6, 1, 7, 59, 0)
+        mock_datetime.now.return_value = datetime(2025, 6, 1, 7, 59, 0)
         tracker = FundingTracker()
 
         # Act
@@ -1268,7 +1268,7 @@ class TestIsFundingTime:
     @patch("src.data.funding_tracker.datetime")
     def test_is_not_funding_time_6_minutes_past(self, mock_datetime, mock_mkdir):
         # Arrange - 16:06 UTC (6 minutes past, outside 5-minute window)
-        mock_datetime.utcnow.return_value = datetime(2025, 6, 1, 16, 6, 0)
+        mock_datetime.now.return_value = datetime(2025, 6, 1, 16, 6, 0)
         tracker = FundingTracker()
 
         # Act
@@ -1355,7 +1355,7 @@ class TestGetDailyFundingSummary:
         call_args = mock_db.execute.call_args
         params = call_args[0][1]
         cutoff = datetime.fromisoformat(params[0])
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         diff = now - cutoff
         assert 29.9 < diff.total_seconds() / 86400 < 30.1
 
@@ -1375,7 +1375,7 @@ class TestGetDailyFundingSummary:
         call_args = mock_db.execute.call_args
         params = call_args[0][1]
         cutoff = datetime.fromisoformat(params[0])
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         diff = now - cutoff
         assert 6.9 < diff.total_seconds() / 86400 < 7.1
 

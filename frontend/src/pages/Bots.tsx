@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
 import { toBlob } from 'html-to-image'
 import api from '../api/client'
+import { getApiErrorMessage } from '../utils/api-error'
 import { useFilterStore } from '../stores/filterStore'
 import type { LlmConnection } from '../types'
 import { useThemeStore } from '../stores/themeStore'
@@ -565,15 +566,15 @@ export default function Bots() {
   const { demoFilter } = useFilterStore()
   const { addToast } = useToastStore()
 
-  const handleStartError = (err: any) => {
-    const detail = err.response?.data?.detail
+  const handleStartError = (err: unknown) => {
+    const detail = (err as any)?.response?.data?.detail
     if (detail && typeof detail === 'object' && detail.message) {
       const msg = detail.affiliate_url
         ? `${detail.message}\n${detail.affiliate_url}`
         : detail.message
       addToast('error', msg, 10000)
     } else {
-      addToast('error', typeof detail === 'string' ? detail : t('bots.failedStart'))
+      addToast('error', getApiErrorMessage(err, t('bots.failedStart')))
     }
   }
   const [bots, setBots] = useState<BotStatus[]>([])
@@ -644,7 +645,7 @@ export default function Bots() {
       await api.post(`/bots/${id}/start`)
       await fetchBots()
       addToast('success', t('bots.start') + ' - OK')
-    } catch (err: any) {
+    } catch (err) {
       handleStartError(err)
     }
     setActionLoading(null)
@@ -661,7 +662,7 @@ export default function Bots() {
         await api.post(`/bots/${botId}/start`)
         await fetchBots()
         addToast('success', t('bots.start') + ' - OK')
-      } catch (err: any) {
+      } catch (err) {
         handleStartError(err)
       }
       setActionLoading(null)
@@ -674,8 +675,8 @@ export default function Bots() {
       await api.post(`/bots/${id}/stop`)
       await fetchBots()
       addToast('info', t('bots.stop') + ' - OK')
-    } catch (err: any) {
-      addToast('error', err.response?.data?.detail || t('bots.failedStop'))
+    } catch (err) {
+      addToast('error', getApiErrorMessage(err, t('bots.failedStop')))
     }
     setActionLoading(null)
   }
@@ -686,8 +687,8 @@ export default function Bots() {
       await api.delete(`/bots/${id}`)
       await fetchBots()
       addToast('success', t('bots.deleted', { name }))
-    } catch (err: any) {
-      addToast('error', err.response?.data?.detail || t('bots.failedDelete'))
+    } catch (err) {
+      addToast('error', getApiErrorMessage(err, t('bots.failedDelete')))
     }
   }
 
@@ -696,8 +697,8 @@ export default function Bots() {
       await api.post(`/bots/${id}/duplicate`)
       await fetchBots()
       addToast('success', t('bots.duplicated'))
-    } catch (err: any) {
-      addToast('error', err.response?.data?.detail || t('bots.failedDuplicate'))
+    } catch (err) {
+      addToast('error', getApiErrorMessage(err, t('bots.failedDuplicate')))
     }
   }
 
@@ -708,8 +709,8 @@ export default function Bots() {
       await api.post(`/bots/${botId}/apply-preset/${presetId}`)
       await fetchBots()
       addToast('success', t('bots.presetApplied'))
-    } catch (err: any) {
-      addToast('error', err.response?.data?.detail || t('bots.presetSwitchFailed'))
+    } catch (err) {
+      addToast('error', getApiErrorMessage(err, t('bots.presetSwitchFailed')))
     }
     setActionLoading(null)
   }

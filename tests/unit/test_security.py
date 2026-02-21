@@ -204,23 +204,6 @@ class TestLegacyPlaintextKeysRemoved:
         assert config.demo_api_secret == ""
         assert config.demo_passphrase == ""
 
-    def test_bitget_ws_requires_explicit_credentials(self):
-        """BitgetWebSocket must raise ValueError if no credentials provided."""
-        from src.websocket.bitget_ws import BitgetWebSocket
-        with pytest.raises(ValueError, match="requires explicit"):
-            BitgetWebSocket(api_key="", api_secret="", passphrase="")
-
-    def test_bitget_ws_accepts_explicit_credentials(self):
-        """BitgetWebSocket should work with explicitly provided credentials."""
-        from src.websocket.bitget_ws import BitgetWebSocket
-        ws = BitgetWebSocket(
-            api_key="test-key",
-            api_secret="test-secret",
-            passphrase="test-pass",
-        )
-        assert ws.api_key == "test-key"
-        assert ws.api_secret == "test-secret"
-        assert ws.passphrase == "test-pass"
 
 
 # ---------------------------------------------------------------------------

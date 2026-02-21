@@ -7,7 +7,7 @@ PnL calculations, Discord notifications, and get_trade single-trade view).
 
 import os
 import sys
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -114,8 +114,8 @@ async def closed_trade(session_factory, user, bot_config):
             pnl_percent=1.05,
             fees=0.5,
             funding_paid=0.1,
-            entry_time=datetime.utcnow() - timedelta(hours=24),
-            exit_time=datetime.utcnow() - timedelta(hours=12),
+            entry_time=datetime.now(timezone.utc) - timedelta(hours=24),
+            exit_time=datetime.now(timezone.utc) - timedelta(hours=12),
             exit_reason="TAKE_PROFIT",
             exchange="bitget",
             demo_mode=True,
@@ -143,7 +143,7 @@ async def open_trade(session_factory, user, bot_config):
             reason="ETH short",
             order_id="order_002",
             status="open",
-            entry_time=datetime.utcnow() - timedelta(hours=6),
+            entry_time=datetime.now(timezone.utc) - timedelta(hours=6),
             exchange="bitget",
             demo_mode=True,
         )
@@ -354,8 +354,8 @@ async def test_list_trades_filter_by_bot_name(client, auth_headers, closed_trade
 
 async def test_list_trades_filter_by_date_range(client, auth_headers, closed_trade):
     """Filter trades by date range."""
-    yesterday = (datetime.utcnow() - timedelta(days=2)).strftime("%Y-%m-%d")
-    today = datetime.utcnow().strftime("%Y-%m-%d")
+    yesterday = (datetime.now(timezone.utc) - timedelta(days=2)).strftime("%Y-%m-%d")
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     resp = await client.get(
         "/api/trades",
         headers=auth_headers,

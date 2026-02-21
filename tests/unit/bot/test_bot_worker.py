@@ -17,7 +17,7 @@ Tests cover:
 import asyncio
 import json
 import pytest
-from datetime import datetime
+from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import sys
@@ -93,7 +93,7 @@ def _make_mock_signal():
         stop_loss=94000.0,
         reason="Test signal",
         metrics_snapshot={"test": True},
-        timestamp=datetime.utcnow(),
+        timestamp=datetime.now(timezone.utc),
     )
 
 

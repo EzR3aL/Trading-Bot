@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Shield, ShieldOff, LayoutGrid, List, Trash2, UserCheck, UserX } from 'lucide-react'
 import api from '../api/client'
+import { getApiErrorMessage } from '../utils/api-error'
 import FilterDropdown from '../components/ui/FilterDropdown'
 import { useAuthStore } from '../stores/authStore'
 import { useToastStore } from '../stores/toastStore'
@@ -37,8 +38,8 @@ export default function AdminUsers() {
       setUsername(''); setPassword(''); setEmail(''); setRole('user')
       loadUsers()
       addToast('success', t('admin.userCreated', 'User created'))
-    } catch (err: any) {
-      addToast('error', err.response?.data?.detail || t('common.error', 'Error'))
+    } catch (err) {
+      addToast('error', getApiErrorMessage(err, t('common.error', 'Error')))
     }
   }
 

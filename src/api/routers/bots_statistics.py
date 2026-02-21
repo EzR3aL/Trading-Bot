@@ -1,7 +1,7 @@
 """Bot statistics endpoints: per-bot stats and cross-bot comparison."""
 
 import json
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -34,7 +34,7 @@ async def get_bot_statistics(
     if not config:
         raise HTTPException(status_code=404, detail="Bot not found")
 
-    since = datetime.utcnow() - timedelta(days=days)
+    since = datetime.now(timezone.utc) - timedelta(days=days)
 
     # Daily PnL series (cumulative)
     daily_filters = [
@@ -178,7 +178,7 @@ async def compare_bots_performance(
     configs_result = await db.execute(bot_query)
     configs = configs_result.scalars().all()
 
-    since = datetime.utcnow() - timedelta(days=days)
+    since = datetime.now(timezone.utc) - timedelta(days=days)
     bot_ids = [c.id for c in configs]
     if not bot_ids:
         return {"days": days, "bots": []}

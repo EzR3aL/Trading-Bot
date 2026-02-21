@@ -1,6 +1,6 @@
 """Tests for LLMSignalStrategy -- prompt validation, should_trade, generate_signal, close."""
 
-from datetime import datetime
+from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -36,7 +36,7 @@ def _make_signal(confidence=80, entry_price=100.0, direction=SignalDirection.LON
         stop_loss=98.5,
         reason="test",
         metrics_snapshot={},
-        timestamp=datetime.utcnow(),
+        timestamp=datetime.now(timezone.utc),
     )
 
 

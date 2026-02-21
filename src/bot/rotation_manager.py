@@ -1,9 +1,8 @@
 """Trade rotation logic for BotWorker (mixin)."""
 
 import json
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
-from src.bot.pnl import calculate_pnl
 from src.exchanges.base import ExchangeClient
 from src.models.database import TradeRecord
 from src.models.session import get_session
@@ -34,7 +33,7 @@ class RotationManagerMixin:
             return
 
         log_prefix = f"[Bot:{self.bot_config_id}]"
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
 
         async with get_session() as session:
             from sqlalchemy import select
@@ -49,18 +48,18 @@ class RotationManagerMixin:
             if not open_trades:
                 # In rotation_only mode, if no open trades exist, open one now
                 if self._config.schedule_type == "rotation_only":
-                    logger.info(f"{log_prefix} ROTATION: No open trades — triggering analysis")
+                    logger.info(f"{log_prefix} ROTATION: No open trades -- triggering analysis")
                     pairs = json.loads(self._config.trading_pairs) if isinstance(self._config.trading_pairs, str) else self._config.trading_pairs
                     rot_balance = await self._client.get_account_balance()
                     rot_budgets = self._calculate_asset_budgets(rot_balance.available, pairs)
                     for symbol in pairs:
                         can_trade_sym, sym_reason = self._risk_manager.can_trade(symbol)
-                        if not can_trade_sym:  # pragma: no cover — rotation risk skip
-                            logger.info(f"{log_prefix} ROTATION: Skipping {symbol} — {sym_reason}")
+                        if not can_trade_sym:  # pragma: no cover -- rotation risk skip
+                            logger.info(f"{log_prefix} ROTATION: Skipping {symbol} -- {sym_reason}")
                             continue
                         try:
                             await self._analyze_symbol(symbol, force=True, asset_budget=rot_budgets.get(symbol))
-                        except Exception as e:  # pragma: no cover — rotation analysis error
+                        except Exception as e:  # pragma: no cover -- rotation analysis error
                             logger.error(f"{log_prefix} ROTATION: Analysis failed for {symbol}: {e}")
                 return
 
@@ -79,7 +78,7 @@ class RotationManagerMixin:
                         # Build today's anchor at start_time UTC
                         anchor = now.replace(hour=sh, minute=sm, second=0, microsecond=0)
                         # If anchor is in the future, go back one day
-                        if anchor > now:  # pragma: no cover — time-dependent edge
+                        if anchor > now:  # pragma: no cover -- time-dependent edge
                             anchor = anchor - timedelta(days=1)
                         # How many intervals since anchor?
                         elapsed_since_anchor = (now - anchor).total_seconds() / 60
@@ -90,7 +89,7 @@ class RotationManagerMixin:
                         if trade.entry_time < last_boundary:
                             should_rotate = True
                             elapsed = (now - trade.entry_time).total_seconds() / 60
-                    except (ValueError, IndexError):  # pragma: no cover — rotation parse fallback
+                    except (ValueError, IndexError):  # pragma: no cover -- rotation parse fallback
                         # Fall back to elapsed-based
                         elapsed = (now - trade.entry_time).total_seconds() / 60
                         should_rotate = elapsed >= rotation_minutes
@@ -99,18 +98,18 @@ class RotationManagerMixin:
                     elapsed = (now - trade.entry_time).total_seconds() / 60
                     should_rotate = elapsed >= rotation_minutes
 
-                if not should_rotate:  # pragma: no cover — rotation timing skip
+                if not should_rotate:  # pragma: no cover -- rotation timing skip
                     continue
 
                 elapsed = (now - trade.entry_time).total_seconds() / 60
                 logger.info(
                     f"{log_prefix} ROTATION: Trade #{trade.id} {trade.symbol} "
-                    f"open for {elapsed:.0f}min (limit: {rotation_minutes}min) — closing"
+                    f"open for {elapsed:.0f}min (limit: {rotation_minutes}min) -- closing"
                 )
 
                 # Force-close the trade
                 client = self._get_client(trade.demo_mode)
-                if not client:  # pragma: no cover — no client available
+                if not client:  # pragma: no cover -- no client available
                     continue
 
                 closed = await self._force_close_trade(trade, client, session)
@@ -118,8 +117,8 @@ class RotationManagerMixin:
                 if closed:
                     # Check risk limits before re-opening
                     can_reopen, reopen_reason = self._risk_manager.can_trade(trade.symbol)
-                    if not can_reopen:  # pragma: no cover — rotation re-open blocked
-                        logger.info(f"{log_prefix} ROTATION: Trade closed but no re-open — {reopen_reason}")
+                    if not can_reopen:  # pragma: no cover -- rotation re-open blocked
+                        logger.info(f"{log_prefix} ROTATION: Trade closed but no re-open -- {reopen_reason}")
                         continue
 
                     # Re-analyze and open a new trade for this symbol
@@ -142,6 +141,7 @@ class RotationManagerMixin:
         """
         log_prefix = f"[Bot:{self.bot_config_id}]"
         mode_str = "DEMO" if trade.demo_mode else "LIVE"
+        rotation_reason = f"[{self._config.name}] Auto-rotation ({self._config.rotation_interval_minutes}min)"
 
         try:
             # Close position via exchange client
@@ -162,20 +162,9 @@ class RotationManagerMixin:
                 except Exception as e:
                     logger.warning("%s Failed to get ticker for %s during rotation: %s", log_prefix, trade.symbol, e)
 
-                pnl, pnl_percent = calculate_pnl(trade.side, trade.entry_price, exit_price, trade.size)
-
-                trade.exit_price = exit_price
-                trade.pnl = pnl
-                trade.pnl_percent = pnl_percent
-                trade.exit_time = datetime.utcnow()
-                trade.exit_reason = "ROTATION_ALREADY_CLOSED"
-                trade.status = "closed"
-
-                self._risk_manager.record_trade_exit(
-                    symbol=trade.symbol, side=trade.side, size=trade.size,
-                    entry_price=trade.entry_price, exit_price=exit_price,
-                    fees=trade.fees or 0, funding_paid=trade.funding_paid or 0,
-                    reason="ROTATION_ALREADY_CLOSED", order_id=trade.order_id,
+                await self._close_and_record_trade(
+                    trade, exit_price, "ROTATION_ALREADY_CLOSED",
+                    strategy_reason=rotation_reason,
                 )
                 return True
 
@@ -191,40 +180,10 @@ class RotationManagerMixin:
                 except Exception as e:
                     logger.warning("Failed to get exit price ticker for %s: %s", trade.symbol, e)
 
-            pnl, pnl_percent = calculate_pnl(trade.side, trade.entry_price, exit_price, trade.size)
-
-            # Update trade record
-            trade.exit_price = exit_price
-            trade.pnl = pnl
-            trade.pnl_percent = pnl_percent
-            trade.exit_time = datetime.utcnow()
-            trade.exit_reason = "ROTATION"
-            trade.status = "closed"
-
-            # Record in risk manager
-            self._risk_manager.record_trade_exit(
-                symbol=trade.symbol, side=trade.side, size=trade.size,
-                entry_price=trade.entry_price, exit_price=exit_price,
-                fees=trade.fees or 0, funding_paid=trade.funding_paid or 0,
-                reason="ROTATION", order_id=trade.order_id,
+            await self._close_and_record_trade(
+                trade, exit_price, "ROTATION",
+                strategy_reason=rotation_reason,
             )
-
-            logger.info(
-                f"{log_prefix} [{mode_str}] ROTATION closed trade #{trade.id}: "
-                f"{trade.side.upper()} {trade.symbol} | PnL: ${pnl:.2f} ({pnl_percent:+.2f}%)"
-            )
-
-            # Send notifications (Discord + Telegram)
-            duration_minutes = int((datetime.utcnow() - trade.entry_time).total_seconds() / 60) if trade.entry_time else None
-            await self._send_notification(lambda n: n.send_trade_exit(
-                symbol=trade.symbol, side=trade.side, size=trade.size,
-                entry_price=trade.entry_price, exit_price=exit_price,
-                pnl=pnl, pnl_percent=pnl_percent,
-                fees=trade.fees or 0, funding_paid=trade.funding_paid or 0,
-                reason="ROTATION", order_id=trade.order_id or "",
-                duration_minutes=duration_minutes, demo_mode=trade.demo_mode,
-                strategy_reason=f"[{self._config.name}] Auto-rotation ({self._config.rotation_interval_minutes}min)",
-            ))
 
             return True
 
@@ -236,17 +195,9 @@ class RotationManagerMixin:
                     f"{log_prefix} [{mode_str}] ROTATION: Trade #{trade.id} {trade.symbol} "
                     f"position not found on exchange. Marking as ROTATION_ALREADY_CLOSED."
                 )
-                trade.exit_price = trade.entry_price
-                trade.pnl = 0
-                trade.pnl_percent = 0
-                trade.exit_time = datetime.utcnow()
-                trade.exit_reason = "ROTATION_ALREADY_CLOSED"
-                trade.status = "closed"
-                self._risk_manager.record_trade_exit(
-                    symbol=trade.symbol, side=trade.side, size=trade.size,
-                    entry_price=trade.entry_price, exit_price=trade.entry_price,
-                    fees=trade.fees or 0, funding_paid=trade.funding_paid or 0,
-                    reason="ROTATION_ALREADY_CLOSED", order_id=trade.order_id,
+                await self._close_and_record_trade(
+                    trade, trade.entry_price, "ROTATION_ALREADY_CLOSED",
+                    strategy_reason=rotation_reason,
                 )
                 return True
 

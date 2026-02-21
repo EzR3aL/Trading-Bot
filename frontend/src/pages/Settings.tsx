@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { ChevronDown, Search, CheckCircle, Clock, Users, Activity, Wifi, WifiOff, Shield, Zap, BarChart3, TrendingUp, Database, Cpu, Hammer, UserCheck, DollarSign, ExternalLink, Settings2 } from 'lucide-react'
 import Pagination from '../components/ui/Pagination'
 import api from '../api/client'
+import { getApiErrorMessage } from '../utils/api-error'
 import { useAuthStore } from '../stores/authStore'
 import type { ConnectionsStatusResponse, ExchangeConnectionStatus, ExchangeInfo, ServiceStatus, LlmConnection, AdminUidEntry, HlRevenueInfo } from '../types'
 import { ExchangeIcon } from '../components/ui/ExchangeLogo'
@@ -295,8 +296,8 @@ export default function Settings() {
     try {
       const res = await api.post(`/config/llm-connections/${provider}/test`)
       showMessage(`${t('settings.connectionSuccess')}: ${res.data.display_name}`)
-    } catch (err: any) {
-      showMessage(err?.response?.data?.detail || t('common.error'))
+    } catch (err) {
+      showMessage(getApiErrorMessage(err, t('common.error')))
     }
     setSaving(false)
   }
@@ -360,8 +361,8 @@ export default function Settings() {
       await loadHlAdminSettings()
       // Refresh revenue view too
       loadHlRevenue()
-    } catch (err: any) {
-      showMessage(err?.response?.data?.detail || t('settings.hlSettingsFailed'))
+    } catch (err) {
+      showMessage(getApiErrorMessage(err, t('settings.hlSettingsFailed')))
     }
     setHlAdminSaving(false)
   }
@@ -423,8 +424,8 @@ export default function Settings() {
       setConnections(connRes.data.connections || [])
       setUidForms(prev => ({ ...prev, [exchangeType]: '' }))
       showMessage(res.data.verified ? t('affiliate.uidVerified') : t('affiliate.uidSaved'))
-    } catch (err: any) {
-      showMessage(err.response?.data?.detail || t('common.error'))
+    } catch (err) {
+      showMessage(getApiErrorMessage(err, t('common.error')))
     }
     setSaving(false)
   }
@@ -444,8 +445,8 @@ export default function Settings() {
       await loadHlReferralInfo()
       const connRes = await api.get('/config/exchange-connections')
       setConnections(connRes.data.connections || [])
-    } catch (err: any) {
-      showMessage(err.response?.data?.detail || t('common.error'))
+    } catch (err) {
+      showMessage(getApiErrorMessage(err, t('common.error')))
     }
     setHlVerifying(false)
   }
@@ -466,8 +467,8 @@ export default function Settings() {
       await api.put(`/config/admin/affiliate-uids/${connectionId}/verify`, { verified })
       await loadAdminUids(adminUidPage, adminUidSearch, adminUidFilter)
       showMessage(verified ? t('affiliate.uidVerified') : t('affiliate.uidRejected'))
-    } catch (err: any) {
-      showMessage(err.response?.data?.detail || t('common.error'))
+    } catch (err) {
+      showMessage(getApiErrorMessage(err, t('common.error')))
     }
   }
 

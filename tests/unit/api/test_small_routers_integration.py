@@ -15,7 +15,7 @@ Coverage targets:
 import json
 import os
 import sys
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import patch
 
@@ -234,7 +234,7 @@ async def backtest_run(session_factory, user):
                 "reason": "Signal detected",
                 "confidence": 80,
             }]),
-            created_at=datetime.utcnow() - timedelta(hours=2),
+            created_at=datetime.now(timezone.utc) - timedelta(hours=2),
             completed_at=datetime(2024, 3, 1, 12, 0),
         )
         session.add(run)
@@ -256,7 +256,7 @@ async def pending_backtest_run(session_factory, user):
             end_date=datetime(2024, 9, 1),
             initial_capital=5000.0,
             status="pending",
-            created_at=datetime.utcnow(),
+            created_at=datetime.now(timezone.utc),
         )
         session.add(run)
         await session.commit()
@@ -279,7 +279,7 @@ async def three_pending_runs(session_factory, user):
                 end_date=datetime(2024, 6, 1),
                 initial_capital=10000.0,
                 status="pending" if i < 2 else "running",
-                created_at=datetime.utcnow(),
+                created_at=datetime.now(timezone.utc),
             )
             session.add(run)
             runs.append(run)
@@ -292,7 +292,7 @@ async def three_pending_runs(session_factory, user):
 @pytest_asyncio.fixture
 async def trade_data(session_factory, user):
     """Insert closed trades for statistics testing."""
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     trades = [
         TradeRecord(
             user_id=user.id,

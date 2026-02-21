@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { LayoutGrid, List, Pencil, Copy, Trash2, ArrowLeft } from 'lucide-react'
 import api from '../api/client'
+import { getApiErrorMessage } from '../utils/api-error'
 import NumInput from '../components/ui/NumInput'
 import type { Preset } from '../types'
 
@@ -87,9 +88,9 @@ export default function Presets() {
         setPresets(prev => [...prev, res.data])
       }
       resetForm()
-    } catch (err: any) {
-      const detail = err.response?.data?.detail
-      const msg = typeof detail === 'string' ? detail : detail ? JSON.stringify(detail) : (err.message || 'Unknown error')
+    } catch (err) {
+      const detail = (err as any)?.response?.data?.detail
+      const msg = typeof detail === 'string' ? detail : detail ? JSON.stringify(detail) : getApiErrorMessage(err, t('common.saveFailed'))
       setError(msg)
     } finally {
       setSaving(false)

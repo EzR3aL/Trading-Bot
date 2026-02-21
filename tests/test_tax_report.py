@@ -7,7 +7,7 @@ and empty year results.
 
 import os
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -24,7 +24,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 @pytest.mark.asyncio
 async def test_get_tax_report_current_year(client, auth_headers, sample_trades):
     """Get tax report for the current year returns correct data."""
-    current_year = datetime.utcnow().year
+    current_year = datetime.now(timezone.utc).year
     response = await client.get(
         "/api/tax-report",
         headers=auth_headers,
@@ -49,7 +49,7 @@ async def test_get_tax_report_default_year(client, auth_headers, sample_trades):
     response = await client.get("/api/tax-report", headers=auth_headers)
     assert response.status_code == 200
     data = response.json()
-    assert data["year"] == datetime.utcnow().year
+    assert data["year"] == datetime.now(timezone.utc).year
 
 
 @pytest.mark.asyncio
@@ -209,7 +209,7 @@ async def test_download_csv_empty_year(client, auth_headers, test_user):
 @pytest.mark.asyncio
 async def test_download_csv_content_disposition(client, auth_headers, sample_trades):
     """CSV download has correct Content-Disposition header."""
-    current_year = datetime.utcnow().year
+    current_year = datetime.now(timezone.utc).year
     response = await client.get(
         "/api/tax-report/csv",
         headers=auth_headers,

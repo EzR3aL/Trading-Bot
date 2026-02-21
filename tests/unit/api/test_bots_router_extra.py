@@ -11,7 +11,7 @@ Targets: lines 56-1186 of bots.py (all endpoint function bodies).
 import json
 import os
 import sys
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -619,7 +619,7 @@ class TestListBots:
 
     async def test_list_bots_with_trade_stats(self, factory, admin_user, sample_bot, mock_orchestrator):
         """Trade statistics aggregation (lines 273-297)."""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         async with factory() as session:
             session.add_all([
                 TradeRecord(
@@ -651,7 +651,7 @@ class TestListBots:
 
     async def test_list_bots_with_trade_stats_demo_filter(self, factory, admin_user, sample_bot, mock_orchestrator):
         """Trade stats filtered by demo_mode (lines 274-276, 291-292)."""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         async with factory() as session:
             session.add(TradeRecord(
                 user_id=admin_user.id, bot_config_id=sample_bot.id, symbol="BTCUSDT",
@@ -669,7 +669,7 @@ class TestListBots:
 
     async def test_list_bots_with_llm_signal(self, factory, admin_user, mock_orchestrator):
         """LLM signal bot metrics (lines 301-410)."""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         async with factory() as session:
             llm_bot = BotConfig(
                 user_id=admin_user.id, name="LLM Bot", strategy_type="llm_signal",
@@ -727,7 +727,7 @@ class TestListBots:
 
     async def test_list_bots_llm_with_demo_filter(self, factory, admin_user, mock_orchestrator):
         """LLM metrics filtered by demo_mode (lines 303-360)."""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         async with factory() as session:
             llm_bot = BotConfig(
                 user_id=admin_user.id, name="LLM Demo Bot", strategy_type="llm_signal",
@@ -757,7 +757,7 @@ class TestListBots:
 
     async def test_list_bots_llm_bad_metrics_snapshot(self, factory, admin_user, mock_orchestrator):
         """LLM bot with invalid metrics_snapshot JSON (lines 324, 374)."""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         async with factory() as session:
             llm_bot = BotConfig(
                 user_id=admin_user.id, name="LLM Bad Metrics", strategy_type="llm_signal",
@@ -786,7 +786,7 @@ class TestListBots:
 
     async def test_list_bots_llm_provider_from_strategy_params(self, factory, admin_user, mock_orchestrator):
         """LLM provider fallback from strategy_params (lines 384-393)."""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         async with factory() as session:
             llm_bot = BotConfig(
                 user_id=admin_user.id, name="LLM Params Bot", strategy_type="llm_signal",
@@ -1683,7 +1683,7 @@ class TestStatistics:
 
     async def test_statistics_with_trades(self, factory, admin_user, sample_bot):
         """Full statistics with trades (lines 928-1050)."""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         async with factory() as session:
             session.add_all([
                 TradeRecord(
@@ -1754,7 +1754,7 @@ class TestStatistics:
 
     async def test_statistics_with_demo_filter(self, factory, admin_user, sample_bot):
         """Statistics with demo_mode filter (lines 935-936, 975-976, 999-1000)."""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         async with factory() as session:
             session.add_all([
                 TradeRecord(
@@ -1820,7 +1820,7 @@ class TestComparePerformance:
 
     async def test_compare_with_trades(self, factory, admin_user, sample_bot):
         """Compare with trade data (lines 1074-1183)."""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         async with factory() as session:
             session.add_all([
                 TradeRecord(
@@ -1894,7 +1894,7 @@ class TestComparePerformance:
 
     async def test_compare_llm_provider_from_strategy_params(self, factory, admin_user):
         """Compare detects LLM provider from strategy_params (lines 1141-1148)."""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         async with factory() as session:
             llm_bot = BotConfig(
                 user_id=admin_user.id, name="LLM Compare Bot",
@@ -1940,7 +1940,7 @@ class TestComparePerformance:
 
     async def test_compare_last_trade_direction(self, factory, admin_user, sample_bot):
         """Compare includes last trade direction and confidence (lines 1127-1136)."""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         async with factory() as session:
             session.add(TradeRecord(
                 user_id=admin_user.id, bot_config_id=sample_bot.id, symbol="BTCUSDT",
@@ -1964,7 +1964,7 @@ class TestComparePerformance:
 
     async def test_compare_with_demo_filter_trades(self, factory, admin_user, sample_bot):
         """Compare with demo_mode filters trade stats (lines 1080-1081, 1110-1111, 1129)."""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         async with factory() as session:
             session.add(TradeRecord(
                 user_id=admin_user.id, bot_config_id=sample_bot.id, symbol="BTCUSDT",
@@ -1997,7 +1997,7 @@ class TestLLMLegacyDetection:
 
     async def test_list_bots_llm_bad_strategy_params(self, factory, admin_user, mock_orchestrator):
         """LLM bot with bad strategy_params JSON (lines 392-393)."""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         async with factory() as session:
             llm_bot = BotConfig(
                 user_id=admin_user.id, name="LLM Bad SP", strategy_type="llm_signal",
@@ -2030,7 +2030,7 @@ class TestLLMLegacyDetection:
 
     async def test_list_bots_llm_legacy_reason_detection(self, factory, admin_user, mock_orchestrator):
         """LLM bot with legacy reason-based provider detection (lines 396-410)."""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         async with factory() as session:
             llm_bot = BotConfig(
                 user_id=admin_user.id, name="LLM Legacy", strategy_type="llm_signal",
@@ -2075,7 +2075,7 @@ class TestLLMLegacyDetection:
 
     async def test_compare_llm_legacy_reason_detection(self, factory, admin_user, mock_orchestrator):
         """Compare endpoint legacy LLM provider from reason (lines 1149-1164)."""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         async with factory() as session:
             llm_bot = BotConfig(
                 user_id=admin_user.id, name="LLM Legacy Compare", strategy_type="llm_signal",
@@ -2119,7 +2119,7 @@ class TestLLMLegacyDetection:
 
     async def test_compare_llm_bad_strategy_params(self, factory, admin_user, mock_orchestrator):
         """Compare LLM with bad strategy_params JSON (lines 1147-1148)."""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         async with factory() as session:
             llm_bot = BotConfig(
                 user_id=admin_user.id, name="LLM Bad SP Compare", strategy_type="llm_signal",

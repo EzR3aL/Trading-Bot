@@ -3,7 +3,7 @@
 import logging
 import aiohttp
 from typing import Optional
-from datetime import datetime
+from datetime import datetime, timezone
 
 from src.notifications.retry import async_retry
 
@@ -78,7 +78,7 @@ class TelegramNotifier:
             lines.append(f"Take Profit: <code>{take_profit}</code>")
         if stop_loss:
             lines.append(f"Stop Loss: <code>{stop_loss}</code>")
-        lines.append(f"\n\U0001f550 {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}")
+        lines.append(f"\n\U0001f550 {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}")
         return await self._send_message("\n".join(lines))
 
     async def send_trade_exit(
@@ -112,7 +112,7 @@ class TelegramNotifier:
             lines.append(f"Strategy: <code>{strategy}</code>")
         if duration:
             lines.append(f"Duration: <code>{duration}</code>")
-        lines.append(f"\n\U0001f550 {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}")
+        lines.append(f"\n\U0001f550 {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}")
         return await self._send_message("\n".join(lines))
 
     async def send_error(self, error_message: str, context: str = "", **kwargs) -> bool:
@@ -124,7 +124,7 @@ class TelegramNotifier:
         ]
         if context:
             lines.append(f"\nContext: {context}")
-        lines.append(f"\n\U0001f550 {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}")
+        lines.append(f"\n\U0001f550 {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}")
         return await self._send_message("\n".join(lines))
 
     async def send_bot_status(self, bot_name: str, status: str, details: str = "", **kwargs) -> bool:
@@ -138,7 +138,7 @@ class TelegramNotifier:
         ]
         if details:
             lines.append(f"Details: {details}")
-        lines.append(f"\n\U0001f550 {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}")
+        lines.append(f"\n\U0001f550 {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}")
         return await self._send_message("\n".join(lines))
 
     async def send_alert(
@@ -162,7 +162,7 @@ class TelegramNotifier:
             f"Current: <code>{current_value:,.2f}</code>",
             f"Threshold: <code>{threshold:,.2f}</code>",
             f"\n{message}",
-            f"\n\U0001f550 {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}",
+            f"\n\U0001f550 {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}",
         ])
         return await self._send_message("\n".join(lines))
 
@@ -200,7 +200,7 @@ class TelegramNotifier:
             f"\U0001f4b3 Fees: <code>{total_fees:,.2f}</code>",
             f"\U0001f504 Funding: <code>{total_funding:+,.2f}</code>",
             f"\U0001f4c9 Max Drawdown: <code>{max_drawdown:.2f}%</code>",
-            f"\n\U0001f550 {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}",
+            f"\n\U0001f550 {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}",
         ]
         return await self._send_message("\n".join(lines))
 
@@ -223,7 +223,7 @@ class TelegramNotifier:
             lines.append(f"Current: <code>{current_value:.2f}</code>")
         if threshold is not None:
             lines.append(f"Threshold: <code>{threshold:.2f}</code>")
-        lines.append(f"\n\U0001f550 {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}")
+        lines.append(f"\n\U0001f550 {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}")
         return await self._send_message("\n".join(lines))
 
     async def send_test_message(self) -> bool:
@@ -231,5 +231,5 @@ class TelegramNotifier:
         return await self._send_message(
             "\u2705 <b>Telegram Notification Test</b>\n\n"
             "Your Telegram notifications are configured correctly!\n"
-            f"\U0001f550 {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}"
+            f"\U0001f550 {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}"
         )
