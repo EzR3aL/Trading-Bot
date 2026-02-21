@@ -19,9 +19,9 @@ async def list_funding_payments(
     db: AsyncSession = Depends(get_db),
 ):
     """List funding payments for the current user."""
-    from datetime import datetime, timedelta
+    from datetime import datetime, timedelta, timezone
 
-    since = datetime.utcnow() - timedelta(days=days)
+    since = datetime.now(timezone.utc) - timedelta(days=days)
 
     query = (
         select(FundingPayment)
@@ -58,9 +58,9 @@ async def funding_summary(
     db: AsyncSession = Depends(get_db),
 ):
     """Get funding payment summary."""
-    from datetime import datetime, timedelta
+    from datetime import datetime, timedelta, timezone
 
-    since = datetime.utcnow() - timedelta(days=days)
+    since = datetime.now(timezone.utc) - timedelta(days=days)
 
     result = await db.execute(
         select(

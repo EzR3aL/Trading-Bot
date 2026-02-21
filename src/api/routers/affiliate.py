@@ -1,7 +1,7 @@
 """Affiliate link CRUD endpoints (admin-managed, globally visible)."""
 
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
@@ -153,7 +153,7 @@ async def verify_uid(
 
     conn.affiliate_uid = uid
     conn.affiliate_verified = True
-    conn.affiliate_verified_at = datetime.utcnow()
+    conn.affiliate_verified_at = datetime.now(timezone.utc)
 
     await db.flush()
 

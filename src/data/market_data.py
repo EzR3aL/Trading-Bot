@@ -15,7 +15,7 @@ Fetches:
 import asyncio
 import time
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, Dict, Any, Tuple, List
 
 import aiohttp
@@ -872,7 +872,7 @@ class MarketDataFetcher:
         from datetime import timedelta
 
         try:
-            now = datetime.utcnow()
+            now = datetime.now(timezone.utc)
             start = now - timedelta(hours=lookback_hours)
 
             params = {

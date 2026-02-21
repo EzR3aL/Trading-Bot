@@ -9,7 +9,7 @@ import asyncio
 import json
 import os
 import sys
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import AsyncGenerator
 from unittest.mock import AsyncMock, MagicMock
@@ -239,7 +239,7 @@ async def sample_trades(test_engine, test_user) -> list:
     session_factory = async_sessionmaker(
         test_engine, class_=AsyncSession, expire_on_commit=False
     )
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     trades_data = [
         TradeRecord(
             user_id=test_user.id,
@@ -380,7 +380,7 @@ async def sample_bot_with_trades(test_engine, test_user, sample_bot_config) -> B
     session_factory = async_sessionmaker(
         test_engine, class_=AsyncSession, expire_on_commit=False
     )
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     trades = [
         TradeRecord(
             user_id=test_user.id,

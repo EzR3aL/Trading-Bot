@@ -115,7 +115,16 @@ class TestStartBot:
     @pytest.mark.asyncio
     async def test_start_initialization_failure_raises(self):
         orch = BotOrchestrator()
-        with patch("src.bot.orchestrator.BotWorker") as MockWorker:
+        mock_session = AsyncMock()
+        mock_config = MagicMock(user_id=1)
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = mock_config
+        mock_session.execute = AsyncMock(return_value=mock_result)
+
+        with patch("src.bot.orchestrator.BotWorker") as MockWorker, \
+             patch("src.bot.orchestrator.get_session") as mock_get_session:
+            mock_get_session.return_value.__aenter__ = AsyncMock(return_value=mock_session)
+            mock_get_session.return_value.__aexit__ = AsyncMock(return_value=False)
             worker_instance = AsyncMock()
             worker_instance.initialize = AsyncMock(return_value=False)
             worker_instance.error_message = "Config not found"
@@ -163,7 +172,16 @@ class TestStartBotSuccess:
     @pytest.mark.asyncio
     async def test_start_bot_success(self):
         orch = BotOrchestrator()
-        with patch("src.bot.orchestrator.BotWorker") as MockWorker:
+        mock_session = AsyncMock()
+        mock_config = MagicMock(user_id=1)
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = mock_config
+        mock_session.execute = AsyncMock(return_value=mock_result)
+
+        with patch("src.bot.orchestrator.BotWorker") as MockWorker, \
+             patch("src.bot.orchestrator.get_session") as mock_get_session:
+            mock_get_session.return_value.__aenter__ = AsyncMock(return_value=mock_session)
+            mock_get_session.return_value.__aexit__ = AsyncMock(return_value=False)
             worker_instance = AsyncMock()
             worker_instance.initialize = AsyncMock(return_value=True)
             worker_instance.start = AsyncMock()
@@ -193,7 +211,16 @@ class TestRestartBot:
         old_worker.stop = AsyncMock(side_effect=fake_stop)
         orch._workers[1] = old_worker
 
-        with patch("src.bot.orchestrator.BotWorker") as MockWorker:
+        mock_session = AsyncMock()
+        mock_config = MagicMock(user_id=1)
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = mock_config
+        mock_session.execute = AsyncMock(return_value=mock_result)
+
+        with patch("src.bot.orchestrator.BotWorker") as MockWorker, \
+             patch("src.bot.orchestrator.get_session") as mock_get_session:
+            mock_get_session.return_value.__aenter__ = AsyncMock(return_value=mock_session)
+            mock_get_session.return_value.__aexit__ = AsyncMock(return_value=False)
             new_worker = AsyncMock()
             new_worker.initialize = AsyncMock(return_value=True)
             new_worker.start = AsyncMock()
@@ -208,7 +235,16 @@ class TestRestartBot:
     @pytest.mark.asyncio
     async def test_restart_without_existing_worker(self):
         orch = BotOrchestrator()
-        with patch("src.bot.orchestrator.BotWorker") as MockWorker:
+        mock_session = AsyncMock()
+        mock_config = MagicMock(user_id=1)
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = mock_config
+        mock_session.execute = AsyncMock(return_value=mock_result)
+
+        with patch("src.bot.orchestrator.BotWorker") as MockWorker, \
+             patch("src.bot.orchestrator.get_session") as mock_get_session:
+            mock_get_session.return_value.__aenter__ = AsyncMock(return_value=mock_session)
+            mock_get_session.return_value.__aexit__ = AsyncMock(return_value=False)
             worker_instance = AsyncMock()
             worker_instance.initialize = AsyncMock(return_value=True)
             worker_instance.start = AsyncMock()

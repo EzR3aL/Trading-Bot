@@ -7,7 +7,7 @@ for convenience, with clear section headers.
 
 import os
 import sys
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
@@ -350,7 +350,7 @@ async def test_delete_then_list_excludes(client, admin_headers, admin_user, affi
 @pytest_asyncio.fixture
 async def funding_payments(session_factory, regular_user):
     """Insert sample funding payments."""
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     items = [
         FundingPayment(
             user_id=regular_user.id,

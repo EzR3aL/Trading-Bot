@@ -9,6 +9,39 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.14.0] - 2026-02-21
+
+### Sicherheit
+- **Account Lockout:** 5 fehlgeschlagene Login-Versuche sperren Account fuer 15 Minuten
+- **WebSocket token_version Pruefung:** WS-Verbindungen pruefen jetzt Token-Revocation gegen DB
+- **Passwort-Aenderung Endpoint:** PUT /api/auth/change-password mit Rate-Limiting (3/min), revoziert bestehende Tokens
+- **passlib entfernt:** Ungenutzte Dependency entfernt (bcrypt wird direkt verwendet)
+
+### Hinzugefuegt
+- **BotStatus/ExchangeType/TradeStatus/TradeSide Enums:** Typ-sichere String-Enums statt Magic Strings
+- **MAX_BOTS_PER_USER Enforcement:** Orchestrator begrenzt auf 10 laufende Bots pro User
+- **TradeCloserMixin:** Gemeinsame Trade-Close-Logik aus position_monitor und rotation_manager extrahiert
+- **API Error Utility:** Zentrales `getApiErrorMessage()` fuer Frontend Error-Handling
+- **Skip-to-Content Link:** Accessibility-Verbesserung im AppLayout
+- **ChangePasswordRequest Schema:** Pydantic-Schema mit min_length=8 Validierung
+
+### Behoben
+- **164x datetime.utcnow() ersetzt:** Alle Vorkommen durch datetime.now(timezone.utc) ersetzt (47 Dateien)
+- **Timezone-aware Subtraction Fix:** Naive/aware datetime Mismatch in trades.py und trade_closer.py behoben
+- **Hardcoded German Strings:** ~20 deutsche Fallback-Strings in BotBuilder durch i18n-Keys ersetzt
+- **Dashboard Tests geloescht:** Tests fuer geloeschte legacy Dashboard-Module entfernt
+
+### Entfernt
+- **Legacy Module geloescht:** trading_bot.py, trade_database.py, src/dashboard/, src/websocket/ (ersetzt durch FastAPI + Exchange-WS)
+- **Legacy Tests geloescht:** 12 Test-Dateien fuer geloeschte Module entfernt
+
+### Geaendert
+- **Exchange Factory:** Verwendet jetzt ExchangeType Enum statt String-Vergleiche
+- **BotWorker/Orchestrator:** Verwendet jetzt BotStatus Enum statt Magic Strings
+- **main.py --dashboard:** Startet jetzt FastAPI statt legacy Dashboard
+
+---
+
 ## [3.13.0] - 2026-02-21
 
 ### Sicherheit

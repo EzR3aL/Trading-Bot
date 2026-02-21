@@ -6,7 +6,7 @@ Funding rates are paid every 8 hours on most exchanges.
 """
 
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import List, Optional, Dict, Any
 
@@ -152,7 +152,7 @@ class FundingTracker:
             funding_rate: Current funding rate
             next_funding_time: Next funding payment time
         """
-        timestamp = datetime.utcnow().isoformat()
+        timestamp = datetime.now(timezone.utc).isoformat()
         next_time = next_funding_time.isoformat() if next_funding_time else None
 
         try:
@@ -188,7 +188,7 @@ class FundingTracker:
         Returns:
             FundingPayment record
         """
-        timestamp = datetime.utcnow()
+        timestamp = datetime.now(timezone.utc)
 
         # Calculate payment amount
         # Long positions pay when rate is positive, receive when negative
@@ -309,7 +309,7 @@ class FundingTracker:
         Returns:
             FundingStats object
         """
-        cutoff = (datetime.utcnow() - timedelta(days=days)).isoformat()
+        cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
 
         if symbol:
             cursor = await self._db.execute("""
@@ -401,7 +401,7 @@ class FundingTracker:
         Returns:
             List of funding rate records
         """
-        cutoff = (datetime.utcnow() - timedelta(days=days)).isoformat()
+        cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
 
         cursor = await self._db.execute("""
             SELECT timestamp, funding_rate
@@ -420,7 +420,7 @@ class FundingTracker:
         Returns:
             True if within 5 minutes of funding time
         """
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         current_hour = now.hour
         current_minute = now.minute
 
@@ -440,7 +440,7 @@ class FundingTracker:
         Returns:
             List of daily summaries
         """
-        cutoff = (datetime.utcnow() - timedelta(days=days)).isoformat()
+        cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
 
         cursor = await self._db.execute("""
             SELECT

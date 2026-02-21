@@ -1,7 +1,7 @@
 """Trade history endpoints (user-scoped)."""
 
 from collections import defaultdict
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Query, Request
@@ -239,7 +239,7 @@ async def sync_trades(
                     try:
                         if trade.entry_time:
                             entry_ms = int(trade.entry_time.timestamp() * 1000)
-                            exit_ms = int(datetime.utcnow().timestamp() * 1000)
+                            exit_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
                             trade.funding_paid = await client.get_funding_fees(
                                 symbol=trade.symbol,
                                 start_time_ms=entry_ms,
@@ -253,7 +253,7 @@ async def sync_trades(
                     trade.exit_price = exit_price
                     trade.pnl = round(pnl, 4)
                     trade.pnl_percent = round(pnl_percent, 2)
-                    trade.exit_time = datetime.utcnow()
+                    trade.exit_time = datetime.now(timezone.utc)
                     trade.exit_reason = exit_reason
 
                     closed_trades.append({
@@ -304,7 +304,10 @@ async def sync_trades(
 
                         duration_minutes = None
                         if trade.entry_time:
-                            duration = datetime.utcnow() - trade.entry_time
+                            entry = trade.entry_time
+                            if entry.tzinfo is None:
+                                entry = entry.replace(tzinfo=timezone.utc)
+                            duration = datetime.now(timezone.utc) - entry
                             duration_minutes = int(duration.total_seconds() / 60)
 
                         await notifier.send_trade_exit(

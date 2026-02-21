@@ -9,7 +9,7 @@ Responsibilities:
 """
 
 import asyncio
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, List, Optional
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -17,6 +17,7 @@ from sqlalchemy import select, update
 
 from src.bot.bot_worker import BotWorker
 from src.models.database import BotConfig, BotInstance
+from src.models.enums import BotStatus
 from src.models.session import get_session
 from src.strategy import StrategyRegistry  # noqa: F401 — triggers registration
 from src.strategy.liquidation_hunter import LiquidationHunterStrategy  # noqa: F401 — registers strategy
@@ -54,8 +55,25 @@ class BotOrchestrator:
     async def _start_bot_locked(self, bot_config_id: int) -> bool:
         """Internal: start bot while holding lock."""
         # Check if already running
-        if bot_config_id in self._workers and self._workers[bot_config_id].status == "running":
+        if bot_config_id in self._workers and self._workers[bot_config_id].status == BotStatus.RUNNING:
             raise ValueError(f"Bot {bot_config_id} is already running")
+
+        # Enforce per-user bot limit
+        async with get_session() as session:
+            result = await session.execute(
+                select(BotConfig).where(BotConfig.id == bot_config_id)
+            )
+            config = result.scalar_one_or_none()
+            if config:
+                user_bot_count = sum(
+                    1 for w in self._workers.values()
+                    if w.config and w.config.user_id == config.user_id
+                    and w.status == BotStatus.RUNNING
+                )
+                if user_bot_count >= MAX_BOTS_PER_USER:
+                    raise ValueError(
+                        f"Maximum of {MAX_BOTS_PER_USER} bots per user reached"
+                    )
 
         # Ensure shared scheduler is running
         if not self._scheduler.running:
@@ -175,7 +193,7 @@ class BotOrchestrator:
             stopped = 0
             for bot_id, worker in list(self._workers.items()):
                 if worker.config and worker.config.user_id == user_id:
-                    if worker.status == "running":
+                    if worker.status == BotStatus.RUNNING:
                         await self._stop_bot_locked(bot_id)
                         stopped += 1
             return stopped
@@ -185,7 +203,7 @@ class BotOrchestrator:
         async with self._lock:
             for bot_id in list(self._workers.keys()):
                 worker = self._workers[bot_id]
-                if worker.status == "running":
+                if worker.status == BotStatus.RUNNING:
                     try:
                         await worker.stop()
                     except Exception as e:
@@ -197,7 +215,7 @@ class BotOrchestrator:
                     await session.execute(
                         update(BotInstance).where(
                             BotInstance.is_running.is_(True)
-                        ).values(is_running=False, stopped_at=datetime.utcnow())
+                        ).values(is_running=False, stopped_at=datetime.now(timezone.utc))
                     )
             except Exception as e:
                 logger.error(f"Orchestrator: Error updating DB on shutdown: {e}")
@@ -227,13 +245,13 @@ class BotOrchestrator:
     def is_running(self, bot_config_id: int) -> bool:
         """Check if a specific bot is running."""
         worker = self._workers.get(bot_config_id)
-        return worker is not None and worker.status == "running"
+        return worker is not None and worker.status == BotStatus.RUNNING
 
     def get_running_count(self, user_id: int) -> int:
         """Count running bots for a user."""
         return sum(
             1 for w in self._workers.values()
-            if w.config and w.config.user_id == user_id and w.status == "running"
+            if w.config and w.config.user_id == user_id and w.status == BotStatus.RUNNING
         )
 
     async def _update_instance_state(self, bot_config_id: int, is_running: bool, error_msg: Optional[str] = None):
@@ -255,10 +273,10 @@ class BotOrchestrator:
                     instance.is_running = is_running
                     instance.error_message = error_msg
                     if is_running:
-                        instance.started_at = datetime.utcnow()
+                        instance.started_at = datetime.now(timezone.utc)
                         instance.stopped_at = None
                     else:
-                        instance.stopped_at = datetime.utcnow()
+                        instance.stopped_at = datetime.now(timezone.utc)
                     if config:
                         instance.demo_mode = config.mode in ("demo", "both")
                 else:
@@ -269,7 +287,7 @@ class BotOrchestrator:
                         exchange_type=config.exchange_type if config else "unknown",
                         is_running=is_running,
                         demo_mode=config.mode in ("demo", "both") if config else True,
-                        started_at=datetime.utcnow() if is_running else None,
+                        started_at=datetime.now(timezone.utc) if is_running else None,
                         error_message=error_msg,
                     )
                     session.add(instance)

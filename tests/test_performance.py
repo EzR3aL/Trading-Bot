@@ -8,7 +8,7 @@ and demo_mode filtering in performance contexts.
 
 import os
 import sys
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
@@ -33,7 +33,7 @@ async def multi_day_trades(test_engine, test_user, sample_bot_config):
         test_engine, class_=AsyncSession, expire_on_commit=False
     )
     # Use noon as base time to avoid midnight boundary issues
-    now = datetime.utcnow().replace(hour=12, minute=0, second=0, microsecond=0)
+    now = datetime.now(timezone.utc).replace(hour=12, minute=0, second=0, microsecond=0)
     trades = []
 
     # Day 1: 2 winning trades (demo) - same date, different hours

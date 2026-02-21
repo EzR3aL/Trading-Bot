@@ -2,7 +2,7 @@
 
 import csv
 import io
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Query
@@ -46,7 +46,7 @@ async def get_tax_report(
 ):
     """Get tax report for a given year."""
     if year is None:
-        year = datetime.utcnow().year
+        year = datetime.now(timezone.utc).year
 
     result = await db.execute(_query_trades(user.id, year, demo_mode))
     trades = result.scalars().all()
@@ -89,7 +89,7 @@ async def download_tax_report_csv(
 ):
     """Download tax report as CSV — German tax-compliant format with bilingual headers."""
     if year is None:
-        year = datetime.utcnow().year
+        year = datetime.now(timezone.utc).year
 
     result = await db.execute(_query_trades(user.id, year, demo_mode))
     trades = result.scalars().all()
@@ -102,7 +102,7 @@ async def download_tax_report_csv(
     # ── Header section ──
     writer.writerow(["STEUERREPORT KRYPTOWAEHRUNGSHANDEL / TAX REPORT CRYPTOCURRENCY TRADING"])
     writer.writerow(["Berichtszeitraum / Reporting Period", f"{year}-01-01 bis/to {year}-12-31"])
-    writer.writerow(["Erstellt am / Generated on", datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")])
+    writer.writerow(["Erstellt am / Generated on", datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")])
     mode_label = "Demo" if demo_mode is True else "Live" if demo_mode is False else "Alle/All"
     writer.writerow(["Modus / Mode", mode_label])
     writer.writerow([])

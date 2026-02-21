@@ -12,7 +12,7 @@ Each cycle:
 Based on the myquant.gg approach: stateless, no learning, prompt-driven.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
 from src.ai.providers import get_provider_class
@@ -209,7 +209,7 @@ class LLMSignalStrategy(BaseStrategy):
                     "llm_provider": self.llm_provider_name,
                     "llm_error": safe_error,
                 },
-                timestamp=datetime.utcnow(),
+                timestamp=datetime.now(timezone.utc),
             )
 
         # Convert to SignalDirection
@@ -254,7 +254,7 @@ class LLMSignalStrategy(BaseStrategy):
             stop_loss=round(stop_loss, 2) if stop_loss is not None else None,
             reason=reason,
             metrics_snapshot=metrics_snapshot,
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
         )
 
         logger.info(

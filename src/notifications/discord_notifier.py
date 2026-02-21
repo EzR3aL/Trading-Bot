@@ -8,7 +8,7 @@ Sends formatted trade notifications to a Discord channel including:
 - Risk alerts
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, Dict, Any
 
 import aiohttp
@@ -126,7 +126,7 @@ class DiscordNotifier:
             "description": description,
             "color": color,
             "fields": fields,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
         }
 
         if footer:

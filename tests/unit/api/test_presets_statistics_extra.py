@@ -10,7 +10,7 @@ Covers uncovered lines in:
 import os
 import sys
 import json
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest_asyncio
@@ -153,8 +153,8 @@ async def trade_data(session_factory, user):
                 fees=0.5,
                 funding_paid=0.1,
                 builder_fee=0.2,
-                entry_time=datetime.utcnow() - timedelta(days=5),
-                exit_time=datetime.utcnow() - timedelta(days=4),
+                entry_time=datetime.now(timezone.utc) - timedelta(days=5),
+                exit_time=datetime.now(timezone.utc) - timedelta(days=4),
                 exchange="hyperliquid",
                 demo_mode=False,
             ),
@@ -177,8 +177,8 @@ async def trade_data(session_factory, user):
                 fees=0.3,
                 funding_paid=0.05,
                 builder_fee=0.0,
-                entry_time=datetime.utcnow() - timedelta(days=3),
-                exit_time=datetime.utcnow() - timedelta(days=2),
+                entry_time=datetime.now(timezone.utc) - timedelta(days=3),
+                exit_time=datetime.now(timezone.utc) - timedelta(days=2),
                 exchange="bitget",
                 demo_mode=True,
             ),
@@ -200,7 +200,7 @@ async def funding_data(session_factory, user):
                 position_value=950.0,
                 payment_amount=0.95,
                 side="long",
-                timestamp=datetime.utcnow() - timedelta(days=2),
+                timestamp=datetime.now(timezone.utc) - timedelta(days=2),
             ),
             FundingPayment(
                 user_id=user.id,
@@ -210,7 +210,7 @@ async def funding_data(session_factory, user):
                 position_value=350.0,
                 payment_amount=-0.7,
                 side="short",
-                timestamp=datetime.utcnow() - timedelta(days=1),
+                timestamp=datetime.now(timezone.utc) - timedelta(days=1),
             ),
         ]
         session.add_all(payments)

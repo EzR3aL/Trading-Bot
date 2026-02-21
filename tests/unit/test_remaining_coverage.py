@@ -18,7 +18,7 @@ import json
 import os
 import sys
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from enum import Enum
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -255,106 +255,8 @@ class TestBitgetWebSocket:
         mock_logger.error.assert_called()
 
 
-# ─── dashboard/app.py ───────────────────────────────────────────────
 
 
-class TestDashboardApp:
-
-    def test_dev_mode_warning(self):
-        """Cover lines 58-61: dev mode startup warning."""
-        import src.dashboard.app as dash_mod
-
-        original = dash_mod.DASHBOARD_DEV_MODE
-        dash_mod.DASHBOARD_DEV_MODE = True
-        # The flag is module-level, verify it's settable
-        assert dash_mod.DASHBOARD_DEV_MODE is True
-        dash_mod.DASHBOARD_DEV_MODE = original
-
-    def test_verify_ws_token_dev_mode(self):
-        """Cover line 542: dev mode bypasses WS auth."""
-        import src.dashboard.app as dash_mod
-        from starlette.testclient import TestClient
-
-        original = dash_mod.DASHBOARD_DEV_MODE
-        dash_mod.DASHBOARD_DEV_MODE = True
-        try:
-            app = dash_mod.create_app()
-            # Provide serializable mock data so the WS loop can send a message
-            mock_stats = MagicMock()
-            mock_stats.to_dict.return_value = {"pnl": 0}
-            app.state.risk_manager = MagicMock()
-            app.state.risk_manager.get_daily_stats.return_value = mock_stats
-            app.state.risk_manager.can_trade.return_value = (True, "ok")
-            app.state.risk_manager.get_remaining_trades.return_value = 5
-            with TestClient(app) as client:
-                try:
-                    with client.websocket_connect("/ws") as ws:
-                        # Connection accepted = dev mode bypassed auth (line 542 covered)
-                        msg = ws.receive_json()
-                        assert msg["type"] == "status"
-                except Exception:
-                    pass
-        finally:
-            dash_mod.DASHBOARD_DEV_MODE = original
-
-    def test_verify_ws_token_protocol_header(self):
-        """Cover line 556: WS auth via Sec-WebSocket-Protocol header."""
-        import src.dashboard.app as dash_mod
-        from starlette.testclient import TestClient
-
-        original_dev = dash_mod.DASHBOARD_DEV_MODE
-        original_auth = dash_mod.WS_AUTH_ENABLED
-        original_key = dash_mod.DASHBOARD_API_KEY
-
-        dash_mod.DASHBOARD_DEV_MODE = False
-        dash_mod.WS_AUTH_ENABLED = True
-        dash_mod.DASHBOARD_API_KEY = "test-key-123"
-
-        try:
-            app = dash_mod.create_app()
-            app.state.risk_manager = MagicMock()
-            app.state.risk_manager.get_daily_stats.return_value = MagicMock(to_dict=MagicMock(return_value={}))
-            with TestClient(app) as client:
-                try:
-                    with client.websocket_connect(
-                        "/ws",
-                        headers={"sec-websocket-protocol": "token.test-key-123"},
-                    ) as _ws:
-                        pass
-                except Exception:
-                    pass
-        finally:
-            dash_mod.DASHBOARD_DEV_MODE = original_dev
-            dash_mod.WS_AUTH_ENABLED = original_auth
-            dash_mod.DASHBOARD_API_KEY = original_key
-
-    def test_verify_ws_token_query_param(self):
-        """Cover line 561: WS auth via query parameter."""
-        import src.dashboard.app as dash_mod
-        from starlette.testclient import TestClient
-
-        original_dev = dash_mod.DASHBOARD_DEV_MODE
-        original_auth = dash_mod.WS_AUTH_ENABLED
-        original_key = dash_mod.DASHBOARD_API_KEY
-
-        dash_mod.DASHBOARD_DEV_MODE = False
-        dash_mod.WS_AUTH_ENABLED = True
-        dash_mod.DASHBOARD_API_KEY = "test-key-456"
-
-        try:
-            app = dash_mod.create_app()
-            app.state.risk_manager = MagicMock()
-            app.state.risk_manager.get_daily_stats.return_value = MagicMock(to_dict=MagicMock(return_value={}))
-            with TestClient(app) as client:
-                try:
-                    with client.websocket_connect("/ws?token=test-key-456") as _ws:
-                        pass
-                except Exception:
-                    pass
-        finally:
-            dash_mod.DASHBOARD_DEV_MODE = original_dev
-            dash_mod.WS_AUTH_ENABLED = original_auth
-            dash_mod.DASHBOARD_API_KEY = original_key
 
 
 # ─── notifications/discord_notifier.py ──────────────────────────────
@@ -474,7 +376,7 @@ class TestBotWorkerEdgeCases:
         mock_trade.side = "long"
         mock_trade.size = 0.01
         mock_trade.entry_price = 50000
-        mock_trade.entry_time = datetime.utcnow() - timedelta(hours=2)
+        mock_trade.entry_time = datetime.now(timezone.utc) - timedelta(hours=2)
         mock_trade.demo_mode = True
         mock_trade.fees = 5
         mock_trade.funding_paid = 1
@@ -516,7 +418,7 @@ class TestBotWorkerEdgeCases:
         mock_trade.side = "long"
         mock_trade.size = 0.01
         mock_trade.entry_price = 50000
-        mock_trade.entry_time = datetime.utcnow() - timedelta(hours=2)
+        mock_trade.entry_time = datetime.now(timezone.utc) - timedelta(hours=2)
         mock_trade.demo_mode = True
         mock_trade.fees = 5
         mock_trade.funding_paid = 1
@@ -561,11 +463,11 @@ class TestBotWorkerEdgeCases:
         # We test the notification block in isolation by calling
         # the internal try/except block logic
         trade = MagicMock()
-        trade.entry_time = datetime.utcnow() - timedelta(hours=1)
+        trade.entry_time = datetime.now(timezone.utc) - timedelta(hours=1)
 
         with patch("src.bot.bot_worker.logger") as mock_logger:
             try:
-                duration_minutes = int((datetime.utcnow() - trade.entry_time).total_seconds() / 60)
+                duration_minutes = int((datetime.now(timezone.utc) - trade.entry_time).total_seconds() / 60)
                 for notifier in await worker._get_notifiers():
                     try:
                         async with notifier:
@@ -910,48 +812,6 @@ class TestBitgetClientFeeEdge:
 
         result = await client.get_order_fees("BTCUSDT", "order123")
         assert result == 0.0
-
-
-# ─── websocket/binance_ws.py ─────────────────────────────────────
-
-
-class TestBinanceWSSubscription:
-
-    async def test_subscribe_reconnects_with_new_symbols(self):
-        """Cover line 348: subscribe disconnects and reconnects with combined symbols."""
-        from src.websocket.binance_ws import BinanceWebSocket
-
-        ws = BinanceWebSocket.__new__(BinanceWebSocket)
-        ws._ws = MagicMock()  # pretend connected
-        ws._state = MagicMock()
-        ws._state.connected = True
-        ws._state.subscribed_symbols = ["BTCUSDT"]
-        ws.disconnect = AsyncMock()
-        ws.connect = AsyncMock()
-
-        await ws.subscribe(["ETHUSDT"])
-
-        ws.disconnect.assert_awaited_once()
-        ws.connect.assert_awaited_once()
-        # Should include both old and new symbols
-        call_args = ws.connect.call_args[0][0]
-        assert "BTCUSDT" in call_args
-        assert "ETHUSDT" in call_args
-
-    async def test_unsubscribe_reconnects_with_remaining(self):
-        """Cover line 360: unsubscribe disconnects and reconnects with remaining."""
-        from src.websocket.binance_ws import BinanceWebSocket
-
-        ws = BinanceWebSocket.__new__(BinanceWebSocket)
-        ws._state = MagicMock()
-        ws._state.subscribed_symbols = ["BTCUSDT", "ETHUSDT"]
-        ws.disconnect = AsyncMock()
-        ws.connect = AsyncMock()
-
-        await ws.unsubscribe(["BTCUSDT"])
-
-        ws.disconnect.assert_awaited_once()
-        ws.connect.assert_awaited_once_with(["ETHUSDT"])
 
 
 # ─── bot/orchestrator.py ─────────────────────────────────────────

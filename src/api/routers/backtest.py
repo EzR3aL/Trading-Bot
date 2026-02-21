@@ -1,7 +1,7 @@
 """Backtest API endpoints."""
 
 import json
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request
 from sqlalchemy import func, select
@@ -179,13 +179,13 @@ async def _execute_backtest(run_id: int):
             run.equity_curve = json.dumps(bt_result["equity_curve"])
             run.trades = json.dumps(bt_result["trades"])
             run.status = "completed"
-            run.completed_at = datetime.utcnow()
+            run.completed_at = datetime.now(timezone.utc)
 
         except Exception as e:
             logger.error(f"Backtest {run_id} failed: {e}", exc_info=True)
             run.status = "failed"
             run.error_message = str(e)[:500]
-            run.completed_at = datetime.utcnow()
+            run.completed_at = datetime.now(timezone.utc)
 
 
 @router.get("/history", response_model=BacktestHistoryResponse)

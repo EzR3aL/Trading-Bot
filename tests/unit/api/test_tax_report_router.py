@@ -7,7 +7,7 @@ demo_mode filtering, empty year, edge cases, and auth requirements.
 
 import os
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -83,7 +83,7 @@ async def closed_trades(session_factory, user):
     All entry_time dates must be within the current year so the default
     year filter picks them up correctly.
     """
-    year = datetime.utcnow().year
+    year = datetime.now(timezone.utc).year
     items = [
         TradeRecord(
             user_id=user.id,
@@ -285,7 +285,7 @@ def test_query_trades_with_demo_mode():
 
 async def test_get_tax_report_current_year(client, auth_headers, closed_trades):
     """Tax report for current year returns correct summary."""
-    year = datetime.utcnow().year
+    year = datetime.now(timezone.utc).year
     resp = await client.get("/api/tax-report", headers=auth_headers, params={"year": year})
     assert resp.status_code == 200
     data = resp.json()
@@ -303,7 +303,7 @@ async def test_get_tax_report_default_year(client, auth_headers, closed_trades):
     resp = await client.get("/api/tax-report", headers=auth_headers)
     assert resp.status_code == 200
     data = resp.json()
-    assert data["year"] == datetime.utcnow().year
+    assert data["year"] == datetime.now(timezone.utc).year
 
 
 async def test_get_tax_report_totals_correct(client, auth_headers, closed_trades):
@@ -424,7 +424,7 @@ async def test_download_csv_returns_csv_content_type(client, auth_headers, close
 
 async def test_download_csv_has_content_disposition(client, auth_headers, closed_trades):
     """CSV download has correct Content-Disposition header."""
-    year = datetime.utcnow().year
+    year = datetime.now(timezone.utc).year
     resp = await client.get("/api/tax-report/csv", headers=auth_headers, params={"year": year})
     assert resp.status_code == 200
     disposition = resp.headers.get("content-disposition", "")
@@ -513,7 +513,7 @@ async def test_download_csv_default_year(client, auth_headers, closed_trades):
     """CSV without year defaults to current year."""
     resp = await client.get("/api/tax-report/csv", headers=auth_headers)
     assert resp.status_code == 200
-    year = datetime.utcnow().year
+    year = datetime.now(timezone.utc).year
     content = resp.text
     assert str(year) in content
 

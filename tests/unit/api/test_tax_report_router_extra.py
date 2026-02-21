@@ -5,7 +5,7 @@ Extra tests for tax_report router — covering the CSV download endpoint
 
 import os
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -71,7 +71,7 @@ async def auth_headers(user):
 
 @pytest_asyncio.fixture
 async def trades_data(session_factory, user):
-    year = datetime.utcnow().year
+    year = datetime.now(timezone.utc).year
     items = [
         TradeRecord(
             user_id=user.id,
@@ -175,7 +175,7 @@ async def client(app):
 
 async def test_tax_report_monthly_breakdown_values(client, auth_headers, trades_data):
     """Monthly breakdown sums PnL correctly per month."""
-    year = datetime.utcnow().year
+    year = datetime.now(timezone.utc).year
     resp = await client.get("/api/tax-report", headers=auth_headers, params={"year": year})
     data = resp.json()
     assert len(data["months"]) == 1  # Both trades in March
@@ -213,7 +213,7 @@ async def test_csv_content_type(client, auth_headers, trades_data):
 
 async def test_csv_content_disposition(client, auth_headers, trades_data):
     """CSV has correct filename in Content-Disposition."""
-    year = datetime.utcnow().year
+    year = datetime.now(timezone.utc).year
     resp = await client.get("/api/tax-report/csv", headers=auth_headers, params={"year": year})
     disposition = resp.headers.get("content-disposition", "")
     assert f"steuerreport_{year}.csv" in disposition

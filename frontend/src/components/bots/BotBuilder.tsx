@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
 import api from '../../api/client'
+import { getApiErrorMessage } from '../../utils/api-error'
 import { ArrowLeft, ArrowRight, Check, Play, Brain, TrendingUp, BarChart3, DollarSign, Activity, Building, LayoutGrid, List, Bot, Info, Zap, Clock } from 'lucide-react'
 import ExchangeLogo from '../ui/ExchangeLogo'
 import FilterDropdown from '../ui/FilterDropdown'
@@ -88,14 +89,7 @@ const STRATEGY_DISPLAY_NAMES: Record<string, string> = {
   claude_edge_indicator: 'Claude-Edge',
 }
 
-const STRATEGY_DESCRIPTIONS_DE: Record<string, string> = {
-  llm_signal: 'KI-gestützte Signalgenerierung mittels Large Language Models. Die KI analysiert Marktdaten in jedem Zyklus und liefert LONG/SHORT-Empfehlungen mit Konfidenzbewertung.',
-  sentiment_surfer: 'Kombiniert Marktstimmung mit technischen Indikatoren zur Vorhersage von Preisbewegungen. Nutzt News-Sentiment, Fear & Greed, VWAP, Supertrend und Spot-Daten. Erfordert Übereinstimmung mehrerer Quellen.',
-  liquidation_hunter: 'Contrarian-Strategie, die gegen überfüllte Positionen handelt. Analysiert Long/Short-Verhältnisse, Funding Rates und Fear & Greed, um Liquidationskaskaden frühzeitig zu erkennen.',
-  degen: 'KI-gesteuerte Arena-Strategie mit festem Prompt und 14 Datenquellen. Nutzt Derivatives, Order Book, Supertrend, VWAP und mehr für 1h BTC-Vorhersagen. Inspiriert vom Degen Prediction Bot.',
-  edge_indicator: 'Technische Analyse basierend auf dem TradingView "Trading Edge" Indikator. Kombiniert EMA 8/21 Ribbon, ADX-Chop-Filter und Predator Momentum Score (MACD + RSI Drift). Nur Kline-Daten, keine externen APIs.',
-  claude_edge_indicator: 'Erweiterte Edge Strategie mit ATR-basierten TP/SL, Volumen-Bestätigung, Multi-Timeframe (4h), Trailing Stop, regime-basierter Positionsgröße und RSI-Divergenz.',
-}
+// Strategy descriptions are now sourced from i18n keys: bots.builder.strategyDesc_{name}
 
 function getStrategyDisplayName(name: string): string {
   return STRATEGY_DISPLAY_NAMES[name] || name.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
@@ -454,8 +448,8 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
         await api.post(`/bots/${newId}/start`)
       }
       onDone()
-    } catch (err: any) {
-      setError(err.response?.data?.detail || t('common.saveFailed'))
+    } catch (err) {
+      setError(getApiErrorMessage(err, t('common.saveFailed')))
     }
     setSaving(false)
   }
@@ -594,7 +588,7 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
                     type="button"
                     onClick={() => setStrategyView('grid')}
                     className={`p-1.5 rounded-md transition-colors ${strategyView === 'grid' ? 'bg-white/10 text-white' : 'text-gray-500 hover:text-gray-300'}`}
-                    title={b.viewGrid || 'Grid'}
+                    title={b.viewGrid}
                   >
                     <LayoutGrid size={14} />
                   </button>
@@ -602,7 +596,7 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
                     type="button"
                     onClick={() => setStrategyView('list')}
                     className={`p-1.5 rounded-md transition-colors ${strategyView === 'list' ? 'bg-white/10 text-white' : 'text-gray-500 hover:text-gray-300'}`}
-                    title={b.viewList || 'List'}
+                    title={b.viewList}
                   >
                     <List size={14} />
                   </button>
@@ -628,7 +622,7 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
                           {['llm_signal', 'degen'].includes(s.name) && <Bot size={14} className="text-emerald-400" />}
                         </div>
                         <div className="text-xs text-gray-500 mt-1 line-clamp-2">
-                          {STRATEGY_DESCRIPTIONS_DE[s.name] || s.description}
+                          {t(`bots.builder.strategyDesc_${s.name}`, { defaultValue: s.description })}
                         </div>
                       </button>
                     )
@@ -656,7 +650,7 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
                           {['llm_signal', 'degen'].includes(s.name) && <Bot size={14} className="text-emerald-400" />}
                         </div>
                         <p className="text-xs text-gray-500 leading-relaxed">
-                          {STRATEGY_DESCRIPTIONS_DE[s.name] || s.description}
+                          {t(`bots.builder.strategyDesc_${s.name}`, { defaultValue: s.description })}
                         </p>
                       </button>
                     )
@@ -668,7 +662,7 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
             {/* LLM info banner */}
             {(strategyType === 'llm_signal' || strategyType === 'degen') && (
               <div className="bg-blue-900/20 border border-blue-800 rounded-lg p-3">
-                <p className="text-xs text-blue-300">{b.llmNote || 'Dieser Bot nutzt KI zur Signalgenerierung. Konfiguriere deinen API-Schluessel unter Einstellungen.'}</p>
+                <p className="text-xs text-blue-300">{b.llmNote}</p>
               </div>
             )}
 
@@ -676,8 +670,8 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
             {strategyType && (strategyType === 'edge_indicator' || strategyType === 'claude_edge_indicator') && STRATEGY_RECOMMENDATIONS[strategyType] && (
               <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-primary-500/10 border border-primary-500/20">
                 <Clock size={14} className="text-primary-400 shrink-0" />
-                <span className="text-xs text-primary-300">Empfohlener Timeframe: <strong>{STRATEGY_RECOMMENDATIONS[strategyType].bestTimeframe}</strong></span>
-                <span className="text-[10px] text-gray-500 ml-auto">90-Tage Backtest</span>
+                <span className="text-xs text-primary-300" dangerouslySetInnerHTML={{ __html: t('bots.builder.recommendedTimeframe', { timeframe: STRATEGY_RECOMMENDATIONS[strategyType].bestTimeframe }) }} />
+                <span className="text-[10px] text-gray-500 ml-auto">{t('bots.builder.backtestDays')}</span>
               </div>
             )}
 
@@ -762,7 +756,7 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
                               value={strategyParams[key] ?? ''}
                               onChange={e => setStrategyParams(prev => ({ ...prev, [key]: e.target.value }))}
                               rows={6}
-                              placeholder="Eigene Anweisungen für die KI-Analyse eingeben..."
+                              placeholder={t('bots.builder.customPromptPlaceholder')}
                               className="filter-select w-full text-sm font-mono !h-auto"
                             />
                           </div>
@@ -781,8 +775,8 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
                             <span className="text-sm font-medium text-gray-300">Pro Mode</span>
                             <p className="text-xs text-gray-500">
                               {proMode
-                                ? (b.proModeParamsActiveHint || 'Strategie-Parameter werden angezeigt')
-                                : (b.proModeParamsHint || 'Strategie-Parameter anpassen (für fortgeschrittene Nutzer)')}
+                                ? b.proModeParamsActiveHint
+                                : b.proModeParamsHint}
                             </p>
                           </div>
                         </div>
@@ -835,8 +829,8 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
                                     className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                                   />
                                   <div className="flex justify-between mt-1">
-                                    <span className="text-[9px] text-gray-600">Deterministisch</span>
-                                    <span className="text-[9px] text-gray-600">Kreativ</span>
+                                    <span className="text-[9px] text-gray-600">{t('bots.builder.deterministic')}</span>
+                                    <span className="text-[9px] text-gray-600">{t('bots.builder.creative')}</span>
                                   </div>
                                 </div>
                               )
@@ -910,9 +904,9 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <div>
-                <label className="block text-sm text-gray-400">{b.dataSources || 'Datenquellen'}</label>
+                <label className="block text-sm text-gray-400">{b.dataSources}</label>
                 <p className="text-xs text-gray-500 mt-0.5">
-                  {selectedSources.length} {b.sourcesSelected || 'sources selected'}
+                  {selectedSources.length} {b.sourcesSelected}
                 </p>
               </div>
               <div className="flex items-center gap-1 bg-white/5 rounded-lg p-0.5">
@@ -920,7 +914,7 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
                   type="button"
                   onClick={() => setSourcesView('grid')}
                   className={`p-1.5 rounded-md transition-colors ${sourcesView === 'grid' ? 'bg-white/10 text-white' : 'text-gray-500 hover:text-gray-300'}`}
-                  title={b.viewGrid || 'Grid'}
+                  title={b.viewGrid}
                 >
                   <LayoutGrid size={14} />
                 </button>
@@ -928,7 +922,7 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
                   type="button"
                   onClick={() => setSourcesView('list')}
                   className={`p-1.5 rounded-md transition-colors ${sourcesView === 'list' ? 'bg-white/10 text-white' : 'text-gray-500 hover:text-gray-300'}`}
-                  title={b.viewList || 'List'}
+                  title={b.viewList}
                 >
                   <List size={14} />
                 </button>
@@ -955,13 +949,13 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
                         className={`text-xs px-2 py-0.5 rounded ${allSelected ? 'text-gray-600' : 'text-primary-400 hover:text-primary-300'}`}
                         disabled={allSelected}
                       >
-                        {b.selectAll || 'Alle auswaehlen'}
+                        {b.selectAll}
                       </button>
                       <button
                         onClick={() => clearCategory(cat)}
                         className="text-xs px-2 py-0.5 rounded text-gray-500 hover:text-gray-400"
                       >
-                        {b.clearAll || 'Leeren'}
+                        {b.clearAll}
                       </button>
                     </div>
                   </div>
@@ -1265,16 +1259,16 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
               <div className="grid grid-cols-2 gap-2">
                 {(['rotation_only', 'market_sessions', 'interval', 'custom_cron'] as const).map(st => {
                   const labelMap: Record<string, string> = {
-                    rotation_only: b.rotationOnly || 'Nur Trade-Rotation',
+                    rotation_only: b.rotationOnly,
                     market_sessions: b.marketSessions,
                     interval: b.interval,
                     custom_cron: b.customCron,
                   }
                   const descMap: Record<string, string> = {
-                    rotation_only: b.rotationOnlyDesc || 'Automatisch schliessen und in festen Intervallen neu eroeffnen',
+                    rotation_only: b.rotationOnlyDesc,
                     market_sessions: '01, 08, 14, 21h UTC',
-                    interval: b.intervalDesc || 'Analyse in frei waehlbarem Minutentakt',
-                    custom_cron: b.customCronDesc || 'Analyse zu festen Uhrzeiten (UTC)',
+                    interval: b.intervalDesc,
+                    custom_cron: b.customCronDesc,
                   }
                   const isSelected = scheduleType === st
                   return (
@@ -1294,7 +1288,7 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
               <div className="space-y-1">
                 {(['rotation_only', 'market_sessions', 'interval', 'custom_cron'] as const).map(st => {
                   const labelMap: Record<string, string> = {
-                    rotation_only: b.rotationOnly || 'Nur Trade-Rotation',
+                    rotation_only: b.rotationOnly,
                     market_sessions: b.marketSessions,
                     interval: b.interval,
                     custom_cron: b.customCron,
@@ -1354,8 +1348,8 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
               <div className="mt-4 pt-4 border-t border-white/5">
                 <div className="flex items-center justify-between">
                   <div>
-                    <span className="text-sm text-gray-300">{b.tradeRotation || 'Trade-Rotation'}</span>
-                    <p className="text-xs text-gray-500 mt-0.5">{b.tradeRotationDesc || 'Trades automatisch in festen Intervallen schliessen und neu eroeffnen'}</p>
+                    <span className="text-sm text-gray-300">{b.tradeRotation}</span>
+                    <p className="text-xs text-gray-500 mt-0.5">{b.tradeRotationDesc}</p>
                   </div>
                   <button onClick={() => setRotationEnabled(!rotationEnabled)}
                     className={`relative w-11 h-6 rounded-full transition-colors ${rotationEnabled ? 'bg-primary-600' : 'bg-gray-700'}`}>
@@ -1388,14 +1382,14 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
 
                 <div className="flex gap-4">
                   <div>
-                    <label className="block text-xs text-gray-500 mb-1.5">{b.customMinutes || 'Eigener Wert (Minuten)'}</label>
+                    <label className="block text-xs text-gray-500 mb-1.5">{b.customMinutes}</label>
                     <NumInput value={rotationMinutes}
                       onChange={e => setRotationMinutes(Math.max(5, parseInt(e.target.value) || 5))}
                       min={5} max={10080}
                       className="filter-select w-36 text-sm tabular-nums" />
                   </div>
                   <div>
-                    <label className="block text-xs text-gray-500 mb-1.5">{b.rotationStartTime || 'Startzeit (UTC)'}</label>
+                    <label className="block text-xs text-gray-500 mb-1.5">{b.rotationStartTime}</label>
                     <FilterDropdown
                       value={rotationStartTime}
                       onChange={val => setRotationStartTime(val)}
@@ -1423,7 +1417,7 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
               <div><span className="text-gray-500">{b.mode}:</span> <span className="text-white ml-2">{mode}</span></div>
               <div><span className="text-gray-500">{b.tradingPairs}:</span> <span className="text-white ml-2">{tradingPairs.join(', ')}</span></div>
               {usesData && (
-                <div><span className="text-gray-500">{b.dataSources || 'Datenquellen'}:</span> <span className="text-white ml-2">{hasFixedSources ? `${selectedSources.length} (${b.fixedSources || 'fest vorgegeben'})` : `${selectedSources.length} ${b.sourcesSelected || 'ausgewählt'}`}</span></div>
+                <div><span className="text-gray-500">{b.dataSources}:</span> <span className="text-white ml-2">{hasFixedSources ? `${selectedSources.length} (${b.fixedSources})` : `${selectedSources.length} ${b.sourcesSelected}`}</span></div>
               )}
               {maxTrades != null && (
                 <div><span className="text-gray-500">{b.maxTrades}:</span> <span className="text-white ml-2">{maxTrades}</span></div>
@@ -1432,15 +1426,15 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
                 <div><span className="text-gray-500">{b.dailyLossLimit}:</span> <span className="text-white ml-2">{dailyLossLimit}%</span></div>
               )}
               <div><span className="text-gray-500">{b.schedule}:</span> <span className="text-white ml-2">
-                {scheduleType === 'rotation_only' ? (b.rotationOnly || 'Nur Rotation') :
+                {scheduleType === 'rotation_only' ? (b.rotationOnly) :
                  scheduleType === 'interval' ? `Alle ${intervalMinutes} Min.` :
                  scheduleType === 'custom_cron' ? customHours.map(h => `${h}:00`).join(', ') :
                  '01:00, 08:00, 14:00, 21:00 UTC'}
               </span></div>
               {(rotationEnabled || scheduleType === 'rotation_only') && (
-                <div><span className="text-gray-500">{b.tradeRotation || 'Trade-Rotation'}:</span> <span className="text-white ml-2">
+                <div><span className="text-gray-500">{b.tradeRotation}:</span> <span className="text-white ml-2">
                   {rotationMinutes >= 60 ? `${rotationMinutes / 60}h` : `${rotationMinutes}min`}
-                  {rotationStartTime ? ` (${b.rotationStartTime || 'Startzeit'}: ${rotationStartTime} UTC)` : ''}
+                  {rotationStartTime ? ` (${b.rotationStartTime}: ${rotationStartTime} UTC)` : ''}
                 </span></div>
               )}
             </div>

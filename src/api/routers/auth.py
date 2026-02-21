@@ -1,11 +1,14 @@
 """Authentication endpoints."""
 
+from datetime import datetime, timedelta, timezone
+
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.rate_limit import _get_real_client_ip, limiter  # noqa: F401 — re-export for backward compat
 from src.api.schemas.auth import (
+    ChangePasswordRequest,
     LoginRequest,
     RefreshRequest,
     TokenResponse,
@@ -13,7 +16,7 @@ from src.api.schemas.auth import (
 )
 from src.auth.dependencies import get_current_user
 from src.auth.jwt_handler import create_access_token, create_refresh_token, decode_token
-from src.auth.password import verify_password
+from src.auth.password import hash_password, verify_password
 from src.models.database import User
 from src.models.session import get_db
 from src.utils.logger import get_logger
@@ -34,7 +37,28 @@ async def login(request: Request, body: LoginRequest, db: AsyncSession = Depends
 
     client_ip = _get_real_client_ip(request)
 
-    if not user or not verify_password(body.password, user.password_hash):
+    if not user:
+        logger.warning("AUTH: Failed login for '%s' from %s", body.username, client_ip)
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid username or password",
+        )
+
+    # Check account lockout
+    if user.locked_until and user.locked_until > datetime.now(timezone.utc):
+        logger.warning("AUTH: Locked account login attempt for '%s' from %s", body.username, client_ip)
+        raise HTTPException(
+            status_code=423,
+            detail="Account temporarily locked. Try again later.",
+        )
+
+    if not verify_password(body.password, user.password_hash):
+        # Increment failed login attempts and lock if threshold reached
+        user.failed_login_attempts = (user.failed_login_attempts or 0) + 1
+        if user.failed_login_attempts >= 5:
+            user.locked_until = datetime.now(timezone.utc) + timedelta(minutes=15)
+            logger.warning("AUTH: Account '%s' locked after %d failed attempts from %s", body.username, user.failed_login_attempts, client_ip)
+        await db.commit()
         logger.warning("AUTH: Failed login for '%s' from %s", body.username, client_ip)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -54,6 +78,10 @@ async def login(request: Request, body: LoginRequest, db: AsyncSession = Depends
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Account is disabled",
         )
+
+    # Successful login — reset lockout counters
+    user.failed_login_attempts = 0
+    user.locked_until = None
 
     tv = getattr(user, "token_version", 0) or 0
     token_data = {"sub": str(user.id), "role": user.role, "tv": tv}
@@ -116,6 +144,29 @@ async def refresh_token(request: Request, body: RefreshRequest, db: AsyncSession
         access_token=access_token,
         refresh_token=refresh_token,
     )
+
+
+@router.put("/change-password")
+@limiter.limit("3/minute")
+async def change_password(
+    request: Request,
+    body: ChangePasswordRequest,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Change the current user's password and revoke existing tokens."""
+    if not verify_password(body.current_password, user.password_hash):
+        raise HTTPException(status_code=401, detail="Current password is incorrect")
+    user.password_hash = hash_password(body.new_password)
+    user.token_version = (user.token_version or 0) + 1
+    await db.commit()
+    token_data = {"sub": str(user.id), "role": user.role, "tv": user.token_version}
+    return {
+        "access_token": create_access_token(token_data),
+        "refresh_token": create_refresh_token(token_data),
+        "token_type": "bearer",
+        "message": "Password changed successfully",
+    }
 
 
 @router.get("/me", response_model=UserProfile)

@@ -109,7 +109,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 py-3 px-2 space-y-0.5 overflow-y-auto">
+      <nav role="navigation" className="flex-1 py-3 px-2 space-y-0.5 overflow-y-auto">
         {navItems.map((item) => {
           const Icon = item.icon
           const isActive = location.pathname === item.path
@@ -211,6 +211,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="min-h-screen bg-gradient-dark">
+      <a href="#main-content" className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50 focus:bg-blue-600 focus:text-white focus:px-4 focus:py-2 focus:rounded">
+        Skip to content
+      </a>
       <OfflineIndicator />
       {/* Mobile hamburger */}
       <div className="lg:hidden fixed top-0 left-0 right-0 z-40 bg-[#0a0e17]/90 backdrop-blur-xl border-b border-white/5 px-4 py-3 flex items-center justify-between">
@@ -252,7 +255,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       </aside>
 
       {/* Main content */}
-      <main className="lg:ml-60 p-6 pt-20 lg:pt-6 min-h-screen">
+      <main id="main-content" role="main" className="lg:ml-60 p-6 pt-20 lg:pt-6 min-h-screen">
         {children}
       </main>
     </div>

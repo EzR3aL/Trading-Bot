@@ -14,7 +14,7 @@ Covers:
 
 import os
 import sys
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -100,7 +100,7 @@ async def open_trade_tp(session_factory, user):
             reason="TP test",
             order_id="order_tp",
             status="open",
-            entry_time=datetime.utcnow() - timedelta(hours=6),
+            entry_time=datetime.now(timezone.utc) - timedelta(hours=6),
             exchange="bitget",
             demo_mode=True,
         )
@@ -127,7 +127,7 @@ async def open_trade_sl(session_factory, user):
             reason="SL test",
             order_id="order_sl",
             status="open",
-            entry_time=datetime.utcnow() - timedelta(hours=4),
+            entry_time=datetime.now(timezone.utc) - timedelta(hours=4),
             exchange="bitget",
             demo_mode=True,
         )

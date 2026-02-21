@@ -9,7 +9,7 @@ backed by an in-memory SQLite database.
 
 import os
 import sys
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -118,7 +118,7 @@ async def bot_config(session_factory, user):
 @pytest_asyncio.fixture
 async def trades(session_factory, user, bot_config):
     """Insert diverse trades for thorough filter testing."""
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     items = [
         TradeRecord(
             user_id=user.id,
@@ -223,7 +223,7 @@ async def trades(session_factory, user, bot_config):
 @pytest_asyncio.fixture
 async def other_user_trade(session_factory, other_user):
     """Trade belonging to a different user (should never be visible)."""
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     async with session_factory() as session:
         t = TradeRecord(
             user_id=other_user.id,
@@ -498,7 +498,7 @@ async def test_list_trades_combined_status_and_symbol(client, auth_headers, trad
 
 async def test_list_trades_filter_date_from(client, auth_headers, trades):
     """Filter by date_from returns only trades after that date."""
-    yesterday = (datetime.utcnow() - timedelta(days=1)).strftime("%Y-%m-%d")
+    yesterday = (datetime.now(timezone.utc) - timedelta(days=1)).strftime("%Y-%m-%d")
     resp = await client.get("/api/trades", headers=auth_headers, params={"date_from": yesterday})
     assert resp.status_code == 200
     data = resp.json()
@@ -508,7 +508,7 @@ async def test_list_trades_filter_date_from(client, auth_headers, trades):
 
 async def test_list_trades_filter_date_to(client, auth_headers, trades):
     """Filter by date_to returns only trades before that date."""
-    four_days_ago = (datetime.utcnow() - timedelta(days=4)).strftime("%Y-%m-%d")
+    four_days_ago = (datetime.now(timezone.utc) - timedelta(days=4)).strftime("%Y-%m-%d")
     resp = await client.get("/api/trades", headers=auth_headers, params={"date_to": four_days_ago})
     assert resp.status_code == 200
     data = resp.json()

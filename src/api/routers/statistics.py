@@ -21,9 +21,9 @@ async def get_statistics(
     db: AsyncSession = Depends(get_db),
 ):
     """Get trading statistics for the current user over N days."""
-    from datetime import datetime, timedelta
+    from datetime import datetime, timedelta, timezone
 
-    since = datetime.utcnow() - timedelta(days=days)
+    since = datetime.now(timezone.utc) - timedelta(days=days)
 
     filters = [
         TradeRecord.user_id == user.id,
@@ -82,9 +82,9 @@ async def get_daily_stats(
     db: AsyncSession = Depends(get_db),
 ):
     """Get daily trading statistics."""
-    from datetime import datetime, timedelta
+    from datetime import datetime, timedelta, timezone
 
-    since = datetime.utcnow() - timedelta(days=days)
+    since = datetime.now(timezone.utc) - timedelta(days=days)
 
     filters = [
         TradeRecord.user_id == user.id,
@@ -135,9 +135,9 @@ async def get_revenue_analytics(
     db: AsyncSession = Depends(get_db),
 ):
     """Get Hyperliquid revenue analytics (builder fees earned)."""
-    from datetime import datetime, timedelta
+    from datetime import datetime, timedelta, timezone
 
-    since = datetime.utcnow() - timedelta(days=days)
+    since = datetime.now(timezone.utc) - timedelta(days=days)
 
     filters = [
         TradeRecord.user_id == user.id,

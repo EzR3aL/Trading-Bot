@@ -74,6 +74,8 @@ def _make_mock_user(
     user.token_version = token_version
     user.language = language
     user.password_hash = hash_password("correct_password")
+    user.locked_until = None
+    user.failed_login_attempts = 0
     return user
 
 

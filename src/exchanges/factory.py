@@ -2,6 +2,7 @@
 
 from src.exchanges.base import ExchangeClient, ExchangeWebSocket
 from src.exchanges.rate_limiter import ExchangeRateLimiter
+from src.models.enums import ExchangeType
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -32,12 +33,18 @@ def create_exchange_client(
     Raises:
         ValueError: If exchange type is not supported
     """
-    exchange_type = exchange_type.lower().strip()
+    try:
+        exchange = ExchangeType(exchange_type.lower().strip())
+    except ValueError:
+        raise ValueError(
+            f"Unsupported exchange: '{exchange_type}'. "
+            f"Supported: {', '.join(e.value for e in ExchangeType)}"
+        )
 
     # Shared rate limiter per exchange type
-    rate_limiter = ExchangeRateLimiter.get(exchange_type)
+    rate_limiter = ExchangeRateLimiter.get(exchange.value)
 
-    if exchange_type == "bitget":
+    if exchange == ExchangeType.BITGET:
         from src.exchanges.bitget.client import BitgetExchangeClient
         return BitgetExchangeClient(
             api_key=api_key,
@@ -47,7 +54,7 @@ def create_exchange_client(
             rate_limiter=rate_limiter,
             **kwargs,
         )
-    elif exchange_type == "weex":
+    elif exchange == ExchangeType.WEEX:
         from src.exchanges.weex.client import WeexClient
         return WeexClient(
             api_key=api_key,
@@ -57,7 +64,7 @@ def create_exchange_client(
             rate_limiter=rate_limiter,
             **kwargs,
         )
-    elif exchange_type == "hyperliquid":
+    elif exchange == ExchangeType.HYPERLIQUID:
         from src.exchanges.hyperliquid.client import HyperliquidClient
         return HyperliquidClient(
             api_key=api_key,
@@ -69,7 +76,7 @@ def create_exchange_client(
     else:
         raise ValueError(
             f"Unsupported exchange: '{exchange_type}'. "
-            f"Supported: bitget, weex, hyperliquid"
+            f"Supported: {', '.join(e.value for e in ExchangeType)}"
         )
 
 
@@ -98,9 +105,15 @@ def create_exchange_websocket(
     Raises:
         ValueError: If exchange type is not supported
     """
-    exchange_type = exchange_type.lower().strip()
+    try:
+        exchange = ExchangeType(exchange_type.lower().strip())
+    except ValueError:
+        raise ValueError(
+            f"Unsupported exchange: '{exchange_type}'. "
+            f"Supported: {', '.join(e.value for e in ExchangeType)}"
+        )
 
-    if exchange_type == "bitget":
+    if exchange == ExchangeType.BITGET:
         from src.exchanges.bitget.websocket import BitgetExchangeWebSocket
         return BitgetExchangeWebSocket(
             api_key=api_key,
@@ -109,7 +122,7 @@ def create_exchange_websocket(
             demo_mode=demo_mode,
             **kwargs,
         )
-    elif exchange_type == "weex":
+    elif exchange == ExchangeType.WEEX:
         from src.exchanges.weex.websocket import WeexWebSocket
         return WeexWebSocket(
             api_key=api_key,
@@ -118,7 +131,7 @@ def create_exchange_websocket(
             demo_mode=demo_mode,
             **kwargs,
         )
-    elif exchange_type == "hyperliquid":
+    elif exchange == ExchangeType.HYPERLIQUID:
         from src.exchanges.hyperliquid.websocket import HyperliquidWebSocket
         return HyperliquidWebSocket(
             api_key=api_key,
@@ -129,13 +142,13 @@ def create_exchange_websocket(
     else:
         raise ValueError(
             f"Unsupported exchange: '{exchange_type}'. "
-            f"Supported: bitget, weex, hyperliquid"
+            f"Supported: {', '.join(e.value for e in ExchangeType)}"
         )
 
 
 def get_supported_exchanges() -> list:
     """Return list of supported exchange identifiers."""
-    return ["bitget", "weex", "hyperliquid"]
+    return [e.value for e in ExchangeType]
 
 
 async def get_all_user_clients(user_id: int, db) -> dict:

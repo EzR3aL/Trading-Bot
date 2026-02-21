@@ -11,7 +11,7 @@ _check_builder_approval, and various error paths.
 import asyncio
 import json
 import pytest
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import sys
@@ -86,7 +86,7 @@ def _make_mock_signal(direction=SignalDirection.LONG, symbol="BTCUSDT",
         stop_loss=stop_loss,
         reason="Test signal",
         metrics_snapshot={"test": True},
-        timestamp=datetime.utcnow(),
+        timestamp=datetime.now(timezone.utc),
     )
 
 
@@ -114,7 +114,7 @@ def _make_mock_trade(**overrides):
     trade.fees = overrides.get("fees", 0)
     trade.funding_paid = overrides.get("funding_paid", 0)
     trade.builder_fee = overrides.get("builder_fee", 0)
-    trade.entry_time = overrides.get("entry_time", datetime.utcnow() - timedelta(hours=1))
+    trade.entry_time = overrides.get("entry_time", datetime.now(timezone.utc) - timedelta(hours=1))
     trade.exit_time = overrides.get("exit_time", None)
     trade.exit_reason = overrides.get("exit_reason", None)
     trade.demo_mode = overrides.get("demo_mode", True)
@@ -1524,7 +1524,7 @@ class TestCheckRotation:
 
         # Trade opened 2 hours ago
         trade = _make_mock_trade(
-            entry_time=datetime.utcnow() - timedelta(hours=2),
+            entry_time=datetime.now(timezone.utc) - timedelta(hours=2),
             demo_mode=True,
         )
 
@@ -1562,7 +1562,7 @@ class TestCheckRotation:
 
         # Trade opened 3 hours ago
         trade = _make_mock_trade(
-            entry_time=datetime.utcnow() - timedelta(hours=3),
+            entry_time=datetime.now(timezone.utc) - timedelta(hours=3),
             demo_mode=True,
         )
 
@@ -1599,7 +1599,7 @@ class TestCheckRotation:
         worker._risk_manager = mock_rm
 
         trade = _make_mock_trade(
-            entry_time=datetime.utcnow() - timedelta(hours=2),
+            entry_time=datetime.now(timezone.utc) - timedelta(hours=2),
             demo_mode=True,
         )
 
@@ -1631,7 +1631,7 @@ class TestCheckRotation:
         worker._risk_manager = mock_rm
 
         trade = _make_mock_trade(
-            entry_time=datetime.utcnow() - timedelta(hours=2),
+            entry_time=datetime.now(timezone.utc) - timedelta(hours=2),
             demo_mode=True,
         )
 
@@ -1683,7 +1683,7 @@ class TestCheckRotation:
         worker._risk_manager = mock_rm
 
         trade = _make_mock_trade(
-            entry_time=datetime.utcnow() - timedelta(hours=2),
+            entry_time=datetime.now(timezone.utc) - timedelta(hours=2),
             demo_mode=True,
         )
 
@@ -2541,7 +2541,7 @@ class TestAnalyzeSymbolLockedTOCTOU:
 
         # Pre-populate dedup cache with a recent entry
         dedup_key = f"BTCUSDT:{signal.direction.value}:{signal.entry_price:.2f}"
-        worker._last_signal_keys = {dedup_key: datetime.utcnow()}
+        worker._last_signal_keys = {dedup_key: datetime.now(timezone.utc)}
 
         await worker._analyze_symbol_locked("BTCUSDT", force=True)
 
@@ -2565,7 +2565,7 @@ class TestAnalyzeSymbolLockedTOCTOU:
 
         # Pre-populate dedup cache with an OLD entry (>60s ago)
         dedup_key = f"BTCUSDT:{signal.direction.value}:{signal.entry_price:.2f}"
-        worker._last_signal_keys = {dedup_key: datetime.utcnow() - timedelta(seconds=120)}
+        worker._last_signal_keys = {dedup_key: datetime.now(timezone.utc) - timedelta(seconds=120)}
 
         await worker._analyze_symbol_locked("BTCUSDT", force=True)
 

@@ -4,7 +4,7 @@ import asyncio
 import json
 import re
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Literal, Optional
 
 import aiohttp
@@ -358,7 +358,7 @@ async def set_affiliate_uid(
 
             if verified:
                 conn.affiliate_verified = True
-                conn.affiliate_verified_at = datetime.utcnow()
+                conn.affiliate_verified_at = datetime.now(timezone.utc)
     except Exception as e:
         _config_logger.warning(f"Affiliate UID auto-verify failed for user {user.id}: {type(e).__name__}")
 
@@ -525,7 +525,7 @@ async def get_connections_status(
         results[svc_name] = result_entry
 
     return {
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
         "services": results,
         "circuit_breakers": circuit_registry.get_all_statuses(),
     }
@@ -744,9 +744,9 @@ async def update_hl_admin_settings(
         existing = result.scalar_one_or_none()
         if existing:
             existing.value = value
-            existing.updated_at = datetime.utcnow()
+            existing.updated_at = datetime.now(timezone.utc)
         else:
-            db.add(SystemSetting(key=key, value=value, updated_at=datetime.utcnow()))
+            db.add(SystemSetting(key=key, value=value, updated_at=datetime.now(timezone.utc)))
 
     return {"status": "ok", "message": "Hyperliquid settings updated"}
 
@@ -863,7 +863,7 @@ async def confirm_builder_approval(
 
     if approved_fee is not None and approved_fee >= builder_fee:
         conn.builder_fee_approved = True
-        conn.builder_fee_approved_at = datetime.utcnow()
+        conn.builder_fee_approved_at = datetime.now(timezone.utc)
         await db.commit()
         return {"status": "ok", "approved_max_fee": approved_fee}
 
@@ -917,7 +917,7 @@ async def verify_referral(
 
     if referred_by:
         conn.referral_verified = True
-        conn.referral_verified_at = datetime.utcnow()
+        conn.referral_verified_at = datetime.now(timezone.utc)
         await db.commit()
         return {"verified": True, "referred_by": referred_by}
 
@@ -1016,10 +1016,10 @@ async def get_revenue_summary(
             referred_by = referral_info.get("referredBy") or referral_info.get("referred_by")
 
         # Query trade-based builder fee earnings from DB
-        from datetime import datetime, timedelta
+        from datetime import datetime, timedelta, timezone
         from sqlalchemy import func as sqlfunc
 
-        since_30d = datetime.utcnow() - timedelta(days=30)
+        since_30d = datetime.now(timezone.utc) - timedelta(days=30)
         trade_stats = await db.execute(
             select(
                 sqlfunc.count().label("total_trades"),
@@ -1191,7 +1191,7 @@ async def verify_affiliate_uid(
         raise HTTPException(status_code=404, detail="Affiliate UID not found")
 
     conn.affiliate_verified = verified
-    conn.affiliate_verified_at = datetime.utcnow() if verified else None
+    conn.affiliate_verified_at = datetime.now(timezone.utc) if verified else None
 
     return {
         "connection_id": conn.id,

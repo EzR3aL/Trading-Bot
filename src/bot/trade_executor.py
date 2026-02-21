@@ -2,7 +2,7 @@
 
 import asyncio
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 from src.exceptions import ExchangeError, OrderError
@@ -124,7 +124,7 @@ class TradeExecutorMixin:
                     reason=signal.reason,
                     order_id=order.order_id,
                     status="open",
-                    entry_time=datetime.utcnow(),
+                    entry_time=datetime.now(timezone.utc),
                     demo_mode=demo_mode,
                     metrics_snapshot=json.dumps(signal.metrics_snapshot),
                 )

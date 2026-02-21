@@ -10,7 +10,7 @@ Migrated from tests/test_bots.py to tests/integration/.
 import json
 import os
 import sys
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
@@ -94,7 +94,7 @@ async def sample_bot_config(test_user_obj):
 @pytest_asyncio.fixture
 async def sample_bot_with_trades(test_user_obj, sample_bot_config):
     """Create trades linked to the sample bot config."""
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     trades = [
         TradeRecord(
             user_id=test_user_obj.id,

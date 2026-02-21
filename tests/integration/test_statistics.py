@@ -9,7 +9,7 @@ Migrated from tests/test_statistics.py to tests/integration/.
 
 import os
 import sys
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
@@ -44,7 +44,7 @@ async def auth_headers(admin_token):
 @pytest_asyncio.fixture
 async def sample_trades(test_user_obj):
     """Insert sample trade records via the monkeypatched session."""
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     trades_data = [
         TradeRecord(
             user_id=test_user_obj.id,

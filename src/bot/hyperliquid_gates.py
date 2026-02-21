@@ -1,6 +1,6 @@
 """Hyperliquid-specific checks for BotWorker (mixin)."""
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 from src.exchanges.base import ExchangeClient
 from src.utils.logger import get_logger
@@ -57,7 +57,7 @@ class HyperliquidGatesMixin:
                 # Save to DB so API-level checks work
                 if conn:
                     conn.referral_verified = True
-                    conn.referral_verified_at = datetime.utcnow()
+                    conn.referral_verified_at = datetime.now(timezone.utc)
                     await db.commit()
                 logger.info(f"{log_prefix} User is referred (by {referred_by}), saved to DB")
                 return True
@@ -114,7 +114,7 @@ class HyperliquidGatesMixin:
             if approved is not None and approved >= client.builder_config["f"]:
                 if conn:
                     conn.builder_fee_approved = True
-                    conn.builder_fee_approved_at = datetime.utcnow()
+                    conn.builder_fee_approved_at = datetime.now(timezone.utc)
                     await db.commit()
                 logger.info(f"{log_prefix} Builder fee approved (on-chain verified)")
                 return True

@@ -6,7 +6,7 @@ tuple-style case() syntax.
 
 import pytest
 import pytest_asyncio
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from src.models.database import FundingPayment
@@ -18,7 +18,7 @@ async def sample_funding_payments(test_engine, test_user):
     session_factory = async_sessionmaker(
         test_engine, class_=AsyncSession, expire_on_commit=False
     )
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     payments = [
         FundingPayment(
             user_id=test_user.id,

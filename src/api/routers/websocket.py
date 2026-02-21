@@ -9,9 +9,12 @@ Receives real-time events: bot_started, bot_stopped, trade_opened, trade_closed.
 import asyncio
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from sqlalchemy import select
 
 from src.api.websocket.manager import ws_manager
 from src.auth.jwt_handler import decode_token
+from src.models.database import User
+from src.models.session import get_session
 from src.monitoring.metrics import WEBSOCKET_CONNECTIONS
 from src.utils.logger import get_logger
 
@@ -36,7 +39,7 @@ async def websocket_endpoint(websocket: WebSocket):
         await websocket.close(code=4001, reason="Auth timeout")
         return
 
-    payload = decode_token(token)
+    payload = decode_token(token, expected_type="access")
     if not payload:
         await websocket.close(code=4001, reason="Invalid token")
         return
@@ -51,6 +54,21 @@ async def websocket_endpoint(websocket: WebSocket):
     except (TypeError, ValueError):
         await websocket.close(code=4001, reason="Invalid user ID")
         return
+
+    # Verify user status and token_version against database
+    async with get_session() as db:
+        result = await db.execute(select(User).where(User.id == user_id))
+        user = result.scalar_one_or_none()
+        if not user or not user.is_active:
+            await websocket.close(code=4001, reason="User inactive")
+            return
+        if getattr(user, 'is_deleted', False):
+            await websocket.close(code=4001, reason="User not found")
+            return
+        tv = payload.get("tv", 0)
+        if tv < (user.token_version or 0):
+            await websocket.close(code=4001, reason="Token revoked")
+            return
 
     await ws_manager.connect(websocket, user_id)
     WEBSOCKET_CONNECTIONS.set(ws_manager.total_connections)
