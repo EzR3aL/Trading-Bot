@@ -11,7 +11,7 @@ Usage:
     signal = await strategy.generate_signal("BTCUSDT")
 """
 
-from datetime import datetime, timedelta
+from datetime import timedelta
 from typing import Any, Dict, List, Optional
 
 from src.backtest.historical_data import HistoricalDataPoint
@@ -79,10 +79,10 @@ class BacktestMarketDataFetcher(MarketDataFetcher):
                  taker_buy_quote_vol, ignore]
         """
         if self._symbol == "ETH":
-            o, h, l, c = hdp.eth_open, hdp.eth_high, hdp.eth_low, hdp.eth_price
+            o, h, liq, c = hdp.eth_open, hdp.eth_high, hdp.eth_low, hdp.eth_price
             vol = hdp.eth_volume
         else:
-            o, h, l, c = hdp.btc_open, hdp.btc_high, hdp.btc_low, hdp.btc_price
+            o, h, liq, c = hdp.btc_open, hdp.btc_high, hdp.btc_low, hdp.btc_price
             vol = hdp.btc_volume
 
         ts = int(hdp.timestamp.timestamp() * 1000)
@@ -97,7 +97,7 @@ class BacktestMarketDataFetcher(MarketDataFetcher):
             ts,                        # open_time
             str(o),                    # open
             str(h),                    # high
-            str(l),                    # low
+            str(liq),                  # low
             str(c),                    # close
             str(vol),                  # volume
             ts + interval_ms - 1,      # close_time

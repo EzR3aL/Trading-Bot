@@ -1,7 +1,6 @@
 """Pydantic schemas for admin log endpoints."""
 
-from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Dict, List, Optional
 
 from pydantic import BaseModel
 

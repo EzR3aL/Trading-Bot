@@ -193,7 +193,7 @@ class TestStrategyAdapterDatePropagation:
         with patch.object(HistoricalDataFetcher, 'fetch_all_historical_data', mock_fetch_all), \
              patch.object(HistoricalDataFetcher, 'close', new_callable=AsyncMock):
             result = await run_backtest_for_strategy(
-                strategy_type="edge_indicator",
+                strategy_type="liquidation_hunter",
                 symbol="BTCUSDT",
                 timeframe="4h",
                 start_date=datetime(2024, 6, 1),
@@ -223,7 +223,7 @@ class TestStrategyAdapterDatePropagation:
         with patch.object(HistoricalDataFetcher, 'fetch_all_historical_data', mock_fetch_all), \
              patch.object(HistoricalDataFetcher, 'close', new_callable=AsyncMock):
             await run_backtest_for_strategy(
-                strategy_type="edge_indicator",
+                strategy_type="liquidation_hunter",
                 symbol="BTCUSDT",
                 timeframe="1d",
                 start_date=datetime(2024, 6, 1),

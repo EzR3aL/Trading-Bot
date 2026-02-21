@@ -9,10 +9,10 @@ Generates comprehensive reports from backtest results including:
 """
 
 import json
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import List, Dict, Optional, Any
+from typing import List, Dict, Any
 
 from src.utils.logger import get_logger
 
@@ -409,7 +409,7 @@ class BacktestReport:
 """
         for month, pnl in sorted(r.monthly_returns.items()):
             pct = (pnl / r.starting_capital) * 100
-            emoji = "+" if pnl >= 0 else "-"
+            _emoji = "+" if pnl >= 0 else "-"
             entry += f"| {month} | ${pnl:+,.2f} ({pct:+.2f}%) |\n"
 
         return entry

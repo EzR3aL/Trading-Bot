@@ -5,15 +5,19 @@ Simulates trading over historical data and calculates performance metrics.
 Uses multi-source data analysis for signal generation.
 """
 
+from __future__ import annotations
+
 import math
-from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from dataclasses import dataclass
+from datetime import datetime
 from enum import Enum
-from typing import Any, List, Optional, Dict, Tuple
+from typing import TYPE_CHECKING, Any, List, Optional, Dict, Tuple
 
 from src.backtest.historical_data import HistoricalDataPoint
 from src.utils.logger import get_logger
-from config import settings
+
+if TYPE_CHECKING:
+    from src.backtest.report import BacktestResult
 
 logger = get_logger(__name__)
 
@@ -1389,14 +1393,15 @@ class BacktestEngine:
         if st == "degen":
             return self._signal_degen(data, symbol)
         # Default: liquidation_hunter (and any unknown type)
-        return self._signal_liquidation_hunter(data, symbol)
+        return self._signal_liquidation_hunter(data, symbol, history)
 
     # ------------------------------------------------------------------ #
     #  Liquidation Hunter — contrarian leverage + sentiment               #
     # ------------------------------------------------------------------ #
 
     def _signal_liquidation_hunter(
-        self, data: HistoricalDataPoint, symbol: str = "BTC"
+        self, data: HistoricalDataPoint, symbol: str = "BTC",
+        history: Optional[List[HistoricalDataPoint]] = None,
     ) -> Tuple[TradeDirection, int, str]:
         """
         Contrarian strategy: bet against crowded positions.
@@ -1551,7 +1556,7 @@ class BacktestEngine:
         elif funding_rate < self.config.funding_rate_low:
             scores.append((50, 0.8, f"Funding Bullish ({funding_rate*100:.4f}%)"))
         else:
-            scores.append((0, 0.8, f"Funding Neutral"))
+            scores.append((0, 0.8, "Funding Neutral"))
 
         # Source 4: Taker Buy/Sell Volume — weight 1.2
         ratio = data.taker_buy_sell_ratio
@@ -1565,17 +1570,17 @@ class BacktestEngine:
         # Source 5: Stablecoin flows — weight 0.8
         flow = data.stablecoin_flow_7d
         if flow > 1_000_000_000:
-            scores.append((30, 0.8, f"Stables Inflow"))
+            scores.append((30, 0.8, "Stables Inflow"))
         elif flow < -1_000_000_000:
-            scores.append((-30, 0.8, f"Stables Outflow"))
+            scores.append((-30, 0.8, "Stables Outflow"))
         else:
-            scores.append((0, 0.8, f"Stables Neutral"))
+            scores.append((0, 0.8, "Stables Neutral"))
 
         # Source 6: Momentum (price change) — weight 1.2
         if abs(price_change) > 1.0:
             scores.append((price_change * 15, 1.2, f"Momentum {price_change:+.1f}%"))
         else:
-            scores.append((0, 1.2, f"Momentum Flat"))
+            scores.append((0, 1.2, "Momentum Flat"))
 
         # Voting: count long vs short
         long_votes = sum(1 for s, _, _ in scores if s > 10)
@@ -1655,62 +1660,62 @@ class BacktestEngine:
 
         # Factor 3: Funding rate
         if funding_rate > 0.001:
-            factor_scores.append((-60, f"Very High Funding"))
+            factor_scores.append((-60, "Very High Funding"))
         elif funding_rate > self.config.funding_rate_high:
-            factor_scores.append((-30, f"High Funding"))
+            factor_scores.append((-30, "High Funding"))
         elif funding_rate < -0.0005:
-            factor_scores.append((60, f"Very Neg Funding"))
+            factor_scores.append((60, "Very Neg Funding"))
         elif funding_rate < self.config.funding_rate_low:
-            factor_scores.append((30, f"Neg Funding"))
+            factor_scores.append((30, "Neg Funding"))
         else:
-            factor_scores.append((0, f"Funding Neutral"))
+            factor_scores.append((0, "Funding Neutral"))
 
         # Factor 4: Open Interest momentum
         oi_change = data.open_interest_change_24h
         if oi_change > 5 and price_change > 0:
-            factor_scores.append((-25, f"OI+Price Rising (squeeze risk)"))
+            factor_scores.append((-25, "OI+Price Rising (squeeze risk)"))
         elif oi_change > 5 and price_change < 0:
-            factor_scores.append((25, f"OI Rising+Price Down (capitulation)"))
+            factor_scores.append((25, "OI Rising+Price Down (capitulation)"))
         elif oi_change < -5:
-            factor_scores.append((15 if price_change > 0 else -15, f"OI Deleveraging"))
+            factor_scores.append((15 if price_change > 0 else -15, "OI Deleveraging"))
         else:
-            factor_scores.append((0, f"OI Stable"))
+            factor_scores.append((0, "OI Stable"))
 
         # Factor 5: Taker Volume
         taker = data.taker_buy_sell_ratio
         if taker > 1.3:
-            factor_scores.append((-30, f"Heavy Buying (contrarian)"))
+            factor_scores.append((-30, "Heavy Buying (contrarian)"))
         elif taker < 0.7:
-            factor_scores.append((30, f"Heavy Selling (contrarian)"))
+            factor_scores.append((30, "Heavy Selling (contrarian)"))
         else:
-            factor_scores.append((0, f"Volume Balanced"))
+            factor_scores.append((0, "Volume Balanced"))
 
         # Factor 6: Top Traders (trend confirmation)
         top_ls = data.top_trader_long_short_ratio
         if top_ls > 1.5:
-            factor_scores.append((20, f"TopTraders Long"))
+            factor_scores.append((20, "TopTraders Long"))
         elif top_ls < 0.7:
-            factor_scores.append((-20, f"TopTraders Short"))
+            factor_scores.append((-20, "TopTraders Short"))
         else:
-            factor_scores.append((0, f"TopTraders Neutral"))
+            factor_scores.append((0, "TopTraders Neutral"))
 
         # Factor 7: Stablecoin flows
         flow = data.stablecoin_flow_7d
         if flow > 2_000_000_000:
-            factor_scores.append((25, f"Large Stablecoin Inflow"))
+            factor_scores.append((25, "Large Stablecoin Inflow"))
         elif flow < -2_000_000_000:
-            factor_scores.append((-25, f"Large Stablecoin Outflow"))
+            factor_scores.append((-25, "Large Stablecoin Outflow"))
         else:
-            factor_scores.append((0, f"Stables Neutral"))
+            factor_scores.append((0, "Stables Neutral"))
 
         # Factor 8: Macro (DXY)
         dxy = data.dxy_index
         if dxy > 107:
-            factor_scores.append((-20, f"Strong USD"))
+            factor_scores.append((-20, "Strong USD"))
         elif dxy > 0 and dxy < 100:
-            factor_scores.append((20, f"Weak USD"))
+            factor_scores.append((20, "Weak USD"))
         else:
-            factor_scores.append((0, f"USD Neutral"))
+            factor_scores.append((0, "USD Neutral"))
 
         # Factor 9: Momentum
         if price_change > 3:
@@ -1820,10 +1825,10 @@ class BacktestEngine:
         # Secondary: Funding rate (light contrarian touch)
         if funding_rate > 0.001 and score > 0:
             score -= 10
-            reasons.append(f"High Funding Warning")
+            reasons.append("High Funding Warning")
         elif funding_rate < -0.0005 and score < 0:
             score += 10
-            reasons.append(f"Neg Funding Warning")
+            reasons.append("Neg Funding Warning")
 
         # Forced decisiveness: ALWAYS pick a direction
         if score > 0:

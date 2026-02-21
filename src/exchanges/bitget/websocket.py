@@ -10,7 +10,6 @@ import hashlib
 import hmac
 import json
 import time
-from datetime import datetime
 from typing import Callable, Dict, List, Optional
 
 import websockets

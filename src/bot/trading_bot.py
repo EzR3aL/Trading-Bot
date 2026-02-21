@@ -20,7 +20,7 @@ based on the Contrarian Liquidation Hunter strategy.
 import asyncio
 import json
 from datetime import datetime
-from typing import Optional, List
+from typing import Optional
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger

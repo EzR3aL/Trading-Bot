@@ -28,7 +28,6 @@ DECISION:
 DATA SOURCE: Only Binance kline data (OHLCV) - single dependency, high reliability.
 """
 
-import asyncio
 import math
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple

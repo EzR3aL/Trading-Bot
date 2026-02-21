@@ -1,6 +1,5 @@
 """Pydantic schemas for portfolio views."""
 
-from typing import Optional
 
 from pydantic import BaseModel
 

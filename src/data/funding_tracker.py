@@ -5,8 +5,7 @@ Tracks and stores funding rate payments over time for accurate PnL calculation.
 Funding rates are paid every 8 hours on most exchanges.
 """
 
-import json
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import List, Optional, Dict, Any

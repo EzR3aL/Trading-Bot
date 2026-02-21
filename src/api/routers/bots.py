@@ -24,7 +24,6 @@ from src.api.schemas.bots import (
     StrategyInfo,
 )
 from src.auth.dependencies import get_current_user
-from src.exceptions import BotError, BotNotFoundError
 from src.models.database import BotConfig, ConfigPreset, ExchangeConnection, TradeRecord, User
 from src.models.session import get_db
 from src.strategy import StrategyRegistry  # imports __init__.py → registers all strategies

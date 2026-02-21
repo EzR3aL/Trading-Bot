@@ -155,8 +155,8 @@ class HyperliquidGatesMixin:
             result = await db.execute(
                 sa_select(AffiliateLink).where(
                     AffiliateLink.exchange_type == exchange_type,
-                    AffiliateLink.is_active == True,
-                    AffiliateLink.uid_required == True,
+                    AffiliateLink.is_active.is_(True),
+                    AffiliateLink.uid_required.is_(True),
                 )
             )
             affiliate_link = result.scalar_one_or_none()

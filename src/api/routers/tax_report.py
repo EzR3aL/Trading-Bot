@@ -101,8 +101,8 @@ async def download_tax_report_csv(
 
     # ── Header section ──
     writer.writerow(["STEUERREPORT KRYPTOWAEHRUNGSHANDEL / TAX REPORT CRYPTOCURRENCY TRADING"])
-    writer.writerow([f"Berichtszeitraum / Reporting Period", f"{year}-01-01 bis/to {year}-12-31"])
-    writer.writerow([f"Erstellt am / Generated on", datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")])
+    writer.writerow(["Berichtszeitraum / Reporting Period", f"{year}-01-01 bis/to {year}-12-31"])
+    writer.writerow(["Erstellt am / Generated on", datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")])
     mode_label = "Demo" if demo_mode is True else "Live" if demo_mode is False else "Alle/All"
     writer.writerow(["Modus / Mode", mode_label])
     writer.writerow([])

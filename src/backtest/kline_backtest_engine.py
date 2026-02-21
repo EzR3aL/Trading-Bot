@@ -13,7 +13,7 @@ import math
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, List, Optional, Tuple, Type
+from typing import Any, Dict, List, Optional, Type
 
 from src.data.market_data import MarketDataFetcher
 from src.strategy.base import BaseStrategy, SignalDirection, TradeSignal

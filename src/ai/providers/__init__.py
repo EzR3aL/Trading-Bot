@@ -1,6 +1,6 @@
 """LLM provider registry and exports."""
 
-from typing import Any, Dict, List, Type
+from typing import Any, Dict, Type
 
 from src.ai.providers.anthropic_provider import AnthropicProvider
 from src.ai.providers.base import BaseLLMProvider, LLMResponse

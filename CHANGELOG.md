@@ -9,6 +9,17 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.12.1] - 2026-02-21
+
+### Behoben
+- **CI-Pipeline repariert:** 134 ruff-Lint-Fehler behoben (unused imports, E402, E712, E741, E731, F821, F841, F811)
+- **Doppelte Methoden entfernt:** 6 duplizierte Funktionen in `MarketDataFetcher` (calculate_atr, calculate_ema, calculate_adx, calculate_macd, calculate_rsi, detect_rsi_divergence)
+- **Undefined Name Bugs:** `BacktestResult` und `history` Referenzen in backtest engine korrigiert
+- **SQLAlchemy Best Practices:** `== True` Vergleiche durch `.is_(True)` ersetzt
+- **Test fix:** `test_date_range.py` nutzte Kline-Strategy-Pfad der in CI wegen Binance Geo-Block (HTTP 451) fehlschlug — auf Data-Pfad umgestellt
+
+---
+
 ## [3.12.0] - 2026-02-20
 
 ### Freie Datumswahl im Backtesting (Option A)

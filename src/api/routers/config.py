@@ -416,7 +416,7 @@ async def get_connections_status(
     db: AsyncSession = Depends(get_db),
 ):
     """Check connectivity to all external data sources and services."""
-    config = await _get_or_create_config(user, db)
+    await _get_or_create_config(user, db)  # ensure config exists (side effect)
     user_connections = await _get_user_connections(user.id, db)
 
     # Build data source services dynamically from registry
