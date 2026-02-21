@@ -321,7 +321,9 @@ def test_frontend_mount_when_directory_exists():
     """When static/frontend exists, a mount is added."""
     from src.api.main_app import create_app
 
-    with patch("src.api.main_app.Path.exists", return_value=True):
+    mock_static = MagicMock()
+    with patch("src.api.main_app.Path.exists", return_value=True), \
+         patch("src.api.main_app.StaticFiles", return_value=mock_static):
         app = create_app()
         # Check that a mount named 'frontend' exists
         mount_names = [r.name for r in app.routes if hasattr(r, "name")]

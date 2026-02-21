@@ -88,5 +88,9 @@ static/frontend/
 *.key
 credentials.json
 
-# Claude - keep settings.local.json private
+# Claude Code - local dev artifacts
+.claude/sessions/
+.claude/plan-*.md
+.claude/skills/
 .claude/settings.local.json
+PLAN.md
