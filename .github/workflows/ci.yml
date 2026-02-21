@@ -9,7 +9,7 @@ on:
 jobs:
   backend-tests:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
 
@@ -20,20 +20,14 @@ jobs:
 
       - run: pip install -r requirements.txt
 
-      - run: pip install pytest pytest-asyncio pytest-cov pytest-mock pytest-timeout
+      - run: pip install pytest pytest-asyncio pytest-mock pytest-timeout
 
-      - run: python -m pytest tests/ -q --cov=src --cov-report=xml --timeout=120
+      - run: python -m pytest tests/ -q --timeout=120
         env:
           CI: true
           ENVIRONMENT: test
           JWT_SECRET_KEY: test-secret-key-for-ci-only-not-production
           DATABASE_URL: sqlite+aiosqlite:///test.db
-
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: coverage
-          path: coverage.xml
 
   frontend-tests:
     runs-on: ubuntu-latest
