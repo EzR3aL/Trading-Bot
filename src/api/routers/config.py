@@ -242,7 +242,7 @@ async def delete_exchange_connection(
 
 
 @router.post("/exchange-connections/{exchange_type}/test")
-@limiter.limit("10/minute")
+@limiter.limit("3/minute")
 async def test_exchange_connection(
     request: Request,
     exchange_type: str = Path(pattern="^(bitget|weex|hyperliquid)$"),

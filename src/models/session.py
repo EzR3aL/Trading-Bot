@@ -165,7 +165,7 @@ async def _run_sqlite_migrations(conn) -> None:
                     updated_at DATETIME
                 )
             """))
-            old_cols = [c for c in col_names if c in [
+            allowed_cols = {
                 'id', 'user_id', 'name', 'description', 'strategy_type', 'exchange_type',
                 'mode', 'trading_pairs', 'leverage', 'position_size_percent',
                 'max_trades_per_day', 'take_profit_percent', 'stop_loss_percent',
@@ -174,8 +174,10 @@ async def _run_sqlite_migrations(conn) -> None:
                 'rotation_interval_minutes', 'rotation_start_time', 'discord_webhook_url',
                 'telegram_bot_token', 'telegram_chat_id', 'active_preset_id',
                 'is_enabled', 'created_at', 'updated_at',
-            ]]
-            shared = ', '.join(old_cols)
+            }
+            old_cols = [c for c in col_names if c in allowed_cols]
+            # Whitelist-validated identifiers — safe for interpolation
+            shared = ', '.join(f'"{c}"' for c in old_cols)
             await conn.execute(text(f"INSERT INTO bot_configs ({shared}) SELECT {shared} FROM _bot_configs_old"))
             await conn.execute(text("DROP TABLE _bot_configs_old"))
             await conn.execute(text("CREATE INDEX IF NOT EXISTS idx_bot_configs_user ON bot_configs(user_id, created_at DESC)"))
