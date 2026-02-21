@@ -84,7 +84,7 @@ export default function App() {
                         </AdminRoute>
                       }
                     />
-                    <Route path="*" element={<NotFound />} />
+<Route path="*" element={<NotFound />} />
                   </Routes>
                 </Suspense>
               </AppLayout>

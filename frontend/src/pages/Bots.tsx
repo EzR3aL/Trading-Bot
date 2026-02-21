@@ -32,8 +32,9 @@ import {
   Layers,
   Bot,
 } from 'lucide-react'
+import GuidedTour, { TourHelpButton, type TourStep } from '../components/ui/GuidedTour'
 
-const STRATEGY_DISPLAY: Record<string, string> = { llm_signal: 'KI-Companion', sentiment_surfer: 'Sentiment Surfer', liquidation_hunter: 'Liquidation Hunter', degen: 'Degen', edge_indicator: 'Edge Indicator', claude_edge_indicator: 'Claude Edge Indicator' }
+const STRATEGY_DISPLAY: Record<string, string> = { llm_signal: 'KI-Companion', sentiment_surfer: 'Sentiment Surfer', liquidation_hunter: 'Liquidation Hunter', degen: 'Degen', edge_indicator: 'Edge Indicator', claude_edge_indicator: 'Claude-Edge' }
 const AI_STRATEGIES = new Set(['llm_signal', 'degen'])
 function strategyLabel(name: string) { return STRATEGY_DISPLAY[name] || name.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) }
 
@@ -762,10 +763,12 @@ export default function Bots() {
             onClick={() => setShowBuilder(true)}
             aria-label={t('bots.newBot')}
             className="btn-gradient flex items-center gap-2"
+            data-tour="new-bot"
           >
             <Plus size={18} />
             {t('bots.newBot')}
           </button>
+          <TourHelpButton tourId="bots-page" />
         </div>
       </div>
 
@@ -802,6 +805,7 @@ export default function Bots() {
               <div
                 key={bot.bot_config_id}
                 className={`glass-card rounded-xl p-5 border transition-all duration-300 ${style.card}`}
+                {...(bot === bots[0] ? { 'data-tour': 'bot-card' } : {})}
               >
                 {/* Header row */}
                 <div className="flex items-start justify-between mb-3">
@@ -903,7 +907,7 @@ export default function Bots() {
                 )}
 
                 {/* Stats row */}
-                <div className="grid grid-cols-3 gap-1 sm:gap-2 mb-3 text-center">
+                <div className="grid grid-cols-3 gap-1 sm:gap-2 mb-3 text-center" {...(bot === bots[0] ? { 'data-tour': 'bot-stats' } : {})}>
                   <div>
                     <div className="text-xs text-gray-500 uppercase tracking-wider">{t('bots.totalPnl')}</div>
                     <div className={`text-base font-mono font-semibold ${bot.total_pnl >= 0 ? 'text-profit' : 'text-loss'}`}>
@@ -1009,7 +1013,7 @@ export default function Bots() {
                 )}
 
                 {/* Actions */}
-                <div className="flex flex-wrap items-center gap-2 pt-3 border-t border-white/5">
+                <div className="flex flex-wrap items-center gap-2 pt-3 border-t border-white/5" {...(bot === bots[0] ? { 'data-tour': 'bot-actions' } : {})}>
                   {bot.status === 'running' ? (
                     <button
                       onClick={() => handleStop(bot.bot_config_id)}
@@ -1092,6 +1096,40 @@ export default function Bots() {
           </div>
         </div>
       )}
+
+      {/* Guided Tour */}
+      <GuidedTour
+        tourId="bots-page"
+        steps={botsTourSteps}
+        autoStart={!loading && !showBuilder && !editBotId}
+      />
     </div>
   )
 }
+
+const botsTourSteps: TourStep[] = [
+  {
+    target: '[data-tour="new-bot"]',
+    titleKey: 'tour.botsNewBotTitle',
+    descriptionKey: 'tour.botsNewBotDesc',
+    position: 'bottom',
+  },
+  {
+    target: '[data-tour="bot-card"]',
+    titleKey: 'tour.botsBotCardTitle',
+    descriptionKey: 'tour.botsBotCardDesc',
+    position: 'bottom',
+  },
+  {
+    target: '[data-tour="bot-stats"]',
+    titleKey: 'tour.botsStatsTitle',
+    descriptionKey: 'tour.botsStatsDesc',
+    position: 'top',
+  },
+  {
+    target: '[data-tour="bot-actions"]',
+    titleKey: 'tour.botsActionsTitle',
+    descriptionKey: 'tour.botsActionsDesc',
+    position: 'top',
+  },
+]

@@ -179,6 +179,10 @@ async def create_bot(
     await db.refresh(config)
 
     logger.info(f"Bot created: {config.name} (id={config.id}) by user {user.id}")
+
+    from src.utils.event_logger import log_event
+    await log_event("bot_created", f"Bot '{config.name}' created", user_id=user.id, bot_id=config.id)
+
     return _config_to_response(config)
 
 
@@ -560,9 +564,14 @@ async def delete_bot(
     if orchestrator.is_running(bot_id):
         await orchestrator.stop_bot(bot_id)
 
+    bot_name = config.name
     await db.delete(config)
-    logger.info(f"Bot deleted: {config.name} (id={bot_id})")
-    return {"status": "ok", "message": f"Bot '{config.name}' deleted"}
+    logger.info(f"Bot deleted: {bot_name} (id={bot_id})")
+
+    from src.utils.event_logger import log_event
+    await log_event("bot_deleted", f"Bot '{bot_name}' deleted", user_id=user.id, bot_id=bot_id)
+
+    return {"status": "ok", "message": f"Bot '{bot_name}' deleted"}
 
 
 @router.post("/{bot_id}/duplicate", response_model=BotConfigResponse)
@@ -619,6 +628,10 @@ async def duplicate_bot(
     await db.refresh(copy)
 
     logger.info(f"Bot duplicated: {original.name} -> {copy.name} (id={copy.id}) by user {user.id}")
+
+    from src.utils.event_logger import log_event
+    await log_event("bot_duplicated", f"Bot '{original.name}' duplicated as '{copy.name}'", user_id=user.id, bot_id=copy.id)
+
     return _config_to_response(copy)
 
 

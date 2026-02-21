@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
 import api from '../../api/client'
-import { ArrowLeft, ArrowRight, Check, Play, Brain, TrendingUp, BarChart3, DollarSign, Activity, Building, LayoutGrid, List, Bot, Zap, Clock } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Check, Play, Brain, TrendingUp, BarChart3, DollarSign, Activity, Building, LayoutGrid, List, Bot, Info, Zap, Clock } from 'lucide-react'
 import ExchangeLogo from '../ui/ExchangeLogo'
 import FilterDropdown from '../ui/FilterDropdown'
 import NumInput from '../ui/NumInput'
@@ -85,7 +85,7 @@ const STRATEGY_DISPLAY_NAMES: Record<string, string> = {
   liquidation_hunter: 'Liquidation Hunter',
   degen: 'Degen',
   edge_indicator: 'Edge Indicator',
-  claude_edge_indicator: 'Claude Edge Indicator',
+  claude_edge_indicator: 'Claude-Edge',
 }
 
 const STRATEGY_DESCRIPTIONS_DE: Record<string, string> = {
@@ -93,8 +93,19 @@ const STRATEGY_DESCRIPTIONS_DE: Record<string, string> = {
   sentiment_surfer: 'Kombiniert Marktstimmung mit technischen Indikatoren zur Vorhersage von Preisbewegungen. Nutzt News-Sentiment, Fear & Greed, VWAP, Supertrend und Spot-Daten. Erfordert Übereinstimmung mehrerer Quellen.',
   liquidation_hunter: 'Contrarian-Strategie, die gegen überfüllte Positionen handelt. Analysiert Long/Short-Verhältnisse, Funding Rates und Fear & Greed, um Liquidationskaskaden frühzeitig zu erkennen.',
   degen: 'KI-gesteuerte Arena-Strategie mit festem Prompt und 14 Datenquellen. Nutzt Derivatives, Order Book, Supertrend, VWAP und mehr für 1h BTC-Vorhersagen. Inspiriert vom Degen Prediction Bot.',
-  edge_indicator: 'Technische Strategie basierend auf dem TradingView "Trading Edge" Indicator. EMA 8/21 Ribbon, ADX Chop-Filter und Predator Momentum Score (MACD + RSI Drift). Nur Kline-Daten.',
-  claude_edge_indicator: 'Erweiterter Edge Indicator mit ATR-basierten TP/SL, Volumen-Bestätigung, Multi-Timeframe (4h) Alignment, Trailing Stop, Regime-basierter Positionsgröße und RSI-Divergenz-Erkennung.',
+  edge_indicator: 'Technische Analyse basierend auf dem TradingView "Trading Edge" Indikator. Kombiniert EMA 8/21 Ribbon, ADX-Chop-Filter und Predator Momentum Score (MACD + RSI Drift). Nur Kline-Daten, keine externen APIs.',
+  claude_edge_indicator: 'Erweiterte Edge Strategie mit ATR-basierten TP/SL, Volumen-Bestätigung, Multi-Timeframe (4h), Trailing Stop, regime-basierter Positionsgröße und RSI-Divergenz.',
+}
+
+const INTERVAL_BACKTEST_HINTS: Record<string, Record<string, string>> = {
+  edge_indicator: {
+    best: '1h',
+    hint: 'Backtest-Empfehlung: 1h erzielt die beste Performance (höchste Rendite, bester Sharpe Ratio). 30m ist die zweitbeste Option.',
+  },
+  claude_edge_indicator: {
+    best: '1h',
+    hint: 'Backtest-Empfehlung: 1h erzielt die beste Performance (+45% Rendite, 55.9% Win Rate, Sharpe 4.02). 30m ist die zweitbeste Option.',
+  },
 }
 
 function getStrategyDisplayName(name: string): string {
@@ -594,7 +605,7 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
                     type="button"
                     onClick={() => setStrategyView('grid')}
                     className={`p-1.5 rounded-md transition-colors ${strategyView === 'grid' ? 'bg-white/10 text-white' : 'text-gray-500 hover:text-gray-300'}`}
-                    title="Kacheln"
+                    title={b.viewGrid || 'Grid'}
                   >
                     <LayoutGrid size={14} />
                   </button>
@@ -602,7 +613,7 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
                     type="button"
                     onClick={() => setStrategyView('list')}
                     className={`p-1.5 rounded-md transition-colors ${strategyView === 'list' ? 'bg-white/10 text-white' : 'text-gray-500 hover:text-gray-300'}`}
-                    title="Liste"
+                    title={b.viewList || 'List'}
                   >
                     <List size={14} />
                   </button>
@@ -920,7 +931,7 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
                   type="button"
                   onClick={() => setSourcesView('grid')}
                   className={`p-1.5 rounded-md transition-colors ${sourcesView === 'grid' ? 'bg-white/10 text-white' : 'text-gray-500 hover:text-gray-300'}`}
-                  title="Kacheln"
+                  title={b.viewGrid || 'Grid'}
                 >
                   <LayoutGrid size={14} />
                 </button>
@@ -928,7 +939,7 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
                   type="button"
                   onClick={() => setSourcesView('list')}
                   className={`p-1.5 rounded-md transition-colors ${sourcesView === 'list' ? 'bg-white/10 text-white' : 'text-gray-500 hover:text-gray-300'}`}
-                  title="Liste"
+                  title={b.viewList || 'List'}
                 >
                   <List size={14} />
                 </button>
@@ -1073,19 +1084,43 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
                               className="filter-select w-full text-sm tabular-nums text-center" />
                           </div>
                           <div>
-                            <label className="block text-[10px] text-gray-500 mb-1">{b.leverage}</label>
+                            <label className="flex items-center gap-0.5 text-[10px] text-gray-500 mb-1">
+                              {b.leverage}
+                              <span className="relative group">
+                                <Info size={10} className="text-blue-400 cursor-help" />
+                                <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 hidden group-hover:block w-44 p-1.5 text-[10px] text-gray-200 bg-gray-800 border border-gray-600 rounded-lg shadow-lg z-50 whitespace-normal leading-relaxed">
+                                  {t('bots.builder.leverageHint')}
+                                </span>
+                              </span>
+                            </label>
                             <NumInput value={cfg.leverage ?? ''} onChange={e => updateAsset('leverage', e.target.value)}
                               placeholder="-" min={1} max={20}
                               className="filter-select w-full text-sm tabular-nums text-center" />
                           </div>
                           <div>
-                            <label className="block text-[10px] text-gray-500 mb-1">TP %</label>
+                            <label className="flex items-center gap-0.5 text-[10px] text-gray-500 mb-1">
+                              TP %
+                              <span className="relative group">
+                                <Info size={10} className="text-blue-400 cursor-help" />
+                                <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 hidden group-hover:block w-44 p-1.5 text-[10px] text-gray-200 bg-gray-800 border border-gray-600 rounded-lg shadow-lg z-50 whitespace-normal leading-relaxed">
+                                  {t('bots.builder.tpHint')}
+                                </span>
+                              </span>
+                            </label>
                             <NumInput value={cfg.tp ?? ''} onChange={e => updateAsset('tp', e.target.value)}
                               placeholder="-" min={0.5} max={20} step={0.5}
                               className="filter-select w-full text-sm tabular-nums text-center" />
                           </div>
                           <div>
-                            <label className="block text-[10px] text-gray-500 mb-1">SL %</label>
+                            <label className="flex items-center gap-0.5 text-[10px] text-gray-500 mb-1">
+                              SL %
+                              <span className="relative group">
+                                <Info size={10} className="text-blue-400 cursor-help" />
+                                <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 hidden group-hover:block w-44 p-1.5 text-[10px] text-gray-200 bg-gray-800 border border-gray-600 rounded-lg shadow-lg z-50 whitespace-normal leading-relaxed">
+                                  {t('bots.builder.slHint')}
+                                </span>
+                              </span>
+                            </label>
                             <NumInput value={cfg.sl ?? ''} onChange={e => updateAsset('sl', e.target.value)}
                               placeholder="-" min={0.5} max={10} step={0.5}
                               className="filter-select w-full text-sm tabular-nums text-center" />

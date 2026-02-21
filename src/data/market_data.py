@@ -975,6 +975,63 @@ class MarketDataFetcher:
 
         return total_tp_vol / total_vol
 
+    # ==================== ATR (Average True Range) ====================
+
+    @staticmethod
+    def calculate_atr(klines: List[List], period: int = 14) -> List[float]:
+        """
+        Calculate Average True Range using Wilder's smoothing.
+
+        TR = max(high-low, |high-prev_close|, |low-prev_close|)
+        ATR[period-1] = SMA(TR, period)
+        ATR[i] = (ATR[i-1] * (period-1) + TR[i]) / period
+
+        Args:
+            klines: OHLCV kline data
+            period: ATR period (default 14)
+
+        Returns:
+            List of ATR values (same length as klines, 0.0 for warmup).
+        """
+        if not klines or len(klines) < period + 1:
+            return [0.0] * len(klines) if klines else []
+
+        highs = []
+        lows = []
+        closes = []
+        for k in klines:
+            try:
+                highs.append(float(k[2]))
+                lows.append(float(k[3]))
+                closes.append(float(k[4]))
+            except (IndexError, ValueError, TypeError):
+                continue
+
+        if len(closes) < period + 1:
+            return [0.0] * len(closes)
+
+        # Calculate True Range
+        true_ranges = [highs[0] - lows[0]]
+        for i in range(1, len(closes)):
+            tr = max(
+                highs[i] - lows[i],
+                abs(highs[i] - closes[i - 1]),
+                abs(lows[i] - closes[i - 1]),
+            )
+            true_ranges.append(tr)
+
+        # Wilder's smoothing
+        atr_values = [0.0] * len(true_ranges)
+        for i in range(len(true_ranges)):
+            if i < period - 1:
+                atr_values[i] = 0.0
+            elif i == period - 1:
+                atr_values[i] = sum(true_ranges[:period]) / period
+            else:
+                atr_values[i] = (atr_values[i - 1] * (period - 1) + true_ranges[i]) / period
+
+        return atr_values
+
     # ==================== Supertrend Indicator ====================
 
     @staticmethod
@@ -1007,27 +1064,8 @@ class MarketDataFetcher:
         if len(closes) < atr_period + 1:
             return {"direction": "neutral", "value": 0.0, "atr": 0.0}
 
-        # Calculate True Range
-        true_ranges = [highs[0] - lows[0]]
-        for i in range(1, len(closes)):
-            tr = max(
-                highs[i] - lows[i],
-                abs(highs[i] - closes[i - 1]),
-                abs(lows[i] - closes[i - 1]),
-            )
-            true_ranges.append(tr)
-
-        # Calculate ATR using simple moving average
-        atr_values = []
-        for i in range(len(true_ranges)):
-            if i < atr_period - 1:
-                atr_values.append(0.0)
-            elif i == atr_period - 1:
-                atr_values.append(sum(true_ranges[:atr_period]) / atr_period)
-            else:
-                atr_values.append(
-                    (atr_values[-1] * (atr_period - 1) + true_ranges[i]) / atr_period
-                )
+        # Reuse calculate_atr for ATR values
+        atr_values = MarketDataFetcher.calculate_atr(klines, atr_period)
 
         # Calculate Supertrend
         supertrend = [0.0] * len(closes)
@@ -2453,4 +2491,390 @@ class MarketDataFetcher:
             f"Selective fetch: {len(result)}/{len(sources)} sources succeeded "
             f"[{', '.join(result.keys())}]"
         )
+        return result
+
+    # ==================== EMA Calculation ====================
+
+    @staticmethod
+    def calculate_ema(values: List[float], period: int) -> List[float]:
+        """
+        Calculate Exponential Moving Average.
+
+        Uses the standard EMA formula:
+        EMA[0] = SMA of first `period` values
+        EMA[i] = value[i] * k + EMA[i-1] * (1 - k), where k = 2 / (period + 1)
+
+        Args:
+            values: List of price values (e.g., close prices)
+            period: EMA period
+
+        Returns:
+            List of EMA values (same length as input, NaN-equivalent 0.0 for warmup)
+        """
+        if not values or period < 1 or len(values) < period:
+            return [0.0] * len(values) if values else []
+
+        k = 2.0 / (period + 1)
+        ema = [0.0] * len(values)
+
+        # Seed with SMA of first `period` values
+        ema[period - 1] = sum(values[:period]) / period
+
+        for i in range(period, len(values)):
+            ema[i] = values[i] * k + ema[i - 1] * (1 - k)
+
+        return ema
+
+    # ==================== ADX Calculation ====================
+
+    @staticmethod
+    def calculate_adx(klines: List[List], period: int = 14) -> Dict[str, Any]:
+        """
+        Calculate Average Directional Index (ADX) using Wilder's method.
+
+        ADX measures trend strength (not direction).
+        ADX > 25 = strong trend, ADX < 20 = weak/choppy market.
+
+        Args:
+            klines: OHLCV kline data
+            period: ADX period (default 14)
+
+        Returns:
+            {"adx": float, "plus_di": float, "minus_di": float, "is_trending": bool}
+        """
+        if not klines or len(klines) < period + 1:
+            return {"adx": 0.0, "plus_di": 0.0, "minus_di": 0.0, "is_trending": False}
+
+        highs, lows, closes = [], [], []
+        for k in klines:
+            try:
+                highs.append(float(k[2]))
+                lows.append(float(k[3]))
+                closes.append(float(k[4]))
+            except (IndexError, ValueError, TypeError):
+                continue
+
+        if len(closes) < period + 1:
+            return {"adx": 0.0, "plus_di": 0.0, "minus_di": 0.0, "is_trending": False}
+
+        # Calculate +DM, -DM, and True Range
+        plus_dm_list = []
+        minus_dm_list = []
+        tr_list = []
+
+        for i in range(1, len(closes)):
+            up_move = highs[i] - highs[i - 1]
+            down_move = lows[i - 1] - lows[i]
+
+            plus_dm = up_move if (up_move > down_move and up_move > 0) else 0.0
+            minus_dm = down_move if (down_move > up_move and down_move > 0) else 0.0
+
+            tr = max(
+                highs[i] - lows[i],
+                abs(highs[i] - closes[i - 1]),
+                abs(lows[i] - closes[i - 1]),
+            )
+
+            plus_dm_list.append(plus_dm)
+            minus_dm_list.append(minus_dm)
+            tr_list.append(tr)
+
+        # Wilder's smoothing (RMA): first value = sum of period, then RMA
+        def wilder_smooth(data: List[float], p: int) -> List[float]:
+            if len(data) < p:
+                return []
+            smoothed = [sum(data[:p])]
+            for i in range(p, len(data)):
+                smoothed.append((smoothed[-1] * (p - 1) + data[i]) / p)
+            return smoothed
+
+        atr_smooth = wilder_smooth(tr_list, period)
+        plus_dm_smooth = wilder_smooth(plus_dm_list, period)
+        minus_dm_smooth = wilder_smooth(minus_dm_list, period)
+
+        if not atr_smooth or not plus_dm_smooth or not minus_dm_smooth:
+            return {"adx": 0.0, "plus_di": 0.0, "minus_di": 0.0, "is_trending": False}
+
+        # Calculate +DI, -DI, DX
+        dx_list = []
+        last_plus_di = 0.0
+        last_minus_di = 0.0
+
+        for i in range(len(atr_smooth)):
+            atr_val = atr_smooth[i]
+            if atr_val == 0:
+                dx_list.append(0.0)
+                continue
+
+            plus_di = 100 * plus_dm_smooth[i] / atr_val
+            minus_di = 100 * minus_dm_smooth[i] / atr_val
+
+            di_sum = plus_di + minus_di
+            dx = 100 * abs(plus_di - minus_di) / di_sum if di_sum != 0 else 0.0
+
+            dx_list.append(dx)
+            last_plus_di = plus_di
+            last_minus_di = minus_di
+
+        # ADX = Wilder smooth of DX
+        adx_smooth = wilder_smooth(dx_list, period)
+        adx_value = adx_smooth[-1] if adx_smooth else 0.0
+
+        return {
+            "adx": round(adx_value, 2),
+            "plus_di": round(last_plus_di, 2),
+            "minus_di": round(last_minus_di, 2),
+            "is_trending": adx_value >= 20.0,
+        }
+
+    # ==================== MACD Calculation ====================
+
+    @staticmethod
+    def calculate_macd(
+        klines: List[List], fast: int = 12, slow: int = 26, signal_period: int = 9
+    ) -> Dict[str, Any]:
+        """
+        Calculate MACD (Moving Average Convergence Divergence).
+
+        MACD Line = EMA(fast) - EMA(slow)
+        Signal Line = EMA(MACD Line, signal_period)
+        Histogram = MACD Line - Signal Line
+
+        Args:
+            klines: OHLCV kline data
+            fast: Fast EMA period (default 12)
+            slow: Slow EMA period (default 26)
+            signal_period: Signal line EMA period (default 9)
+
+        Returns:
+            {"macd_line": float, "signal_line": float, "histogram": float,
+             "histogram_series": List[float]}
+        """
+        if not klines or len(klines) < slow + signal_period:
+            return {
+                "macd_line": 0.0,
+                "signal_line": 0.0,
+                "histogram": 0.0,
+                "histogram_series": [],
+            }
+
+        closes = []
+        for k in klines:
+            try:
+                closes.append(float(k[4]))
+            except (IndexError, ValueError, TypeError):
+                continue
+
+        if len(closes) < slow + signal_period:
+            return {
+                "macd_line": 0.0,
+                "signal_line": 0.0,
+                "histogram": 0.0,
+                "histogram_series": [],
+            }
+
+        ema_fast = MarketDataFetcher.calculate_ema(closes, fast)
+        ema_slow = MarketDataFetcher.calculate_ema(closes, slow)
+
+        # MACD line = EMA_fast - EMA_slow (only valid after slow period warmup)
+        macd_line_series = []
+        for i in range(len(closes)):
+            if i >= slow - 1 and ema_fast[i] != 0 and ema_slow[i] != 0:
+                macd_line_series.append(ema_fast[i] - ema_slow[i])
+            else:
+                macd_line_series.append(0.0)
+
+        # Signal line = EMA of MACD line
+        valid_macd = [v for v in macd_line_series if v != 0.0 or macd_line_series.index(v) >= slow - 1]
+        if len(valid_macd) < signal_period:
+            valid_macd = macd_line_series[slow - 1:]
+
+        signal_line_series = MarketDataFetcher.calculate_ema(valid_macd, signal_period)
+
+        # Histogram
+        histogram_series = []
+        for i in range(len(valid_macd)):
+            if i >= signal_period - 1 and signal_line_series[i] != 0:
+                histogram_series.append(valid_macd[i] - signal_line_series[i])
+            else:
+                histogram_series.append(0.0)
+
+        macd_line = valid_macd[-1] if valid_macd else 0.0
+        signal_line = signal_line_series[-1] if signal_line_series else 0.0
+        histogram = macd_line - signal_line
+
+        return {
+            "macd_line": round(macd_line, 6),
+            "signal_line": round(signal_line, 6),
+            "histogram": round(histogram, 6),
+            "histogram_series": histogram_series,
+        }
+
+    # ==================== RSI Calculation ====================
+
+    @staticmethod
+    def calculate_rsi(klines: List[List], period: int = 14) -> List[float]:
+        """
+        Calculate Relative Strength Index (RSI).
+
+        Uses Wilder's smoothing method (same as TradingView default).
+        RSI = 100 - (100 / (1 + RS)), where RS = avg_gain / avg_loss.
+
+        Args:
+            klines: OHLCV kline data
+            period: RSI period (default 14)
+
+        Returns:
+            List of RSI values (0-100). Warmup values are 50.0.
+        """
+        if not klines or len(klines) < period + 1:
+            return [50.0] * len(klines) if klines else []
+
+        closes = []
+        for k in klines:
+            try:
+                closes.append(float(k[4]))
+            except (IndexError, ValueError, TypeError):
+                continue
+
+        if len(closes) < period + 1:
+            return [50.0] * len(closes)
+
+        # Calculate price changes
+        changes = [closes[i] - closes[i - 1] for i in range(1, len(closes))]
+
+        gains = [max(c, 0) for c in changes]
+        losses = [abs(min(c, 0)) for c in changes]
+
+        rsi_values = [50.0] * len(closes)
+
+        # Initial average (SMA of first `period`)
+        avg_gain = sum(gains[:period]) / period
+        avg_loss = sum(losses[:period]) / period
+
+        if avg_gain == 0 and avg_loss == 0:
+            rsi_values[period] = 50.0
+        elif avg_loss == 0:
+            rsi_values[period] = 100.0
+        else:
+            rs = avg_gain / avg_loss
+            rsi_values[period] = 100 - (100 / (1 + rs))
+
+        # Wilder's smoothing for subsequent values
+        for i in range(period, len(changes)):
+            avg_gain = (avg_gain * (period - 1) + gains[i]) / period
+            avg_loss = (avg_loss * (period - 1) + losses[i]) / period
+
+            if avg_gain == 0 and avg_loss == 0:
+                rsi_values[i + 1] = 50.0
+            elif avg_loss == 0:
+                rsi_values[i + 1] = 100.0
+            else:
+                rs = avg_gain / avg_loss
+                rsi_values[i + 1] = 100 - (100 / (1 + rs))
+
+        return rsi_values
+
+    # ==================== RSI Divergence Detection ====================
+
+    @staticmethod
+    def detect_rsi_divergence(
+        klines: List[List], rsi_period: int = 14, lookback: int = 20
+    ) -> Dict[str, Any]:
+        """
+        Detect bullish and bearish RSI divergence.
+
+        Bearish divergence: price makes higher high but RSI makes lower high.
+        Bullish divergence: price makes lower low but RSI makes higher low.
+
+        Scans the last `lookback` bars for swing highs/lows in both price
+        and RSI, then compares the most recent two pivots.
+
+        Args:
+            klines: OHLCV kline data
+            rsi_period: RSI calculation period (default 14)
+            lookback: Number of bars to scan for pivots (default 20)
+
+        Returns:
+            {
+                "bullish_divergence": bool,
+                "bearish_divergence": bool,
+                "price_high_1": float, "price_high_2": float,
+                "rsi_high_1": float, "rsi_high_2": float,
+                "price_low_1": float, "price_low_2": float,
+                "rsi_low_1": float, "rsi_low_2": float,
+            }
+        """
+        default = {
+            "bullish_divergence": False,
+            "bearish_divergence": False,
+            "price_high_1": 0.0, "price_high_2": 0.0,
+            "rsi_high_1": 0.0, "rsi_high_2": 0.0,
+            "price_low_1": 0.0, "price_low_2": 0.0,
+            "rsi_low_1": 0.0, "rsi_low_2": 0.0,
+        }
+
+        if not klines or len(klines) < rsi_period + lookback:
+            return default
+
+        # Extract closes and highs/lows
+        closes = []
+        highs = []
+        lows = []
+        for k in klines:
+            try:
+                highs.append(float(k[2]))
+                lows.append(float(k[3]))
+                closes.append(float(k[4]))
+            except (IndexError, ValueError, TypeError):
+                continue
+
+        if len(closes) < rsi_period + lookback:
+            return default
+
+        rsi_values = MarketDataFetcher.calculate_rsi(klines, rsi_period)
+        if len(rsi_values) < lookback:
+            return default
+
+        # Scan for swing highs and swing lows in the lookback window
+        # A swing high at index i: high[i] > high[i-1] and high[i] > high[i+1]
+        # A swing low at index i: low[i] < low[i-1] and low[i] < low[i+1]
+        start = len(closes) - lookback
+        end = len(closes) - 1  # Exclude last bar (no right neighbor)
+
+        swing_highs = []  # (index, price_high, rsi_value)
+        swing_lows = []   # (index, price_low, rsi_value)
+
+        for i in range(max(start, 1), end):
+            if highs[i] > highs[i - 1] and highs[i] > highs[i + 1]:
+                swing_highs.append((i, highs[i], rsi_values[i]))
+            if lows[i] < lows[i - 1] and lows[i] < lows[i + 1]:
+                swing_lows.append((i, lows[i], rsi_values[i]))
+
+        result = dict(default)
+
+        # Bearish divergence: need at least 2 swing highs
+        if len(swing_highs) >= 2:
+            prev_h = swing_highs[-2]
+            curr_h = swing_highs[-1]
+            result["price_high_1"] = prev_h[1]
+            result["price_high_2"] = curr_h[1]
+            result["rsi_high_1"] = prev_h[2]
+            result["rsi_high_2"] = curr_h[2]
+            # Price higher high but RSI lower high
+            if curr_h[1] > prev_h[1] and curr_h[2] < prev_h[2]:
+                result["bearish_divergence"] = True
+
+        # Bullish divergence: need at least 2 swing lows
+        if len(swing_lows) >= 2:
+            prev_l = swing_lows[-2]
+            curr_l = swing_lows[-1]
+            result["price_low_1"] = prev_l[1]
+            result["price_low_2"] = curr_l[1]
+            result["rsi_low_1"] = prev_l[2]
+            result["rsi_low_2"] = curr_l[2]
+            # Price lower low but RSI higher low
+            if curr_l[1] < prev_l[1] and curr_l[2] > prev_l[2]:
+                result["bullish_divergence"] = True
+
         return result

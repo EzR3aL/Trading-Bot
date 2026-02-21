@@ -212,6 +212,9 @@ async def upsert_exchange_connection(
     if data.demo_passphrase:
         conn.demo_passphrase_encrypted = encrypt_value(data.demo_passphrase)
 
+    from src.utils.event_logger import log_event
+    await log_event("config_changed", f"Exchange connection '{exchange_type}' updated", user_id=user.id)
+
     return {"status": "ok", "message": f"{exchange_type} API keys updated"}
 
 
@@ -593,7 +596,10 @@ async def upsert_llm_connection(
 
     conn.api_key_encrypted = encrypt_value(data.api_key)
 
+    from src.utils.event_logger import log_event
     display = LLM_PROVIDERS_INFO.get(provider_type, {}).get("name", provider_type)
+    await log_event("config_changed", f"LLM connection '{display}' updated", user_id=user.id)
+
     return {"status": "ok", "message": f"{display} API key updated"}
 
 

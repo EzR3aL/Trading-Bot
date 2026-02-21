@@ -134,6 +134,9 @@ async def start_bot(
     config.is_enabled = True
     await db.flush()
 
+    from src.utils.event_logger import log_event
+    await log_event("bot_started", f"Bot '{config.name}' started", user_id=user.id, bot_id=bot_id)
+
     return {"status": "ok", "message": f"Bot '{config.name}' started"}
 
 
@@ -160,6 +163,9 @@ async def stop_bot(
     # Mark as disabled
     config.is_enabled = False
     await db.flush()
+
+    from src.utils.event_logger import log_event
+    await log_event("bot_stopped", f"Bot '{config.name}' stopped", user_id=user.id, bot_id=bot_id)
 
     return {"status": "ok", "message": f"Bot '{config.name}' stopped"}
 
@@ -195,6 +201,9 @@ async def restart_bot(
 
     config.is_enabled = True
     await db.flush()
+
+    from src.utils.event_logger import log_event
+    await log_event("bot_restarted", f"Bot '{config.name}' restarted", user_id=user.id, bot_id=bot_id)
 
     return {"status": "ok", "message": f"Bot '{config.name}' restarted"}
 

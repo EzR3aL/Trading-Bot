@@ -127,9 +127,11 @@ async def lifespan(app: FastAPI):
     collector_task.cancel()
     await orchestrator.shutdown_all()
 
-    # Drain pending audit writes before closing DB
+    # Drain pending audit + event writes before closing DB
     from src.api.middleware.audit_log import drain_pending_audit_tasks
+    from src.utils.event_logger import drain_pending_event_tasks
     await drain_pending_audit_tasks(timeout=5.0)
+    await drain_pending_event_tasks(timeout=5.0)
 
     await close_db()
     logger.info("Application shut down")

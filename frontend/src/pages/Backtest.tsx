@@ -22,7 +22,7 @@ const STRATEGY_DISPLAY: Record<string, string> = {
   llm_signal: 'KI-Companion',
   degen: 'Degen',
   edge_indicator: 'Edge Indicator',
-  claude_edge_indicator: 'Claude Edge Indicator',
+  claude_edge_indicator: 'Claude-Edge',
 }
 
 const TRADING_PAIRS = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'XRPUSDT', 'DOGEUSDT', 'AVAXUSDT']
@@ -45,7 +45,7 @@ const DEFAULT_TIMEFRAME_MAX_DAYS: Record<string, number> = {
 const EARLIEST_DATE = '2020-01-01'
 
 function strategyLabel(type: string): string {
-  return STRATEGY_DISPLAY[type] || type.replace(/_/g, ' ')
+  return STRATEGY_DISPLAY[type] || type.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
 }
 
 function formatDateEU(dateStr: string): string {
