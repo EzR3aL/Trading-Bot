@@ -829,6 +829,7 @@ class TestExecuteTradeExtended:
         mock_client.get_fill_price.return_value = 95100.0
 
         mock_rm = MagicMock()
+        mock_rm.can_trade.return_value = (True, "")
         mock_rm.calculate_position_size.return_value = (1000.0, 0.01)
         worker._risk_manager = mock_rm
 
@@ -854,6 +855,7 @@ class TestExecuteTradeExtended:
         mock_client.get_fill_price.return_value = 95100.0
 
         mock_rm = MagicMock()
+        mock_rm.can_trade.return_value = (True, "")
         mock_rm.calculate_position_size.return_value = (1000.0, 0.01)
         worker._risk_manager = mock_rm
 
@@ -881,6 +883,7 @@ class TestExecuteTradeExtended:
         mock_client.get_fill_price.return_value = 95100.0
 
         mock_rm = MagicMock()
+        mock_rm.can_trade.return_value = (True, "")
         mock_rm.calculate_position_size.return_value = (1000.0, 0.01)
         worker._risk_manager = mock_rm
 
@@ -906,6 +909,7 @@ class TestExecuteTradeExtended:
         mock_client.get_fill_price.return_value = 95100.0
 
         mock_rm = MagicMock()
+        mock_rm.can_trade.return_value = (True, "")
         worker._risk_manager = mock_rm
 
         signal = _make_mock_signal(entry_price=95000.0)
@@ -917,8 +921,8 @@ class TestExecuteTradeExtended:
         # Full budget: position_usdt = 5000, should not call calculate_position_size
         mock_rm.calculate_position_size.assert_not_called()
 
-    async def test_asset_budget_with_position_size_percent_uses_risk_manager(self):
-        """When asset_budget is set but position_size_percent exists, use RiskManager."""
+    async def test_asset_budget_always_uses_direct_sizing(self):
+        """When asset_budget is set, always use direct sizing (even if position_size_percent exists)."""
         worker = BotWorker(bot_config_id=1)
         worker._config = _make_mock_config(position_size_percent=7.5)
         worker._get_notifiers = AsyncMock(return_value=[])
@@ -928,6 +932,7 @@ class TestExecuteTradeExtended:
         mock_client.get_fill_price.return_value = 95100.0
 
         mock_rm = MagicMock()
+        mock_rm.can_trade.return_value = (True, "")
         mock_rm.calculate_position_size.return_value = (1000.0, 0.01)
         worker._risk_manager = mock_rm
 
@@ -937,7 +942,8 @@ class TestExecuteTradeExtended:
         with patch("src.bot.trade_executor.get_session", return_value=_mock_session_ctx(mock_session)):
             await worker._execute_trade(signal, mock_client, demo_mode=True, asset_budget=5000.0)
 
-        mock_rm.calculate_position_size.assert_called_once()
+        # asset_budget takes priority — direct sizing, no RiskManager call
+        mock_rm.calculate_position_size.assert_not_called()
 
     async def test_fill_price_fallback_when_fetch_fails(self):
         """When get_fill_price fails, falls back to order price or entry price."""
@@ -951,6 +957,7 @@ class TestExecuteTradeExtended:
         mock_client.get_fill_price.side_effect = Exception("API error")
 
         mock_rm = MagicMock()
+        mock_rm.can_trade.return_value = (True, "")
         mock_rm.calculate_position_size.return_value = (1000.0, 0.01)
         worker._risk_manager = mock_rm
 
@@ -979,6 +986,7 @@ class TestExecuteTradeExtended:
         mock_client.get_fill_price.return_value = 95100.0
 
         mock_rm = MagicMock()
+        mock_rm.can_trade.return_value = (True, "")
         mock_rm.calculate_position_size.return_value = (1000.0, 0.01)
         worker._risk_manager = mock_rm
 
@@ -1007,6 +1015,7 @@ class TestExecuteTradeExtended:
         mock_client.get_fill_price.return_value = 95100.0
 
         mock_rm = MagicMock()
+        mock_rm.can_trade.return_value = (True, "")
         mock_rm.calculate_position_size.return_value = (1000.0, 0.01)
         worker._risk_manager = mock_rm
 
@@ -1031,6 +1040,7 @@ class TestExecuteTradeExtended:
         mock_client.get_fill_price.return_value = 95100.0
 
         mock_rm = MagicMock()
+        mock_rm.can_trade.return_value = (True, "")
         mock_rm.calculate_position_size.return_value = (1000.0, 0.01)
         worker._risk_manager = mock_rm
 
@@ -1052,6 +1062,7 @@ class TestExecuteTradeExtended:
         mock_client.set_leverage.side_effect = Exception("Exchange unreachable")
 
         mock_rm = MagicMock()
+        mock_rm.can_trade.return_value = (True, "")
         mock_rm.calculate_position_size.return_value = (1000.0, 0.01)
         worker._risk_manager = mock_rm
 
@@ -1073,6 +1084,7 @@ class TestExecuteTradeExtended:
         mock_client.get_fill_price.return_value = None
 
         mock_rm = MagicMock()
+        mock_rm.can_trade.return_value = (True, "")
         mock_rm.calculate_position_size.return_value = (1000.0, 0.01)
         worker._risk_manager = mock_rm
 

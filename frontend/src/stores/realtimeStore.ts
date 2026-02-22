@@ -15,6 +15,8 @@ interface RealtimeStore {
   pushEvent: (type: string, data: unknown) => void
   /** Update the cached status of a single bot. */
   updateBotStatus: (botId: number, status: unknown) => void
+  /** Remove a bot from the cached statuses. */
+  removeBotStatus: (botId: number) => void
 }
 
 export const useRealtimeStore = create<RealtimeStore>((set) => ({
@@ -28,4 +30,10 @@ export const useRealtimeStore = create<RealtimeStore>((set) => ({
     set((state) => ({
       botStatuses: { ...state.botStatuses, [botId]: status },
     })),
+
+  removeBotStatus: (botId) =>
+    set((state) => {
+      const { [botId]: _, ...rest } = state.botStatuses
+      return { botStatuses: rest }
+    }),
 }))

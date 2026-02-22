@@ -1,12 +1,21 @@
 """
 Background metric collectors.
 
-Periodically samples bot orchestrator state and updates Prometheus gauges.
+Periodically samples bot orchestrator state, process memory,
+and disk usage, updating Prometheus gauges.
 """
 
 import asyncio
+import os
+import shutil
 
-from src.monitoring.metrics import BOTS_BY_STATUS, BOTS_RUNNING, BOT_CONSECUTIVE_ERRORS
+from src.monitoring.metrics import (
+    BOTS_BY_STATUS,
+    BOTS_RUNNING,
+    BOT_CONSECUTIVE_ERRORS,
+    DISK_USAGE_PERCENT,
+    PROCESS_MEMORY_BYTES,
+)
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -39,6 +48,29 @@ async def collect_bot_metrics(app) -> None:
                     BOT_CONSECUTIVE_ERRORS.labels(str(bot_id)).set(
                         getattr(w, "_consecutive_errors", 0)
                     )
+
+            # Process memory (cross-platform)
+            try:
+                import resource
+                rusage = resource.getrusage(resource.RUSAGE_SELF)
+                PROCESS_MEMORY_BYTES.set(rusage.ru_maxrss * 1024)
+            except (ImportError, AttributeError):
+                # Windows fallback
+                try:
+                    import ctypes
+                    kernel32 = ctypes.windll.kernel32  # type: ignore[attr-defined]
+                    # Not reliable on Windows — skip silently
+                except Exception:
+                    pass
+
+            # Disk usage for data directory
+            try:
+                data_dir = os.getenv("DATA_DIR", "data")
+                usage = shutil.disk_usage(data_dir)
+                DISK_USAGE_PERCENT.set((usage.used / usage.total) * 100)
+            except Exception:
+                pass
+
         except Exception:
             logger.debug("Bot metrics collection cycle skipped", exc_info=True)
 

@@ -166,10 +166,11 @@ function confidenceColor(value: number): string {
 
 function TradeDetailModal({ trade, onClose, t }: { trade: BotTrade; onClose: () => void; t: (key: string) => string }) {
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 backdrop-blur-md" onClick={onClose}>
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 backdrop-blur-md" onClick={onClose} role="dialog" aria-modal="true" onKeyDown={(e) => { if (e.key === 'Escape') onClose() }}>
       <div
         className="bg-[#0f1420] rounded-2xl p-7 max-w-lg w-full mx-4 border border-white/10 shadow-2xl"
         onClick={(e) => e.stopPropagation()}
+        aria-label={t('bots.tradeDetail')}
       >
         {/* Header */}
         <div className="flex items-center justify-between mb-5">
@@ -273,7 +274,7 @@ function BotTradeHistoryModal({ bot, onClose, t }: { bot: BotStatus; onClose: ()
         const links: AffiliateLink[] = affRes.data
         const match = links.find(l => l.exchange_type === bot.exchange_type)
         if (match) setAffiliateLink(match)
-      } catch { /* ignore */ }
+      } catch (err) { console.error('Failed to load bot trade history:', err) }
       setLoading(false)
     }
     load()
@@ -294,16 +295,17 @@ function BotTradeHistoryModal({ bot, onClose, t }: { bot: BotStatus; onClose: ()
       ])
       setCopied(true)
       setTimeout(() => setCopied(false), 2000)
-    } catch { /* ignore */ }
+    } catch (err) { console.error('Failed to copy image:', err) }
   }
 
   const latestClosed = stats?.recent_trades.find(tr => tr.status === 'closed')
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-md" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-md" onClick={onClose} role="dialog" aria-modal="true" onKeyDown={(e) => { if (e.key === 'Escape') onClose() }}>
       <div
         className="bg-[#0b0f19] rounded-2xl max-w-5xl w-full mx-4 my-3 max-h-[96vh] flex flex-col border border-white/10 shadow-2xl overflow-hidden"
         onClick={(e) => e.stopPropagation()}
+        aria-label={t('bots.tradeHistory')}
       >
         {/* Modal Header */}
         <div className="flex items-center justify-between px-6 py-3.5 border-b border-white/5 shrink-0">
@@ -628,8 +630,8 @@ export default function Bots() {
   }, [fetchBots])
 
   useEffect(() => {
-    api.get('/presets').then(res => setPresets(res.data)).catch(() => {})
-    api.get('/config/llm-connections').then(res => setLlmConnections(res.data.connections || [])).catch(() => {})
+    api.get('/presets').then(res => setPresets(res.data)).catch((err) => { console.error('Failed to load presets:', err); useToastStore.getState().addToast('error', t('common.loadError', 'Failed to load data')) })
+    api.get('/config/llm-connections').then(res => setLlmConnections(res.data.connections || [])).catch((err) => { console.error('Failed to load LLM connections:', err); useToastStore.getState().addToast('error', t('common.loadError', 'Failed to load data')) })
   }, [])
 
   const handleStart = async (id: number) => {
@@ -644,7 +646,7 @@ export default function Bots() {
     try {
       await api.post(`/bots/${id}/start`)
       await fetchBots()
-      addToast('success', t('bots.start') + ' - OK')
+      addToast('success', t('bots.start'))
     } catch (err) {
       handleStartError(err)
     }
@@ -661,7 +663,7 @@ export default function Bots() {
       try {
         await api.post(`/bots/${botId}/start`)
         await fetchBots()
-        addToast('success', t('bots.start') + ' - OK')
+        addToast('success', t('bots.start'))
       } catch (err) {
         handleStartError(err)
       }
@@ -674,7 +676,7 @@ export default function Bots() {
     try {
       await api.post(`/bots/${id}/stop`)
       await fetchBots()
-      addToast('info', t('bots.stop') + ' - OK')
+      addToast('info', t('bots.stop'))
     } catch (err) {
       addToast('error', getApiErrorMessage(err, t('bots.failedStop')))
     }
@@ -719,7 +721,7 @@ export default function Bots() {
     try {
       await api.post('/bots/stop-all')
       await fetchBots()
-      addToast('info', t('bots.stopAll') + ' - OK')
+      addToast('info', t('bots.stopAll'))
     } catch {
       addToast('error', t('common.error'))
     }

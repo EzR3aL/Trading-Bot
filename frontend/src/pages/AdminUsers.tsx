@@ -24,7 +24,7 @@ export default function AdminUsers() {
     try {
       const res = await api.get('/users')
       setUsers(res.data)
-    } catch { /* ignore */ }
+    } catch (err) { console.error('Failed to load users:', err); useToastStore.getState().addToast('error', 'Failed to load data') }
   }
 
   useEffect(() => { loadUsers() }, [])

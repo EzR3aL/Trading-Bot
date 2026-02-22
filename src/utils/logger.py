@@ -5,12 +5,44 @@ Provides colored console output, file logging, and optional JSON output.
 
 import json as json_lib
 import logging
+import logging.handlers
 import os
+import re
 import sys
 from datetime import datetime
 from pathlib import Path
 
 import colorlog
+
+# Patterns that match sensitive data in log messages
+_REDACT_PATTERNS = [
+    # API keys and secrets (hex/base64 strings 16+ chars after common prefixes)
+    re.compile(r"(api[_-]?key|api[_-]?secret|passphrase|password|token|secret|authorization)['\"]?\s*[:=]\s*['\"]?([A-Za-z0-9+/=_-]{16,})", re.IGNORECASE),
+    # Bearer tokens
+    re.compile(r"(Bearer\s+)([A-Za-z0-9._-]{20,})", re.IGNORECASE),
+    # JWT tokens (header.payload.signature)
+    re.compile(r"(eyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,})"),
+]
+
+
+class RedactionFilter(logging.Filter):
+    """Filter that redacts sensitive values from log records."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if isinstance(record.msg, str):
+            record.msg = self._redact(record.msg)
+        if record.args:
+            if isinstance(record.args, dict):
+                record.args = {k: self._redact(v) if isinstance(v, str) else v for k, v in record.args.items()}
+            elif isinstance(record.args, tuple):
+                record.args = tuple(self._redact(a) if isinstance(a, str) else a for a in record.args)
+        return True
+
+    @staticmethod
+    def _redact(text: str) -> str:
+        for pattern in _REDACT_PATTERNS:
+            text = pattern.sub(lambda m: m.group(0)[:len(m.group(0)) - len(m.group(m.lastindex))] + "***REDACTED***" if m.lastindex else "***REDACTED***", text)
+        return text
 
 
 class JSONFormatter(logging.Formatter):
@@ -59,8 +91,13 @@ def setup_logging(
     # Remove existing handlers
     root_logger.handlers = []
 
-    # Check if JSON mode is enabled
-    use_json = os.getenv("LOG_FORMAT", "text").lower() == "json"
+    # Add redaction filter to prevent secrets from leaking into logs
+    root_logger.addFilter(RedactionFilter())
+
+    # JSON mode: explicit LOG_FORMAT=json, or auto-enabled in production
+    environment = os.getenv("ENVIRONMENT", "development").lower()
+    log_format = os.getenv("LOG_FORMAT", "").lower()
+    use_json = log_format == "json" or (not log_format and environment == "production")
 
     # Console handler
     console_handler = logging.StreamHandler(sys.stdout) if use_json else colorlog.StreamHandler(sys.stdout)
@@ -84,8 +121,10 @@ def setup_logging(
 
     root_logger.addHandler(console_handler)
 
-    # File handler
-    file_handler = logging.FileHandler(log_file, encoding="utf-8")
+    # File handler with rotation (100 MB per file, 10 backups)
+    file_handler = logging.handlers.RotatingFileHandler(
+        log_file, encoding="utf-8", maxBytes=100_000_000, backupCount=10,
+    )
     file_handler.setLevel(logging.DEBUG)
 
     if use_json:

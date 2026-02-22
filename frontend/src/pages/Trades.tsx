@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import api from '../api/client'
+import { useToastStore } from '../stores/toastStore'
 import { useFilterStore } from '../stores/filterStore'
 import type { Trade } from '../types'
 import { ExchangeIcon } from '../components/ui/ExchangeLogo'
@@ -31,7 +32,7 @@ export default function Trades() {
   const [allTrades, setAllTrades] = useState<Trade[]>([])
 
   useEffect(() => {
-    api.post('/trades/sync').catch(() => {}).finally(() => setSynced(true))
+    api.post('/trades/sync').catch((err) => { console.error('Failed to sync trades:', err); useToastStore.getState().addToast('error', t('common.loadError', 'Failed to load data')) }).finally(() => setSynced(true))
   }, [])
 
   // Fetch a larger set once to extract unique exchanges/bots
@@ -40,7 +41,7 @@ export default function Trades() {
     const params = new URLSearchParams({ page: '1', per_page: '200' })
     if (demoFilter === 'demo') params.set('demo_mode', 'true')
     else if (demoFilter === 'live') params.set('demo_mode', 'false')
-    api.get(`/trades?${params}`).then(res => setAllTrades(res.data.trades)).catch(() => {})
+    api.get(`/trades?${params}`).then(res => setAllTrades(res.data.trades)).catch((err) => { console.error('Failed to load trade filters:', err); useToastStore.getState().addToast('error', t('common.loadError', 'Failed to load data')) })
   }, [synced, demoFilter])
 
   const uniqueExchanges = useMemo(() => {

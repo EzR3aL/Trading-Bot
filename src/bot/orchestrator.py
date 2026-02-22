@@ -41,6 +41,9 @@ class BotOrchestrator:
         self._workers: Dict[int, BotWorker] = {}  # bot_config_id -> BotWorker
         self._lock = asyncio.Lock()
         self._scheduler = AsyncIOScheduler()  # Shared scheduler for all bots
+        # Per-user locks for atomic risk-check-then-trade execution.
+        # Prevents concurrent trades from bypassing daily loss limits.
+        self._user_trade_locks: Dict[int, asyncio.Lock] = {}
 
     async def start_bot(self, bot_config_id: int) -> bool:
         """
@@ -79,8 +82,17 @@ class BotOrchestrator:
         if not self._scheduler.running:
             self._scheduler.start()
 
-        # Create and initialize worker with shared scheduler
-        worker = BotWorker(bot_config_id, scheduler=self._scheduler)
+        # Resolve user_id for the per-user trade lock
+        user_trade_lock = None
+        if config:
+            user_trade_lock = self.get_user_trade_lock(config.user_id)
+
+        # Create and initialize worker with shared scheduler + per-user trade lock
+        worker = BotWorker(
+            bot_config_id,
+            scheduler=self._scheduler,
+            user_trade_lock=user_trade_lock,
+        )
         success = await worker.initialize()
 
         if not success:
@@ -154,8 +166,9 @@ class BotOrchestrator:
         """
         Restore bots that were running before server shutdown.
 
-        Called during FastAPI lifespan startup. Finds all enabled BotConfigs
-        and starts them.
+        Called during FastAPI lifespan startup (before API accepts requests).
+        The per-iteration lock acquisition is safe because no concurrent
+        start_bot() calls can occur until lifespan startup completes.
         """
         logger.info("Orchestrator: Restoring bots from database...")
 
@@ -253,6 +266,16 @@ class BotOrchestrator:
             1 for w in self._workers.values()
             if w.config and w.config.user_id == user_id and w.status == BotStatus.RUNNING
         )
+
+    def get_user_trade_lock(self, user_id: int) -> asyncio.Lock:
+        """Get a per-user lock for atomic risk-check-then-trade execution.
+
+        Multiple bots for the same user share this lock so that concurrent
+        trades cannot bypass the daily loss limit. The lock is created lazily.
+        """
+        if user_id not in self._user_trade_locks:
+            self._user_trade_locks[user_id] = asyncio.Lock()
+        return self._user_trade_locks[user_id]
 
     async def _update_instance_state(self, bot_config_id: int, is_running: bool, error_msg: Optional[str] = None):
         """Update or create BotInstance record in database."""

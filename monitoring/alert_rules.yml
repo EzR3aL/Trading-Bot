@@ -1,0 +1,131 @@
+groups:
+  - name: trading_bot_alerts
+    rules:
+      # Health check failing — app or DB down
+      - alert: HealthCheckFailing
+        expr: up{job="trading-bot"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Trading bot health check failing"
+          description: "The trading bot has been unreachable for more than 1 minute."
+
+      # High HTTP error rate (5xx responses)
+      - alert: HighErrorRate
+        expr: rate(http_requests_total{status_code=~"5.."}[5m]) / rate(http_requests_total[5m]) > 0.05
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High HTTP 5xx error rate"
+          description: "More than 5% of HTTP requests are returning 5xx errors."
+
+      # No running bots when expected
+      - alert: NoBotsRunning
+        expr: bots_running_total == 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "No trading bots are running"
+          description: "Zero bots have been running for 5 minutes."
+
+      # Bot in error state
+      - alert: BotInErrorState
+        expr: bots_by_status{status="error"} > 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Bot in error state"
+          description: "{{ $value }} bot(s) have been in error state for more than 2 minutes."
+
+      # Bot consecutive errors (may need manual intervention)
+      - alert: BotConsecutiveErrors
+        expr: bot_consecutive_errors > 5
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Bot {{ $labels.bot_id }} has {{ $value }} consecutive errors"
+          description: "Bot {{ $labels.bot_id }} is experiencing repeated failures. Manual review recommended."
+
+      # High request latency
+      - alert: HighRequestLatency
+        expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m])) > 2
+        for: 3m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High API request latency"
+          description: "P95 request latency is above 2 seconds."
+
+      # Database query latency
+      - alert: SlowDatabaseQueries
+        expr: histogram_quantile(0.95, rate(db_query_duration_seconds_bucket[5m])) > 1
+        for: 3m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Slow database queries detected"
+          description: "P95 database query duration is above 1 second."
+
+      # Too many WebSocket connections (potential abuse)
+      - alert: HighWebSocketConnections
+        expr: websocket_connections_active > 100
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High number of WebSocket connections"
+          description: "{{ $value }} active WebSocket connections detected."
+
+      # Rate limiting triggered heavily (potential attack)
+      - alert: HighRateLimitHits
+        expr: rate(http_requests_total{status_code="429"}[5m]) > 1
+        for: 3m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High rate of 429 responses"
+          description: "Elevated rate limiting activity detected — potential abuse."
+
+      # High memory usage
+      - alert: HighMemoryUsage
+        expr: process_resident_memory_bytes > 768 * 1024 * 1024
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Trading bot memory usage above 768 MB"
+          description: "Process is using {{ $value | humanize1024 }}B of memory."
+
+      # Disk usage high
+      - alert: HighDiskUsage
+        expr: disk_usage_percent > 85
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Disk usage above 85%"
+          description: "Data directory disk usage is at {{ $value }}%."
+
+      - alert: CriticalDiskUsage
+        expr: disk_usage_percent > 95
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Disk usage above 95% — immediate action required"
+          description: "Data directory disk usage is at {{ $value }}%."
+
+      # Trade execution failures
+      - alert: TradeExecutionFailures
+        expr: rate(trade_failures_total[5m]) > 0.1
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Trade execution failures detected"
+          description: "Trade failures occurring at {{ $value }} per second for exchange {{ $labels.exchange }}."

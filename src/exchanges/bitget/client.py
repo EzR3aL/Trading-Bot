@@ -241,16 +241,30 @@ class BitgetExchangeClient(ExchangeClient):
         order_id = result.get("orderId", result.get("data", {}).get("orderId", ""))
 
         # Set Entire TP/SL via dedicated endpoint (covers full position)
+        # Brief delay to ensure order fill is registered before setting TP/SL
+        tpsl_failed = False
         if take_profit is not None or stop_loss is not None:
-            try:
-                await self._set_position_tpsl(
-                    symbol=symbol,
-                    hold_side=side,
-                    take_profit=take_profit,
-                    stop_loss=stop_loss,
-                )
-            except Exception as e:
-                logger.warning(f"Failed to set entire TP/SL for {symbol}: {e}")
+            await asyncio.sleep(0.2)
+            for attempt in range(2):
+                try:
+                    await self._set_position_tpsl(
+                        symbol=symbol,
+                        hold_side=side,
+                        take_profit=take_profit,
+                        stop_loss=stop_loss,
+                    )
+                    tpsl_failed = False
+                    break
+                except Exception as e:
+                    tpsl_failed = True
+                    if attempt == 0:
+                        logger.warning(f"TP/SL attempt 1 failed for {symbol}, retrying: {e}")
+                        await asyncio.sleep(0.5)
+                    else:
+                        logger.error(
+                            f"CRITICAL: TP/SL failed for {symbol} after 2 attempts: {e}. "
+                            "Position is UNPROTECTED — manual intervention required."
+                        )
 
         return Order(
             order_id=str(order_id),
@@ -263,6 +277,7 @@ class BitgetExchangeClient(ExchangeClient):
             leverage=leverage,
             take_profit=take_profit,
             stop_loss=stop_loss,
+            tpsl_failed=tpsl_failed,
         )
 
     async def _set_position_tpsl(

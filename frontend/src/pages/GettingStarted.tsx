@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
 import api from '../api/client'
+import { useToastStore } from '../stores/toastStore'
 import {
   KeyRound,
   Layers,
@@ -40,7 +41,7 @@ function PrerequisiteBanner() {
         if (link.affiliate_url) urls[link.exchange_type] = link.affiliate_url
       }
       setAffiliateUrls(urls)
-    }).catch(() => {})
+    }).catch((err) => { console.error('Failed to load affiliate links:', err); useToastStore.getState().addToast('error', t('common.loadError', 'Failed to load data')) })
   }, [])
 
   const exchanges = [

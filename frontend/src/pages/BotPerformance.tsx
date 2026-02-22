@@ -7,6 +7,7 @@ import {
 } from 'recharts'
 import { toBlob } from 'html-to-image'
 import api from '../api/client'
+import { useToastStore } from '../stores/toastStore'
 import { useFilterStore } from '../stores/filterStore'
 import { useThemeStore } from '../stores/themeStore'
 import { SkeletonChart, SkeletonTable } from '../components/ui/Skeleton'
@@ -503,8 +504,8 @@ export default function BotPerformance() {
 
   useEffect(() => {
     loadCompareData()
-    api.get('/config/llm-connections').then(res => setLlmConnections(res.data.connections || [])).catch(() => {})
-    api.get('/affiliate-links').then(res => setAffiliateLinks(res.data)).catch(() => {})
+    api.get('/config/llm-connections').then(res => setLlmConnections(res.data.connections || [])).catch((err) => { console.error('Failed to load LLM connections:', err); useToastStore.getState().addToast('error', t('common.loadError', 'Failed to load data')) })
+    api.get('/affiliate-links').then(res => setAffiliateLinks(res.data)).catch((err) => { console.error('Failed to load affiliate links:', err); useToastStore.getState().addToast('error', t('common.loadError', 'Failed to load data')) })
   }, [loadCompareData])
 
   useEffect(() => {
@@ -724,7 +725,7 @@ export default function BotPerformance() {
                             await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })])
                             setLatestCopied(true)
                             setTimeout(() => setLatestCopied(false), 2000)
-                          } catch { /* ignore */ }
+                          } catch (err) { console.error('Failed to copy image:', err) }
                         }}
                         className={`flex items-center gap-1.5 px-3 py-1 text-xs rounded-lg transition-all border ${
                           latestCopied
@@ -965,7 +966,7 @@ export default function BotPerformance() {
                       ])
                       setCopied(true)
                       setTimeout(() => setCopied(false), 2000)
-                    } catch { /* ignore */ }
+                    } catch (err) { console.error('Failed to copy image:', err) }
                   }}
                   className={`flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg transition-all border ${
                     copied

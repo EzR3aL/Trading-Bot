@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import api from '../api/client'
+import { useToastStore } from '../stores/toastStore'
 import { useFilterStore } from '../stores/filterStore'
 import type { Statistics, Trade, DailyStats } from '../types'
 import PnlChart from '../components/dashboard/PnlChart'
@@ -86,7 +87,7 @@ export default function Dashboard() {
       setLoading(true)
       setError('')
       try {
-        await api.post('/trades/sync').catch(() => {})
+        await api.post('/trades/sync').catch((err) => { console.error('Failed to sync trades:', err); useToastStore.getState().addToast('error', t('common.loadError', 'Failed to load data')) })
 
         const demoParam = demoFilter === 'demo' ? '&demo_mode=true' : demoFilter === 'live' ? '&demo_mode=false' : ''
         const [statsRes, dailyRes, tradesRes] = await Promise.all([

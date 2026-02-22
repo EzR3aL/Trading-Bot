@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -113,7 +113,7 @@ export default function Portfolio() {
   /* ── Derived Data ───────────────────────────────────────── */
 
   // Build chart data: pivot daily data by exchange into rows keyed by date
-  const chartData = (() => {
+  const chartData = useMemo(() => {
     const dateMap: Record<string, Record<string, number>> = {}
     const exchangeSet = new Set<string>()
 
@@ -134,7 +134,7 @@ export default function Portfolio() {
           ...vals,
         })),
     }
-  })()
+  }, [dailyData])
 
   // Total balance from allocation
   const totalBalance = allocation.reduce((sum, a) => sum + a.balance, 0)

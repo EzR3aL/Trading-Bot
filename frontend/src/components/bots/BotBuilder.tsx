@@ -1,8 +1,9 @@
 import { useState, useEffect, useMemo } from 'react'
-import { useTranslation } from 'react-i18next'
+import { Trans, useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
 import api from '../../api/client'
 import { getApiErrorMessage } from '../../utils/api-error'
+import { useToastStore } from '../../stores/toastStore'
 import { ArrowLeft, ArrowRight, Check, Play, Brain, TrendingUp, BarChart3, DollarSign, Activity, Building, LayoutGrid, List, Bot, Info, Zap, Clock } from 'lucide-react'
 import ExchangeLogo from '../ui/ExchangeLogo'
 import FilterDropdown from '../ui/FilterDropdown'
@@ -117,6 +118,7 @@ const PAIRS_HL = ['BTC', 'ETH', 'SOL', 'XRP', 'DOGE', 'AVAX']
 
 export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps) {
   const { t } = useTranslation()
+  const { addToast } = useToastStore()
   const isEdit = botId !== null && botId !== undefined
   const [step, setStep] = useState(0)
   const [strategies, setStrategies] = useState<Strategy[]>([])
@@ -190,7 +192,7 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
     if (!isEdit) {
       api.get('/presets').then(res => {
         setPresets(res.data || [])
-      }).catch(() => {})
+      }).catch((err) => { console.error('Failed to load presets:', err); addToast('error', 'Failed to load data') })
     }
   }, [isEdit])
 
@@ -247,7 +249,7 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
       if (!isEdit) {
         setSelectedSources([])
       }
-    }).catch(() => {})
+    }).catch((err) => { console.error('Failed to load data sources:', err); addToast('error', 'Failed to load data') })
   }, [isEdit])
 
   // Load existing bot if editing
@@ -670,7 +672,9 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
             {strategyType && (strategyType === 'edge_indicator' || strategyType === 'claude_edge_indicator') && STRATEGY_RECOMMENDATIONS[strategyType] && (
               <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-primary-500/10 border border-primary-500/20">
                 <Clock size={14} className="text-primary-400 shrink-0" />
-                <span className="text-xs text-primary-300" dangerouslySetInnerHTML={{ __html: t('bots.builder.recommendedTimeframe', { timeframe: STRATEGY_RECOMMENDATIONS[strategyType].bestTimeframe }) }} />
+                <span className="text-xs text-primary-300">
+                  <Trans i18nKey="bots.builder.recommendedTimeframe" values={{ timeframe: STRATEGY_RECOMMENDATIONS[strategyType].bestTimeframe }} components={{ strong: <strong /> }} />
+                </span>
                 <span className="text-[10px] text-gray-500 ml-auto">{t('bots.builder.backtestDays')}</span>
               </div>
             )}

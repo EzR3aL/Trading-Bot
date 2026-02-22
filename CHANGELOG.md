@@ -9,6 +9,123 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.20.0] - 2026-02-22
+
+### Hinzugefuegt
+- **Trade-Fehler Benutzerbenachrichtigung** — Bei fehlgeschlagener Orderplatzierung wird der Benutzer sofort via WebSocket (`trade_failed` Event) und Discord/Telegram (`TRADE_FAILED` Risk Alert) benachrichtigt. Nur echte Fehler — "minimum amount" Warnungen werden nicht eskaliert
+- **Atomare Daily-Loss-Limit Pruefung** — Per-User `asyncio.Lock` im Orchestrator stellt sicher, dass Risk-Check + Trade-Execution atomar ablaufen. Verhindert, dass parallele Bots gleichzeitig das Tageslimit umgehen
+- **Datenbank-Performance-Indexes** — Neue Indexes `ix_trade_bot_status` (bot_config_id, status) und `ix_trade_entry_time` (entry_time) auf TradeRecord fuer schnellere Abfragen im Position Monitor
+- **Log-Rotation** — `RotatingFileHandler` mit 100 MB pro Datei, 10 Backups. Automatisches JSON-Format in Production (`LOG_FORMAT=json` oder `ENVIRONMENT=production`)
+- **Request-ID Middleware** — Jede Response enthaelt `X-Request-ID` Header fuer Log-Korrelation. Akzeptiert Client-Header oder generiert UUID
+- **System-Metriken** — Neue Prometheus-Gauges: `process_resident_memory_bytes` (Speicherverbrauch), `disk_usage_percent` (Festplatte). Background-Collector erfasst alle 15 Sekunden
+- **Trade-Failure Counter** — Neuer Prometheus-Counter `trade_failures_total` mit Labels `exchange` und `error_type`
+- **PostgreSQL Backup Sidecar** — Automatisches taegliches Backup via `pg_dump` im Docker-Compose. Behaelt 7 Tage, loescht aeltere automatisch
+- **Alertmanager Integration** — Vollstaendige Alertmanager-Konfiguration mit Webhook-Receiver. Separate Route fuer kritische Alerts (1h Wiederholung). Prometheus sendet Alerts an Alertmanager
+- **Erweiterte Alert-Regeln** — 4 neue Prometheus-Alerts: `HighMemoryUsage` (>768MB), `HighDiskUsage` (>85%), `CriticalDiskUsage` (>95%), `TradeExecutionFailures`
+- **Graceful Shutdown** — `STOPSIGNAL SIGTERM` + `--timeout-graceful-shutdown 25s` im Dockerfile, `stop_grace_period: 30s` in Docker-Compose
+- **CPU-Limit** — Trading-Bot Container auf 2.0 CPUs begrenzt
+- **35 neue Tests** — Trade-Failure-Notification (4), Per-User Trade Lock (6), DB-Indexes (2), Log-Rotation (2), Request-ID (2), Health-Check (1), Prometheus-Metriken (3), Metrics-Collector (2), Docker/DevOps-Konfiguration (13)
+
+### Geaendert
+- **Health-Check Endpoint** — Erweitert um `checks`-Objekt mit `database` und `bots` Status. Zeigt Anzahl der Bots im Error-State
+- **Erweiterter Metrics-Collector** — Sammelt jetzt auch Prozess-Speicher (Linux: `resource.getrusage`, Windows: Fallback) und Disk-Usage (`shutil.disk_usage`)
+
+### Frontend
+- **i18n: Hardcoded Strings entfernt** — Alle `" - OK"` Suffixe und `"Failed to load data"` durch `t()` Uebersetzungen ersetzt (Bots, BotDetail, Dashboard, Backtest, BotPerformance, GettingStarted, Trades)
+- **Modal Accessibility** — `role="dialog"`, `aria-modal="true"`, `aria-label`, Escape-Key-Handler auf TradeDetailModal und BotTradeHistoryModal
+- **Toast Store** — Maximum 10 Toasts gleichzeitig (aeltere werden automatisch entfernt)
+- **Realtime Store** — `removeBotStatus()` Methode fuer Cleanup hinzugefuegt
+- **Portfolio Performance** — `chartData` mit `useMemo` optimiert (abhaengig von `dailyData`)
+
+---
+
+## [3.19.0] - 2026-02-22
+
+### Hinzugefuegt
+- **Metrics Endpoint IP-Restriction** — `/metrics` ist in Production nur von localhost, Docker-Netzwerken und `METRICS_ALLOWED_IPS` erreichbar (403 fuer andere IPs)
+- **HTTPS Redirect Middleware** — Automatische HTTP→HTTPS Weiterleitung (301) in Production ueber `X-Forwarded-Proto` Header (fuer Nginx/Caddy/Traefik)
+- **Default-Passwort Erkennung** — Config Validator lehnt schwache Passwoerter (`tradingbot_dev`, `changeme`, etc.) bei `ENVIRONMENT=production` ab — App startet nicht
+- **11 neue Security-Tests** — Metrics IP-Restriction (5), HTTPS Redirect (3), Default-Passwort Validator (3)
+
+### Geaendert
+- **docker-compose.yml** — Produktions-Checkliste als Kommentar ergaenzt (POSTGRES_PASSWORD, GF_ADMIN_PASSWORD, ENVIRONMENT)
+
+---
+
+## [3.18.0] - 2026-02-22
+
+### Hinzugefuegt
+- **Toast-Benachrichtigungen im Frontend** — Alle `console.error`-Only-Catches durch `useToastStore.addToast()` ergaenzt (8 Dateien, 15+ Stellen). Benutzer sehen jetzt Fehlermeldungen bei API-Fehlern
+- **Rate Limiting auf allen Endpoints** — 16 ungeschuetzte Endpoints in 5 Router-Dateien mit `@limiter.limit()` versehen:
+  - `admin_logs.py` (5 Endpoints: 60/min Lesen, 5/min Loeschen)
+  - `exchanges.py` (2 Endpoints: 30/min)
+  - `funding.py` (2 Endpoints: 30/min)
+  - `portfolio.py` (4 Endpoints: 20-30/min)
+  - `statistics.py` (3 Endpoints: 30/min)
+- **Exchange-Name Validierung** — `GET /api/exchanges/{name}/info` validiert Parameter mit Regex `^[a-zA-Z][a-zA-Z0-9_-]{0,29}$`, gibt 400 bei ungueltigem Namen
+- **Log-Redaktion** — `RedactionFilter` in `logger.py` maskiert automatisch API-Keys, Bearer-Tokens und JWTs in allen Log-Ausgaben
+- **Prometheus Alert Rules** — 9 Alerting-Regeln fuer kritische Events:
+  - `HealthCheckFailing`, `HighErrorRate`, `NoBotsRunning`, `BotInErrorState`
+  - `BotConsecutiveErrors`, `HighRequestLatency`, `SlowDatabaseQueries`
+  - `HighWebSocketConnections`, `HighRateLimitHits`
+- **Docker Health Check verbessert** — Parst jetzt `/api/health`-Response und prueft `status == "healthy"` (statt nur HTTP 200)
+- **18 neue Tests** — Auth-Integration (Login Lockout Flow, Password Change + Token Revocation), Exchange-Validierung, Log-Redaktion (5 Faelle), Rate-Limiting Coverage (5 Router-Dateien)
+
+### Behoben
+- **Frontend: Stille Catches endgueltig behoben** — Alle `catch { /* ignore */ }` durch `console.error` + Toast-Benachrichtigung ersetzt
+  - Backtest.tsx: 4 Catches (Submit, Load, Delete + Polling-Error-Logging)
+  - BotPerformance.tsx: 2 Catches (Copy-to-Clipboard Error-Logging)
+  - Bots.tsx: 2 Catches (Trade History Load + Copy-Image Error-Logging)
+
+---
+
+## [3.17.0] - 2026-02-22
+
+### Behoben
+- **CRITICAL: Path Traversal in SPA Routing** — `serve_spa()` validiert jetzt, dass aufgeloeste Pfade innerhalb des Frontend-Verzeichnisses bleiben. Verhindert `../../etc/passwd`-Angriffe
+- **CRITICAL: TP/SL Fehlerbehandlung (Bitget)** — TP/SL-Fehler werden jetzt als ERROR (statt WARNING) geloggt, mit automatischem Retry (2 Versuche) und 200ms Verzoegerung fuer Order-Fill
+- **CRITICAL: Daily Loss Limit in Trade Execution** — `can_trade()` wird jetzt direkt vor Orderplatzierung geprueft, nicht nur waehrend der Analyse
+- **CRITICAL: Position Sizing Logik** — Vereinfacht: `asset_budget` wird immer direkt verwendet wenn gesetzt, unabhaengig von `position_size_percent`
+- **HIGH: Weex Client Retry/Circuit Breaker** — Gleiche `@with_retry` und Circuit Breaker Logik wie Bitget hinzugefuegt (3 Versuche, Exponential Backoff)
+- **HIGH: Stille `.catch(() => {})` im Frontend** — 14 leere Catch-Bloecke in 8 Dateien durch `console.error`-Logging ersetzt
+- **HIGH: `dangerouslySetInnerHTML` in BotBuilder** — Durch sichere `<Trans>`-Komponente von react-i18next ersetzt
+- **HIGH: Docker Image Pinning** — `prom/prometheus:v3.2.1` und `grafana/grafana:11.5.2` statt `:latest`
+- **HIGH: X-Forwarded-For IP-Validierung** — IP-Format wird jetzt per Regex validiert, Fallback auf `request.client.host` bei ungueltigem Format
+- **MEDIUM: Passwort-Komplexitaet** — Neues Passwort erfordert min. 8 Zeichen, 1 Grossbuchstabe, 1 Kleinbuchstabe, 1 Ziffer, 1 Sonderzeichen
+- **MEDIUM: Account Lockout Eskalation** — Exponentielles Backoff: 15min, 30min, 60min, ... max 24h (statt fixer 15min)
+- **MEDIUM: Health Check DB-Verifizierung** — `/api/health` prueft DB-Konnektivitaet mit `SELECT 1`, gibt 503 bei Fehler zurueck
+- **MENTOR: TP/SL Failure Propagation** — `Order.tpsl_failed` Flag hinzugefuegt, trade_executor sendet Risk Alert bei fehlgeschlagenem TP/SL
+- **MENTOR: IP-Validierung** — Regex durch `ipaddress.ip_address()` ersetzt fuer echte IPv4/IPv6-Validierung
+- **MENTOR: Health Check Imports** — Module-Level Imports statt Function-Level fuer bessere Sichtbarkeit
+
+### Geaendert
+- **Orchestrator Kommentar** — Dokumentiert, warum `restore_on_startup()` keine Race Condition hat (laeuft vor API-Start)
+- **Status-Endpoint Version** — `/api/status` und `/api/health` zeigen jetzt korrekt Version `3.0.0`
+
+### Hinzugefuegt
+- **36 neue Tests** — `test_production_hardening.py` mit Integration/Unit-Tests fuer alle Hardening-Fixes:
+  - Path Traversal (HTTP-Integration), can_trade Guard (Denial + Allow), TP/SL Failure Propagation,
+  - Lockout Eskalation (8 parametrisierte Faelle), Passwort-Komplexitaet (6 Faelle),
+  - IP-Validierung (9 Faelle inkl. IPv4/IPv6/Garbage), Health Check DB (200 + 503),
+  - Weex Circuit Breaker (Registrierung, Fehler, Bypass)
+
+---
+
+## [3.16.0] - 2026-02-22
+
+### Hinzugefuegt
+- **PostgreSQL Support:** docker-compose.yml enthaelt PostgreSQL 16 Alpine als Produktionsdatenbank mit Healthcheck und benanntem Volume
+- **SPA Catch-All Routing:** FastAPI serviert index.html fuer alle Frontend-Routen — Seitenaktualisierung auf /settings etc. funktioniert jetzt korrekt
+- **.env.example:** PostgreSQL- und Grafana-Konfiguration dokumentiert
+
+### Geaendert
+- **DateTime Timezone:** Alle DateTime-Spalten verwenden jetzt `DateTime(timezone=True)` fuer PostgreSQL-Kompatibilitaet (verhindert offset-naive vs offset-aware Fehler)
+- **Dockerfile:** `--legacy-peer-deps` fuer npm, `NODE_OPTIONS=--max-old-space-size=1536` fuer speicherbeschraenkte Builds, korrekter Frontend-Output-Pfad
+- **docker-compose.yml:** CPU-Limit auf 0.90 (1-vCPU-Droplet), Grafana nur auf localhost gebunden, Passwort ueber Umgebungsvariable, trading-bot haengt von postgres ab
+- **Settings:** Referral-Registrierung fuer Admin-Benutzer ausgeblendet
+
+---
+
 ## [3.15.2] - 2026-02-21
 
 ### Hinzugefuegt

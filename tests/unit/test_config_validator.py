@@ -19,6 +19,7 @@ def test_production_without_jwt_secret_raises():
     env = {
         "ENVIRONMENT": "production",
         "JWT_SECRET_KEY": "short",  # Too short
+        "POSTGRES_PASSWORD": "StrongTestPass123!",
     }
     with patch.dict(os.environ, env, clear=False):
         with pytest.raises(ConfigValidationError, match="JWT_SECRET_KEY"):
@@ -33,6 +34,7 @@ def test_production_with_valid_jwt_secret_passes():
         "ENCRYPTION_KEY": "some-key",
         "CORS_ORIGINS": "https://example.com",
         "DATABASE_URL": "postgresql+asyncpg://localhost/db",
+        "POSTGRES_PASSWORD": "StrongTestPass123!",
     }
     with patch.dict(os.environ, env, clear=False):
         validate_startup_config()
@@ -46,6 +48,7 @@ def test_production_sqlite_warning(caplog):
         "ENCRYPTION_KEY": "some-key",
         "DATABASE_URL": "sqlite+aiosqlite:///test.db",
         "CORS_ORIGINS": "https://example.com",
+        "POSTGRES_PASSWORD": "StrongTestPass123!",
     }
     with patch.dict(os.environ, env, clear=False):
         validate_startup_config()
@@ -59,6 +62,7 @@ def test_production_missing_cors_warning(caplog):
         "JWT_SECRET_KEY": "a" * 64,
         "ENCRYPTION_KEY": "some-key",
         "DATABASE_URL": "postgresql+asyncpg://localhost/db",
+        "POSTGRES_PASSWORD": "StrongTestPass123!",
     }
     # Remove CORS_ORIGINS if present
     with patch.dict(os.environ, env, clear=False):
@@ -74,6 +78,7 @@ def test_production_missing_encryption_key_warning(caplog):
         "JWT_SECRET_KEY": "a" * 64,
         "DATABASE_URL": "postgresql+asyncpg://localhost/db",
         "CORS_ORIGINS": "https://example.com",
+        "POSTGRES_PASSWORD": "StrongTestPass123!",
     }
     with patch.dict(os.environ, env, clear=False):
         os.environ.pop("ENCRYPTION_KEY", None)

@@ -30,6 +30,7 @@ class Order:
     leverage: Optional[int] = None
     fee: float = 0.0
     client_order_id: Optional[str] = None
+    tpsl_failed: bool = False
 
 
 @dataclass

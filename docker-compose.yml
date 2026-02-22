@@ -1,22 +1,50 @@
-# Bitget Trading Bot v2.0 - Docker Compose Configuration
+# Trading Bot - Docker Compose Configuration
 # Usage:
 #   Build & Run: docker compose up --build -d
 #   Logs:        docker compose logs -f
 #   Stop:        docker compose down
+#
+# ⚠ PRODUCTION CHECKLIST (before deploying):
+#   1. Set POSTGRES_PASSWORD to a strong random value in .env
+#   2. Set GF_ADMIN_PASSWORD to a strong value in .env
+#   3. Set ENVIRONMENT=production in .env
+#   The app will REFUSE TO START with default passwords in production mode.
+#
+# Local dev:  Works out of the box with defaults (DB on localhost only).
 
 services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: tradingbot-postgres
+    restart: unless-stopped
+    environment:
+      - POSTGRES_DB=${POSTGRES_DB:-tradingbot}
+      - POSTGRES_USER=${POSTGRES_USER:-tradingbot}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-tradingbot_dev}
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-tradingbot}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   trading-bot:
     build:
       context: .
       dockerfile: Dockerfile
     container_name: bitget-trading-bot
     restart: unless-stopped
+    stop_grace_period: 30s
 
     env_file:
       - .env
 
     environment:
       - PYTHONUNBUFFERED=1
+      - DATABASE_URL=${DATABASE_URL:-postgresql+asyncpg://tradingbot:${POSTGRES_PASSWORD:-tradingbot_dev}@postgres:5432/tradingbot}
 
     ports:
       - "127.0.0.1:8000:8000"
@@ -26,42 +54,89 @@ services:
       - ./logs:/app/logs
 
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')"]
+      test: ["CMD", "python", "-c", "import urllib.request, json; r = urllib.request.urlopen('http://localhost:8000/api/health'); d = json.loads(r.read()); exit(0 if d.get('status') == 'healthy' else 1)"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 15s
 
+    depends_on:
+      postgres:
+        condition: service_healthy
+
     deploy:
       resources:
         limits:
-          cpus: '2'
           memory: 1024M
-        reservations:
-          cpus: '0.5'
-          memory: 256M
+          cpus: "2.0"
+
+  # Automated daily PostgreSQL backup (retains 7 days)
+  pg-backup:
+    image: postgres:16-alpine
+    container_name: tradingbot-pg-backup
+    restart: unless-stopped
+    environment:
+      - PGHOST=postgres
+      - PGUSER=${POSTGRES_USER:-tradingbot}
+      - PGPASSWORD=${POSTGRES_PASSWORD:-tradingbot_dev}
+      - PGDATABASE=${POSTGRES_DB:-tradingbot}
+    volumes:
+      - ./backups:/backups
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        while true; do
+          STAMP=$$(date +%Y%m%d_%H%M%S)
+          echo "[$$STAMP] Starting backup..."
+          pg_dump -Fc -f /backups/tradingbot_$$STAMP.dump 2>&1
+          if [ $$? -eq 0 ]; then
+            echo "[$$STAMP] Backup complete: tradingbot_$$STAMP.dump"
+          else
+            echo "[$$STAMP] Backup FAILED"
+          fi
+          # Remove backups older than 7 days
+          find /backups -name "tradingbot_*.dump" -mtime +7 -delete
+          # Sleep 24 hours
+          sleep 86400
+        done
+    depends_on:
+      postgres:
+        condition: service_healthy
 
   prometheus:
-    image: prom/prometheus:latest
+    image: prom/prometheus:v3.2.1
     container_name: tradingbot-prometheus
     restart: unless-stopped
     ports:
       - "127.0.0.1:9090:9090"
     volumes:
       - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./monitoring/alert_rules.yml:/etc/prometheus/alert_rules.yml
       - prometheus_data:/prometheus
     depends_on:
       trading-bot:
         condition: service_healthy
 
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    container_name: tradingbot-alertmanager
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:9093:9093"
+    volumes:
+      - ./monitoring/alertmanager.yml:/etc/alertmanager/alertmanager.yml
+    depends_on:
+      - prometheus
+
   grafana:
-    image: grafana/grafana:latest
+    image: grafana/grafana:11.5.2
     container_name: tradingbot-grafana
     restart: unless-stopped
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     environment:
-      - GF_SECURITY_ADMIN_PASSWORD=admin
+      # ⚠ CHANGE in production! Default "changeme" is for local dev only
+      - GF_SECURITY_ADMIN_PASSWORD=${GF_ADMIN_PASSWORD:-changeme}
     volumes:
       - grafana_data:/var/lib/grafana
       - ./monitoring/grafana/provisioning:/etc/grafana/provisioning
@@ -70,5 +145,6 @@ services:
       - prometheus
 
 volumes:
+  postgres_data:
   prometheus_data:
   grafana_data:

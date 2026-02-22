@@ -5,6 +5,7 @@ import Pagination from '../components/ui/Pagination'
 import api from '../api/client'
 import { getApiErrorMessage } from '../utils/api-error'
 import { useAuthStore } from '../stores/authStore'
+import { useToastStore } from '../stores/toastStore'
 import type { ConnectionsStatusResponse, ExchangeConnectionStatus, ExchangeInfo, ServiceStatus, LlmConnection, AdminUidEntry, HlRevenueInfo } from '../types'
 import { ExchangeIcon } from '../components/ui/ExchangeLogo'
 import FilterDropdown from '../components/ui/FilterDropdown'
@@ -386,7 +387,7 @@ export default function Settings() {
       }
       setAffiliateForms(forms)
       setAffiliateLoaded(true)
-    } catch { /* ignore */ }
+    } catch (err) { console.error('Failed to load affiliate links:', err); useToastStore.getState().addToast('error', 'Failed to load data') }
   }
 
   const saveAffiliateLink = async (exchange: string) => {
@@ -685,8 +686,8 @@ export default function Settings() {
                           </>
                         )}
 
-                        {/* Hyperliquid: Referral verification (no UID) */}
-                        {ex.name === 'hyperliquid' && hlReferralInfo?.referral_required && (
+                        {/* Hyperliquid: Referral verification (no UID) — hidden for admins */}
+                        {ex.name === 'hyperliquid' && hlReferralInfo?.referral_required && !isAdmin && (
                           <div className="mt-4 pt-4 border-t border-white/[0.06]">
                             <h4 className="text-sm font-medium text-white mb-2">{t('affiliate.referral')}</h4>
                             <p className="text-gray-400 text-xs mb-3">{t('affiliate.referralHint')}</p>

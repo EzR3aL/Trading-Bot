@@ -11,6 +11,7 @@ import {
 } from 'lucide-react'
 import confetti from 'canvas-confetti'
 import api from '../api/client'
+import { useToastStore } from '../stores/toastStore'
 import DatePicker from '../components/ui/DatePicker'
 import FilterDropdown from '../components/ui/FilterDropdown'
 import NumInput from '../components/ui/NumInput'
@@ -86,19 +87,19 @@ export default function Backtest() {
       if (res.data.strategies?.length > 0 && !strategyType) {
         setStrategyType(res.data.strategies[0].name)
       }
-    }).catch(() => {})
+    }).catch((err) => { console.error('Failed to load strategies:', err); useToastStore.getState().addToast('error', t('common.loadError', 'Failed to load data')) })
     api.get('/backtest/date-limits').then(res => {
       if (res.data.timeframe_max_days) {
         setTimeframeMaxDays(res.data.timeframe_max_days)
       }
-    }).catch(() => {})
+    }).catch((err) => { console.error('Failed to load date limits:', err); useToastStore.getState().addToast('error', t('common.loadError', 'Failed to load data')) })
   }, [])
 
   // Fetch history on mount
   const fetchHistory = useCallback(() => {
     api.get('/backtest/history?per_page=50').then(res => {
       setHistory(res.data.runs || [])
-    }).catch(() => {}).finally(() => setLoadingHistory(false))
+    }).catch((err) => { console.error('Failed to load backtest history:', err); useToastStore.getState().addToast('error', t('common.loadError', 'Failed to load data')) }).finally(() => setLoadingHistory(false))
   }, [])
 
   useEffect(() => { fetchHistory() }, [fetchHistory])
@@ -115,7 +116,7 @@ export default function Backtest() {
           if (res.data.status === 'completed' || res.data.status === 'failed') {
             fetchHistory()
           }
-        } catch { /* ignore */ }
+        } catch (err) { console.error('Failed to poll backtest status:', err) }
       }, 2000)
     }
     return () => { cancelled = true; if (pollRef.current) clearInterval(pollRef.current) }
@@ -189,7 +190,7 @@ export default function Backtest() {
       const runRes = await api.get(`/backtest/${res.data.run_id}`)
       setActiveRun(runRes.data)
       fetchHistory()
-    } catch { /* ignore */ }
+    } catch (err) { console.error('Failed to start backtest:', err); useToastStore.getState().addToast('error', t('common.error')) }
     setSubmitting(false)
   }
 
@@ -197,7 +198,7 @@ export default function Backtest() {
     try {
       const res = await api.get(`/backtest/${runId}`)
       setActiveRun(res.data)
-    } catch { /* ignore */ }
+    } catch (err) { console.error('Failed to load backtest run:', err) }
   }
 
   const handleDelete = async (runId: number) => {
@@ -205,7 +206,7 @@ export default function Backtest() {
       await api.delete(`/backtest/${runId}`)
       setHistory(prev => prev.filter(h => h.id !== runId))
       if (activeRun?.id === runId) setActiveRun(null)
-    } catch { /* ignore */ }
+    } catch (err) { console.error('Failed to delete backtest:', err); useToastStore.getState().addToast('error', t('common.error')) }
   }
 
   const isRunning = activeRun?.status === 'pending' || activeRun?.status === 'running'

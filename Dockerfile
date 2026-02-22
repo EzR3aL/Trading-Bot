@@ -5,8 +5,9 @@
 FROM node:20-alpine AS frontend
 WORKDIR /app/frontend
 COPY frontend/package*.json ./
-RUN npm ci --production=false
+RUN npm ci --legacy-peer-deps
 COPY frontend/ .
+ENV NODE_OPTIONS=--max-old-space-size=1536
 RUN npm run build
 
 # Stage 2: Python Dependencies
@@ -41,7 +42,7 @@ RUN useradd --create-home --shell /bin/bash botuser
 COPY --chown=botuser:botuser . .
 
 # Copy built frontend from stage 1
-COPY --from=frontend /app/frontend/dist /app/static/frontend
+COPY --from=frontend /app/static/frontend /app/static/frontend
 
 # Create data directories
 RUN mkdir -p data logs \
@@ -56,5 +57,8 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
 
 EXPOSE 8000
 
+# Ensure container stops cleanly on SIGTERM from Docker
+STOPSIGNAL SIGTERM
+
 # Run FastAPI backend (serves React frontend via StaticFiles)
-CMD ["python", "-m", "uvicorn", "src.api.main_app:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["python", "-m", "uvicorn", "src.api.main_app:app", "--host", "0.0.0.0", "--port", "8000", "--timeout-graceful-shutdown", "25"]

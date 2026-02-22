@@ -2,10 +2,11 @@
 
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy import func, select, case
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.api.rate_limit import limiter
 from src.auth.dependencies import get_current_user
 from src.models.database import TradeRecord, User
 from src.models.session import get_db
@@ -14,7 +15,9 @@ router = APIRouter(prefix="/api/statistics", tags=["statistics"])
 
 
 @router.get("")
+@limiter.limit("30/minute")
 async def get_statistics(
+    request: Request,
     days: int = Query(30, ge=1, le=365),
     demo_mode: Optional[bool] = Query(None),
     user: User = Depends(get_current_user),
@@ -75,7 +78,9 @@ async def get_statistics(
 
 
 @router.get("/daily")
+@limiter.limit("30/minute")
 async def get_daily_stats(
+    request: Request,
     days: int = Query(30, ge=1, le=365),
     demo_mode: Optional[bool] = Query(None),
     user: User = Depends(get_current_user),
@@ -128,7 +133,9 @@ async def get_daily_stats(
 
 
 @router.get("/revenue")
+@limiter.limit("30/minute")
 async def get_revenue_analytics(
+    request: Request,
     days: int = Query(30, ge=1, le=365),
     demo_mode: Optional[bool] = Query(None),
     user: User = Depends(get_current_user),
