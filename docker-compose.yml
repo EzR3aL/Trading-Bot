@@ -68,7 +68,7 @@ services:
       resources:
         limits:
           memory: 1024M
-          cpus: "2.0"
+          cpus: "${CPU_LIMIT:-2.0}"
 
   # Automated daily PostgreSQL backup (retains 7 days)
   pg-backup:

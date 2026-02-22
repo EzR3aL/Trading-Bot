@@ -91,9 +91,9 @@ groups:
           summary: "High rate of 429 responses"
           description: "Elevated rate limiting activity detected — potential abuse."
 
-      # High memory usage
+      # High memory usage (app_memory_bytes is custom; process_resident_memory_bytes is built-in)
       - alert: HighMemoryUsage
-        expr: process_resident_memory_bytes > 768 * 1024 * 1024
+        expr: app_memory_bytes > 768 * 1024 * 1024 or process_resident_memory_bytes > 768 * 1024 * 1024
         for: 5m
         labels:
           severity: warning
