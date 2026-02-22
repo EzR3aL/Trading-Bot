@@ -3,6 +3,9 @@
 #   Build & Run: docker compose up --build -d
 #   Logs:        docker compose logs -f
 #   Stop:        docker compose down
+#
+# Production: Set POSTGRES_PASSWORD in .env to a strong random value.
+# Local dev:  Works out of the box with defaults (DB on localhost only).
 
 services:
   postgres:
@@ -12,7 +15,7 @@ services:
     environment:
       - POSTGRES_DB=${POSTGRES_DB:-tradingbot}
       - POSTGRES_USER=${POSTGRES_USER:-tradingbot}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-tradingbot_dev}
     ports:
       - "127.0.0.1:5432:5432"
     volumes:
@@ -35,6 +38,7 @@ services:
 
     environment:
       - PYTHONUNBUFFERED=1
+      - DATABASE_URL=${DATABASE_URL:-postgresql+asyncpg://tradingbot:${POSTGRES_PASSWORD:-tradingbot_dev}@postgres:5432/tradingbot}
 
     ports:
       - "127.0.0.1:8000:8000"
@@ -57,11 +61,7 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '0.90'
           memory: 1024M
-        reservations:
-          cpus: '0.25'
-          memory: 256M
 
   prometheus:
     image: prom/prometheus:latest
