@@ -42,9 +42,9 @@ class User(Base):
     failed_login_attempts = Column(Integer, default=0, server_default="0")
     locked_until = Column(DateTime(timezone=True), nullable=True)
     is_deleted = Column(Boolean, default=False)
-    deleted_at = Column(DateTime, nullable=True)
-    created_at = Column(DateTime, server_default=func.now())
-    updated_at = Column(DateTime, onupdate=func.now())
+    deleted_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
     # Relationships — use "all" (not "all, delete-orphan") to prevent cascade
     # deletes from wiping trade history and other important child records.
@@ -87,8 +87,8 @@ class UserConfig(Base):
     # Migration nullifies any existing plaintext values. Do NOT write to this column.
     discord_webhook_url = Column(Text, nullable=True)
 
-    created_at = Column(DateTime, server_default=func.now())
-    updated_at = Column(DateTime, onupdate=func.now())
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
     # Relationships
     user = relationship("User", back_populates="configs")
@@ -113,8 +113,8 @@ class ConfigPreset(Base):
     # Trading Pairs (JSON stored as text)
     trading_pairs = Column(Text, nullable=True)  # JSON: ["BTCUSDT", "ETHUSDT"]
 
-    created_at = Column(DateTime, server_default=func.now())
-    updated_at = Column(DateTime, onupdate=func.now())
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
     # Relationships
     user = relationship("User", back_populates="presets")
@@ -151,14 +151,14 @@ class TradeRecord(Base):
     fees = Column(Float, default=0)
     funding_paid = Column(Float, default=0)
     builder_fee = Column(Float, default=0)
-    entry_time = Column(DateTime, nullable=False, index=True)
-    exit_time = Column(DateTime, nullable=True)
+    entry_time = Column(DateTime(timezone=True), nullable=False, index=True)
+    exit_time = Column(DateTime(timezone=True), nullable=True)
     exit_reason = Column(String(50), nullable=True)
     metrics_snapshot = Column(Text, nullable=True)  # JSON string
     demo_mode = Column(Boolean, default=False, nullable=False, server_default=text("false"))
 
-    created_at = Column(DateTime, server_default=func.now())
-    updated_at = Column(DateTime, onupdate=func.now())
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
     # Relationships
     user = relationship("User", back_populates="trades")
@@ -179,9 +179,9 @@ class FundingPayment(Base):
     position_value = Column(Float, nullable=False)
     payment_amount = Column(Float, nullable=False)
     side = Column(String(10), nullable=True)  # long | short
-    timestamp = Column(DateTime, nullable=False)
+    timestamp = Column(DateTime(timezone=True), nullable=False)
 
-    created_at = Column(DateTime, server_default=func.now())
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     # Relationships
     user = relationship("User", back_populates="funding_payments")
@@ -198,12 +198,12 @@ class BotInstance(Base):
     is_running = Column(Boolean, default=False)
     demo_mode = Column(Boolean, default=True)
     active_preset_id = Column(Integer, ForeignKey("config_presets.id", ondelete="SET NULL"), nullable=True)
-    started_at = Column(DateTime, nullable=True)
-    stopped_at = Column(DateTime, nullable=True)
+    started_at = Column(DateTime(timezone=True), nullable=True)
+    stopped_at = Column(DateTime(timezone=True), nullable=True)
     error_message = Column(Text, nullable=True)
 
-    created_at = Column(DateTime, server_default=func.now())
-    updated_at = Column(DateTime, onupdate=func.now())
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
     # Relationships
     user = relationship("User", back_populates="bot_instances")
@@ -233,19 +233,19 @@ class ExchangeConnection(Base):
 
     # Builder fee approval tracking (Hyperliquid)
     builder_fee_approved = Column(Boolean, default=False, nullable=False, server_default=text("false"))
-    builder_fee_approved_at = Column(DateTime, nullable=True)
+    builder_fee_approved_at = Column(DateTime(timezone=True), nullable=True)
 
     # Referral verification tracking (Hyperliquid)
     referral_verified = Column(Boolean, default=False, nullable=False, server_default=text("false"))
-    referral_verified_at = Column(DateTime, nullable=True)
+    referral_verified_at = Column(DateTime(timezone=True), nullable=True)
 
     # Affiliate UID verification (Bitget / Weex)
     affiliate_uid = Column(String(100), nullable=True)
     affiliate_verified = Column(Boolean, default=False, nullable=False, server_default=text("false"))
-    affiliate_verified_at = Column(DateTime, nullable=True)
+    affiliate_verified_at = Column(DateTime(timezone=True), nullable=True)
 
-    created_at = Column(DateTime, server_default=func.now())
-    updated_at = Column(DateTime, onupdate=func.now())
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
     # Relationships
     user = relationship("User", back_populates="exchange_connections")
@@ -257,7 +257,7 @@ class SystemSetting(Base):
 
     key = Column(String(100), primary_key=True)
     value = Column(Text, nullable=True)
-    updated_at = Column(DateTime, onupdate=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
 
 class LLMConnection(Base):
@@ -272,8 +272,8 @@ class LLMConnection(Base):
     provider_type = Column(String(50), nullable=False)  # groq|gemini|openai|anthropic|mistral|xai|perplexity
     api_key_encrypted = Column(Text, nullable=False)
 
-    created_at = Column(DateTime, server_default=func.now())
-    updated_at = Column(DateTime, onupdate=func.now())
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
     # Relationships
     user = relationship("User", back_populates="llm_connections")
@@ -338,8 +338,8 @@ class BotConfig(Base):
     # State
     is_enabled = Column(Boolean, default=False)
 
-    created_at = Column(DateTime, server_default=func.now())
-    updated_at = Column(DateTime, onupdate=func.now())
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
     # Relationships
     user = relationship("User", back_populates="bot_configs")
@@ -357,7 +357,7 @@ class Exchange(Base):
     supports_demo = Column(Boolean, default=False)
     config_schema = Column(Text, nullable=True)  # JSON schema for exchange-specific config
 
-    created_at = Column(DateTime, server_default=func.now())
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 
 class AffiliateLink(Base):
@@ -371,8 +371,8 @@ class AffiliateLink(Base):
     is_active = Column(Boolean, default=True)
     uid_required = Column(Boolean, default=False, nullable=False, server_default=text("false"))
 
-    created_at = Column(DateTime, server_default=func.now())
-    updated_at = Column(DateTime, onupdate=func.now())
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
 
 class BacktestRun(Base):
@@ -386,8 +386,8 @@ class BacktestRun(Base):
     strategy_type = Column(String(50), nullable=False)
     symbol = Column(String(50), nullable=False, default="BTCUSDT")
     timeframe = Column(String(10), nullable=False, default="1d")
-    start_date = Column(DateTime, nullable=False)
-    end_date = Column(DateTime, nullable=False)
+    start_date = Column(DateTime(timezone=True), nullable=False)
+    end_date = Column(DateTime(timezone=True), nullable=False)
     initial_capital = Column(Float, nullable=False, default=10000.0)
     strategy_params = Column(Text, nullable=True)  # JSON: custom_prompt, thresholds, etc.
 
@@ -400,8 +400,8 @@ class BacktestRun(Base):
     equity_curve = Column(Text, nullable=True)      # JSON: [{timestamp, equity}, ...]
     trades = Column(Text, nullable=True)            # JSON: [{entry_date, exit_date, ...}, ...]
 
-    created_at = Column(DateTime, server_default=func.now())
-    completed_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    completed_at = Column(DateTime(timezone=True), nullable=True)
 
     # Relationships
     user = relationship("User", back_populates="backtest_runs")
@@ -421,8 +421,8 @@ class RiskStats(Base):
     daily_pnl = Column(Float, default=0.0)
     trades_count = Column(Integer, default=0)
     is_halted = Column(Boolean, default=False)
-    created_at = Column(DateTime, server_default=func.now())
-    updated_at = Column(DateTime, onupdate=func.now())
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
 
 class AuditLog(Base):
@@ -436,7 +436,7 @@ class AuditLog(Base):
     status_code = Column(Integer, nullable=False)
     response_time_ms = Column(Float, nullable=False)
     client_ip = Column(String(45), nullable=False)
-    created_at = Column(DateTime, server_default=func.now(), index=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
 
 
 class EventLog(Base):
@@ -450,4 +450,4 @@ class EventLog(Base):
     severity = Column(String(10), nullable=False, default="info")
     message = Column(String(1000), nullable=False)
     details = Column(Text, nullable=True)
-    created_at = Column(DateTime, server_default=func.now(), index=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)

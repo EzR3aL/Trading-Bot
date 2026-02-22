@@ -685,8 +685,8 @@ export default function Settings() {
                           </>
                         )}
 
-                        {/* Hyperliquid: Referral verification (no UID) */}
-                        {ex.name === 'hyperliquid' && hlReferralInfo?.referral_required && (
+                        {/* Hyperliquid: Referral verification (no UID) — hidden for admins */}
+                        {ex.name === 'hyperliquid' && hlReferralInfo?.referral_required && !isAdmin && (
                           <div className="mt-4 pt-4 border-t border-white/[0.06]">
                             <h4 className="text-sm font-medium text-white mb-2">{t('affiliate.referral')}</h4>
                             <p className="text-gray-400 text-xs mb-3">{t('affiliate.referralHint')}</p>

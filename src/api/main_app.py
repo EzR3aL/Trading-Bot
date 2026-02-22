@@ -281,10 +281,20 @@ def create_app() -> FastAPI:
     from src.api.websocket.manager import ws_manager
     app.state.ws_manager = ws_manager
 
-    # Serve frontend static files (built React app)
+    # Serve frontend static files (built React app) with SPA catch-all
     frontend_dir = Path("static/frontend")
     if frontend_dir.exists():
-        app.mount("/", StaticFiles(directory=str(frontend_dir), html=True), name="frontend")
+        from fastapi.responses import FileResponse
+
+        app.mount("/assets", StaticFiles(directory=str(frontend_dir / "assets")), name="assets")
+
+        @app.get("/{full_path:path}")
+        async def serve_spa(full_path: str):
+            """Serve static files or fall back to index.html for SPA routing."""
+            file_path = frontend_dir / full_path
+            if file_path.is_file():
+                return FileResponse(str(file_path))
+            return FileResponse(str(frontend_dir / "index.html"))
     else:
         logger.info("Frontend not built yet - API-only mode")
 

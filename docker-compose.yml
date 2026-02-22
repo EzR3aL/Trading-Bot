@@ -1,10 +1,28 @@
-# Bitget Trading Bot v2.0 - Docker Compose Configuration
+# Trading Bot - Docker Compose Configuration
 # Usage:
 #   Build & Run: docker compose up --build -d
 #   Logs:        docker compose logs -f
 #   Stop:        docker compose down
 
 services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: tradingbot-postgres
+    restart: unless-stopped
+    environment:
+      - POSTGRES_DB=${POSTGRES_DB:-tradingbot}
+      - POSTGRES_USER=${POSTGRES_USER:-tradingbot}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-tradingbot}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   trading-bot:
     build:
       context: .
@@ -32,13 +50,17 @@ services:
       retries: 3
       start_period: 15s
 
+    depends_on:
+      postgres:
+        condition: service_healthy
+
     deploy:
       resources:
         limits:
-          cpus: '2'
+          cpus: '0.90'
           memory: 1024M
         reservations:
-          cpus: '0.5'
+          cpus: '0.25'
           memory: 256M
 
   prometheus:
@@ -59,9 +81,9 @@ services:
     container_name: tradingbot-grafana
     restart: unless-stopped
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     environment:
-      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_SECURITY_ADMIN_PASSWORD=${GF_ADMIN_PASSWORD:-changeme}
     volumes:
       - grafana_data:/var/lib/grafana
       - ./monitoring/grafana/provisioning:/etc/grafana/provisioning
@@ -70,5 +92,6 @@ services:
       - prometheus
 
 volumes:
+  postgres_data:
   prometheus_data:
   grafana_data:

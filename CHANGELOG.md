@@ -9,6 +9,21 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.16.0] - 2026-02-22
+
+### Hinzugefuegt
+- **PostgreSQL Support:** docker-compose.yml enthaelt PostgreSQL 16 Alpine als Produktionsdatenbank mit Healthcheck und benanntem Volume
+- **SPA Catch-All Routing:** FastAPI serviert index.html fuer alle Frontend-Routen — Seitenaktualisierung auf /settings etc. funktioniert jetzt korrekt
+- **.env.example:** PostgreSQL- und Grafana-Konfiguration dokumentiert
+
+### Geaendert
+- **DateTime Timezone:** Alle DateTime-Spalten verwenden jetzt `DateTime(timezone=True)` fuer PostgreSQL-Kompatibilitaet (verhindert offset-naive vs offset-aware Fehler)
+- **Dockerfile:** `--legacy-peer-deps` fuer npm, `NODE_OPTIONS=--max-old-space-size=1536` fuer speicherbeschraenkte Builds, korrekter Frontend-Output-Pfad
+- **docker-compose.yml:** CPU-Limit auf 0.90 (1-vCPU-Droplet), Grafana nur auf localhost gebunden, Passwort ueber Umgebungsvariable, trading-bot haengt von postgres ab
+- **Settings:** Referral-Registrierung fuer Admin-Benutzer ausgeblendet
+
+---
+
 ## [3.15.2] - 2026-02-21
 
 ### Hinzugefuegt

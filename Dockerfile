@@ -5,8 +5,9 @@
 FROM node:20-alpine AS frontend
 WORKDIR /app/frontend
 COPY frontend/package*.json ./
-RUN npm ci --production=false
+RUN npm ci --legacy-peer-deps
 COPY frontend/ .
+ENV NODE_OPTIONS=--max-old-space-size=1536
 RUN npm run build
 
 # Stage 2: Python Dependencies
@@ -41,7 +42,7 @@ RUN useradd --create-home --shell /bin/bash botuser
 COPY --chown=botuser:botuser . .
 
 # Copy built frontend from stage 1
-COPY --from=frontend /app/frontend/dist /app/static/frontend
+COPY --from=frontend /app/static/frontend /app/static/frontend
 
 # Create data directories
 RUN mkdir -p data logs \

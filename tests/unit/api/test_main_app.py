@@ -318,16 +318,17 @@ async def test_seed_exchanges_skips_when_data_exists():
 # ---------------------------------------------------------------------------
 
 def test_frontend_mount_when_directory_exists():
-    """When static/frontend exists, a mount is added."""
+    """When static/frontend exists, assets mount and SPA catch-all are added."""
     from src.api.main_app import create_app
 
     mock_static = MagicMock()
     with patch("src.api.main_app.Path.exists", return_value=True), \
+         patch("src.api.main_app.Path.is_file", return_value=False), \
          patch("src.api.main_app.StaticFiles", return_value=mock_static):
         app = create_app()
-        # Check that a mount named 'frontend' exists
-        mount_names = [r.name for r in app.routes if hasattr(r, "name")]
-        assert "frontend" in mount_names
+        route_names = [r.name for r in app.routes if hasattr(r, "name")]
+        assert "assets" in route_names
+        assert "serve_spa" in route_names
 
 
 def test_frontend_not_mounted_when_directory_missing():
@@ -336,8 +337,9 @@ def test_frontend_not_mounted_when_directory_missing():
 
     with patch("src.api.main_app.Path.exists", return_value=False):
         app = create_app()
-        mount_names = [r.name for r in app.routes if hasattr(r, "name")]
-        assert "frontend" not in mount_names
+        route_names = [r.name for r in app.routes if hasattr(r, "name")]
+        assert "assets" not in route_names
+        assert "serve_spa" not in route_names
 
 
 # ---------------------------------------------------------------------------
