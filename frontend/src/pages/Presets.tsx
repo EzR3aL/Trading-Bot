@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { LayoutGrid, List, Pencil, Copy, Trash2, ArrowLeft } from 'lucide-react'
 import api from '../api/client'
 import { getApiErrorMessage } from '../utils/api-error'
+import { useToastStore } from '../stores/toastStore'
 import NumInput from '../components/ui/NumInput'
 import type { Preset } from '../types'
 
@@ -30,7 +31,7 @@ export default function Presets() {
     try {
       const res = await api.get('/presets')
       setPresets(res.data)
-    } catch { /* ignore */ }
+    } catch (err) { console.error('Failed to load presets:', err); useToastStore.getState().addToast('error', 'Failed to load data') }
   }
 
   useEffect(() => { loadPresets() }, [])

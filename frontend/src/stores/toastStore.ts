@@ -15,6 +15,8 @@ interface ToastState {
   removeToast: (id: string) => void
 }
 
+const MAX_TOASTS = 10
+
 let toastCounter = 0
 
 export const useToastStore = create<ToastState>((set) => ({
@@ -24,9 +26,12 @@ export const useToastStore = create<ToastState>((set) => ({
     const id = `toast-${++toastCounter}-${Date.now()}`
     const toast: Toast = { id, type, message, duration }
 
-    set((state) => ({
-      toasts: [...state.toasts, toast],
-    }))
+    set((state) => {
+      const updated = [...state.toasts, toast]
+      return {
+        toasts: updated.length > MAX_TOASTS ? updated.slice(updated.length - MAX_TOASTS) : updated,
+      }
+    })
 
     if (duration > 0) {
       setTimeout(() => {

@@ -11,6 +11,7 @@ import {
 } from 'lucide-react'
 import api from '../api/client'
 import { getApiErrorMessage } from '../utils/api-error'
+import { useToastStore } from '../stores/toastStore'
 import { useFilterStore } from '../stores/filterStore'
 import { ExchangeIcon } from '../components/ui/ExchangeLogo'
 import PnlCell from '../components/ui/PnlCell'
@@ -185,7 +186,7 @@ export default function BotDetail() {
   useEffect(() => { fetchData() }, [fetchData])
 
   useEffect(() => {
-    api.get('/config/llm-connections').then(res => setLlmConnections(res.data.connections || [])).catch(() => {})
+    api.get('/config/llm-connections').then(res => setLlmConnections(res.data.connections || [])).catch((err) => { console.error('Failed to load LLM connections:', err); useToastStore.getState().addToast('error', t('common.loadError', 'Failed to load data')) })
   }, [])
 
   // Auto-refresh every 10s

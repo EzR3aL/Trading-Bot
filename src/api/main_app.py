@@ -48,6 +48,35 @@ from src.utils.logger import get_logger  # noqa: E402
 logger = get_logger(__name__)
 
 
+class RequestIDMiddleware(BaseHTTPMiddleware):
+    """Attach a unique request ID to every request for log correlation."""
+
+    async def dispatch(self, request: Request, call_next):
+        import uuid
+        request_id = request.headers.get("x-request-id") or str(uuid.uuid4())[:8]
+        request.state.request_id = request_id
+        response: Response = await call_next(request)
+        response.headers["X-Request-ID"] = request_id
+        return response
+
+
+class HTTPSRedirectMiddleware(BaseHTTPMiddleware):
+    """Redirect HTTP to HTTPS in production when behind a reverse proxy.
+
+    Checks the X-Forwarded-Proto header set by Nginx/Caddy/Traefik.
+    Only active when ENVIRONMENT=production.
+    """
+
+    async def dispatch(self, request: Request, call_next):
+        environment = os.getenv("ENVIRONMENT", "development").lower()
+        if environment == "production":
+            proto = request.headers.get("x-forwarded-proto", "https")
+            if proto == "http":
+                url = str(request.url).replace("http://", "https://", 1)
+                return Response(status_code=301, headers={"Location": url})
+        return await call_next(request)
+
+
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     """Add security headers to all responses."""
 
@@ -217,6 +246,12 @@ def create_app() -> FastAPI:
     # Security headers
     app.add_middleware(SecurityHeadersMiddleware)
 
+    # Request ID for log correlation
+    app.add_middleware(RequestIDMiddleware)
+
+    # HTTPS redirect (outermost — added last so it runs first)
+    app.add_middleware(HTTPSRedirectMiddleware)
+
     # CORS — same-origin (localhost:8000) does not need CORS so it is excluded.
     environment = os.getenv("ENVIRONMENT", "development").lower()
     allowed_origins = [
@@ -291,7 +326,10 @@ def create_app() -> FastAPI:
         @app.get("/{full_path:path}")
         async def serve_spa(full_path: str):
             """Serve static files or fall back to index.html for SPA routing."""
-            file_path = frontend_dir / full_path
+            file_path = (frontend_dir / full_path).resolve()
+            # Prevent path traversal — resolved path must stay inside frontend_dir
+            if not str(file_path).startswith(str(frontend_dir.resolve())):
+                return FileResponse(str(frontend_dir / "index.html"))
             if file_path.is_file():
                 return FileResponse(str(file_path))
             return FileResponse(str(frontend_dir / "index.html"))

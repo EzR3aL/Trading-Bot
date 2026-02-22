@@ -1,9 +1,10 @@
 """Funding payment endpoints (user-scoped)."""
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.api.rate_limit import limiter
 from src.auth.dependencies import get_current_user
 from src.models.database import FundingPayment, User
 from src.models.session import get_db
@@ -12,7 +13,9 @@ router = APIRouter(prefix="/api/funding", tags=["funding"])
 
 
 @router.get("")
+@limiter.limit("30/minute")
 async def list_funding_payments(
+    request: Request,
     days: int = Query(30, ge=1, le=365),
     symbol: str = None,
     user: User = Depends(get_current_user),
@@ -52,7 +55,9 @@ async def list_funding_payments(
 
 
 @router.get("/summary")
+@limiter.limit("30/minute")
 async def funding_summary(
+    request: Request,
     days: int = Query(30, ge=1, le=365),
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),

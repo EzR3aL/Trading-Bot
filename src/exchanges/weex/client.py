@@ -12,15 +12,20 @@ import json
 import time
 from typing import Any, Dict, List, Optional
 
+import asyncio
+
 import aiohttp
 
 from src.exceptions import ExchangeError
 from src.exchanges.base import ExchangeClient
 from src.exchanges.types import Balance, FundingRateInfo, Order, Position, Ticker
 from src.exchanges.weex.constants import BASE_URL, SUCCESS_CODE, TESTNET_URL
+from src.utils.circuit_breaker import CircuitBreakerError, circuit_registry, with_retry
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
+
+_weex_breaker = circuit_registry.get("weex_api", fail_threshold=5, reset_timeout=60)
 
 
 class WeexClientError(ExchangeError):
@@ -91,6 +96,26 @@ class WeexClient(ExchangeClient):
         params: Optional[Dict] = None,
         data: Optional[Dict] = None,
         auth: bool = True,
+        use_circuit_breaker: bool = True,
+    ) -> Dict[str, Any]:
+        if use_circuit_breaker:
+            async def _do():
+                return await self._raw_request(method, endpoint, params, data, auth)
+            try:
+                return await _weex_breaker.call(_do)
+            except CircuitBreakerError as e:
+                raise WeexClientError(f"API temporarily unavailable: {e}")
+        return await self._raw_request(method, endpoint, params, data, auth)
+
+    @with_retry(max_attempts=3, min_wait=1.0, max_wait=10.0,
+                retry_on=(aiohttp.ClientError, asyncio.TimeoutError))
+    async def _raw_request(
+        self,
+        method: str,
+        endpoint: str,
+        params: Optional[Dict] = None,
+        data: Optional[Dict] = None,
+        auth: bool = True,
     ) -> Dict[str, Any]:
         await self._ensure_session()
         url = f"{self.base_url}{endpoint}"
@@ -105,15 +130,26 @@ class WeexClient(ExchangeClient):
 
         headers = self._get_headers(method, request_path, body) if auth else {"Content-Type": "application/json"}
 
-        async with self._session.request(
-            method=method, url=url, headers=headers,
-            data=body if body else None,
-            timeout=aiohttp.ClientTimeout(total=15),
-        ) as response:
-            result = await response.json()
-            if response.status != 200 or result.get("code") != SUCCESS_CODE:
-                raise WeexClientError(f"Weex API Error: {result.get('msg', 'Unknown')}")
-            return result.get("data", result)
+        try:
+            async with self._session.request(
+                method=method, url=url, headers=headers,
+                data=body if body else None,
+                timeout=aiohttp.ClientTimeout(total=15),
+            ) as response:
+                result = await response.json()
+
+                if response.status == 429:
+                    raise aiohttp.ClientResponseError(
+                        response.request_info, response.history,
+                        status=429, message="Rate limited",
+                    )
+
+                if response.status != 200 or result.get("code") != SUCCESS_CODE:
+                    raise WeexClientError(f"Weex API Error: {result.get('msg', 'Unknown')}")
+                return result.get("data", result)
+
+        except (aiohttp.ClientError, asyncio.TimeoutError):
+            raise
 
     async def get_account_balance(self) -> Balance:
         data = await self._request("GET", "/api/v2/mix/account/account", params={

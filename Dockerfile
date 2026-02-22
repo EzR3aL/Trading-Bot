@@ -57,5 +57,8 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
 
 EXPOSE 8000
 
+# Ensure container stops cleanly on SIGTERM from Docker
+STOPSIGNAL SIGTERM
+
 # Run FastAPI backend (serves React frontend via StaticFiles)
-CMD ["python", "-m", "uvicorn", "src.api.main_app:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["python", "-m", "uvicorn", "src.api.main_app:app", "--host", "0.0.0.0", "--port", "8000", "--timeout-graceful-shutdown", "25"]

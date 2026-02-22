@@ -75,7 +75,12 @@ class BotWorker(
     4. Stopped by Orchestrator or on error (with auto-restart)
     """
 
-    def __init__(self, bot_config_id: int, scheduler: Optional[AsyncIOScheduler] = None):
+    def __init__(
+        self,
+        bot_config_id: int,
+        scheduler: Optional[AsyncIOScheduler] = None,
+        user_trade_lock: Optional[asyncio.Lock] = None,
+    ):
         self.bot_config_id = bot_config_id
         self._config: Optional[BotConfig] = None
         self._client: Optional[ExchangeClient] = None
@@ -93,6 +98,10 @@ class BotWorker(
 
         # Per-symbol lock to prevent duplicate position opening
         self._symbol_locks: dict[str, asyncio.Lock] = {}
+
+        # Per-user lock shared across all bots of the same user.
+        # Ensures atomic risk-check-then-trade to prevent daily loss bypass.
+        self._user_trade_lock: asyncio.Lock = user_trade_lock or asyncio.Lock()
 
         # Per-mode clients for "both" mode
         self._demo_client: Optional[ExchangeClient] = None
@@ -637,12 +646,16 @@ class BotWorker(
         cutoff = datetime.now(timezone.utc) - timedelta(minutes=5)
         self._last_signal_keys = {k: v for k, v in self._last_signal_keys.items() if v > cutoff}
 
-        # Execute on appropriate clients
-        mode = self._config.mode
-        if mode in ("demo", "both") and self._demo_client:
-            await self._execute_trade(signal, self._demo_client, demo_mode=True, asset_budget=asset_budget)
-        if mode in ("live", "both") and self._live_client:
-            await self._execute_trade(signal, self._live_client, demo_mode=False, asset_budget=asset_budget)
+        # Execute on appropriate clients under per-user lock.
+        # The lock serializes risk-check + order placement across all bots
+        # of the same user, preventing concurrent trades from bypassing
+        # the daily loss limit.
+        async with self._user_trade_lock:
+            mode = self._config.mode
+            if mode in ("demo", "both") and self._demo_client:
+                await self._execute_trade(signal, self._demo_client, demo_mode=True, asset_budget=asset_budget)
+            if mode in ("live", "both") and self._live_client:
+                await self._execute_trade(signal, self._live_client, demo_mode=False, asset_budget=asset_budget)
 
     async def _send_daily_summary(self):
         """Send daily trading summary at end of day and reset risk alerts."""

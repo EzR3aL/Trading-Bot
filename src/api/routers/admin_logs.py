@@ -7,6 +7,9 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from fastapi import Request
+
+from src.api.rate_limit import limiter
 from src.api.schemas.admin_logs import (
     AuditLogListResponse,
     AuditLogResponse,
@@ -27,7 +30,9 @@ router = APIRouter(prefix="/api/admin", tags=["admin-logs"])
 
 
 @router.get("/audit-logs", response_model=AuditLogListResponse)
+@limiter.limit("60/minute")
 async def list_audit_logs(
+    request: Request,
     user_id: Optional[int] = None,
     method: Optional[str] = Query(None, pattern="^(GET|POST|PUT|DELETE|PATCH|OPTIONS)$"),
     path: Optional[str] = None,
@@ -95,7 +100,9 @@ async def list_audit_logs(
 
 
 @router.delete("/audit-logs", response_model=PurgeResponse)
+@limiter.limit("5/minute")
 async def purge_audit_logs(
+    request: Request,
     days: int = Query(30, ge=1, le=365, description="Delete logs older than N days"),
     admin: User = Depends(get_current_admin),
     db: AsyncSession = Depends(get_db),
@@ -113,7 +120,9 @@ async def purge_audit_logs(
 
 
 @router.get("/events", response_model=EventLogListResponse)
+@limiter.limit("60/minute")
 async def list_events(
+    request: Request,
     event_type: Optional[str] = None,
     severity: Optional[str] = Query(None, pattern="^(info|warning|error)$"),
     bot_id: Optional[int] = None,
@@ -180,7 +189,9 @@ async def list_events(
 
 
 @router.get("/events/stats", response_model=EventStatsListResponse)
+@limiter.limit("30/minute")
 async def event_stats(
+    request: Request,
     admin: User = Depends(get_current_admin),
     db: AsyncSession = Depends(get_db),
 ):
@@ -222,7 +233,9 @@ async def event_stats(
 
 
 @router.delete("/events", response_model=PurgeResponse)
+@limiter.limit("5/minute")
 async def purge_events(
+    request: Request,
     days: int = Query(30, ge=1, le=365, description="Delete events older than N days"),
     admin: User = Depends(get_current_admin),
     db: AsyncSession = Depends(get_db),

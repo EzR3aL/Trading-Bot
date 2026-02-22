@@ -36,6 +36,15 @@ def validate_startup_config():
     if environment == "production" and "sqlite" in db_url.lower():
         warnings.append("Using SQLite in production is not recommended; consider PostgreSQL")
 
+    # Reject default/weak database password in production
+    _WEAK_PASSWORDS = {"tradingbot_dev", "changeme", "password", "postgres", "admin", ""}
+    pg_password = os.getenv("POSTGRES_PASSWORD", "")
+    if environment == "production" and pg_password in _WEAK_PASSWORDS:
+        errors.append(
+            "POSTGRES_PASSWORD is a default/weak value. "
+            "Set a strong random password in .env for production"
+        )
+
     # CORS origins in production
     if environment == "production" and not os.getenv("CORS_ORIGINS"):
         warnings.append("CORS_ORIGINS not set in production; API will reject cross-origin requests")

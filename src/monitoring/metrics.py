@@ -5,6 +5,8 @@ All metrics are defined here so they can be imported
 from a single place across the application.
 """
 
+import os
+
 from prometheus_client import Counter, Gauge, Histogram, Info
 
 # Application info
@@ -39,6 +41,11 @@ TRADE_PNL = Histogram(
     "Trade PnL percentage",
     buckets=[-10, -5, -2, -1, 0, 1, 2, 5, 10, 25],
 )
+TRADE_FAILURES = Counter(
+    "trade_failures_total",
+    "Total failed trade execution attempts",
+    ["exchange", "error_type"],
+)
 
 # System metrics
 DB_QUERY_DURATION = Histogram(
@@ -46,4 +53,10 @@ DB_QUERY_DURATION = Histogram(
 )
 WEBSOCKET_CONNECTIONS = Gauge(
     "websocket_connections_active", "Active WebSocket connections"
+)
+PROCESS_MEMORY_BYTES = Gauge(
+    "process_resident_memory_bytes", "Resident memory size in bytes"
+)
+DISK_USAGE_PERCENT = Gauge(
+    "disk_usage_percent", "Disk usage percentage for data directory"
 )

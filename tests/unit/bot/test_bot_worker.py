@@ -449,6 +449,7 @@ class TestExecuteTrade:
 
         mock_rm = MagicMock()
         mock_rm.calculate_position_size.return_value = (1000.0, 0.01)
+        mock_rm.can_trade.return_value = (True, "")
         worker._risk_manager = mock_rm
 
         signal = _make_mock_signal()
@@ -475,6 +476,7 @@ class TestExecuteTrade:
 
         mock_rm = MagicMock()
         mock_rm.calculate_position_size.return_value = (1000.0, 0.01)
+        mock_rm.can_trade.return_value = (True, "")
         worker._risk_manager = mock_rm
 
         signal = _make_mock_signal()
@@ -496,6 +498,7 @@ class TestExecuteTrade:
 
         mock_rm = MagicMock()
         mock_rm.calculate_position_size.return_value = (1000.0, 0.01)
+        mock_rm.can_trade.return_value = (True, "")
         worker._risk_manager = mock_rm
 
         signal = _make_mock_signal()

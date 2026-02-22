@@ -53,11 +53,17 @@ async def login(request: Request, body: LoginRequest, db: AsyncSession = Depends
         )
 
     if not verify_password(body.password, user.password_hash):
-        # Increment failed login attempts and lock if threshold reached
+        # Increment failed login attempts and lock with escalating duration
         user.failed_login_attempts = (user.failed_login_attempts or 0) + 1
         if user.failed_login_attempts >= 5:
-            user.locked_until = datetime.now(timezone.utc) + timedelta(minutes=15)
-            logger.warning("AUTH: Account '%s' locked after %d failed attempts from %s", body.username, user.failed_login_attempts, client_ip)
+            # Exponential backoff: 15min, 30min, 60min, ... max 24h
+            lockout_tier = user.failed_login_attempts // 5
+            lockout_minutes = min(15 * (2 ** (lockout_tier - 1)), 1440)
+            user.locked_until = datetime.now(timezone.utc) + timedelta(minutes=lockout_minutes)
+            logger.warning(
+                "AUTH: Account '%s' locked for %d min after %d failed attempts from %s",
+                body.username, lockout_minutes, user.failed_login_attempts, client_ip,
+            )
         await db.commit()
         logger.warning("AUTH: Failed login for '%s' from %s", body.username, client_ip)
         raise HTTPException(

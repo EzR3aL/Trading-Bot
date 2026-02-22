@@ -4,10 +4,11 @@ import asyncio
 import time
 from typing import Any, Optional
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.api.rate_limit import limiter
 from src.api.schemas.portfolio import (
     ExchangeSummary,
     PortfolioAllocation,
@@ -41,7 +42,9 @@ def _cache_set(key: str, value: Any) -> None:
 
 
 @router.get("/summary", response_model=PortfolioSummary)
+@limiter.limit("30/minute")
 async def get_portfolio_summary(
+    request: Request,
     days: int = Query(30, ge=1, le=365),
     demo_mode: Optional[str] = Query(None, description="all | true | false"),
     user: User = Depends(get_current_user),
@@ -115,7 +118,9 @@ async def get_portfolio_summary(
 
 
 @router.get("/positions", response_model=list[PortfolioPosition])
+@limiter.limit("20/minute")
 async def get_portfolio_positions(
+    request: Request,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -162,7 +167,9 @@ async def get_portfolio_positions(
 
 
 @router.get("/daily", response_model=list[PortfolioDaily])
+@limiter.limit("30/minute")
 async def get_portfolio_daily(
+    request: Request,
     days: int = Query(30, ge=1, le=365),
     demo_mode: Optional[str] = Query(None),
     user: User = Depends(get_current_user),
@@ -207,7 +214,9 @@ async def get_portfolio_daily(
 
 
 @router.get("/allocation", response_model=list[PortfolioAllocation])
+@limiter.limit("20/minute")
 async def get_portfolio_allocation(
+    request: Request,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):

@@ -126,6 +126,8 @@ class TradeRecord(Base):
     __table_args__ = (
         Index("ix_trade_user_status", "user_id", "status"),
         Index("ix_trade_user_symbol_side", "user_id", "symbol", "side"),
+        Index("ix_trade_bot_status", "bot_config_id", "status"),
+        Index("ix_trade_entry_time", "entry_time"),
     )
 
     id = Column(Integer, primary_key=True, autoincrement=True)

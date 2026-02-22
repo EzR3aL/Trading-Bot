@@ -5,6 +5,7 @@ import Pagination from '../components/ui/Pagination'
 import api from '../api/client'
 import { getApiErrorMessage } from '../utils/api-error'
 import { useAuthStore } from '../stores/authStore'
+import { useToastStore } from '../stores/toastStore'
 import type { ConnectionsStatusResponse, ExchangeConnectionStatus, ExchangeInfo, ServiceStatus, LlmConnection, AdminUidEntry, HlRevenueInfo } from '../types'
 import { ExchangeIcon } from '../components/ui/ExchangeLogo'
 import FilterDropdown from '../components/ui/FilterDropdown'
@@ -386,7 +387,7 @@ export default function Settings() {
       }
       setAffiliateForms(forms)
       setAffiliateLoaded(true)
-    } catch { /* ignore */ }
+    } catch (err) { console.error('Failed to load affiliate links:', err); useToastStore.getState().addToast('error', 'Failed to load data') }
   }
 
   const saveAffiliateLink = async (exchange: string) => {

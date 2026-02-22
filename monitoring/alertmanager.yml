@@ -1,0 +1,36 @@
+# Alertmanager configuration for Trading Bot
+#
+# Configure a receiver below to enable alert delivery.
+# Options: webhook (Discord/Slack/custom), email, PagerDuty, etc.
+#
+# Docs: https://prometheus.io/docs/alerting/latest/configuration/
+
+global:
+  resolve_timeout: 5m
+
+route:
+  receiver: "default"
+  group_by: ["alertname", "severity"]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+
+  routes:
+    - match:
+        severity: critical
+      receiver: "critical"
+      repeat_interval: 1h
+
+receivers:
+  - name: "default"
+    webhook_configs:
+      # Point to your notification endpoint (Discord webhook, Slack, etc.)
+      # Uncomment and set the URL:
+      # - url: "https://discord.com/api/webhooks/YOUR_WEBHOOK_ID/YOUR_WEBHOOK_TOKEN"
+      - url: "${ALERTMANAGER_WEBHOOK_URL:-http://trading-bot:8000/api/webhooks/alertmanager}"
+        send_resolved: true
+
+  - name: "critical"
+    webhook_configs:
+      - url: "${ALERTMANAGER_WEBHOOK_URL:-http://trading-bot:8000/api/webhooks/alertmanager}"
+        send_resolved: true

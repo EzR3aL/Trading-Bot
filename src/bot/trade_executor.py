@@ -54,6 +54,13 @@ class TradeExecutorMixin:
                 signal.stop_loss = round(signal.entry_price * (1 + asset_sl / 100), 2)
 
         try:
+            # Pre-execution risk check — ensures daily loss limit is enforced
+            # even if conditions changed between analysis and execution
+            can_trade, deny_reason = self._risk_manager.can_trade(signal.symbol)
+            if not can_trade:
+                logger.warning(f"{log_prefix} [{mode_str}] Trade denied at execution: {deny_reason}")
+                return
+
             # Use pre-calculated asset budget or fall back to full available balance
             if asset_budget is not None:
                 available = asset_budget
@@ -62,8 +69,8 @@ class TradeExecutorMixin:
                 available = balance.available
 
             # Calculate position size
-            if asset_budget is not None and self._config.position_size_percent is None:
-                # Full budget mode — no double-sizing
+            if asset_budget is not None:
+                # Per-asset budget mode — use full budget directly
                 position_usdt = available
                 position_size = (available * leverage) / signal.entry_price
             else:
@@ -143,9 +150,19 @@ class TradeExecutorMixin:
             )
 
             self.trades_today += 1
+
+            # Warn if TP/SL placement failed — position is unprotected
+            tpsl_warning = ""
+            if getattr(order, "tpsl_failed", False):
+                tpsl_warning = " [WARNING: TP/SL FAILED — position UNPROTECTED]"
+                logger.error(
+                    f"{log_prefix} [{mode_str}] TP/SL failed for {signal.symbol} — "
+                    "position is open WITHOUT stop-loss protection"
+                )
+
             logger.info(
                 f"{log_prefix} [{mode_str}] Trade opened: {signal.direction.value.upper()} "
-                f"{signal.symbol} @ ${fill_price:,.2f} (conf: {signal.confidence}%)"
+                f"{signal.symbol} @ ${fill_price:,.2f} (conf: {signal.confidence}%){tpsl_warning}"
             )
 
             # Broadcast via WebSocket
@@ -162,13 +179,17 @@ class TradeExecutorMixin:
                         "size": position_size,
                         "leverage": leverage,
                         "demo_mode": demo_mode,
+                        "tpsl_failed": getattr(order, "tpsl_failed", False),
                     },
                 ))
             except Exception as e:
                 logger.debug("WS broadcast failed: %s", e)
 
             # Send notifications (Discord + Telegram)
-            await self._send_notification(lambda n: n.send_trade_entry(
+            trade_reason = f"[{self._config.name}] {signal.reason}"
+            if getattr(order, "tpsl_failed", False):
+                trade_reason += " | TP/SL FAILED — MANUAL INTERVENTION REQUIRED"
+            await self._send_notification(lambda n, r=trade_reason: n.send_trade_entry(
                 symbol=signal.symbol,
                 side=signal.direction.value,
                 size=position_size,
@@ -177,10 +198,20 @@ class TradeExecutorMixin:
                 take_profit=signal.target_price,
                 stop_loss=signal.stop_loss,
                 confidence=signal.confidence,
-                reason=f"[{self._config.name}] {signal.reason}",
+                reason=r,
                 order_id=order.order_id or "",
                 demo_mode=demo_mode,
             ))
+
+            # Send dedicated risk alert if TP/SL failed
+            if getattr(order, "tpsl_failed", False):
+                await self._send_notification(lambda n: n.send_risk_alert(
+                    alert_type="TPSL_FAILED",
+                    message=(
+                        f"{signal.symbol}: TP/SL placement failed after order fill. "
+                        f"Position is UNPROTECTED. Manual TP/SL required."
+                    ),
+                ))
 
         except OrderError as e:
             err_msg = str(e).lower()
@@ -188,11 +219,44 @@ class TradeExecutorMixin:
                 logger.warning(f"{log_prefix} [{mode_str}] Order below exchange minimum: {e}")
             else:
                 logger.error(f"{log_prefix} [{mode_str}] Order failed: {e}")
+                await self._notify_trade_failure(signal, mode_str, str(e))
         except ExchangeError as e:
             logger.error(f"{log_prefix} [{mode_str}] Trade execution failed: {e}")
+            await self._notify_trade_failure(signal, mode_str, str(e))
         except Exception as e:
             err_msg = str(e).lower()
             if "minimum amount" in err_msg or "minimum order" in err_msg:
                 logger.warning(f"{log_prefix} [{mode_str}] Order below exchange minimum: {e}")
             else:
                 logger.error(f"{log_prefix} [{mode_str}] Trade execution failed: {e}")
+                await self._notify_trade_failure(signal, mode_str, str(e))
+
+    async def _notify_trade_failure(self, signal: TradeSignal, mode_str: str, error: str):
+        """Notify user of trade execution failure via WebSocket and notifications."""
+        try:
+            from src.api.websocket.manager import ws_manager
+            asyncio.create_task(ws_manager.broadcast_to_user(
+                self._config.user_id,
+                "trade_failed",
+                {
+                    "bot_id": self.bot_config_id,
+                    "bot_name": self._config.name,
+                    "symbol": signal.symbol,
+                    "side": signal.direction.value,
+                    "error": error,
+                    "demo_mode": mode_str == "DEMO",
+                },
+            ))
+        except Exception:
+            pass
+
+        try:
+            await self._send_notification(lambda n: n.send_risk_alert(
+                alert_type="TRADE_FAILED",
+                message=(
+                    f"[{self._config.name}] {mode_str} order failed for "
+                    f"{signal.symbol} ({signal.direction.value}): {error}"
+                ),
+            ))
+        except Exception:
+            pass
