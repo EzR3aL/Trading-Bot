@@ -55,7 +55,7 @@ WEBSOCKET_CONNECTIONS = Gauge(
     "websocket_connections_active", "Active WebSocket connections"
 )
 PROCESS_MEMORY_BYTES = Gauge(
-    "process_resident_memory_bytes", "Resident memory size in bytes"
+    "app_memory_bytes", "Application memory size in bytes"
 )
 DISK_USAGE_PERCENT = Gauge(
     "disk_usage_percent", "Disk usage percentage for data directory"

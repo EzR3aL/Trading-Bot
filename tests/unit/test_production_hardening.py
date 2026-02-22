@@ -1393,7 +1393,7 @@ class TestPrometheusMetricsDefined:
     def test_process_memory_gauge(self):
         """PROCESS_MEMORY_BYTES gauge is defined."""
         from src.monitoring.metrics import PROCESS_MEMORY_BYTES
-        assert PROCESS_MEMORY_BYTES._name == "process_resident_memory_bytes"
+        assert PROCESS_MEMORY_BYTES._name == "app_memory_bytes"
 
     def test_disk_usage_gauge(self):
         """DISK_USAGE_PERCENT gauge is defined."""
@@ -1485,7 +1485,7 @@ class TestAlertRules:
         rules_path = Path(__file__).parent.parent.parent / "monitoring" / "alert_rules.yml"
         content = rules_path.read_text()
         assert "HighMemoryUsage" in content
-        assert "process_resident_memory_bytes" in content
+        assert "app_memory_bytes" in content
 
     def test_disk_usage_alert_defined(self):
         """HighDiskUsage and CriticalDiskUsage alerts exist."""
