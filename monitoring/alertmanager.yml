@@ -27,10 +27,10 @@ receivers:
       # Point to your notification endpoint (Discord webhook, Slack, etc.)
       # Uncomment and set the URL:
       # - url: "https://discord.com/api/webhooks/YOUR_WEBHOOK_ID/YOUR_WEBHOOK_TOKEN"
-      - url: "${ALERTMANAGER_WEBHOOK_URL:-http://trading-bot:8000/api/webhooks/alertmanager}"
+      - url: "http://trading-bot:8000/api/webhooks/alertmanager"
         send_resolved: true
 
   - name: "critical"
     webhook_configs:
-      - url: "${ALERTMANAGER_WEBHOOK_URL:-http://trading-bot:8000/api/webhooks/alertmanager}"
+      - url: "http://trading-bot:8000/api/webhooks/alertmanager"
         send_resolved: true
