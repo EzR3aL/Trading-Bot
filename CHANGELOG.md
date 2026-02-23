@@ -9,6 +9,15 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.20.1] - 2026-02-23
+
+### Behoben
+- **NoneType-Crash in Strategien** — Wenn Binance/GDELT-APIs intermittierend `None` zurueckgeben, crashte `generate_signal()` mit `unsupported operand type(s) for /: 'NoneType' and 'int'`. Betroffen: Liquidation Hunter (741x), Claude Edge (149x), Sentiment Surfer. Alle Metrik-Felder werden jetzt mit Fallback-Werten abgesichert
+- **Trade-Execution Balance-Fehler** — Bot 1 scheiterte mit `The order amount exceeds the balance` weil `entry_price` nicht vor der Position-Size-Berechnung validiert wurde. Frueher Guard gegen ungueltige Preise hinzugefuegt
+- **GDELT-Timeout-Kaskade** — News-Sentiment-API-Timeouts kaskadierten in NoneType-Fehler. Sentiment Surfer setzt jetzt explizite Fallback-Werte bei fehlenden Metriken
+
+---
+
 ## [3.20.0] - 2026-02-22
 
 ### Hinzugefuegt

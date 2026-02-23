@@ -54,6 +54,11 @@ class TradeExecutorMixin:
                 signal.stop_loss = round(signal.entry_price * (1 + asset_sl / 100), 2)
 
         try:
+            # Validate entry price before any calculations
+            if not signal.entry_price or signal.entry_price <= 0:
+                logger.warning(f"{log_prefix} [{mode_str}] Invalid entry price: {signal.entry_price}")
+                return
+
             # Pre-execution risk check — ensures daily loss limit is enforced
             # even if conditions changed between analysis and execution
             can_trade, deny_reason = self._risk_manager.can_trade(signal.symbol)
@@ -68,9 +73,9 @@ class TradeExecutorMixin:
                 balance = await client.get_account_balance()
                 available = balance.available
 
-            # Calculate position size
+            # Calculate position size (use margin, not leveraged notional)
             if asset_budget is not None:
-                # Per-asset budget mode — use full budget directly
+                # Per-asset budget mode — budget is the margin amount
                 position_usdt = available
                 position_size = (available * leverage) / signal.entry_price
             else:

@@ -157,18 +157,27 @@ class LiquidationHunterStrategy(BaseStrategy):
 
         logger.info(f"=== Generating Signal for {symbol} ===")
 
-        metrics = await self.data_fetcher.fetch_all_metrics()
+        try:
+            metrics = await self.data_fetcher.fetch_all_metrics()
+        except Exception as e:
+            logger.error(f"Failed to fetch metrics for {symbol}: {e}")
+            return TradeSignal(
+                direction=SignalDirection.LONG, confidence=0, symbol=symbol,
+                entry_price=0.0, target_price=0.0, stop_loss=0.0,
+                reason=f"Metrics fetch failed: {e}", metrics_snapshot={},
+                timestamp=datetime.now(),
+            )
 
         # Fetch symbol-specific data (funding rate, price) for the actual traded symbol.
         # fetch_all_metrics only has BTC/ETH — for other symbols we need direct lookups.
         if "BTC" in symbol:
-            funding_rate = metrics.funding_rate_btc
-            current_price = metrics.btc_price
-            price_change = metrics.btc_24h_change_percent
+            funding_rate = metrics.funding_rate_btc or 0.0
+            current_price = metrics.btc_price or 0.0
+            price_change = metrics.btc_24h_change_percent or 0.0
         elif "ETH" in symbol:
-            funding_rate = metrics.funding_rate_eth
-            current_price = metrics.eth_price
-            price_change = metrics.eth_24h_change_percent
+            funding_rate = metrics.funding_rate_eth or 0.0
+            current_price = metrics.eth_price or 0.0
+            price_change = metrics.eth_24h_change_percent or 0.0
         else:
             try:
                 funding_rate = await self.data_fetcher.get_funding_rate_binance(symbol) or 0.0
@@ -188,12 +197,14 @@ class LiquidationHunterStrategy(BaseStrategy):
         confidence = 50
 
         # Step 1: Analyze Leverage
-        leverage_direction, leverage_conf, leverage_reason = self._analyze_leverage(metrics.long_short_ratio)
+        long_short_ratio = metrics.long_short_ratio if metrics.long_short_ratio is not None else 1.0
+        leverage_direction, leverage_conf, leverage_reason = self._analyze_leverage(long_short_ratio)
         reasons.append(leverage_reason)
         confidence += leverage_conf
 
         # Step 2: Analyze Sentiment
-        sentiment_direction, sentiment_conf, sentiment_reason = self._analyze_sentiment(metrics.fear_greed_index)
+        fear_greed = metrics.fear_greed_index if metrics.fear_greed_index is not None else 50
+        sentiment_direction, sentiment_conf, sentiment_reason = self._analyze_sentiment(fear_greed)
         reasons.append(sentiment_reason)
         confidence += sentiment_conf
 

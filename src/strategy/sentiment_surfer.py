@@ -281,15 +281,15 @@ class SentimentSurferStrategy(BaseStrategy):
         else:
             klines = results[2]
 
-        # Get price data
+        # Get price data (guard against None from failed API calls)
         if "BTC" in symbol:
-            current_price = metrics.btc_price if metrics else 0
-            price_change = metrics.btc_24h_change_percent if metrics else 0
+            current_price = (metrics.btc_price if metrics and metrics.btc_price is not None else 0) or 0
+            price_change = (metrics.btc_24h_change_percent if metrics and metrics.btc_24h_change_percent is not None else 0) or 0
         else:
-            current_price = metrics.eth_price if metrics else 0
-            price_change = metrics.eth_24h_change_percent if metrics else 0
+            current_price = (metrics.eth_price if metrics and metrics.eth_price is not None else 0) or 0
+            price_change = (metrics.eth_24h_change_percent if metrics and metrics.eth_24h_change_percent is not None else 0) or 0
 
-        fear_greed = metrics.fear_greed_index if metrics else 50
+        fear_greed = (metrics.fear_greed_index if metrics and metrics.fear_greed_index is not None else 50) or 50
 
         # Calculate technical indicators from klines
         vwap = MarketDataFetcher.calculate_vwap(klines)
