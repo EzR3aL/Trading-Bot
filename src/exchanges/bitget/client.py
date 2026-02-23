@@ -205,9 +205,15 @@ class BitgetExchangeClient(ExchangeClient):
         if isinstance(data, list):
             data = data[0] if data else {}
 
+        logger.info(
+            "Bitget balance: equity=%s available=%s crossedMax=%s unrealizedPL=%s",
+            data.get("accountEquity"), data.get("available"),
+            data.get("crossedMaxAvailable"), data.get("unrealizedPL"),
+        )
+
         return Balance(
             total=float(data.get("accountEquity", 0) or data.get("usdtEquity", 0)),
-            available=float(data.get("available", 0) or data.get("crossedMaxAvailable", 0)),
+            available=float(data.get("crossedMaxAvailable", 0) or data.get("available", 0)),
             unrealized_pnl=float(data.get("unrealizedPL", 0)),
             currency="USDT",
         )
