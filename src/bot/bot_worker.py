@@ -579,7 +579,7 @@ class BotWorker(
             try:
                 await self._analyze_symbol(symbol, asset_budget=budgets.get(symbol))
             except Exception as e:
-                logger.error(f"{log_prefix} Error analyzing {symbol}: {e}")
+                logger.error(f"{log_prefix} Error analyzing {symbol}: {e}", exc_info=True)
 
         self.last_analysis = datetime.now(timezone.utc)
 

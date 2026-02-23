@@ -60,7 +60,7 @@ class RotationManagerMixin:
                         try:
                             await self._analyze_symbol(symbol, force=True, asset_budget=rot_budgets.get(symbol))
                         except Exception as e:  # pragma: no cover -- rotation analysis error
-                            logger.error(f"{log_prefix} ROTATION: Analysis failed for {symbol}: {e}")
+                            logger.error(f"{log_prefix} ROTATION: Analysis failed for {symbol}: {e}", exc_info=True)
                 return
 
             # Determine if we use anchored rotation (start_time) or elapsed-based
