@@ -305,15 +305,21 @@ class SentimentSurferStrategy(BaseStrategy):
         if self._p.get("use_oiwap", True) and klines:
             oiwap = await self.data_fetcher.calculate_oiwap(symbol, klines, period)
 
-        # Score all 6 sources
-        scores: List[Tuple[float, str, str]] = [
-            (*self._score_news_sentiment(news.get("average_tone", 0)), "news"),
+        # Score sources — skip news entirely when GDELT returned no articles
+        scores: List[Tuple[float, str, str]] = []
+        news_article_count = news.get("article_count", 0)
+        if news_article_count > 0:
+            scores.append((*self._score_news_sentiment(news.get("average_tone", 0)), "news"))
+        else:
+            logger.warning("News source unavailable (0 articles) — excluded from signal")
+
+        scores.extend([
             (*self._score_fear_greed(fear_greed), "fear_greed"),
             (*self._score_vwap(current_price, vwap, oiwap), "vwap"),
             (*self._score_supertrend(supertrend), "supertrend"),
             (*self._score_spot_volume(volume_data), "volume"),
             (*self._score_momentum(price_change), "momentum"),
-        ]
+        ])
 
         # Log individual scores
         for score, reason, key in scores:
@@ -339,7 +345,8 @@ class SentimentSurferStrategy(BaseStrategy):
         snapshot["oiwap"] = oiwap
         snapshot["supertrend"] = supertrend
         snapshot["volume_buy_ratio"] = volume_data.get("buy_ratio", 0.5)
-        snapshot["agreement"] = f"{agreement}/6"
+        total_sources = len(scores)
+        snapshot["agreement"] = f"{agreement}/{total_sources}"
         snapshot["scores"] = {key: score for score, _, key in scores}
 
         signal = TradeSignal(
@@ -356,7 +363,7 @@ class SentimentSurferStrategy(BaseStrategy):
 
         logger.info(
             f"=== SIGNAL: {signal.direction.value.upper()} {signal.confidence}% "
-            f"@ ${signal.entry_price:,.2f} (agreement: {agreement}/6) ==="
+            f"@ ${signal.entry_price:,.2f} (agreement: {agreement}/{total_sources}) ==="
         )
 
         return signal
@@ -369,11 +376,14 @@ class SentimentSurferStrategy(BaseStrategy):
         if signal.entry_price <= 0:
             return False, "Invalid entry price"
 
-        agreement = int(signal.metrics_snapshot.get("agreement", "0/6").split("/")[0])
+        agreement_str = signal.metrics_snapshot.get("agreement", "0/6")
+        parts = agreement_str.split("/")
+        agreement = int(parts[0])
+        total_sources = int(parts[1]) if len(parts) > 1 else 6
 
         if agreement < min_agreement:
             return False, (
-                f"Insufficient agreement: {agreement}/6 sources agree "
+                f"Insufficient agreement: {agreement}/{total_sources} sources agree "
                 f"(need {min_agreement})"
             )
 
@@ -384,7 +394,7 @@ class SentimentSurferStrategy(BaseStrategy):
 
         return True, (
             f"Signal approved: {signal.confidence}% confidence, "
-            f"{agreement}/6 sources agree"
+            f"{agreement}/{total_sources} sources agree"
         )
 
     @classmethod

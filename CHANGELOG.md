@@ -9,6 +9,18 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.21.0] - 2026-02-23
+
+### Hinzugefuegt
+- **Budget/Balance-Warnung im Bot-Dashboard** — Neuer API-Endpoint `GET /api/bots/budget-info` zeigt pro Bot: verfuegbares Guthaben, allokiertes Budget, Gesamt-Allokation pro Exchange. Bot-Cards zeigen Budget-Zeile und amber Warnbanner wenn Mittel nicht ausreichen oder Bots ueberallokiert sind (>100%). Verhindert stilles Scheitern wenn mehrere Bots dasselbe Konto teilen
+- **Graceful Degradation fuer SentimentSurfer ohne News** — Wenn GDELT keine Artikel liefert (Timeout/Ausfall), wird die News-Quelle komplett aus der Signal-Berechnung entfernt statt als neutrales Signal gezaehlt. Agreement-Check passt sich dynamisch an (z.B. "3/5" statt "3/6"). Verbleibende 5 Quellen (Fear&Greed, VWAP, Supertrend, Volume, Momentum) entscheiden allein
+
+### Geaendert
+- **GDELT-Parameter optimiert** — `max_records`: 25→10, Query: `"bitcoin OR cryptocurrency OR crypto"`→`"bitcoin"`, `lookback_hours`: 24→12, Timeout: 15s→10s. Kleinere Queries = schnellere Antworten von der ueberlastetem GDELT-API
+- **GDELT Circuit Breaker gelockert** — `reset_timeout`: 300s→120s (schneller erneut versuchen bei intermittierender Verfuegbarkeit)
+
+---
+
 ## [3.20.2] - 2026-02-23
 
 ### Behoben

@@ -233,3 +233,24 @@ class StrategyInfo(BaseModel):
 class StrategiesListResponse(BaseModel):
     """Response listing available strategies."""
     strategies: List[StrategyInfo] = []
+
+
+class BotBudgetInfo(BaseModel):
+    """Budget allocation info for a single bot."""
+    bot_config_id: int
+    bot_name: str
+    exchange_type: str
+    mode: str
+    currency: str = "USDT"
+    exchange_balance: float
+    exchange_equity: float
+    allocated_budget: float
+    allocated_pct: float
+    total_allocated_pct: float
+    has_sufficient_funds: bool
+    warning_message: Optional[str] = None
+
+
+class BotBudgetListResponse(BaseModel):
+    """Response listing budget info for all bots."""
+    budgets: List[BotBudgetInfo] = []

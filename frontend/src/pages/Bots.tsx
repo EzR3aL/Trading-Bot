@@ -20,6 +20,7 @@ import {
   Pencil,
   Trash2,
   AlertCircle,
+  AlertTriangle,
   RefreshCw,
   Activity,
   Clock,
@@ -70,6 +71,21 @@ interface BotStatus {
   active_preset_name?: string | null
   builder_fee_approved?: boolean | null
   referral_verified?: boolean | null
+}
+
+interface BotBudgetInfo {
+  bot_config_id: number
+  bot_name: string
+  exchange_type: string
+  mode: string
+  currency: string
+  exchange_balance: number
+  exchange_equity: number
+  allocated_budget: number
+  allocated_pct: number
+  total_allocated_pct: number
+  has_sufficient_funds: boolean
+  warning_message: string | null
 }
 
 interface Preset {
@@ -590,6 +606,7 @@ export default function Bots() {
   const [presetDropdownOpen, setPresetDropdownOpen] = useState<number | null>(null)
   const [builderFeeModalBotId, setBuilderFeeModalBotId] = useState<number | null>(null)
   const [llmConnections, setLlmConnections] = useState<LlmConnection[]>([])
+  const [budgetInfo, setBudgetInfo] = useState<Record<number, BotBudgetInfo>>({})
 
   // Build lookup: model_id → display name, provider_type → family_name
   const modelNameMap = useMemo(() => {
@@ -632,6 +649,20 @@ export default function Bots() {
   useEffect(() => {
     api.get('/presets').then(res => setPresets(res.data)).catch((err) => { console.error('Failed to load presets:', err); useToastStore.getState().addToast('error', t('common.loadError', 'Failed to load data')) })
     api.get('/config/llm-connections').then(res => setLlmConnections(res.data.connections || [])).catch((err) => { console.error('Failed to load LLM connections:', err); useToastStore.getState().addToast('error', t('common.loadError', 'Failed to load data')) })
+  }, [])
+
+  // Budget info fetch (separate 30s interval — lighter than 5s bot polls)
+  useEffect(() => {
+    const fetchBudget = () => {
+      api.get('/bots/budget-info').then(res => {
+        const map: Record<number, BotBudgetInfo> = {}
+        for (const b of res.data.budgets || []) map[b.bot_config_id] = b
+        setBudgetInfo(map)
+      }).catch(() => { /* silent — budget info is optional */ })
+    }
+    fetchBudget()
+    const interval = setInterval(fetchBudget, 30000)
+    return () => clearInterval(interval)
   }, [])
 
   const handleStart = async (id: number) => {
@@ -931,6 +962,37 @@ export default function Bots() {
                     <div className="text-base text-white font-semibold">{bot.open_trades}</div>
                   </div>
                 </div>
+
+                {/* Budget / Allocation */}
+                {budgetInfo[bot.bot_config_id] && (() => {
+                  const bi = budgetInfo[bot.bot_config_id]
+                  return (
+                    <div className="mb-3 pt-2 border-t border-white/5">
+                      <div className="grid grid-cols-2 gap-2 text-sm mb-1">
+                        <div>
+                          <span className="text-gray-500">{t('bots.budget', 'Budget')}: </span>
+                          <span className="text-white font-mono">${bi.allocated_budget.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</span>
+                          <span className="text-gray-500"> / ${bi.exchange_balance.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })} {t('bots.exchangeAvailable', 'available')}</span>
+                        </div>
+                        <div className="text-right">
+                          <span className="text-gray-500">{t('bots.allocation', 'Allocation')}: </span>
+                          <span className={`font-mono font-semibold ${bi.total_allocated_pct > 100 ? 'text-amber-400' : 'text-white'}`}>
+                            {bi.allocated_pct.toFixed(0)}% / {bi.total_allocated_pct.toFixed(0)}%
+                          </span>
+                        </div>
+                      </div>
+                      {!bi.has_sufficient_funds && bi.warning_message && (
+                        <div className="flex items-start gap-2 mt-2 p-2 rounded-lg bg-amber-500/10 border border-amber-500/20">
+                          <AlertTriangle className="w-4 h-4 text-amber-400 mt-0.5 flex-shrink-0" />
+                          <div className="text-xs text-amber-300">
+                            <div>{bi.warning_message}</div>
+                            <div className="mt-0.5 text-amber-400/70">{t('bots.insufficientFunds', 'Reduce position % or add funds')}</div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })()}
 
                 {/* LLM Metrics */}
                 {AI_STRATEGIES.has(bot.strategy_type) && (

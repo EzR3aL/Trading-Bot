@@ -33,7 +33,7 @@ logger = get_logger(__name__)
 # Circuit breakers for external APIs
 _binance_breaker = circuit_registry.get("binance_api", fail_threshold=5, reset_timeout=60)
 _alternative_me_breaker = circuit_registry.get("alternative_me_api", fail_threshold=3, reset_timeout=120)
-_gdelt_breaker = circuit_registry.get("gdelt_api", fail_threshold=5, reset_timeout=300)
+_gdelt_breaker = circuit_registry.get("gdelt_api", fail_threshold=5, reset_timeout=120)
 _deribit_breaker = circuit_registry.get("deribit_api", fail_threshold=3, reset_timeout=120)
 _coingecko_breaker = circuit_registry.get("coingecko_api", fail_threshold=3, reset_timeout=120)
 _defillama_breaker = circuit_registry.get("defillama_api", fail_threshold=3, reset_timeout=120)
@@ -858,13 +858,13 @@ class MarketDataFetcher:
     # ==================== News Sentiment (GDELT) ====================
 
     async def get_news_sentiment(
-        self, query: str = "bitcoin OR cryptocurrency OR crypto", lookback_hours: int = 24, max_records: int = 25
+        self, query: str = "bitcoin", lookback_hours: int = 12, max_records: int = 10
     ) -> Dict[str, Any]:
         """
         Fetch news sentiment from GDELT Project API.
 
-        Uses broader crypto-related query to capture all market-moving news.
-        Low maxrecords is critical — GDELT scales response time linearly with record count.
+        Focused query + low maxrecords for faster response times.
+        GDELT scales response time linearly with record count.
 
         Returns:
             Dict with average_tone (-10 to +10), article_count
@@ -885,7 +885,7 @@ class MarketDataFetcher:
             }
 
             async def _fetch():
-                return await self._get_with_retry(self.GDELT_API_URL, params, timeout=15)
+                return await self._get_with_retry(self.GDELT_API_URL, params, timeout=10)
 
             data = await _gdelt_breaker.call(_fetch)
 
