@@ -76,8 +76,10 @@ class TradeExecutorMixin:
             # Calculate position size (use margin, not leveraged notional)
             if asset_budget is not None:
                 # Per-asset budget mode — budget is the margin amount
-                position_usdt = available
-                position_size = (available * leverage) / signal.entry_price
+                # Use 95% of budget to leave margin for fees and funding
+                usable = available * 0.95
+                position_usdt = usable
+                position_size = (usable * leverage) / signal.entry_price
             else:
                 # Legacy fallback via RiskManager
                 position_usdt, position_size = self._risk_manager.calculate_position_size(

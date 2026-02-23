@@ -17,6 +17,7 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 - **GDELT-Timeout-Kaskade** — News-Sentiment-API-Timeouts kaskadierten in NoneType-Fehler. Sentiment Surfer setzt jetzt explizite Fallback-Werte bei fehlenden Metriken
 - **None TP/SL aus Bot-Config ueberschreibt Strategy-Defaults** — Wenn `take_profit_percent` und `stop_loss_percent` in der Bot-Config `NULL` sind, wurde `None` in die Strategy-Params injiziert und ueberschrieb die Defaults (4.0% / 1.5%). Fix: None-Werte werden nicht mehr an Strategien weitergegeben
 - **Fehlende Tracebacks in Bot-Logs** — Error-Handler loggten nur die Fehlermeldung ohne Stacktrace, was Debugging unmoeglich machte. `exc_info=True` hinzugefuegt
+- **Order exceeds balance bei 100% Position** — Position-Size-Berechnung nutzte 100% des Budgets als Margin, aber Bitget benoetigt Reserve fuer Gebuehren/Funding. Jetzt 95% Safety-Margin
 
 ---
 
