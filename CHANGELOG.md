@@ -13,6 +13,7 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ### Behoben
 - **Logging im Docker-Container komplett fehlend** — `setup_logging()` wurde im API-Einstiegspunkt (`main_app.py`) nie aufgerufen, da Docker uvicorn direkt startet statt ueber `main.py`. Alle INFO-Level Logs (Analysen, Budgets, Signale) waren unsichtbar — nur ERROR-Meldungen kamen durch Pythons Last-Resort-Handler. Fix: `setup_logging()` wird jetzt in `main_app.py` aufgerufen
+- **Falsches Balance-Feld bei Bitget Cross-Margin** — `get_account_balance()` nutzte `available` (auszahlbarer Betrag) statt `crossedMaxAvailable` (tatsaechlich fuer neue Positionen verfuegbar). Bei bestehenden Positionen zeigte `available` den vollen Kontostand (~$20k), obwohl die Margin durch andere Positionen belegt war (~$19k). Ergebnis: Orders wurden von Bitget abgelehnt ("order amount exceeds balance"). Fix: Prioritaet auf `crossedMaxAvailable` geaendert
 - **Debug-Logging fuer Order-Vorbereitung** — Vor jeder Orderplatzierung werden jetzt verfuegbares Guthaben, Leverage, Position-Groesse und Entry-Preis geloggt, um Balance-Fehler schneller zu diagnostizieren
 
 ---

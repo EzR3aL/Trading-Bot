@@ -205,7 +205,7 @@ class BitgetExchangeClient(ExchangeClient):
         if isinstance(data, list):
             data = data[0] if data else {}
 
-        logger.info(
+        logger.debug(
             "Bitget balance: equity=%s available=%s crossedMax=%s unrealizedPL=%s",
             data.get("accountEquity"), data.get("available"),
             data.get("crossedMaxAvailable"), data.get("unrealizedPL"),
