@@ -18,6 +18,7 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 - **None TP/SL aus Bot-Config ueberschreibt Strategy-Defaults** — Wenn `take_profit_percent` und `stop_loss_percent` in der Bot-Config `NULL` sind, wurde `None` in die Strategy-Params injiziert und ueberschrieb die Defaults (4.0% / 1.5%). Fix: None-Werte werden nicht mehr an Strategien weitergegeben
 - **Fehlende Tracebacks in Bot-Logs** — Error-Handler loggten nur die Fehlermeldung ohne Stacktrace, was Debugging unmoeglich machte. `exc_info=True` hinzugefuegt
 - **Order exceeds balance bei 100% Position** — Position-Size-Berechnung nutzte 100% des Budgets als Margin, aber Bitget benoetigt Reserve fuer Gebuehren/Funding. Jetzt 95% Safety-Margin
+- **Circuit Breaker vergiftet durch set_leverage** — `set_leverage` Fehler bei existierenden Positionen wurden als API-Fehler gezaehlt und oeffneten den Circuit Breaker fuer ALLE Bitget-Calls. Fix: set_leverage umgeht jetzt den Circuit Breaker
 
 ---
 
