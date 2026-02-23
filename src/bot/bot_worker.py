@@ -209,9 +209,11 @@ class BotWorker(
                 if self._config.strategy_params:
                     strategy_params = json.loads(self._config.strategy_params)
 
-                # Add TP/SL from trading params so strategy can use them
-                strategy_params.setdefault("take_profit_percent", self._config.take_profit_percent)
-                strategy_params.setdefault("stop_loss_percent", self._config.stop_loss_percent)
+                # Add TP/SL from trading params so strategy can use them (skip None)
+                if self._config.take_profit_percent is not None:
+                    strategy_params.setdefault("take_profit_percent", self._config.take_profit_percent)
+                if self._config.stop_loss_percent is not None:
+                    strategy_params.setdefault("stop_loss_percent", self._config.stop_loss_percent)
 
                 # If LLM strategy, inject decrypted API key from user's LLMConnection
                 if self._config.strategy_type in ("llm_signal", "degen"):
