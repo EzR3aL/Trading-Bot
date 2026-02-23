@@ -9,6 +9,14 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.20.2] - 2026-02-23
+
+### Behoben
+- **Logging im Docker-Container komplett fehlend** — `setup_logging()` wurde im API-Einstiegspunkt (`main_app.py`) nie aufgerufen, da Docker uvicorn direkt startet statt ueber `main.py`. Alle INFO-Level Logs (Analysen, Budgets, Signale) waren unsichtbar — nur ERROR-Meldungen kamen durch Pythons Last-Resort-Handler. Fix: `setup_logging()` wird jetzt in `main_app.py` aufgerufen
+- **Debug-Logging fuer Order-Vorbereitung** — Vor jeder Orderplatzierung werden jetzt verfuegbares Guthaben, Leverage, Position-Groesse und Entry-Preis geloggt, um Balance-Fehler schneller zu diagnostizieren
+
+---
+
 ## [3.20.1] - 2026-02-23
 
 ### Behoben

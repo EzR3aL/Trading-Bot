@@ -93,6 +93,13 @@ class TradeExecutorMixin:
                 logger.warning(f"{log_prefix} [{mode_str}] Position too small: ${position_usdt:.2f} (min 5 USDT)")
                 return
 
+            logger.info(
+                f"{log_prefix} [{mode_str}] Order prep: {signal.symbol} "
+                f"available=${available:,.2f} leverage={leverage}x "
+                f"position_usdt=${position_usdt:,.2f} size={position_size:.6f} "
+                f"entry=${signal.entry_price:,.2f}"
+            )
+
             # Set leverage
             await client.set_leverage(signal.symbol, leverage)
 

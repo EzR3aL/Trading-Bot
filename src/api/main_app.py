@@ -43,8 +43,9 @@ from src.api.routers import (  # noqa: E402
     websocket,
 )
 from src.models.session import close_db, init_db  # noqa: E402
-from src.utils.logger import get_logger  # noqa: E402
+from src.utils.logger import get_logger, setup_logging  # noqa: E402
 
+setup_logging(log_level=os.getenv("LOG_LEVEL", "INFO"))
 logger = get_logger(__name__)
 
 
