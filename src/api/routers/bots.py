@@ -438,12 +438,6 @@ async def create_bot(
     if count_result.scalar() >= MAX_BOTS_PER_USER:
         raise HTTPException(status_code=400, detail=f"Maximum {MAX_BOTS_PER_USER} bots per user")
 
-    # Symbol conflict check
-    conflicts = await _check_symbol_conflicts(db, user.id, body.exchange_type, body.mode, body.trading_pairs)
-    if conflicts:
-        symbols = ", ".join(c.symbol for c in conflicts)
-        raise HTTPException(status_code=400, detail=f"Symbol conflict: {symbols} already traded by an active bot on this exchange")
-
     # Encrypt discord webhook if provided
     encrypted_webhook = None
     if body.discord_webhook_url:
@@ -809,15 +803,6 @@ async def update_bot(
             StrategyRegistry.get(body.strategy_type)
         except KeyError as e:
             raise HTTPException(status_code=400, detail=str(e))
-
-    # Symbol conflict check (use updated values or fall back to existing config)
-    check_exchange = body.exchange_type or config.exchange_type
-    check_mode = body.mode or config.mode
-    check_pairs = body.trading_pairs or parse_json_field(config.trading_pairs, field_name="trading_pairs", context=f"bot {bot_id}", default=[])
-    conflicts = await _check_symbol_conflicts(db, user.id, check_exchange, check_mode, check_pairs, exclude_bot_id=bot_id)
-    if conflicts:
-        symbols = ", ".join(c.symbol for c in conflicts)
-        raise HTTPException(status_code=400, detail=f"Symbol conflict: {symbols} already traded by an active bot on this exchange")
 
     # Apply updates
     update_data = body.model_dump(exclude_unset=True)

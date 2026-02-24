@@ -284,17 +284,18 @@ async def close_position(
         demo_mode=is_demo,
     )
 
-    # Close position on exchange
+    # Close position on exchange (may already be closed / not exist)
     try:
         order = await asyncio.wait_for(
             client.close_position(symbol, trade.side),
             timeout=15.0,
         )
     except Exception as e:
-        logger.error(f"Failed to close position {symbol} for bot {bot_id}: {e}")
-        raise HTTPException(status_code=502, detail=f"Failed to close position: {e}")
+        # Log but don't fail — position may not exist on exchange anymore
+        logger.warning(f"Exchange close_position failed for {symbol} bot {bot_id} (may already be closed): {e}")
+        order = None
 
-    # Update trade record
+    # Get current price for PnL
     try:
         ticker = await client.get_ticker(symbol)
         exit_price = ticker.last_price

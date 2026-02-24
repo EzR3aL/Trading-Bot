@@ -528,7 +528,6 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
     if (stepKey === 'step2' && !strategyType) errors.push(t('bots.builder.errors.strategyRequired'))
     if (stepKey === 'step2b' && !hasFixedSources && selectedSources.length === 0) errors.push(t('bots.builder.errors.dataSourcesRequired'))
     if (stepKey === 'step3' && tradingPairs.length === 0) errors.push(t('bots.builder.errors.pairsRequired'))
-    if (stepKey === 'step4' && symbolConflicts.length > 0) errors.push(t('bots.builder.errors.symbolConflicts'))
     if (stepKey === 'step5') {
       if (scheduleType === 'custom_cron' && customHours.length === 0) errors.push(t('bots.builder.errors.hoursRequired'))
       if (scheduleType === 'interval' && intervalMinutes < 5) errors.push(t('bots.builder.errors.intervalMinimum'))
