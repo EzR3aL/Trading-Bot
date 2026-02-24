@@ -587,7 +587,11 @@
       },
       "symbolConflictTitle": "Symbol-Konflikt erkannt",
       "symbolConflictItem": "{{symbol}} wird bereits von \"{{botName}}\" ({{mode}}) gehandelt",
-      "symbolConflictHint": "Jede Börse erlaubt nur eine Position pro Symbol. Deaktiviere den bestehenden Bot oder wähle andere Trading-Paare."
+      "symbolConflictHint": "Jede Börse erlaubt nur eine Position pro Symbol. Deaktiviere den bestehenden Bot oder wähle andere Trading-Paare.",
+      "marginMode": "Margin-Modus",
+      "cross": "Cross",
+      "isolated": "Isolated",
+      "marginModeHint": "Cross: Margin wird über alle Positionen geteilt. Isolated: Jede Position hat ein eigenes Margin-Budget."
     }
   },
   "botDetail": {

@@ -285,10 +285,10 @@ class HyperliquidClient(ExchangeClient):
 
     # ── Trading Operations (EIP-712 signed via SDK) ─────────────────────────
 
-    async def set_leverage(self, symbol: str, leverage: int) -> bool:
+    async def set_leverage(self, symbol: str, leverage: int, margin_mode: str = "cross") -> bool:
         coin = self._normalize_symbol(symbol)
         try:
-            result = self._exchange.update_leverage(leverage=leverage, name=coin, is_cross=True)
+            result = self._exchange.update_leverage(leverage=leverage, name=coin, is_cross=(margin_mode == "cross"))
             logger.info(f"Hyperliquid leverage set to {leverage}x for {coin}: {result}")
             return True
         except Exception as e:
@@ -303,12 +303,13 @@ class HyperliquidClient(ExchangeClient):
         leverage: int,
         take_profit: Optional[float] = None,
         stop_loss: Optional[float] = None,
+        margin_mode: str = "cross",
     ) -> Order:
         coin = self._normalize_symbol(symbol)
         is_buy = side.lower() == "long"
 
         # Set leverage first
-        await self.set_leverage(coin, leverage)
+        await self.set_leverage(coin, leverage, margin_mode=margin_mode)
 
         logger.info(
             f"Hyperliquid market_open: {coin} {'BUY' if is_buy else 'SELL'} "
@@ -441,7 +442,7 @@ class HyperliquidClient(ExchangeClient):
         except Exception as e:
             logger.warning(f"Hyperliquid {tpsl.upper()} trigger failed for {coin}: {e}")
 
-    async def close_position(self, symbol: str, side: str) -> Optional[Order]:
+    async def close_position(self, symbol: str, side: str, margin_mode: str = "cross") -> Optional[Order]:
         coin = self._normalize_symbol(symbol)
 
         # Get current position size

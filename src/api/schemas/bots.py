@@ -17,6 +17,7 @@ class BotConfigCreate(BaseModel):
     strategy_type: str = Field(..., min_length=1)
     exchange_type: str = Field(..., pattern="^(bitget|weex|hyperliquid)$")
     mode: str = Field(default="demo", pattern="^(demo|live|both)$")
+    margin_mode: str = Field(default="cross", pattern="^(cross|isolated)$")
 
     # Trading parameters (all optional — empty = equal split, no TP/SL)
     trading_pairs: List[str] = Field(default=["BTCUSDT"], max_length=20)
@@ -96,6 +97,7 @@ class BotConfigUpdate(BaseModel):
     strategy_type: Optional[str] = None
     exchange_type: Optional[str] = Field(None, pattern="^(bitget|weex|hyperliquid)$")
     mode: Optional[str] = Field(None, pattern="^(demo|live|both)$")
+    margin_mode: Optional[str] = Field(None, pattern="^(cross|isolated)$")
 
     trading_pairs: Optional[List[str]] = None
     leverage: Optional[int] = Field(None, ge=1, le=20)
@@ -149,6 +151,7 @@ class BotConfigResponse(BaseModel):
     strategy_type: str
     exchange_type: str
     mode: str
+    margin_mode: str = "cross"
     trading_pairs: List[str]
     leverage: Optional[int] = None
     position_size_percent: Optional[float] = None
@@ -179,6 +182,7 @@ class BotRuntimeStatus(BaseModel):
     strategy_type: str
     exchange_type: str
     mode: str
+    margin_mode: str = "cross"
     trading_pairs: List[str]
     status: str  # idle | starting | running | error | stopped
     error_message: Optional[str] = None

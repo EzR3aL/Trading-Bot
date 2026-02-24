@@ -158,6 +158,7 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
   const [strategyParams, setStrategyParams] = useState<Record<string, any>>({})
   const [exchangeType, setExchangeType] = useState('bitget')
   const [mode, setMode] = useState('demo')
+  const [marginMode, setMarginMode] = useState<'cross' | 'isolated'>('cross')
   const [tradingPairs, setTradingPairs] = useState<string[]>(['BTCUSDT'])
   const [maxTrades, setMaxTrades] = useState<number | null>(null)
   const [dailyLossLimit, setDailyLossLimit] = useState<number | null>(null)
@@ -291,6 +292,7 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
         setStrategyParams(d.strategy_params || {})
         setExchangeType(d.exchange_type)
         setMode(d.mode)
+        setMarginMode(d.margin_mode || 'cross')
         setTradingPairs(d.trading_pairs)
         setMaxTrades(d.max_trades_per_day ?? null)
         setDailyLossLimit(d.daily_loss_limit_percent ?? null)
@@ -474,6 +476,7 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
       strategy_type: strategyType,
       exchange_type: exchangeType,
       mode,
+      margin_mode: marginMode,
       trading_pairs: tradingPairs,
       max_trades_per_day: maxTrades || undefined,
       daily_loss_limit_percent: dailyLossLimit || undefined,
@@ -1381,6 +1384,27 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
               </div>
             </div>
 
+            {/* Margin Mode */}
+            <div>
+              <label className="block text-sm text-gray-400 mb-2">{t('bots.builder.marginMode')}</label>
+              <div className="flex gap-2">
+                {(['cross', 'isolated'] as const).map(mm => {
+                  const active = marginMode === mm
+                  return (
+                    <button key={mm} onClick={() => setMarginMode(mm)}
+                      className={`px-4 py-2 rounded-xl border transition-all ${
+                        active
+                          ? 'border-primary-500 bg-primary-500/10 text-white ring-1 ring-primary-500/30'
+                          : 'border-white/10 bg-white/[0.03] text-gray-400 hover:border-white/20 hover:bg-white/[0.06]'
+                      }`}>
+                      {t(`bots.builder.${mm}`)}
+                    </button>
+                  )
+                })}
+              </div>
+              <p className="text-xs text-gray-500 mt-1.5">{t('bots.builder.marginModeHint')}</p>
+            </div>
+
             {/* Symbol conflict warning */}
             {symbolConflicts.length > 0 && (
               <div className="p-3 bg-amber-900/30 border border-amber-800 rounded-xl space-y-1.5">
@@ -1621,6 +1645,7 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
               <div><span className="text-gray-500">{b.strategy}:</span> <span className="text-white ml-2">{getStrategyDisplayName(strategyType)}</span></div>
               <div><span className="text-gray-500">{b.exchange}:</span> <span className="text-white ml-2"><ExchangeLogo exchange={exchangeType} size={14} /></span></div>
               <div><span className="text-gray-500">{b.mode}:</span> <span className="text-white ml-2">{mode}</span></div>
+              <div><span className="text-gray-500">{t('bots.builder.marginMode')}:</span> <span className="text-white ml-2">{t(`bots.builder.${marginMode}`)}</span></div>
               <div><span className="text-gray-500">{b.tradingPairs}:</span> <span className="text-white ml-2">{tradingPairs.join(', ')}</span></div>
               {usesData && (
                 <div><span className="text-gray-500">{b.dataSources}:</span> <span className="text-white ml-2">{hasFixedSources ? `${selectedSources.length} (${b.fixedSources})` : `${selectedSources.length} ${b.sourcesSelected}`}</span></div>

@@ -9,6 +9,21 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.24.0] - 2026-02-24
+
+### Hinzugefuegt
+- **Margin-Modus-Auswahl im BotBuilder** — Neues `margin_mode`-Feld (Cross/Isolated) pro Bot waehlbar. Cross teilt Margin ueber alle Positionen, Isolated begrenzt das Risiko pro Position. Standard: Cross (wie bisher)
+- **Alembic-Migration 002** — Neue Spalte `margin_mode` in `bot_configs` mit Server-Default "cross" fuer bestehende Bots
+- **API-Schemas erweitert** — `margin_mode` in Create/Update/Response/RuntimeStatus Schemas
+- **Exchange-Clients aktualisiert** — Bitget, Weex und Hyperliquid verwenden den gewaehlten Margin-Modus bei `set_leverage()`, `place_market_order()`, `close_position()` und `place_raw_order()`
+- **BotBuilder UI** — Margin-Modus-Selector (Cross/Isolated Buttons) in Step 4 (Exchange) mit Erklaerungstext, Anzeige im Review-Step
+- **i18n** — Deutsche und englische Uebersetzungen fuer Margin-Modus
+
+### Geaendert
+- **Kein globaler Trading-Parameter-Fallback mehr** — RiskManager verwendet keine globalen Settings (`config/settings.py`) mehr als Fallback. Wenn `max_trades_per_day`, `daily_loss_limit_percent` oder `position_size_percent` nicht in der Bot-Config gesetzt sind, gilt: NULL = kein Limit bzw. volles Budget. User muss Werte explizit per Bot-Erstellung oder Preset setzen
+
+---
+
 ## [3.23.0] - 2026-02-24
 
 ### Hinzugefuegt

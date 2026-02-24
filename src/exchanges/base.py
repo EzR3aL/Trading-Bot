@@ -52,6 +52,7 @@ class ExchangeClient(ABC):
         leverage: int,
         take_profit: Optional[float] = None,
         stop_loss: Optional[float] = None,
+        margin_mode: str = "cross",
     ) -> Order:
         """Place a market order with optional TP/SL."""
         ...
@@ -62,7 +63,7 @@ class ExchangeClient(ABC):
         ...
 
     @abstractmethod
-    async def close_position(self, symbol: str, side: str) -> Optional[Order]:
+    async def close_position(self, symbol: str, side: str, margin_mode: str = "cross") -> Optional[Order]:
         """Close an open position."""
         ...
 
@@ -77,7 +78,7 @@ class ExchangeClient(ABC):
         ...
 
     @abstractmethod
-    async def set_leverage(self, symbol: str, leverage: int) -> bool:
+    async def set_leverage(self, symbol: str, leverage: int, margin_mode: str = "cross") -> bool:
         """Set leverage for a symbol."""
         ...
 

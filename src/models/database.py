@@ -302,6 +302,7 @@ class BotConfig(Base):
     # Exchange & mode
     exchange_type = Column(String(50), nullable=False)  # bitget | weex | hyperliquid
     mode = Column(String(10), nullable=False, default="demo")  # demo | live | both
+    margin_mode = Column(String(10), nullable=False, default="cross")  # cross | isolated
 
     # Trading parameters (all nullable — None = equal split / no TP/SL)
     trading_pairs = Column(Text, nullable=False, default='["BTCUSDT"]')  # JSON array

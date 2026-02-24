@@ -226,15 +226,17 @@ class BitgetExchangeClient(ExchangeClient):
         leverage: int,
         take_profit: Optional[float] = None,
         stop_loss: Optional[float] = None,
+        margin_mode: str = "cross",
     ) -> Order:
         # Set leverage first
-        await self.set_leverage(symbol, leverage)
+        await self.set_leverage(symbol, leverage, margin_mode=margin_mode)
 
+        api_margin = "crossed" if margin_mode == "cross" else "isolated"
         order_side = "buy" if side == "long" else "sell"
         data = {
             "symbol": symbol,
             "productType": PRODUCT_TYPE_USDT,
-            "marginMode": "crossed",
+            "marginMode": api_margin,
             "marginCoin": "USDT",
             "side": order_side,
             "tradeSide": "open",
@@ -326,7 +328,7 @@ class BitgetExchangeClient(ExchangeClient):
         except BitgetClientError:
             return False
 
-    async def close_position(self, symbol: str, side: str) -> Optional[Order]:
+    async def close_position(self, symbol: str, side: str, margin_mode: str = "cross") -> Optional[Order]:
         order_side = "sell" if side == "long" else "buy"
 
         # Get position size
@@ -334,10 +336,11 @@ class BitgetExchangeClient(ExchangeClient):
         if not pos:
             return None
 
+        api_margin = "crossed" if margin_mode == "cross" else "isolated"
         data = {
             "symbol": symbol,
             "productType": PRODUCT_TYPE_USDT,
-            "marginMode": "crossed",
+            "marginMode": api_margin,
             "marginCoin": "USDT",
             "side": order_side,
             "tradeSide": "close",
@@ -410,7 +413,7 @@ class BitgetExchangeClient(ExchangeClient):
                 )
         return positions
 
-    async def set_leverage(self, symbol: str, leverage: int) -> bool:
+    async def set_leverage(self, symbol: str, leverage: int, margin_mode: str = "cross") -> bool:
         for hold_side in ("long", "short"):
             data = {
                 "symbol": symbol,
@@ -631,12 +634,14 @@ class BitgetExchangeClient(ExchangeClient):
         price: Optional[str] = None,
         take_profit: Optional[str] = None,
         stop_loss: Optional[str] = None,
+        margin_mode: str = "cross",
     ) -> Dict[str, Any]:
         """Place an order using raw Bitget API format."""
+        api_margin = "crossed" if margin_mode == "cross" else "isolated"
         data = {
             "symbol": symbol,
             "productType": PRODUCT_TYPE_USDT,
-            "marginMode": "crossed",
+            "marginMode": api_margin,
             "marginCoin": "USDT",
             "side": side,
             "tradeSide": trade_side,

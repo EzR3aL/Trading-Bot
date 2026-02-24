@@ -166,12 +166,14 @@ class WeexClient(ExchangeClient):
     async def place_market_order(
         self, symbol: str, side: str, size: float, leverage: int,
         take_profit: Optional[float] = None, stop_loss: Optional[float] = None,
+        margin_mode: str = "cross",
     ) -> Order:
-        await self.set_leverage(symbol, leverage)
+        await self.set_leverage(symbol, leverage, margin_mode=margin_mode)
+        api_margin = "crossed" if margin_mode == "cross" else "isolated"
         order_side = "buy" if side == "long" else "sell"
         data = {
             "symbol": symbol, "productType": "USDT-FUTURES",
-            "marginMode": "crossed", "marginCoin": "USDT",
+            "marginMode": api_margin, "marginCoin": "USDT",
             "side": order_side, "tradeSide": "open",
             "orderType": "market", "size": str(size),
         }
@@ -197,14 +199,15 @@ class WeexClient(ExchangeClient):
         except WeexClientError:
             return False
 
-    async def close_position(self, symbol: str, side: str) -> Optional[Order]:
+    async def close_position(self, symbol: str, side: str, margin_mode: str = "cross") -> Optional[Order]:
         pos = await self.get_position(symbol)
         if not pos:
             return None
+        api_margin = "crossed" if margin_mode == "cross" else "isolated"
         order_side = "sell" if side == "long" else "buy"
         data = {
             "symbol": symbol, "productType": "USDT-FUTURES",
-            "marginMode": "crossed", "marginCoin": "USDT",
+            "marginMode": api_margin, "marginCoin": "USDT",
             "side": order_side, "tradeSide": "close",
             "orderType": "market", "size": str(pos.size),
         }
@@ -249,7 +252,7 @@ class WeexClient(ExchangeClient):
                 ))
         return positions
 
-    async def set_leverage(self, symbol: str, leverage: int) -> bool:
+    async def set_leverage(self, symbol: str, leverage: int, margin_mode: str = "cross") -> bool:
         for hold_side in ("long", "short"):
             try:
                 await self._request("POST", "/api/v2/mix/account/set-leverage", data={

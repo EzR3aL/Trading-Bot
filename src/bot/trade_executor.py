@@ -101,7 +101,8 @@ class TradeExecutorMixin:
             )
 
             # Set leverage
-            await client.set_leverage(signal.symbol, leverage)
+            margin_mode = getattr(self._config, "margin_mode", "cross")
+            await client.set_leverage(signal.symbol, leverage, margin_mode=margin_mode)
 
             # Place order
             side = "long" if signal.direction.value == "long" else "short"
@@ -112,6 +113,7 @@ class TradeExecutorMixin:
                 leverage=leverage,
                 take_profit=signal.target_price,
                 stop_loss=signal.stop_loss,
+                margin_mode=margin_mode,
             )
 
             if not order:

@@ -145,7 +145,8 @@ class RotationManagerMixin:
 
         try:
             # Close position via exchange client
-            order = await client.close_position(trade.symbol, trade.side)
+            margin_mode = getattr(self._config, "margin_mode", "cross")
+            order = await client.close_position(trade.symbol, trade.side, margin_mode=margin_mode)
 
             if order is None:
                 # Position already closed (TP/SL triggered before rotation)

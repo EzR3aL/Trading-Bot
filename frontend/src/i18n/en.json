@@ -587,7 +587,11 @@
       },
       "symbolConflictTitle": "Symbol conflict detected",
       "symbolConflictItem": "{{symbol}} is already traded by \"{{botName}}\" ({{mode}})",
-      "symbolConflictHint": "Each exchange only allows one position per symbol. Disable the existing bot or choose different trading pairs."
+      "symbolConflictHint": "Each exchange only allows one position per symbol. Disable the existing bot or choose different trading pairs.",
+      "marginMode": "Margin Mode",
+      "cross": "Cross",
+      "isolated": "Isolated",
+      "marginModeHint": "Cross: Margin is shared across all positions. Isolated: Each position has its own margin budget."
     }
   },
   "botDetail": {

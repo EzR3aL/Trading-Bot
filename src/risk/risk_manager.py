@@ -16,7 +16,6 @@ from pathlib import Path
 from typing import Optional, Dict, List
 
 from src.utils.logger import get_logger, TradeLogger
-from config import settings
 
 # Lazy imports for async DB — only used when bot_config_id is set
 _db_available = True
@@ -131,10 +130,10 @@ class RiskManager:
                 {"BTCUSDT": {"max_trades": 5, "loss_limit": 3.0}}
             bot_config_id: If set, use database storage instead of JSON files
         """
-        # Fall back to settings when not explicitly provided
-        self.max_trades = max_trades_per_day if max_trades_per_day is not None else getattr(getattr(settings, 'trading', None), 'max_trades_per_day', None)
-        self.daily_loss_limit = daily_loss_limit_percent if daily_loss_limit_percent is not None else getattr(getattr(settings, 'trading', None), 'daily_loss_limit_percent', None)
-        self.position_size_pct = position_size_percent or settings.trading.position_size_percent
+        # Use explicit bot config values only — NULL means no limit / no override
+        self.max_trades = max_trades_per_day
+        self.daily_loss_limit = daily_loss_limit_percent
+        self.position_size_pct = position_size_percent
         self.per_symbol_limits = per_symbol_limits or {}
 
         # Profit Lock-In settings
@@ -448,24 +447,28 @@ class RiskManager:
         Returns:
             Tuple of (position_size_usdt, position_size_base)
         """
-        # Base position size
+        # Base position size (None = use full per-asset budget)
         base_size_pct = self.position_size_pct
 
-        # Scale with confidence
-        if confidence >= 85:
-            multiplier = 1.5
-        elif confidence >= 75:
-            multiplier = 1.25
-        elif confidence >= 65:
-            multiplier = 1.0
-        elif confidence >= 55:
-            multiplier = 0.75
+        if base_size_pct is None:
+            position_usdt = balance
+            position_pct = 100.0
         else:
-            multiplier = 0.5
+            # Scale with confidence
+            if confidence >= 85:
+                multiplier = 1.5
+            elif confidence >= 75:
+                multiplier = 1.25
+            elif confidence >= 65:
+                multiplier = 1.0
+            elif confidence >= 55:
+                multiplier = 0.75
+            else:
+                multiplier = 0.5
 
-        # Calculate position value
-        position_pct = min(base_size_pct * multiplier, 25.0)  # Cap at 25% of balance
-        position_usdt = balance * (position_pct / 100)
+            # Calculate position value
+            position_pct = min(base_size_pct * multiplier, 25.0)  # Cap at 25% of balance
+            position_usdt = balance * (position_pct / 100)
 
         # Calculate base currency amount
         position_base = (position_usdt * leverage) / entry_price
