@@ -9,6 +9,16 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.22.1] - 2026-02-24
+
+### Hinzugefuegt
+- **"Alle speichern" Button fuer Affiliate-Links** — Neuer Button neben der Ueberschrift "Affiliate-Links pro Exchange konfigurieren" speichert alle Exchanges mit URL parallel via `Promise.all`. Erspart das einzelne Speichern jeder Zeile
+
+### Behoben
+- **Affiliate-Link Daten verschwinden bei Inaktiv-Toggle** — `GET /api/affiliate-links` gab nur aktive Links zurueck. Wenn ein Admin einen Link auf inaktiv setzte und speicherte, wurden URL und Label beim naechsten Laden geloescht. Fix: Admins sehen jetzt alle Links (auch inaktive), normale User weiterhin nur aktive
+
+---
+
 ## [3.22.0] - 2026-02-24
 
 ### Hinzugefuegt
