@@ -132,7 +132,7 @@ async def start_bot(
     conflicts = await _check_symbol_conflicts(db, user.id, config.exchange_type, config.mode, trading_pairs, exclude_bot_id=bot_id)
     if conflicts:
         symbols = ", ".join(c.symbol for c in conflicts)
-        raise HTTPException(status_code=400, detail=f"Symbol conflict: {symbols} already traded by an active bot on this exchange")
+        raise HTTPException(status_code=400, detail=f"Symbol-Konflikt: {symbols} wird bereits von einem aktiven Bot auf dieser Exchange gehandelt")
 
     try:
         await orchestrator.start_bot(bot_id)
@@ -209,7 +209,7 @@ async def restart_bot(
     conflicts = await _check_symbol_conflicts(db, user.id, config.exchange_type, config.mode, trading_pairs, exclude_bot_id=bot_id)
     if conflicts:
         symbols = ", ".join(c.symbol for c in conflicts)
-        raise HTTPException(status_code=400, detail=f"Symbol conflict: {symbols} already traded by an active bot on this exchange")
+        raise HTTPException(status_code=400, detail=f"Symbol-Konflikt: {symbols} wird bereits von einem aktiven Bot auf dieser Exchange gehandelt")
 
     try:
         await orchestrator.restart_bot(bot_id)
