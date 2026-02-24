@@ -22,6 +22,7 @@ from src.api.schemas.bots import (
     BotConfigUpdate,
     BotListResponse,
     BotRuntimeStatus,
+    ExchangeBalancePreview,
     StrategiesListResponse,
     StrategyInfo,
 )
@@ -113,6 +114,121 @@ async def list_data_sources(user: User = Depends(get_current_user)):
         "sources": [ds.to_dict() for ds in DATA_SOURCES],
         "defaults": DEFAULT_SOURCES,
     }
+
+
+# ─── Balance Preview (for BotBuilder) ────────────────────────
+
+@router.get("/balance-preview", response_model=ExchangeBalancePreview)
+@limiter.limit("15/minute")
+async def get_balance_preview(
+    request: Request,
+    exchange_type: str = Query(..., pattern="^(bitget|weex|hyperliquid)$"),
+    mode: str = Query(..., pattern="^(demo|live|both)$"),
+    exclude_bot_id: Optional[int] = Query(None),
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Balance preview for the BotBuilder — shows equity, allocated %, and remaining."""
+    import asyncio
+    from src.exchanges.factory import create_exchange_client
+    from src.utils.encryption import decrypt_value
+
+    # For "both" mode, live balance is the limiting factor
+    effective_mode = "live" if mode == "both" else mode
+
+    # Check exchange connection
+    conn_result = await db.execute(
+        select(ExchangeConnection).where(
+            ExchangeConnection.user_id == user.id,
+            ExchangeConnection.exchange_type == exchange_type,
+        )
+    )
+    conn = conn_result.scalar_one_or_none()
+    if not conn:
+        return ExchangeBalancePreview(
+            exchange_type=exchange_type, mode=mode, has_connection=False,
+            error="no_connection",
+        )
+
+    is_demo = effective_mode == "demo"
+    api_key_enc = conn.demo_api_key_encrypted if is_demo else conn.api_key_encrypted
+    api_secret_enc = conn.demo_api_secret_encrypted if is_demo else conn.api_secret_encrypted
+    passphrase_enc = conn.demo_passphrase_encrypted if is_demo else conn.passphrase_encrypted
+
+    if not api_key_enc or not api_secret_enc:
+        return ExchangeBalancePreview(
+            exchange_type=exchange_type, mode=mode, has_connection=False,
+            error="no_credentials",
+        )
+
+    # Fetch balance (reuse budget cache)
+    cache_key = f"budget:{user.id}:{exchange_type}:{effective_mode}"
+    cached = _budget_cache_get(cache_key)
+    if cached:
+        available, equity, currency = cached
+    else:
+        try:
+            client = create_exchange_client(
+                exchange_type=exchange_type,
+                api_key=decrypt_value(api_key_enc),
+                api_secret=decrypt_value(api_secret_enc),
+                passphrase=decrypt_value(passphrase_enc) if passphrase_enc else "",
+                demo_mode=is_demo,
+            )
+            balance = await asyncio.wait_for(client.get_account_balance(), timeout=10.0)
+            available = balance.available
+            equity = balance.total
+            currency = balance.currency
+            _budget_cache_set(cache_key, (available, equity, currency))
+        except Exception as e:
+            logger.warning("Balance preview fetch failed for %s/%s: %s", exchange_type, effective_mode, e)
+            return ExchangeBalancePreview(
+                exchange_type=exchange_type, mode=mode, has_connection=True,
+                error=f"fetch_failed: {e}",
+            )
+
+    # Calculate already-allocated % from existing bots on this exchange/mode
+    bot_filter = [
+        BotConfig.user_id == user.id,
+        BotConfig.exchange_type == exchange_type,
+    ]
+    if mode == "both":
+        bot_filter.append(BotConfig.mode.in_(["live", "both"]))
+    else:
+        bot_filter.append(BotConfig.mode.in_([mode, "both"]))
+
+    if exclude_bot_id:
+        bot_filter.append(BotConfig.id != exclude_bot_id)
+
+    bots_result = await db.execute(select(BotConfig).where(*bot_filter))
+    existing_bots = bots_result.scalars().all()
+
+    total_allocated_pct = 0.0
+    for bot in existing_bots:
+        pac = parse_json_field(bot.per_asset_config, field_name="per_asset_config", context=f"bot {bot.id}", default={})
+        try:
+            pairs = json.loads(bot.trading_pairs) if isinstance(bot.trading_pairs, str) else (bot.trading_pairs or [])
+        except (json.JSONDecodeError, TypeError):
+            pairs = []
+        for symbol in pairs:
+            pct = (pac.get(symbol) or {}).get("position_pct")
+            if pct and pct > 0:
+                total_allocated_pct += pct
+
+    allocated_amount = equity * total_allocated_pct / 100 if equity > 0 else 0.0
+    remaining = max(0.0, equity - allocated_amount)
+
+    return ExchangeBalancePreview(
+        exchange_type=exchange_type,
+        mode=mode,
+        currency=currency,
+        exchange_balance=round(available, 2),
+        exchange_equity=round(equity, 2),
+        existing_allocated_pct=round(total_allocated_pct, 1),
+        existing_allocated_amount=round(allocated_amount, 2),
+        remaining_balance=round(remaining, 2),
+        has_connection=True,
+    )
 
 
 # ─── CRUD ─────────────────────────────────────────────────────

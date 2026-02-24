@@ -254,3 +254,17 @@ class BotBudgetInfo(BaseModel):
 class BotBudgetListResponse(BaseModel):
     """Response listing budget info for all bots."""
     budgets: List[BotBudgetInfo] = []
+
+
+class ExchangeBalancePreview(BaseModel):
+    """Balance preview for the BotBuilder — shows available funds before saving."""
+    exchange_type: str
+    mode: str
+    currency: str = "USDT"
+    exchange_balance: float = 0.0
+    exchange_equity: float = 0.0
+    existing_allocated_pct: float = 0.0
+    existing_allocated_amount: float = 0.0
+    remaining_balance: float = 0.0
+    has_connection: bool = False
+    error: Optional[str] = None

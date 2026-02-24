@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom'
 import api from '../../api/client'
 import { getApiErrorMessage } from '../../utils/api-error'
 import { useToastStore } from '../../stores/toastStore'
-import { ArrowLeft, ArrowRight, Check, Play, Brain, TrendingUp, BarChart3, DollarSign, Activity, Building, LayoutGrid, List, Bot, Info, Zap, Clock } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Check, Play, Brain, TrendingUp, BarChart3, DollarSign, Activity, Building, LayoutGrid, List, Bot, Info, Zap, Clock, AlertTriangle, Wallet } from 'lucide-react'
 import ExchangeLogo from '../ui/ExchangeLogo'
 import FilterDropdown from '../ui/FilterDropdown'
 import NumInput from '../ui/NumInput'
@@ -49,6 +49,19 @@ interface Preset {
   trading_config: Record<string, any>
   strategy_config: Record<string, any>
   trading_pairs: string[]
+}
+
+interface BalancePreview {
+  exchange_type: string
+  mode: string
+  currency: string
+  exchange_balance: number
+  exchange_equity: number
+  existing_allocated_pct: number
+  existing_allocated_amount: number
+  remaining_balance: number
+  has_connection: boolean
+  error: string | null
 }
 
 interface BotBuilderProps {
@@ -151,6 +164,10 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
   const [discordWebhookUrl, setDiscordWebhookUrl] = useState('')
   const [telegramBotToken, setTelegramBotToken] = useState('')
   const [telegramChatId, setTelegramChatId] = useState('')
+
+  // Balance preview for Step 3
+  const [balancePreview, setBalancePreview] = useState<BalancePreview | null>(null)
+  const [balanceLoading, setBalanceLoading] = useState(false)
 
   // View modes for strategy, data sources, and schedule
   const [strategyView, setStrategyView] = useState<'grid' | 'list'>('grid')
@@ -345,6 +362,18 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
       }
     }))
   }, [exchangeType]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Fetch exchange balance preview when exchange/mode changes
+  useEffect(() => {
+    const effectiveMode = mode === 'both' ? 'both' : mode
+    setBalanceLoading(true)
+    const params = new URLSearchParams({ exchange_type: exchangeType, mode: effectiveMode })
+    if (isEdit && botId) params.append('exclude_bot_id', String(botId))
+    api.get(`/bots/balance-preview?${params}`)
+      .then(res => setBalancePreview(res.data))
+      .catch(() => setBalancePreview(null))
+      .finally(() => setBalanceLoading(false))
+  }, [exchangeType, mode, botId, isEdit])
 
   const togglePair = (pair: string) => {
     setTradingPairs(prev =>
@@ -1046,6 +1075,89 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
               </div>
             </div>
 
+            {/* Exchange Balance Banner */}
+            {(() => {
+              if (balanceLoading) {
+                return (
+                  <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4 animate-pulse">
+                    <div className="flex items-center gap-2">
+                      <Wallet size={16} className="text-gray-500" />
+                      <div className="h-4 w-32 bg-white/10 rounded" />
+                    </div>
+                  </div>
+                )
+              }
+              if (!balancePreview) return null
+
+              if (!balancePreview.has_connection) {
+                return (
+                  <div className="rounded-xl border border-amber-500/30 bg-amber-900/10 p-3 flex items-start gap-2">
+                    <AlertTriangle size={16} className="text-amber-400 mt-0.5 shrink-0" />
+                    <p className="text-sm text-amber-300">
+                      {t('bots.builder.noExchangeConnection', { exchange: exchangeType, mode })}
+                    </p>
+                  </div>
+                )
+              }
+
+              const bp = balancePreview
+              // Calculate how much this bot would need based on current per-asset config
+              const thisBotPct = tradingPairs.reduce((sum, p) => sum + (perAssetConfig[p]?.position_pct || 0), 0)
+              const thisBotAmount = bp.exchange_equity > 0 ? bp.exchange_equity * thisBotPct / 100 : 0
+              const totalPctWithThis = bp.existing_allocated_pct + thisBotPct
+              const isOverAllocated = totalPctWithThis > 100
+              const isInsufficientBalance = thisBotAmount > bp.remaining_balance && thisBotPct > 0
+
+              return (
+                <div className={`rounded-xl border p-4 ${
+                  isOverAllocated ? 'border-amber-500/40 bg-amber-900/10' :
+                  isInsufficientBalance ? 'border-amber-500/30 bg-amber-900/5' :
+                  'border-white/[0.06] bg-white/[0.02]'
+                }`}>
+                  <div className="flex items-center gap-2 mb-3">
+                    <Wallet size={16} className="text-primary-400" />
+                    <span className="text-sm font-medium text-gray-300">{t('bots.builder.exchangeBalance')}</span>
+                    {mode === 'both' && (
+                      <span className="text-[10px] text-gray-500 ml-auto">{t('bots.builder.bothModeNote')}</span>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-3 gap-3">
+                    <div>
+                      <div className="text-[10px] text-gray-500 uppercase tracking-wider mb-0.5">{t('bots.builder.totalEquity')}</div>
+                      <div className="text-sm font-semibold text-white tabular-nums">${bp.exchange_equity.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                      <div className="text-[10px] text-gray-600">{bp.currency}</div>
+                    </div>
+                    <div>
+                      <div className="text-[10px] text-gray-500 uppercase tracking-wider mb-0.5">{t('bots.builder.alreadyAllocated')}</div>
+                      <div className="text-sm font-semibold text-amber-400 tabular-nums">{bp.existing_allocated_pct.toFixed(1)}%</div>
+                      <div className="text-[10px] text-gray-600">${bp.existing_allocated_amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                    </div>
+                    <div>
+                      <div className="text-[10px] text-gray-500 uppercase tracking-wider mb-0.5">{t('bots.builder.availableForBot')}</div>
+                      <div className="text-sm font-semibold text-green-400 tabular-nums">${bp.remaining_balance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                      <div className="text-[10px] text-gray-600">{(100 - bp.existing_allocated_pct).toFixed(1)}%</div>
+                    </div>
+                  </div>
+
+                  {isOverAllocated && (
+                    <div className="mt-3 flex items-center gap-1.5 text-xs text-amber-400">
+                      <AlertTriangle size={13} />
+                      {t('bots.builder.overAllocatedWarning', { pct: totalPctWithThis.toFixed(0) })}
+                    </div>
+                  )}
+                  {!isOverAllocated && isInsufficientBalance && (
+                    <div className="mt-3 flex items-center gap-1.5 text-xs text-amber-400">
+                      <AlertTriangle size={13} />
+                      {t('bots.builder.insufficientBalanceWarning', {
+                        needed: thisBotAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+                        available: bp.remaining_balance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+                      })}
+                    </div>
+                  )}
+                </div>
+              )
+            })()}
+
             {/* Per-asset config */}
             {tradingPairs.length > 0 && (
               <div>
@@ -1136,9 +1248,16 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
                     const unfixedCount = tradingPairs.filter(p => !perAssetConfig[p]?.position_pct).length
                     const remaining = Math.max(0, 100 - fixed)
                     const perUnfixed = unfixedCount > 0 ? remaining / unfixedCount : 0
+                    const equity = balancePreview?.exchange_equity || 0
                     return tradingPairs.map(p => {
                       const pct = perAssetConfig[p]?.position_pct || perUnfixed
-                      return <span key={p} className="bg-white/5 px-2 py-0.5 rounded">{p}: {pct.toFixed(1)}%</span>
+                      const dollar = equity > 0 ? (equity * pct / 100) : 0
+                      return (
+                        <span key={p} className="bg-white/5 px-2 py-0.5 rounded">
+                          {p}: {pct.toFixed(1)}%
+                          {equity > 0 && <span className="text-gray-600 ml-1">(${dollar.toFixed(0)})</span>}
+                        </span>
+                      )
                     })
                   })()}
                 </div>
