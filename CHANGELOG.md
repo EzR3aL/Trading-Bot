@@ -16,6 +16,7 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ### Behoben
 - **Affiliate-Link Daten verschwinden bei Inaktiv-Toggle** — `GET /api/affiliate-links` gab nur aktive Links zurueck. Wenn ein Admin einen Link auf inaktiv setzte und speicherte, wurden URL und Label beim naechsten Laden geloescht. Fix: Admins sehen jetzt alle Links (auch inaktive), normale User weiterhin nur aktive
+- **Bot tradet sofort beim Start trotz Market-Session-Schedule** — `start()` rief `_analyze_and_trade_safe()` immer sofort auf, unabhaengig vom Schedule-Typ. Bei `market_sessions` und `custom_cron` wurde der CronTrigger umgangen und ein Trade ohne Ruecksicht auf die konfigurierten Stunden ausgefuehrt. Fix: Initiale Analyse nur wenn die aktuelle UTC-Stunde in den konfigurierten Session-Stunden liegt. Andernfalls wird geloggt, wann die naechste Session startet
 
 ---
 

@@ -395,8 +395,29 @@ class BotWorker(
         self.started_at = datetime.now(timezone.utc)
         self.error_message = None
 
-        # Run initial analysis
-        await self._analyze_and_trade_safe()
+        # Run initial analysis — but respect schedule type.
+        # For cron-based schedules (market_sessions, custom_cron), only run
+        # if the current hour matches a configured session hour.
+        # For interval/rotation_only, always run immediately.
+        schedule_type = self._config.schedule_type or "market_sessions"
+        if schedule_type in ("interval", "rotation_only"):
+            await self._analyze_and_trade_safe()
+        else:
+            schedule_config = {}
+            if self._config.schedule_config:
+                schedule_config = json.loads(self._config.schedule_config)
+            session_hours = schedule_config.get("hours", DEFAULT_MARKET_HOURS)
+            current_hour = datetime.now(timezone.utc).hour
+            if current_hour in session_hours:
+                await self._analyze_and_trade_safe()
+            else:
+                next_hours = sorted(h for h in session_hours if h > current_hour)
+                next_hour = next_hours[0] if next_hours else session_hours[0]
+                logger.info(
+                    f"[Bot:{self.bot_config_id}] Skipping initial analysis — "
+                    f"not in market session (current={current_hour}:00 UTC, "
+                    f"next session={next_hour}:00 UTC)"
+                )
 
         logger.info(f"[Bot:{self.bot_config_id}] Started: {self._config.name}")
 
