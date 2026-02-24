@@ -407,6 +407,25 @@ export default function Settings() {
     setSaving(false)
   }
 
+  const saveAllAffiliateLinks = async () => {
+    const exchanges = Object.entries(affiliateForms).filter(([, form]) => form.url)
+    if (exchanges.length === 0) return
+    setSaving(true)
+    try {
+      await Promise.all(exchanges.map(([ex, form]) =>
+        api.put(`/affiliate-links/${ex}`, {
+          affiliate_url: form.url,
+          label: form.label || null,
+          is_active: form.active,
+          uid_required: form.uidRequired,
+        })
+      ))
+      showMessage(t('settings.saved'))
+      loadAffiliateLinks()
+    } catch { showMessage(t('common.error')) }
+    setSaving(false)
+  }
+
   const deleteAffiliateLink = async (exchange: string) => {
     setSaving(true)
     try {
@@ -977,11 +996,20 @@ export default function Settings() {
             <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.6fr)] gap-4 items-start">
               {/* Left: Affiliate Link Configuration */}
               <div>
-                <div className="flex items-center gap-2 mb-3">
-                  <ExternalLink size={16} className="text-gray-500" />
-                  <h3 className="text-sm font-semibold text-gray-300 uppercase tracking-wider">
-                    {t('settings.affiliateLinksDesc').split('.')[0]}
-                  </h3>
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <ExternalLink size={16} className="text-gray-500" />
+                    <h3 className="text-sm font-semibold text-gray-300 uppercase tracking-wider">
+                      {t('settings.affiliateLinksDesc').split('.')[0]}
+                    </h3>
+                  </div>
+                  <button
+                    onClick={saveAllAffiliateLinks}
+                    disabled={saving || !Object.values(affiliateForms).some(f => f.url)}
+                    className="px-3 py-1.5 text-xs bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 transition-colors flex items-center gap-1.5"
+                  >
+                    {t('settings.saveAll')}
+                  </button>
                 </div>
                 <div className="space-y-3">
                   {['bitget', 'weex', 'hyperliquid'].map((ex) => {

@@ -87,6 +87,7 @@
     "exchange": "Exchange",
     "profile": "Profile",
     "save": "Save",
+    "saveAll": "Save All",
     "saved": "Saved",
     "testConnection": "Test Connection",
     "testWebhook": "Send Test Message",
