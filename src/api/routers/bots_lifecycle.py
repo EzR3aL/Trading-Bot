@@ -47,7 +47,7 @@ async def _enforce_hl_gates(user: User, db: AsyncSession):
     if referral_code and not hl_conn.referral_verified:
         raise HTTPException(
             status_code=400,
-            detail=f"Referral erforderlich. Bitte registriere dich ueber "
+            detail=f"Referral erforderlich. Bitte registriere dich über "
                    f"https://app.hyperliquid.xyz/join/{referral_code} "
                    f"bevor du Hyperliquid Bots nutzen kannst.",
         )
@@ -167,7 +167,7 @@ async def stop_bot(
         raise HTTPException(status_code=404, detail="Bot nicht gefunden")
     success = await orchestrator.stop_bot(bot_id)
     if not success:
-        raise HTTPException(status_code=400, detail="Bot laeuft nicht")
+        raise HTTPException(status_code=400, detail="Bot läuft nicht")
 
     # Mark as disabled
     config.is_enabled = False
@@ -255,7 +255,7 @@ async def close_position(
     )
     trade = trade_result.scalar_one_or_none()
     if not trade:
-        raise HTTPException(status_code=404, detail=f"Kein offener Trade fuer {symbol} gefunden")
+        raise HTTPException(status_code=404, detail=f"Kein offener Trade für {symbol} gefunden")
 
     # Get exchange connection
     conn_result = await db.execute(

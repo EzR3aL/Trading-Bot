@@ -138,7 +138,7 @@ async def delete_preset(
     if not preset:
         raise HTTPException(status_code=404, detail="Preset nicht gefunden")
     if preset.is_active:
-        raise HTTPException(status_code=400, detail="Aktives Preset kann nicht geloescht werden. Zuerst deaktivieren.")
+        raise HTTPException(status_code=400, detail="Aktives Preset kann nicht gelöscht werden. Zuerst deaktivieren.")
     await db.delete(preset)
 
 

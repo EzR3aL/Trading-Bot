@@ -101,7 +101,7 @@ async def delete_user(
     Financial records (trades, funding) are preserved for audit purposes.
     """
     if admin.id == user_id:
-        raise HTTPException(status_code=400, detail="Du kannst dich nicht selbst loeschen")
+        raise HTTPException(status_code=400, detail="Du kannst dich nicht selbst löschen")
 
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()

@@ -41,7 +41,7 @@ async def login(request: Request, body: LoginRequest, db: AsyncSession = Depends
         logger.warning("AUTH: Failed login for '%s' from %s", body.username, client_ip)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Ungueltiger Benutzername oder Passwort",
+            detail="Ungültiger Benutzername oder Passwort",
         )
 
     # Check account lockout
@@ -49,7 +49,7 @@ async def login(request: Request, body: LoginRequest, db: AsyncSession = Depends
         logger.warning("AUTH: Locked account login attempt for '%s' from %s", body.username, client_ip)
         raise HTTPException(
             status_code=423,
-            detail="Konto voruebergehend gesperrt. Versuche es spaeter erneut.",
+            detail="Konto vorübergehend gesperrt. Versuche es später erneut.",
         )
 
     if not verify_password(body.password, user.password_hash):
@@ -68,14 +68,14 @@ async def login(request: Request, body: LoginRequest, db: AsyncSession = Depends
         logger.warning("AUTH: Failed login for '%s' from %s", body.username, client_ip)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Ungueltiger Benutzername oder Passwort",
+            detail="Ungültiger Benutzername oder Passwort",
         )
 
     if user.is_deleted:
         logger.warning("AUTH: Login attempt for deleted user '%s' from %s", body.username, client_ip)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Ungueltiger Benutzername oder Passwort",
+            detail="Ungültiger Benutzername oder Passwort",
         )
 
     if not user.is_active:
@@ -112,7 +112,7 @@ async def refresh_token(request: Request, body: RefreshRequest, db: AsyncSession
         logger.warning("AUTH: Invalid refresh token from %s", client_ip)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Ungueltiger Refresh-Token",
+            detail="Ungültiger Refresh-Token",
         )
 
     user_id = payload.get("sub")

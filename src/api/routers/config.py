@@ -259,7 +259,7 @@ async def test_exchange_connection(
     )
     conn = result.scalar_one_or_none()
     if not conn:
-        raise HTTPException(status_code=400, detail=f"Keine API-Keys fuer {exchange_type} konfiguriert")
+        raise HTTPException(status_code=400, detail=f"Keine API-Keys für {exchange_type} konfiguriert")
 
     if mode == "live":
         if not conn.api_key_encrypted:
@@ -306,7 +306,7 @@ async def test_exchange_connection(
         }
     except Exception as e:
         _config_logger.error("Exchange connection test failed: %s", e, exc_info=True)
-        raise HTTPException(status_code=400, detail="Verbindung fehlgeschlagen. Pruefe deine Zugangsdaten und versuche es erneut.")
+        raise HTTPException(status_code=400, detail="Verbindung fehlgeschlagen. Prüfe deine Zugangsdaten und versuche es erneut.")
 
 
 # ── Affiliate UID ───────────────────────────────────────────────────
@@ -669,7 +669,7 @@ async def test_llm_connection(
         raise
     except Exception as e:
         _config_logger.error("LLM connection test failed: %s", e, exc_info=True)
-        raise HTTPException(status_code=400, detail="Verbindung fehlgeschlagen. Pruefe deinen API-Key und versuche es erneut.")
+        raise HTTPException(status_code=400, detail="Verbindung fehlgeschlagen. Prüfe deinen API-Key und versuche es erneut.")
 
 
 # ── Hyperliquid Builder Code & Referral ────────────────────────────
@@ -724,7 +724,7 @@ async def update_hl_admin_settings(
 
     # Validate builder address (empty = clear, otherwise must be 0x + 40 hex)
     if builder_address and not _re.match(r"^0x[0-9a-fA-F]{40}$", builder_address):
-        raise HTTPException(status_code=400, detail="Builder-Adresse muss eine gueltige Ethereum-Adresse sein (0x + 40 Hex-Zeichen)")
+        raise HTTPException(status_code=400, detail="Builder-Adresse muss eine gültige Ethereum-Adresse sein (0x + 40 Hex-Zeichen)")
 
     # Validate referral code (alphanumeric, max 50 chars)
     if referral_code and not _re.match(r"^[a-zA-Z0-9_-]+$", referral_code):
@@ -757,7 +757,7 @@ def _create_hl_client(conn: ExchangeConnection, use_demo: bool):
 
     if use_demo:
         if not conn.demo_api_key_encrypted:  # pragma: no cover — HL key validation
-            raise HTTPException(status_code=400, detail="Keine Demo-API-Keys fuer Hyperliquid")
+            raise HTTPException(status_code=400, detail="Keine Demo-API-Keys für Hyperliquid")
         return create_exchange_client(
             exchange_type="hyperliquid",
             api_key=decrypt_value(conn.demo_api_key_encrypted),
@@ -766,7 +766,7 @@ def _create_hl_client(conn: ExchangeConnection, use_demo: bool):
         )
     else:
         if not conn.api_key_encrypted:  # pragma: no cover — HL key validation
-            raise HTTPException(status_code=400, detail="Keine Live-API-Keys fuer Hyperliquid")
+            raise HTTPException(status_code=400, detail="Keine Live-API-Keys für Hyperliquid")
         return create_exchange_client(
             exchange_type="hyperliquid",
             api_key=decrypt_value(conn.api_key_encrypted),
@@ -923,7 +923,7 @@ async def verify_referral(
 
     raise HTTPException(
         status_code=400,
-        detail=f"Referral nicht gefunden. Bitte registriere dich zuerst ueber "
+        detail=f"Referral nicht gefunden. Bitte registriere dich zuerst über "
                f"https://app.hyperliquid.xyz/join/{referral_code}",
     )
 
@@ -970,7 +970,7 @@ async def get_referral_status(
         raise
     except Exception as e:
         _config_logger.error("Referral check failed: %s", e, exc_info=True)
-        raise HTTPException(status_code=400, detail="Referral-Pruefung fehlgeschlagen. Siehe Server-Logs.")
+        raise HTTPException(status_code=400, detail="Referral-Prüfung fehlgeschlagen. Siehe Server-Logs.")
 
 
 @router.get("/hyperliquid/revenue-summary")
@@ -1058,7 +1058,7 @@ async def get_revenue_summary(
         raise
     except Exception as e:
         _config_logger.error("Revenue summary failed: %s", e, exc_info=True)
-        raise HTTPException(status_code=400, detail="Umsatzuebersicht konnte nicht geladen werden. Siehe Server-Logs.")
+        raise HTTPException(status_code=400, detail="Umsatzübersicht konnte nicht geladen werden. Siehe Server-Logs.")
 
 
 async def _async_none():

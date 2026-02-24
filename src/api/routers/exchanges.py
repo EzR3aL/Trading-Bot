@@ -35,7 +35,7 @@ async def list_exchanges(request: Request):
 async def get_exchange_detail(request: Request, exchange_name: str):
     """Get details about a specific exchange."""
     if not _EXCHANGE_NAME_RE.match(exchange_name):
-        raise HTTPException(status_code=400, detail="Ungueltiger Exchange-Name")
+        raise HTTPException(status_code=400, detail="Ungültiger Exchange-Name")
 
     try:
         info = get_exchange_info(exchange_name)

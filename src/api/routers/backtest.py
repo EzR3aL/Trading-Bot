@@ -97,7 +97,7 @@ async def start_backtest(
         start_dt = datetime.fromisoformat(body.start_date)
         end_dt = datetime.fromisoformat(body.end_date)
     except ValueError:
-        raise HTTPException(status_code=400, detail="Ungueltiges Datumsformat. Verwende YYYY-MM-DD")
+        raise HTTPException(status_code=400, detail="Ungültiges Datumsformat. Verwende YYYY-MM-DD")
 
     if end_dt <= start_dt:
         raise HTTPException(status_code=400, detail="Enddatum muss nach dem Startdatum liegen")
@@ -110,7 +110,7 @@ async def start_backtest(
     if start_dt < EARLIEST_DATE:
         raise HTTPException(
             status_code=400,
-            detail=f"Startdatum darf nicht vor {EARLIEST_DATE.strftime('%Y-%m-%d')} liegen (Beginn der Binance-Futures-Daten)",
+            detail=f"Startdatum darf nicht vor dem {EARLIEST_DATE.strftime('%Y-%m-%d')} liegen (Beginn der Binance-Futures-Daten)",
         )
 
     # Timeframe-specific maximum duration
@@ -119,7 +119,7 @@ async def start_backtest(
     if actual_days > max_days:
         raise HTTPException(
             status_code=400,
-            detail=f"Maximum {max_days} days for {body.timeframe} timeframe (requested {actual_days} days)",
+            detail=f"Maximal {max_days} Tage für {body.timeframe}-Zeitrahmen (angefragt: {actual_days} Tage)",
         )
 
     # Create DB record

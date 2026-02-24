@@ -34,7 +34,7 @@ async def get_current_user(
     if not payload:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Ungueltiger oder abgelaufener Token",
+            detail="Ungültiger oder abgelaufener Token",
             headers={"WWW-Authenticate": "Bearer"},
         )
 
@@ -42,7 +42,7 @@ async def get_current_user(
     if not user_id:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Ungueltiger Token-Inhalt",
+            detail="Ungültiger Token-Inhalt",
         )
 
     # Check token_version to support token revocation
