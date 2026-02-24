@@ -457,6 +457,11 @@
     "presetApplied": "Preset angewendet",
     "presetSwitchFailed": "Preset konnte nicht angewendet werden",
     "stopBotFirst": "Stoppe den Bot zuerst",
+    "closePosition": "Position schließen",
+    "closePositionConfirm": "Position {{symbol}} wirklich schließen?",
+    "positionClosed": "Position {{symbol}} geschlossen",
+    "failedClosePosition": "Position konnte nicht geschlossen werden",
+    "moreActions": "Weitere Aktionen",
     "deleted": "{{name}} gelöscht",
     "builder": {
       "title": "Neuen Bot erstellen",
@@ -577,8 +582,12 @@
         "pairsRequired": "Bitte wähle mindestens ein Trading-Paar",
         "rotationMinimum": "Rotationsintervall muss mindestens 5 Minuten betragen",
         "intervalMinimum": "Intervall muss mindestens 5 Minuten betragen",
-        "hoursRequired": "Bitte wähle mindestens eine Uhrzeit"
-      }
+        "hoursRequired": "Bitte wähle mindestens eine Uhrzeit",
+        "symbolConflicts": "Speichern nicht möglich: Trading-Paare kollidieren mit einem bestehenden Bot."
+      },
+      "symbolConflictTitle": "Symbol-Konflikt erkannt",
+      "symbolConflictItem": "{{symbol}} wird bereits von \"{{botName}}\" ({{mode}}) gehandelt",
+      "symbolConflictHint": "Jede Börse erlaubt nur eine Position pro Symbol. Deaktiviere den bestehenden Bot oder wähle andere Trading-Paare."
     }
   },
   "botDetail": {

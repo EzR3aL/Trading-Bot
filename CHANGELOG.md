@@ -9,6 +9,16 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.23.0] - 2026-02-24
+
+### Hinzugefuegt
+- **Symbol-Konflikt-Erkennung** — Dreistufige Absicherung verhindert, dass mehrere Bots dasselbe Symbol auf derselben Exchange/Mode-Kombination handeln. Frontend-Warnung in BotBuilder Step 4 + Review, Backend-Block bei Create/Update, Defense-in-Depth bei Start/Restart
+- **GET `/api/bots/symbol-conflicts`** — Neuer Endpoint prueft Trading-Pair-Konflikte mit bestehenden aktiven Bots (Mode-Konflikt-Matrix: demo↔demo/both, live↔live/both, both↔alle)
+- **Manuelles Position-Schliessen** — Neuer Button (XCircle) auf Bot-Karten wenn offene Trades existieren. Endpoint `POST /api/bots/{bot_id}/close-position/{symbol}` schliesst die Position auf der Exchange und markiert den Trade-Record als closed
+- **3-Punkte-Menue auf Bot-Karten** — Bearbeiten, Kopieren und Loeschen in ein kompaktes Dropdown-Menue verschoben. Bei Multi-Symbol-Bots werden einzelne Close-Position-Optionen im Menue angezeigt
+
+---
+
 ## [3.22.1] - 2026-02-24
 
 ### Hinzugefuegt

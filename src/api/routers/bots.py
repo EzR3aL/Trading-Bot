@@ -26,6 +26,8 @@ from src.api.schemas.bots import (
     ExchangeBalancePreview,
     StrategiesListResponse,
     StrategyInfo,
+    SymbolConflict,
+    SymbolConflictResponse,
 )
 from src.auth.dependencies import get_current_user
 from src.models.database import BotConfig, ConfigPreset, ExchangeConnection, TradeRecord, User
@@ -88,6 +90,54 @@ def _config_to_response(config: BotConfig) -> BotConfigResponse:
         created_at=config.created_at.isoformat() if config.created_at else None,
         updated_at=config.updated_at.isoformat() if config.updated_at else None,
     )
+
+
+# Mode overlap: which existing modes conflict with a new bot's mode
+_MODE_CONFLICTS: dict[str, set[str]] = {
+    "demo": {"demo", "both"},
+    "live": {"live", "both"},
+    "both": {"demo", "live", "both"},
+}
+
+
+async def _check_symbol_conflicts(
+    db: AsyncSession,
+    user_id: int,
+    exchange_type: str,
+    mode: str,
+    trading_pairs: list[str],
+    exclude_bot_id: int | None = None,
+) -> list[SymbolConflict]:
+    """Find enabled bots that already trade the same symbols on the same exchange/mode."""
+    conflicting_modes = _MODE_CONFLICTS.get(mode, set())
+    query = (
+        select(BotConfig)
+        .where(
+            BotConfig.user_id == user_id,
+            BotConfig.exchange_type == exchange_type,
+            BotConfig.is_enabled.is_(True),
+            BotConfig.mode.in_(conflicting_modes),
+        )
+    )
+    if exclude_bot_id is not None:
+        query = query.where(BotConfig.id != exclude_bot_id)
+
+    result = await db.execute(query)
+    existing_bots = result.scalars().all()
+
+    requested_set = set(trading_pairs)
+    conflicts: list[SymbolConflict] = []
+    for bot in existing_bots:
+        existing_pairs = set(parse_json_field(bot.trading_pairs, field_name="trading_pairs", context=f"bot {bot.id}", default=[]))
+        overlap = requested_set & existing_pairs
+        for symbol in sorted(overlap):
+            conflicts.append(SymbolConflict(
+                symbol=symbol,
+                existing_bot_id=bot.id,
+                existing_bot_name=bot.name,
+                existing_bot_mode=bot.mode,
+            ))
+    return conflicts
 
 
 # ─── Strategies ───────────────────────────────────────────────
@@ -343,6 +393,27 @@ async def get_balance_overview(
     return ExchangeBalanceOverview(exchanges=results)
 
 
+# ─── Symbol Conflict Check ────────────────────────────────────
+
+@router.get("/symbol-conflicts", response_model=SymbolConflictResponse)
+@limiter.limit("30/minute")
+async def check_symbol_conflicts(
+    request: Request,
+    exchange_type: str = Query(..., pattern="^(bitget|weex|hyperliquid)$"),
+    mode: str = Query(..., pattern="^(demo|live|both)$"),
+    trading_pairs: str = Query(..., description="Comma-separated list of trading pairs"),
+    exclude_bot_id: Optional[int] = Query(None),
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Check if trading pairs conflict with existing enabled bots."""
+    pairs = [p.strip() for p in trading_pairs.split(",") if p.strip()]
+    if not pairs:
+        return SymbolConflictResponse()
+    conflicts = await _check_symbol_conflicts(db, user.id, exchange_type, mode, pairs, exclude_bot_id)
+    return SymbolConflictResponse(has_conflicts=len(conflicts) > 0, conflicts=conflicts)
+
+
 # ─── CRUD ─────────────────────────────────────────────────────
 
 @router.post("", response_model=BotConfigResponse)
@@ -366,6 +437,12 @@ async def create_bot(
     )
     if count_result.scalar() >= MAX_BOTS_PER_USER:
         raise HTTPException(status_code=400, detail=f"Maximum {MAX_BOTS_PER_USER} bots per user")
+
+    # Symbol conflict check
+    conflicts = await _check_symbol_conflicts(db, user.id, body.exchange_type, body.mode, body.trading_pairs)
+    if conflicts:
+        symbols = ", ".join(c.symbol for c in conflicts)
+        raise HTTPException(status_code=400, detail=f"Symbol conflict: {symbols} already traded by an active bot on this exchange")
 
     # Encrypt discord webhook if provided
     encrypted_webhook = None
@@ -732,6 +809,15 @@ async def update_bot(
             StrategyRegistry.get(body.strategy_type)
         except KeyError as e:
             raise HTTPException(status_code=400, detail=str(e))
+
+    # Symbol conflict check (use updated values or fall back to existing config)
+    check_exchange = body.exchange_type or config.exchange_type
+    check_mode = body.mode or config.mode
+    check_pairs = body.trading_pairs or parse_json_field(config.trading_pairs, field_name="trading_pairs", context=f"bot {bot_id}", default=[])
+    conflicts = await _check_symbol_conflicts(db, user.id, check_exchange, check_mode, check_pairs, exclude_bot_id=bot_id)
+    if conflicts:
+        symbols = ", ".join(c.symbol for c in conflicts)
+        raise HTTPException(status_code=400, detail=f"Symbol conflict: {symbols} already traded by an active bot on this exchange")
 
     # Apply updates
     update_data = body.model_dump(exclude_unset=True)

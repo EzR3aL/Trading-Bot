@@ -457,6 +457,11 @@
     "presetApplied": "Preset applied",
     "presetSwitchFailed": "Failed to apply preset",
     "stopBotFirst": "Stop the bot first",
+    "closePosition": "Close Position",
+    "closePositionConfirm": "Close position {{symbol}}?",
+    "positionClosed": "Position {{symbol}} closed",
+    "failedClosePosition": "Failed to close position",
+    "moreActions": "More actions",
     "deleted": "{{name}} deleted",
     "builder": {
       "title": "Create New Bot",
@@ -577,8 +582,12 @@
         "pairsRequired": "Please select at least one trading pair",
         "rotationMinimum": "Rotation interval must be at least 5 minutes",
         "intervalMinimum": "Interval must be at least 5 minutes",
-        "hoursRequired": "Please select at least one hour"
-      }
+        "hoursRequired": "Please select at least one hour",
+        "symbolConflicts": "Cannot save: trading pairs conflict with an existing bot."
+      },
+      "symbolConflictTitle": "Symbol conflict detected",
+      "symbolConflictItem": "{{symbol}} is already traded by \"{{botName}}\" ({{mode}})",
+      "symbolConflictHint": "Each exchange only allows one position per symbol. Disable the existing bot or choose different trading pairs."
     }
   },
   "botDetail": {

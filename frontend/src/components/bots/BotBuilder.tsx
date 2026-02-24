@@ -64,6 +64,13 @@ interface BalancePreview {
   error: string | null
 }
 
+interface SymbolConflict {
+  symbol: string
+  existing_bot_id: number
+  existing_bot_name: string
+  existing_bot_mode: string
+}
+
 interface BotBuilderProps {
   botId?: number | null
   onDone: () => void
@@ -164,6 +171,9 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
   const [discordWebhookUrl, setDiscordWebhookUrl] = useState('')
   const [telegramBotToken, setTelegramBotToken] = useState('')
   const [telegramChatId, setTelegramChatId] = useState('')
+
+  // Symbol conflicts
+  const [symbolConflicts, setSymbolConflicts] = useState<SymbolConflict[]>([])
 
   // Balance preview for Step 3
   const [balancePreview, setBalancePreview] = useState<BalancePreview | null>(null)
@@ -374,6 +384,23 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
       .catch(() => setBalancePreview(null))
   }, [exchangeType, mode, botId, isEdit])
 
+  // Fetch symbol conflicts when exchange, mode, or pairs change
+  useEffect(() => {
+    if (tradingPairs.length === 0) {
+      setSymbolConflicts([])
+      return
+    }
+    const params = new URLSearchParams({
+      exchange_type: exchangeType,
+      mode,
+      trading_pairs: tradingPairs.join(','),
+    })
+    if (isEdit && botId) params.append('exclude_bot_id', String(botId))
+    api.get(`/bots/symbol-conflicts?${params}`)
+      .then(res => setSymbolConflicts(res.data.conflicts || []))
+      .catch(() => setSymbolConflicts([]))
+  }, [exchangeType, mode, tradingPairs, botId, isEdit])
+
   // Fetch balance overview for all exchanges once
   useEffect(() => {
     setOverviewLoading(true)
@@ -501,6 +528,7 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
     if (stepKey === 'step2' && !strategyType) errors.push(t('bots.builder.errors.strategyRequired'))
     if (stepKey === 'step2b' && !hasFixedSources && selectedSources.length === 0) errors.push(t('bots.builder.errors.dataSourcesRequired'))
     if (stepKey === 'step3' && tradingPairs.length === 0) errors.push(t('bots.builder.errors.pairsRequired'))
+    if (stepKey === 'step4' && symbolConflicts.length > 0) errors.push(t('bots.builder.errors.symbolConflicts'))
     if (stepKey === 'step5') {
       if (scheduleType === 'custom_cron' && customHours.length === 0) errors.push(t('bots.builder.errors.hoursRequired'))
       if (scheduleType === 'interval' && intervalMinutes < 5) errors.push(t('bots.builder.errors.intervalMinimum'))
@@ -1354,6 +1382,22 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
               </div>
             </div>
 
+            {/* Symbol conflict warning */}
+            {symbolConflicts.length > 0 && (
+              <div className="p-3 bg-amber-900/30 border border-amber-800 rounded-xl space-y-1.5">
+                <div className="flex items-center gap-2 text-amber-400 font-medium text-sm">
+                  <AlertTriangle size={16} />
+                  {t('bots.builder.symbolConflictTitle')}
+                </div>
+                {symbolConflicts.map((c, i) => (
+                  <div key={i} className="text-sm text-amber-300/80 ml-6">
+                    {t('bots.builder.symbolConflictItem', { symbol: c.symbol, botName: c.existing_bot_name, mode: c.existing_bot_mode.toUpperCase() })}
+                  </div>
+                ))}
+                <p className="text-xs text-amber-400/60 ml-6">{t('bots.builder.symbolConflictHint')}</p>
+              </div>
+            )}
+
             {/* Notifications section */}
             <div className="pt-4 border-t border-white/5">
               <label className="block text-sm text-gray-400 mb-3">{t('settings.notifications')}</label>
@@ -1601,6 +1645,14 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
                 </span></div>
               )}
             </div>
+
+            {/* Symbol conflict warning (compact) */}
+            {symbolConflicts.length > 0 && (
+              <div className="flex items-center gap-2 p-2.5 bg-amber-900/30 border border-amber-800 rounded-lg text-sm text-amber-400">
+                <AlertTriangle size={15} className="flex-shrink-0" />
+                <span>{t('bots.builder.symbolConflictTitle')}: {symbolConflicts.map(c => c.symbol).join(', ')}</span>
+              </div>
+            )}
 
             {/* Per-asset config review */}
             {tradingPairs.length > 0 && (

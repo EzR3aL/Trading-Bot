@@ -273,3 +273,17 @@ class ExchangeBalancePreview(BaseModel):
 class ExchangeBalanceOverview(BaseModel):
     """Balance overview across all connected exchanges."""
     exchanges: List[ExchangeBalancePreview] = []
+
+
+class SymbolConflict(BaseModel):
+    """A single symbol conflict with an existing bot."""
+    symbol: str
+    existing_bot_id: int
+    existing_bot_name: str
+    existing_bot_mode: str
+
+
+class SymbolConflictResponse(BaseModel):
+    """Response for symbol conflict checks."""
+    has_conflicts: bool = False
+    conflicts: list[SymbolConflict] = []

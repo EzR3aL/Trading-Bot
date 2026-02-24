@@ -33,6 +33,8 @@ import {
   ChevronDown,
   Layers,
   Bot,
+  MoreVertical,
+  XCircle,
 } from 'lucide-react'
 import GuidedTour, { TourHelpButton, type TourStep } from '../components/ui/GuidedTour'
 
@@ -607,6 +609,7 @@ export default function Bots() {
   const [builderFeeModalBotId, setBuilderFeeModalBotId] = useState<number | null>(null)
   const [llmConnections, setLlmConnections] = useState<LlmConnection[]>([])
   const [budgetInfo, setBudgetInfo] = useState<Record<number, BotBudgetInfo>>({})
+  const [moreMenuOpen, setMoreMenuOpen] = useState<number | null>(null)
 
   // Build lookup: model_id → display name, provider_type → family_name
   const modelNameMap = useMemo(() => {
@@ -744,6 +747,19 @@ export default function Bots() {
       addToast('success', t('bots.presetApplied'))
     } catch (err) {
       addToast('error', getApiErrorMessage(err, t('bots.presetSwitchFailed')))
+    }
+    setActionLoading(null)
+  }
+
+  const handleClosePosition = async (botId: number, symbol: string) => {
+    if (!confirm(t('bots.closePositionConfirm', { symbol }))) return
+    setActionLoading(botId)
+    try {
+      await api.post(`/bots/${botId}/close-position/${symbol}`)
+      await fetchBots()
+      addToast('success', t('bots.positionClosed', { symbol }))
+    } catch (err) {
+      addToast('error', getApiErrorMessage(err, t('bots.failedClosePosition')))
     }
     setActionLoading(null)
   }
@@ -1104,6 +1120,22 @@ export default function Bots() {
                       {t('bots.start')}
                     </button>
                   )}
+                  {/* Close position button — only when open trades exist */}
+                  {bot.open_trades > 0 && (
+                    <button
+                      onClick={() => {
+                        // Close the first trading pair's position (most common case: single pair)
+                        const symbol = bot.trading_pairs[0]
+                        if (symbol) handleClosePosition(bot.bot_config_id, symbol)
+                      }}
+                      disabled={actionLoading === bot.bot_config_id}
+                      aria-label={t('bots.closePosition')}
+                      className="p-2 text-amber-400 hover:text-amber-300 hover:bg-amber-500/10 transition-all duration-200 rounded-lg"
+                      title={t('bots.closePosition')}
+                    >
+                      <XCircle size={16} />
+                    </button>
+                  )}
                   <button
                     onClick={() => setHistoryBot(bot)}
                     aria-label={t('bots.showTrades')}
@@ -1112,32 +1144,61 @@ export default function Bots() {
                   >
                     <TrendingUp size={16} />
                   </button>
-                  <button
-                    onClick={() => setEditBotId(bot.bot_config_id)}
-                    disabled={bot.status === 'running'}
-                    aria-label={`${t('bots.edit')} ${bot.name}`}
-                    className="p-2 text-gray-400 hover:text-white disabled:opacity-30 transition-all duration-200 rounded-lg hover:bg-white/5"
-                    title={t('bots.edit')}
-                  >
-                    <Pencil size={16} />
-                  </button>
-                  <button
-                    onClick={() => handleDuplicate(bot.bot_config_id)}
-                    aria-label={`${t('bots.duplicate')} ${bot.name}`}
-                    className="p-2 text-gray-400 hover:text-white transition-all duration-200 rounded-lg hover:bg-white/5"
-                    title={t('bots.duplicate')}
-                  >
-                    <Copy size={16} />
-                  </button>
-                  <button
-                    onClick={() => handleDelete(bot.bot_config_id, bot.name)}
-                    disabled={bot.status === 'running'}
-                    aria-label={`${t('bots.delete')} ${bot.name}`}
-                    className="p-2 text-gray-400 hover:text-red-400 disabled:opacity-30 transition-all duration-200 rounded-lg hover:bg-red-500/5"
-                    title={t('bots.delete')}
-                  >
-                    <Trash2 size={16} />
-                  </button>
+                  {/* 3-dot menu for Edit, Duplicate, Delete */}
+                  <div className="relative">
+                    <button
+                      onClick={() => setMoreMenuOpen(moreMenuOpen === bot.bot_config_id ? null : bot.bot_config_id)}
+                      aria-label={t('bots.moreActions')}
+                      className="p-2 text-gray-400 hover:text-white transition-all duration-200 rounded-lg hover:bg-white/5"
+                      title={t('bots.moreActions')}
+                    >
+                      <MoreVertical size={16} />
+                    </button>
+                    {moreMenuOpen === bot.bot_config_id && (
+                      <>
+                        <div className="fixed inset-0 z-10" onClick={() => setMoreMenuOpen(null)} />
+                        <div className="absolute right-0 bottom-full mb-1 z-20 w-44 bg-[#1a1f2e] border border-white/10 rounded-lg shadow-xl overflow-hidden">
+                          <button
+                            onClick={() => { setMoreMenuOpen(null); setEditBotId(bot.bot_config_id) }}
+                            disabled={bot.status === 'running'}
+                            className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-gray-300 hover:bg-white/5 disabled:opacity-30 transition-colors"
+                          >
+                            <Pencil size={14} />
+                            {t('bots.edit')}
+                          </button>
+                          <button
+                            onClick={() => { setMoreMenuOpen(null); handleDuplicate(bot.bot_config_id) }}
+                            className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-gray-300 hover:bg-white/5 transition-colors"
+                          >
+                            <Copy size={14} />
+                            {t('bots.duplicate')}
+                          </button>
+                          {bot.open_trades > 0 && bot.trading_pairs.length > 1 && (
+                            bot.trading_pairs.map(symbol => (
+                              <button
+                                key={symbol}
+                                onClick={() => { setMoreMenuOpen(null); handleClosePosition(bot.bot_config_id, symbol) }}
+                                disabled={actionLoading === bot.bot_config_id}
+                                className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-amber-400 hover:bg-amber-500/5 disabled:opacity-30 transition-colors"
+                              >
+                                <XCircle size={14} />
+                                {t('bots.closePosition')} {symbol}
+                              </button>
+                            ))
+                          )}
+                          <div className="border-t border-white/5" />
+                          <button
+                            onClick={() => { setMoreMenuOpen(null); handleDelete(bot.bot_config_id, bot.name) }}
+                            disabled={bot.status === 'running'}
+                            className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-red-400 hover:bg-red-500/5 disabled:opacity-30 transition-colors"
+                          >
+                            <Trash2 size={14} />
+                            {t('bots.delete')}
+                          </button>
+                        </div>
+                      </>
+                    )}
+                  </div>
                 </div>
               </div>
             )
