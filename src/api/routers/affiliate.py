@@ -35,10 +35,11 @@ async def list_affiliate_links(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """List all active affiliate links (any authenticated user)."""
-    result = await db.execute(
-        select(AffiliateLink).where(AffiliateLink.is_active.is_(True))
-    )
+    """List affiliate links. Admins see all (including inactive), users see only active."""
+    query = select(AffiliateLink)
+    if user.role != "admin":
+        query = query.where(AffiliateLink.is_active.is_(True))
+    result = await db.execute(query)
     return [AffiliateLinkResponse.model_validate(link) for link in result.scalars().all()]
 
 
