@@ -49,7 +49,7 @@ def get_orchestrator(request: Request):
     """FastAPI dependency: retrieve orchestrator from app.state."""
     orchestrator = getattr(request.app.state, "orchestrator", None)
     if orchestrator is None:
-        raise HTTPException(status_code=503, detail="Bot orchestrator not initialized")
+        raise HTTPException(status_code=503, detail="Bot-Orchestrator nicht initialisiert")
     return orchestrator
 
 
@@ -436,7 +436,7 @@ async def create_bot(
         select(func.count(BotConfig.id)).where(BotConfig.user_id == user.id)
     )
     if count_result.scalar() >= MAX_BOTS_PER_USER:
-        raise HTTPException(status_code=400, detail=f"Maximum {MAX_BOTS_PER_USER} bots per user")
+        raise HTTPException(status_code=400, detail=f"Maximal {MAX_BOTS_PER_USER} Bots pro Benutzer erlaubt")
 
     # Encrypt discord webhook if provided
     encrypted_webhook = None
@@ -771,7 +771,7 @@ async def get_bot(
     )
     config = result.scalar_one_or_none()
     if not config:
-        raise HTTPException(status_code=404, detail="Bot not found")
+        raise HTTPException(status_code=404, detail="Bot nicht gefunden")
     return _config_to_response(config)
 
 
@@ -791,11 +791,11 @@ async def update_bot(
     )
     config = result.scalar_one_or_none()
     if not config:
-        raise HTTPException(status_code=404, detail="Bot not found")
+        raise HTTPException(status_code=404, detail="Bot nicht gefunden")
 
     # Check if running
     if orchestrator.is_running(bot_id):
-        raise HTTPException(status_code=400, detail="Stop the bot before editing its configuration")
+        raise HTTPException(status_code=400, detail="Stoppe den Bot bevor du die Konfiguration bearbeitest")
 
     # Validate strategy if changed
     if body.strategy_type:
@@ -858,7 +858,7 @@ async def delete_bot(
     )
     config = result.scalar_one_or_none()
     if not config:
-        raise HTTPException(status_code=404, detail="Bot not found")
+        raise HTTPException(status_code=404, detail="Bot nicht gefunden")
 
     # Stop if running
     if orchestrator.is_running(bot_id):
@@ -888,14 +888,14 @@ async def duplicate_bot(
     )
     original = result.scalar_one_or_none()
     if not original:
-        raise HTTPException(status_code=404, detail="Bot not found")
+        raise HTTPException(status_code=404, detail="Bot nicht gefunden")
 
     # Check bot limit
     count_result = await db.execute(
         select(func.count(BotConfig.id)).where(BotConfig.user_id == user.id)
     )
     if count_result.scalar() >= MAX_BOTS_PER_USER:
-        raise HTTPException(status_code=400, detail=f"Maximum {MAX_BOTS_PER_USER} bots per user")
+        raise HTTPException(status_code=400, detail=f"Maximal {MAX_BOTS_PER_USER} Bots pro Benutzer erlaubt")
 
     copy = BotConfig(
         user_id=user.id,

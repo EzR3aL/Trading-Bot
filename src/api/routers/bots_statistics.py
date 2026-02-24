@@ -32,7 +32,7 @@ async def get_bot_statistics(
     )
     config = result.scalar_one_or_none()
     if not config:
-        raise HTTPException(status_code=404, detail="Bot not found")
+        raise HTTPException(status_code=404, detail="Bot nicht gefunden")
 
     since = datetime.now(timezone.utc) - timedelta(days=days)
 

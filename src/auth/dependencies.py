@@ -26,7 +26,7 @@ async def get_current_user(
     if not credentials:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Not authenticated",
+            detail="Nicht authentifiziert",
             headers={"WWW-Authenticate": "Bearer"},
         )
 
@@ -34,7 +34,7 @@ async def get_current_user(
     if not payload:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or expired token",
+            detail="Ungueltiger oder abgelaufener Token",
             headers={"WWW-Authenticate": "Bearer"},
         )
 
@@ -42,7 +42,7 @@ async def get_current_user(
     if not user_id:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token payload",
+            detail="Ungueltiger Token-Inhalt",
         )
 
     # Check token_version to support token revocation
@@ -54,7 +54,7 @@ async def get_current_user(
     if not user or not user.is_active or user.is_deleted:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User not found or inactive",
+            detail="Benutzer nicht gefunden oder inaktiv",
         )
 
     # Reject tokens issued before a password change / forced logout.
@@ -64,7 +64,7 @@ async def get_current_user(
         if effective_tv < user.token_version:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Token revoked — please log in again",
+                detail="Token widerrufen — bitte erneut anmelden",
                 headers={"WWW-Authenticate": "Bearer"},
             )
 
@@ -78,6 +78,6 @@ async def get_current_admin(
     if user.role != "admin":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Admin access required",
+            detail="Admin-Zugriff erforderlich",
         )
     return user

@@ -117,7 +117,7 @@ async def start_bot(
     )
     config = result.scalar_one_or_none()
     if not config:
-        raise HTTPException(status_code=404, detail="Bot not found")
+        raise HTTPException(status_code=404, detail="Bot nicht gefunden")
 
     # ── Pre-start gates (API level) — admins bypass all gates ──
     if user.role != "admin":
@@ -164,10 +164,10 @@ async def stop_bot(
     )
     config = result.scalar_one_or_none()
     if not config:
-        raise HTTPException(status_code=404, detail="Bot not found")
+        raise HTTPException(status_code=404, detail="Bot nicht gefunden")
     success = await orchestrator.stop_bot(bot_id)
     if not success:
-        raise HTTPException(status_code=400, detail="Bot is not running")
+        raise HTTPException(status_code=400, detail="Bot laeuft nicht")
 
     # Mark as disabled
     config.is_enabled = False
@@ -194,7 +194,7 @@ async def restart_bot(
     )
     config = result.scalar_one_or_none()
     if not config:
-        raise HTTPException(status_code=404, detail="Bot not found")
+        raise HTTPException(status_code=404, detail="Bot nicht gefunden")
 
     # ── Pre-start gates (API level) — admins bypass all gates ──
     if user.role != "admin":
@@ -243,7 +243,7 @@ async def close_position(
     )
     config = result.scalar_one_or_none()
     if not config:
-        raise HTTPException(status_code=404, detail="Bot not found")
+        raise HTTPException(status_code=404, detail="Bot nicht gefunden")
 
     # Find the open trade record for this bot + symbol
     trade_result = await db.execute(
@@ -255,7 +255,7 @@ async def close_position(
     )
     trade = trade_result.scalar_one_or_none()
     if not trade:
-        raise HTTPException(status_code=404, detail=f"No open trade found for {symbol}")
+        raise HTTPException(status_code=404, detail=f"Kein offener Trade fuer {symbol} gefunden")
 
     # Get exchange connection
     conn_result = await db.execute(
@@ -266,7 +266,7 @@ async def close_position(
     )
     conn = conn_result.scalar_one_or_none()
     if not conn:
-        raise HTTPException(status_code=400, detail="No exchange connection configured")
+        raise HTTPException(status_code=400, detail="Keine Exchange-Verbindung konfiguriert")
 
     is_demo = trade.demo_mode
     api_key_enc = conn.demo_api_key_encrypted if is_demo else conn.api_key_encrypted
@@ -274,7 +274,7 @@ async def close_position(
     passphrase_enc = conn.demo_passphrase_encrypted if is_demo else conn.passphrase_encrypted
 
     if not api_key_enc or not api_secret_enc:
-        raise HTTPException(status_code=400, detail="Exchange credentials not configured")
+        raise HTTPException(status_code=400, detail="Exchange-Zugangsdaten nicht konfiguriert")
 
     client = create_exchange_client(
         exchange_type=config.exchange_type,
@@ -355,9 +355,9 @@ async def test_telegram(
     )
     config = result.scalar_one_or_none()
     if not config:
-        raise HTTPException(status_code=404, detail="Bot not found")
+        raise HTTPException(status_code=404, detail="Bot nicht gefunden")
     if not config.telegram_bot_token or not config.telegram_chat_id:
-        raise HTTPException(status_code=400, detail="Telegram not configured")
+        raise HTTPException(status_code=400, detail="Telegram nicht konfiguriert")
 
     from src.notifications.telegram_notifier import TelegramNotifier
     from src.utils.encryption import decrypt_value
@@ -368,7 +368,7 @@ async def test_telegram(
     )
     success = await notifier.send_test_message()
     if not success:
-        raise HTTPException(status_code=502, detail="Failed to send Telegram message")
+        raise HTTPException(status_code=502, detail="Telegram-Nachricht konnte nicht gesendet werden")
     return {"status": "ok", "message": "Test message sent"}
 
 
@@ -390,11 +390,11 @@ async def apply_preset_to_bot(
     )
     config = result.scalar_one_or_none()
     if not config:
-        raise HTTPException(status_code=404, detail="Bot not found")
+        raise HTTPException(status_code=404, detail="Bot nicht gefunden")
 
     # Check if running
     if orchestrator.is_running(bot_id):
-        raise HTTPException(status_code=400, detail="Stop the bot before applying a preset")
+        raise HTTPException(status_code=400, detail="Stoppe den Bot bevor du ein Preset anwendest")
 
     # Load preset
     preset_result = await db.execute(
@@ -402,7 +402,7 @@ async def apply_preset_to_bot(
     )
     preset = preset_result.scalar_one_or_none()
     if not preset:
-        raise HTTPException(status_code=404, detail="Preset not found")
+        raise HTTPException(status_code=404, detail="Preset nicht gefunden")
 
     # Apply trading config from preset
     if preset.trading_config:

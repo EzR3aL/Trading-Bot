@@ -94,7 +94,7 @@ async def delete_affiliate_link(
     )
     link = result.scalar_one_or_none()
     if not link:
-        raise HTTPException(status_code=404, detail="Affiliate link not found")
+        raise HTTPException(status_code=404, detail="Affiliate-Link nicht gefunden")
 
     await db.delete(link)
     return {"detail": "deleted"}
@@ -128,12 +128,12 @@ async def verify_uid(
         if exchange == "bitget":
             raise HTTPException(
                 status_code=422,
-                detail="Bitget UID must be numeric only",
+                detail="Bitget UID muss rein numerisch sein",
             )
         elif exchange == "weex":
             raise HTTPException(
                 status_code=422,
-                detail="Weex UID must be alphanumeric",
+                detail="Weex UID muss alphanumerisch sein",
             )
 
     # Find or create ExchangeConnection for this user + exchange

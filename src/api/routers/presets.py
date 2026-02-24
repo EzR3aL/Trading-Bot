@@ -81,7 +81,7 @@ async def get_preset(
     )
     preset = result.scalar_one_or_none()
     if not preset:
-        raise HTTPException(status_code=404, detail="Preset not found")
+        raise HTTPException(status_code=404, detail="Preset nicht gefunden")
     return _preset_to_response(preset)
 
 
@@ -102,7 +102,7 @@ async def update_preset(
     )
     preset = result.scalar_one_or_none()
     if not preset:
-        raise HTTPException(status_code=404, detail="Preset not found")
+        raise HTTPException(status_code=404, detail="Preset nicht gefunden")
 
     if data.name is not None:
         preset.name = data.name
@@ -136,9 +136,9 @@ async def delete_preset(
     )
     preset = result.scalar_one_or_none()
     if not preset:
-        raise HTTPException(status_code=404, detail="Preset not found")
+        raise HTTPException(status_code=404, detail="Preset nicht gefunden")
     if preset.is_active:
-        raise HTTPException(status_code=400, detail="Cannot delete an active preset. Deactivate it first.")
+        raise HTTPException(status_code=400, detail="Aktives Preset kann nicht geloescht werden. Zuerst deaktivieren.")
     await db.delete(preset)
 
 
@@ -166,7 +166,7 @@ async def activate_preset(
     )
     preset = result.scalar_one_or_none()
     if not preset:
-        raise HTTPException(status_code=404, detail="Preset not found")
+        raise HTTPException(status_code=404, detail="Preset nicht gefunden")
 
     preset.is_active = True
     return {"status": "ok", "message": f"Preset '{preset.name}' activated"}
@@ -188,7 +188,7 @@ async def duplicate_preset(
     )
     original = result.scalar_one_or_none()
     if not original:
-        raise HTTPException(status_code=404, detail="Preset not found")
+        raise HTTPException(status_code=404, detail="Preset nicht gefunden")
 
     copy = ConfigPreset(
         user_id=user.id,

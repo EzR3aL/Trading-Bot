@@ -41,7 +41,7 @@ async def create_user(
         select(User).where(User.username == data.username)
     )
     if existing.scalar_one_or_none():
-        raise HTTPException(status_code=409, detail="Username already exists")
+        raise HTTPException(status_code=409, detail="Benutzername existiert bereits")
 
     user = User(
         username=data.username,
@@ -69,7 +69,7 @@ async def update_user(
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
     if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise HTTPException(status_code=404, detail="Benutzer nicht gefunden")
 
     if data.email is not None:
         user.email = data.email
@@ -101,12 +101,12 @@ async def delete_user(
     Financial records (trades, funding) are preserved for audit purposes.
     """
     if admin.id == user_id:
-        raise HTTPException(status_code=400, detail="Cannot delete yourself")
+        raise HTTPException(status_code=400, detail="Du kannst dich nicht selbst loeschen")
 
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
     if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise HTTPException(status_code=404, detail="Benutzer nicht gefunden")
 
     user.is_deleted = True
     user.is_active = False

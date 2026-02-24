@@ -350,7 +350,7 @@ async def get_trade(
     )
     row = result.one_or_none()
     if not row:
-        raise HTTPException(status_code=404, detail="Trade not found")
+        raise HTTPException(status_code=404, detail="Trade nicht gefunden")
 
     trade, bot_name, bot_exchange = row
 

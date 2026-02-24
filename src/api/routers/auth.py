@@ -41,7 +41,7 @@ async def login(request: Request, body: LoginRequest, db: AsyncSession = Depends
         logger.warning("AUTH: Failed login for '%s' from %s", body.username, client_ip)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid username or password",
+            detail="Ungueltiger Benutzername oder Passwort",
         )
 
     # Check account lockout
@@ -49,7 +49,7 @@ async def login(request: Request, body: LoginRequest, db: AsyncSession = Depends
         logger.warning("AUTH: Locked account login attempt for '%s' from %s", body.username, client_ip)
         raise HTTPException(
             status_code=423,
-            detail="Account temporarily locked. Try again later.",
+            detail="Konto voruebergehend gesperrt. Versuche es spaeter erneut.",
         )
 
     if not verify_password(body.password, user.password_hash):
@@ -68,21 +68,21 @@ async def login(request: Request, body: LoginRequest, db: AsyncSession = Depends
         logger.warning("AUTH: Failed login for '%s' from %s", body.username, client_ip)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid username or password",
+            detail="Ungueltiger Benutzername oder Passwort",
         )
 
     if user.is_deleted:
         logger.warning("AUTH: Login attempt for deleted user '%s' from %s", body.username, client_ip)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid username or password",
+            detail="Ungueltiger Benutzername oder Passwort",
         )
 
     if not user.is_active:
         logger.warning("AUTH: Login attempt for disabled user '%s' from %s", body.username, client_ip)
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Account is disabled",
+            detail="Konto ist deaktiviert",
         )
 
     # Successful login — reset lockout counters
@@ -112,7 +112,7 @@ async def refresh_token(request: Request, body: RefreshRequest, db: AsyncSession
         logger.warning("AUTH: Invalid refresh token from %s", client_ip)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid refresh token",
+            detail="Ungueltiger Refresh-Token",
         )
 
     user_id = payload.get("sub")
@@ -123,7 +123,7 @@ async def refresh_token(request: Request, body: RefreshRequest, db: AsyncSession
         logger.warning("AUTH: Refresh for inactive/deleted user_id=%s from %s", user_id, client_ip)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User not found or inactive",
+            detail="Benutzer nicht gefunden oder inaktiv",
         )
 
     # Reject refresh tokens issued before a security event (password change,
@@ -135,7 +135,7 @@ async def refresh_token(request: Request, body: RefreshRequest, db: AsyncSession
         logger.warning("AUTH: Revoked refresh token used for user_id=%s (tv=%s < %s) from %s", user_id, token_tv, user_tv, client_ip)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Token revoked — please log in again",
+            detail="Token widerrufen — bitte erneut anmelden",
         )
 
     token_data = {"sub": str(user.id), "role": user.role, "tv": user_tv}
@@ -159,7 +159,7 @@ async def change_password(
 ):
     """Change the current user's password and revoke existing tokens."""
     if not verify_password(body.current_password, user.password_hash):
-        raise HTTPException(status_code=401, detail="Current password is incorrect")
+        raise HTTPException(status_code=401, detail="Aktuelles Passwort ist falsch")
     user.password_hash = hash_password(body.new_password)
     user.token_version = (user.token_version or 0) + 1
     await db.commit()

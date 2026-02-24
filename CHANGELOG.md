@@ -16,6 +16,7 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 - **GET `/api/bots/symbol-conflicts`** — Neuer Endpoint prueft Trading-Pair-Konflikte mit bestehenden aktiven Bots (Mode-Konflikt-Matrix: demo↔demo/both, live↔live/both, both↔alle)
 - **Manuelles Position-Schliessen** — Close-Position-Optionen immer im 3-Punkte-Menue verfuegbar (pro Trading-Pair). Endpoint `POST /api/bots/{bot_id}/close-position/{symbol}` schliesst die Position auf der Exchange und markiert den Trade-Record als closed. Robust bei bereits geschlossenen Positionen
 - **3-Punkte-Menue auf Bot-Karten** — Bearbeiten, Kopieren, Position schliessen und Loeschen in ein kompaktes Dropdown-Menue verschoben
+- **Vollstaendige deutsche Lokalisierung** — Alle Backend-Fehlermeldungen (HTTPException) in allen API-Routers auf Deutsch uebersetzt: auth, bots, config, backtest, presets, trades, users, affiliate, exchanges
 
 ---
 

@@ -97,20 +97,20 @@ async def start_backtest(
         start_dt = datetime.fromisoformat(body.start_date)
         end_dt = datetime.fromisoformat(body.end_date)
     except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD")
+        raise HTTPException(status_code=400, detail="Ungueltiges Datumsformat. Verwende YYYY-MM-DD")
 
     if end_dt <= start_dt:
-        raise HTTPException(status_code=400, detail="end_date must be after start_date")
+        raise HTTPException(status_code=400, detail="Enddatum muss nach dem Startdatum liegen")
 
     # Date range validation
     today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
     if end_dt > today + timedelta(days=1):
-        raise HTTPException(status_code=400, detail="end_date cannot be in the future")
+        raise HTTPException(status_code=400, detail="Enddatum darf nicht in der Zukunft liegen")
 
     if start_dt < EARLIEST_DATE:
         raise HTTPException(
             status_code=400,
-            detail=f"start_date cannot be before {EARLIEST_DATE.strftime('%Y-%m-%d')} (Binance Futures data start)",
+            detail=f"Startdatum darf nicht vor {EARLIEST_DATE.strftime('%Y-%m-%d')} liegen (Beginn der Binance-Futures-Daten)",
         )
 
     # Timeframe-specific maximum duration
@@ -246,7 +246,7 @@ async def get_run(
     )
     run = result.scalar_one_or_none()
     if not run:
-        raise HTTPException(status_code=404, detail="Backtest run not found")
+        raise HTTPException(status_code=404, detail="Backtest-Lauf nicht gefunden")
 
     metrics = None
     equity_curve = None
@@ -296,7 +296,7 @@ async def delete_run(
     )
     run = result.scalar_one_or_none()
     if not run:
-        raise HTTPException(status_code=404, detail="Backtest run not found")
+        raise HTTPException(status_code=404, detail="Backtest-Lauf nicht gefunden")
 
     await db.delete(run)
     return {"status": "ok", "message": "Backtest run deleted"}
