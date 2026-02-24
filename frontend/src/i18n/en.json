@@ -564,6 +564,11 @@
       "overAllocatedWarning": "Over-allocated: existing bots already use {{pct}}% of your balance.",
       "insufficientBalanceWarning": "This bot would need ${{needed}} but only ${{available}} is available.",
       "bothModeNote": "\"Both\" mode: showing live balance (the limiting factor).",
+      "allExchanges": "All Exchanges",
+      "equity": "Equity",
+      "allocated": "Allocated",
+      "available": "Available",
+      "noConnections": "No exchange connections configured yet.",
       "errors": {
         "nameRequired": "Please enter a bot name",
         "strategyRequired": "Please select a strategy",

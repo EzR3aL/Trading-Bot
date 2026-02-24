@@ -9,6 +9,15 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.22.0] - 2026-02-24
+
+### Hinzugefuegt
+- **Exchange-Balance Uebersicht im BotBuilder** — Step 3 zeigt jetzt eine kompakte Tabelle aller verbundenen Exchanges mit Equity, bereits allokiertem Guthaben und verfuegbarem Budget. Ausgewaehlte Exchange wird hervorgehoben. Amber-Warnung bei Ueberallokation (>100%) oder unzureichendem Guthaben
+- **Multi-Exchange Balance-Overview Endpoint** — Neuer API-Endpoint `GET /api/bots/balance-overview` liefert Balance-Daten fuer alle konfigurierten Exchanges parallel (asyncio.gather). Unterstuetzt `exclude_bot_id` Parameter fuer Edit-Modus (keine Doppelzaehlung)
+- **Einzel-Exchange Balance-Preview Endpoint** — Neuer API-Endpoint `GET /api/bots/balance-preview` zeigt Balance + Allokation fuer eine spezifische Exchange/Mode-Kombination. Wird fuer Dollar-Betraege neben Prozenten in der Per-Asset-Konfiguration verwendet
+
+---
+
 ## [3.21.0] - 2026-02-23
 
 ### Hinzugefuegt

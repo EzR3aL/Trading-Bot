@@ -268,3 +268,8 @@ class ExchangeBalancePreview(BaseModel):
     remaining_balance: float = 0.0
     has_connection: bool = False
     error: Optional[str] = None
+
+
+class ExchangeBalanceOverview(BaseModel):
+    """Balance overview across all connected exchanges."""
+    exchanges: List[ExchangeBalancePreview] = []

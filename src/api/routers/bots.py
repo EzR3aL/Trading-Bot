@@ -22,6 +22,7 @@ from src.api.schemas.bots import (
     BotConfigUpdate,
     BotListResponse,
     BotRuntimeStatus,
+    ExchangeBalanceOverview,
     ExchangeBalancePreview,
     StrategiesListResponse,
     StrategyInfo,
@@ -229,6 +230,117 @@ async def get_balance_preview(
         remaining_balance=round(remaining, 2),
         has_connection=True,
     )
+
+
+@router.get("/balance-overview", response_model=ExchangeBalanceOverview)
+@limiter.limit("10/minute")
+async def get_balance_overview(
+    request: Request,
+    exclude_bot_id: Optional[int] = Query(None),
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Balance overview across ALL connected exchanges (demo + live)."""
+    import asyncio
+    from src.exchanges.factory import create_exchange_client
+    from src.utils.encryption import decrypt_value
+
+    # Load all exchange connections
+    conn_result = await db.execute(
+        select(ExchangeConnection).where(ExchangeConnection.user_id == user.id)
+    )
+    connections = {c.exchange_type: c for c in conn_result.scalars().all()}
+
+    # Load all bots for allocation calculation
+    bot_filter = [BotConfig.user_id == user.id]
+    if exclude_bot_id:
+        bot_filter.append(BotConfig.id != exclude_bot_id)
+    bots_result = await db.execute(select(BotConfig).where(*bot_filter))
+    all_bots = bots_result.scalars().all()
+
+    # Build (exchange, mode) pairs to query
+    exchange_modes: list[tuple[str, str]] = []
+    for ex_type in ["bitget", "weex", "hyperliquid"]:
+        conn = connections.get(ex_type)
+        if not conn:
+            continue
+        if conn.demo_api_key_encrypted and conn.demo_api_secret_encrypted:
+            exchange_modes.append((ex_type, "demo"))
+        if conn.api_key_encrypted and conn.api_secret_encrypted:
+            exchange_modes.append((ex_type, "live"))
+
+    if not exchange_modes:
+        return ExchangeBalanceOverview(exchanges=[])
+
+    # Fetch balances in parallel
+    results: list[ExchangeBalancePreview] = []
+
+    async def _fetch(ex_type: str, mode: str):
+        conn = connections[ex_type]
+        is_demo = mode == "demo"
+        api_key_enc = conn.demo_api_key_encrypted if is_demo else conn.api_key_encrypted
+        api_secret_enc = conn.demo_api_secret_encrypted if is_demo else conn.api_secret_encrypted
+        passphrase_enc = conn.demo_passphrase_encrypted if is_demo else conn.passphrase_encrypted
+
+        # Fetch balance with cache
+        cache_key = f"budget:{user.id}:{ex_type}:{mode}"
+        cached = _budget_cache_get(cache_key)
+        if cached:
+            available, equity, currency = cached
+        else:
+            try:
+                client = create_exchange_client(
+                    exchange_type=ex_type,
+                    api_key=decrypt_value(api_key_enc),
+                    api_secret=decrypt_value(api_secret_enc),
+                    passphrase=decrypt_value(passphrase_enc) if passphrase_enc else "",
+                    demo_mode=is_demo,
+                )
+                balance = await asyncio.wait_for(client.get_account_balance(), timeout=10.0)
+                available, equity, currency = balance.available, balance.total, balance.currency
+                _budget_cache_set(cache_key, (available, equity, currency))
+            except Exception as e:
+                logger.warning("Balance overview fetch failed for %s/%s: %s", ex_type, mode, e)
+                results.append(ExchangeBalancePreview(
+                    exchange_type=ex_type, mode=mode, has_connection=True,
+                    error=f"fetch_failed",
+                ))
+                return
+
+        # Calculate allocated % from existing bots on this exchange/mode
+        total_pct = 0.0
+        for bot in all_bots:
+            if bot.exchange_type != ex_type:
+                continue
+            if mode not in (["demo", "both"] if bot.mode == "both" else [bot.mode]):
+                if not (bot.mode == "both" or bot.mode == mode):
+                    continue
+            pac = parse_json_field(bot.per_asset_config, field_name="per_asset_config", context=f"bot {bot.id}", default={})
+            try:
+                pairs = json.loads(bot.trading_pairs) if isinstance(bot.trading_pairs, str) else (bot.trading_pairs or [])
+            except (json.JSONDecodeError, TypeError):
+                pairs = []
+            for symbol in pairs:
+                pct = (pac.get(symbol) or {}).get("position_pct")
+                if pct and pct > 0:
+                    total_pct += pct
+
+        allocated_amount = equity * total_pct / 100 if equity > 0 else 0.0
+        results.append(ExchangeBalancePreview(
+            exchange_type=ex_type,
+            mode=mode,
+            currency=currency,
+            exchange_balance=round(available, 2),
+            exchange_equity=round(equity, 2),
+            existing_allocated_pct=round(total_pct, 1),
+            existing_allocated_amount=round(allocated_amount, 2),
+            remaining_balance=round(max(0.0, equity - allocated_amount), 2),
+            has_connection=True,
+        ))
+
+    await asyncio.gather(*(_fetch(ex, m) for ex, m in exchange_modes), return_exceptions=True)
+
+    return ExchangeBalanceOverview(exchanges=results)
 
 
 # ─── CRUD ─────────────────────────────────────────────────────

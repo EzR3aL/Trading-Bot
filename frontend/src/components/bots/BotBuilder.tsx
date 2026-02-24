@@ -167,7 +167,8 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
 
   // Balance preview for Step 3
   const [balancePreview, setBalancePreview] = useState<BalancePreview | null>(null)
-  const [balanceLoading, setBalanceLoading] = useState(false)
+  const [balanceOverview, setBalanceOverview] = useState<BalancePreview[]>([])
+  const [overviewLoading, setOverviewLoading] = useState(false)
 
   // View modes for strategy, data sources, and schedule
   const [strategyView, setStrategyView] = useState<'grid' | 'list'>('grid')
@@ -366,14 +367,23 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
   // Fetch exchange balance preview when exchange/mode changes
   useEffect(() => {
     const effectiveMode = mode === 'both' ? 'both' : mode
-    setBalanceLoading(true)
     const params = new URLSearchParams({ exchange_type: exchangeType, mode: effectiveMode })
     if (isEdit && botId) params.append('exclude_bot_id', String(botId))
     api.get(`/bots/balance-preview?${params}`)
       .then(res => setBalancePreview(res.data))
       .catch(() => setBalancePreview(null))
-      .finally(() => setBalanceLoading(false))
   }, [exchangeType, mode, botId, isEdit])
+
+  // Fetch balance overview for all exchanges once
+  useEffect(() => {
+    setOverviewLoading(true)
+    const params = new URLSearchParams()
+    if (isEdit && botId) params.append('exclude_bot_id', String(botId))
+    api.get(`/bots/balance-overview?${params}`)
+      .then(res => setBalanceOverview(res.data.exchanges || []))
+      .catch(() => setBalanceOverview([]))
+      .finally(() => setOverviewLoading(false))
+  }, [botId, isEdit])
 
   const togglePair = (pair: string) => {
     setTradingPairs(prev =>
@@ -1075,9 +1085,9 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
               </div>
             </div>
 
-            {/* Exchange Balance Banner */}
+            {/* Exchange Balance Overview — all exchanges */}
             {(() => {
-              if (balanceLoading) {
+              if (overviewLoading) {
                 return (
                   <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4 animate-pulse">
                     <div className="flex items-center gap-2">
@@ -1087,26 +1097,23 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
                   </div>
                 )
               }
-              if (!balancePreview) return null
-
-              if (!balancePreview.has_connection) {
+              if (balanceOverview.length === 0 && !overviewLoading) {
                 return (
-                  <div className="rounded-xl border border-amber-500/30 bg-amber-900/10 p-3 flex items-start gap-2">
-                    <AlertTriangle size={16} className="text-amber-400 mt-0.5 shrink-0" />
-                    <p className="text-sm text-amber-300">
-                      {t('bots.builder.noExchangeConnection', { exchange: exchangeType, mode })}
-                    </p>
+                  <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-3 flex items-center gap-2">
+                    <Wallet size={16} className="text-gray-500" />
+                    <p className="text-sm text-gray-500">{t('bots.builder.noConnections')}</p>
                   </div>
                 )
               }
 
-              const bp = balancePreview
-              // Calculate how much this bot would need based on current per-asset config
+              // Calculate this bot's allocation for warning on selected exchange
               const thisBotPct = tradingPairs.reduce((sum, p) => sum + (perAssetConfig[p]?.position_pct || 0), 0)
-              const thisBotAmount = bp.exchange_equity > 0 ? bp.exchange_equity * thisBotPct / 100 : 0
-              const totalPctWithThis = bp.existing_allocated_pct + thisBotPct
+              const effectiveMode = mode === 'both' ? 'live' : mode
+              const selectedEntry = balanceOverview.find(e => e.exchange_type === exchangeType && e.mode === effectiveMode)
+              const totalPctWithThis = selectedEntry ? selectedEntry.existing_allocated_pct + thisBotPct : 0
+              const thisBotAmount = selectedEntry && selectedEntry.exchange_equity > 0 ? selectedEntry.exchange_equity * thisBotPct / 100 : 0
               const isOverAllocated = totalPctWithThis > 100
-              const isInsufficientBalance = thisBotAmount > bp.remaining_balance && thisBotPct > 0
+              const isInsufficientBalance = selectedEntry ? thisBotAmount > selectedEntry.remaining_balance && thisBotPct > 0 : false
 
               return (
                 <div className={`rounded-xl border p-4 ${
@@ -1116,29 +1123,62 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
                 }`}>
                   <div className="flex items-center gap-2 mb-3">
                     <Wallet size={16} className="text-primary-400" />
-                    <span className="text-sm font-medium text-gray-300">{t('bots.builder.exchangeBalance')}</span>
+                    <span className="text-sm font-medium text-gray-300">{t('bots.builder.allExchanges')}</span>
                     {mode === 'both' && (
                       <span className="text-[10px] text-gray-500 ml-auto">{t('bots.builder.bothModeNote')}</span>
                     )}
                   </div>
-                  <div className="grid grid-cols-3 gap-3">
-                    <div>
-                      <div className="text-[10px] text-gray-500 uppercase tracking-wider mb-0.5">{t('bots.builder.totalEquity')}</div>
-                      <div className="text-sm font-semibold text-white tabular-nums">${bp.exchange_equity.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
-                      <div className="text-[10px] text-gray-600">{bp.currency}</div>
-                    </div>
-                    <div>
-                      <div className="text-[10px] text-gray-500 uppercase tracking-wider mb-0.5">{t('bots.builder.alreadyAllocated')}</div>
-                      <div className="text-sm font-semibold text-amber-400 tabular-nums">{bp.existing_allocated_pct.toFixed(1)}%</div>
-                      <div className="text-[10px] text-gray-600">${bp.existing_allocated_amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
-                    </div>
-                    <div>
-                      <div className="text-[10px] text-gray-500 uppercase tracking-wider mb-0.5">{t('bots.builder.availableForBot')}</div>
-                      <div className="text-sm font-semibold text-green-400 tabular-nums">${bp.remaining_balance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
-                      <div className="text-[10px] text-gray-600">{(100 - bp.existing_allocated_pct).toFixed(1)}%</div>
-                    </div>
+
+                  {/* Compact table */}
+                  <div className="overflow-hidden rounded-lg border border-white/[0.04]">
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr className="bg-white/[0.03] text-gray-500 text-[10px] uppercase tracking-wider">
+                          <th className="text-left px-3 py-1.5 font-medium">{t('bots.builder.exchange')}</th>
+                          <th className="text-left px-2 py-1.5 font-medium">{t('bots.builder.mode')}</th>
+                          <th className="text-right px-2 py-1.5 font-medium">{t('bots.builder.equity')}</th>
+                          <th className="text-right px-2 py-1.5 font-medium">{t('bots.builder.allocated')}</th>
+                          <th className="text-right px-3 py-1.5 font-medium">{t('bots.builder.available')}</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-white/[0.04]">
+                        {balanceOverview.map(entry => {
+                          const isSelected = entry.exchange_type === exchangeType && entry.mode === effectiveMode
+                          const isOver = entry.existing_allocated_pct > 100
+                          return (
+                            <tr key={`${entry.exchange_type}-${entry.mode}`} className={`transition-colors ${
+                              isSelected ? 'bg-primary-500/5' : 'hover:bg-white/[0.02]'
+                            }`}>
+                              <td className="px-3 py-2 flex items-center gap-1.5">
+                                <ExchangeLogo exchange={entry.exchange_type} size={14} />
+                                {isSelected && <span className="w-1 h-1 rounded-full bg-primary-400" />}
+                              </td>
+                              <td className="px-2 py-2">
+                                <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${
+                                  entry.mode === 'demo' ? 'bg-blue-500/10 text-blue-400' : 'bg-orange-500/10 text-orange-400'
+                                }`}>
+                                  {entry.mode.toUpperCase()}
+                                </span>
+                              </td>
+                              <td className="px-2 py-2 text-right tabular-nums text-gray-300">
+                                ${entry.exchange_equity.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                                <span className="text-gray-600 ml-0.5 text-[10px]">{entry.currency}</span>
+                              </td>
+                              <td className={`px-2 py-2 text-right tabular-nums ${isOver ? 'text-red-400' : 'text-amber-400'}`}>
+                                {entry.existing_allocated_pct.toFixed(0)}%
+                                <span className="text-gray-600 ml-1">(${entry.existing_allocated_amount.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })})</span>
+                              </td>
+                              <td className="px-3 py-2 text-right tabular-nums text-green-400">
+                                ${entry.remaining_balance.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                              </td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
                   </div>
 
+                  {/* Warnings for the selected exchange */}
                   {isOverAllocated && (
                     <div className="mt-3 flex items-center gap-1.5 text-xs text-amber-400">
                       <AlertTriangle size={13} />
@@ -1150,7 +1190,7 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
                       <AlertTriangle size={13} />
                       {t('bots.builder.insufficientBalanceWarning', {
                         needed: thisBotAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
-                        available: bp.remaining_balance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+                        available: (selectedEntry?.remaining_balance ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
                       })}
                     </div>
                   )}
