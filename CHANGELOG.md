@@ -12,10 +12,10 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 ## [3.23.0] - 2026-02-24
 
 ### Hinzugefuegt
-- **Symbol-Konflikt-Erkennung** — Dreistufige Absicherung verhindert, dass mehrere Bots dasselbe Symbol auf derselben Exchange/Mode-Kombination handeln. Frontend-Warnung in BotBuilder Step 4 + Review, Backend-Block bei Create/Update, Defense-in-Depth bei Start/Restart
+- **Symbol-Konflikt-Erkennung** — Warnung im BotBuilder (Step 4 + Review) wenn Trading-Paare mit bestehenden aktiven Bots kollidieren. Erstellen/Bearbeiten bleibt moeglich, nur Starten wird bei Konflikten blockiert (Defense-in-Depth)
 - **GET `/api/bots/symbol-conflicts`** — Neuer Endpoint prueft Trading-Pair-Konflikte mit bestehenden aktiven Bots (Mode-Konflikt-Matrix: demo↔demo/both, live↔live/both, both↔alle)
-- **Manuelles Position-Schliessen** — Neuer Button (XCircle) auf Bot-Karten wenn offene Trades existieren. Endpoint `POST /api/bots/{bot_id}/close-position/{symbol}` schliesst die Position auf der Exchange und markiert den Trade-Record als closed
-- **3-Punkte-Menue auf Bot-Karten** — Bearbeiten, Kopieren und Loeschen in ein kompaktes Dropdown-Menue verschoben. Bei Multi-Symbol-Bots werden einzelne Close-Position-Optionen im Menue angezeigt
+- **Manuelles Position-Schliessen** — Close-Position-Optionen immer im 3-Punkte-Menue verfuegbar (pro Trading-Pair). Endpoint `POST /api/bots/{bot_id}/close-position/{symbol}` schliesst die Position auf der Exchange und markiert den Trade-Record als closed. Robust bei bereits geschlossenen Positionen
+- **3-Punkte-Menue auf Bot-Karten** — Bearbeiten, Kopieren, Position schliessen und Loeschen in ein kompaktes Dropdown-Menue verschoben
 
 ---
 

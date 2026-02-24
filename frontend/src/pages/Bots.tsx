@@ -1120,22 +1120,6 @@ export default function Bots() {
                       {t('bots.start')}
                     </button>
                   )}
-                  {/* Close position button — only when open trades exist */}
-                  {bot.open_trades > 0 && (
-                    <button
-                      onClick={() => {
-                        // Close the first trading pair's position (most common case: single pair)
-                        const symbol = bot.trading_pairs[0]
-                        if (symbol) handleClosePosition(bot.bot_config_id, symbol)
-                      }}
-                      disabled={actionLoading === bot.bot_config_id}
-                      aria-label={t('bots.closePosition')}
-                      className="p-2 text-amber-400 hover:text-amber-300 hover:bg-amber-500/10 transition-all duration-200 rounded-lg"
-                      title={t('bots.closePosition')}
-                    >
-                      <XCircle size={16} />
-                    </button>
-                  )}
                   <button
                     onClick={() => setHistoryBot(bot)}
                     aria-label={t('bots.showTrades')}
@@ -1173,19 +1157,17 @@ export default function Bots() {
                             <Copy size={14} />
                             {t('bots.duplicate')}
                           </button>
-                          {bot.open_trades > 0 && bot.trading_pairs.length > 1 && (
-                            bot.trading_pairs.map(symbol => (
-                              <button
-                                key={symbol}
-                                onClick={() => { setMoreMenuOpen(null); handleClosePosition(bot.bot_config_id, symbol) }}
-                                disabled={actionLoading === bot.bot_config_id}
-                                className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-amber-400 hover:bg-amber-500/5 disabled:opacity-30 transition-colors"
-                              >
-                                <XCircle size={14} />
-                                {t('bots.closePosition')} {symbol}
-                              </button>
-                            ))
-                          )}
+                          {bot.trading_pairs.map(symbol => (
+                            <button
+                              key={symbol}
+                              onClick={() => { setMoreMenuOpen(null); handleClosePosition(bot.bot_config_id, symbol) }}
+                              disabled={actionLoading === bot.bot_config_id}
+                              className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-amber-400 hover:bg-amber-500/5 disabled:opacity-30 transition-colors"
+                            >
+                              <XCircle size={14} />
+                              {t('bots.closePosition')} {symbol}
+                            </button>
+                          ))}
                           <div className="border-t border-white/5" />
                           <button
                             onClick={() => { setMoreMenuOpen(null); handleDelete(bot.bot_config_id, bot.name) }}
