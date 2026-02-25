@@ -16,6 +16,20 @@ import { ExchangeIcon } from '../components/ui/ExchangeLogo'
 import { Eye, EyeOff, ArrowUpRight, ArrowDownRight, Trophy, Target, LayoutGrid, BarChart3, Bot, FileText, X, Copy } from 'lucide-react'
 import type { LlmConnection } from '../types'
 
+/* ── Strategy Labels ─────────────────────────────────────── */
+
+const STRATEGY_DISPLAY: Record<string, string> = {
+  llm_signal: 'KI-Companion',
+  sentiment_surfer: 'Sentiment Surfer',
+  liquidation_hunter: 'Liquidation Hunter',
+  degen: 'Degen',
+  edge_indicator: 'Edge Indicator',
+  claude_edge_indicator: 'Claude-Edge',
+}
+function strategyLabel(name: string): string {
+  return STRATEGY_DISPLAY[name] || name.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
+}
+
 /* ── Colors ──────────────────────────────────────────────── */
 
 const BOT_COLORS = [
@@ -170,10 +184,11 @@ function BotCard({ bot, color, isSelected, isHovered, onClick, onMouseEnter, onM
         }}
       />
 
-      {/* Header: name + mode */}
+      {/* Header: name + strategy + mode */}
       <div className="flex items-center gap-2 mb-1">
         <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />
         <span className="text-white text-sm font-medium truncate">{bot.name}</span>
+        <span className="text-[10px] text-gray-400 truncate">{strategyLabel(bot.strategy_type)}</span>
         <span className={`ml-auto text-[9px] px-1.5 py-0.5 rounded-full font-medium flex-shrink-0 ${
           bot.mode === 'live' ? 'badge-live' : 'badge-demo'
         }`}>
@@ -275,6 +290,7 @@ function SmallMultipleCard({ bot, color, yDomain, chartGridColor, chartTickColor
         <div className="flex items-center gap-2">
           <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />
           <span className="text-white text-sm font-medium truncate">{bot.name}</span>
+          <span className="text-[10px] text-gray-400 truncate">{strategyLabel(bot.strategy_type)}</span>
           <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-medium ${
             bot.mode === 'live' ? 'badge-live' : 'badge-demo'
           }`}>
@@ -665,7 +681,13 @@ export default function BotPerformance() {
           {/* ── Bot Detail Panel ─────────────────────────── */}
           {botDetail && (
             <div className="glass-card rounded-xl p-5 slide-in-panel">
-              <h2 className="text-white font-semibold mb-4">{botDetail.bot_name} -- {t('performance.details')}</h2>
+              <h2 className="text-white font-semibold mb-4">
+                {botDetail.bot_name} -- {t('performance.details')}
+                {(() => {
+                  const st = compareData.find(b => b.bot_id === selectedBot)?.strategy_type
+                  return st ? <span className="ml-2 text-sm font-normal text-gray-400">{strategyLabel(st)}</span> : null
+                })()}
+              </h2>
 
               {/* Summary Cards (centered) */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
