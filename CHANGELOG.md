@@ -9,6 +9,26 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.28.0] - 2026-02-25
+
+### Hinzugefuegt
+- **Trailing Stop + Breakeven Exit-Strategie** — Neues zweistufiges Exit-System fuer alle Strategien (Edge Indicator + Claude Edge). ATR-basierter Trailing Stop (1.5x ATR vom Hoechstpreis) sichert Gewinne dynamisch. Breakeven-Schutz verhindert, dass profitable Trades im Minus geschlossen werden. Hoechstpreis wird in DB gespeichert und ueberlebt Bot-Neustarts
+- **Anleitung Trailing Stop** — Neue Dokumentation (`Anleitungen/Trailing-Stop-Exit-Strategie.md`) mit Erklaerung, Parametern und Beispiel-Szenarien
+
+---
+
+## [3.27.0] - 2026-02-25
+
+### Geaendert
+- **Position Monitor auf 1 Minute** — Erkennung von manuell geschlossenen Positionen reduziert von 5 Min auf 1 Min. Rate-Limit-Pruefung fuer alle Exchanges (Bitget, Hyperliquid, Weex) bestaetigt Sicherheit
+- **TP/SL komplett aus Exchange-Orders entfernt** — `trade_executor.py` setzt `target_price` und `stop_loss` immer auf `None`. Exit wird ausschliesslich durch die Strategie-Logik gesteuert, nicht durch Exchange-Orders
+- **TP/SL in API-Schema optional** — `TradeResponse.take_profit` und `TradeResponse.stop_loss` sind jetzt `Optional[float]` um Trades ohne TP/SL korrekt darzustellen
+
+### Hinzugefuegt
+- **Warnung bei Bot-Stop mit offenen Positionen** — Beim Stoppen eines Bots mit offenen Trades wird eine Warnung angezeigt: "X offene Position(en) werden NICHT automatisch geschlossen und nicht mehr ueberwacht"
+
+---
+
 ## [3.26.0] - 2026-02-25
 
 ### Behoben
