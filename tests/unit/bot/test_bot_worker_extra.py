@@ -840,7 +840,9 @@ class TestExecuteTradeExtended:
             await worker._execute_trade(signal, mock_client, demo_mode=True)
 
         # Verify leverage 10 was used
-        mock_client.set_leverage.assert_awaited_with("BTCUSDT", 10)
+        mock_client.set_leverage.assert_awaited_once()
+        args, kwargs = mock_client.set_leverage.call_args
+        assert args == ("BTCUSDT", 10)
 
     async def test_per_asset_tp_sl_override_long(self):
         """Per-asset TP/SL overrides for long direction."""

@@ -453,7 +453,8 @@ class TestCalculateTargets:
 
     def test_long_targets(self):
         """LONG: TP above entry, SL below entry."""
-        tp, sl = self.strategy._calculate_targets(SignalDirection.LONG, 100000.0)
+        strategy = EdgeIndicatorStrategy(params={"take_profit_percent": 3.0, "stop_loss_percent": 1.5})
+        tp, sl = strategy._calculate_targets(SignalDirection.LONG, 100000.0)
 
         assert tp == 103000.0  # 100000 * 1.03
         assert sl == 98500.0   # 100000 * 0.985
@@ -462,7 +463,8 @@ class TestCalculateTargets:
 
     def test_short_targets(self):
         """SHORT: TP below entry, SL above entry."""
-        tp, sl = self.strategy._calculate_targets(SignalDirection.SHORT, 100000.0)
+        strategy = EdgeIndicatorStrategy(params={"take_profit_percent": 3.0, "stop_loss_percent": 1.5})
+        tp, sl = strategy._calculate_targets(SignalDirection.SHORT, 100000.0)
 
         assert tp == 97000.0   # 100000 * 0.97
         assert sl == 101500.0  # 100000 * 1.015
@@ -706,7 +708,8 @@ class TestSchemaAndDescription:
             assert "type" in entry, f"{key} missing 'type'"
             assert "label" in entry, f"{key} missing 'label'"
             assert "description" in entry, f"{key} missing 'description'"
-            assert "default" in entry, f"{key} missing 'default'"
+            if key not in ("take_profit_percent", "stop_loss_percent"):
+                assert "default" in entry, f"{key} missing 'default'"
 
     def test_min_confidence_bounds(self):
         """min_confidence should have min=10, max=80, default=40."""
@@ -778,7 +781,7 @@ class TestDefaults:
             "macd_fast", "macd_slow", "macd_signal",
             "rsi_period", "rsi_smooth_period",
             "momentum_smooth_period", "momentum_bull_threshold", "momentum_bear_threshold",
-            "min_confidence", "take_profit_percent", "stop_loss_percent",
+            "min_confidence",
             "kline_interval", "kline_count",
         ]
 

@@ -30,7 +30,7 @@ class TestLeverageAnalysis:
 
     def setup_method(self):
         """Set up test fixtures."""
-        self.strategy = LiquidationHunterStrategy(data_fetcher=None)
+        self.strategy = LiquidationHunterStrategy(params={"take_profit_percent": 4.0, "stop_loss_percent": 1.5}, data_fetcher=None)
 
     def test_crowded_longs_signals_short(self):
         """When L/S ratio > 2.5 (default threshold), signal should be SHORT."""
@@ -76,7 +76,7 @@ class TestSentimentAnalysis:
 
     def setup_method(self):
         """Set up test fixtures."""
-        self.strategy = LiquidationHunterStrategy(data_fetcher=None)
+        self.strategy = LiquidationHunterStrategy(params={"take_profit_percent": 4.0, "stop_loss_percent": 1.5}, data_fetcher=None)
 
     def test_extreme_greed_signals_short(self):
         """Fear & Greed > 80 (default threshold) should signal SHORT."""
@@ -128,7 +128,7 @@ class TestFundingRateAnalysis:
 
     def setup_method(self):
         """Set up test fixtures."""
-        self.strategy = LiquidationHunterStrategy(data_fetcher=None)
+        self.strategy = LiquidationHunterStrategy(params={"take_profit_percent": 4.0, "stop_loss_percent": 1.5}, data_fetcher=None)
 
     def test_high_funding_strengthens_short(self):
         """High funding rate should strengthen SHORT signal."""
@@ -179,7 +179,7 @@ class TestTargetCalculation:
 
     def setup_method(self):
         """Set up test fixtures."""
-        self.strategy = LiquidationHunterStrategy(data_fetcher=None)
+        self.strategy = LiquidationHunterStrategy(params={"take_profit_percent": 4.0, "stop_loss_percent": 1.5}, data_fetcher=None)
 
     def test_long_targets_calculated_correctly(self):
         """LONG targets: TP above entry, SL below entry."""
@@ -295,10 +295,13 @@ class TestSignalGeneration:
 
     @pytest.mark.asyncio
     async def test_signal_has_valid_targets(
-        self, strategy_with_mock_fetcher, crowded_longs_extreme_greed
+        self, mock_data_fetcher, crowded_longs_extreme_greed
     ):
         """Generated signal should have valid TP and SL targets."""
-        strategy = strategy_with_mock_fetcher
+        strategy = LiquidationHunterStrategy(
+            params={"take_profit_percent": 4.0, "stop_loss_percent": 1.5},
+            data_fetcher=mock_data_fetcher,
+        )
         strategy.data_fetcher.fetch_all_metrics = AsyncMock(
             return_value=crowded_longs_extreme_greed
         )

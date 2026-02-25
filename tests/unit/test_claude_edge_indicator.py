@@ -133,8 +133,6 @@ class TestClaudeEdgeInit:
     def test_default_params_applied(self):
         strategy = ClaudeEdgeIndicatorStrategy()
         assert strategy._p["ema_fast_period"] == 8
-        assert strategy._p["atr_tp_multiplier"] == 2.5
-        assert strategy._p["atr_sl_multiplier"] == 1.5
         assert strategy._p["volume_weight"] == 0.3
         assert strategy._p["trailing_stop_enabled"] is True
         assert strategy._p["use_htf_filter"] is True
@@ -209,7 +207,7 @@ class TestCalculateEmaRibbon:
 
 class TestCalculateTargets:
     def setup_method(self):
-        self.strategy = ClaudeEdgeIndicatorStrategy()
+        self.strategy = ClaudeEdgeIndicatorStrategy(params={"atr_tp_multiplier": 2.5, "atr_sl_multiplier": 1.5})
 
     def test_long_targets_with_klines(self):
         """LONG: TP above entry, SL below entry using ATR."""
@@ -644,7 +642,8 @@ class TestSchemaAndDescription:
             assert "type" in entry, f"{key} missing 'type'"
             assert "label" in entry, f"{key} missing 'label'"
             assert "description" in entry, f"{key} missing 'description'"
-            assert "default" in entry, f"{key} missing 'default'"
+            if key not in ("atr_tp_multiplier", "atr_sl_multiplier"):
+                assert "default" in entry, f"{key} missing 'default'"
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -686,8 +685,6 @@ class TestRegistration:
 class TestDefaults:
     def test_has_atr_keys(self):
         assert "atr_period" in DEFAULTS
-        assert "atr_tp_multiplier" in DEFAULTS
-        assert "atr_sl_multiplier" in DEFAULTS
 
     def test_has_volume_keys(self):
         assert "volume_weight" in DEFAULTS

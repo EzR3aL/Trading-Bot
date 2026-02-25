@@ -828,7 +828,8 @@ class TestCalculateTargets:
 
     def test_long_targets(self):
         """LONG: TP above entry, SL below entry."""
-        tp, sl = self.strategy._calculate_targets(SignalDirection.LONG, 100000.0)
+        strategy = SentimentSurferStrategy(params={"take_profit_percent": 3.5, "stop_loss_percent": 1.5})
+        tp, sl = strategy._calculate_targets(SignalDirection.LONG, 100000.0)
 
         # TP = 100000 * 1.035 = 103500
         # SL = 100000 * 0.985 = 98500
@@ -839,7 +840,8 @@ class TestCalculateTargets:
 
     def test_short_targets(self):
         """SHORT: TP below entry, SL above entry."""
-        tp, sl = self.strategy._calculate_targets(SignalDirection.SHORT, 100000.0)
+        strategy = SentimentSurferStrategy(params={"take_profit_percent": 3.5, "stop_loss_percent": 1.5})
+        tp, sl = strategy._calculate_targets(SignalDirection.SHORT, 100000.0)
 
         # TP = 100000 * 0.965 = 96500
         # SL = 100000 * 1.015 = 101500
@@ -862,7 +864,8 @@ class TestCalculateTargets:
 
     def test_targets_are_rounded(self):
         """Results should be rounded to 2 decimal places."""
-        tp, sl = self.strategy._calculate_targets(SignalDirection.LONG, 33333.33)
+        strategy = SentimentSurferStrategy(params={"take_profit_percent": 3.5, "stop_loss_percent": 1.5})
+        tp, sl = strategy._calculate_targets(SignalDirection.LONG, 33333.33)
 
         # Ensure both are rounded to 2 decimal places
         assert tp == round(tp, 2)
@@ -1396,7 +1399,6 @@ class TestDefaults:
             "weight_news", "weight_fear_greed", "weight_vwap",
             "weight_supertrend", "weight_volume", "weight_momentum",
             "min_agreement", "min_confidence",
-            "take_profit_percent", "stop_loss_percent",
         ]
 
         for key in expected_keys:
@@ -1408,5 +1410,3 @@ class TestDefaults:
         assert DEFAULTS["fear_greed_extreme_greed"] == 75
         assert DEFAULTS["min_agreement"] == 3
         assert DEFAULTS["min_confidence"] == 40
-        assert DEFAULTS["take_profit_percent"] == 3.5
-        assert DEFAULTS["stop_loss_percent"] == 1.5
