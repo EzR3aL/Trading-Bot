@@ -177,8 +177,6 @@ class WeexClient(ExchangeClient):
                 timeout=aiohttp.ClientTimeout(total=15),
             ) as response:
                 result = await response.json()
-                code = result.get("code")
-                logger.debug(f"Weex {method} {endpoint}: status={response.status} code={code}")
 
                 if response.status == 429:
                     raise aiohttp.ClientResponseError(
@@ -186,7 +184,18 @@ class WeexClient(ExchangeClient):
                         status=429, message="Rate limited",
                     )
 
-                # Some endpoints (ticker, time) return raw data without code wrapper
+                # Some endpoints return raw list/data without {code, data} wrapper
+                if not isinstance(result, dict):
+                    if response.status == 200:
+                        return result
+                    raise WeexClientError(
+                        f"Weex API Error: unexpected response (status={response.status})"
+                    )
+
+                code = result.get("code")
+                logger.debug(f"Weex {method} {endpoint}: status={response.status} code={code}")
+
+                # Some endpoints return dict without code wrapper
                 if code is None and response.status == 200:
                     return result
 
