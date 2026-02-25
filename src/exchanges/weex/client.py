@@ -120,7 +120,7 @@ class WeexClient(ExchangeClient):
                      body: str = "") -> Dict[str, str]:
         timestamp = str(int(time.time() * 1000))
         signature = self._generate_signature(timestamp, method, request_path, body)
-        return {
+        headers = {
             "ACCESS-KEY": self.api_key,
             "ACCESS-SIGN": signature,
             "ACCESS-TIMESTAMP": timestamp,
@@ -128,6 +128,9 @@ class WeexClient(ExchangeClient):
             "Content-Type": "application/json",
             "locale": "en-US",
         }
+        if self.demo_mode:
+            headers["paptrading"] = "1"
+        return headers
 
     async def _request(
         self,
