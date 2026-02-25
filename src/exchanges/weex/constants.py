@@ -22,7 +22,7 @@ ENDPOINTS = {
     "set_leverage": "/capi/v2/account/leverage",
     "ticker": "/capi/v2/market/ticker",
     "contracts": "/capi/v2/market/contracts",
-    "funding_rate": "/capi/v2/market/fundingRate",
+    "funding_rate": "/capi/v2/market/funding_rate",
     "candles": "/capi/v2/market/candles",
     "open_interest": "/capi/v2/market/open_interest",
     "place_order": "/capi/v2/order/placeOrder",

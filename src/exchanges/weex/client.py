@@ -359,16 +359,19 @@ class WeexClient(ExchangeClient):
         )
 
     async def get_funding_rate(self, symbol: str) -> FundingRateInfo:
-        api_symbol = self._to_api_symbol(symbol)
-        data = await self._request("GET", ENDPOINTS["funding_rate"], params={
-            "symbol": api_symbol,
-        }, auth=False)
+        data = await self._request("GET", ENDPOINTS["funding_rate"], auth=False)
+        # Response is a list of all rates; match by baseCurrency (e.g. "BTC_USDT")
+        base = symbol.replace("USDT", "")
+        target_currency = f"{base}_USDT"
+        rate = 0.0
         if isinstance(data, list):
-            data = data[0] if data else {}
-        return FundingRateInfo(
-            symbol=symbol,
-            current_rate=float(data.get("fundingRate", data.get("funding_rate", data.get("fundingrate", 0)))),
-        )
+            for item in data:
+                if item.get("baseCurrency", "") == target_currency:
+                    rate = float(item.get("fundingRate", 0))
+                    break
+        elif isinstance(data, dict):
+            rate = float(data.get("fundingRate", 0))
+        return FundingRateInfo(symbol=symbol, current_rate=rate)
 
     # ── Affiliate ──────────────────────────────────────────────────
 

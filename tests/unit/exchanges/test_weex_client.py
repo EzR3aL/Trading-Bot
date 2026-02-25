@@ -985,11 +985,14 @@ class TestGetTicker:
 # ---------------------------------------------------------------------------
 
 class TestGetFundingRate:
-    async def test_get_funding_rate_from_dict(self, client, mock_session):
-        # Arrange
+    async def test_get_funding_rate_finds_matching_currency(self, client, mock_session):
+        # Arrange - Weex returns list of all funding rates with baseCurrency
         client._session = mock_session
         mock_session.request = MagicMock(
-            return_value=_make_api_response({"fundingRate": "0.0001"})
+            return_value=_make_api_response([
+                {"baseCurrency": "BTC_USDT", "fundingRate": "0.0001"},
+                {"baseCurrency": "ETH_USDT", "fundingRate": "0.0003"},
+            ])
         )
 
         # Act
@@ -1000,11 +1003,14 @@ class TestGetFundingRate:
         assert rate.symbol == "BTCUSDT"
         assert rate.current_rate == 0.0001
 
-    async def test_get_funding_rate_from_list(self, client, mock_session):
+    async def test_get_funding_rate_matches_eth(self, client, mock_session):
         # Arrange
         client._session = mock_session
         mock_session.request = MagicMock(
-            return_value=_make_api_response([{"fundingRate": "-0.0005"}])
+            return_value=_make_api_response([
+                {"baseCurrency": "BTC_USDT", "fundingRate": "0.0001"},
+                {"baseCurrency": "ETH_USDT", "fundingRate": "-0.0005"},
+            ])
         )
 
         # Act
@@ -1030,7 +1036,9 @@ class TestGetFundingRate:
         # Arrange
         client._session = mock_session
         mock_session.request = MagicMock(
-            return_value=_make_api_response({"fundingRate": "0.0001"})
+            return_value=_make_api_response([
+                {"baseCurrency": "BTC_USDT", "fundingRate": "0.0001"},
+            ])
         )
 
         # Act
