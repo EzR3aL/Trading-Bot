@@ -844,8 +844,8 @@ class TestExecuteTradeExtended:
         args, kwargs = mock_client.set_leverage.call_args
         assert args == ("BTCUSDT", 10)
 
-    async def test_per_asset_tp_sl_override_long(self):
-        """Per-asset TP/SL overrides for long direction."""
+    async def test_tp_sl_always_cleared_for_exchange_orders(self):
+        """TP/SL from strategy or per-asset config must NOT be sent to exchange."""
         worker = BotWorker(bot_config_id=1)
         per_asset = json.dumps({"BTCUSDT": {"tp": 5, "sl": 2}})
         worker._config = _make_mock_config(per_asset_config=per_asset)
@@ -861,44 +861,22 @@ class TestExecuteTradeExtended:
         mock_rm.calculate_position_size.return_value = (1000.0, 0.01)
         worker._risk_manager = mock_rm
 
+        # Signal comes in with TP/SL set by strategy
         signal = _make_mock_signal(direction=SignalDirection.LONG, entry_price=100000.0)
+        signal.target_price = 105000.0
+        signal.stop_loss = 98000.0
 
         mock_session = _make_db_session()
         with patch("src.bot.trade_executor.get_session", return_value=_mock_session_ctx(mock_session)):
             await worker._execute_trade(signal, mock_client, demo_mode=True)
 
-        # Long: TP = entry * (1 + 5/100) = 105000
-        assert signal.target_price == 105000.0
-        # Long: SL = entry * (1 - 2/100) = 98000
-        assert signal.stop_loss == 98000.0
-
-    async def test_per_asset_tp_sl_override_short(self):
-        """Per-asset TP/SL overrides for short direction."""
-        worker = BotWorker(bot_config_id=1)
-        per_asset = json.dumps({"BTCUSDT": {"tp": 5, "sl": 2}})
-        worker._config = _make_mock_config(per_asset_config=per_asset)
-        worker._get_notifiers = AsyncMock(return_value=[])
-
-        mock_client = AsyncMock()
-        mock_client.get_account_balance.return_value = _make_mock_balance()
-        mock_client.place_market_order.return_value = _make_mock_order()
-        mock_client.get_fill_price.return_value = 95100.0
-
-        mock_rm = MagicMock()
-        mock_rm.can_trade.return_value = (True, "")
-        mock_rm.calculate_position_size.return_value = (1000.0, 0.01)
-        worker._risk_manager = mock_rm
-
-        signal = _make_mock_signal(direction=SignalDirection.SHORT, entry_price=100000.0)
-
-        mock_session = _make_db_session()
-        with patch("src.bot.trade_executor.get_session", return_value=_mock_session_ctx(mock_session)):
-            await worker._execute_trade(signal, mock_client, demo_mode=True)
-
-        # Short: TP = entry * (1 - 5/100) = 95000
-        assert signal.target_price == 95000.0
-        # Short: SL = entry * (1 + 2/100) = 102000
-        assert signal.stop_loss == 102000.0
+        # TP/SL must be cleared — exit strategy handles this, not exchange orders
+        assert signal.target_price is None
+        assert signal.stop_loss is None
+        # Verify None was passed to place_market_order
+        call_kwargs = mock_client.place_market_order.call_args[1]
+        assert call_kwargs["take_profit"] is None
+        assert call_kwargs["stop_loss"] is None
 
     async def test_asset_budget_full_budget_mode(self):
         """When asset_budget is set and position_size_percent is None, use full budget."""

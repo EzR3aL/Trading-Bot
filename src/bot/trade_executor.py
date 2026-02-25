@@ -39,19 +39,10 @@ class TradeExecutorMixin:
         # Resolve leverage: per-asset > global > 1x
         leverage = asset_cfg.get("leverage") or self._config.leverage or 1
 
-        # Apply per-asset TP/SL overrides to signal
-        asset_tp = asset_cfg.get("tp")
-        asset_sl = asset_cfg.get("sl")
-        if asset_tp is not None and signal.entry_price > 0:
-            if signal.direction.value == "long":
-                signal.target_price = round(signal.entry_price * (1 + asset_tp / 100), 2)
-            else:
-                signal.target_price = round(signal.entry_price * (1 - asset_tp / 100), 2)
-        if asset_sl is not None and signal.entry_price > 0:
-            if signal.direction.value == "long":
-                signal.stop_loss = round(signal.entry_price * (1 - asset_sl / 100), 2)
-            else:
-                signal.stop_loss = round(signal.entry_price * (1 + asset_sl / 100), 2)
+        # TP/SL are handled by the strategy's exit logic, not by exchange orders.
+        # Clear any strategy-calculated TP/SL so they are NOT sent to the exchange.
+        signal.target_price = None
+        signal.stop_loss = None
 
         try:
             # Validate entry price before any calculations
