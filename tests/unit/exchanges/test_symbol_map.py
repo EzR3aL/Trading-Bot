@@ -13,8 +13,8 @@ class TestNormalizeSymbol:
         assert normalize_symbol("BTCUSDT", "bitget") == "BTC"
 
     def test_normalize_symbol_weex(self):
-        """Weex's 'BTC/USDT:USDT' normalizes to 'BTC'."""
-        assert normalize_symbol("BTC/USDT:USDT", "weex") == "BTC"
+        """Weex's 'BTCUSDT' normalizes to 'BTC'."""
+        assert normalize_symbol("BTCUSDT", "weex") == "BTC"
 
     def test_normalize_symbol_hyperliquid(self):
         """Hyperliquid's 'BTC' normalizes to 'BTC'."""
@@ -31,8 +31,8 @@ class TestToExchangeSymbol:
         assert to_exchange_symbol("BTC", "bitget") == "BTCUSDT"
 
     def test_to_exchange_symbol_weex(self):
-        """'BTC' converts to 'BTC/USDT:USDT' for Weex."""
-        assert to_exchange_symbol("BTC", "weex") == "BTC/USDT:USDT"
+        """'BTC' converts to 'BTCUSDT' for Weex."""
+        assert to_exchange_symbol("BTC", "weex") == "BTCUSDT"
 
     def test_to_exchange_symbol_hyperliquid(self):
         """'BTC' converts to 'BTC' for Hyperliquid."""

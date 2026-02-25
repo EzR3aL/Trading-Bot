@@ -1,8 +1,11 @@
 """
 Weex Exchange Client implementing ExchangeClient ABC.
 
-Weex API is similar to Bitget with HMAC-SHA256 auth.
-Uses ccxt-compatible symbol format (e.g. BTC/USDT:USDT).
+Weex API uses /capi/v2/ endpoints on api-contract.weex.com.
+Demo mode uses the same URL but different symbol names:
+  Live:  cmt_btcusdt   (BTC-USDT)
+  Demo:  cmt_btcsusdt  (BTC-SUSDT)
+Auth: HMAC-SHA256 + Base64 (same algorithm as Bitget).
 """
 
 import base64
@@ -10,6 +13,7 @@ import hashlib
 import hmac
 import json
 import time
+import uuid
 from typing import Any, Dict, List, Optional
 
 import asyncio
@@ -19,7 +23,17 @@ import aiohttp
 from src.exceptions import ExchangeError
 from src.exchanges.base import ExchangeClient
 from src.exchanges.types import Balance, FundingRateInfo, Order, Position, Ticker
-from src.exchanges.weex.constants import BASE_URL, SUCCESS_CODE, TESTNET_URL
+from src.exchanges.weex.constants import (
+    BASE_URL,
+    ENDPOINTS,
+    MARGIN_CROSS,
+    MARGIN_ISOLATED,
+    ORDER_TYPE_CLOSE_LONG,
+    ORDER_TYPE_CLOSE_SHORT,
+    ORDER_TYPE_OPEN_LONG,
+    ORDER_TYPE_OPEN_SHORT,
+    SUCCESS_CODE,
+)
 from src.utils.circuit_breaker import CircuitBreakerError, circuit_registry, with_retry
 from src.utils.logger import get_logger
 
@@ -47,7 +61,7 @@ class WeexClient(ExchangeClient):
         **kwargs,
     ):
         super().__init__(api_key, api_secret, passphrase, demo_mode)
-        self.base_url = TESTNET_URL if demo_mode else BASE_URL
+        self.base_url = BASE_URL
         self._session: Optional[aiohttp.ClientSession] = None
         logger.info(f"WeexClient initialized ({'DEMO' if demo_mode else 'LIVE'} mode)")
 
@@ -58,6 +72,36 @@ class WeexClient(ExchangeClient):
     @property
     def supports_demo(self) -> bool:
         return True
+
+    # ── Symbol transformation ──────────────────────────────────────
+
+    def _to_api_symbol(self, symbol: str) -> str:
+        """Convert DB symbol (BTCUSDT) to Weex API format.
+
+        Live:  BTCUSDT -> cmt_btcusdt
+        Demo:  BTCUSDT -> cmt_btcsusdt
+        """
+        base = symbol.replace("USDT", "").lower()
+        if self.demo_mode:
+            return f"cmt_{base}susdt"
+        return f"cmt_{base}usdt"
+
+    def _from_api_symbol(self, api_symbol: str) -> str:
+        """Convert Weex API symbol back to DB format.
+
+        cmt_btcusdt  -> BTCUSDT
+        cmt_btcsusdt -> BTCUSDT
+        """
+        s = api_symbol.replace("cmt_", "")
+        if s.endswith("susdt"):
+            base = s[:-5]
+        elif s.endswith("usdt"):
+            base = s[:-4]
+        else:
+            base = s
+        return f"{base.upper()}USDT"
+
+    # ── HTTP plumbing ──────────────────────────────────────────────
 
     async def _ensure_session(self):
         if self._session is None or self._session.closed:
@@ -87,6 +131,7 @@ class WeexClient(ExchangeClient):
             "ACCESS-TIMESTAMP": timestamp,
             "ACCESS-PASSPHRASE": self.passphrase,
             "Content-Type": "application/json",
+            "locale": "en-US",
         }
 
     async def _request(
@@ -137,6 +182,7 @@ class WeexClient(ExchangeClient):
                 timeout=aiohttp.ClientTimeout(total=15),
             ) as response:
                 result = await response.json()
+                logger.debug(f"Weex {method} {endpoint}: status={response.status} code={result.get('code')}")
 
                 if response.status == 429:
                     raise aiohttp.ClientResponseError(
@@ -144,24 +190,39 @@ class WeexClient(ExchangeClient):
                         status=429, message="Rate limited",
                     )
 
-                if response.status != 200 or result.get("code") != SUCCESS_CODE:
-                    raise WeexClientError(f"Weex API Error: {result.get('msg', 'Unknown')}")
+                if response.status != 200 or str(result.get("code")) != SUCCESS_CODE:
+                    msg = result.get("msg", result.get("message", "Unknown"))
+                    raise WeexClientError(
+                        f"Weex API Error: {msg} (code={result.get('code')}, status={response.status})"
+                    )
                 return result.get("data", result)
 
         except (aiohttp.ClientError, asyncio.TimeoutError):
             raise
 
+    # ── Account ────────────────────────────────────────────────────
+
     async def get_account_balance(self) -> Balance:
-        data = await self._request("GET", "/api/v2/mix/account/account", params={
-            "symbol": "BTCUSDT", "productType": "USDT-FUTURES", "marginCoin": "USDT",
-        })
+        data = await self._request("GET", ENDPOINTS["account_assets"])
         if isinstance(data, list):
-            data = data[0] if data else {}
+            for item in data:
+                coin = item.get("coinName", "").upper()
+                if coin in ("USDT", "SUSDT"):
+                    return Balance(
+                        total=float(item.get("equity", 0)),
+                        available=float(item.get("available", 0)),
+                        unrealized_pnl=float(item.get("unrealizePnl", 0)),
+                    )
+            item = data[0] if data else {}
+        else:
+            item = data
         return Balance(
-            total=float(data.get("accountEquity", 0)),
-            available=float(data.get("available", 0)),
-            unrealized_pnl=float(data.get("unrealizedPL", 0)),
+            total=float(item.get("equity", item.get("accountEquity", 0))),
+            available=float(item.get("available", 0)),
+            unrealized_pnl=float(item.get("unrealizePnl", item.get("unrealizedPL", 0))),
         )
+
+    # ── Orders ─────────────────────────────────────────────────────
 
     async def place_market_order(
         self, symbol: str, side: str, size: float, leverage: int,
@@ -169,22 +230,27 @@ class WeexClient(ExchangeClient):
         margin_mode: str = "cross",
     ) -> Order:
         await self.set_leverage(symbol, leverage, margin_mode=margin_mode)
-        api_margin = "crossed" if margin_mode == "cross" else "isolated"
-        order_side = "buy" if side == "long" else "sell"
+        api_symbol = self._to_api_symbol(symbol)
+        margin = MARGIN_CROSS if margin_mode == "cross" else MARGIN_ISOLATED
+        order_type = ORDER_TYPE_OPEN_LONG if side == "long" else ORDER_TYPE_OPEN_SHORT
+
         data = {
-            "symbol": symbol, "productType": "USDT-FUTURES",
-            "marginMode": api_margin, "marginCoin": "USDT",
-            "side": order_side, "tradeSide": "open",
-            "orderType": "market", "size": str(size),
+            "symbol": api_symbol,
+            "client_oid": uuid.uuid4().hex[:32],
+            "size": str(size),
+            "type": order_type,
+            "order_type": "0",
+            "match_price": "1",
+            "marginMode": margin,
         }
         if take_profit is not None:
-            data["presetStopSurplusPrice"] = str(take_profit)
+            data["presetTakeProfitPrice"] = str(take_profit)
         if stop_loss is not None:
             data["presetStopLossPrice"] = str(stop_loss)
 
-        result = await self._request("POST", "/api/v2/mix/order/place-order", data=data)
+        result = await self._request("POST", ENDPOINTS["place_order"], data=data)
         return Order(
-            order_id=str(result.get("orderId", "")),
+            order_id=str(result.get("orderId", result.get("order_id", ""))),
             symbol=symbol, side=side, size=size, price=0.0,
             status="filled", exchange="weex", leverage=leverage,
             take_profit=take_profit, stop_loss=stop_loss,
@@ -192,93 +258,122 @@ class WeexClient(ExchangeClient):
 
     async def cancel_order(self, symbol: str, order_id: str) -> bool:
         try:
-            await self._request("POST", "/api/v2/mix/order/cancel-order", data={
-                "symbol": symbol, "productType": "USDT-FUTURES", "orderId": order_id,
+            await self._request("POST", ENDPOINTS["cancel_order"], data={
+                "orderId": order_id,
             })
             return True
         except WeexClientError:
             return False
 
     async def close_position(self, symbol: str, side: str, margin_mode: str = "cross") -> Optional[Order]:
+        """Close position using flash-close endpoint."""
         pos = await self.get_position(symbol)
         if not pos:
             return None
-        api_margin = "crossed" if margin_mode == "cross" else "isolated"
-        order_side = "sell" if side == "long" else "buy"
-        data = {
-            "symbol": symbol, "productType": "USDT-FUTURES",
-            "marginMode": api_margin, "marginCoin": "USDT",
-            "side": order_side, "tradeSide": "close",
-            "orderType": "market", "size": str(pos.size),
-        }
-        result = await self._request("POST", "/api/v2/mix/order/place-order", data=data)
+        api_symbol = self._to_api_symbol(symbol)
+        result = await self._request("POST", ENDPOINTS["close_positions"], data={
+            "symbol": api_symbol,
+        })
+        order_id = ""
+        if isinstance(result, dict):
+            order_id = str(result.get("orderId", result.get("order_id", "")))
+        elif isinstance(result, list) and result:
+            order_id = str(result[0].get("orderId", result[0].get("order_id", "")))
         return Order(
-            order_id=str(result.get("orderId", "")),
-            symbol=symbol, side=side, size=pos.size,
-            price=0.0, status="filled", exchange="weex",
+            order_id=order_id, symbol=symbol, side=side,
+            size=pos.size, price=0.0, status="filled", exchange="weex",
+        )
+
+    # ── Positions ──────────────────────────────────────────────────
+
+    def _parse_position(self, pos: Dict, fallback_symbol: str = "") -> Optional[Position]:
+        """Parse a single position dict from Weex API response."""
+        total = float(pos.get("hold_amount", pos.get("holdAmount", pos.get("total", 0))))
+        if total <= 0:
+            return None
+        raw_side = str(pos.get("side", pos.get("holdSide", "long")))
+        hold_side = "long" if raw_side in ("1", "long") else "short"
+        api_sym = pos.get("symbol", "")
+        db_symbol = self._from_api_symbol(api_sym) if api_sym else fallback_symbol
+        return Position(
+            symbol=db_symbol, side=hold_side, size=total,
+            entry_price=float(pos.get("cost_open", pos.get("averageOpenPrice", pos.get("openPriceAvg", 0)))),
+            current_price=float(pos.get("markPrice", pos.get("mark_price", 0))),
+            unrealized_pnl=float(pos.get("profit_unreal", pos.get("unrealizedPnl", pos.get("unrealizedPL", 0)))),
+            leverage=int(float(pos.get("leverage", 1))),
+            exchange="weex",
         )
 
     async def get_position(self, symbol: str) -> Optional[Position]:
-        data = await self._request("GET", "/api/v2/mix/position/single-position", params={
-            "symbol": symbol, "productType": "USDT-FUTURES", "marginCoin": "USDT",
+        api_symbol = self._to_api_symbol(symbol)
+        data = await self._request("GET", ENDPOINTS["single_position"], params={
+            "symbol": api_symbol,
         })
         positions = data if isinstance(data, list) else [data] if data else []
         for pos in positions:
-            total = float(pos.get("total", 0))
-            if total > 0:
-                return Position(
-                    symbol=symbol, side=pos.get("holdSide", "long"), size=total,
-                    entry_price=float(pos.get("openPriceAvg", 0)),
-                    current_price=float(pos.get("markPrice", 0)),
-                    unrealized_pnl=float(pos.get("unrealizedPL", 0)),
-                    leverage=int(pos.get("leverage", 1)), exchange="weex",
-                )
+            result = self._parse_position(pos, fallback_symbol=symbol)
+            if result:
+                return result
         return None
 
     async def get_open_positions(self) -> List[Position]:
-        data = await self._request("GET", "/api/v2/mix/position/all-position", params={
-            "productType": "USDT-FUTURES", "marginCoin": "USDT",
-        })
+        data = await self._request("GET", ENDPOINTS["all_positions"])
         positions = []
         for pos in (data if isinstance(data, list) else []):
-            total = float(pos.get("total", 0))
-            if total > 0:
-                positions.append(Position(
-                    symbol=pos.get("symbol", ""), side=pos.get("holdSide", "long"),
-                    size=total, entry_price=float(pos.get("openPriceAvg", 0)),
-                    current_price=float(pos.get("markPrice", 0)),
-                    unrealized_pnl=float(pos.get("unrealizedPL", 0)),
-                    leverage=int(pos.get("leverage", 1)), exchange="weex",
-                ))
+            result = self._parse_position(pos)
+            if result:
+                positions.append(result)
         return positions
 
+    # ── Leverage ───────────────────────────────────────────────────
+
     async def set_leverage(self, symbol: str, leverage: int, margin_mode: str = "cross") -> bool:
-        for hold_side in ("long", "short"):
-            try:
-                await self._request("POST", "/api/v2/mix/account/set-leverage", data={
-                    "symbol": symbol, "productType": "USDT-FUTURES",
-                    "marginCoin": "USDT", "leverage": str(leverage), "holdSide": hold_side,
-                })
-            except WeexClientError:
-                pass
+        api_symbol = self._to_api_symbol(symbol)
+        margin = MARGIN_CROSS if margin_mode == "cross" else MARGIN_ISOLATED
+        try:
+            await self._request("POST", ENDPOINTS["set_leverage"], data={
+                "symbol": api_symbol,
+                "marginMode": margin,
+                "longLeverage": str(leverage),
+                "shortLeverage": str(leverage),
+            })
+        except WeexClientError:
+            pass
         return True
 
+    # ── Market data ────────────────────────────────────────────────
+
     async def get_ticker(self, symbol: str) -> Ticker:
-        data = await self._request("GET", "/api/v2/mix/market/ticker", params={
-            "symbol": symbol, "productType": "USDT-FUTURES",
+        api_symbol = self._to_api_symbol(symbol)
+        data = await self._request("GET", ENDPOINTS["ticker"], params={
+            "symbol": api_symbol,
         }, auth=False)
         if isinstance(data, list):
             data = data[0] if data else {}
         return Ticker(
             symbol=symbol,
-            last_price=float(data.get("lastPr", 0)),
-            bid=float(data.get("bidPr", 0)),
-            ask=float(data.get("askPr", 0)),
-            volume_24h=float(data.get("baseVolume", 0)),
+            last_price=float(data.get("last", data.get("lastPr", 0))),
+            bid=float(data.get("best_bid", data.get("bidPr", 0))),
+            ask=float(data.get("best_ask", data.get("askPr", 0))),
+            volume_24h=float(data.get("volume_24h", data.get("baseVolume", data.get("base_volume", 0)))),
         )
 
+    async def get_funding_rate(self, symbol: str) -> FundingRateInfo:
+        api_symbol = self._to_api_symbol(symbol)
+        data = await self._request("GET", ENDPOINTS["funding_rate"], params={
+            "symbol": api_symbol,
+        }, auth=False)
+        if isinstance(data, list):
+            data = data[0] if data else {}
+        return FundingRateInfo(
+            symbol=symbol,
+            current_rate=float(data.get("fundingRate", data.get("funding_rate", 0))),
+        )
+
+    # ── Affiliate ──────────────────────────────────────────────────
+
     async def check_affiliate_uid(self, uid: str) -> bool:
-        """Check if a UID is in our affiliate referral list via Weex Rebate API."""
+        """Check if a UID is in our affiliate referral list."""
         try:
             result = await self._request(
                 "GET",
@@ -291,17 +386,5 @@ class WeexClient(ExchangeClient):
                     return True
             return False
         except Exception as e:
-            from src.utils.logger import get_logger
-            get_logger(__name__).warning(f"Affiliate UID check failed for {uid}: {e}")
+            logger.warning(f"Affiliate UID check failed for {uid}: {e}")
             return False
-
-    async def get_funding_rate(self, symbol: str) -> FundingRateInfo:
-        data = await self._request("GET", "/api/v2/mix/market/current-fund-rate", params={
-            "symbol": symbol, "productType": "USDT-FUTURES",
-        }, auth=False)
-        if isinstance(data, list):
-            data = data[0] if data else {}
-        return FundingRateInfo(
-            symbol=symbol,
-            current_rate=float(data.get("fundingRate", 0)),
-        )

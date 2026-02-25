@@ -14,7 +14,7 @@ import aiohttp
 import pytest
 
 from src.exchanges.weex.client import WeexClient, WeexClientError
-from src.exchanges.weex.constants import BASE_URL, SUCCESS_CODE, TESTNET_URL
+from src.exchanges.weex.constants import BASE_URL, ENDPOINTS, SUCCESS_CODE
 from src.exchanges.types import Balance, FundingRateInfo, Order, Position, Ticker
 
 
@@ -85,10 +85,8 @@ def mock_session():
 # ---------------------------------------------------------------------------
 
 class TestWeexClientInit:
-    def test_init_demo_mode_uses_testnet_url(self, client):
-        # Arrange / Act - fixture creates the client
-        # Assert
-        assert client.base_url == TESTNET_URL
+    def test_init_demo_mode_uses_base_url(self, client):
+        assert client.base_url == BASE_URL
         assert client.demo_mode is True
         assert client.api_key == "test-api-key"
         assert client.api_secret == "test-api-secret"
@@ -143,12 +141,13 @@ class TestSignatureGeneration:
         assert len(sig) > 0
 
     def test_get_headers_returns_required_keys(self, client):
-        headers = client._get_headers("GET", "/api/v2/mix/market/ticker")
+        headers = client._get_headers("GET", "/capi/v2/market/ticker")
         assert headers["ACCESS-KEY"] == "test-api-key"
         assert headers["ACCESS-PASSPHRASE"] == "test-passphrase"
         assert headers["Content-Type"] == "application/json"
         assert "ACCESS-SIGN" in headers
         assert "ACCESS-TIMESTAMP" in headers
+        assert headers["locale"] == "en-US"
 
     def test_get_headers_timestamp_is_numeric_string(self, client):
         headers = client._get_headers("GET", "/path")
@@ -356,15 +355,16 @@ class TestRequest:
 # ---------------------------------------------------------------------------
 
 class TestGetAccountBalance:
-    async def test_returns_balance_from_dict(self, client, mock_session):
-        # Arrange
+    async def test_returns_balance_from_list_with_usdt(self, client, mock_session):
+        # Arrange - Weex returns list of coin balances
         client._session = mock_session
         mock_session.request = MagicMock(
-            return_value=_make_api_response({
-                "accountEquity": "1500.50",
+            return_value=_make_api_response([{
+                "coinName": "USDT",
+                "equity": "1500.50",
                 "available": "1200.00",
-                "unrealizedPL": "300.50",
-            })
+                "unrealizePnl": "300.50",
+            }])
         )
 
         # Act
@@ -376,14 +376,15 @@ class TestGetAccountBalance:
         assert balance.available == 1200.00
         assert balance.unrealized_pnl == 300.50
 
-    async def test_returns_balance_from_list(self, client, mock_session):
-        # Arrange - API returns a list
+    async def test_returns_balance_from_list_with_susdt(self, client, mock_session):
+        # Arrange - demo mode uses SUSDT
         client._session = mock_session
         mock_session.request = MagicMock(
             return_value=_make_api_response([{
-                "accountEquity": "2000",
-                "available": "1800",
-                "unrealizedPL": "200",
+                "coinName": "SUSDT",
+                "equity": "50000",
+                "available": "48000",
+                "unrealizePnl": "200",
             }])
         )
 
@@ -391,8 +392,8 @@ class TestGetAccountBalance:
         balance = await client.get_account_balance()
 
         # Assert
-        assert balance.total == 2000.0
-        assert balance.available == 1800.0
+        assert balance.total == 50000.0
+        assert balance.available == 48000.0
 
     async def test_returns_zero_balance_from_empty_list(self, client, mock_session):
         # Arrange
@@ -418,11 +419,10 @@ class TestPlaceMarketOrder:
     async def test_place_long_market_order(self, client, mock_session):
         # Arrange
         client._session = mock_session
-        # set_leverage calls _request twice (long, short), then place_order once
+        # set_leverage calls once, then place_order once
         call_count = 0
         responses = [
-            _make_api_response({}),  # set_leverage long
-            _make_api_response({}),  # set_leverage short
+            _make_api_response({}),  # set_leverage
             _make_api_response({"orderId": "ORD001"}),  # place order
         ]
 
@@ -454,7 +454,6 @@ class TestPlaceMarketOrder:
         client._session = mock_session
         responses = [
             _make_api_response({}),
-            _make_api_response({}),
             _make_api_response({"orderId": "ORD002"}),
         ]
         call_count = 0
@@ -480,7 +479,6 @@ class TestPlaceMarketOrder:
         # Arrange
         client._session = mock_session
         responses = [
-            _make_api_response({}),
             _make_api_response({}),
             _make_api_response({"orderId": "ORD003"}),
         ]
@@ -525,12 +523,11 @@ class TestPlaceMarketOrder:
 
         # Assert - the last POST should be the order placement
         order_body = captured_bodies[-1]
-        assert order_body["symbol"] == "BTCUSDT"
-        assert order_body["side"] == "buy"
-        assert order_body["tradeSide"] == "open"
-        assert order_body["orderType"] == "market"
+        assert order_body["symbol"] == "cmt_btcsusdt"  # demo mode
+        assert order_body["type"] == "1"  # Open Long
+        assert order_body["match_price"] == "1"  # Market
         assert order_body["size"] == "0.05"
-        assert order_body["presetStopSurplusPrice"] == "96000.0"
+        assert order_body["presetTakeProfitPrice"] == "96000.0"
         assert order_body["presetStopLossPrice"] == "93000.0"
 
 
@@ -698,14 +695,14 @@ class TestGetPosition:
 
 class TestGetOpenPositions:
     async def test_returns_list_of_positions(self, client, mock_session):
-        # Arrange
+        # Arrange - symbols come back in Weex API format (demo: cmt_btcsusdt)
         client._session = mock_session
         mock_session.request = MagicMock(
             return_value=_make_api_response([
-                {"symbol": "BTCUSDT", "total": "0.5", "holdSide": "long",
+                {"symbol": "cmt_btcsusdt", "total": "0.5", "holdSide": "long",
                  "openPriceAvg": "95000", "markPrice": "96000",
                  "unrealizedPL": "500", "leverage": "10"},
-                {"symbol": "ETHUSDT", "total": "2.0", "holdSide": "short",
+                {"symbol": "cmt_ethsusdt", "total": "2.0", "holdSide": "short",
                  "openPriceAvg": "3500", "markPrice": "3400",
                  "unrealizedPL": "200", "leverage": "5"},
             ])
@@ -725,10 +722,10 @@ class TestGetOpenPositions:
         client._session = mock_session
         mock_session.request = MagicMock(
             return_value=_make_api_response([
-                {"symbol": "BTCUSDT", "total": "0", "holdSide": "long",
+                {"symbol": "cmt_btcsusdt", "total": "0", "holdSide": "long",
                  "openPriceAvg": "0", "markPrice": "0",
                  "unrealizedPL": "0", "leverage": "1"},
-                {"symbol": "ETHUSDT", "total": "1.0", "holdSide": "short",
+                {"symbol": "cmt_ethsusdt", "total": "1.0", "holdSide": "short",
                  "openPriceAvg": "3500", "markPrice": "3400",
                  "unrealizedPL": "100", "leverage": "5"},
             ])
@@ -785,40 +782,19 @@ class TestSetLeverage:
 
         # Assert
         assert result is True
-        # Called twice: once for "long", once for "short"
-        assert mock_session.request.call_count == 2
+        assert mock_session.request.call_count == 1
 
-    async def test_set_leverage_continues_on_error(self, client, mock_session):
-        # Arrange - first call fails, second succeeds
-        client._session = mock_session
-        call_count = 0
-
-        def side_effect(*args, **kwargs):
-            nonlocal call_count
-            call_count += 1
-            if call_count == 1:
-                return _make_error_response(msg="Already set", code="40001")
-            return _make_api_response({})
-
-        mock_session.request = MagicMock(side_effect=side_effect)
-
-        # Act
-        result = await client.set_leverage("BTCUSDT", 10)
-
-        # Assert - should still return True even if one side fails
-        assert result is True
-
-    async def test_set_leverage_both_fail_still_returns_true(self, client, mock_session):
-        # Arrange - both calls fail
+    async def test_set_leverage_returns_true_on_error(self, client, mock_session):
+        # Arrange
         client._session = mock_session
         mock_session.request = MagicMock(
-            return_value=_make_error_response(msg="Error", code="50000")
+            return_value=_make_error_response(msg="Already set", code="40001")
         )
 
         # Act
         result = await client.set_leverage("BTCUSDT", 10)
 
-        # Assert
+        # Assert - should still return True even on failure
         assert result is True
 
 
@@ -896,7 +872,7 @@ class TestClosePosition:
         # Assert
         assert result is None
 
-    async def test_close_position_sends_correct_close_body(self, client, mock_session):
+    async def test_close_position_sends_flash_close_body(self, client, mock_session):
         # Arrange
         client._session = mock_session
         captured_bodies = []
@@ -921,11 +897,9 @@ class TestClosePosition:
         # Act
         await client.close_position("BTCUSDT", "long")
 
-        # Assert - the close order body should have side=sell for long position
+        # Assert - flash-close sends only the symbol
         close_body = captured_bodies[-1]
-        assert close_body["side"] == "sell"
-        assert close_body["tradeSide"] == "close"
-        assert close_body["size"] == "1.0"
+        assert close_body["symbol"] == "cmt_btcsusdt"  # demo mode symbol
 
 
 # ---------------------------------------------------------------------------

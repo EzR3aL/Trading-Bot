@@ -19,10 +19,10 @@ class TestNormalizeSymbol:
         assert normalize_symbol("ETHUSDT", "bitget") == "ETH"
 
     def test_weex_btc(self):
-        assert normalize_symbol("BTC/USDT:USDT", "weex") == "BTC"
+        assert normalize_symbol("BTCUSDT", "weex") == "BTC"
 
     def test_weex_sol(self):
-        assert normalize_symbol("SOL/USDT:USDT", "weex") == "SOL"
+        assert normalize_symbol("SOLUSDT", "weex") == "SOL"
 
     def test_hyperliquid_btc(self):
         assert normalize_symbol("BTC", "hyperliquid") == "BTC"
@@ -30,8 +30,8 @@ class TestNormalizeSymbol:
     def test_bitget_fallback_strips_usdt(self):
         assert normalize_symbol("NEARUSDT", "bitget") == "NEAR"
 
-    def test_weex_fallback_splits_slash(self):
-        assert normalize_symbol("NEAR/USDT:USDT", "weex") == "NEAR"
+    def test_weex_fallback_strips_usdt(self):
+        assert normalize_symbol("NEARUSDT", "weex") == "NEAR"
 
     def test_hyperliquid_fallback_returns_as_is(self):
         assert normalize_symbol("NEAR", "hyperliquid") == "NEAR"
@@ -50,7 +50,7 @@ class TestToExchangeSymbol:
         assert to_exchange_symbol("BTCUSDT", "bitget") == "BTCUSDT"
 
     def test_weex_from_base(self):
-        assert to_exchange_symbol("ETH", "weex") == "ETH/USDT:USDT"
+        assert to_exchange_symbol("ETH", "weex") == "ETHUSDT"
 
     def test_hyperliquid_from_base(self):
         assert to_exchange_symbol("SOL", "hyperliquid") == "SOL"
@@ -59,7 +59,7 @@ class TestToExchangeSymbol:
         assert to_exchange_symbol("NEAR", "bitget") == "NEARUSDT"
 
     def test_weex_fallback_for_unknown_symbol(self):
-        assert to_exchange_symbol("NEAR", "weex") == "NEAR/USDT:USDT"
+        assert to_exchange_symbol("NEAR", "weex") == "NEARUSDT"
 
     def test_hyperliquid_fallback_for_unknown_symbol(self):
         assert to_exchange_symbol("NEAR", "hyperliquid") == "NEAR"

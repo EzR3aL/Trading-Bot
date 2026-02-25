@@ -9,6 +9,18 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.26.0] - 2026-02-25
+
+### Behoben
+- **Weex Exchange Client komplett ueberarbeitet** — Alle API-Pfade von `/api/v2/mix/` (Bitget-Format) auf korrekte Weex-Pfade `/capi/v2/` umgestellt. Base-URL von nicht-existentem `api.weex.com` auf `api-contract.weex.com` korrigiert
+- **Weex Demo-Modus korrekt implementiert** — Weex hat kein separates Testnet. Demo-Modus nutzt jetzt die selbe URL wie Live, aber mit SUSDT-Symbolen (z.B. `cmt_btcsusdt` statt `cmt_btcusdt`). Stellt sicher dass Demo-Bots nur Demo-Assets handeln
+- **Weex Symbol-Transformation** — Neue `_to_api_symbol()` / `_from_api_symbol()` Methoden wandeln DB-Symbole (BTCUSDT) automatisch in Weex-API-Format um (`cmt_btcusdt` fuer Live, `cmt_btcsusdt` fuer Demo)
+- **Weex close_position** — Nutzt jetzt Flash-Close Endpoint (`/capi/v2/order/closePositions`) statt fehleranfaelligem place-order
+- **Weex Order-Format** — Korrekte `type`-Parameter (1=Open Long, 2=Open Short, 3=Close Long, 4=Close Short) statt Bitget-Format (`side`+`tradeSide`)
+- **Symbol-Map aktualisiert** — Weex nutzt jetzt konsistentes BTCUSDT-Format (Client transformiert intern)
+
+---
+
 ## [3.25.0] - 2026-02-25
 
 ### Hinzugefuegt
