@@ -1144,6 +1144,7 @@ from src.api.routers.bots_lifecycle import (  # noqa: E402, F401
     _enforce_affiliate_gate,
     _enforce_hl_gates,
     apply_preset_to_bot,
+    reset_preset,
     restart_bot,
     start_bot,
     stop_all_bots,

@@ -455,6 +455,8 @@
     "noPreset": "Kein Preset",
     "switchPreset": "Preset wechseln",
     "presetApplied": "Preset angewendet",
+    "presetReset": "Preset entfernt – Standard wiederhergestellt",
+    "defaultPreset": "Standard (Bot-Konfiguration)",
     "presetSwitchFailed": "Preset konnte nicht angewendet werden",
     "stopBotFirst": "Stoppe den Bot zuerst",
     "closePosition": "Position schließen",

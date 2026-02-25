@@ -751,6 +751,19 @@ export default function Bots() {
     setActionLoading(null)
   }
 
+  const handleResetPreset = async (botId: number) => {
+    setPresetDropdownOpen(null)
+    setActionLoading(botId)
+    try {
+      await api.post(`/bots/${botId}/reset-preset`)
+      await fetchBots()
+      addToast('success', t('bots.presetReset', 'Preset entfernt – Standard wiederhergestellt'))
+    } catch (err) {
+      addToast('error', getApiErrorMessage(err, t('bots.presetSwitchFailed')))
+    }
+    setActionLoading(null)
+  }
+
   const handleClosePosition = async (botId: number, symbol: string) => {
     if (!confirm(t('bots.closePositionConfirm', { symbol }))) return
     setActionLoading(botId)
@@ -934,6 +947,14 @@ export default function Bots() {
                       <>
                         <div className="fixed inset-0 z-10" onClick={() => setPresetDropdownOpen(null)} />
                         <div className="absolute z-20 mt-1 w-full bg-[#1a1f2e] border border-white/10 rounded-lg shadow-xl overflow-hidden">
+                          {bot.active_preset_id && (
+                            <button
+                              onClick={() => handleResetPreset(bot.bot_config_id)}
+                              className="w-full text-left px-3 py-2 text-sm transition-colors text-gray-300 hover:bg-white/5 border-b border-white/5"
+                            >
+                              <span className="font-medium">{t('bots.defaultPreset', 'Standard (Bot-Konfiguration)')}</span>
+                            </button>
+                          )}
                           {presets.map(preset => (
                             <button
                               key={preset.id}

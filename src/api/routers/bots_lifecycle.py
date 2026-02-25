@@ -473,3 +473,37 @@ async def apply_preset_to_bot(
 
     logger.info(f"Preset '{preset.name}' applied to bot {config.name} (id={bot_id})")
     return _config_to_response(config)
+
+
+@lifecycle_router.post("/{bot_id}/reset-preset", response_model=BotConfigResponse)
+@limiter.limit("10/minute")
+async def reset_preset(
+    request: Request,
+    bot_id: int,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    orchestrator=Depends(get_orchestrator),
+):
+    """Remove the active preset from a bot (reverts to user-configured defaults)."""
+    result = await db.execute(
+        select(BotConfig).where(BotConfig.id == bot_id, BotConfig.user_id == user.id)
+    )
+    config = result.scalar_one_or_none()
+    if not config:
+        raise HTTPException(status_code=404, detail="Bot nicht gefunden")
+
+    if orchestrator.is_running(bot_id):
+        raise HTTPException(status_code=400, detail="Stoppe den Bot bevor du das Preset entfernst")
+
+    config.active_preset_id = None
+
+    await db.flush()
+
+    refreshed = await db.execute(
+        select(BotConfig).where(BotConfig.id == bot_id)
+        .options(selectinload(BotConfig.active_preset))
+    )
+    config = refreshed.scalar_one()
+
+    logger.info(f"Preset removed from bot {config.name} (id={bot_id})")
+    return _config_to_response(config)

@@ -455,6 +455,8 @@
     "noPreset": "No preset",
     "switchPreset": "Switch Preset",
     "presetApplied": "Preset applied",
+    "presetReset": "Preset removed – default restored",
+    "defaultPreset": "Default (bot configuration)",
     "presetSwitchFailed": "Failed to apply preset",
     "stopBotFirst": "Stop the bot first",
     "closePosition": "Close Position",
