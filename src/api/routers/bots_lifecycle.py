@@ -165,6 +165,15 @@ async def stop_bot(
     config = result.scalar_one_or_none()
     if not config:
         raise HTTPException(status_code=404, detail="Bot nicht gefunden")
+    # Check for open trades before stopping
+    open_result = await db.execute(
+        select(TradeRecord).where(
+            TradeRecord.bot_config_id == bot_id,
+            TradeRecord.status == "open",
+        )
+    )
+    open_trades = list(open_result.scalars().all())
+
     success = await orchestrator.stop_bot(bot_id)
     if not success:
         raise HTTPException(status_code=400, detail="Bot läuft nicht")
@@ -176,7 +185,15 @@ async def stop_bot(
     from src.utils.event_logger import log_event
     await log_event("bot_stopped", f"Bot '{config.name}' stopped", user_id=user.id, bot_id=bot_id)
 
-    return {"status": "ok", "message": f"Bot '{config.name}' stopped"}
+    warning = None
+    if open_trades:
+        symbols = ", ".join(t.symbol for t in open_trades)
+        warning = (
+            f"{len(open_trades)} offene Position(en) auf der Exchange: {symbols}. "
+            f"Diese werden NICHT automatisch geschlossen und nicht mehr überwacht."
+        )
+
+    return {"status": "ok", "message": f"Bot '{config.name}' stopped", "warning": warning}
 
 
 @lifecycle_router.post("/{bot_id}/restart")

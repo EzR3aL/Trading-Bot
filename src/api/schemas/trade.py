@@ -14,8 +14,8 @@ class TradeResponse(BaseModel):
     size: float
     entry_price: float
     exit_price: Optional[float] = None
-    take_profit: float
-    stop_loss: float
+    take_profit: Optional[float] = None
+    stop_loss: Optional[float] = None
     leverage: int
     confidence: int
     reason: str
