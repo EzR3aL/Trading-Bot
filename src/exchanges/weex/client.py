@@ -78,24 +78,19 @@ class WeexClient(ExchangeClient):
     def _to_api_symbol(self, symbol: str) -> str:
         """Convert DB symbol (BTCUSDT) to Weex API format.
 
-        Live:  BTCUSDT -> cmt_btcusdt
-        Demo:  BTCUSDT -> cmt_btcsusdt
+        BTCUSDT -> cmt_btcusdt
+        Demo/live use the same symbol; demo is account-level on Weex.
         """
         base = symbol.replace("USDT", "").lower()
-        if self.demo_mode:
-            return f"cmt_{base}susdt"
         return f"cmt_{base}usdt"
 
     def _from_api_symbol(self, api_symbol: str) -> str:
         """Convert Weex API symbol back to DB format.
 
-        cmt_btcusdt  -> BTCUSDT
-        cmt_btcsusdt -> BTCUSDT
+        cmt_btcusdt -> BTCUSDT
         """
         s = api_symbol.replace("cmt_", "")
-        if s.endswith("susdt"):
-            base = s[:-5]
-        elif s.endswith("usdt"):
+        if s.endswith("usdt"):
             base = s[:-4]
         else:
             base = s
@@ -182,7 +177,8 @@ class WeexClient(ExchangeClient):
                 timeout=aiohttp.ClientTimeout(total=15),
             ) as response:
                 result = await response.json()
-                logger.debug(f"Weex {method} {endpoint}: status={response.status} code={result.get('code')}")
+                code = result.get("code")
+                logger.debug(f"Weex {method} {endpoint}: status={response.status} code={code}")
 
                 if response.status == 429:
                     raise aiohttp.ClientResponseError(
@@ -190,10 +186,14 @@ class WeexClient(ExchangeClient):
                         status=429, message="Rate limited",
                     )
 
-                if response.status != 200 or str(result.get("code")) != SUCCESS_CODE:
+                # Some endpoints (ticker, time) return raw data without code wrapper
+                if code is None and response.status == 200:
+                    return result
+
+                if response.status != 200 or str(code) != SUCCESS_CODE:
                     msg = result.get("msg", result.get("message", "Unknown"))
                     raise WeexClientError(
-                        f"Weex API Error: {msg} (code={result.get('code')}, status={response.status})"
+                        f"Weex API Error: {msg} (code={code}, status={response.status})"
                     )
                 return result.get("data", result)
 
@@ -352,10 +352,10 @@ class WeexClient(ExchangeClient):
             data = data[0] if data else {}
         return Ticker(
             symbol=symbol,
-            last_price=float(data.get("last", data.get("lastPr", 0))),
-            bid=float(data.get("best_bid", data.get("bidPr", 0))),
-            ask=float(data.get("best_ask", data.get("askPr", 0))),
-            volume_24h=float(data.get("volume_24h", data.get("baseVolume", data.get("base_volume", 0)))),
+            last_price=float(data.get("last", 0)),
+            bid=float(data.get("best_bid", 0)),
+            ask=float(data.get("best_ask", 0)),
+            volume_24h=float(data.get("volume_24h", data.get("base_volume", 0))),
         )
 
     async def get_funding_rate(self, symbol: str) -> FundingRateInfo:
@@ -367,7 +367,7 @@ class WeexClient(ExchangeClient):
             data = data[0] if data else {}
         return FundingRateInfo(
             symbol=symbol,
-            current_rate=float(data.get("fundingRate", data.get("funding_rate", 0))),
+            current_rate=float(data.get("fundingRate", data.get("funding_rate", data.get("fundingrate", 0)))),
         )
 
     # ── Affiliate ──────────────────────────────────────────────────

@@ -523,7 +523,7 @@ class TestPlaceMarketOrder:
 
         # Assert - the last POST should be the order placement
         order_body = captured_bodies[-1]
-        assert order_body["symbol"] == "cmt_btcsusdt"  # demo mode
+        assert order_body["symbol"] == "cmt_btcusdt"  # demo mode
         assert order_body["type"] == "1"  # Open Long
         assert order_body["match_price"] == "1"  # Market
         assert order_body["size"] == "0.05"
@@ -695,14 +695,14 @@ class TestGetPosition:
 
 class TestGetOpenPositions:
     async def test_returns_list_of_positions(self, client, mock_session):
-        # Arrange - symbols come back in Weex API format (demo: cmt_btcsusdt)
+        # Arrange - symbols come back in Weex API format (demo: cmt_btcusdt)
         client._session = mock_session
         mock_session.request = MagicMock(
             return_value=_make_api_response([
-                {"symbol": "cmt_btcsusdt", "total": "0.5", "holdSide": "long",
+                {"symbol": "cmt_btcusdt", "total": "0.5", "holdSide": "long",
                  "openPriceAvg": "95000", "markPrice": "96000",
                  "unrealizedPL": "500", "leverage": "10"},
-                {"symbol": "cmt_ethsusdt", "total": "2.0", "holdSide": "short",
+                {"symbol": "cmt_ethusdt", "total": "2.0", "holdSide": "short",
                  "openPriceAvg": "3500", "markPrice": "3400",
                  "unrealizedPL": "200", "leverage": "5"},
             ])
@@ -722,10 +722,10 @@ class TestGetOpenPositions:
         client._session = mock_session
         mock_session.request = MagicMock(
             return_value=_make_api_response([
-                {"symbol": "cmt_btcsusdt", "total": "0", "holdSide": "long",
+                {"symbol": "cmt_btcusdt", "total": "0", "holdSide": "long",
                  "openPriceAvg": "0", "markPrice": "0",
                  "unrealizedPL": "0", "leverage": "1"},
-                {"symbol": "cmt_ethsusdt", "total": "1.0", "holdSide": "short",
+                {"symbol": "cmt_ethusdt", "total": "1.0", "holdSide": "short",
                  "openPriceAvg": "3500", "markPrice": "3400",
                  "unrealizedPL": "100", "leverage": "5"},
             ])
@@ -899,7 +899,7 @@ class TestClosePosition:
 
         # Assert - flash-close sends only the symbol
         close_body = captured_bodies[-1]
-        assert close_body["symbol"] == "cmt_btcsusdt"  # demo mode symbol
+        assert close_body["symbol"] == "cmt_btcusdt"  # demo mode symbol
 
 
 # ---------------------------------------------------------------------------
@@ -908,14 +908,14 @@ class TestClosePosition:
 
 class TestGetTicker:
     async def test_get_ticker_from_dict(self, client, mock_session):
-        # Arrange
+        # Arrange - Weex ticker returns raw data with 'last', 'best_bid', 'best_ask'
         client._session = mock_session
         mock_session.request = MagicMock(
             return_value=_make_api_response({
-                "lastPr": "95000.5",
-                "bidPr": "94999.0",
-                "askPr": "95001.0",
-                "baseVolume": "12345.678",
+                "last": "95000.5",
+                "best_bid": "94999.0",
+                "best_ask": "95001.0",
+                "volume_24h": "12345.678",
             })
         )
 
@@ -935,10 +935,10 @@ class TestGetTicker:
         client._session = mock_session
         mock_session.request = MagicMock(
             return_value=_make_api_response([{
-                "lastPr": "3500.0",
-                "bidPr": "3499.0",
-                "askPr": "3501.0",
-                "baseVolume": "50000.0",
+                "last": "3500.0",
+                "best_bid": "3499.0",
+                "best_ask": "3501.0",
+                "volume_24h": "50000.0",
             }])
         )
 
@@ -968,7 +968,7 @@ class TestGetTicker:
         # Arrange
         client._session = mock_session
         mock_session.request = MagicMock(
-            return_value=_make_api_response({"lastPr": "95000"})
+            return_value=_make_api_response({"last": "95000"})
         )
 
         # Act
