@@ -56,6 +56,26 @@ class PositionMonitorMixin:
                 await self._handle_closed_position(trade, client, session)
                 return
 
+            # Update highest price tracking for trailing stop
+            current_price = None
+            try:
+                ticker = await client.get_ticker(trade.symbol)
+                if ticker:
+                    current_price = ticker.last_price
+            except Exception:
+                pass
+
+            if current_price and trade.entry_price:
+                if trade.side == "long":
+                    new_highest = max(trade.highest_price or trade.entry_price, current_price)
+                else:
+                    # For short: track lowest price (stored in highest_price field)
+                    new_highest = min(trade.highest_price or trade.entry_price, current_price)
+
+                if new_highest != trade.highest_price:
+                    trade.highest_price = new_highest
+                    await session.commit()
+
             # Strategy-based exit check
             if self._strategy and hasattr(self._strategy, 'should_exit'):
                 try:
@@ -71,6 +91,8 @@ class PositionMonitorMixin:
                         side=trade.side,
                         entry_price=trade.entry_price,
                         metrics_at_entry=metrics_at_entry,
+                        current_price=current_price,
+                        highest_price=trade.highest_price,
                     )
 
                     if should_close:

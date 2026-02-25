@@ -60,6 +60,12 @@ DEFAULTS = {
     "momentum_bear_threshold": -0.20,
     # Trade filters
     "min_confidence": 40,
+    # ATR (for trailing stop)
+    "atr_period": 14,
+    # Trailing stop
+    "trailing_stop_enabled": True,
+    "trailing_breakeven_atr": 1.0,
+    "trailing_trail_atr": 1.5,
     # Data
     "kline_interval": "1h",
     "kline_count": 200,
@@ -462,14 +468,14 @@ class EdgeIndicatorStrategy(BaseStrategy):
         side: str,
         entry_price: float,
         metrics_at_entry: dict | None = None,
+        current_price: float | None = None,
+        highest_price: float | None = None,
     ) -> Tuple[bool, str]:
-        """
-        Check if an open position should be closed based on current indicators.
+        """Check if an open position should be closed.
 
-        Exit conditions (mirrors TradingView 'Trading Edge' indicator):
-        - LONG: price drops back into/below EMA ribbon (trend weakening/reversing)
-        - SHORT: price rises back into/above EMA ribbon (trend weakening/reversing)
-        - Regime flip: momentum shifts against the position direction
+        Uses a two-layer exit system:
+        1. ATR Trailing Stop + Breakeven protection (price-based)
+        2. Indicator exits: EMA ribbon + momentum regime (signal-based)
         """
         try:
             await self._ensure_fetcher()
@@ -491,53 +497,145 @@ class EdgeIndicatorStrategy(BaseStrategy):
             if not closes:
                 return False, "No valid close prices"
 
-            # Calculate current indicators
+            if current_price is None:
+                current_price = closes[-1]
+
+            # --- Layer 1: ATR Trailing Stop + Breakeven ---
+            if self._p.get("trailing_stop_enabled") and highest_price and entry_price:
+                trail_exit, trail_reason = self._check_trailing_stop(
+                    side, entry_price, current_price, highest_price, klines,
+                )
+                if trail_exit:
+                    return True, trail_reason
+
+            # --- Layer 2: Indicator-based exits ---
             ribbon = self._calculate_ema_ribbon(closes)
             momentum = self._calculate_predator_momentum(closes, klines, ribbon["ema_fast_above"])
-
             regime = momentum.get("regime", 0)
 
-            # LONG EXIT conditions
+            indicator_exit = False
+            indicator_reason = ""
+
             if side == "long":
                 if ribbon["bear_trend"]:
-                    return True, (
+                    indicator_exit = True
+                    indicator_reason = (
                         "Trend reversal: Preis unter EMA-Ribbon (bearTrend). "
                         "Momentum=%.2f" % momentum['smoothed_score']
                     )
-                if ribbon["neutral"] and regime == -1:
-                    return True, (
+                elif ribbon["neutral"] and regime == -1:
+                    indicator_exit = True
+                    indicator_reason = (
                         "Trend schwaecht sich ab: Preis im Ribbon + baerisches Momentum "
                         "(score=%.2f)" % momentum['smoothed_score']
                     )
-                if momentum.get("regime_flip_bear", False):
-                    return True, (
+                elif momentum.get("regime_flip_bear", False):
+                    indicator_exit = True
+                    indicator_reason = (
                         "Regime-Flip: Momentum dreht bearish "
                         "(score=%.2f)" % momentum['smoothed_score']
                     )
 
-            # SHORT EXIT conditions
             elif side == "short":
                 if ribbon["bull_trend"]:
-                    return True, (
+                    indicator_exit = True
+                    indicator_reason = (
                         "Trend reversal: Preis ueber EMA-Ribbon (bullTrend). "
                         "Momentum=%.2f" % momentum['smoothed_score']
                     )
-                if ribbon["neutral"] and regime == 1:
-                    return True, (
+                elif ribbon["neutral"] and regime == 1:
+                    indicator_exit = True
+                    indicator_reason = (
                         "Trend schwaecht sich ab: Preis im Ribbon + bullisches Momentum "
                         "(score=%.2f)" % momentum['smoothed_score']
                     )
-                if momentum.get("regime_flip_bull", False):
-                    return True, (
+                elif momentum.get("regime_flip_bull", False):
+                    indicator_exit = True
+                    indicator_reason = (
                         "Regime-Flip: Momentum dreht bullish "
                         "(score=%.2f)" % momentum['smoothed_score']
                     )
+
+            if indicator_exit:
+                # Breakeven protection: if trade was profitable enough, don't exit at a loss
+                if self._p.get("trailing_stop_enabled") and highest_price and entry_price:
+                    breakeven_atr = self._p.get("trailing_breakeven_atr", 1.0)
+                    atr_series = MarketDataFetcher.calculate_atr(klines, self._p["atr_period"])
+                    atr_val = atr_series[-1] if atr_series else current_price * 0.015
+                    breakeven_threshold = atr_val * breakeven_atr
+
+                    if side == "long":
+                        was_profitable = (highest_price - entry_price) >= breakeven_threshold
+                        is_loss = current_price < entry_price
+                    else:
+                        was_profitable = (entry_price - highest_price) >= breakeven_threshold
+                        is_loss = current_price > entry_price
+
+                    if was_profitable and is_loss:
+                        logger.info(
+                            "Breakeven protection: blocking indicator exit at loss "
+                            "(entry=%.2f, current=%.2f, highest=%.2f)",
+                            entry_price, current_price, highest_price,
+                        )
+                        return False, ""
+
+                return True, indicator_reason
 
             return False, ""
 
         except Exception as e:
             logger.error("Exit check error for %s: %s", symbol, e)
             return False, ""
+
+    def _check_trailing_stop(
+        self,
+        side: str,
+        entry_price: float,
+        current_price: float,
+        highest_price: float,
+        klines: List[List],
+    ) -> Tuple[bool, str]:
+        """Check ATR-based trailing stop with breakeven floor."""
+        atr_series = MarketDataFetcher.calculate_atr(klines, self._p["atr_period"])
+        atr_val = atr_series[-1] if atr_series else current_price * 0.015
+
+        breakeven_atr = self._p.get("trailing_breakeven_atr", 1.0)
+        trail_atr = self._p.get("trailing_trail_atr", 1.5)
+        trail_distance = atr_val * trail_atr
+        breakeven_threshold = atr_val * breakeven_atr
+
+        if side == "long":
+            was_profitable = (highest_price - entry_price) >= breakeven_threshold
+            if not was_profitable:
+                return False, ""
+
+            trailing_stop = highest_price - trail_distance
+            trailing_stop = max(trailing_stop, entry_price)
+
+            if current_price <= trailing_stop:
+                pnl_pct = (current_price - entry_price) / entry_price * 100
+                return True, (
+                    "Trailing Stop: Preis $%.2f unter Stop $%.2f "
+                    "(Hoechst=$%.2f, ATR=%.0f, Trail=%.1fx). PnL=%.2f%%"
+                    % (current_price, trailing_stop, highest_price, atr_val, trail_atr, pnl_pct)
+                )
+        else:
+            was_profitable = (entry_price - highest_price) >= breakeven_threshold
+            if not was_profitable:
+                return False, ""
+
+            trailing_stop = highest_price + trail_distance
+            trailing_stop = min(trailing_stop, entry_price)
+
+            if current_price >= trailing_stop:
+                pnl_pct = (entry_price - current_price) / entry_price * 100
+                return True, (
+                    "Trailing Stop: Preis $%.2f ueber Stop $%.2f "
+                    "(Tiefst=$%.2f, ATR=%.0f, Trail=%.1fx). PnL=%.2f%%"
+                    % (current_price, trailing_stop, highest_price, atr_val, trail_atr, pnl_pct)
+                )
+
+        return False, ""
 
     async def generate_signal(self, symbol: str = "BTCUSDT") -> TradeSignal:
         """Generate a trade signal using the Edge Indicator layers."""
