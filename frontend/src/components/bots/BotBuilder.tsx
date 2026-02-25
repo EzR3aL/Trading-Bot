@@ -1332,6 +1332,28 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
                   })()}
                 </div>
                 <p className="text-xs text-gray-600 mt-1">{t('bots.builder.perAssetHint')}</p>
+                {/* TP/SL warning */}
+                {(() => {
+                  const pairsWithoutSl = tradingPairs.filter(p => !perAssetConfig[p]?.sl)
+                  const pairsWithoutTpSl = tradingPairs.filter(p => !perAssetConfig[p]?.tp && !perAssetConfig[p]?.sl)
+                  if (pairsWithoutTpSl.length > 0 && pairsWithoutTpSl.length === pairsWithoutSl.length) {
+                    return (
+                      <div className="mt-2 flex items-start gap-2 p-2.5 bg-amber-900/20 border border-amber-800/50 rounded-lg">
+                        <AlertTriangle size={14} className="text-amber-400 mt-0.5 flex-shrink-0" />
+                        <p className="text-xs text-amber-400">{t('bots.builder.noTpSlWarning')}</p>
+                      </div>
+                    )
+                  }
+                  if (pairsWithoutSl.length > 0) {
+                    return (
+                      <div className="mt-2 flex items-start gap-2 p-2.5 bg-yellow-900/20 border border-yellow-800/50 rounded-lg">
+                        <AlertTriangle size={14} className="text-yellow-400 mt-0.5 flex-shrink-0" />
+                        <p className="text-xs text-yellow-400">{t('bots.builder.noSlWarning')}</p>
+                      </div>
+                    )
+                  }
+                  return null
+                })()}
               </div>
             )}
 
@@ -1695,6 +1717,7 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
                       if (cfg.leverage) parts.push(`${cfg.leverage}x`)
                       if (cfg.tp) parts.push(`TP ${cfg.tp}%`)
                       if (cfg.sl) parts.push(`SL ${cfg.sl}%`)
+                      if (!cfg.tp && !cfg.sl) parts.push(t('bots.builder.noTpSlLabel'))
                       if (cfg.max_trades) parts.push(`${cfg.max_trades} Trades`)
                       if (cfg.loss_limit) parts.push(`Verlust ${cfg.loss_limit}%`)
                       return (

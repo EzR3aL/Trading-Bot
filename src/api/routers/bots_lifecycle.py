@@ -284,16 +284,34 @@ async def close_position(
         demo_mode=is_demo,
     )
 
-    # Close position on exchange (may already be closed / not exist)
+    # Close position on exchange
+    order = None
     try:
         order = await asyncio.wait_for(
             client.close_position(symbol, trade.side, margin_mode=getattr(config, "margin_mode", "cross")),
             timeout=15.0,
         )
     except Exception as e:
-        # Log but don't fail — position may not exist on exchange anymore
-        logger.warning(f"Exchange close_position failed for {symbol} bot {bot_id} (may already be closed): {e}")
-        order = None
+        logger.warning(f"Exchange close_position call failed for {symbol} bot {bot_id}: {e}")
+
+    # Verify position is actually closed on exchange
+    try:
+        remaining_pos = await asyncio.wait_for(client.get_position(symbol), timeout=10.0)
+        if remaining_pos and remaining_pos.size > 0:
+            raise HTTPException(
+                status_code=502,
+                detail=f"Position {symbol} konnte auf der Exchange nicht geschlossen werden. "
+                       f"Bitte manuell auf der Exchange schliessen.",
+            )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Could not verify position status for {symbol} bot {bot_id}: {e}")
+        raise HTTPException(
+            status_code=502,
+            detail=f"Position {symbol}: Status konnte nach dem Schliessen nicht verifiziert werden. "
+                   f"Bitte auf der Exchange pruefen.",
+        )
 
     # Get current price for PnL
     try:

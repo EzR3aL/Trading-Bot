@@ -54,9 +54,6 @@ DEFAULTS = {
     # Trade filters
     "min_agreement": 3,
     "min_confidence": 40,
-    # Risk
-    "take_profit_percent": 3.5,
-    "stop_loss_percent": 1.5,
     # Data
     "kline_interval": "1h",
     "kline_count": 200,
@@ -228,19 +225,29 @@ class SentimentSurferStrategy(BaseStrategy):
 
     def _calculate_targets(
         self, direction: SignalDirection, current_price: float
-    ) -> Tuple[float, float]:
-        """Calculate take profit and stop loss prices."""
-        tp_pct = self._p["take_profit_percent"] / 100
-        sl_pct = self._p["stop_loss_percent"] / 100
+    ) -> Tuple:
+        """Calculate TP/SL prices. Returns (None, None) if not configured by user."""
+        tp_pct_raw = self._p.get("take_profit_percent")
+        sl_pct_raw = self._p.get("stop_loss_percent")
 
-        if direction == SignalDirection.LONG:
-            take_profit = current_price * (1 + tp_pct)
-            stop_loss = current_price * (1 - sl_pct)
-        else:
-            take_profit = current_price * (1 - tp_pct)
-            stop_loss = current_price * (1 + sl_pct)
+        take_profit = None
+        stop_loss = None
 
-        return round(take_profit, 2), round(stop_loss, 2)
+        if tp_pct_raw is not None and current_price > 0:
+            tp_pct = float(tp_pct_raw) / 100
+            if direction == SignalDirection.LONG:
+                take_profit = round(current_price * (1 + tp_pct), 2)
+            else:
+                take_profit = round(current_price * (1 - tp_pct), 2)
+
+        if sl_pct_raw is not None and current_price > 0:
+            sl_pct = float(sl_pct_raw) / 100
+            if direction == SignalDirection.LONG:
+                stop_loss = round(current_price * (1 - sl_pct), 2)
+            else:
+                stop_loss = round(current_price * (1 + sl_pct), 2)
+
+        return take_profit, stop_loss
 
     # ==================== Signal Generation ====================
 

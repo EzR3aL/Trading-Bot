@@ -167,9 +167,16 @@ class TradeExecutorMixin:
 
             self.trades_today += 1
 
-            # Warn if TP/SL placement failed — position is unprotected
+            # Warn about TP/SL status
             tpsl_warning = ""
-            if getattr(order, "tpsl_failed", False):
+            if signal.target_price is None and signal.stop_loss is None:
+                tpsl_warning = " [Kein TP/SL - Strategie-Exit aktiv]"
+                logger.info(
+                    "%s [%s] %s: kein TP/SL gesetzt - "
+                    "Position wird durch Strategie-Exit-Signale verwaltet",
+                    log_prefix, mode_str, signal.symbol,
+                )
+            elif getattr(order, "tpsl_failed", False):
                 tpsl_warning = " [WARNING: TP/SL FAILED — position UNPROTECTED]"
                 logger.error(
                     f"{log_prefix} [{mode_str}] TP/SL failed for {signal.symbol} — "

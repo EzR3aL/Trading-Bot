@@ -47,8 +47,6 @@ DEFAULTS = {
     "funding_rate_low": -0.0002,
     "high_confidence_min": 85,
     "low_confidence_min": 60,
-    "take_profit_percent": 4.0,
-    "stop_loss_percent": 1.5,
     # Data
     "kline_interval": "1h",
     "kline_count": 200,
@@ -139,18 +137,29 @@ class LiquidationHunterStrategy(BaseStrategy):
             return SignalDirection.LONG
         return SignalDirection.SHORT
 
-    def _calculate_targets(self, direction: SignalDirection, current_price: float) -> Tuple[float, float]:
-        take_profit_pct = self._p["take_profit_percent"] / 100
-        stop_loss_pct = self._p["stop_loss_percent"] / 100
+    def _calculate_targets(self, direction: SignalDirection, current_price: float) -> Tuple:
+        """Calculate TP/SL prices. Returns (None, None) if not configured by user."""
+        tp_pct_raw = self._p.get("take_profit_percent")
+        sl_pct_raw = self._p.get("stop_loss_percent")
 
-        if direction == SignalDirection.LONG:
-            take_profit = current_price * (1 + take_profit_pct)
-            stop_loss = current_price * (1 - stop_loss_pct)
-        else:
-            take_profit = current_price * (1 - take_profit_pct)
-            stop_loss = current_price * (1 + stop_loss_pct)
+        take_profit = None
+        stop_loss = None
 
-        return round(take_profit, 2), round(stop_loss, 2)
+        if tp_pct_raw is not None and current_price > 0:
+            tp_pct = float(tp_pct_raw) / 100
+            if direction == SignalDirection.LONG:
+                take_profit = round(current_price * (1 + tp_pct), 2)
+            else:
+                take_profit = round(current_price * (1 - tp_pct), 2)
+
+        if sl_pct_raw is not None and current_price > 0:
+            sl_pct = float(sl_pct_raw) / 100
+            if direction == SignalDirection.LONG:
+                stop_loss = round(current_price * (1 - sl_pct), 2)
+            else:
+                stop_loss = round(current_price * (1 + sl_pct), 2)
+
+        return take_profit, stop_loss
 
     async def generate_signal(self, symbol: str = "BTCUSDT") -> TradeSignal:
         await self._ensure_fetcher()
@@ -286,20 +295,18 @@ class LiquidationHunterStrategy(BaseStrategy):
         if signal.entry_price <= 0:
             return False, "Invalid entry price"
 
-        if signal.target_price <= 0 or signal.stop_loss <= 0:
-            return False, "Invalid TP/SL targets"
-
-        # Validate TP/SL direction makes sense
-        if signal.direction == SignalDirection.LONG:
-            if signal.target_price <= signal.entry_price:
-                return False, f"TP ({signal.target_price}) must be above entry ({signal.entry_price}) for LONG"
-            if signal.stop_loss >= signal.entry_price:
-                return False, f"SL ({signal.stop_loss}) must be below entry ({signal.entry_price}) for LONG"
-        else:
-            if signal.target_price >= signal.entry_price:
-                return False, f"TP ({signal.target_price}) must be below entry ({signal.entry_price}) for SHORT"
-            if signal.stop_loss <= signal.entry_price:
-                return False, f"SL ({signal.stop_loss}) must be above entry ({signal.entry_price}) for SHORT"
+        # Validate TP/SL direction if set
+        if signal.target_price is not None and signal.stop_loss is not None:
+            if signal.direction == SignalDirection.LONG:
+                if signal.target_price <= signal.entry_price:
+                    return False, f"TP ({signal.target_price}) must be above entry ({signal.entry_price}) for LONG"
+                if signal.stop_loss >= signal.entry_price:
+                    return False, f"SL ({signal.stop_loss}) must be below entry ({signal.entry_price}) for LONG"
+            else:
+                if signal.target_price >= signal.entry_price:
+                    return False, f"TP ({signal.target_price}) must be below entry ({signal.entry_price}) for SHORT"
+                if signal.stop_loss <= signal.entry_price:
+                    return False, f"SL ({signal.stop_loss}) must be above entry ({signal.entry_price}) for SHORT"
 
         return True, f"Signal approved with {signal.confidence}% confidence"
 

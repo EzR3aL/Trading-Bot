@@ -60,9 +60,6 @@ DEFAULTS = {
     "momentum_bear_threshold": -0.20,
     # Trade filters
     "min_confidence": 40,
-    # Risk
-    "take_profit_percent": 3.0,
-    "stop_loss_percent": 1.5,
     # Data
     "kline_interval": "1h",
     "kline_count": 200,
@@ -432,19 +429,115 @@ class EdgeIndicatorStrategy(BaseStrategy):
 
     def _calculate_targets(
         self, direction: SignalDirection, current_price: float
-    ) -> Tuple[float, float]:
-        """Calculate take profit and stop loss prices."""
-        tp_pct = self._p["take_profit_percent"] / 100
-        sl_pct = self._p["stop_loss_percent"] / 100
+    ) -> Tuple[Optional[float], Optional[float]]:
+        """Calculate TP/SL prices. Returns (None, None) if not configured by user."""
+        tp_pct_raw = self._p.get("take_profit_percent")
+        sl_pct_raw = self._p.get("stop_loss_percent")
 
-        if direction == SignalDirection.LONG:
-            take_profit = current_price * (1 + tp_pct)
-            stop_loss = current_price * (1 - sl_pct)
-        else:
-            take_profit = current_price * (1 - tp_pct)
-            stop_loss = current_price * (1 + sl_pct)
+        take_profit = None
+        stop_loss = None
 
-        return round(take_profit, 2), round(stop_loss, 2)
+        if tp_pct_raw is not None and current_price > 0:
+            tp_pct = float(tp_pct_raw) / 100
+            if direction == SignalDirection.LONG:
+                take_profit = round(current_price * (1 + tp_pct), 2)
+            else:
+                take_profit = round(current_price * (1 - tp_pct), 2)
+
+        if sl_pct_raw is not None and current_price > 0:
+            sl_pct = float(sl_pct_raw) / 100
+            if direction == SignalDirection.LONG:
+                stop_loss = round(current_price * (1 - sl_pct), 2)
+            else:
+                stop_loss = round(current_price * (1 + sl_pct), 2)
+
+        return take_profit, stop_loss
+
+
+    # ==================== Exit Signal Logic ====================
+
+    async def should_exit(
+        self,
+        symbol: str,
+        side: str,
+        entry_price: float,
+        metrics_at_entry: dict | None = None,
+    ) -> Tuple[bool, str]:
+        """
+        Check if an open position should be closed based on current indicators.
+
+        Exit conditions (mirrors TradingView 'Trading Edge' indicator):
+        - LONG: price drops back into/below EMA ribbon (trend weakening/reversing)
+        - SHORT: price rises back into/above EMA ribbon (trend weakening/reversing)
+        - Regime flip: momentum shifts against the position direction
+        """
+        try:
+            await self._ensure_fetcher()
+
+            interval = self._p["kline_interval"]
+            count = self._p["kline_count"]
+            klines = await self.data_fetcher.get_binance_klines(symbol, interval, count)
+
+            if not klines or len(klines) < self._p["ema_slow_period"] + 10:
+                return False, "Insufficient data for exit check"
+
+            closes = []
+            for k in klines:
+                try:
+                    closes.append(float(k[4]))
+                except (IndexError, ValueError, TypeError):
+                    continue
+
+            if not closes:
+                return False, "No valid close prices"
+
+            # Calculate current indicators
+            ribbon = self._calculate_ema_ribbon(closes)
+            momentum = self._calculate_predator_momentum(closes, klines, ribbon["ema_fast_above"])
+
+            regime = momentum.get("regime", 0)
+
+            # LONG EXIT conditions
+            if side == "long":
+                if ribbon["bear_trend"]:
+                    return True, (
+                        "Trend reversal: Preis unter EMA-Ribbon (bearTrend). "
+                        "Momentum=%.2f" % momentum['smoothed_score']
+                    )
+                if ribbon["neutral"] and regime == -1:
+                    return True, (
+                        "Trend schwaecht sich ab: Preis im Ribbon + baerisches Momentum "
+                        "(score=%.2f)" % momentum['smoothed_score']
+                    )
+                if momentum.get("regime_flip_bear", False):
+                    return True, (
+                        "Regime-Flip: Momentum dreht bearish "
+                        "(score=%.2f)" % momentum['smoothed_score']
+                    )
+
+            # SHORT EXIT conditions
+            elif side == "short":
+                if ribbon["bull_trend"]:
+                    return True, (
+                        "Trend reversal: Preis ueber EMA-Ribbon (bullTrend). "
+                        "Momentum=%.2f" % momentum['smoothed_score']
+                    )
+                if ribbon["neutral"] and regime == 1:
+                    return True, (
+                        "Trend schwaecht sich ab: Preis im Ribbon + bullisches Momentum "
+                        "(score=%.2f)" % momentum['smoothed_score']
+                    )
+                if momentum.get("regime_flip_bull", False):
+                    return True, (
+                        "Regime-Flip: Momentum dreht bullish "
+                        "(score=%.2f)" % momentum['smoothed_score']
+                    )
+
+            return False, ""
+
+        except Exception as e:
+            logger.error("Exit check error for %s: %s", symbol, e)
+            return False, ""
 
     async def generate_signal(self, symbol: str = "BTCUSDT") -> TradeSignal:
         """Generate a trade signal using the Edge Indicator layers."""
@@ -615,13 +708,13 @@ class EdgeIndicatorStrategy(BaseStrategy):
             },
             "take_profit_percent": {
                 "type": "float", "label": "Take Profit %",
-                "description": "Take-Profit-Ziel in Prozent vom Einstiegspreis",
-                "default": 3.0, "min": 0.5, "max": 20.0,
+                "description": "Optional: Take-Profit in % vom Einstiegspreis. Leer = kein TP (Strategie-Exit).",
+                "min": 0.5, "max": 20.0,
             },
             "stop_loss_percent": {
                 "type": "float", "label": "Stop Loss %",
-                "description": "Stop-Loss in Prozent vom Einstiegspreis",
-                "default": 1.5, "min": 0.5, "max": 10.0,
+                "description": "Optional: Stop-Loss in % vom Einstiegspreis. Leer = kein SL (Strategie-Exit).",
+                "min": 0.5, "max": 10.0,
             },
         }
 

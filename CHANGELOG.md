@@ -9,6 +9,22 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.25.0] - 2026-02-25
+
+### Hinzugefuegt
+- **Strategie-basierte Exit-Signale** — Neue `should_exit()` Methode in BaseStrategy. Edge Indicator und Claude Edge Indicator pruefen alle 5 Min ob der Trend noch intakt ist (EMA-Ribbon, Predator Momentum, Regime Flips). Positionen werden automatisch geschlossen wenn die Indikatoren drehen
+- **Neuer Exit-Grund `STRATEGY_EXIT`** — Wird in Trade-History, Logs und Notifications angezeigt wenn die Strategie eine Position schliesst
+- **TP/SL-Warnung im BotBuilder** — Gelbe Warnung bei fehlendem Stop-Loss, orange Warnung wenn weder TP noch SL gesetzt. Review-Step zeigt "Kein TP/SL (Strategie-Exit)" pro Asset
+
+### Geaendert
+- **TP/SL nicht mehr standardmaessig gesetzt** — Alle Strategien (Edge Indicator, Claude Edge, Liquidation Hunter, Sentiment Surfer) haben keine TP/SL-Defaults mehr. User muss TP/SL explizit in der Per-Asset-Config oder via Preset setzen. Ohne TP/SL verlaesst sich der Bot auf die Strategie-Exit-Logik
+- **Claude Edge Indicator** — ATR-basierte TP/SL-Multiplikatoren (`atr_tp_multiplier`, `atr_sl_multiplier`) aus Defaults entfernt, `should_exit()` implementiert
+
+### Behoben
+- **Manuelles Position-Schliessen verifiziert jetzt den Exchange-Status** — Bisher wurde der Trade in der DB als geschlossen markiert auch wenn der Exchange-Close fehlschlug. Jetzt wird nach dem Close-Versuch geprueft ob die Position wirklich weg ist. Bei Fehler erhaelt der User eine klare Fehlermeldung statt einer stillen Fehlinformation
+
+---
+
 ## [3.24.0] - 2026-02-24
 
 ### Hinzugefuegt

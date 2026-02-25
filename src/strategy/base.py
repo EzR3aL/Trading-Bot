@@ -33,8 +33,8 @@ class TradeSignal:
     confidence: int  # 0-100
     symbol: str
     entry_price: float
-    target_price: float  # Take profit target
-    stop_loss: float
+    target_price: float | None  # Take profit target (None = no TP)
+    stop_loss: float | None  # Stop loss (None = no SL)
     reason: str
     metrics_snapshot: dict
     timestamp: datetime
@@ -71,6 +71,36 @@ class BaseStrategy(ABC):
             params: Strategy-specific parameters (from bot_config.strategy_params)
         """
         self.params = params or {}
+
+    async def should_exit(
+        self,
+        symbol: str,
+        side: str,
+        entry_price: float,
+        metrics_at_entry: dict | None = None,
+    ) -> Tuple[bool, str]:
+        """
+        Check if an open position should be closed based on current indicators.
+
+        Override in strategies that support indicator-based exits.
+        Default: never exit (TP/SL on exchange or manual close).
+        """
+        return False, ""
+
+    async def should_exit(
+        self,
+        symbol: str,
+        side: str,
+        entry_price: float,
+        metrics_at_entry: dict | None = None,
+    ) -> Tuple[bool, str]:
+        """
+        Check if an open position should be closed based on current indicators.
+
+        Override in strategies that support indicator-based exits.
+        Default: never exit (TP/SL on exchange or manual close).
+        """
+        return False, ""
 
     @abstractmethod
     async def generate_signal(self, symbol: str) -> TradeSignal:

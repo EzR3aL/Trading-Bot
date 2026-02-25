@@ -47,10 +47,8 @@ DEFAULTS = {
     "momentum_bear_threshold": -0.20,
     # Trade filters
     "min_confidence": 40,
-    # ATR-based Risk (replaces fixed TP/SL)
+    # ATR-based Risk (optional — only used if user configures multipliers)
     "atr_period": 14,
-    "atr_tp_multiplier": 2.5,
-    "atr_sl_multiplier": 1.5,
     # Volume confirmation
     "volume_weight": 0.3,
     "volume_strong_threshold": 0.58,
@@ -310,33 +308,45 @@ class ClaudeEdgeIndicatorStrategy(BaseStrategy):
     def _calculate_targets(
         self, direction: SignalDirection, current_price: float,
         klines: Optional[List[List]] = None,
-    ) -> Tuple[float, float]:
+    ) -> Tuple[Optional[float], Optional[float]]:
         """
         Calculate TP/SL using ATR multipliers instead of fixed percentages.
 
-        Falls back to ATR-estimated values if klines are not provided.
+        Returns (None, None) if ATR multipliers are not configured by the user.
         """
+        tp_mult = self._p.get("atr_tp_multiplier")
+        sl_mult = self._p.get("atr_sl_multiplier")
+
+        if tp_mult is None and sl_mult is None:
+            return None, None
+
         atr_value = 0.0
         if klines:
             atr_series = MarketDataFetcher.calculate_atr(klines, self._p["atr_period"])
             if atr_series:
                 atr_value = atr_series[-1]
 
-        # Fallback: estimate ATR as ~1.5% of price (typical BTC 1h volatility)
         if atr_value <= 0:
             atr_value = current_price * 0.015
 
-        tp_distance = atr_value * self._p["atr_tp_multiplier"]
-        sl_distance = atr_value * self._p["atr_sl_multiplier"]
+        take_profit = None
+        stop_loss = None
 
-        if direction == SignalDirection.LONG:
-            take_profit = current_price + tp_distance
-            stop_loss = current_price - sl_distance
-        else:
-            take_profit = current_price - tp_distance
-            stop_loss = current_price + sl_distance
+        if tp_mult is not None:
+            tp_distance = atr_value * float(tp_mult)
+            if direction == SignalDirection.LONG:
+                take_profit = round(current_price + tp_distance, 2)
+            else:
+                take_profit = round(current_price - tp_distance, 2)
 
-        return round(take_profit, 2), round(stop_loss, 2)
+        if sl_mult is not None:
+            sl_distance = atr_value * float(sl_mult)
+            if direction == SignalDirection.LONG:
+                stop_loss = round(current_price - sl_distance, 2)
+            else:
+                stop_loss = round(current_price + sl_distance, 2)
+
+        return take_profit, stop_loss
 
     # ==================== Enhancement #2: Volume Confirmation ====================
 
@@ -683,6 +693,78 @@ class ClaudeEdgeIndicatorStrategy(BaseStrategy):
                 return SignalDirection.LONG, " | ".join(reasons)
             return SignalDirection.SHORT, " | ".join(reasons)
 
+    async def should_exit(
+        self,
+        symbol: str,
+        side: str,
+        entry_price: float,
+        metrics_at_entry: dict | None = None,
+    ) -> Tuple[bool, str]:
+        """Check if an open position should be closed based on current indicators."""
+        try:
+            await self._ensure_fetcher()
+
+            interval = self._p["kline_interval"]
+            count = self._p["kline_count"]
+            klines = await self.data_fetcher.get_binance_klines(symbol, interval, count)
+
+            if not klines or len(klines) < self._p["ema_slow_period"] + 10:
+                return False, "Insufficient data for exit check"
+
+            closes = []
+            for k in klines:
+                try:
+                    closes.append(float(k[4]))
+                except (IndexError, ValueError, TypeError):
+                    continue
+
+            if not closes:
+                return False, "No valid close prices"
+
+            ribbon = self._calculate_ema_ribbon(closes)
+            momentum = self._calculate_predator_momentum(closes, klines, ribbon["ema_fast_above"])
+            regime = momentum.get("regime", 0)
+
+            if side == "long":
+                if ribbon["bear_trend"]:
+                    return True, (
+                        "Trend reversal: Preis unter EMA-Ribbon (bearTrend). "
+                        "Momentum=%.2f" % momentum['smoothed_score']
+                    )
+                if ribbon["neutral"] and regime == -1:
+                    return True, (
+                        "Trend schwaecht sich ab: Preis im Ribbon + baerisches Momentum "
+                        "(score=%.2f)" % momentum['smoothed_score']
+                    )
+                if momentum.get("regime_flip_bear", False):
+                    return True, (
+                        "Regime-Flip: Momentum dreht bearish "
+                        "(score=%.2f)" % momentum['smoothed_score']
+                    )
+
+            elif side == "short":
+                if ribbon["bull_trend"]:
+                    return True, (
+                        "Trend reversal: Preis ueber EMA-Ribbon (bullTrend). "
+                        "Momentum=%.2f" % momentum['smoothed_score']
+                    )
+                if ribbon["neutral"] and regime == 1:
+                    return True, (
+                        "Trend schwaecht sich ab: Preis im Ribbon + bullisches Momentum "
+                        "(score=%.2f)" % momentum['smoothed_score']
+                    )
+                if momentum.get("regime_flip_bull", False):
+                    return True, (
+                        "Regime-Flip: Momentum dreht bullish "
+                        "(score=%.2f)" % momentum['smoothed_score']
+                    )
+
+            return False, ""
+
+        except Exception as e:
+            logger.error("Exit check error for %s: %s", symbol, e)
+            return False, ""
+
     async def generate_signal(self, symbol: str = "BTCUSDT") -> TradeSignal:
         """Generate a trade signal using the enhanced Claude-Edge layers."""
         await self._ensure_fetcher()
@@ -701,8 +783,8 @@ class ClaudeEdgeIndicatorStrategy(BaseStrategy):
                 confidence=0,
                 symbol=symbol,
                 entry_price=0.0,
-                target_price=0.0,
-                stop_loss=0.0,
+                target_price=None,
+                stop_loss=None,
                 reason="Insufficient kline data",
                 metrics_snapshot={"error": "insufficient_data"},
                 timestamp=datetime.now(),
@@ -724,8 +806,8 @@ class ClaudeEdgeIndicatorStrategy(BaseStrategy):
                 confidence=0,
                 symbol=symbol,
                 entry_price=0.0,
-                target_price=0.0,
-                stop_loss=0.0,
+                target_price=None,
+                stop_loss=None,
                 reason="Invalid price data",
                 metrics_snapshot={"error": "invalid_price"},
                 timestamp=datetime.now(),
@@ -913,16 +995,14 @@ class ClaudeEdgeIndicatorStrategy(BaseStrategy):
             "atr_tp_multiplier": {
                 "type": "float",
                 "label": "ATR TP Multiplikator",
-                "description": "Take Profit = Einstieg +/- ATR * Multiplikator (Standard 2.5)",
-                "default": 2.5,
+                "description": "Optional. Take Profit = Einstieg +/- ATR * Multiplikator. Wenn leer, kein automatisches TP.",
                 "min": 1.0,
                 "max": 5.0,
             },
             "atr_sl_multiplier": {
                 "type": "float",
                 "label": "ATR SL Multiplikator",
-                "description": "Stop Loss = Einstieg -/+ ATR * Multiplikator (Standard 1.5)",
-                "default": 1.5,
+                "description": "Optional. Stop Loss = Einstieg -/+ ATR * Multiplikator. Wenn leer, kein automatisches SL.",
                 "min": 0.5,
                 "max": 3.0,
             },

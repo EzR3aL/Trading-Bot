@@ -1,5 +1,6 @@
 """Position monitoring logic for BotWorker (mixin)."""
 
+import json
 from datetime import datetime, timezone
 
 from src.exchanges.base import ExchangeClient
@@ -39,8 +40,7 @@ class PositionMonitorMixin:
                 await self._check_position(trade, session)
 
     async def _check_position(self, trade: TradeRecord, session):
-        """Check a single open position."""
-        # Determine which client to use
+        """Check a single open position — exchange status + strategy exit signals."""
         client = self._get_client(trade.demo_mode)
         if not client:
             return
@@ -49,16 +49,81 @@ class PositionMonitorMixin:
             position = await client.get_position(trade.symbol)
 
             if not position:
-                # Position closed (TP/SL hit or manual)
                 await self._handle_closed_position(trade, client, session)
                 return
 
-            # Check if position side matches
             if hasattr(position, 'side') and position.side != trade.side:
                 await self._handle_closed_position(trade, client, session)
+                return
+
+            # Strategy-based exit check
+            if self._strategy and hasattr(self._strategy, 'should_exit'):
+                try:
+                    metrics_at_entry = None
+                    if trade.metrics_snapshot:
+                        try:
+                            metrics_at_entry = json.loads(trade.metrics_snapshot) if isinstance(trade.metrics_snapshot, str) else trade.metrics_snapshot
+                        except (json.JSONDecodeError, TypeError):
+                            pass
+
+                    should_close, exit_reason = await self._strategy.should_exit(
+                        symbol=trade.symbol,
+                        side=trade.side,
+                        entry_price=trade.entry_price,
+                        metrics_at_entry=metrics_at_entry,
+                    )
+
+                    if should_close:
+                        logger.info(
+                            "[Bot:%s] Strategy exit for %s (%s): %s",
+                            self.bot_config_id, trade.symbol, trade.side, exit_reason,
+                        )
+                        try:
+                            await client.close_position(trade.symbol, trade.side)
+                        except Exception as close_err:
+                            logger.error("[Bot:%s] Failed to close position: %s", self.bot_config_id, close_err)
+                            return
+
+                        ticker = await client.get_ticker(trade.symbol)
+                        exit_price = ticker.last_price if ticker else trade.entry_price
+
+                        fees = trade.fees or 0
+                        try:
+                            if trade.order_id:
+                                fees = await client.get_trade_total_fees(
+                                    symbol=trade.symbol,
+                                    entry_order_id=trade.order_id,
+                                    close_order_id=trade.close_order_id,
+                                )
+                        except Exception:
+                            pass
+
+                        funding_paid = trade.funding_paid or 0
+                        try:
+                            if trade.entry_time:
+                                entry_ms = int(trade.entry_time.timestamp() * 1000)
+                                exit_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
+                                funding_paid = await client.get_funding_fees(
+                                    symbol=trade.symbol,
+                                    start_time_ms=entry_ms,
+                                    end_time_ms=exit_ms,
+                                )
+                        except Exception:
+                            pass
+
+                        await self._close_and_record_trade(
+                            trade,
+                            exit_price,
+                            "STRATEGY_EXIT",
+                            fees=fees,
+                            funding_paid=funding_paid,
+                            strategy_reason="[%s] %s" % (self._config.name, exit_reason),
+                        )
+                except Exception as e:
+                    logger.error("[Bot:%s] Strategy exit check error: %s", self.bot_config_id, e)
 
         except Exception as e:
-            logger.error(f"[Bot:{self.bot_config_id}] Position check error: {e}")
+            logger.error("[Bot:%s] Position check error: %s", self.bot_config_id, e)
 
     async def _handle_closed_position(self, trade: TradeRecord, client: ExchangeClient, session):
         """Handle a position that was closed externally (TP/SL/manual)."""
@@ -70,12 +135,13 @@ class PositionMonitorMixin:
             exit_price = ticker.last_price if ticker else trade.entry_price
 
             # Determine exit reason
-            if abs(exit_price - trade.take_profit) < trade.entry_price * 0.002:
-                exit_reason = "TAKE_PROFIT"
-            elif abs(exit_price - trade.stop_loss) < trade.entry_price * 0.002:
-                exit_reason = "STOP_LOSS"
-            else:
-                exit_reason = "EXTERNAL_CLOSE"
+            exit_reason = "EXTERNAL_CLOSE"
+            if trade.take_profit is not None and trade.entry_price > 0:
+                if abs(exit_price - trade.take_profit) < trade.entry_price * 0.002:
+                    exit_reason = "TAKE_PROFIT"
+            if trade.stop_loss is not None and trade.entry_price > 0:
+                if abs(exit_price - trade.stop_loss) < trade.entry_price * 0.002:
+                    exit_reason = "STOP_LOSS"
 
             # Fetch trading fees from exchange (entry + exit via orders-history)
             fees = trade.fees
