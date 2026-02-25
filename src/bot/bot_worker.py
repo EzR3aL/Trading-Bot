@@ -346,10 +346,10 @@ class BotWorker(
                 max_instances=1,
             )
 
-        # Position monitoring every 5 minutes
+        # Position monitoring every minute
         self._scheduler.add_job(
             self._monitor_positions_safe,
-            CronTrigger(minute="*/5"),
+            CronTrigger(minute="*/1"),
             id=f"bot_{self.bot_config_id}_monitor",
             name=f"Bot {self.bot_config_id} Position Monitor",
             replace_existing=True,
