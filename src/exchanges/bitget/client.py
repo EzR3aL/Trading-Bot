@@ -334,24 +334,18 @@ class BitgetExchangeClient(ExchangeClient):
         if not pos:
             return None
 
-        # Use actual position side from exchange (not the DB side) to avoid mismatches
         actual_side = pos.side  # "long" or "short" from exchange
-        order_side = "sell" if actual_side == "long" else "buy"
 
-        api_margin = "crossed" if margin_mode == "cross" else "isolated"
+        # Use flash-close endpoint (works reliably in both hedge and one-way mode)
         data = {
             "symbol": symbol,
             "productType": PRODUCT_TYPE_USDT,
-            "marginMode": api_margin,
-            "marginCoin": "USDT",
-            "side": order_side,
-            "tradeSide": "close",
             "holdSide": actual_side,
-            "orderType": "market",
-            "size": str(pos.size),
         }
-        result = await self._request("POST", ENDPOINTS["place_order"], data=data)
-        order_id = result.get("orderId", "")
+        result = await self._request("POST", ENDPOINTS["close_positions"], data=data)
+
+        success_list = result.get("successList", [])
+        order_id = success_list[0].get("orderId", "") if success_list else ""
 
         return Order(
             order_id=str(order_id),

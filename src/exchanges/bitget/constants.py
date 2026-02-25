@@ -28,6 +28,7 @@ ENDPOINTS = {
     "orders_pending": "/api/v2/mix/order/orders-pending",
     "orders_history": "/api/v2/mix/order/orders-history",
     "order_fills": "/api/v2/mix/order/fills",
+    "close_positions": "/api/v2/mix/order/close-positions",
     "account_bill": "/api/v2/mix/account/bill",
 }
 
