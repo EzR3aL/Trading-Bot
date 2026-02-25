@@ -329,12 +329,14 @@ class BitgetExchangeClient(ExchangeClient):
             return False
 
     async def close_position(self, symbol: str, side: str, margin_mode: str = "cross") -> Optional[Order]:
-        order_side = "sell" if side == "long" else "buy"
-
-        # Get position size
+        # Get position size and actual hold side from exchange
         pos = await self.get_position(symbol)
         if not pos:
             return None
+
+        # Use actual position side from exchange (not the DB side) to avoid mismatches
+        actual_side = pos.side  # "long" or "short" from exchange
+        order_side = "sell" if actual_side == "long" else "buy"
 
         api_margin = "crossed" if margin_mode == "cross" else "isolated"
         data = {
@@ -344,6 +346,7 @@ class BitgetExchangeClient(ExchangeClient):
             "marginCoin": "USDT",
             "side": order_side,
             "tradeSide": "close",
+            "holdSide": actual_side,
             "orderType": "market",
             "size": str(pos.size),
         }
