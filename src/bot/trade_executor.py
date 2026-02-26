@@ -39,10 +39,29 @@ class TradeExecutorMixin:
         # Resolve leverage: per-asset > global > 1x
         leverage = asset_cfg.get("leverage") or self._config.leverage or 1
 
-        # TP/SL are handled by the strategy's exit logic, not by exchange orders.
-        # Clear any strategy-calculated TP/SL so they are NOT sent to the exchange.
-        signal.target_price = None
-        signal.stop_loss = None
+        # TP/SL: Use user-configured values from per-asset or bot-level config.
+        # Per-asset config takes priority, then bot-level, then None (strategy exit).
+        tp_pct = asset_cfg.get("take_profit_percent") or getattr(self._config, "take_profit_percent", None)
+        sl_pct = asset_cfg.get("stop_loss_percent") or getattr(self._config, "stop_loss_percent", None)
+
+        is_long = signal.direction.value == "long"
+        if tp_pct and signal.entry_price and signal.entry_price > 0:
+            signal.target_price = (
+                signal.entry_price * (1 + tp_pct / 100)
+                if is_long
+                else signal.entry_price * (1 - tp_pct / 100)
+            )
+        else:
+            signal.target_price = None
+
+        if sl_pct and signal.entry_price and signal.entry_price > 0:
+            signal.stop_loss = (
+                signal.entry_price * (1 - sl_pct / 100)
+                if is_long
+                else signal.entry_price * (1 + sl_pct / 100)
+            )
+        else:
+            signal.stop_loss = None
 
         try:
             # Validate entry price before any calculations
@@ -111,6 +130,11 @@ class TradeExecutorMixin:
                 logger.error(f"{log_prefix} [{mode_str}] Failed to place order")
                 return
 
+            # Safety: if exchange couldn't set TP/SL, clear them so should_exit() takes over
+            if getattr(order, "tpsl_failed", False):
+                signal.target_price = None
+                signal.stop_loss = None
+
             # Get fill price — prefer order.price (avgPx from exchange)
             fill_price = order.price if order.price > 0 else signal.entry_price
             if order.order_id:
@@ -158,9 +182,18 @@ class TradeExecutorMixin:
 
             self.trades_today += 1
 
-            # Warn about TP/SL status
+            # Log TP/SL status
             tpsl_warning = ""
-            if signal.target_price is None and signal.stop_loss is None:
+            if signal.target_price is not None or signal.stop_loss is not None:
+                tp_str = f"${signal.target_price:,.2f}" if signal.target_price else "—"
+                sl_str = f"${signal.stop_loss:,.2f}" if signal.stop_loss else "—"
+                tpsl_warning = f" [TP={tp_str} SL={sl_str}]"
+                logger.info(
+                    "%s [%s] %s: TP/SL an Exchange gesendet — TP=%s SL=%s, "
+                    "should_exit() deaktiviert",
+                    log_prefix, mode_str, signal.symbol, tp_str, sl_str,
+                )
+            elif signal.target_price is None and signal.stop_loss is None:
                 tpsl_warning = " [Kein TP/SL - Strategie-Exit aktiv]"
                 logger.info(
                     "%s [%s] %s: kein TP/SL gesetzt - "

@@ -42,9 +42,9 @@ DEFAULTS = {
     "rsi_period": 14,
     "rsi_smooth_period": 5,
     # Momentum Score
-    "momentum_smooth_period": 3,
-    "momentum_bull_threshold": 0.20,
-    "momentum_bear_threshold": -0.20,
+    "momentum_smooth_period": 5,
+    "momentum_bull_threshold": 0.35,
+    "momentum_bear_threshold": -0.35,
     # Trade filters
     "min_confidence": 40,
     # ATR-based Risk (optional — only used if user configures multipliers)
@@ -61,8 +61,8 @@ DEFAULTS = {
     "use_htf_filter": True,
     # Trailing stop
     "trailing_stop_enabled": True,
-    "trailing_breakeven_atr": 1.0,
-    "trailing_trail_atr": 1.5,
+    "trailing_breakeven_atr": 1.5,
+    "trailing_trail_atr": 2.5,
     # Regime sizing
     "min_position_scale": 0.5,
     "max_position_scale": 1.0,
@@ -1138,18 +1138,50 @@ class ClaudeEdgeIndicatorStrategy(BaseStrategy):
             "momentum_bull_threshold": {
                 "type": "float",
                 "label": "Momentum Bull-Schwelle",
-                "description": "Momentum-Score über diesem Wert = bullisches Regime (Standard 0.20)",
-                "default": 0.20,
+                "description": "Momentum-Score über diesem Wert = bullisches Regime (Standard 0.35)",
+                "default": 0.35,
                 "min": 0.0,
                 "max": 1.0,
             },
             "momentum_bear_threshold": {
                 "type": "float",
                 "label": "Momentum Bear-Schwelle",
-                "description": "Momentum-Score unter diesem Wert = bärisches Regime (Standard -0.20)",
-                "default": -0.20,
+                "description": "Momentum-Score unter diesem Wert = bärisches Regime (Standard -0.35)",
+                "default": -0.35,
                 "min": -1.0,
                 "max": 0.0,
+            },
+            "trailing_breakeven_atr": {
+                "type": "float",
+                "label": "Trailing Breakeven ATR",
+                "description": "ATR-Vielfaches für Breakeven-Aktivierung — höher = Breakeven erst bei stärkerem Profit (Standard 1.5)",
+                "default": 1.5,
+                "min": 0.5,
+                "max": 5.0,
+            },
+            "trailing_trail_atr": {
+                "type": "float",
+                "label": "Trailing Stop ATR",
+                "description": "ATR-Vielfaches für den Trailing-Stop-Abstand — höher = weniger Stopouts in Seitwärtsmärkten (Standard 2.5)",
+                "default": 2.5,
+                "min": 0.5,
+                "max": 5.0,
+            },
+            "momentum_smooth_period": {
+                "type": "int",
+                "label": "Momentum Glättung",
+                "description": "Perioden für die Momentum-Glättung — höher = weniger Noise-Exits (Standard 5)",
+                "default": 5,
+                "min": 1,
+                "max": 20,
+            },
+            "atr_period": {
+                "type": "int",
+                "label": "ATR Periode",
+                "description": "Berechnungsperiode für den ATR-Indikator (Standard 14)",
+                "default": 14,
+                "min": 5,
+                "max": 50,
             },
             "min_confidence": {
                 "type": "int",

@@ -844,8 +844,8 @@ class TestExecuteTradeExtended:
         args, kwargs = mock_client.set_leverage.call_args
         assert args == ("BTCUSDT", 10)
 
-    async def test_tp_sl_always_cleared_for_exchange_orders(self):
-        """TP/SL from strategy or per-asset config must NOT be sent to exchange."""
+    async def test_tp_sl_passthrough_from_config(self):
+        """User-configured TP/SL from bot config is sent to exchange."""
         worker = BotWorker(bot_config_id=1)
         per_asset = json.dumps({"BTCUSDT": {"tp": 5, "sl": 2}})
         worker._config = _make_mock_config(per_asset_config=per_asset)
@@ -861,7 +861,7 @@ class TestExecuteTradeExtended:
         mock_rm.calculate_position_size.return_value = (1000.0, 0.01)
         worker._risk_manager = mock_rm
 
-        # Signal comes in with TP/SL set by strategy
+        # Signal comes in with TP/SL set by strategy (overridden by config)
         signal = _make_mock_signal(direction=SignalDirection.LONG, entry_price=100000.0)
         signal.target_price = 105000.0
         signal.stop_loss = 98000.0
@@ -870,10 +870,37 @@ class TestExecuteTradeExtended:
         with patch("src.bot.trade_executor.get_session", return_value=_mock_session_ctx(mock_session)):
             await worker._execute_trade(signal, mock_client, demo_mode=True)
 
-        # TP/SL must be cleared — exit strategy handles this, not exchange orders
-        assert signal.target_price is None
-        assert signal.stop_loss is None
-        # Verify None was passed to place_market_order
+        # Bot-level TP=4%, SL=1.5% → TP/SL sent to exchange (not cleared)
+        call_kwargs = mock_client.place_market_order.call_args[1]
+        assert call_kwargs["take_profit"] == pytest.approx(104000.0)  # 100000 * 1.04
+        assert call_kwargs["stop_loss"] == pytest.approx(98500.0)     # 100000 * 0.985
+
+    async def test_tp_sl_none_when_no_config(self):
+        """Without TP/SL in config, None is passed to exchange."""
+        worker = BotWorker(bot_config_id=1)
+        worker._config = _make_mock_config(
+            take_profit_percent=None,
+            stop_loss_percent=None,
+            per_asset_config=None,
+        )
+        worker._get_notifiers = AsyncMock(return_value=[])
+
+        mock_client = AsyncMock()
+        mock_client.get_account_balance.return_value = _make_mock_balance()
+        mock_client.place_market_order.return_value = _make_mock_order()
+        mock_client.get_fill_price.return_value = 95100.0
+
+        mock_rm = MagicMock()
+        mock_rm.can_trade.return_value = (True, "")
+        mock_rm.calculate_position_size.return_value = (1000.0, 0.01)
+        worker._risk_manager = mock_rm
+
+        signal = _make_mock_signal(direction=SignalDirection.LONG, entry_price=100000.0)
+
+        mock_session = _make_db_session()
+        with patch("src.bot.trade_executor.get_session", return_value=_mock_session_ctx(mock_session)):
+            await worker._execute_trade(signal, mock_client, demo_mode=True)
+
         call_kwargs = mock_client.place_market_order.call_args[1]
         assert call_kwargs["take_profit"] is None
         assert call_kwargs["stop_loss"] is None
