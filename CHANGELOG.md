@@ -9,6 +9,22 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.29.0] - 2026-02-26
+
+### Geaendert
+- **should_exit() Schwellen erhoeht** — Weniger Fehl-Exits durch angepasste Defaults: `momentum_bull/bear_threshold` 0.20→0.35, `trailing_trail_atr` 1.5→2.5, `trailing_breakeven_atr` 1.0→1.5, `momentum_smooth_period` 3→5. Reduziert aggressive Fruehaus-Exits (vorher 17/35 Trades < 2 Min)
+- **TP/SL an Exchange gesendet** — User-definierte TP/SL-Werte (per-asset oder bot-level) werden jetzt als absolute Preise an die Exchange uebergeben statt geloescht. Long: TP = Entry × (1 + tp%), SL = Entry × (1 - sl%). Short: invertiert
+- **should_exit() bedingt deaktiviert** — Wenn ein Trade TP/SL auf der Exchange hat, wird should_exit() uebersprungen (Exchange handelt Exit). Ohne TP/SL laeuft should_exit() wie bisher als Fallback
+
+### Hinzugefuegt
+- **tpsl_failed Safety-Fallback** — Wenn die Exchange TP/SL nicht setzen kann, werden TP/SL auf None zurueckgesetzt und should_exit() greift automatisch als Backup
+- **4 neue Pro-Mode Parameter im UI** — `trailing_breakeven_atr`, `trailing_trail_atr`, `momentum_smooth_period`, `atr_period` sind jetzt im Strategy-Schema sichtbar und vom User anpassbar
+- **TP/SL Erfolgs-Logging** — Neuer Log-Eintrag wenn TP/SL erfolgreich an Exchange gesendet wird (vorher nur None- und Failed-Branch)
+- **25 neue Tests** — 13 Unit-Tests (test_tpsl_passthrough.py) + 12 Integration-Tests (test_tpsl_flow.py) mit stateful Exchange-Mock und Beispiel-Trades
+- **Demo-Trade Test-Script** — `scripts/test_tpsl_demo_trade.py` fuer Live-Verifikation auf Bitget Demo-API (5 Szenarien)
+
+---
+
 ## [3.28.0] - 2026-02-25
 
 ### Hinzugefuegt

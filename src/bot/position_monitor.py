@@ -76,6 +76,15 @@ class PositionMonitorMixin:
                     trade.highest_price = new_highest
                     await session.commit()
 
+            # Skip strategy exit when exchange handles TP/SL
+            has_exchange_tpsl = trade.take_profit is not None or trade.stop_loss is not None
+            if has_exchange_tpsl:
+                logger.debug(
+                    "[Bot:%s] Skipping should_exit for %s — exchange TP/SL active (TP=%s SL=%s)",
+                    self.bot_config_id, trade.symbol, trade.take_profit, trade.stop_loss,
+                )
+                return
+
             # Strategy-based exit check
             if self._strategy and hasattr(self._strategy, 'should_exit'):
                 try:
