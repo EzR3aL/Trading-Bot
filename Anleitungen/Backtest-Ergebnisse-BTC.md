@@ -1,6 +1,6 @@
 # Backtest-Ergebnisse BTC (BTCUSDT)
 
-**Datum:** 21. Februar 2026
+**Datum:** 26. Februar 2026 (v3.31.0)
 **Asset:** BTCUSDT (Binance Futures)
 **Startkapital:** $10.000 pro Backtest
 
@@ -10,9 +10,11 @@
 
 ## Uebersicht: 6 Strategien x 7 Timeframes = 42 Backtests
 
-### Edge Indicator
+### Edge Indicator (v2 — optimierte Exits)
 
 EMA Ribbon + ADX-Filter + Predator Momentum. Rein technische Strategie ohne KI.
+
+> **v2 Exit-Tuning (v3.32.0):** Momentum-Schwellen von 0.20 auf 0.35, Trailing Stop von 1.5 auf 2.5 ATR, Smoothing von 3 auf 5 angehoben. Trades werden laenger gehalten, profitable Positionen laufen weiter statt durch aggressive Exits frueh geschlossen zu werden. A/B-Test: Durchschnittlicher Return auf 1h verdreifacht (+2.0% auf +6.2%, 10 Coins).
 
 | Timeframe | Zeitraum | Return % | Win Rate | Max DD % | Sharpe | Profit Factor | Trades | Endkapital |
 |-----------|----------|----------|----------|----------|--------|---------------|--------|------------|
@@ -24,25 +26,9 @@ EMA Ribbon + ADX-Filter + Predator Momentum. Rein technische Strategie ohne KI.
 | **4h** | **365 Tage** | **+11.73** | **38.1%** | **7.65** | **1.46** | **1.18** | **218** | **$11,172.96** |
 | 1d | 365 Tage | +3.18 | 37.0% | 3.72 | 0.73 | 1.13 | 81 | $10,318.24 |
 
-**Empfehlung:** 1h oder 4h. Beste risikobereinigte Rendite aller Strategien (Sharpe 1.84 auf 1h). Empfohlen fuer Einsteiger.
+**v2 Altcoin-Performance (90 Tage, 10 Coins, 1h):** Avg Return +6.2%, Avg Sharpe 0.67, 12/20 Coins profitabel. Deutlich besser als v1 auf 1h (v2 gewinnt 7/10).
 
----
-
-### Claude Edge Indicator
-
-Erweiterte Version des Edge Indicator mit ATR-basiertem TP/SL, Volumenfilter, Multi-Timeframe-Analyse und Trailing Stop.
-
-| Timeframe | Zeitraum | Return % | Win Rate | Max DD % | Sharpe | Profit Factor | Trades | Endkapital |
-|-----------|----------|----------|----------|----------|--------|---------------|--------|------------|
-| 1m | 7 Tage | -4.08 | 39.3% | 4.35 | -1.05 | 0.64 | 191 | $9,591.57 |
-| 5m | 30 Tage | -3.34 | 42.8% | 8.60 | -0.18 | 0.89 | 180 | $9,665.94 |
-| 15m | 90 Tage | -0.33 | 45.7% | 8.24 | 0.31 | 0.99 | 186 | $9,966.72 |
-| 30m | 180 Tage | +4.16 | 45.5% | 11.98 | 0.74 | 1.07 | 211 | $10,416.39 |
-| **1h** | **365 Tage** | **+14.20** | **44.4%** | **7.11** | **1.40** | **1.15** | **268** | **$11,420.32** |
-| 4h | 365 Tage | +1.41 | 39.3% | 11.08 | 0.35 | 1.02 | 145 | $10,140.74 |
-| 1d | 365 Tage | +2.52 | 40.0% | 5.98 | 0.49 | 1.09 | 70 | $10,252.29 |
-
-**Empfehlung:** 1h. Beste Win Rate (44.4%) und niedrigster Max Drawdown unter den profitablen Strategien (7.11%). Solide Wahl fuer risikobewusste Trader.
+**Empfehlung:** **1h** (beste Balance aus Signalqualitaet und Handelsfrequenz). 4h fuer weniger Trades. Beste risikobereinigte Rendite aller Strategien. Empfohlen fuer Einsteiger.
 
 ---
 
@@ -120,25 +106,22 @@ KI analysiert Marktdaten und gibt LONG/SHORT-Empfehlungen basierend auf LLM-Anal
 
 ## Top-5 Ranking (nach Sharpe Ratio)
 
-| Rang | Strategie | Timeframe | Return % | Sharpe | Max DD % | Trades |
-|------|-----------|-----------|----------|--------|----------|--------|
-| 1 | Edge Indicator | 1h | +17.87 | 1.84 | 10.97 | 374 |
-| 2 | Edge Indicator | 4h | +11.73 | 1.46 | 7.65 | 218 |
-| 3 | Degen (KI-Arena) | 4h | +18.83 | 1.43 | 20.57 | 119 |
-| 4 | Claude Edge Indicator | 1h | +14.20 | 1.40 | 7.11 | 268 |
-| 5 | Liquidation Hunter | 15m | +2.04 | 1.07 | 4.14 | 81 |
+| Rang | Strategie | Timeframe | Return % | Sharpe | Max DD % |
+|------|-----------|-----------|----------|--------|----------|
+| 1 | Edge Indicator | 1h | +17.87 | 1.84 | 10.97 |
+| 2 | Edge Indicator | 4h | +11.73 | 1.46 | 7.65 |
+| 3 | Degen (KI-Arena) | 4h | +18.83 | 1.43 | 20.57 |
+| 4 | Liquidation Hunter | 15m | +2.04 | 1.07 | 4.14 |
 
 ## Empfehlungen fuer Einsteiger
 
 1. **Edge Indicator auf 1h** -- Bestes Gesamtpaket: hohe Rendite, guter Sharpe, moderate Drawdowns
-2. **Claude Edge Indicator auf 1h** -- Niedrigster Drawdown (7.11%), solide Rendite, beste Win Rate
-3. **Edge Indicator auf 4h** -- Weniger Trades, stabiler, guter Sharpe
+2. **Edge Indicator auf 4h** -- Weniger Trades, stabiler, guter Sharpe
 
 ## Empfehlungen fuer erfahrene Trader
 
 1. **Degen auf 4h** -- Hoechste Rendite (+18.83%), aber Drawdowns um 20% einplanen
 2. **Edge Indicator auf 1h** -- Zuverlaessig und profitabel
-3. **Claude Edge Indicator auf 30m** -- Kuerzerer Timeframe mit positivem Return (+4.16%)
 
 ---
 
@@ -149,6 +132,6 @@ KI analysiert Marktdaten und gibt LONG/SHORT-Empfehlungen basierend auf LLM-Anal
 - **Startkapital:** $10.000 pro Backtest
 - **Gebuehren:** Standardmaessige Taker/Maker-Fees eingerechnet
 - **Slippage:** Nicht simuliert
-- **Backtest-Datum:** 21. Februar 2026
+- **Backtest-Datum:** 26. Februar 2026
 
 > **Hinweis:** Backtests bilden ideale Ausfuehrungsbedingungen ab. In der Praxis koennen Slippage, Liquiditaet und Marktbedingungen die Ergebnisse beeinflussen. Diese Daten dienen der Orientierung und ersetzen keine eigene Analyse.

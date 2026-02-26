@@ -78,7 +78,7 @@ interface BotBuilderProps {
 }
 
 // Strategies that use market data and should show the data sources step
-const DATA_STRATEGIES = ['llm_signal', 'sentiment_surfer', 'liquidation_hunter', 'degen', 'edge_indicator', 'claude_edge_indicator']
+const DATA_STRATEGIES = ['llm_signal', 'sentiment_surfer', 'liquidation_hunter', 'degen', 'edge_indicator']
 
 // Fixed data sources for non-LLM strategies (these strategies use hardcoded sources internally)
 const FIXED_STRATEGY_SOURCES: Record<string, string[]> = {
@@ -96,9 +96,6 @@ const FIXED_STRATEGY_SOURCES: Record<string, string[]> = {
   edge_indicator: [
     'spot_price', 'vwap', 'supertrend', 'spot_volume', 'volatility',
   ],
-  claude_edge_indicator: [
-    'spot_price', 'vwap', 'supertrend', 'spot_volume', 'volatility',
-  ],
 }
 
 const STRATEGY_DISPLAY_NAMES: Record<string, string> = {
@@ -107,7 +104,6 @@ const STRATEGY_DISPLAY_NAMES: Record<string, string> = {
   liquidation_hunter: 'Liquidation Hunter',
   degen: 'Degen',
   edge_indicator: 'Edge Indicator',
-  claude_edge_indicator: 'Claude-Edge',
 }
 
 // Strategy descriptions are now sourced from i18n keys: bots.builder.strategyDesc_{name}
@@ -129,7 +125,6 @@ const CATEGORY_ICONS: Record<string, typeof Brain> = {
 // Backtest-based timeframe recommendations (90-day BTCUSDT backtest)
 const STRATEGY_RECOMMENDATIONS: Record<string, { bestTimeframe: string }> = {
   edge_indicator: { bestTimeframe: '1h' },
-  claude_edge_indicator: { bestTimeframe: '1h' },
 }
 
 const EXCHANGES = ['bitget', 'weex', 'hyperliquid']
@@ -738,7 +733,7 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
             )}
 
             {/* Strategy Recommendations from Backtest */}
-            {strategyType && (strategyType === 'edge_indicator' || strategyType === 'claude_edge_indicator') && STRATEGY_RECOMMENDATIONS[strategyType] && (
+            {strategyType && strategyType === 'edge_indicator' && STRATEGY_RECOMMENDATIONS[strategyType] && (
               <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-primary-500/10 border border-primary-500/20">
                 <Clock size={14} className="text-primary-400 shrink-0" />
                 <span className="text-xs text-primary-300">

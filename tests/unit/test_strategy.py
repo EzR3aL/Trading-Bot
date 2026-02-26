@@ -185,7 +185,7 @@ class TestSignalDirection:
         assert SignalDirection.SHORT.value == "short"
 
     def test_enum_members_count(self):
-        assert len(SignalDirection) == 2
+        assert len(SignalDirection) == 3
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

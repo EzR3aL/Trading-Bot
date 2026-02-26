@@ -38,7 +38,7 @@ import {
 } from 'lucide-react'
 import GuidedTour, { TourHelpButton, type TourStep } from '../components/ui/GuidedTour'
 
-const STRATEGY_DISPLAY: Record<string, string> = { llm_signal: 'KI-Companion', sentiment_surfer: 'Sentiment Surfer', liquidation_hunter: 'Liquidation Hunter', degen: 'Degen', edge_indicator: 'Edge Indicator', claude_edge_indicator: 'Claude-Edge' }
+const STRATEGY_DISPLAY: Record<string, string> = { llm_signal: 'KI-Companion', sentiment_surfer: 'Sentiment Surfer', liquidation_hunter: 'Liquidation Hunter', degen: 'Degen', edge_indicator: 'Edge Indicator' }
 const AI_STRATEGIES = new Set(['llm_signal', 'degen'])
 function strategyLabel(name: string) { return STRATEGY_DISPLAY[name] || name.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) }
 
@@ -610,6 +610,7 @@ export default function Bots() {
   const [llmConnections, setLlmConnections] = useState<LlmConnection[]>([])
   const [budgetInfo, setBudgetInfo] = useState<Record<number, BotBudgetInfo>>({})
   const [moreMenuOpen, setMoreMenuOpen] = useState<number | null>(null)
+  const [closePositionOpen, setClosePositionOpen] = useState<number | null>(null)
 
   // Build lookup: model_id → display name, provider_type → family_name
   const modelNameMap = useMemo(() => {
@@ -996,7 +997,10 @@ export default function Bots() {
                   </div>
                   <div>
                     <div className="text-xs text-gray-500 uppercase tracking-wider">{t('bots.openTrades')}</div>
-                    <div className="text-base text-white font-semibold">{bot.open_trades}</div>
+                    <div className={`text-base font-semibold ${bot.open_trades > 0 ? 'text-amber-400' : 'text-white'}`}>
+                      {bot.open_trades > 0 && <span className="inline-block w-1.5 h-1.5 rounded-full bg-amber-400 mr-1.5 mb-0.5 animate-pulse" />}
+                      {bot.open_trades}
+                    </div>
                   </div>
                 </div>
 
@@ -1111,6 +1115,52 @@ export default function Bots() {
                   <div className="flex items-center gap-1.5 mb-3 text-sm text-gray-500">
                     <Clock size={14} />
                     {t('bots.lastAnalysis')}: {new Date(bot.last_analysis).toLocaleTimeString()}
+                  </div>
+                )}
+
+                {/* Close Position — prominent when trades are open */}
+                {bot.open_trades > 0 && bot.status === 'running' && (
+                  <div className="mb-3">
+                    {bot.trading_pairs.length === 1 ? (
+                      <button
+                        onClick={() => handleClosePosition(bot.bot_config_id, bot.trading_pairs[0])}
+                        disabled={actionLoading === bot.bot_config_id}
+                        className="w-full flex items-center justify-center gap-2 px-3 py-2.5 text-sm font-medium bg-amber-500/10 text-amber-400 rounded-xl border border-amber-500/25 hover:bg-amber-500/20 hover:border-amber-500/40 disabled:opacity-50 transition-all duration-200"
+                      >
+                        <XCircle size={15} />
+                        {t('bots.closePosition')} {bot.trading_pairs[0]}
+                      </button>
+                    ) : (
+                      <div className="relative">
+                        <button
+                          onClick={() => setClosePositionOpen(closePositionOpen === bot.bot_config_id ? null : bot.bot_config_id)}
+                          disabled={actionLoading === bot.bot_config_id}
+                          className="w-full flex items-center justify-center gap-2 px-3 py-2.5 text-sm font-medium bg-amber-500/10 text-amber-400 rounded-xl border border-amber-500/25 hover:bg-amber-500/20 hover:border-amber-500/40 disabled:opacity-50 transition-all duration-200"
+                        >
+                          <XCircle size={15} />
+                          {t('bots.closePosition')} ({bot.open_trades})
+                          <ChevronDown size={14} className={`transition-transform ${closePositionOpen === bot.bot_config_id ? 'rotate-180' : ''}`} />
+                        </button>
+                        {closePositionOpen === bot.bot_config_id && (
+                          <>
+                            <div className="fixed inset-0 z-10" onClick={() => setClosePositionOpen(null)} />
+                            <div className="absolute left-0 right-0 top-full mt-1 z-20 bg-[#1a1f2e] border border-amber-500/20 rounded-xl shadow-xl overflow-hidden">
+                              {bot.trading_pairs.map(symbol => (
+                                <button
+                                  key={symbol}
+                                  onClick={() => { setClosePositionOpen(null); handleClosePosition(bot.bot_config_id, symbol) }}
+                                  disabled={actionLoading === bot.bot_config_id}
+                                  className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-amber-400 hover:bg-amber-500/10 disabled:opacity-30 transition-colors"
+                                >
+                                  <XCircle size={14} />
+                                  {symbol}
+                                </button>
+                              ))}
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    )}
                   </div>
                 )}
 

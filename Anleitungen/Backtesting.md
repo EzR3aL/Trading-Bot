@@ -24,13 +24,12 @@ Version **3.3.1** (Februar 2026). Vollstaendig im Frontend integriert.
 
 ### Unterstuetzte Strategien
 
-Alle 6 Strategien koennen getestet werden:
+Alle 5 Strategien koennen getestet werden:
 - LiquidationHunter
 - LLM Signal
 - Sentiment Surfer
 - Degen
 - Edge Indicator
-- Claude Edge Indicator
 
 ---
 
@@ -195,7 +194,7 @@ Backtesting simulates a trading strategy with **historical market data**. You ca
 
 Available since version **3.3.1** (February 2026). Fully integrated in the frontend.
 
-All 6 strategies can be tested: LiquidationHunter, LLM Signal, Sentiment Surfer, Degen, Edge Indicator, Claude Edge Indicator.
+All 5 strategies can be tested: LiquidationHunter, LLM Signal, Sentiment Surfer, Degen, Edge Indicator.
 
 ---
 

@@ -798,5 +798,5 @@ class TestDefaults:
         assert DEFAULTS["macd_slow"] == 26
         assert DEFAULTS["macd_signal"] == 9
         assert DEFAULTS["rsi_period"] == 14
-        assert DEFAULTS["momentum_bull_threshold"] == 0.20
-        assert DEFAULTS["momentum_bear_threshold"] == -0.20
+        assert DEFAULTS["momentum_bull_threshold"] == 0.35
+        assert DEFAULTS["momentum_bear_threshold"] == -0.35

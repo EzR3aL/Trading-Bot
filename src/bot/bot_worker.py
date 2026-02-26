@@ -648,6 +648,29 @@ class BotWorker(
                     logger.info(f"{log_prefix} Already have open position in {symbol}")
                     return
 
+        # Post-trade cooldown — wait before re-entering after a close
+        if not force:
+            cooldown_hours = self._get_strategy_param("cooldown_hours", 4.0)
+            if cooldown_hours > 0:
+                async with get_session() as session:
+                    from sqlalchemy import select
+                    last_closed = await session.execute(
+                        select(TradeRecord).where(
+                            TradeRecord.bot_config_id == self.bot_config_id,
+                            TradeRecord.symbol == symbol,
+                            TradeRecord.status == "closed",
+                        ).order_by(TradeRecord.exit_time.desc()).limit(1)
+                    )
+                    last = last_closed.scalar_one_or_none()
+                    if last and last.exit_time:
+                        elapsed = (datetime.now(timezone.utc) - last.exit_time).total_seconds() / 3600
+                        if elapsed < cooldown_hours:
+                            logger.info(
+                                "%s Cooldown for %s — closed %.1fh ago, need %.1fh",
+                                log_prefix, symbol, elapsed, cooldown_hours,
+                            )
+                            return
+
         # Generate signal
         signal = await self._strategy.generate_signal(symbol)
 
@@ -707,6 +730,12 @@ class BotWorker(
 
         # Reset risk alert deduplication for the new day
         self._risk_alerts_sent.clear()
+
+    def _get_strategy_param(self, key: str, default):
+        """Read a strategy parameter from the strategy instance."""
+        if hasattr(self._strategy, '_p') and isinstance(self._strategy._p, dict):
+            return self._strategy._p.get(key, default)
+        return default
 
     def get_status_dict(self) -> dict:
         """Return status info for API responses."""

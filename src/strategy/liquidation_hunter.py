@@ -137,7 +137,7 @@ class LiquidationHunterStrategy(BaseStrategy):
             return SignalDirection.LONG
         return SignalDirection.SHORT
 
-    def _calculate_targets(self, direction: SignalDirection, current_price: float) -> Tuple:
+    def _calculate_targets(self, direction: SignalDirection, current_price: float, klines=None) -> Tuple:
         """Calculate TP/SL prices. Returns (None, None) if not configured by user."""
         tp_pct_raw = self._p.get("take_profit_percent")
         sl_pct_raw = self._p.get("stop_loss_percent")

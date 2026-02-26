@@ -54,18 +54,22 @@ DEFAULTS = {
     # RSI
     "rsi_period": 14,
     "rsi_smooth_period": 5,
-    # Momentum Score
-    "momentum_smooth_period": 3,
-    "momentum_bull_threshold": 0.20,
-    "momentum_bear_threshold": -0.20,
+    # Momentum Score (v2: relaxed thresholds for fewer premature exits)
+    "momentum_smooth_period": 5,
+    "momentum_bull_threshold": 0.35,
+    "momentum_bear_threshold": -0.35,
     # Trade filters
     "min_confidence": 40,
     # ATR (for trailing stop)
     "atr_period": 14,
     # Trailing stop
     "trailing_stop_enabled": True,
-    "trailing_breakeven_atr": 1.0,
-    "trailing_trail_atr": 1.5,
+    "trailing_breakeven_atr": 1.5,
+    "trailing_trail_atr": 2.5,
+    # Default SL safety net (optional, 0 = disabled)
+    "default_sl_atr": 0,
+    # MACD Floor (v2)
+    "use_macd_floor": True,
     # Data
     "kline_interval": "1h",
     "kline_count": 200,
@@ -195,6 +199,10 @@ class EdgeIndicatorStrategy(BaseStrategy):
         histogram_series = macd_data["histogram_series"]
 
         stdev_macd = _stdev(histogram_series, min(100, len(histogram_series))) if histogram_series else 1e-10
+        if self._p.get("use_macd_floor", True):
+            atr_series_pm = MarketDataFetcher.calculate_atr(klines, self._p["atr_period"])
+            atr_val_pm = atr_series_pm[-1] if atr_series_pm else closes[-1] * 0.015
+            stdev_macd = max(stdev_macd, atr_val_pm * 0.01)
         macd_norm = _tanh(macd_hist / stdev_macd)
 
         rsi_values = MarketDataFetcher.calculate_rsi(klines, rsi_period)
@@ -271,11 +279,19 @@ class EdgeIndicatorStrategy(BaseStrategy):
         if min_len <= 1:
             return []
 
+        # MACD Floor for _build_score_series
+        atr_floor = 0.0
+        if self._p.get("use_macd_floor", True):
+            atr_series_bs = MarketDataFetcher.calculate_atr(klines, self._p["atr_period"])
+            atr_floor = (atr_series_bs[-1] if atr_series_bs else closes[-1] * 0.015) * 0.01
+
         scores = []
         for i in range(1, min_len):
             hist_val = hist_series[i] if i < len(hist_series) else 0.0
             hist_window = hist_series[max(0, i - 99):i + 1]
             sd = _stdev(hist_window, min(100, len(hist_window)))
+            if atr_floor > 0:
+                sd = max(sd, atr_floor)
             m_norm = _tanh(hist_val / sd)
 
             rsi_idx = len(rsi_smoothed) - min_len + i
@@ -434,11 +450,18 @@ class EdgeIndicatorStrategy(BaseStrategy):
             return SignalDirection.SHORT, " | ".join(reasons)
 
     def _calculate_targets(
-        self, direction: SignalDirection, current_price: float
+        self, direction: SignalDirection, current_price: float,
+        klines: Optional[List[List]] = None,
     ) -> Tuple[Optional[float], Optional[float]]:
-        """Calculate TP/SL prices. Returns (None, None) if not configured by user."""
+        """
+        Calculate TP/SL prices.
+
+        SL priority: stop_loss_percent > default_sl_atr (2x ATR) > None
+        TP: only from take_profit_percent (user-configured).
+        """
         tp_pct_raw = self._p.get("take_profit_percent")
         sl_pct_raw = self._p.get("stop_loss_percent")
+        default_sl = self._p.get("default_sl_atr", 2.0)
 
         take_profit = None
         stop_loss = None
@@ -451,11 +474,28 @@ class EdgeIndicatorStrategy(BaseStrategy):
                 take_profit = round(current_price * (1 - tp_pct), 2)
 
         if sl_pct_raw is not None and current_price > 0:
+            # User-configured percent SL takes priority
             sl_pct = float(sl_pct_raw) / 100
             if direction == SignalDirection.LONG:
                 stop_loss = round(current_price * (1 - sl_pct), 2)
             else:
                 stop_loss = round(current_price * (1 + sl_pct), 2)
+        elif default_sl > 0 and current_price > 0:
+            # Default SL safety net: 2x ATR
+            atr_value = 0.0
+            if klines:
+                atr_series = MarketDataFetcher.calculate_atr(
+                    klines, self._p["atr_period"]
+                )
+                if atr_series:
+                    atr_value = atr_series[-1]
+            if atr_value <= 0:
+                atr_value = current_price * 0.015
+            sl_distance = atr_value * float(default_sl)
+            if direction == SignalDirection.LONG:
+                stop_loss = round(current_price - sl_distance, 2)
+            else:
+                stop_loss = round(current_price + sl_distance, 2)
 
         return take_profit, stop_loss
 
@@ -470,6 +510,7 @@ class EdgeIndicatorStrategy(BaseStrategy):
         metrics_at_entry: dict | None = None,
         current_price: float | None = None,
         highest_price: float | None = None,
+        **kwargs,
     ) -> Tuple[bool, str]:
         """Check if an open position should be closed.
 
@@ -559,7 +600,7 @@ class EdgeIndicatorStrategy(BaseStrategy):
             if indicator_exit:
                 # Breakeven protection: if trade was profitable enough, don't exit at a loss
                 if self._p.get("trailing_stop_enabled") and highest_price and entry_price:
-                    breakeven_atr = self._p.get("trailing_breakeven_atr", 1.0)
+                    breakeven_atr = self._p.get("trailing_breakeven_atr", 1.5)
                     atr_series = MarketDataFetcher.calculate_atr(klines, self._p["atr_period"])
                     atr_val = atr_series[-1] if atr_series else current_price * 0.015
                     breakeven_threshold = atr_val * breakeven_atr
@@ -599,8 +640,8 @@ class EdgeIndicatorStrategy(BaseStrategy):
         atr_series = MarketDataFetcher.calculate_atr(klines, self._p["atr_period"])
         atr_val = atr_series[-1] if atr_series else current_price * 0.015
 
-        breakeven_atr = self._p.get("trailing_breakeven_atr", 1.0)
-        trail_atr = self._p.get("trailing_trail_atr", 1.5)
+        breakeven_atr = self._p.get("trailing_breakeven_atr", 1.5)
+        trail_atr = self._p.get("trailing_trail_atr", 2.5)
         trail_distance = atr_val * trail_atr
         breakeven_threshold = atr_val * breakeven_atr
 
@@ -753,7 +794,8 @@ class EdgeIndicatorStrategy(BaseStrategy):
             "Technical analysis strategy based on the TradingView 'Trading Edge' indicator. "
             "Combines EMA 8/21 Ribbon for trend direction, ADX for chop filtering, "
             "and a Predator Momentum score (MACD + RSI Drift + Trend Bonus) for timing. "
-            "Only requires kline data - no external API dependencies."
+            "v2: Optimized exit thresholds let profitable trades run longer. "
+            "Best on 1h and 4h. Only requires kline data - no external API dependencies."
         )
 
     @classmethod
@@ -786,13 +828,13 @@ class EdgeIndicatorStrategy(BaseStrategy):
             },
             "momentum_bull_threshold": {
                 "type": "float", "label": "Momentum Bull-Schwelle",
-                "description": "Momentum-Score über diesem Wert = bullisches Regime (Standard 0.20)",
-                "default": 0.20, "min": 0.0, "max": 1.0,
+                "description": "Momentum-Score ueber diesem Wert = bullisches Regime. Hoeher = weniger Fehl-Exits, Trades laufen laenger (Standard 0.35)",
+                "default": 0.35, "min": 0.0, "max": 1.0,
             },
             "momentum_bear_threshold": {
                 "type": "float", "label": "Momentum Bear-Schwelle",
-                "description": "Momentum-Score unter diesem Wert = bärisches Regime (Standard -0.20)",
-                "default": -0.20, "min": -1.0, "max": 0.0,
+                "description": "Momentum-Score unter diesem Wert = baerisches Regime. Niedriger = weniger Fehl-Exits (Standard -0.35)",
+                "default": -0.35, "min": -1.0, "max": 0.0,
             },
             "min_confidence": {
                 "type": "int", "label": "Min. Konfidenz",

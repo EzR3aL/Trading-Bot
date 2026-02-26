@@ -10,7 +10,6 @@ Tests cover:
 - LLM strategies falling back to legacy mode
 - All 7 timeframes generating correct candle counts
 - Next-candle-open entry preservation (look-ahead bias prevention)
-- ATR-based TP/SL for ClaudeEdge strategy
 """
 
 import random
@@ -38,7 +37,7 @@ from src.data.market_data import MarketMetrics
 
 CANDLES_PER_DAY = {"1m": 1440, "5m": 288, "15m": 96, "30m": 48, "1h": 24, "4h": 6, "1d": 1}
 ALL_TIMEFRAMES = ["1m", "5m", "15m", "30m", "1h", "4h", "1d"]
-UNIFIED_STRATEGIES = ["edge_indicator", "claude_edge_indicator", "sentiment_surfer", "liquidation_hunter"]
+UNIFIED_STRATEGIES = ["edge_indicator", "sentiment_surfer", "liquidation_hunter"]
 
 
 def _generate_data(days: int = 15, interval: str = "1h", seed: int = 42) -> List[HistoricalDataPoint]:
@@ -266,37 +265,6 @@ class TestUnifiedEdgeIndicator:
                 assert t.stop_loss_price > 0, "SL should be set"
 
 
-class TestUnifiedClaudeEdge:
-    """ClaudeEdgeIndicator uses ATR-based TP/SL in unified backtest."""
-
-    @pytest.mark.asyncio
-    async def test_unified_claude_edge_uses_atr_tp_sl(self):
-        """ClaudeEdgeIndicator TP/SL should differ from fixed-percent defaults."""
-        from src.backtest.backtest_data_provider import BacktestMarketDataFetcher
-        from src.strategy.claude_edge_indicator import ClaudeEdgeIndicatorStrategy
-
-        data_points = _generate_data(days=20, interval="1h")
-        mock_fetcher = BacktestMarketDataFetcher()
-        strategy = ClaudeEdgeIndicatorStrategy(
-            params={"kline_interval": "1h", "kline_count": 200},
-            data_fetcher=mock_fetcher,
-            backtest_mode=True,
-        )
-
-        config = BacktestConfig(starting_capital=10000)
-        engine = BacktestEngine(config, strategy_type="claude_edge_indicator", symbol="BTC")
-
-        result = await engine.run_unified(data_points, strategy, mock_fetcher)
-        await strategy.close()
-
-        assert result.total_trades >= 0, "Should not crash"
-        if result.total_trades > 0:
-            trade = result.trades[0]
-            assert trade.take_profit_price != trade.stop_loss_price, "TP and SL should differ"
-            assert trade.take_profit_price > 0
-            assert trade.stop_loss_price > 0
-
-
 class TestUnifiedSentimentSurfer:
     """SentimentSurfer agreement gate works in unified backtest."""
 
@@ -363,7 +331,6 @@ class TestLLMStrategiesLegacy:
         assert "degen" in LLM_STRATEGIES
         assert "llm_signal" in LLM_STRATEGIES
         assert "edge_indicator" not in LLM_STRATEGIES
-        assert "claude_edge_indicator" not in LLM_STRATEGIES
 
     def test_legacy_degen_generates_trades(self):
         """Degen via legacy engine produces trades."""
@@ -502,12 +469,6 @@ class TestStrategyConstructors:
         from src.strategy.edge_indicator import EdgeIndicatorStrategy
         fetcher = BacktestMarketDataFetcher()
         s = EdgeIndicatorStrategy(data_fetcher=fetcher)
-        assert s.data_fetcher is fetcher
-
-    def test_claude_edge_accepts_data_fetcher(self):
-        from src.strategy.claude_edge_indicator import ClaudeEdgeIndicatorStrategy
-        fetcher = BacktestMarketDataFetcher()
-        s = ClaudeEdgeIndicatorStrategy(data_fetcher=fetcher, backtest_mode=True)
         assert s.data_fetcher is fetcher
 
     def test_sentiment_surfer_accepts_data_fetcher(self):

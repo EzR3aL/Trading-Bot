@@ -1,6 +1,6 @@
 # Strategie-Dokumentation
 
-Der Trading Bot bietet 6 Strategien mit unterschiedlichen Ansaetzen, Risikoprofilen und Datenquellen.
+Der Trading Bot bietet 5 Strategien mit unterschiedlichen Ansaetzen, Risikoprofilen und Datenquellen.
 
 ---
 
@@ -13,7 +13,6 @@ Der Trading Bot bietet 6 Strategien mit unterschiedlichen Ansaetzen, Risikoprofi
 | 3 | Sentiment Surfer | Hybrid | 6 gewichtete Quellen | Mittel | Balanced Trading |
 | 4 | Degen | KI-Arena | 19 feste Quellen | Hoch | Experimentell |
 | 5 | Edge Indicator | Technisch | Nur Kline-Daten (OHLCV) | Niedrig-Mittel | Technische Trader |
-| 6 | Claude Edge Indicator | Technisch+ | Kline + Volume + Multi-TF | Niedrig-Mittel | Fortgeschrittene |
 
 ### Backtest-Ergebnisse (90 Tage, BTCUSDT, $10k)
 
@@ -21,7 +20,6 @@ Der Trading Bot bietet 6 Strategien mit unterschiedlichen Ansaetzen, Risikoprofi
 |-----------|--------|----------|--------|--------|--------|-----|
 | **LiquidationHunter** | +26.2% | 53.9% | 4.7% | 5.51 | 104 | 1.98 |
 | **Edge Indicator** | +18.6% | 47.1% | 9.8% | 2.91 | 68 | 1.65 |
-| Claude Edge Indicator | +18.6% | 47.1% | 9.8% | 2.91 | 68 | 1.65 |
 | Degen | +0.8% | 40.0% | 3.8% | 0.43 | 35 | 1.08 |
 | LLM Signal | +0.8% | 40.0% | 4.5% | 0.51 | 25 | 1.12 |
 | Sentiment Surfer | -3.7% | 32.3% | 9.4% | -1.07 | 65 | 0.84 |
@@ -321,57 +319,6 @@ Kombiniert mehrere Momentum-Indikatoren zu einem Score von -1 bis +1:
 
 ---
 
-## 6. Claude Edge Indicator
-
-`src/strategy/claude_edge_indicator.py`
-
-### Ueberblick
-
-Eine **erweiterte Version des Edge Indicators** mit 6 Verbesserungen, die aus der Backtest-Analyse identifiziert wurden. Behalt die technische Grundlage bei, fuegt aber intelligentere Risk-Management-Features hinzu.
-
-### 6 Verbesserungen gegenueber Edge Indicator
-
-| # | Feature | Beschreibung |
-|---|---------|-------------|
-| 1 | **ATR-basierte TP/SL** | Dynamische Targets basierend auf aktueller Volatilitaet statt fester Prozentwerte |
-| 2 | **Volume Confirmation** | Buy/Sell Volume Ratio verstaerkt den Momentum Score |
-| 3 | **Multi-Timeframe** | 4h EMA Ribbon Alignment als hoehere Timeframe-Bestaetigung |
-| 4 | **Trailing Stop** | Metadata fuer Breakeven + Trailing Stop Logik |
-| 5 | **Regime-basierte Sizing** | Position Size skaliert 0.5-1.0x basierend auf Confidence |
-| 6 | **RSI Divergence** | Erkennt Preis/RSI-Divergenz fuer fruehe Reversals |
-
-### ATR-basiertes Risk Management
-
-Statt fester TP/SL Prozentwerte:
-
-```
-Take Profit = Entry +/- (ATR * 2.5)
-Stop Loss   = Entry -/+ (ATR * 1.5)
-```
-
-**Vorteil:** In volatilen Maerkten weiter, in ruhigen Maerkten enger -- passt sich automatisch an.
-
-### Multi-Timeframe Bestaetigung
-
-Die Strategie prueft die 4h EMA Ribbon zusaetzlich:
-- 4h Bull + 1h Bull = **Staerkeres Signal** (Confidence Boost)
-- 4h Bear + 1h Bull = Konflikt -> Confidence Reduktion
-- 4h Daten nicht verfuegbar (z.B. im Backtest) -> wird uebersprungen
-
-### Empfohlene Parameter
-
-| Parameter | Empfehlung |
-|-----------|------------|
-| Timeframe | **1h** (basierend auf 90-Tage Backtest) |
-| ATR Period | 14 |
-| ATR TP Multiplier | 2.5 |
-| ATR SL Multiplier | 1.5 |
-| Volume Weight | 0.3 |
-| HTF Interval | 4h |
-| Leverage | 3x |
-
----
-
 ## Confidence-System
 
 Alle Strategien verwenden ein einheitliches Confidence-System:
@@ -411,9 +358,7 @@ Break-Even = 1 / (1 + R/R) = 1 / (1 + 1.75) = 36.4%
 | Eigene KI-Analyse, Custom Prompts | LLM Signal |
 | Ausgewogener Multi-Faktor Ansatz | Sentiment Surfer |
 | Experimentell, aggressive Predictions | Degen |
-| Fortgeschritten, dynamisches Risk Management | Claude Edge Indicator |
 | Nur Kline-Daten, keine API-Abhaengigkeiten | Edge Indicator |
-| Multi-Timeframe Bestaetigung gewuenscht | Claude Edge Indicator |
 
 ---
 

@@ -107,7 +107,6 @@ describe('guide strategy overview keys', () => {
     'stratLiquidation', 'stratLiquidationTf',
     'stratDegen', 'stratDegenTf',
     'stratEdge', 'stratEdgeTf',
-    'stratClaudeEdge', 'stratClaudeEdgeTf',
     'stratTypeKi', 'stratTypeSentiment', 'stratTypeLiq', 'stratTypeKline',
   ];
 

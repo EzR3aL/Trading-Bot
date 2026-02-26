@@ -17,49 +17,38 @@ Dieses Dokument erklaert fuer jede Strategie im Detail, **wie der Bot tatsaechli
 8. [Trade-Gate](#i8-trade-gate)
 9. [Beispiel-Szenarien](#i9-beispiel-szenarien)
 
-**II. Claude Edge Indicator**
+**II. Liquidation Hunter**
 1. [Ueberblick](#ii1-ueberblick)
-2. [ATR-basierte TP/SL](#ii2-atr-basierte-tpsl)
-3. [Volumen-Bestaetigung](#ii3-volumen-bestaetigung)
-4. [Multi-Timeframe Abgleich](#ii4-multi-timeframe-abgleich)
-5. [Trailing Stop](#ii5-trailing-stop)
-6. [Regime-basierte Positionsgroesse](#ii6-regime-basierte-positionsgroesse)
-7. [RSI Divergenz-Erkennung](#ii7-rsi-divergenz-erkennung)
-8. [Erweiterte Konfidenz-Berechnung](#ii8-erweiterte-konfidenz-berechnung)
-9. [Vergleich mit Edge Indicator](#ii9-vergleich-mit-edge-indicator)
+2. [Analyse 1: Leverage (Long/Short Ratio)](#ii2-analyse-1-leverage-longshort-ratio)
+3. [Analyse 2: Sentiment (Fear & Greed Index)](#ii3-analyse-2-sentiment-fear--greed-index)
+4. [Analyse 3: Funding Rate](#ii4-analyse-3-funding-rate)
+5. [Signal-Kombination](#ii5-signal-kombination)
+6. [Konfidenz-Berechnung](#ii6-konfidenz-berechnung)
+7. [Trade-Gate](#ii7-trade-gate)
+8. [Beispiel-Szenarien](#ii8-beispiel-szenarien)
 
-**III. Liquidation Hunter**
+**III. Sentiment Surfer**
 1. [Ueberblick](#iii1-ueberblick)
-2. [Analyse 1: Leverage (Long/Short Ratio)](#iii2-analyse-1-leverage-longshort-ratio)
-3. [Analyse 2: Sentiment (Fear & Greed Index)](#iii3-analyse-2-sentiment-fear--greed-index)
-4. [Analyse 3: Funding Rate](#iii4-analyse-3-funding-rate)
-5. [Signal-Kombination](#iii5-signal-kombination)
-6. [Konfidenz-Berechnung](#iii6-konfidenz-berechnung)
-7. [Trade-Gate](#iii7-trade-gate)
-8. [Beispiel-Szenarien](#iii8-beispiel-szenarien)
+2. [Die 6 Scoring-Quellen](#iii2-die-6-scoring-quellen)
+3. [Quelle 1: News Sentiment (GDELT)](#iii3-quelle-1-news-sentiment-gdelt)
+4. [Quelle 2: Fear & Greed Index](#iii4-quelle-2-fear--greed-index)
+5. [Quelle 3: VWAP/OIWAP](#iii5-quelle-3-vwapoiwap)
+6. [Quelle 4: Supertrend](#iii6-quelle-4-supertrend)
+7. [Quelle 5: Spot Volume](#iii7-quelle-5-spot-volume)
+8. [Quelle 6: Price Momentum](#iii8-quelle-6-price-momentum)
+9. [Gewichtete Aggregation](#iii9-gewichtete-aggregation)
+10. [Agreement-Check](#iii10-agreement-check)
+11. [Beispiel-Szenarien](#iii11-beispiel-szenarien)
 
-**IV. Sentiment Surfer**
+**IV. Degen**
 1. [Ueberblick](#iv1-ueberblick)
-2. [Die 6 Scoring-Quellen](#iv2-die-6-scoring-quellen)
-3. [Quelle 1: News Sentiment (GDELT)](#iv3-quelle-1-news-sentiment-gdelt)
-4. [Quelle 2: Fear & Greed Index](#iv4-quelle-2-fear--greed-index)
-5. [Quelle 3: VWAP/OIWAP](#iv5-quelle-3-vwapoiwap)
-6. [Quelle 4: Supertrend](#iv6-quelle-4-supertrend)
-7. [Quelle 5: Spot Volume](#iv7-quelle-5-spot-volume)
-8. [Quelle 6: Price Momentum](#iv8-quelle-6-price-momentum)
-9. [Gewichtete Aggregation](#iv9-gewichtete-aggregation)
-10. [Agreement-Check](#iv10-agreement-check)
-11. [Beispiel-Szenarien](#iv11-beispiel-szenarien)
+2. [Die 19 Datenquellen](#iv2-die-19-datenquellen)
+3. [Der System-Prompt](#iv3-der-system-prompt)
+4. [Datenaufbereitung fuer den LLM](#iv4-datenaufbereitung-fuer-den-llm)
+5. [Trade-Gate](#iv5-trade-gate)
+6. [Vergleich mit LLM Signal](#iv6-vergleich-mit-llm-signal)
 
-**V. Degen**
-1. [Ueberblick](#v1-ueberblick)
-2. [Die 19 Datenquellen](#v2-die-19-datenquellen)
-3. [Der System-Prompt](#v3-der-system-prompt)
-4. [Datenaufbereitung fuer den LLM](#v4-datenaufbereitung-fuer-den-llm)
-5. [Trade-Gate](#v5-trade-gate)
-6. [Vergleich mit LLM Signal](#v6-vergleich-mit-llm-signal)
-
-**VI. Parameter-Referenz**
+**V. Parameter-Referenz**
 
 ---
 
@@ -282,177 +271,9 @@ Konfidenz: 50 + 1 + 5 = 56% → SHORT (aber moderate Konfidenz)
 
 ---
 
-# II. Claude Edge Indicator
+# II. Liquidation Hunter
 
 ## II.1 Ueberblick
-
-Erweiterte Version des Edge Indicators mit **6 Verbesserungen** fuer intelligenteres Risk Management. Trotz des Namens verwendet diese Strategie **keine KI** — die Verbesserungen wurden aus einer Backtest-Analyse identifiziert.
-
-**Basis:** Identische 3 Schichten wie Edge Indicator (EMA Ribbon, ADX, Predator Momentum)
-
-**Datenquellen:** Binance Klines 1h + 4h (fuer Multi-Timeframe)
-
-| # | Verbesserung | Effekt |
-|---|-------------|--------|
-| 1 | ATR-basierte TP/SL | Dynamische Ziele statt fester Prozente |
-| 2 | Volumen-Bestaetigung | Kauf-/Verkaufsvolumen bestaetigt Signal |
-| 3 | Multi-Timeframe (4h) | Hoeherer Zeitrahmen als Filter |
-| 4 | Trailing Stop | Gewinne laufen lassen |
-| 5 | Regime-basierte Groesse | Staerkere Signale → groessere Position |
-| 6 | RSI Divergenz | Fruehe Reversal-Erkennung |
-
----
-
-## II.2 ATR-basierte TP/SL
-
-Feste %-Ziele ignorieren die Markt-Volatilitaet. **ATR** (Average True Range) misst die durchschnittliche Schwankungsbreite:
-
-```
-ATR = Durchschnitt der True Ranges der letzten 14 Kerzen
-
-Take Profit = Einstieg ± (ATR × 2.5)
-Stop Loss   = Einstieg ∓ (ATR × 1.5)
-```
-
-**Beispiel:**
-
-```
-BTC: $65,000 | ATR: $450
-
-LONG: TP = $66,125 (+1.73%) | SL = $64,325 (-1.04%)
-
-Bei hoher Volatilitaet (ATR = $900):
-LONG: TP = $67,250 (+3.46%) | SL = $63,650 (-2.08%)
-```
-
----
-
-## II.3 Volumen-Bestaetigung
-
-Aus den Klines wird das Kauf/Verkauf-Verhaeltnis berechnet:
-
-```
-Buy Ratio = Taker-Buy-Volume / Gesamtvolumen
-```
-
-| Buy Ratio | Score | Interpretation |
-|-----------|-------|----------------|
-| ≥ 0.58 | +1.0 | Starker Kaufdruck |
-| 0.50 - 0.58 | 0 bis +1.0 | Leichter Kaufdruck |
-| 0.42 - 0.50 | -1.0 bis 0 | Leichter Verkaufsdruck |
-| ≤ 0.42 | -1.0 | Starker Verkaufsdruck |
-
-**Konfidenz-Einfluss:**
-- Volumen bestaetigt Richtung: **+1 bis +8 Punkte**
-- Volumen widerspricht: **-3 Punkte**
-
----
-
-## II.4 Multi-Timeframe Abgleich
-
-Die Strategie holt zusaetzlich 100 Kerzen vom 4h-Chart und prueft das EMA Ribbon (8/21):
-
-```
-4h: Preis > Oberkante → HTF bullish
-4h: Preis < Unterkante → HTF bearish
-```
-
-| 1h Signal | 4h Trend | Effekt |
-|-----------|----------|--------|
-| LONG | HTF bullish | +5 |
-| SHORT | HTF bearish | +5 |
-| LONG | HTF bearish | -3 |
-| SHORT | HTF bullish | -3 |
-
----
-
-## II.5 Trailing Stop
-
-Statt eines festen SL folgt der Stop dem Preis:
-
-```
-1. Trade eroeffnet mit SL (ATR × 1.5)
-2. Preis erreicht +ATR×1.0 im Gewinn → SL auf Einstieg (Breakeven)
-3. Preis steigt weiter → SL folgt mit ATR×1.5 Abstand
-4. SL bewegt sich nur in Gewinnrichtung, nie zurueck
-```
-
-**Beispiel (LONG):**
-
-```
-Einstieg: $65,000 | ATR: $450
-
-Initial SL: $64,325
-Breakeven ab: $65,450 → SL auf $65,000
-Preis bei $67,000 → SL bei $66,325
-Preis faellt → geschlossen bei $66,325 (Gewinn: +$1,325)
-```
-
----
-
-## II.6 Regime-basierte Positionsgroesse
-
-```
-Konfidenz 40%  → 0.50x (halbe Position)
-Konfidenz 67%  → 0.75x
-Konfidenz 95%  → 1.00x (volle Position)
-
-Formel: scale = 0.5 + ((confidence - 40) / 55) × 0.5
-```
-
----
-
-## II.7 RSI Divergenz-Erkennung
-
-Erkennt Divergenzen ueber die letzten 20 Kerzen:
-
-| Typ | Preis | RSI | Bedeutung |
-|-----|-------|-----|-----------|
-| **Bullische Divergenz** | Tiefere Tiefs | Hoehere Tiefs | Abwaertstrend verliert Kraft |
-| **Baerische Divergenz** | Hoehere Hochs | Tiefere Hochs | Aufwaertstrend verliert Kraft |
-
-| Situation | Konfidenz |
-|-----------|-----------|
-| Divergenz bestaetigt Regime | **+8** |
-| Divergenz warnt gegen Regime | **-10** |
-
----
-
-## II.8 Erweiterte Konfidenz-Berechnung
-
-Alle Edge-Indicator-Faktoren plus:
-
-| Neuer Faktor | Punkte |
-|-------------|--------|
-| Volumen bestaetigt | +1 bis +8 |
-| Volumen widerspricht | -3 |
-| HTF bestaetigt | +5 |
-| HTF widerspricht | -3 |
-| RSI Divergenz bestaetigt | +8 |
-| RSI Divergenz warnt | -10 |
-
----
-
-## II.9 Vergleich mit Edge Indicator
-
-| Aspekt | Edge Indicator | Claude Edge |
-|--------|---------------|-------------|
-| Richtungslogik | EMA + ADX + Momentum | Identisch |
-| TP/SL | Feste % | ATR-basiert (dynamisch) |
-| Volumen | Nicht beruecksichtigt | Buy/Sell Ratio |
-| Multi-Timeframe | Nein | 4h EMA Ribbon |
-| Trailing Stop | Nein | ATR-basiert mit Breakeven |
-| Positionsgroesse | Fest | Konfidenz-skaliert (0.5x-1.0x) |
-| RSI Divergenz | Nein | ±8/10 Punkte |
-| API-Aufrufe | 1 | 2 |
-
----
-
----
-
-# III. Liquidation Hunter
-
-## III.1 Ueberblick
 
 Contrarian-Strategie, die **gegen die Masse wettet**. Wenn zu viele Trader in eine Richtung positioniert sind, nimmt der Bot die Gegenposition ein — in der Erwartung, dass ueberfuellte Positionen liquidiert werden und den Preis in die andere Richtung treiben.
 
@@ -467,7 +288,7 @@ Contrarian-Strategie, die **gegen die Masse wettet**. Wenn zu viele Trader in ei
 
 ---
 
-## III.2 Analyse 1: Leverage (Long/Short Ratio)
+## II.2 Analyse 1: Leverage (Long/Short Ratio)
 
 ### Was ist die Long/Short Ratio?
 
@@ -501,7 +322,7 @@ Beispiel: L/S Ratio = 5.0
 
 ---
 
-## III.3 Analyse 2: Sentiment (Fear & Greed Index)
+## II.3 Analyse 2: Sentiment (Fear & Greed Index)
 
 ### Was ist der Fear & Greed Index?
 
@@ -535,7 +356,7 @@ Beispiel: FGI = 90
 
 ---
 
-## III.4 Analyse 3: Funding Rate
+## II.4 Analyse 3: Funding Rate
 
 ### Was ist die Funding Rate?
 
@@ -555,7 +376,7 @@ Bis zu **+20 Punkte** wenn die Funding Rate das Signal bestaetigt.
 
 ---
 
-## III.5 Signal-Kombination
+## II.5 Signal-Kombination
 
 Die drei Analysen werden zu einem finalen Signal kombiniert:
 
@@ -604,7 +425,7 @@ Am Ende wird die Konfidenz auf **60% bis 95%** begrenzt.
 
 ---
 
-## III.6 Konfidenz-Berechnung
+## II.6 Konfidenz-Berechnung
 
 ```
 Basis:                        50
@@ -619,7 +440,7 @@ Clamp: [60, 95]
 
 ---
 
-## III.7 Trade-Gate
+## II.7 Trade-Gate
 
 ```
 1. Konfidenz ≥ 60%
@@ -632,7 +453,7 @@ Clamp: [60, 95]
 
 ---
 
-## III.8 Beispiel-Szenarien
+## II.8 Beispiel-Szenarien
 
 ### Ideales Contrarian-Setup
 
@@ -682,9 +503,9 @@ Funding Rate: -0.03% (Shorts zahlen) → Boost LONG
 
 ---
 
-# IV. Sentiment Surfer
+# III. Sentiment Surfer
 
-## IV.1 Ueberblick
+## III.1 Ueberblick
 
 Ausgewogene Multi-Quellen-Strategie, die **6 verschiedene Datenquellen** kombiniert. Jede Quelle erzeugt einen Score von -100 (maximal baerisch) bis +100 (maximal bullisch). Der gewichtete Durchschnitt ergibt die finale Entscheidung.
 
@@ -699,7 +520,7 @@ Ausgewogene Multi-Quellen-Strategie, die **6 verschiedene Datenquellen** kombini
 
 ---
 
-## IV.2 Die 6 Scoring-Quellen
+## III.2 Die 6 Scoring-Quellen
 
 | # | Quelle | Gewicht | Typ |
 |---|--------|---------|-----|
@@ -714,7 +535,7 @@ VWAP und Supertrend haben **hoehere Gewichtung** (1.2x) weil sie als zuverlaessi
 
 ---
 
-## IV.3 Quelle 1: News Sentiment (GDELT)
+## III.3 Quelle 1: News Sentiment (GDELT)
 
 ### Datenquelle
 
@@ -734,7 +555,7 @@ Wenn GDELT keine Artikel liefert (Timeout, API-Ausfall), wird die News-Quelle ko
 
 ---
 
-## IV.4 Quelle 2: Fear & Greed Index
+## III.4 Quelle 2: Fear & Greed Index
 
 ### Interpretation (Contrarian — wie Liquidation Hunter)
 
@@ -752,7 +573,7 @@ FGI 25-75 →  Score = 0 (neutral)
 
 ---
 
-## IV.5 Quelle 3: VWAP/OIWAP
+## III.5 Quelle 3: VWAP/OIWAP
 
 ### Was ist VWAP?
 
@@ -782,7 +603,7 @@ Wenn OIWAP verfuegbar:
 
 ---
 
-## IV.6 Quelle 4: Supertrend
+## III.6 Quelle 4: Supertrend
 
 ### Was ist der Supertrend?
 
@@ -805,7 +626,7 @@ Rot (Abwaertstrend): Preis unter dem Supertrend-Level
 
 ---
 
-## IV.7 Quelle 5: Spot Volume
+## III.7 Quelle 5: Spot Volume
 
 ### Berechnung
 
@@ -831,7 +652,7 @@ Buy Ratio 0.60 → Score = +40 (starke Akkumulation)
 
 ---
 
-## IV.8 Quelle 6: Price Momentum
+## III.8 Quelle 6: Price Momentum
 
 ### Berechnung
 
@@ -859,7 +680,7 @@ Rauschen (|change| < 0.5%):
 
 ---
 
-## IV.9 Gewichtete Aggregation
+## III.9 Gewichtete Aggregation
 
 Alle 6 Scores werden gewichtet zusammengefasst:
 
@@ -886,7 +707,7 @@ weighted_score = 287.4 / 6.0 = 47.9
 
 ---
 
-## IV.10 Agreement-Check
+## III.10 Agreement-Check
 
 Neben der Konfidenz gibt es eine **Mindestzustimmung**: Mindestens 3 von 6 Quellen muessen mit der finalen Richtung uebereinstimmen.
 
@@ -919,7 +740,7 @@ Min Agreement bleibt bei 3 (von 5).
 
 ---
 
-## IV.11 Beispiel-Szenarien
+## III.11 Beispiel-Szenarien
 
 ### Bullishes Alignment (5/6 Quellen)
 
@@ -969,9 +790,9 @@ Konfidenz: 53%
 
 ---
 
-# V. Degen
+# IV. Degen
 
-## V.1 Ueberblick
+## IV.1 Ueberblick
 
 Eine **vorkonfigurierte KI-Arena-Strategie** mit festem System-Prompt und 19 festen Datenquellen. Im Gegensatz zur LLM Signal Strategie (wo der User Prompt und Datenquellen waehlt) ist beim Degen alles vordefiniert — der User konfiguriert nur **LLM-Provider, Modell und Temperatur**.
 
@@ -986,7 +807,7 @@ Eine **vorkonfigurierte KI-Arena-Strategie** mit festem System-Prompt und 19 fes
 
 ---
 
-## V.2 Die 19 Datenquellen
+## IV.2 Die 19 Datenquellen
 
 Alle Daten werden **gleichzeitig** (parallel) geholt:
 
@@ -1041,7 +862,7 @@ Alle Daten werden **gleichzeitig** (parallel) geholt:
 
 ---
 
-## V.3 Der System-Prompt
+## IV.3 Der System-Prompt
 
 Der Prompt ist **fest und nicht aenderbar**:
 
@@ -1066,7 +887,7 @@ REASONING: [2-3 sentences explaining your analysis]
 
 ---
 
-## V.4 Datenaufbereitung fuer den LLM
+## IV.4 Datenaufbereitung fuer den LLM
 
 Die 19 Datenquellen werden in ein strukturiertes JSON umgewandelt. Jede Quelle enthaelt:
 
@@ -1114,7 +935,7 @@ Dieses JSON wird als User-Message an den LLM geschickt. Der LLM analysiert es un
 
 ---
 
-## V.5 Trade-Gate
+## IV.5 Trade-Gate
 
 ```
 1. Konfidenz ≥ 55% (hoeher als bei anderen Strategien)
@@ -1125,7 +946,7 @@ Die hoehere Mindestkonfidenz (55% statt 40%) reflektiert, dass LLM-Entscheidunge
 
 ---
 
-## V.6 Vergleich mit LLM Signal
+## IV.6 Vergleich mit LLM Signal
 
 | Aspekt | Degen | LLM Signal |
 |--------|-------|------------|
@@ -1140,7 +961,7 @@ Die hoehere Mindestkonfidenz (55% statt 40%) reflektiert, dass LLM-Entscheidunge
 
 ---
 
-# VI. Parameter-Referenz
+# V. Parameter-Referenz
 
 ## Edge Indicator
 
@@ -1154,20 +975,6 @@ Die hoehere Mindestkonfidenz (55% statt 40%) reflektiert, dass LLM-Entscheidunge
 | RSI Periode | 14 | RSI Berechnungsperiode |
 | Min. Konfidenz | 40% | Unter diesem Wert kein Trade |
 | Kline Intervall | 1h | Kerzen-Zeitrahmen |
-
-## Claude Edge Indicator (zusaetzlich)
-
-| Parameter | Standard | Beschreibung |
-|-----------|---------|--------------|
-| ATR Periode | 14 | ATR Berechnungsperiode |
-| ATR TP Multiplier | 2.5 | TP = ATR × Multiplier |
-| ATR SL Multiplier | 1.5 | SL = ATR × Multiplier |
-| HTF Intervall | 4h | Hoeherer Zeitrahmen |
-| HTF Filter aktiv | Ja | 4h-Abgleich einschalten |
-| Trailing Stop | Ja | Trailing mit Breakeven |
-| Divergenz Lookback | 20 | Kerzen fuer Divergenz |
-| Min Position Scale | 0.5 | 50% bei schwachem Signal |
-| Max Position Scale | 1.0 | 100% bei starkem Signal |
 
 ## Liquidation Hunter
 

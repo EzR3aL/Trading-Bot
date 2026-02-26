@@ -16,7 +16,7 @@ from datetime import datetime, timedelta
 from src.backtest.strategy_adapter import run_backtest_for_strategy
 
 
-STRATEGIES = ["edge_indicator", "claude_edge_indicator", "sentiment_surfer", "liquidation_hunter"]
+STRATEGIES = ["edge_indicator", "sentiment_surfer", "liquidation_hunter"]
 TIMEFRAMES = ["15m", "30m", "1h", "4h", "1d"]
 
 # 30-day backtest period

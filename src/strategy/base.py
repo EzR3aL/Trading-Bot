@@ -20,6 +20,7 @@ class SignalDirection(Enum):
     """Trade signal direction."""
     LONG = "long"
     SHORT = "short"
+    NEUTRAL = "neutral"
 
 
 @dataclass
@@ -78,21 +79,7 @@ class BaseStrategy(ABC):
         side: str,
         entry_price: float,
         metrics_at_entry: dict | None = None,
-    ) -> Tuple[bool, str]:
-        """
-        Check if an open position should be closed based on current indicators.
-
-        Override in strategies that support indicator-based exits.
-        Default: never exit (TP/SL on exchange or manual close).
-        """
-        return False, ""
-
-    async def should_exit(
-        self,
-        symbol: str,
-        side: str,
-        entry_price: float,
-        metrics_at_entry: dict | None = None,
+        **kwargs,
     ) -> Tuple[bool, str]:
         """
         Check if an open position should be closed based on current indicators.

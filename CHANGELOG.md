@@ -9,6 +9,73 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.33.0] - 2026-02-26
+
+### Geaendert
+- **"Position schließen" Button direkt sichtbar** — Wenn ein Bot offene Trades hat, erscheint jetzt ein prominenter Amber-Button direkt auf der Bot-Karte (statt versteckt im Drei-Punkte-Menue). Bei Single-Pair-Bots: 1-Klick-Schließen. Bei Multi-Pair-Bots: Dropdown-Auswahl. Open-Trades-Zaehler wird amber mit Puls-Indikator hervorgehoben
+- **Tests korrigiert** — SignalDirection Enum-Count auf 3 aktualisiert (LONG, SHORT, NEUTRAL), Edge Indicator DEFAULTS-Test an v2-Werte angepasst (0.35/-0.35)
+
+### Entfernt
+- **Claude Edge Indicator komplett entfernt** — A/B-Tests zeigten, dass Edge Indicator v2 auf 1h durchschnittlich +6.2% Return liefert vs Claude Edge ~+3%. Alle wertvollen Features (MACD Floor, default_sl_atr) waren bereits als optionale Parameter in Edge v2 portiert. 7 Dateien geloescht, 30 Dateien bereinigt
+- **Backend:** `src/strategy/claude_edge_indicator.py` geloescht, Routing und Signal-Methode aus Backtest-Engine entfernt, KLINE_STRATEGIES bereinigt
+- **Tests:** 4 dedizierte Test-Dateien geloescht, Claude Edge Referenzen aus 4 Shared-Test-Dateien entfernt
+- **Scripts:** `backtest_v331.py` geloescht, Strategie-Listen in backtest_timeframes, backtest_altcoins, run_backtest_matrix bereinigt
+- **Frontend:** Claude-Edge aus BotBuilder, Bots, Backtest, BotDetail, BotPerformance, GettingStarted entfernt
+- **i18n:** stratClaudeEdge Keys und strategyDesc_claude_edge_indicator aus en.json und de.json entfernt
+- **Dokumentation:** Alle Anleitungen, FAQ, README, STRATEGY.md aktualisiert (6 Strategien → 5 Strategien)
+
+---
+
+## [3.32.0] - 2026-02-26
+
+### Geaendert
+- **Edge Indicator v2: Exit-Tuning** — Momentum-Schwellen von 0.20 auf 0.35, Trailing Stop von 1.5 auf 2.5 ATR, Smoothing von 3 auf 5 erhoht. A/B-Test ueber 10 Coins x 3 Timeframes zeigt: 1h Return verdreifacht (+2.0% auf +6.2%), Sharpe verdoppelt (0.33 auf 0.67), v2 gewinnt 7/10 auf 1h. Trades werden laenger gehalten, profitable Positionen laufen weiter statt frueh geschlossen zu werden
+- **Edge Indicator: MACD Floor + Default SL** — use_macd_floor (Default: True) und default_sl_atr (Default: 0, optional) aus Claude Edge portiert. MACD Floor als Sicherheitsfeature, Default SL optional aktivierbar
+- **Backtest-Ergebnisse aktualisiert** — Claude Edge Indicator Zahlen basieren jetzt auf v3.31.0 (90d Backtest). Alte Zahlen (+14.2%, Sharpe 1.40) durch ehrliche v3.31 Ergebnisse ersetzt: BTC 1h +1.4% (Sharpe 0.33), ETH 1h +8.5% (Sharpe 1.00)
+- **Frontend-Beschreibungen (de.json + en.json)** — Edge Indicator: v2 Exit-Optimierung erwaehnt, neue Altcoin-Performance-Zahlen. Claude Edge: v3.31.0 Features (Default SL, MACD Floor) und neue Backtest-Zahlen. Timeframe-Empfehlung von "1h / 4h" auf "1h" geaendert
+- **Backend get_description()** — Edge Indicator erwaehnt v2 Exit-Optimierung. Claude Edge erwaehnt ATR-basiertes Default-SL, MACD Noise Floor und Timeframe-Empfehlung (1h)
+- **kline_interval Schema-Beschreibung** — Timeframe-Empfehlung (1h) direkt im Parameter-Hint sichtbar
+- **Strategien-Uebersicht (DE + EN)** — Edge Indicator: neue Exit-Parameter in Tabelle (Momentum Threshold, Trailing ATR, Smooth). Claude Edge: 3 neue Features (Default SL, MACD Floor, Seitwaertsmarkt-Filter), Backtest-Tabelle
+- **Empfehlungen** — Claude Edge Indicator jetzt auch fuer Einsteiger empfohlen (Default SL als Sicherheitsnetz)
+
+### Hinzugefuegt
+- **Backtest-Ergebnisse-BTC.md** — v3.31.0 Abschnitt mit ehrlicher Bewertung, ETH-Ergebnisse, Edge v2 Altcoin-Performance, Hinweis auf Trendmarkt-Abhaengigkeit
+- **5 Backtest-Scripts** — backtest_altcoins.py, backtest_edge_v2.py, backtest_edge_v2_macd_only.py, backtest_macd_floor_ab.py, backtest_exit_tuning.py fuer A/B-Tests und Strategie-Vergleiche
+
+### Behoben
+- **_calculate_targets() Signatur-Bug** — Backtest-Engine uebergibt 3 Argumente (direction, price, klines), aber EdgeIndicator, LiquidationHunter und SentimentSurfer akzeptierten nur 2. Behoben durch optionalen klines=None Parameter in allen 3 Strategien
+
+---
+
+## [3.31.0] - 2026-02-26
+
+### Geaendert
+- **Fallback-Logik entschaerft** — `_determine_direction()` gibt jetzt NEUTRAL zurueck wenn Regime und Ribbon sich widersprechen (z.B. Regime=1 bei bear_trend). Vorher wurde im Seitwaertsmarkt immer eine Richtung erzwungen, was zu Verlusttrades fuehrte
+- **Default Stop-Loss bei 2x ATR** — Jeder Trade hat jetzt ein Sicherheitsnetz: wenn kein expliziter SL konfiguriert ist, wird automatisch ein SL bei 2x ATR gesetzt. Prioritaets-Kette: stop_loss_percent > atr_sl_multiplier > default_sl_atr (2.0) > deaktiviert (0)
+- **MACD stdev Floor** — Verhindert extreme macd_norm Werte (±1.0) bei niedriger Vola. Floor = 1% des ATR. Bei BTC 1h (ATR ~$500) ist der Floor $5, was falsche Regime-Flips in Seitwaertsmaerkten daempft
+- **TradeExecutor bewahrt Strategy-SL** — Wenn kein User-SL (stop_loss_percent) konfiguriert ist, wird der Strategy-berechnete SL (z.B. Default ATR SL) nicht mehr auf None gesetzt
+
+### Hinzugefuegt
+- **Neuer Parameter `default_sl_atr`** — Konfigurierbares Sicherheitsnetz-SL (Default 2.0x ATR). Per UI anpassbar (0.0-5.0, 0 = deaktiviert). Wird von stop_loss_percent und atr_sl_multiplier ueberschrieben
+- **10 neue Tests** — Fallback NEUTRAL (3), Default SL Prioritaets-Kette (4), MACD Floor (2), Schema/Defaults (1)
+
+---
+
+## [3.30.0] - 2026-02-26
+
+### Geaendert
+- **Exit-Logik gehaertet: AND-Bedingung** — Ribbon allein reicht nicht mehr fuer Exit. Jetzt muessen EMA-Ribbon UND Momentum-Regime uebereinstimmen (z.B. SHORT-Exit nur bei bull_trend + regime >= 1). Verhindert Fehl-Exits durch einzelne gruene Kerzen bei engem Ribbon
+- **trend_bonus von 0.6 auf 0.3 reduziert** — Momentum-Score wird jetzt unabhaengiger vom EMA-Ribbon berechnet. Bei 0.3 reicht der Trend-Bonus allein nicht mehr um den Regime-Threshold (0.35) zu ueberschreiten — MACD oder RSI muessen mindestens +0.05 beitragen
+- **should_exit() akzeptiert entry_time** — Neuer optionaler Parameter fuer Haltezeit-Pruefung, rueckwaertskompatibel via **kwargs in Base- und Edge-Strategie
+
+### Hinzugefuegt
+- **Mindest-Haltezeit (min_hold_hours)** — Trades werden mindestens 4h gehalten bevor Indikator-Exits (Layer 2) greifen. Trailing-Stop (Layer 1) bleibt immer aktiv. Guard sitzt zwischen Layer 1 und Layer 2 in should_exit(). Default: 4.0h, per UI anpassbar (0-72h)
+- **Post-Trade Cooldown (cooldown_hours)** — Nach Trade-Schliessung wird 4h gewartet bevor ein neuer Trade fuer dasselbe Symbol geoeffnet wird. Verhindert Open-Close-Open-Schleifen. Default: 4.0h, per UI anpassbar (0-72h, 0 = deaktiviert)
+- **3 neue UI-Parameter** — `trend_bonus_weight`, `min_hold_hours`, `cooldown_hours` im Strategy-Schema sichtbar und vom User anpassbar
+- **15 neue Tests** — AND-Bedingung (4), trend_bonus-Reduktion (2), Haltezeit (3), Cooldown (3), neue Defaults + Schema (2), plus existierende 12 bestanden
+
+---
+
 ## [3.29.0] - 2026-02-26
 
 ### Geaendert

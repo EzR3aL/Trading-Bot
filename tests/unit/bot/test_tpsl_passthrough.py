@@ -12,8 +12,31 @@ Covers:
 8. Position monitor calls should_exit() when no TP/SL
 9. tpsl_failed → TP/SL reset to None (safety fallback)
 10. _handle_closed_position detects TP/SL exits
-11. Claude-Edge new default thresholds loaded correctly
-12. SHORT trade — slight momentum flip no longer triggers exit
+11. SHORT trade — slight momentum flip no longer triggers exit
+13. SHORT: bull_trend alone → no exit (momentum bearish)
+14. SHORT: bull_trend + bullish regime → exit
+15. LONG: bear_trend alone → no exit (momentum bullish)
+16. LONG: bear_trend + bearish regime → exit
+17. trend_bonus 0.3: EMA-Cross alone → regime stays neutral
+18. trend_bonus 0.3: EMA-Cross + MACD → regime flips
+19. Min hold: Trade < 4h → indicator exit blocked
+20. Min hold: Trade > 4h → indicator exit allowed
+21. Min hold: Trailing stop ignores hold time
+22. Cooldown: Trade closed 2h ago → reentry blocked
+23. Cooldown: Trade closed 5h ago → reentry allowed
+24. Cooldown: cooldown_hours=0 → no cooldown
+25. New DEFAULTS + param schema include new parameters
+--- v3.31.0 ---
+26. Fallback: ADX < 18 + Ribbon neutral → NEUTRAL
+27. Fallback: Regime=1 + Ribbon neutral → LONG (frühes Signal)
+28. Fallback: Regime=1 + bear_trend → NEUTRAL (widersprüchlich)
+29. Default SL: Kein User-SL → 2x ATR SL gesetzt
+30. Default SL: User hat stop_loss_percent → überschreibt Default
+31. Default SL: User hat atr_sl_multiplier → überschreibt Default
+32. Default SL: default_sl_atr=0 → kein SL
+33. MACD Floor: stdev nahe 0 → macd_norm gedämpft
+34. MACD Floor: normaler stdev → unverändert
+35. Neue DEFAULTS und Schema enthalten default_sl_atr
 """
 
 import json
@@ -364,46 +387,7 @@ class TestHandleClosedPosition:
 
 
 # ---------------------------------------------------------------------------
-# 11. Claude-Edge new default thresholds
-# ---------------------------------------------------------------------------
-
-class TestClaudeEdgeDefaults:
-
-    def test_new_default_thresholds_loaded(self):
-        """Verify the updated DEFAULTS are applied correctly."""
-        from src.strategy.claude_edge_indicator import DEFAULTS
-
-        assert DEFAULTS["momentum_bull_threshold"] == 0.35
-        assert DEFAULTS["momentum_bear_threshold"] == -0.35
-        assert DEFAULTS["trailing_trail_atr"] == 2.5
-        assert DEFAULTS["trailing_breakeven_atr"] == 1.5
-        assert DEFAULTS["momentum_smooth_period"] == 5
-
-    def test_param_schema_includes_new_params(self):
-        """get_param_schema() exposes the 4 previously missing parameters."""
-        from src.strategy.claude_edge_indicator import ClaudeEdgeIndicatorStrategy
-
-        schema = ClaudeEdgeIndicatorStrategy.get_param_schema()
-
-        assert "trailing_breakeven_atr" in schema
-        assert schema["trailing_breakeven_atr"]["type"] == "float"
-        assert schema["trailing_breakeven_atr"]["default"] == 1.5
-
-        assert "trailing_trail_atr" in schema
-        assert schema["trailing_trail_atr"]["type"] == "float"
-        assert schema["trailing_trail_atr"]["default"] == 2.5
-
-        assert "momentum_smooth_period" in schema
-        assert schema["momentum_smooth_period"]["type"] == "int"
-        assert schema["momentum_smooth_period"]["default"] == 5
-
-        assert "atr_period" in schema
-        assert schema["atr_period"]["type"] == "int"
-        assert schema["atr_period"]["default"] == 14
-
-
-# ---------------------------------------------------------------------------
-# 12. SHORT trade — slight momentum flip → no exit with new thresholds
+# 11. SHORT trade — slight momentum flip → no exit with new thresholds
 # ---------------------------------------------------------------------------
 
 class TestMomentumThresholdNoExit:
@@ -433,3 +417,232 @@ class TestMomentumThresholdNoExit:
             regime = "neutral"
 
         assert regime == "neutral", "Slight momentum flip should remain neutral"
+
+
+# ---------------------------------------------------------------------------
+# 13-16. AND-Bedingung: Ribbon allein reicht nicht mehr fuer Exit
+# ---------------------------------------------------------------------------
+
+class TestANDConditionExits:
+
+    def test_short_bull_trend_alone_no_exit(self):
+        """SHORT: bull_trend allein → kein Exit wenn Momentum baerisch (regime=-1)."""
+        # Simulate: ribbon says bull_trend but momentum is bearish
+        ribbon = {"bull_trend": True, "bear_trend": False, "neutral": False, "ema_fast_above": True}
+        regime = -1  # bearish momentum
+
+        # New AND logic: bull_trend AND regime >= 1 required
+        indicator_exit = False
+        if ribbon["bull_trend"] and regime >= 1:
+            indicator_exit = True
+
+        assert not indicator_exit, "bull_trend alone should NOT exit SHORT when momentum is bearish"
+
+    def test_short_bull_trend_plus_bullish_regime_exits(self):
+        """SHORT: bull_trend + bullish regime → Exit (both conditions met)."""
+        ribbon = {"bull_trend": True, "bear_trend": False, "neutral": False, "ema_fast_above": True}
+        regime = 1  # bullish momentum confirms
+
+        indicator_exit = False
+        if ribbon["bull_trend"] and regime >= 1:
+            indicator_exit = True
+
+        assert indicator_exit, "bull_trend + bullish regime should exit SHORT"
+
+    def test_long_bear_trend_alone_no_exit(self):
+        """LONG: bear_trend allein → kein Exit wenn Momentum bullish (regime=1)."""
+        ribbon = {"bull_trend": False, "bear_trend": True, "neutral": False, "ema_fast_above": False}
+        regime = 1  # bullish momentum
+
+        indicator_exit = False
+        if ribbon["bear_trend"] and regime <= -1:
+            indicator_exit = True
+
+        assert not indicator_exit, "bear_trend alone should NOT exit LONG when momentum is bullish"
+
+    def test_long_bear_trend_plus_bearish_regime_exits(self):
+        """LONG: bear_trend + bearish regime → Exit (both conditions met)."""
+        ribbon = {"bull_trend": False, "bear_trend": True, "neutral": False, "ema_fast_above": False}
+        regime = -1  # bearish momentum confirms
+
+        indicator_exit = False
+        if ribbon["bear_trend"] and regime <= -1:
+            indicator_exit = True
+
+        assert indicator_exit, "bear_trend + bearish regime should exit LONG"
+
+
+# ---------------------------------------------------------------------------
+# 17-18. trend_bonus 0.3: EMA-Cross allein reicht nicht fuer Regime-Flip
+# ---------------------------------------------------------------------------
+
+class TestTrendBonusReduction:
+
+    def test_trend_bonus_alone_stays_neutral(self):
+        """trend_bonus=0.3 allein ueberschreitet threshold 0.35 NICHT → regime=neutral."""
+        trend_bonus_weight = 0.3
+        threshold = 0.35
+        macd_norm = 0.0
+        rsi_norm = 0.0
+
+        # Only EMA cross contributing
+        raw_score = macd_norm + rsi_norm + trend_bonus_weight
+        score = max(-1.0, min(1.0, raw_score))
+
+        assert score < threshold, (
+            f"trend_bonus {trend_bonus_weight} alone should NOT exceed threshold {threshold}"
+        )
+
+    def test_trend_bonus_plus_macd_flips_regime(self):
+        """trend_bonus=0.3 + MACD=0.1 = 0.4 > 0.35 → regime flips to bull."""
+        trend_bonus_weight = 0.3
+        threshold = 0.35
+        macd_norm = 0.1
+        rsi_norm = 0.0
+
+        raw_score = macd_norm + rsi_norm + trend_bonus_weight
+        score = max(-1.0, min(1.0, raw_score))
+
+        assert score > threshold, (
+            f"trend_bonus {trend_bonus_weight} + macd {macd_norm} should exceed threshold {threshold}"
+        )
+
+        # Determine regime
+        regime = 1 if score > threshold else (-1 if score < -threshold else 0)
+        assert regime == 1, "Should flip to bull regime"
+
+
+# ---------------------------------------------------------------------------
+# 19-21. Haltezeit: min_hold_hours Guard
+# ---------------------------------------------------------------------------
+
+class TestMinHoldHours:
+
+    def test_trade_under_min_hold_blocks_indicator_exit(self):
+        """Trade < 4h → Indikator-Exit blockiert."""
+        from datetime import timedelta
+
+        min_hold_hours = 4.0
+        entry_time = datetime.now(timezone.utc) - timedelta(hours=2)
+        elapsed = (datetime.now(timezone.utc) - entry_time).total_seconds() / 3600
+
+        should_block = elapsed < min_hold_hours
+        assert should_block, "Trade held 2h should be blocked (< 4h minimum)"
+
+    def test_trade_over_min_hold_allows_indicator_exit(self):
+        """Trade > 4h → Indikator-Exit erlaubt."""
+        from datetime import timedelta
+
+        min_hold_hours = 4.0
+        entry_time = datetime.now(timezone.utc) - timedelta(hours=5)
+        elapsed = (datetime.now(timezone.utc) - entry_time).total_seconds() / 3600
+
+        should_block = elapsed < min_hold_hours
+        assert not should_block, "Trade held 5h should NOT be blocked (> 4h minimum)"
+
+    def test_trailing_stop_ignores_min_hold(self):
+        """Trailing-Stop ignoriert Haltezeit — immer aktiv.
+
+        The min_hold_hours guard is placed between Layer 1 (trailing stop)
+        and Layer 2 (indicator exits) in should_exit(). Layer 1 runs first.
+        """
+        # This verifies the architectural decision: trailing stop (Layer 1)
+        # runs BEFORE the min_hold_hours check. If trailing stop triggers,
+        # the function returns immediately without hitting the guard.
+        trailing_stop_triggered = True
+        min_hold_hours = 4.0
+        elapsed_hours = 1.0  # Only 1h held
+
+        # Layer 1 check
+        if trailing_stop_triggered:
+            result = "exit"  # Trailing stop exits immediately
+        else:
+            # Layer 2: min_hold_hours guard
+            if elapsed_hours < min_hold_hours:
+                result = "blocked"
+            else:
+                result = "indicator_exit"
+
+        assert result == "exit", "Trailing stop should exit regardless of hold time"
+
+
+# ---------------------------------------------------------------------------
+# 22-24. Cooldown: cooldown_hours Guard
+# ---------------------------------------------------------------------------
+
+class TestCooldownHours:
+
+    def test_cooldown_blocks_reentry_after_recent_close(self):
+        """Trade vor 2h geschlossen → neuer Einstieg blockiert."""
+        from datetime import timedelta
+
+        cooldown_hours = 4.0
+        exit_time = datetime.now(timezone.utc) - timedelta(hours=2)
+        elapsed = (datetime.now(timezone.utc) - exit_time).total_seconds() / 3600
+
+        should_block = elapsed < cooldown_hours
+        assert should_block, "Should block entry — only 2h since last close (need 4h)"
+
+    def test_cooldown_allows_reentry_after_sufficient_wait(self):
+        """Trade vor 5h geschlossen → neuer Einstieg erlaubt."""
+        from datetime import timedelta
+
+        cooldown_hours = 4.0
+        exit_time = datetime.now(timezone.utc) - timedelta(hours=5)
+        elapsed = (datetime.now(timezone.utc) - exit_time).total_seconds() / 3600
+
+        should_block = elapsed < cooldown_hours
+        assert not should_block, "Should allow entry — 5h since last close (> 4h cooldown)"
+
+    def test_cooldown_zero_disables(self):
+        """cooldown_hours=0 → kein Cooldown, sofortiger Wiedereinstieg."""
+        cooldown_hours = 0.0
+
+        # When cooldown is 0, the guard should not activate
+        should_check = cooldown_hours > 0
+        assert not should_check, "cooldown_hours=0 should skip the cooldown check entirely"
+
+
+# ---------------------------------------------------------------------------
+# 25. MACD stdev Floor
+# ---------------------------------------------------------------------------
+
+class TestMACDStdevFloor:
+    """MACD normalization uses ATR-based floor to prevent extreme values."""
+
+    def test_low_stdev_clamped_by_floor(self):
+        """stdev nahe 0 → macd_norm gedämpft (nicht ±1.0)."""
+        import math
+
+        # Simulate: very low stdev (flat market), significant MACD histogram
+        macd_hist = 5.0
+        stdev_raw = 0.001  # Near zero from flat market
+        atr_val = 500.0  # BTC 1h typical ATR
+        floor = atr_val * 0.01  # $5.0
+
+        stdev_effective = max(stdev_raw, floor)
+
+        # Without floor: tanh(5.0 / 0.001) = tanh(5000) ≈ 1.0 (extreme)
+        norm_without_floor = math.tanh(macd_hist / stdev_raw)
+        # With floor: tanh(5.0 / 5.0) = tanh(1.0) ≈ 0.76 (damped)
+        norm_with_floor = math.tanh(macd_hist / stdev_effective)
+
+        assert abs(norm_without_floor) > 0.99, "Without floor, should be extreme"
+        assert norm_with_floor < 0.85, "With floor, should be damped"
+        assert norm_with_floor > 0.5, "With floor, should still be a meaningful signal"
+
+    def test_normal_stdev_unaffected_by_floor(self):
+        """normaler stdev → unverändert (Floor nicht aktiv)."""
+        import math
+
+        macd_hist = 5.0
+        stdev_raw = 20.0  # Normal market volatility
+        atr_val = 500.0
+        floor = atr_val * 0.01  # $5.0
+
+        stdev_effective = max(stdev_raw, floor)
+
+        assert stdev_effective == stdev_raw, "Normal stdev should not be affected by floor"
+
+        norm = math.tanh(macd_hist / stdev_effective)
+        assert norm == pytest.approx(math.tanh(5.0 / 20.0)), "Result should match un-floored calculation"

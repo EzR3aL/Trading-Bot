@@ -1,6 +1,6 @@
 # Trading Strategies Overview
 
-All 6 trading strategies explained: how they work, risk profiles, parameter recommendations, and when to use each.
+All 5 trading strategies explained: how they work, risk profiles, parameter recommendations, and when to use each.
 
 ---
 
@@ -12,8 +12,7 @@ All 6 trading strategies explained: how they work, risk profiles, parameter reco
 4. [Sentiment Surfer](#4-sentiment-surfer)
 5. [Degen](#5-degen)
 6. [Edge Indicator](#6-edge-indicator)
-7. [Claude Edge Indicator](#7-claude-edge-indicator)
-8. [Which Strategy is Right for You?](#8-which-strategy-is-right-for-you)
+7. [Which Strategy is Right for You?](#7-which-strategy-is-right-for-you)
 
 ---
 
@@ -28,7 +27,6 @@ All 6 trading strategies explained: how they work, risk profiles, parameter reco
 | Sentiment Surfer | Hybrid | 6 sources | None | Medium | Balanced trading |
 | Degen | AI Arena | 19 fixed sources | LLM API | High | Experimental |
 | Edge Indicator | Technical | Kline only | None | Low-Medium | Beginners / Technical |
-| Claude Edge Indicator | Technical+ | Kline+Volume+MTF | None | Low-Medium | Advanced |
 
 ### Backtest Results (90 Days, BTCUSDT, $10k, 1h)
 
@@ -36,7 +34,6 @@ All 6 trading strategies explained: how they work, risk profiles, parameter reco
 |----------|--------|----------|--------|--------|-----|--------|
 | **LiquidationHunter** | +26.2% | 53.9% | 4.7% | 5.51 | 1.98 | 104 |
 | **Edge Indicator** | +18.6% | 47.1% | 9.8% | 2.91 | 1.65 | 68 |
-| Claude Edge Indicator | +18.6% | 47.1% | 9.8% | 2.91 | 1.65 | 68 |
 | Degen | +0.8% | 40.0% | 3.8% | 0.43 | 1.08 | 35 |
 | LLM Signal | +0.8% | 40.0% | 4.5% | 0.51 | 1.12 | 25 |
 | Sentiment Surfer | -3.7% | 32.3% | 9.4% | -1.07 | 0.84 | 65 |
@@ -46,7 +43,6 @@ All 6 trading strategies explained: how they work, risk profiles, parameter reco
 | Risk | Strategy | Reason |
 |------|----------|--------|
 | **Low** | Edge Indicator | Kline data only, clear rules, ADX filter |
-| **Low-Medium** | Claude Edge Indicator | Edge + dynamic risk management |
 | **Medium** | LiquidationHunter | Contrarian with clear signals |
 | **Medium** | Sentiment Surfer | Multi-factor, balanced |
 | **Medium-High** | LLM Signal | Depends on LLM quality |
@@ -194,11 +190,13 @@ A **pre-configured AI arena strategy** with a fixed prompt. Collects **19 data s
 
 ---
 
-## 6. Edge Indicator
+## 6. Edge Indicator (v2 — Optimized Exits)
 
 ### What does it do?
 
 A **purely technical strategy** that exclusively uses kline data (OHLCV) from Binance. No external APIs, maximum reliability. Based on the TradingView "Trading Edge" indicator.
+
+> **v2 (v3.32.0):** Exit thresholds optimized — trades are held longer, profitable positions run further. A/B test shows +200% return increase on 1h (10 coins, 90d).
 
 ### Who is it for?
 
@@ -227,46 +225,17 @@ NO TRADE: Neutral OR choppy market
 | EMA Fast | 8 | 8 | 5 |
 | EMA Slow | 21 | 21 | 13 |
 | ADX Threshold | 22 | 18 | 15 |
+| Momentum Threshold | 0.40 | **0.35** | 0.25 |
+| Trailing Trail ATR | 3.0 | **2.5** | 2.0 |
+| Trailing Breakeven ATR | 2.0 | **1.5** | 1.0 |
+| Momentum Smooth | 7 | **5** | 3 |
 | Timeframe | 4h | **1h** | 15m |
 | Take Profit | 3.0% | 2.5% | 2.0% |
 | Stop Loss | 1.5% | 1.5% | 1.0% |
 
 ---
 
-## 7. Claude Edge Indicator
-
-### What does it do?
-
-The **enhanced version of the Edge Indicator** with 6 improvements for smarter risk management:
-
-| Enhancement | Benefit |
-|-------------|---------|
-| ATR-based TP/SL | Adapts to volatility |
-| Volume Confirmation | Confirms signals through volume |
-| Multi-Timeframe (4h) | Higher TF as confirmation |
-| Trailing Stop | Let profits run |
-| Regime-based Sizing | Larger position on stronger signals |
-| RSI Divergence | Early reversal detection |
-
-### Who is it for?
-
-- Advanced technical traders
-- Those who prefer dynamic risk management
-- Traders who like multi-timeframe analysis
-
-### Parameter Recommendations
-
-| Parameter | Conservative | Standard | Aggressive |
-|-----------|-------------|----------|------------|
-| ATR TP Multiplier | 3.0 | 2.5 | 2.0 |
-| ATR SL Multiplier | 2.0 | 1.5 | 1.0 |
-| Volume Weight | 0.2 | 0.3 | 0.4 |
-| HTF Interval | 4h | 4h | 1h |
-| Timeframe | 4h | **1h** | 15m |
-
----
-
-## 8. Which Strategy is Right for You?
+## 7. Which Strategy is Right for You?
 
 ### Decision Tree
 
@@ -284,17 +253,14 @@ Do you prefer contrarian trading?
 
 Do you want a balanced multi-factor approach?
   Yes -> Sentiment Surfer (6 sources, weighted)
-
-Do you want advanced risk management?
-  Yes -> Claude Edge Indicator (ATR, Volume, Multi-TF)
 ```
 
 ### Recommendations by Experience Level
 
 | Level | Primary Strategy | Alternative |
 |-------|-----------------|-------------|
-| Beginner | Edge Indicator | LiquidationHunter |
-| Intermediate | Claude Edge Indicator | Sentiment Surfer |
+| Beginner | Edge Indicator | Sentiment Surfer |
+| Intermediate | Sentiment Surfer | LiquidationHunter |
 | Expert | LLM Signal (Custom Prompt) | Degen |
 
 ### Recommendations by Risk Tolerance
@@ -312,5 +278,5 @@ You can run **multiple bots in parallel**:
 | Combination | Benefit |
 |-------------|---------|
 | Edge Indicator + LiquidationHunter | Technical + contrarian diversification |
-| Claude Edge Indicator + LLM Signal | Technical + AI analysis |
+| Edge Indicator + LLM Signal | Technical + AI analysis |
 | Edge Indicator (BTC) + Edge Indicator (ETH) | Same strategy, different assets |

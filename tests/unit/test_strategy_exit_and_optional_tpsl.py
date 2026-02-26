@@ -3,7 +3,7 @@ Comprehensive tests for strategy-based exit signals, optional TP/SL,
 position monitor exit checks, and close-position verification.
 
 Covers all changes from 2026-02-23 to 2026-02-25:
-1. should_exit() for EdgeIndicator + ClaudeEdge
+1. should_exit() for EdgeIndicator
 2. Optional TP/SL (_calculate_targets returns None when no config)
 3. Position monitor strategy exit integration
 4. Close-position endpoint exchange verification
@@ -330,134 +330,7 @@ class TestEdgeIndicatorShouldExit:
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# 4. ClaudeEdge: Optional TP/SL + should_exit()
-# ═══════════════════════════════════════════════════════════════════════════════
-
-class TestClaudeEdgeOptionalTpSl:
-    """ClaudeEdge._calculate_targets returns (None, None) without ATR config."""
-
-    def test_no_atr_defaults_returns_none(self):
-        from src.strategy.claude_edge_indicator import ClaudeEdgeIndicatorStrategy
-        strategy = ClaudeEdgeIndicatorStrategy()
-        tp, sl = strategy._calculate_targets(SignalDirection.LONG, 95000.0)
-        assert tp is None
-        assert sl is None
-
-    def test_no_atr_defaults_short_returns_none(self):
-        from src.strategy.claude_edge_indicator import ClaudeEdgeIndicatorStrategy
-        strategy = ClaudeEdgeIndicatorStrategy()
-        tp, sl = strategy._calculate_targets(SignalDirection.SHORT, 95000.0)
-        assert tp is None
-        assert sl is None
-
-    def test_user_configured_atr_tp_only(self):
-        from src.strategy.claude_edge_indicator import ClaudeEdgeIndicatorStrategy
-        strategy = ClaudeEdgeIndicatorStrategy(params={"atr_tp_multiplier": 2.5})
-        klines = _make_klines(_uptrend_closes(50))
-        tp, sl = strategy._calculate_targets(SignalDirection.LONG, 95000.0, klines)
-        assert tp is not None
-        assert tp > 95000.0
-        assert sl is None
-
-    def test_user_configured_atr_sl_only(self):
-        from src.strategy.claude_edge_indicator import ClaudeEdgeIndicatorStrategy
-        strategy = ClaudeEdgeIndicatorStrategy(params={"atr_sl_multiplier": 1.5})
-        klines = _make_klines(_uptrend_closes(50))
-        tp, sl = strategy._calculate_targets(SignalDirection.LONG, 95000.0, klines)
-        assert tp is None
-        assert sl is not None
-        assert sl < 95000.0
-
-    def test_user_configured_both_atr(self):
-        from src.strategy.claude_edge_indicator import ClaudeEdgeIndicatorStrategy
-        strategy = ClaudeEdgeIndicatorStrategy(params={
-            "atr_tp_multiplier": 2.5,
-            "atr_sl_multiplier": 1.5,
-        })
-        klines = _make_klines(_uptrend_closes(50))
-        tp, sl = strategy._calculate_targets(SignalDirection.LONG, 95000.0, klines)
-        assert tp is not None
-        assert sl is not None
-        assert tp > 95000.0
-        assert sl < 95000.0
-
-    def test_defaults_dict_has_no_atr_multipliers(self):
-        from src.strategy.claude_edge_indicator import DEFAULTS
-        assert "atr_tp_multiplier" not in DEFAULTS
-        assert "atr_sl_multiplier" not in DEFAULTS
-
-    def test_param_schema_has_no_default_for_atr_tp(self):
-        from src.strategy.claude_edge_indicator import ClaudeEdgeIndicatorStrategy
-        schema = ClaudeEdgeIndicatorStrategy.get_param_schema()
-        assert "default" not in schema["atr_tp_multiplier"]
-
-    def test_param_schema_has_no_default_for_atr_sl(self):
-        from src.strategy.claude_edge_indicator import ClaudeEdgeIndicatorStrategy
-        schema = ClaudeEdgeIndicatorStrategy.get_param_schema()
-        assert "default" not in schema["atr_sl_multiplier"]
-
-
-class TestClaudeEdgeShouldExit:
-    """ClaudeEdge.should_exit() exit conditions."""
-
-    def _make_strategy(self, klines):
-        from src.strategy.claude_edge_indicator import ClaudeEdgeIndicatorStrategy
-        fetcher = _make_mock_fetcher(klines)
-        return ClaudeEdgeIndicatorStrategy(data_fetcher=fetcher)
-
-    @pytest.mark.asyncio
-    async def test_long_exit_on_bear_trend(self):
-        closes = _downtrend_closes(60, start=200, step=3)
-        strategy = self._make_strategy(_make_klines(closes))
-
-        should_close, reason = await strategy.should_exit("BTCUSDT", "long", 200.0)
-
-        assert should_close is True
-        assert "bearTrend" in reason or "unter EMA" in reason
-
-    @pytest.mark.asyncio
-    async def test_short_exit_on_bull_trend(self):
-        closes = _uptrend_closes(60, start=100, step=3)
-        strategy = self._make_strategy(_make_klines(closes))
-
-        should_close, reason = await strategy.should_exit("BTCUSDT", "short", 100.0)
-
-        assert should_close is True
-        assert "bullTrend" in reason or "ueber EMA" in reason
-
-    @pytest.mark.asyncio
-    async def test_long_no_exit_in_uptrend(self):
-        closes = _uptrend_closes(60, start=100, step=3)
-        strategy = self._make_strategy(_make_klines(closes))
-
-        should_close, _ = await strategy.should_exit("BTCUSDT", "long", 100.0)
-
-        assert should_close is False
-
-    @pytest.mark.asyncio
-    async def test_short_no_exit_in_downtrend(self):
-        closes = _downtrend_closes(60, start=200, step=3)
-        strategy = self._make_strategy(_make_klines(closes))
-
-        should_close, _ = await strategy.should_exit("BTCUSDT", "short", 200.0)
-
-        assert should_close is False
-
-    @pytest.mark.asyncio
-    async def test_error_returns_false(self):
-        from src.strategy.claude_edge_indicator import ClaudeEdgeIndicatorStrategy
-        fetcher = AsyncMock()
-        fetcher.get_binance_klines = AsyncMock(side_effect=Exception("timeout"))
-        fetcher._ensure_session = AsyncMock()
-        strategy = ClaudeEdgeIndicatorStrategy(data_fetcher=fetcher)
-
-        should_close, _ = await strategy.should_exit("BTCUSDT", "long", 95000.0)
-
-        assert should_close is False
-
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# 5. LiquidationHunter + SentimentSurfer: Optional TP/SL
+# 4. LiquidationHunter + SentimentSurfer: Optional TP/SL
 # ═══════════════════════════════════════════════════════════════════════════════
 
 class TestLiquidationHunterOptionalTpSl:

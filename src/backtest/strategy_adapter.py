@@ -2,7 +2,7 @@
 Strategy Adapter for Backtesting.
 
 Bridges the gap between the API layer and the backtest engines.
-Routes kline-based strategies (Edge Indicator, Claude-Edge) to
+Routes kline-based strategies (Edge Indicator) to
 KlineBacktestEngine, and data-based strategies to BacktestEngine.
 
 Unified Mode (v3.10.0): Non-LLM data strategies use the LIVE strategy code
@@ -26,7 +26,7 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 # Strategies that use OHLCV kline data with technical indicators
-KLINE_STRATEGIES = {"edge_indicator", "claude_edge_indicator"}
+KLINE_STRATEGIES = {"edge_indicator"}
 
 # Strategies that require LLM calls — cannot be unified (non-deterministic)
 LLM_STRATEGIES = {"degen", "llm_signal"}
@@ -56,7 +56,7 @@ async def run_backtest_for_strategy(
     """
     Run a backtest for any registered strategy.
 
-    Kline strategies (Edge Indicator, Claude-Edge) use KlineBacktestEngine.
+    Kline strategies (Edge Indicator) use KlineBacktestEngine.
     Non-LLM data strategies use UNIFIED mode with live strategy code.
     LLM strategies fall back to LEGACY mode with engine-internal signal generators.
 
@@ -79,7 +79,7 @@ async def run_backtest_for_strategy(
 
 
 # ------------------------------------------------------------------ #
-#  KLINE-BASED BACKTEST (Edge Indicator, Claude-Edge)                 #
+#  KLINE-BASED BACKTEST (Edge Indicator)                              #
 # ------------------------------------------------------------------ #
 
 async def _run_kline_backtest(
@@ -524,11 +524,7 @@ async def _run_unified_backtest(
     # Create live strategy instance with mock data fetcher
     strategy_class = StrategyRegistry.get(strategy_type)
 
-    # ClaudeEdgeIndicator accepts backtest_mode for sync HTF alignment
     kwargs = {"params": params, "data_fetcher": mock_fetcher}
-    if strategy_type == "claude_edge_indicator":
-        kwargs["backtest_mode"] = True
-
     strategy = strategy_class(**kwargs)
 
     try:

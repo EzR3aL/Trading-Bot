@@ -35,8 +35,8 @@ class KlineTrade:
     direction: str  # "long" or "short"
     entry_bar: int
     entry_price: float
-    take_profit: float
-    stop_loss: float
+    take_profit: Optional[float]
+    stop_loss: Optional[float]
     confidence: int
     reason: str
     position_value: float
@@ -206,22 +206,22 @@ class KlineBacktestEngine:
                 open_trade.bars_held += 1
                 exited = False
 
-                # Check TP/SL against high/low
+                # Check TP/SL against high/low (skip None targets)
                 if open_trade.direction == "long":
-                    if bar_high >= open_trade.take_profit:
+                    if open_trade.take_profit is not None and bar_high >= open_trade.take_profit:
                         exited = True
                         exit_price = open_trade.take_profit
                         result = KlineTradeResult.TAKE_PROFIT
-                    elif bar_low <= open_trade.stop_loss:
+                    elif open_trade.stop_loss is not None and bar_low <= open_trade.stop_loss:
                         exited = True
                         exit_price = open_trade.stop_loss
                         result = KlineTradeResult.STOP_LOSS
                 else:  # short
-                    if bar_low <= open_trade.take_profit:
+                    if open_trade.take_profit is not None and bar_low <= open_trade.take_profit:
                         exited = True
                         exit_price = open_trade.take_profit
                         result = KlineTradeResult.TAKE_PROFIT
-                    elif bar_high >= open_trade.stop_loss:
+                    elif open_trade.stop_loss is not None and bar_high >= open_trade.stop_loss:
                         exited = True
                         exit_price = open_trade.stop_loss
                         result = KlineTradeResult.STOP_LOSS
@@ -250,7 +250,8 @@ class KlineBacktestEngine:
             window = klines[bar_idx - lookback:bar_idx]
             signal = self._generate_signal_sync(strategy, window)
 
-            if signal and signal.confidence >= self.config.min_confidence and signal.entry_price > 0:
+            if (signal and signal.direction in (SignalDirection.LONG, SignalDirection.SHORT)
+                    and signal.confidence >= self.config.min_confidence and signal.entry_price > 0):
                 # Open new trade
                 trade_counter += 1
                 pos_value = capital * (self.config.position_size_percent / 100)
@@ -309,7 +310,7 @@ class KlineBacktestEngine:
 
         direction, reason = strategy._determine_direction(ribbon, momentum, adx_data)
         confidence = strategy._calculate_confidence(adx_data, momentum, ribbon)
-        take_profit, stop_loss = strategy._calculate_targets(direction, current_price)
+        take_profit, stop_loss = strategy._calculate_targets(direction, current_price, klines_window)
 
         return TradeSignal(
             direction=direction,

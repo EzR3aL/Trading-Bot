@@ -200,7 +200,6 @@ function StrategyOverview() {
     { name: 'Liquidation Hunter', icon: <Target size={18} className="text-red-400" />, desc: t('guide.stratLiquidation'), tf: t('guide.stratLiquidationTf'), type: t('guide.stratTypeLiq') },
     { name: 'Degen', icon: <Zap size={18} className="text-amber-400" />, desc: t('guide.stratDegen'), tf: t('guide.stratDegenTf'), type: t('guide.stratTypeKi') },
     { name: 'Edge Indicator', icon: <Activity size={18} className="text-green-400" />, desc: t('guide.stratEdge'), tf: t('guide.stratEdgeTf'), type: t('guide.stratTypeKline') },
-    { name: 'Claude-Edge', icon: <Activity size={18} className="text-emerald-400" />, desc: t('guide.stratClaudeEdge'), tf: t('guide.stratClaudeEdgeTf'), type: t('guide.stratTypeKline') },
   ]
 
   return (

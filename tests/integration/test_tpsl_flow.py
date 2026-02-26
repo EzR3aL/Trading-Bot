@@ -161,7 +161,7 @@ def _make_config(**overrides):
     config.user_id = overrides.get("user_id", 1)
     config.name = overrides.get("name", "Integration Bot")
     config.description = ""
-    config.strategy_type = overrides.get("strategy_type", "claude_edge_indicator")
+    config.strategy_type = overrides.get("strategy_type", "edge_indicator")
     config.exchange_type = overrides.get("exchange_type", "bitget")
     config.mode = overrides.get("mode", "demo")
     config.trading_pairs = json.dumps(["BTCUSDT"])

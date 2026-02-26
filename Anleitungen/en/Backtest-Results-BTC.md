@@ -28,24 +28,6 @@ EMA Ribbon + ADX Filter + Predator Momentum. Purely technical strategy without A
 
 ---
 
-### Claude Edge Indicator
-
-Enhanced version of Edge Indicator with ATR-based TP/SL, volume filter, multi-timeframe analysis and trailing stop.
-
-| Timeframe | Period | Return % | Win Rate | Max DD % | Sharpe | Profit Factor | Trades | End Capital |
-|-----------|--------|----------|----------|----------|--------|---------------|--------|-------------|
-| 1m | 7 days | -4.08 | 39.3% | 4.35 | -1.05 | 0.64 | 191 | $9,591.57 |
-| 5m | 30 days | -3.34 | 42.8% | 8.60 | -0.18 | 0.89 | 180 | $9,665.94 |
-| 15m | 90 days | -0.33 | 45.7% | 8.24 | 0.31 | 0.99 | 186 | $9,966.72 |
-| 30m | 180 days | +4.16 | 45.5% | 11.98 | 0.74 | 1.07 | 211 | $10,416.39 |
-| **1h** | **365 days** | **+14.20** | **44.4%** | **7.11** | **1.40** | **1.15** | **268** | **$11,420.32** |
-| 4h | 365 days | +1.41 | 39.3% | 11.08 | 0.35 | 1.02 | 145 | $10,140.74 |
-| 1d | 365 days | +2.52 | 40.0% | 5.98 | 0.49 | 1.09 | 70 | $10,252.29 |
-
-**Recommendation:** 1h. Best win rate (44.4%) and lowest max drawdown among profitable strategies (7.11%). Solid choice for risk-conscious traders.
-
----
-
 ### Liquidation Hunter
 
 Contrarian strategy trading against crowded positions (liquidation heatmap).
@@ -125,20 +107,17 @@ AI analyzes market data and gives LONG/SHORT recommendations based on LLM analys
 | 1 | Edge Indicator | 1h | +17.87 | 1.84 | 10.97 | 374 |
 | 2 | Edge Indicator | 4h | +11.73 | 1.46 | 7.65 | 218 |
 | 3 | Degen (AI Arena) | 4h | +18.83 | 1.43 | 20.57 | 119 |
-| 4 | Claude Edge Indicator | 1h | +14.20 | 1.40 | 7.11 | 268 |
-| 5 | Liquidation Hunter | 15m | +2.04 | 1.07 | 4.14 | 81 |
+| 4 | Liquidation Hunter | 15m | +2.04 | 1.07 | 4.14 | 81 |
 
 ## Recommendations for Beginners
 
 1. **Edge Indicator on 1h** -- Best overall package: high return, good Sharpe, moderate drawdowns
-2. **Claude Edge Indicator on 1h** -- Lowest drawdown (7.11%), solid return, best win rate
-3. **Edge Indicator on 4h** -- Fewer trades, more stable, good Sharpe
+2. **Edge Indicator on 4h** -- Fewer trades, more stable, good Sharpe
 
 ## Recommendations for Experienced Traders
 
 1. **Degen on 4h** -- Highest return (+18.83%), but expect ~20% drawdowns
 2. **Edge Indicator on 1h** -- Reliable and profitable
-3. **Claude Edge Indicator on 30m** -- Shorter timeframe with positive return (+4.16%)
 
 ---
 

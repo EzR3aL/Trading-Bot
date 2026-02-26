@@ -126,7 +126,6 @@ describe('GettingStarted', () => {
       expect(screen.getByText('Liquidation Hunter')).toBeInTheDocument()
       expect(screen.getAllByText(/^Degen$/).length).toBeGreaterThanOrEqual(1)
       expect(screen.getByText('Edge Indicator')).toBeInTheDocument()
-      expect(screen.getByText('Claude-Edge')).toBeInTheDocument()
     })
 
     it('renders column headers', () => {

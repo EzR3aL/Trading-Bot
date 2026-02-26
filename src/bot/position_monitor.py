@@ -102,6 +102,7 @@ class PositionMonitorMixin:
                         metrics_at_entry=metrics_at_entry,
                         current_price=current_price,
                         highest_price=trade.highest_price,
+                        entry_time=trade.entry_time,
                     )
 
                     if should_close:

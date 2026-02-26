@@ -64,24 +64,11 @@ async def main():
 
     print()
     print("=" * 90)
-    print("CLAUDE EDGE INDICATOR — Timeframe Comparison")
-    print("=" * 90)
-    print(HDR)
-    print("-" * 90)
-    for tf in ["15m", "30m", "1h", "4h", "1d"]:
-        try:
-            r = await run_backtest_for_strategy("claude_edge_indicator", "BTCUSDT", tf, start, end, 10000)
-            print(f'{tf:>30s} | {fmt(r["metrics"])}')
-        except Exception as e:
-            print(f'{tf:>30s} | ERROR: {e}')
-
-    print()
-    print("=" * 90)
     print("ALL STRATEGIES — Comparison (1h, default params)")
     print("=" * 90)
     print(HDR)
     print("-" * 90)
-    for strat in ["edge_indicator", "claude_edge_indicator", "sentiment_surfer", "liquidation_hunter", "degen", "llm_signal"]:
+    for strat in ["edge_indicator", "sentiment_surfer", "liquidation_hunter", "degen", "llm_signal"]:
         try:
             r = await run_backtest_for_strategy(strat, "BTCUSDT", "1h", start, end, 10000)
             print(f'{strat:>30s} | {fmt(r["metrics"])}')

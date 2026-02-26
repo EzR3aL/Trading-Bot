@@ -224,7 +224,8 @@ class SentimentSurferStrategy(BaseStrategy):
         return direction, confidence, agreement, " | ".join(reasons)
 
     def _calculate_targets(
-        self, direction: SignalDirection, current_price: float
+        self, direction: SignalDirection, current_price: float,
+        klines=None,
     ) -> Tuple:
         """Calculate TP/SL prices. Returns (None, None) if not configured by user."""
         tp_pct_raw = self._p.get("take_profit_percent")

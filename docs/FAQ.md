@@ -4,7 +4,7 @@
 
 ### Was macht dieser Bot genau?
 
-Der Bot ist ein Multi-Exchange Trading System, das Kryptomaerkte analysiert und automatisch handelt. Er unterstuetzt **6 verschiedene Strategien** und **3 Exchanges** (Bitget, Weex, Hyperliquid). Du kannst mehrere Bots parallel laufen lassen, jeden mit einer eigenen Strategie, eigenem Trading-Paar und eigener Exchange.
+Der Bot ist ein Multi-Exchange Trading System, das Kryptomaerkte analysiert und automatisch handelt. Er unterstuetzt **5 verschiedene Strategien** und **3 Exchanges** (Bitget, Weex, Hyperliquid). Du kannst mehrere Bots parallel laufen lassen, jeden mit einer eigenen Strategie, eigenem Trading-Paar und eigener Exchange.
 
 ### Welche Strategien stehen zur Verfuegung?
 
@@ -15,7 +15,6 @@ Der Bot ist ein Multi-Exchange Trading System, das Kryptomaerkte analysiert und 
 | 3 | **Sentiment Surfer** | Hybrid | Kombiniert 6 Datenquellen (News, Sentiment, VWAP, Supertrend, Volume, Momentum) |
 | 4 | **Degen** | KI-Arena | Fester Prompt mit 19 Datenquellen fuer aggressive 1h BTC-Predictions |
 | 5 | **Edge Indicator** | Technisch | EMA Ribbon + ADX Filter + Predator Momentum Score (nur Kline-Daten) |
-| 6 | **Claude Edge Indicator** | Technisch+ | Edge Indicator erweitert um ATR-TP/SL, Volume, Multi-TF, Trailing Stop |
 
 ### Welche Exchanges werden unterstuetzt?
 
@@ -33,7 +32,6 @@ Der Bot bietet mehrere Strategien mit unterschiedlichen Risikoprofilen. Backtest
 |-----------|--------|----------|--------|--------|
 | LiquidationHunter | +26.2% | 53.9% | 4.7% | 5.51 |
 | Edge Indicator | +18.6% | 47.1% | 9.8% | 2.91 |
-| Claude Edge Indicator | +18.6% | 47.1% | 9.8% | 2.91 |
 
 **Vergangene Performance garantiert keine zukuenftige Rendite.** Teste immer erst im Demo-Modus.
 
@@ -81,7 +79,7 @@ Dann mit Docker Compose deployen (siehe [DEPLOYMENT.md](DEPLOYMENT.md)).
 
 **Ja!** Seit v3.3.1 ist ein vollstaendiges Backtesting-System eingebaut:
 - Im Frontend unter "Backtest" erreichbar
-- Alle 6 Strategien koennen getestet werden
+- Alle 5 Strategien koennen getestet werden
 - Konfigurierbare Zeitraeume, Timeframes und Parameter
 - Equity Curve, Trade Log und Metriken
 - Siehe [Anleitungen/Backtesting.md](../Anleitungen/Backtesting.md)

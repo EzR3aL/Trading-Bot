@@ -60,8 +60,7 @@ class TradeExecutorMixin:
                 if is_long
                 else signal.entry_price * (1 + sl_pct / 100)
             )
-        else:
-            signal.stop_loss = None
+        # else: preserve strategy-computed SL (e.g. default ATR SL)
 
         try:
             # Validate entry price before any calculations

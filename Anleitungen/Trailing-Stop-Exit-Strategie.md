@@ -2,7 +2,7 @@
 
 ## Uebersicht
 
-Jede Strategie (Edge Indicator + Claude-Edge) verfuegt ueber ein zweistufiges Exit-System,
+Jede Strategie (Edge Indicator) verfuegt ueber ein zweistufiges Exit-System,
 das Gewinne automatisch schuetzt und Verlust-Trades minimiert.
 
 ## Wie funktioniert es?

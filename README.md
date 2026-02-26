@@ -212,7 +212,6 @@ The strategy engine uses a plugin architecture. All strategies implement `BaseSt
 | **LLM Signal** | AI-Powered | Delegates signal generation to configurable LLM providers (OpenAI, Anthropic, local). Stateless, prompt-driven |
 | **Degen** | AI-Powered | Pre-configured LLM arena strategy with 19 fixed data sources (funding, order flow, options, volatility) |
 | **Edge Indicator** | Technical | EMA ribbon + ADX chop filter + MACD/RSI momentum score. Pure price action from Binance klines |
-| **Claude Edge Indicator** | Technical (Enhanced) | Edge Indicator plus ATR-based TP/SL, volume confirmation, multi-timeframe alignment, trailing stops, RSI divergence |
 | **Sentiment Surfer** | Hybrid | Weighted scoring across 6 sources: news sentiment, Fear & Greed, VWAP, Supertrend, spot volume, price momentum |
 
 Each strategy can be assigned per bot instance, and users can run multiple bots with different strategies simultaneously (up to 10 per user).
