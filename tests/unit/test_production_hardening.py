@@ -36,6 +36,8 @@ os.environ.setdefault("JWT_SECRET_KEY", "test-secret-key-for-testing-only-not-fo
 os.environ.setdefault("ENCRYPTION_KEY", "iDh4DatDZy2cb_esIAoNk_blWkQx3zDG14cj1lq8Rgo=")
 os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
+from src.errors import ERR_TOKEN_REVOKED  # noqa: E402
+
 
 # ---------------------------------------------------------------------------
 # 1. Path Traversal (Integration via HTTP)
@@ -721,7 +723,7 @@ class TestPasswordChangeRevocation:
                 db=mock_db,
             )
         assert exc_info.value.status_code == 401
-        assert "revoked" in exc_info.value.detail.lower()
+        assert exc_info.value.detail == ERR_TOKEN_REVOKED
 
 
 # ---------------------------------------------------------------------------

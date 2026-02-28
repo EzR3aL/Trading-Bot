@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.rate_limit import limiter
 from src.api.schemas.preset import PresetCreate, PresetResponse, PresetUpdate
+from src.errors import ERR_PRESET_ACTIVE_CANNOT_DELETE, ERR_PRESET_NOT_FOUND
 from src.auth.dependencies import get_current_user
 from src.models.database import ConfigPreset, User
 from src.models.session import get_db
@@ -81,7 +82,7 @@ async def get_preset(
     )
     preset = result.scalar_one_or_none()
     if not preset:
-        raise HTTPException(status_code=404, detail="Preset nicht gefunden")
+        raise HTTPException(status_code=404, detail=ERR_PRESET_NOT_FOUND)
     return _preset_to_response(preset)
 
 
@@ -102,7 +103,7 @@ async def update_preset(
     )
     preset = result.scalar_one_or_none()
     if not preset:
-        raise HTTPException(status_code=404, detail="Preset nicht gefunden")
+        raise HTTPException(status_code=404, detail=ERR_PRESET_NOT_FOUND)
 
     if data.name is not None:
         preset.name = data.name
@@ -136,9 +137,9 @@ async def delete_preset(
     )
     preset = result.scalar_one_or_none()
     if not preset:
-        raise HTTPException(status_code=404, detail="Preset nicht gefunden")
+        raise HTTPException(status_code=404, detail=ERR_PRESET_NOT_FOUND)
     if preset.is_active:
-        raise HTTPException(status_code=400, detail="Aktives Preset kann nicht gelöscht werden. Zuerst deaktivieren.")
+        raise HTTPException(status_code=400, detail=ERR_PRESET_ACTIVE_CANNOT_DELETE)
     await db.delete(preset)
 
 
@@ -166,7 +167,7 @@ async def activate_preset(
     )
     preset = result.scalar_one_or_none()
     if not preset:
-        raise HTTPException(status_code=404, detail="Preset nicht gefunden")
+        raise HTTPException(status_code=404, detail=ERR_PRESET_NOT_FOUND)
 
     preset.is_active = True
     return {"status": "ok", "message": f"Preset '{preset.name}' activated"}
@@ -188,7 +189,7 @@ async def duplicate_preset(
     )
     original = result.scalar_one_or_none()
     if not original:
-        raise HTTPException(status_code=404, detail="Preset nicht gefunden")
+        raise HTTPException(status_code=404, detail=ERR_PRESET_NOT_FOUND)
 
     copy = ConfigPreset(
         user_id=user.id,

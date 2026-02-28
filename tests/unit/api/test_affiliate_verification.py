@@ -53,7 +53,7 @@ class TestVerifyUID:
             headers=auth_headers,
         )
         assert resp.status_code == 422
-        assert "numeric" in resp.json()["detail"].lower()
+        assert "numerisch" in resp.json()["detail"].lower()
 
     @pytest.mark.asyncio
     async def test_verify_weex_uid_alphanumeric(self, client, auth_headers, test_user):
@@ -77,7 +77,7 @@ class TestVerifyUID:
             headers=auth_headers,
         )
         assert resp.status_code == 422
-        assert "alphanumeric" in resp.json()["detail"].lower()
+        assert "alphanumerisch" in resp.json()["detail"].lower()
 
     @pytest.mark.asyncio
     async def test_verify_empty_uid_rejected(self, client, auth_headers, test_user):

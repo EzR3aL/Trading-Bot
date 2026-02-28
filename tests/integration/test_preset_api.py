@@ -18,6 +18,7 @@ Endpoints under test:
 
 import pytest
 
+from src.errors import ERR_PRESET_ACTIVE_CANNOT_DELETE
 from tests.integration.conftest import auth_header
 
 # Reusable preset payload matching PresetCreate schema
@@ -255,7 +256,7 @@ async def test_delete_active_preset_fails(client, user_token):
         headers=auth_header(user_token),
     )
     assert del_resp.status_code == 400
-    assert "active" in del_resp.json()["detail"].lower()
+    assert del_resp.json()["detail"] == ERR_PRESET_ACTIVE_CANNOT_DELETE
 
 
 # ---------------------------------------------------------------------------

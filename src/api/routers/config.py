@@ -26,6 +26,26 @@ from src.api.schemas.config import (
     TradingConfigUpdate,
 )
 from src.auth.dependencies import get_current_admin, get_current_user
+from src.errors import (
+    ERR_AFFILIATE_UID_NOT_FOUND,
+    ERR_BUILDER_FEE_NOT_FOUND,
+    ERR_CONNECTION_FAILED,
+    ERR_CONNECTION_TEST_FAILED,
+    ERR_INVALID_BUILDER_ADDRESS,
+    ERR_INVALID_REFERRAL_CODE,
+    ERR_LLM_CONNECTION_FAILED,
+    ERR_NO_API_KEYS,
+    ERR_NO_API_KEYS_FOR,
+    ERR_NO_DEMO_API_KEYS,
+    ERR_NO_DEMO_API_KEYS_HL,
+    ERR_NO_HL_CONNECTION,
+    ERR_NO_HL_CONNECTION_PLAIN,
+    ERR_NO_LIVE_API_KEYS,
+    ERR_NO_LIVE_API_KEYS_HL,
+    ERR_REFERRAL_CHECK_FAILED,
+    ERR_REFERRAL_NOT_FOUND,
+    ERR_REVENUE_SUMMARY_FAILED,
+)
 from src.models.database import ExchangeConnection, LLMConnection, TradeRecord, User, UserConfig
 from src.models.session import get_db
 from src.utils.circuit_breaker import circuit_registry
@@ -259,19 +279,19 @@ async def test_exchange_connection(
     )
     conn = result.scalar_one_or_none()
     if not conn:
-        raise HTTPException(status_code=400, detail=f"Keine API-Keys für {exchange_type} konfiguriert")
+        raise HTTPException(status_code=400, detail=ERR_NO_API_KEYS_FOR.format(exchange_type=exchange_type))
 
     if mode == "live":
         if not conn.api_key_encrypted:
-            raise HTTPException(status_code=400, detail="Keine Live-API-Keys konfiguriert")
+            raise HTTPException(status_code=400, detail=ERR_NO_LIVE_API_KEYS)
         use_demo = False
     elif mode == "demo":
         if not conn.demo_api_key_encrypted:
-            raise HTTPException(status_code=400, detail="Keine Demo-API-Keys konfiguriert")
+            raise HTTPException(status_code=400, detail=ERR_NO_DEMO_API_KEYS)
         use_demo = True
     else:
         if not conn.api_key_encrypted and not conn.demo_api_key_encrypted:
-            raise HTTPException(status_code=400, detail="Keine API-Keys konfiguriert")
+            raise HTTPException(status_code=400, detail=ERR_NO_API_KEYS)
         use_demo = bool(conn.demo_api_key_encrypted)
 
     try:
@@ -306,7 +326,7 @@ async def test_exchange_connection(
         }
     except Exception as e:
         _config_logger.error("Exchange connection test failed: %s", e, exc_info=True)
-        raise HTTPException(status_code=400, detail="Verbindung fehlgeschlagen. Prüfe deine Zugangsdaten und versuche es erneut.")
+        raise HTTPException(status_code=400, detail=ERR_CONNECTION_FAILED)
 
 
 # ── Affiliate UID ───────────────────────────────────────────────────
@@ -664,12 +684,12 @@ async def test_llm_connection(
                 "display_name": provider_class.get_display_name(),
             }
         else:
-            raise HTTPException(status_code=400, detail="Verbindungstest fehlgeschlagen")
+            raise HTTPException(status_code=400, detail=ERR_CONNECTION_TEST_FAILED)
     except HTTPException:
         raise
     except Exception as e:
         _config_logger.error("LLM connection test failed: %s", e, exc_info=True)
-        raise HTTPException(status_code=400, detail="Verbindung fehlgeschlagen. Prüfe deinen API-Key und versuche es erneut.")
+        raise HTTPException(status_code=400, detail=ERR_LLM_CONNECTION_FAILED)
 
 
 # ── Hyperliquid Builder Code & Referral ────────────────────────────
@@ -724,11 +744,11 @@ async def update_hl_admin_settings(
 
     # Validate builder address (empty = clear, otherwise must be 0x + 40 hex)
     if builder_address and not _re.match(r"^0x[0-9a-fA-F]{40}$", builder_address):
-        raise HTTPException(status_code=400, detail="Builder-Adresse muss eine gültige Ethereum-Adresse sein (0x + 40 Hex-Zeichen)")
+        raise HTTPException(status_code=400, detail=ERR_INVALID_BUILDER_ADDRESS)
 
     # Validate referral code (alphanumeric, max 50 chars)
     if referral_code and not _re.match(r"^[a-zA-Z0-9_-]+$", referral_code):
-        raise HTTPException(status_code=400, detail="Referral-Code muss alphanumerisch sein (max. 50 Zeichen)")
+        raise HTTPException(status_code=400, detail=ERR_INVALID_REFERRAL_CODE)
 
     # Upsert each setting
     settings = {
@@ -757,7 +777,7 @@ def _create_hl_client(conn: ExchangeConnection, use_demo: bool):
 
     if use_demo:
         if not conn.demo_api_key_encrypted:  # pragma: no cover — HL key validation
-            raise HTTPException(status_code=400, detail="Keine Demo-API-Keys für Hyperliquid")
+            raise HTTPException(status_code=400, detail=ERR_NO_DEMO_API_KEYS_HL)
         return create_exchange_client(
             exchange_type="hyperliquid",
             api_key=decrypt_value(conn.demo_api_key_encrypted),
@@ -766,7 +786,7 @@ def _create_hl_client(conn: ExchangeConnection, use_demo: bool):
         )
     else:
         if not conn.api_key_encrypted:  # pragma: no cover — HL key validation
-            raise HTTPException(status_code=400, detail="Keine Live-API-Keys für Hyperliquid")
+            raise HTTPException(status_code=400, detail=ERR_NO_LIVE_API_KEYS_HL)
         return create_exchange_client(
             exchange_type="hyperliquid",
             api_key=decrypt_value(conn.api_key_encrypted),
@@ -841,7 +861,7 @@ async def confirm_builder_approval(
     )
     conn = result.scalar_one_or_none()
     if not conn:
-        raise HTTPException(status_code=400, detail="Keine Hyperliquid-Verbindung konfiguriert")
+        raise HTTPException(status_code=400, detail=ERR_NO_HL_CONNECTION_PLAIN)
 
     # Frontend may pass the browser wallet address that actually signed
     signing_wallet = (data.wallet_address or "").strip().lower() or None
@@ -873,7 +893,7 @@ async def confirm_builder_approval(
     )
     raise HTTPException(
         status_code=400,
-        detail="Builder-Fee-Genehmigung nicht auf Hyperliquid gefunden. Bitte erneut signieren.",
+        detail=ERR_BUILDER_FEE_NOT_FOUND,
     )
 
 
@@ -893,7 +913,7 @@ async def verify_referral(
     )
     conn = result.scalar_one_or_none()
     if not conn:
-        raise HTTPException(status_code=400, detail="Keine Hyperliquid-Verbindung konfiguriert.")
+        raise HTTPException(status_code=400, detail=ERR_NO_HL_CONNECTION)
 
     from src.utils.settings import get_hl_config
     hl_cfg = await get_hl_config()
@@ -923,8 +943,7 @@ async def verify_referral(
 
     raise HTTPException(
         status_code=400,
-        detail=f"Referral nicht gefunden. Bitte registriere dich zuerst über "
-               f"https://app.hyperliquid.xyz/join/{referral_code}",
+        detail=ERR_REFERRAL_NOT_FOUND.format(referral_code=referral_code),
     )
 
 
@@ -943,7 +962,7 @@ async def get_referral_status(
     )
     conn = result.scalar_one_or_none()
     if not conn:
-        raise HTTPException(status_code=400, detail="Keine Hyperliquid-Verbindung konfiguriert")
+        raise HTTPException(status_code=400, detail=ERR_NO_HL_CONNECTION_PLAIN)
 
     from src.utils.settings import get_hl_config
     hl_cfg = await get_hl_config()
@@ -970,7 +989,7 @@ async def get_referral_status(
         raise
     except Exception as e:
         _config_logger.error("Referral check failed: %s", e, exc_info=True)
-        raise HTTPException(status_code=400, detail="Referral-Prüfung fehlgeschlagen. Siehe Server-Logs.")
+        raise HTTPException(status_code=400, detail=ERR_REFERRAL_CHECK_FAILED)
 
 
 @router.get("/hyperliquid/revenue-summary")
@@ -988,7 +1007,7 @@ async def get_revenue_summary(
     )
     conn = result.scalar_one_or_none()
     if not conn:
-        raise HTTPException(status_code=400, detail="Keine Hyperliquid-Verbindung konfiguriert")
+        raise HTTPException(status_code=400, detail=ERR_NO_HL_CONNECTION_PLAIN)
 
     from src.utils.settings import get_hl_config
     hl_cfg = await get_hl_config()
@@ -1058,7 +1077,7 @@ async def get_revenue_summary(
         raise
     except Exception as e:
         _config_logger.error("Revenue summary failed: %s", e, exc_info=True)
-        raise HTTPException(status_code=400, detail="Umsatzübersicht konnte nicht geladen werden. Siehe Server-Logs.")
+        raise HTTPException(status_code=400, detail=ERR_REVENUE_SUMMARY_FAILED)
 
 
 async def _async_none():
@@ -1188,7 +1207,7 @@ async def verify_affiliate_uid(
     )
     conn = result.scalar_one_or_none()
     if not conn or not conn.affiliate_uid:
-        raise HTTPException(status_code=404, detail="Affiliate-UID nicht gefunden")
+        raise HTTPException(status_code=404, detail=ERR_AFFILIATE_UID_NOT_FOUND)
 
     conn.affiliate_verified = verified
     conn.affiliate_verified_at = datetime.now(timezone.utc) if verified else None

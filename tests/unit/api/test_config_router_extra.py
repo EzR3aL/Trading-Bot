@@ -36,6 +36,18 @@ from src.models.database import (
 )
 from src.auth.password import hash_password
 from src.auth.jwt_handler import create_access_token
+from src.errors import (
+    ERR_BUILDER_FEE_NOT_FOUND,
+    ERR_CONNECTION_FAILED,
+    ERR_INVALID_BUILDER_ADDRESS,
+    ERR_LLM_CONNECTION_FAILED,
+    ERR_NO_API_KEYS,
+    ERR_NO_DEMO_API_KEYS,
+    ERR_NO_LIVE_API_KEYS,
+    ERR_REFERRAL_CHECK_FAILED,
+    ERR_REFERRAL_NOT_FOUND,
+    ERR_REVENUE_SUMMARY_FAILED,
+)
 from src.utils.encryption import encrypt_value
 
 # Reset Fernet singleton so it uses our test key
@@ -594,7 +606,7 @@ class TestTestExchangeConnection:
             headers=auth_headers,
         )
         assert resp.status_code == 400
-        assert "No live API keys" in resp.json()["detail"]
+        assert resp.json()["detail"] == ERR_NO_LIVE_API_KEYS
 
     @pytest.mark.asyncio
     async def test_demo_mode_no_demo_keys(self, client, auth_headers, session_factory, user):
@@ -612,7 +624,7 @@ class TestTestExchangeConnection:
             headers=auth_headers,
         )
         assert resp.status_code == 400
-        assert "No demo API keys" in resp.json()["detail"]
+        assert resp.json()["detail"] == ERR_NO_DEMO_API_KEYS
 
     @pytest.mark.asyncio
     async def test_auto_mode_no_keys_at_all(self, client, auth_headers, session_factory, user):
@@ -628,7 +640,7 @@ class TestTestExchangeConnection:
             headers=auth_headers,
         )
         assert resp.status_code == 400
-        assert "No API keys configured" in resp.json()["detail"]
+        assert resp.json()["detail"] == ERR_NO_API_KEYS
 
     @pytest.mark.asyncio
     @patch("src.exchanges.factory.create_exchange_client")
@@ -649,7 +661,7 @@ class TestTestExchangeConnection:
             headers=auth_headers,
         )
         assert resp.status_code == 400
-        assert "Connection failed" in resp.json()["detail"]
+        assert resp.json()["detail"] == ERR_CONNECTION_FAILED
 
 
 # ===========================================================================
@@ -1002,7 +1014,7 @@ class TestTestLLMConnection:
             "/api/config/llm-connections/groq/test", headers=auth_headers
         )
         assert resp.status_code == 400
-        assert "Connection failed" in resp.json()["detail"]
+        assert resp.json()["detail"] == ERR_LLM_CONNECTION_FAILED
 
 
 # ===========================================================================
@@ -1091,7 +1103,7 @@ class TestUpdateHLAdminSettings:
             headers=admin_headers,
         )
         assert resp.status_code == 400
-        assert "Ethereum address" in resp.json()["detail"]
+        assert resp.json()["detail"] == ERR_INVALID_BUILDER_ADDRESS
 
     @pytest.mark.asyncio
     async def test_invalid_builder_fee_not_int(self, client, admin_headers):
@@ -1318,7 +1330,7 @@ class TestConfirmBuilderApproval:
             headers=auth_headers,
         )
         assert resp.status_code == 400
-        assert "not found" in resp.json()["detail"]
+        assert resp.json()["detail"] == ERR_BUILDER_FEE_NOT_FOUND
 
     @pytest.mark.asyncio
     @patch("src.utils.settings.get_hl_config")
@@ -1503,7 +1515,7 @@ class TestVerifyReferral:
             headers=auth_headers,
         )
         assert resp.status_code == 400
-        assert "Referral nicht gefunden" in resp.json()["detail"]
+        assert resp.json()["detail"] == ERR_REFERRAL_NOT_FOUND.format(referral_code="REF123")
 
     @pytest.mark.asyncio
     @patch("src.utils.settings.get_hl_config")
@@ -1632,7 +1644,7 @@ class TestGetReferralStatus:
             "/api/config/hyperliquid/referral-status", headers=admin_headers
         )
         assert resp.status_code == 400
-        assert "Failed to check referral" in resp.json()["detail"]
+        assert resp.json()["detail"] == ERR_REFERRAL_CHECK_FAILED
 
 
 # ===========================================================================
@@ -1771,7 +1783,7 @@ class TestGetRevenueSummary:
             "/api/config/hyperliquid/revenue-summary", headers=admin_headers
         )
         assert resp.status_code == 400
-        assert "Failed to get revenue summary" in resp.json()["detail"]
+        assert resp.json()["detail"] == ERR_REVENUE_SUMMARY_FAILED
 
     @pytest.mark.asyncio
     @patch("src.utils.settings.get_hl_config")

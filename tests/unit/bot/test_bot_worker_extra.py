@@ -895,7 +895,10 @@ class TestExecuteTradeExtended:
         mock_rm.calculate_position_size.return_value = (1000.0, 0.01)
         worker._risk_manager = mock_rm
 
-        signal = _make_mock_signal(direction=SignalDirection.LONG, entry_price=100000.0)
+        signal = _make_mock_signal(
+            direction=SignalDirection.LONG, entry_price=100000.0,
+            target_price=None, stop_loss=None,
+        )
 
         mock_session = _make_db_session()
         with patch("src.bot.trade_executor.get_session", return_value=_mock_session_ctx(mock_session)):

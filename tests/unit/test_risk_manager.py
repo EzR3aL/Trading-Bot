@@ -20,7 +20,7 @@ import tempfile
 import shutil
 from pathlib import Path
 from datetime import datetime
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock
 
 import sys
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
@@ -300,17 +300,12 @@ class TestRiskManagerInitialization:
         assert new_dir.exists()
 
     def test_uses_settings_defaults(self, temp_data_dir):
-        """Should use settings values when not explicitly provided."""
-        with patch('src.risk.risk_manager.settings') as mock_settings:
-            mock_settings.trading.max_trades_per_day = 5
-            mock_settings.trading.daily_loss_limit_percent = 10.0
-            mock_settings.trading.position_size_percent = 15.0
+        """Should default to None when not explicitly provided."""
+        rm = RiskManager(data_dir=temp_data_dir)
 
-            rm = RiskManager(data_dir=temp_data_dir)
-
-            assert rm.max_trades == 5
-            assert rm.daily_loss_limit == 10.0
-            assert rm.position_size_pct == 15.0
+        assert rm.max_trades is None
+        assert rm.daily_loss_limit is None
+        assert rm.position_size_pct is None
 
     def test_override_settings(self, temp_data_dir):
         """Should use explicit values over settings."""
@@ -510,18 +505,13 @@ class TestCanTrade:
         """Should allow trading when max_trades is None."""
         temp_dir = tempfile.mkdtemp()
         try:
-            with patch('src.risk.risk_manager.settings') as mock_settings:
-                mock_settings.trading.max_trades_per_day = None
-                mock_settings.trading.daily_loss_limit_percent = None
-                mock_settings.trading.position_size_percent = 10.0
+            rm = RiskManager(data_dir=temp_dir)
+            rm.initialize_day(10000.0)
+            rm.get_daily_stats().trades_executed = 100
 
-                rm = RiskManager(data_dir=temp_dir)
-                rm.initialize_day(10000.0)
-                rm.get_daily_stats().trades_executed = 100
+            can_trade, reason = rm.can_trade()
 
-                can_trade, reason = rm.can_trade()
-
-                assert can_trade is True
+            assert can_trade is True
         finally:
             shutil.rmtree(temp_dir, ignore_errors=True)
 
@@ -529,18 +519,13 @@ class TestCanTrade:
         """Should allow trading when daily_loss_limit is None."""
         temp_dir = tempfile.mkdtemp()
         try:
-            with patch('src.risk.risk_manager.settings') as mock_settings:
-                mock_settings.trading.max_trades_per_day = None
-                mock_settings.trading.daily_loss_limit_percent = None
-                mock_settings.trading.position_size_percent = 10.0
+            rm = RiskManager(data_dir=temp_dir)
+            rm.initialize_day(10000.0)
+            rm.get_daily_stats().total_pnl = -5000.0  # 50% loss
 
-                rm = RiskManager(data_dir=temp_dir)
-                rm.initialize_day(10000.0)
-                rm.get_daily_stats().total_pnl = -5000.0  # 50% loss
+            can_trade, reason = rm.can_trade()
 
-                can_trade, reason = rm.can_trade()
-
-                assert can_trade is True
+            assert can_trade is True
         finally:
             shutil.rmtree(temp_dir, ignore_errors=True)
 
@@ -1334,17 +1319,12 @@ class TestProfitLockIn:
         """Should return None if daily_loss_limit is None."""
         temp_dir = tempfile.mkdtemp()
         try:
-            with patch('src.risk.risk_manager.settings') as mock_settings:
-                mock_settings.trading.max_trades_per_day = None
-                mock_settings.trading.daily_loss_limit_percent = None
-                mock_settings.trading.position_size_percent = 10.0
+            rm = RiskManager(data_dir=temp_dir)
+            rm.initialize_day(10000.0)
 
-                rm = RiskManager(data_dir=temp_dir)
-                rm.initialize_day(10000.0)
+            result = rm.get_dynamic_loss_limit()
 
-                result = rm.get_dynamic_loss_limit()
-
-                assert result is None
+            assert result is None
         finally:
             shutil.rmtree(temp_dir, ignore_errors=True)
 
@@ -1500,17 +1480,12 @@ class TestGetRemainingTrades:
         """Should return 999 when max_trades is None (no limit)."""
         temp_dir = tempfile.mkdtemp()
         try:
-            with patch('src.risk.risk_manager.settings') as mock_settings:
-                mock_settings.trading.max_trades_per_day = None
-                mock_settings.trading.daily_loss_limit_percent = None
-                mock_settings.trading.position_size_percent = 10.0
+            rm = RiskManager(data_dir=temp_dir)
+            rm.initialize_day(10000.0)
 
-                rm = RiskManager(data_dir=temp_dir)
-                rm.initialize_day(10000.0)
+            remaining = rm.get_remaining_trades()
 
-                remaining = rm.get_remaining_trades()
-
-                assert remaining == 999
+            assert remaining == 999
         finally:
             shutil.rmtree(temp_dir, ignore_errors=True)
 
@@ -1555,17 +1530,12 @@ class TestGetRemainingTrades:
         """Should return 999 for symbol with no limit (global also None)."""
         temp_dir = tempfile.mkdtemp()
         try:
-            with patch('src.risk.risk_manager.settings') as mock_settings:
-                mock_settings.trading.max_trades_per_day = None
-                mock_settings.trading.daily_loss_limit_percent = None
-                mock_settings.trading.position_size_percent = 10.0
+            rm = RiskManager(data_dir=temp_dir)
+            rm.initialize_day(10000.0)
 
-                rm = RiskManager(data_dir=temp_dir)
-                rm.initialize_day(10000.0)
+            remaining = rm.get_remaining_trades(symbol="BTCUSDT")
 
-                remaining = rm.get_remaining_trades(symbol="BTCUSDT")
-
-                assert remaining == 999
+            assert remaining == 999
         finally:
             shutil.rmtree(temp_dir, ignore_errors=True)
 
@@ -1635,17 +1605,12 @@ class TestGetRemainingRiskBudget:
         """Should return None when no loss limit is set."""
         temp_dir = tempfile.mkdtemp()
         try:
-            with patch('src.risk.risk_manager.settings') as mock_settings:
-                mock_settings.trading.max_trades_per_day = None
-                mock_settings.trading.daily_loss_limit_percent = None
-                mock_settings.trading.position_size_percent = 10.0
+            rm = RiskManager(data_dir=temp_dir)
+            rm.initialize_day(10000.0)
 
-                rm = RiskManager(data_dir=temp_dir)
-                rm.initialize_day(10000.0)
+            budget = rm.get_remaining_risk_budget()
 
-                budget = rm.get_remaining_risk_budget()
-
-                assert budget is None
+            assert budget is None
         finally:
             shutil.rmtree(temp_dir, ignore_errors=True)
 

@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.api.rate_limit import limiter
 from src.api.schemas.affiliate import AffiliateLinkResponse, AffiliateLinkUpdate
 from src.auth.dependencies import get_current_admin, get_current_user
+from src.errors import ERR_INVALID_EXCHANGE
 from src.models.database import AffiliateLink, ExchangeConnection, User
 from src.models.session import get_db
 
@@ -54,7 +55,7 @@ async def upsert_affiliate_link(
 ):
     """Create or update affiliate link for an exchange (admin only)."""
     if exchange not in VALID_EXCHANGES:
-        raise HTTPException(status_code=400, detail=f"Invalid exchange: {exchange}")
+        raise HTTPException(status_code=400, detail=ERR_INVALID_EXCHANGE)
 
     result = await db.execute(
         select(AffiliateLink).where(AffiliateLink.exchange_type == exchange)
@@ -117,7 +118,7 @@ async def verify_uid(
     uid = data.uid.strip()
 
     if exchange not in VALID_EXCHANGES:
-        raise HTTPException(status_code=400, detail=f"Invalid exchange: {exchange}")
+        raise HTTPException(status_code=400, detail=ERR_INVALID_EXCHANGE)
 
     if not uid:
         raise HTTPException(status_code=400, detail="UID must not be empty")

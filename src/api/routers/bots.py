@@ -30,6 +30,7 @@ from src.api.schemas.bots import (
     SymbolConflictResponse,
 )
 from src.auth.dependencies import get_current_user
+from src.errors import ERR_BOT_NOT_FOUND, ERR_MAX_BOTS_REACHED, ERR_STOP_BOT_BEFORE_EDIT
 from src.models.database import BotConfig, ConfigPreset, ExchangeConnection, TradeRecord, User
 from src.models.session import get_db
 from src.strategy import StrategyRegistry  # imports __init__.py → registers all strategies
@@ -68,7 +69,7 @@ def _config_to_response(config: BotConfig) -> BotConfigResponse:
         strategy_type=config.strategy_type,
         exchange_type=config.exchange_type,
         mode=config.mode,
-        margin_mode=getattr(config, "margin_mode", "cross"),
+        margin_mode=getattr(config, "margin_mode", None) or "cross",
         trading_pairs=trading_pairs,
         leverage=config.leverage,
         position_size_percent=config.position_size_percent,
@@ -437,7 +438,7 @@ async def create_bot(
         select(func.count(BotConfig.id)).where(BotConfig.user_id == user.id)
     )
     if count_result.scalar() >= MAX_BOTS_PER_USER:
-        raise HTTPException(status_code=400, detail=f"Maximal {MAX_BOTS_PER_USER} Bots pro Benutzer erlaubt")
+        raise HTTPException(status_code=400, detail=ERR_MAX_BOTS_REACHED.format(max_bots=MAX_BOTS_PER_USER))
 
     # Encrypt discord webhook if provided
     encrypted_webhook = None
@@ -734,7 +735,7 @@ async def list_bots(
             strategy_type=config.strategy_type,
             exchange_type=config.exchange_type,
             mode=config.mode,
-            margin_mode=getattr(config, "margin_mode", "cross"),
+            margin_mode=getattr(config, "margin_mode", None) or "cross",
             trading_pairs=trading_pairs,
             status=runtime["status"] if runtime else ("idle" if not config.is_enabled else "stopped"),
             error_message=runtime.get("error_message") if runtime else None,
@@ -774,7 +775,7 @@ async def get_bot(
     )
     config = result.scalar_one_or_none()
     if not config:
-        raise HTTPException(status_code=404, detail="Bot nicht gefunden")
+        raise HTTPException(status_code=404, detail=ERR_BOT_NOT_FOUND)
     return _config_to_response(config)
 
 
@@ -794,11 +795,11 @@ async def update_bot(
     )
     config = result.scalar_one_or_none()
     if not config:
-        raise HTTPException(status_code=404, detail="Bot nicht gefunden")
+        raise HTTPException(status_code=404, detail=ERR_BOT_NOT_FOUND)
 
     # Check if running
     if orchestrator.is_running(bot_id):
-        raise HTTPException(status_code=400, detail="Stoppe den Bot bevor du die Konfiguration bearbeitest")
+        raise HTTPException(status_code=400, detail=ERR_STOP_BOT_BEFORE_EDIT)
 
     # Validate strategy if changed
     if body.strategy_type:
@@ -861,7 +862,7 @@ async def delete_bot(
     )
     config = result.scalar_one_or_none()
     if not config:
-        raise HTTPException(status_code=404, detail="Bot nicht gefunden")
+        raise HTTPException(status_code=404, detail=ERR_BOT_NOT_FOUND)
 
     # Stop if running
     if orchestrator.is_running(bot_id):
@@ -891,14 +892,14 @@ async def duplicate_bot(
     )
     original = result.scalar_one_or_none()
     if not original:
-        raise HTTPException(status_code=404, detail="Bot nicht gefunden")
+        raise HTTPException(status_code=404, detail=ERR_BOT_NOT_FOUND)
 
     # Check bot limit
     count_result = await db.execute(
         select(func.count(BotConfig.id)).where(BotConfig.user_id == user.id)
     )
     if count_result.scalar() >= MAX_BOTS_PER_USER:
-        raise HTTPException(status_code=400, detail=f"Maximal {MAX_BOTS_PER_USER} Bots pro Benutzer erlaubt")
+        raise HTTPException(status_code=400, detail=ERR_MAX_BOTS_REACHED.format(max_bots=MAX_BOTS_PER_USER))
 
     copy = BotConfig(
         user_id=user.id,

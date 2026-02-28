@@ -576,7 +576,7 @@ class TestPlaceMarketOrder:
         """set_leverage is called before placing the order."""
         call_order = []
 
-        async def mock_set_leverage(symbol, leverage):
+        async def mock_set_leverage(symbol, leverage, margin_mode="cross"):
             call_order.append("set_leverage")
             return True
 
@@ -705,7 +705,7 @@ class TestClosePosition:
         with patch.object(client, "get_position", new_callable=AsyncMock, return_value=mock_position):
             with patch.object(
                 client, "_request", new_callable=AsyncMock,
-                return_value={"orderId": "close-order-1"},
+                return_value={"successList": [{"orderId": "close-order-1"}]},
             ):
                 order = await client.close_position("BTCUSDT", "long")
 
@@ -730,14 +730,13 @@ class TestClosePosition:
         with patch.object(client, "get_position", new_callable=AsyncMock, return_value=mock_position):
             with patch.object(
                 client, "_request", new_callable=AsyncMock,
-                return_value={"orderId": "close-order-2"},
+                return_value={"successList": [{"orderId": "close-order-2"}]},
             ) as mock_req:
                 _order = await client.close_position("ETHUSDT", "short")
 
-        # Verify side mapping: closing short = buy
+        # Verify flash-close uses holdSide from position
         call_data = mock_req.call_args.kwargs["data"]
-        assert call_data["side"] == "buy"
-        assert call_data["tradeSide"] == "close"
+        assert call_data["holdSide"] == "short"
 
     async def test_close_position_no_position_returns_none(self, client):
         """Returns None when no position exists."""

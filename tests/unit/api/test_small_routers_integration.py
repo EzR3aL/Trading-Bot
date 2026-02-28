@@ -34,6 +34,15 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from src.models.database import AffiliateLink, BacktestRun, Base, TradeRecord, User
 from src.auth.password import hash_password
 from src.auth.jwt_handler import create_access_token
+from src.errors import (
+    ERR_BACKTEST_NOT_FOUND,
+    ERR_CANNOT_DELETE_SELF,
+    ERR_END_BEFORE_START,
+    ERR_INVALID_DATE_FORMAT,
+    ERR_INVALID_EXCHANGE,
+    ERR_USERNAME_EXISTS,
+    ERR_USER_NOT_FOUND,
+)
 
 
 # ===========================================================================
@@ -467,7 +476,7 @@ async def test_users_create_duplicate_username_returns_409(
         json={"username": "admin", "password": "Test@1234"},
     )
     assert resp.status_code == 409
-    assert "already exists" in resp.json()["detail"]
+    assert resp.json()["detail"] == ERR_USERNAME_EXISTS
 
 
 async def test_users_create_defaults(client, admin_headers, admin_user):
@@ -621,7 +630,7 @@ async def test_users_update_not_found(client, admin_headers, admin_user):
         json={"email": "gone@test.com"},
     )
     assert resp.status_code == 404
-    assert "not found" in resp.json()["detail"].lower()
+    assert resp.json()["detail"] == ERR_USER_NOT_FOUND
 
 
 async def test_users_update_forbidden_for_regular_user(client, auth_headers, user):
@@ -669,14 +678,14 @@ async def test_users_delete_cannot_delete_self(client, admin_headers, admin_user
     """Admin cannot delete themselves (400)."""
     resp = await client.delete(f"/api/users/{admin_user.id}", headers=admin_headers)
     assert resp.status_code == 400
-    assert "Cannot delete yourself" in resp.json()["detail"]
+    assert resp.json()["detail"] == ERR_CANNOT_DELETE_SELF
 
 
 async def test_users_delete_not_found(client, admin_headers, admin_user):
     """Deleting a non-existent user returns 404."""
     resp = await client.delete("/api/users/99999", headers=admin_headers)
     assert resp.status_code == 404
-    assert "not found" in resp.json()["detail"].lower()
+    assert resp.json()["detail"] == ERR_USER_NOT_FOUND
 
 
 async def test_users_delete_forbidden_for_regular_user(
@@ -799,7 +808,7 @@ async def test_backtest_start_invalid_date_format(client, auth_headers, user):
         },
     )
     assert resp.status_code == 400
-    assert "Invalid date format" in resp.json()["detail"]
+    assert resp.json()["detail"] == ERR_INVALID_DATE_FORMAT
 
 
 async def test_backtest_start_end_before_start(client, auth_headers, user):
@@ -814,7 +823,7 @@ async def test_backtest_start_end_before_start(client, auth_headers, user):
         },
     )
     assert resp.status_code == 400
-    assert "end_date must be after start_date" in resp.json()["detail"]
+    assert resp.json()["detail"] == ERR_END_BEFORE_START
 
 
 async def test_backtest_start_same_dates(client, auth_headers, user):
@@ -948,7 +957,7 @@ async def test_backtest_get_run_not_found(client, auth_headers, user):
     """Getting a non-existent run returns 404."""
     resp = await client.get("/api/backtest/99999", headers=auth_headers)
     assert resp.status_code == 404
-    assert "not found" in resp.json()["detail"].lower()
+    assert resp.json()["detail"] == ERR_BACKTEST_NOT_FOUND
 
 
 async def test_backtest_get_run_requires_auth(client, backtest_run):
@@ -1332,10 +1341,10 @@ async def test_affiliate_list_any_user_allowed(
 async def test_affiliate_list_admin_allowed(
     client, admin_headers, admin_user, affiliate_links
 ):
-    """Admin can also list affiliate links."""
+    """Admin can also list affiliate links (admins see all including inactive)."""
     resp = await client.get("/api/affiliate-links", headers=admin_headers)
     assert resp.status_code == 200
-    assert len(resp.json()) == 2
+    assert len(resp.json()) == 3
 
 
 async def test_affiliate_list_requires_auth(client):
@@ -1392,7 +1401,7 @@ async def test_affiliate_upsert_invalid_exchange(client, admin_headers, admin_us
         },
     )
     assert resp.status_code == 400
-    assert "Invalid exchange" in resp.json()["detail"]
+    assert resp.json()["detail"] == ERR_INVALID_EXCHANGE
 
 
 async def test_affiliate_upsert_forbidden_for_regular_user(
@@ -1438,7 +1447,7 @@ async def test_affiliate_delete_not_found(client, admin_headers, admin_user):
         "/api/affiliate-links/bitget", headers=admin_headers
     )
     assert resp.status_code == 404
-    assert "not found" in resp.json()["detail"].lower()
+    assert "nicht gefunden" in resp.json()["detail"].lower()
 
 
 async def test_affiliate_delete_forbidden_for_regular_user(

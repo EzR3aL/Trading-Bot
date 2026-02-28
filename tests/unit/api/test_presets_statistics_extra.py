@@ -27,6 +27,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from src.models.database import Base, ConfigPreset, FundingPayment, TradeRecord, User
 from src.auth.password import hash_password
 from src.auth.jwt_handler import create_access_token
+from src.errors import ERR_PRESET_ACTIVE_CANNOT_DELETE
 
 
 @pytest_asyncio.fixture
@@ -349,7 +350,7 @@ async def test_delete_active_preset_fails(client, auth_headers, preset, session_
 
     resp = await client.delete(f"/api/presets/{preset.id}", headers=auth_headers)
     assert resp.status_code == 400
-    assert "active" in resp.json()["detail"].lower()
+    assert resp.json()["detail"] == ERR_PRESET_ACTIVE_CANNOT_DELETE
 
 
 async def test_activate_preset(client, auth_headers, preset):

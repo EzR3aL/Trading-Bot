@@ -13,6 +13,26 @@ from src.api.rate_limit import limiter
 from src.api.routers.bots import _check_symbol_conflicts, _config_to_response, get_orchestrator
 from src.api.schemas.bots import BotConfigResponse
 from src.auth.dependencies import get_current_user
+from src.errors import (
+    ERR_AFFILIATE_PENDING,
+    ERR_AFFILIATE_REQUIRED,
+    ERR_BOT_NOT_FOUND,
+    ERR_BOT_NOT_RUNNING,
+    ERR_EXCHANGE_CREDENTIALS_MISSING,
+    ERR_HL_BUILDER_FEE_NOT_APPROVED,
+    ERR_HL_REFERRAL_REQUIRED,
+    ERR_NO_EXCHANGE_CONNECTION,
+    ERR_NO_HL_CONNECTION,
+    ERR_NO_OPEN_TRADE,
+    ERR_POSITION_CLOSE_FAILED,
+    ERR_POSITION_VERIFY_FAILED,
+    ERR_PRESET_NOT_FOUND,
+    ERR_STOP_BOT_BEFORE_PRESET,
+    ERR_STOP_BOT_BEFORE_RESET,
+    ERR_SYMBOL_CONFLICT,
+    ERR_TELEGRAM_NOT_CONFIGURED,
+    ERR_TELEGRAM_SEND_FAILED,
+)
 from src.exceptions import BotError
 from src.models.database import AffiliateLink, BotConfig, ConfigPreset, ExchangeConnection, TradeRecord, User
 from src.models.session import get_db
@@ -38,7 +58,7 @@ async def _enforce_hl_gates(user: User, db: AsyncSession):
     )
     hl_conn = hl_conn_result.scalar_one_or_none()
     if not hl_conn:
-        raise HTTPException(status_code=400, detail="Keine Hyperliquid-Verbindung konfiguriert.")
+        raise HTTPException(status_code=400, detail=ERR_NO_HL_CONNECTION)
 
     hl_cfg = await get_hl_config()
 
@@ -47,9 +67,7 @@ async def _enforce_hl_gates(user: User, db: AsyncSession):
     if referral_code and not hl_conn.referral_verified:
         raise HTTPException(
             status_code=400,
-            detail=f"Referral erforderlich. Bitte registriere dich über "
-                   f"https://app.hyperliquid.xyz/join/{referral_code} "
-                   f"bevor du Hyperliquid Bots nutzen kannst.",
+            detail=ERR_HL_REFERRAL_REQUIRED.format(referral_code=referral_code),
         )
 
     # Gate 2: Builder fee check
@@ -57,7 +75,7 @@ async def _enforce_hl_gates(user: User, db: AsyncSession):
     if builder_address and not hl_conn.builder_fee_approved:
         raise HTTPException(
             status_code=400,
-            detail="Builder Fee nicht genehmigt. Bitte genehmige die Builder Fee auf der Website.",
+            detail=ERR_HL_BUILDER_FEE_NOT_APPROVED,
         )
 
 
@@ -87,7 +105,7 @@ async def _enforce_affiliate_gate(exchange_type: str, user: User, db: AsyncSessi
         raise HTTPException(
             status_code=400,
             detail={
-                "message": "Registriere dich zuerst über unseren Affiliate-Link, trage dann deine UID unter Einstellungen → API Keys ein.",
+                "message": ERR_AFFILIATE_REQUIRED,
                 "affiliate_url": aff_link.affiliate_url,
                 "type": "affiliate_required",
             },
@@ -96,7 +114,7 @@ async def _enforce_affiliate_gate(exchange_type: str, user: User, db: AsyncSessi
         raise HTTPException(
             status_code=400,
             detail={
-                "message": "Deine UID wurde eingereicht, ist aber noch nicht freigegeben. Bitte warte auf die Freigabe durch einen Admin.",
+                "message": ERR_AFFILIATE_PENDING,
                 "type": "affiliate_pending",
             },
         )
@@ -117,7 +135,7 @@ async def start_bot(
     )
     config = result.scalar_one_or_none()
     if not config:
-        raise HTTPException(status_code=404, detail="Bot nicht gefunden")
+        raise HTTPException(status_code=404, detail=ERR_BOT_NOT_FOUND)
 
     # ── Pre-start gates (API level) — admins bypass all gates ──
     if user.role != "admin":
@@ -132,7 +150,7 @@ async def start_bot(
     conflicts = await _check_symbol_conflicts(db, user.id, config.exchange_type, config.mode, trading_pairs, exclude_bot_id=bot_id)
     if conflicts:
         symbols = ", ".join(c.symbol for c in conflicts)
-        raise HTTPException(status_code=400, detail=f"Symbol-Konflikt: {symbols} wird bereits von einem aktiven Bot auf dieser Exchange gehandelt")
+        raise HTTPException(status_code=400, detail=ERR_SYMBOL_CONFLICT.format(symbols=symbols))
 
     try:
         await orchestrator.start_bot(bot_id)
@@ -164,7 +182,7 @@ async def stop_bot(
     )
     config = result.scalar_one_or_none()
     if not config:
-        raise HTTPException(status_code=404, detail="Bot nicht gefunden")
+        raise HTTPException(status_code=404, detail=ERR_BOT_NOT_FOUND)
     # Check for open trades before stopping
     open_result = await db.execute(
         select(TradeRecord).where(
@@ -176,7 +194,7 @@ async def stop_bot(
 
     success = await orchestrator.stop_bot(bot_id)
     if not success:
-        raise HTTPException(status_code=400, detail="Bot läuft nicht")
+        raise HTTPException(status_code=400, detail=ERR_BOT_NOT_RUNNING)
 
     # Mark as disabled
     config.is_enabled = False
@@ -211,7 +229,7 @@ async def restart_bot(
     )
     config = result.scalar_one_or_none()
     if not config:
-        raise HTTPException(status_code=404, detail="Bot nicht gefunden")
+        raise HTTPException(status_code=404, detail=ERR_BOT_NOT_FOUND)
 
     # ── Pre-start gates (API level) — admins bypass all gates ──
     if user.role != "admin":
@@ -226,7 +244,7 @@ async def restart_bot(
     conflicts = await _check_symbol_conflicts(db, user.id, config.exchange_type, config.mode, trading_pairs, exclude_bot_id=bot_id)
     if conflicts:
         symbols = ", ".join(c.symbol for c in conflicts)
-        raise HTTPException(status_code=400, detail=f"Symbol-Konflikt: {symbols} wird bereits von einem aktiven Bot auf dieser Exchange gehandelt")
+        raise HTTPException(status_code=400, detail=ERR_SYMBOL_CONFLICT.format(symbols=symbols))
 
     try:
         await orchestrator.restart_bot(bot_id)
@@ -260,7 +278,7 @@ async def close_position(
     )
     config = result.scalar_one_or_none()
     if not config:
-        raise HTTPException(status_code=404, detail="Bot nicht gefunden")
+        raise HTTPException(status_code=404, detail=ERR_BOT_NOT_FOUND)
 
     # Find the open trade record for this bot + symbol
     trade_result = await db.execute(
@@ -272,7 +290,7 @@ async def close_position(
     )
     trade = trade_result.scalar_one_or_none()
     if not trade:
-        raise HTTPException(status_code=404, detail=f"Kein offener Trade für {symbol} gefunden")
+        raise HTTPException(status_code=404, detail=ERR_NO_OPEN_TRADE.format(symbol=symbol))
 
     # Get exchange connection
     conn_result = await db.execute(
@@ -283,7 +301,7 @@ async def close_position(
     )
     conn = conn_result.scalar_one_or_none()
     if not conn:
-        raise HTTPException(status_code=400, detail="Keine Exchange-Verbindung konfiguriert")
+        raise HTTPException(status_code=400, detail=ERR_NO_EXCHANGE_CONNECTION)
 
     is_demo = trade.demo_mode
     api_key_enc = conn.demo_api_key_encrypted if is_demo else conn.api_key_encrypted
@@ -291,7 +309,7 @@ async def close_position(
     passphrase_enc = conn.demo_passphrase_encrypted if is_demo else conn.passphrase_encrypted
 
     if not api_key_enc or not api_secret_enc:
-        raise HTTPException(status_code=400, detail="Exchange-Zugangsdaten nicht konfiguriert")
+        raise HTTPException(status_code=400, detail=ERR_EXCHANGE_CREDENTIALS_MISSING)
 
     client = create_exchange_client(
         exchange_type=config.exchange_type,
@@ -317,8 +335,7 @@ async def close_position(
         if remaining_pos and remaining_pos.size > 0:
             raise HTTPException(
                 status_code=502,
-                detail=f"Position {symbol} konnte auf der Exchange nicht geschlossen werden. "
-                       f"Bitte manuell auf der Exchange schliessen.",
+                detail=ERR_POSITION_CLOSE_FAILED.format(symbol=symbol),
             )
     except HTTPException:
         raise
@@ -326,8 +343,7 @@ async def close_position(
         logger.error(f"Could not verify position status for {symbol} bot {bot_id}: {e}")
         raise HTTPException(
             status_code=502,
-            detail=f"Position {symbol}: Status konnte nach dem Schliessen nicht verifiziert werden. "
-                   f"Bitte auf der Exchange pruefen.",
+            detail=ERR_POSITION_VERIFY_FAILED.format(symbol=symbol),
         )
 
     # Get current price for PnL
@@ -390,9 +406,9 @@ async def test_telegram(
     )
     config = result.scalar_one_or_none()
     if not config:
-        raise HTTPException(status_code=404, detail="Bot nicht gefunden")
+        raise HTTPException(status_code=404, detail=ERR_BOT_NOT_FOUND)
     if not config.telegram_bot_token or not config.telegram_chat_id:
-        raise HTTPException(status_code=400, detail="Telegram nicht konfiguriert")
+        raise HTTPException(status_code=400, detail=ERR_TELEGRAM_NOT_CONFIGURED)
 
     from src.notifications.telegram_notifier import TelegramNotifier
     from src.utils.encryption import decrypt_value
@@ -403,7 +419,7 @@ async def test_telegram(
     )
     success = await notifier.send_test_message()
     if not success:
-        raise HTTPException(status_code=502, detail="Telegram-Nachricht konnte nicht gesendet werden")
+        raise HTTPException(status_code=502, detail=ERR_TELEGRAM_SEND_FAILED)
     return {"status": "ok", "message": "Test message sent"}
 
 
@@ -425,11 +441,11 @@ async def apply_preset_to_bot(
     )
     config = result.scalar_one_or_none()
     if not config:
-        raise HTTPException(status_code=404, detail="Bot nicht gefunden")
+        raise HTTPException(status_code=404, detail=ERR_BOT_NOT_FOUND)
 
     # Check if running
     if orchestrator.is_running(bot_id):
-        raise HTTPException(status_code=400, detail="Stoppe den Bot bevor du ein Preset anwendest")
+        raise HTTPException(status_code=400, detail=ERR_STOP_BOT_BEFORE_PRESET)
 
     # Load preset
     preset_result = await db.execute(
@@ -437,7 +453,7 @@ async def apply_preset_to_bot(
     )
     preset = preset_result.scalar_one_or_none()
     if not preset:
-        raise HTTPException(status_code=404, detail="Preset nicht gefunden")
+        raise HTTPException(status_code=404, detail=ERR_PRESET_NOT_FOUND)
 
     # Apply trading config from preset
     if preset.trading_config:
@@ -507,10 +523,10 @@ async def reset_preset(
     )
     config = result.scalar_one_or_none()
     if not config:
-        raise HTTPException(status_code=404, detail="Bot nicht gefunden")
+        raise HTTPException(status_code=404, detail=ERR_BOT_NOT_FOUND)
 
     if orchestrator.is_running(bot_id):
-        raise HTTPException(status_code=400, detail="Stoppe den Bot bevor du das Preset entfernst")
+        raise HTTPException(status_code=400, detail=ERR_STOP_BOT_BEFORE_RESET)
 
     config.active_preset_id = None
 

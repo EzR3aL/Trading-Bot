@@ -17,6 +17,15 @@ from src.api.schemas.auth import (
 from src.auth.dependencies import get_current_user
 from src.auth.jwt_handler import create_access_token, create_refresh_token, decode_token
 from src.auth.password import hash_password, verify_password
+from src.errors import (
+    ERR_ACCOUNT_DISABLED,
+    ERR_ACCOUNT_LOCKED,
+    ERR_CURRENT_PASSWORD_WRONG,
+    ERR_INVALID_CREDENTIALS,
+    ERR_INVALID_REFRESH_TOKEN,
+    ERR_TOKEN_REVOKED,
+    ERR_USER_NOT_FOUND_OR_INACTIVE,
+)
 from src.models.database import User
 from src.models.session import get_db
 from src.utils.logger import get_logger
@@ -41,7 +50,7 @@ async def login(request: Request, body: LoginRequest, db: AsyncSession = Depends
         logger.warning("AUTH: Failed login for '%s' from %s", body.username, client_ip)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Ungültiger Benutzername oder Passwort",
+            detail=ERR_INVALID_CREDENTIALS,
         )
 
     # Check account lockout
@@ -49,7 +58,7 @@ async def login(request: Request, body: LoginRequest, db: AsyncSession = Depends
         logger.warning("AUTH: Locked account login attempt for '%s' from %s", body.username, client_ip)
         raise HTTPException(
             status_code=423,
-            detail="Konto vorübergehend gesperrt. Versuche es später erneut.",
+            detail=ERR_ACCOUNT_LOCKED,
         )
 
     if not verify_password(body.password, user.password_hash):
@@ -68,21 +77,21 @@ async def login(request: Request, body: LoginRequest, db: AsyncSession = Depends
         logger.warning("AUTH: Failed login for '%s' from %s", body.username, client_ip)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Ungültiger Benutzername oder Passwort",
+            detail=ERR_INVALID_CREDENTIALS,
         )
 
     if user.is_deleted:
         logger.warning("AUTH: Login attempt for deleted user '%s' from %s", body.username, client_ip)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Ungültiger Benutzername oder Passwort",
+            detail=ERR_INVALID_CREDENTIALS,
         )
 
     if not user.is_active:
         logger.warning("AUTH: Login attempt for disabled user '%s' from %s", body.username, client_ip)
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Konto ist deaktiviert",
+            detail=ERR_ACCOUNT_DISABLED,
         )
 
     # Successful login — reset lockout counters
@@ -112,7 +121,7 @@ async def refresh_token(request: Request, body: RefreshRequest, db: AsyncSession
         logger.warning("AUTH: Invalid refresh token from %s", client_ip)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Ungültiger Refresh-Token",
+            detail=ERR_INVALID_REFRESH_TOKEN,
         )
 
     user_id = payload.get("sub")
@@ -123,7 +132,7 @@ async def refresh_token(request: Request, body: RefreshRequest, db: AsyncSession
         logger.warning("AUTH: Refresh for inactive/deleted user_id=%s from %s", user_id, client_ip)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Benutzer nicht gefunden oder inaktiv",
+            detail=ERR_USER_NOT_FOUND_OR_INACTIVE,
         )
 
     # Reject refresh tokens issued before a security event (password change,
@@ -135,7 +144,7 @@ async def refresh_token(request: Request, body: RefreshRequest, db: AsyncSession
         logger.warning("AUTH: Revoked refresh token used for user_id=%s (tv=%s < %s) from %s", user_id, token_tv, user_tv, client_ip)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Token widerrufen — bitte erneut anmelden",
+            detail=ERR_TOKEN_REVOKED,
         )
 
     token_data = {"sub": str(user.id), "role": user.role, "tv": user_tv}
@@ -159,7 +168,7 @@ async def change_password(
 ):
     """Change the current user's password and revoke existing tokens."""
     if not verify_password(body.current_password, user.password_hash):
-        raise HTTPException(status_code=401, detail="Aktuelles Passwort ist falsch")
+        raise HTTPException(status_code=401, detail=ERR_CURRENT_PASSWORD_WRONG)
     user.password_hash = hash_password(body.new_password)
     user.token_version = (user.token_version or 0) + 1
     await db.commit()
