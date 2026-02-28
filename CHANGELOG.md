@@ -9,6 +9,23 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.34.0] - 2026-02-28
+
+### Hinzugefuegt
+- **Trailing Stop im Trades-API** (#102) — `GET /api/trades` und `GET /api/trades/{id}` liefern jetzt live Trailing-Stop-Daten fuer offene Edge-Indicator-Trades: `trailing_stop_active`, `trailing_stop_price`, `trailing_stop_distance`, `trailing_stop_distance_pct`, `can_close_at_loss`. ATR wird live von Binance Klines berechnet
+- **Zentralisierte Fehlerkonstanten** (`src/errors.py`) — Alle deutschen Fehlermeldungen als importierbare Konstanten. Source-Code und Tests referenzieren dieselbe Konstante, sodass Wording-Aenderungen nie wieder Tests brechen
+- **8 neue Trailing-Stop-Tests** — LONG aktiv, SHORT aktiv, nicht profitabel, geschlossener Trade, Nicht-Edge-Strategie, Listen-Endpoint, Kline-Fehler, fehlender highest_price
+
+### Behoben
+- **81 fehlgeschlagene CI-Tests** — Deutsche Fehlermeldungen in Source vs. englische Assertions in Tests. Geloest durch zentrale Konstanten in `src/errors.py` + Import in 11 Source- und 21 Test-Dateien
+- **Risk Manager Tests** — `patch('settings')` entfernt (Modul existiert nicht mehr), Tests direkt auf `RiskManager()` umgestellt
+- **Position Monitor Tests** — `trade.highest_price = None` zu Test-Mocks hinzugefuegt
+- **BotConfigResponse margin_mode** — `getattr()` gibt MagicMock zurueck statt Default; Fix: `getattr(..., None) or "cross"`
+- **Bitget Client Tests** — Flash-Close API: `holdSide` statt `side`, Response-Format `successList` aktualisiert
+- **Optional TP/SL Tests** — Assertions an neue Optionalitaet und deutsche Validierungsmeldungen angepasst
+
+---
+
 ## [3.33.0] - 2026-02-26
 
 ### Geaendert
