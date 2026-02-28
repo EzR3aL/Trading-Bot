@@ -31,6 +31,12 @@ class TradeResponse(BaseModel):
     demo_mode: bool = False
     bot_name: Optional[str] = None
     bot_exchange: Optional[str] = None
+    # Trailing stop (computed live for open trades)
+    trailing_stop_active: Optional[bool] = None
+    trailing_stop_price: Optional[float] = None
+    trailing_stop_distance: Optional[float] = None
+    trailing_stop_distance_pct: Optional[float] = None
+    can_close_at_loss: Optional[bool] = None
 
 
 class TradeListResponse(BaseModel):

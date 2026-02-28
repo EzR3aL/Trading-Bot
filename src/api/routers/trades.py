@@ -1,5 +1,6 @@
 """Trade history endpoints (user-scoped)."""
 
+import json
 from collections import defaultdict
 from datetime import datetime, timezone
 from typing import Optional
@@ -10,14 +11,102 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.schemas.trade import TradeListResponse, TradeResponse
 from src.auth.dependencies import get_current_user
+from src.data.market_data import MarketDataFetcher
 from src.exchanges.factory import create_exchange_client
 from src.models.database import BotConfig, ExchangeConnection, TradeRecord, User, UserConfig
 from src.models.session import get_db
+from src.strategy.edge_indicator import DEFAULTS as EDGE_DEFAULTS
 from src.utils.encryption import decrypt_value
 from src.api.rate_limit import limiter
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
+
+
+async def _compute_trailing_stop(
+    trade: TradeRecord,
+    strategy_type: Optional[str],
+    strategy_params_json: Optional[str],
+) -> dict:
+    """Compute live trailing stop fields for an open trade.
+
+    Returns a dict with keys matching TradeResponse trailing stop fields.
+    Only computes for edge_indicator strategy with trailing_stop_enabled.
+    """
+    if trade.status != "open" or strategy_type != "edge_indicator":
+        return {}
+
+    # Merge strategy defaults with custom params
+    params = dict(EDGE_DEFAULTS)
+    if strategy_params_json:
+        try:
+            params.update(json.loads(strategy_params_json))
+        except (json.JSONDecodeError, TypeError):
+            pass
+
+    if not params.get("trailing_stop_enabled", True):
+        return {}
+
+    highest_price = trade.highest_price
+    if highest_price is None:
+        return {"trailing_stop_active": False, "can_close_at_loss": True}
+
+    # Fetch klines for ATR calculation
+    atr_period = params.get("atr_period", 14)
+    interval = params.get("kline_interval", "1h")
+    try:
+        fetcher = MarketDataFetcher()
+        klines = await fetcher.get_binance_klines(
+            trade.symbol, interval, atr_period + 15,
+        )
+        await fetcher.close()
+    except Exception as exc:
+        logger.debug("Trailing stop kline fetch failed for %s: %s", trade.symbol, exc)
+        return {"trailing_stop_active": False}
+
+    if not klines:
+        return {"trailing_stop_active": False}
+
+    atr_series = MarketDataFetcher.calculate_atr(klines, atr_period)
+    atr_val = atr_series[-1] if atr_series else trade.entry_price * 0.015
+
+    breakeven_atr = params.get("trailing_breakeven_atr", 1.5)
+    trail_atr = params.get("trailing_trail_atr", 2.5)
+    breakeven_threshold = atr_val * breakeven_atr
+    trail_distance = atr_val * trail_atr
+
+    side = trade.side
+    entry = trade.entry_price
+
+    if side == "long":
+        was_profitable = (highest_price - entry) >= breakeven_threshold
+        if was_profitable:
+            trailing_stop = max(highest_price - trail_distance, entry)
+            distance = highest_price - trailing_stop
+            distance_pct = (distance / highest_price) * 100 if highest_price else 0
+            return {
+                "trailing_stop_active": True,
+                "trailing_stop_price": round(trailing_stop, 2),
+                "trailing_stop_distance": round(distance, 2),
+                "trailing_stop_distance_pct": round(distance_pct, 2),
+                "can_close_at_loss": False,
+            }
+        return {"trailing_stop_active": False, "can_close_at_loss": True}
+    else:
+        # SHORT: highest_price tracks the lowest price since entry
+        was_profitable = (entry - highest_price) >= breakeven_threshold
+        if was_profitable:
+            trailing_stop = min(highest_price + trail_distance, entry)
+            distance = trailing_stop - highest_price
+            distance_pct = (distance / highest_price) * 100 if highest_price else 0
+            return {
+                "trailing_stop_active": True,
+                "trailing_stop_price": round(trailing_stop, 2),
+                "trailing_stop_distance": round(distance, 2),
+                "trailing_stop_distance_pct": round(distance_pct, 2),
+                "can_close_at_loss": False,
+            }
+        return {"trailing_stop_active": False, "can_close_at_loss": True}
 
 router = APIRouter(prefix="/api/trades", tags=["trades"])
 
@@ -40,7 +129,13 @@ async def list_trades(
 ):
     """List trades for the current user with filters."""
     query = (
-        select(TradeRecord, BotConfig.name.label("bot_name"), BotConfig.exchange_type.label("bot_exchange"))
+        select(
+            TradeRecord,
+            BotConfig.name.label("bot_name"),
+            BotConfig.exchange_type.label("bot_exchange"),
+            BotConfig.strategy_type.label("strategy_type"),
+            BotConfig.strategy_params.label("strategy_params"),
+        )
         .outerjoin(BotConfig, TradeRecord.bot_config_id == BotConfig.id)
         .where(TradeRecord.user_id == user.id)
     )
@@ -91,35 +186,45 @@ async def list_trades(
     result = await db.execute(query)
     rows = result.all()
 
+    # Build responses and enrich open trades with trailing stop info
+    trades_out: list[TradeResponse] = []
+    for t, bot_name_val, bot_exchange_val, strat_type, strat_params in rows:
+        ts_info: dict = {}
+        if t.status == "open":
+            try:
+                ts_info = await _compute_trailing_stop(t, strat_type, strat_params)
+            except Exception as exc:
+                logger.debug("Trailing stop enrichment failed for trade %s: %s", t.id, exc)
+
+        trades_out.append(TradeResponse(
+            id=t.id,
+            symbol=t.symbol,
+            side=t.side,
+            size=t.size,
+            entry_price=t.entry_price,
+            exit_price=t.exit_price,
+            take_profit=t.take_profit,
+            stop_loss=t.stop_loss,
+            leverage=t.leverage,
+            confidence=t.confidence,
+            reason=t.reason,
+            status=t.status,
+            pnl=t.pnl,
+            pnl_percent=t.pnl_percent,
+            fees=t.fees or 0,
+            funding_paid=t.funding_paid or 0,
+            entry_time=t.entry_time.isoformat() if t.entry_time else "",
+            exit_time=t.exit_time.isoformat() if t.exit_time else None,
+            exit_reason=t.exit_reason,
+            exchange=t.exchange,
+            demo_mode=t.demo_mode,
+            bot_name=bot_name_val,
+            bot_exchange=bot_exchange_val,
+            **ts_info,
+        ))
+
     return TradeListResponse(
-        trades=[
-            TradeResponse(
-                id=t.id,
-                symbol=t.symbol,
-                side=t.side,
-                size=t.size,
-                entry_price=t.entry_price,
-                exit_price=t.exit_price,
-                take_profit=t.take_profit,
-                stop_loss=t.stop_loss,
-                leverage=t.leverage,
-                confidence=t.confidence,
-                reason=t.reason,
-                status=t.status,
-                pnl=t.pnl,
-                pnl_percent=t.pnl_percent,
-                fees=t.fees or 0,
-                funding_paid=t.funding_paid or 0,
-                entry_time=t.entry_time.isoformat() if t.entry_time else "",
-                exit_time=t.exit_time.isoformat() if t.exit_time else None,
-                exit_reason=t.exit_reason,
-                exchange=t.exchange,
-                demo_mode=t.demo_mode,
-                bot_name=bot_name,
-                bot_exchange=bot_exchange,
-            )
-            for t, bot_name, bot_exchange in rows
-        ],
+        trades=trades_out,
         total=total,
         page=page,
         per_page=per_page,
@@ -344,7 +449,13 @@ async def get_trade(
     from fastapi import HTTPException
 
     result = await db.execute(
-        select(TradeRecord, BotConfig.name.label("bot_name"), BotConfig.exchange_type.label("bot_exchange"))
+        select(
+            TradeRecord,
+            BotConfig.name.label("bot_name"),
+            BotConfig.exchange_type.label("bot_exchange"),
+            BotConfig.strategy_type.label("strategy_type"),
+            BotConfig.strategy_params.label("strategy_params"),
+        )
         .outerjoin(BotConfig, TradeRecord.bot_config_id == BotConfig.id)
         .where(TradeRecord.id == trade_id, TradeRecord.user_id == user.id)
     )
@@ -352,7 +463,14 @@ async def get_trade(
     if not row:
         raise HTTPException(status_code=404, detail="Trade nicht gefunden")
 
-    trade, bot_name, bot_exchange = row
+    trade, bot_name, bot_exchange, strat_type, strat_params = row
+
+    ts_info: dict = {}
+    if trade.status == "open":
+        try:
+            ts_info = await _compute_trailing_stop(trade, strat_type, strat_params)
+        except Exception as exc:
+            logger.debug("Trailing stop enrichment failed for trade %s: %s", trade.id, exc)
 
     return TradeResponse(
         id=trade.id,
@@ -378,4 +496,5 @@ async def get_trade(
         demo_mode=trade.demo_mode,
         bot_name=bot_name,
         bot_exchange=bot_exchange,
+        **ts_info,
     )

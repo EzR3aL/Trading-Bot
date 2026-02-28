@@ -395,3 +395,272 @@ async def test_list_trades_response_has_all_fields(client, auth_headers, closed_
         t = data["trades"][0]
         expected = {"id", "symbol", "side", "size", "entry_price", "status", "pnl", "fees", "demo_mode"}
         assert expected.issubset(set(t.keys()))
+
+
+# ---------------------------------------------------------------------------
+# Trailing stop enrichment
+# ---------------------------------------------------------------------------
+
+
+@pytest_asyncio.fixture
+async def edge_bot(session_factory, user):
+    """Bot using edge_indicator strategy with trailing stop enabled."""
+    import json as _json
+    async with session_factory() as session:
+        bc = BotConfig(
+            user_id=user.id,
+            name="EdgeBot",
+            exchange_type="bitget",
+            strategy_type="edge_indicator",
+            strategy_params=_json.dumps({
+                "trailing_stop_enabled": True,
+                "trailing_breakeven_atr": 1.5,
+                "trailing_trail_atr": 2.5,
+                "atr_period": 14,
+                "kline_interval": "1h",
+            }),
+        )
+        session.add(bc)
+        await session.commit()
+        await session.refresh(bc)
+        return bc
+
+
+@pytest_asyncio.fixture
+async def open_long_trailing(session_factory, user, edge_bot):
+    """Open LONG trade with highest_price high enough for trailing stop to activate."""
+    async with session_factory() as session:
+        t = TradeRecord(
+            user_id=user.id,
+            bot_config_id=edge_bot.id,
+            symbol="BTCUSDT",
+            side="long",
+            size=0.01,
+            entry_price=60000.0,
+            leverage=3,
+            confidence=75,
+            reason="Edge long",
+            order_id="edge_001",
+            status="open",
+            highest_price=62000.0,  # +$2000 above entry
+            entry_time=datetime.now(timezone.utc) - timedelta(hours=4),
+            exchange="bitget",
+            demo_mode=True,
+        )
+        session.add(t)
+        await session.commit()
+        await session.refresh(t)
+        return t
+
+
+@pytest_asyncio.fixture
+async def open_short_trailing(session_factory, user, edge_bot):
+    """Open SHORT trade with highest_price (lowest) enough for trailing stop."""
+    async with session_factory() as session:
+        t = TradeRecord(
+            user_id=user.id,
+            bot_config_id=edge_bot.id,
+            symbol="BTCUSDT",
+            side="short",
+            size=0.01,
+            entry_price=65000.0,
+            leverage=3,
+            confidence=75,
+            reason="Edge short",
+            order_id="edge_002",
+            status="open",
+            highest_price=63000.0,  # $2000 below entry (good for short)
+            entry_time=datetime.now(timezone.utc) - timedelta(hours=4),
+            exchange="bitget",
+            demo_mode=True,
+        )
+        session.add(t)
+        await session.commit()
+        await session.refresh(t)
+        return t
+
+
+def _mock_klines(atr_value=600.0, count=30):
+    """Create fake klines that produce a predictable ATR."""
+    klines = []
+    base = 62000.0
+    for i in range(count):
+        o = base
+        h = base + atr_value
+        lo = base - atr_value * 0.1
+        c = base + atr_value * 0.5
+        klines.append([i * 3600000, str(o), str(h), str(lo), str(c), "100", (i + 1) * 3600000])
+    return klines
+
+
+def _make_mdf_mock(klines):
+    """Create a MarketDataFetcher mock class that preserves calculate_atr."""
+    from src.data.market_data import MarketDataFetcher as RealMDF
+    mock_fetcher = MagicMock()
+    mock_fetcher.get_binance_klines = AsyncMock(return_value=klines)
+    mock_fetcher.close = AsyncMock()
+    mock_cls = MagicMock(return_value=mock_fetcher)
+    mock_cls.calculate_atr = RealMDF.calculate_atr
+    return mock_cls
+
+
+async def test_trailing_stop_long_active(client, auth_headers, open_long_trailing):
+    """Open LONG trade with sufficient profit shows active trailing stop."""
+    mock_cls = _make_mdf_mock(_mock_klines(600.0))
+
+    with patch("src.api.routers.trades.MarketDataFetcher", mock_cls):
+        resp = await client.get(
+            f"/api/trades/{open_long_trailing.id}", headers=auth_headers
+        )
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["trailing_stop_active"] is True
+    assert data["trailing_stop_price"] is not None
+    assert data["trailing_stop_price"] >= 60000.0  # at least entry
+    assert data["trailing_stop_distance"] is not None
+    assert data["trailing_stop_distance_pct"] is not None
+    assert data["can_close_at_loss"] is False
+
+
+async def test_trailing_stop_short_active(client, auth_headers, open_short_trailing):
+    """Open SHORT trade with sufficient profit shows active trailing stop."""
+    mock_cls = _make_mdf_mock(_mock_klines(600.0))
+
+    with patch("src.api.routers.trades.MarketDataFetcher", mock_cls):
+        resp = await client.get(
+            f"/api/trades/{open_short_trailing.id}", headers=auth_headers
+        )
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["trailing_stop_active"] is True
+    assert data["trailing_stop_price"] is not None
+    assert data["trailing_stop_price"] <= 65000.0  # at most entry
+    assert data["can_close_at_loss"] is False
+
+
+async def test_trailing_stop_not_active_when_not_profitable(
+    client, auth_headers, session_factory, user, edge_bot
+):
+    """Trade that hasn't moved enough shows trailing_stop_active=False."""
+    async with session_factory() as session:
+        t = TradeRecord(
+            user_id=user.id,
+            bot_config_id=edge_bot.id,
+            symbol="ETHUSDT",
+            side="long",
+            size=0.1,
+            entry_price=3500.0,
+            leverage=3,
+            confidence=70,
+            reason="Edge long ETH",
+            order_id="edge_003",
+            status="open",
+            highest_price=3510.0,  # barely moved — not enough for breakeven
+            entry_time=datetime.now(timezone.utc) - timedelta(hours=1),
+            exchange="bitget",
+            demo_mode=True,
+        )
+        session.add(t)
+        await session.commit()
+        await session.refresh(t)
+        trade_id = t.id
+
+    mock_cls = _make_mdf_mock(_mock_klines(600.0))
+
+    with patch("src.api.routers.trades.MarketDataFetcher", mock_cls):
+        resp = await client.get(f"/api/trades/{trade_id}", headers=auth_headers)
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["trailing_stop_active"] is False
+    assert data["can_close_at_loss"] is True
+
+
+async def test_trailing_stop_null_for_closed_trade(client, auth_headers, closed_trade):
+    """Closed trades have null trailing stop fields (no computation)."""
+    resp = await client.get(f"/api/trades/{closed_trade.id}", headers=auth_headers)
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["trailing_stop_active"] is None
+    assert data["trailing_stop_price"] is None
+    assert data["can_close_at_loss"] is None
+
+
+async def test_trailing_stop_null_for_non_edge_strategy(client, auth_headers, open_trade):
+    """Trades from non-edge_indicator strategies have null trailing stop fields."""
+    resp = await client.get(f"/api/trades/{open_trade.id}", headers=auth_headers)
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["trailing_stop_active"] is None
+
+
+async def test_trailing_stop_in_list_trades(client, auth_headers, open_long_trailing):
+    """list_trades endpoint also enriches open trades with trailing stop info."""
+    mock_cls = _make_mdf_mock(_mock_klines(600.0))
+
+    with patch("src.api.routers.trades.MarketDataFetcher", mock_cls):
+        resp = await client.get(
+            "/api/trades", headers=auth_headers, params={"status": "open"}
+        )
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["total"] >= 1
+    open_t = data["trades"][0]
+    assert open_t["trailing_stop_active"] is True
+    assert open_t["can_close_at_loss"] is False
+
+
+async def test_trailing_stop_kline_fetch_failure(
+    client, auth_headers, open_long_trailing
+):
+    """When kline fetch fails, trailing_stop_active defaults to False."""
+    mock_fetcher = MagicMock()
+    mock_fetcher.get_binance_klines = AsyncMock(side_effect=Exception("Network error"))
+    mock_fetcher.close = AsyncMock()
+    mock_cls = MagicMock(return_value=mock_fetcher)
+
+    with patch("src.api.routers.trades.MarketDataFetcher", mock_cls):
+        resp = await client.get(
+            f"/api/trades/{open_long_trailing.id}", headers=auth_headers
+        )
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["trailing_stop_active"] is False
+
+
+async def test_trailing_stop_no_highest_price(
+    client, auth_headers, session_factory, user, edge_bot
+):
+    """Trade without highest_price returns trailing_stop_active=False, can_close_at_loss=True."""
+    async with session_factory() as session:
+        t = TradeRecord(
+            user_id=user.id,
+            bot_config_id=edge_bot.id,
+            symbol="BTCUSDT",
+            side="long",
+            size=0.01,
+            entry_price=60000.0,
+            leverage=3,
+            confidence=75,
+            reason="Edge long no HP",
+            order_id="edge_004",
+            status="open",
+            highest_price=None,
+            entry_time=datetime.now(timezone.utc) - timedelta(minutes=5),
+            exchange="bitget",
+            demo_mode=True,
+        )
+        session.add(t)
+        await session.commit()
+        await session.refresh(t)
+        trade_id = t.id
+
+    resp = await client.get(f"/api/trades/{trade_id}", headers=auth_headers)
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["trailing_stop_active"] is False
+    assert data["can_close_at_loss"] is True
