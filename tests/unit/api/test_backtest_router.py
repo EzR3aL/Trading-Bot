@@ -26,6 +26,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from src.models.database import Base, BacktestRun, User
 from src.auth.password import hash_password
 from src.auth.jwt_handler import create_access_token
+from src.errors import ERR_END_BEFORE_START, ERR_INVALID_DATE_FORMAT
 
 
 # ---------------------------------------------------------------------------
@@ -335,7 +336,7 @@ async def test_start_backtest_invalid_dates(client, auth_headers, user):
         },
     )
     assert resp.status_code == 400
-    assert "end_date must be after start_date" in resp.json()["detail"]
+    assert ERR_END_BEFORE_START in resp.json()["detail"]
 
 
 async def test_start_backtest_invalid_date_format(client, auth_headers, user):
@@ -350,7 +351,7 @@ async def test_start_backtest_invalid_date_format(client, auth_headers, user):
         },
     )
     assert resp.status_code == 400
-    assert "Invalid date format" in resp.json()["detail"]
+    assert ERR_INVALID_DATE_FORMAT in resp.json()["detail"]
 
 
 async def test_start_backtest_concurrent_limit(client, auth_headers, pending_runs):

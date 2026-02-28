@@ -416,6 +416,7 @@ class TestPositionMonitorStrategyExit:
         trade.demo_mode = True
         trade.take_profit = tp
         trade.stop_loss = sl
+        trade.highest_price = None
         trade.metrics_snapshot = json.dumps(metrics) if metrics else None
         trade.order_id = "order_001"
         trade.close_order_id = None
@@ -553,6 +554,7 @@ class TestPositionMonitorStrategyExit:
         monitor = self._make_monitor(strategy)
         client = AsyncMock()
         client.get_position = AsyncMock(return_value=self._make_position())
+        client.get_ticker = AsyncMock(return_value=MagicMock(last_price=96000.0))
         monitor._get_client = MagicMock(return_value=client)
 
         metrics = {"adx": 25, "regime": 1, "momentum_smoothed": 0.5}

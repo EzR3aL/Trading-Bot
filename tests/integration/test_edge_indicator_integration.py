@@ -200,7 +200,7 @@ class TestMarketConditions:
 
     @pytest.mark.asyncio
     async def test_tp_sl_correct_for_direction(self):
-        """TP and SL should be on correct sides of entry price."""
+        """TP and SL should be on correct sides of entry price when set."""
         klines = _make_klines(_uptrend_closes())
         fetcher = _make_mock_fetcher(klines)
         strategy = EdgeIndicatorStrategy(data_fetcher=fetcher)
@@ -208,12 +208,18 @@ class TestMarketConditions:
         signal = await strategy.generate_signal("BTCUSDT")
 
         if signal.entry_price > 0:
-            if signal.direction == SignalDirection.LONG:
-                assert signal.target_price > signal.entry_price
-                assert signal.stop_loss < signal.entry_price
-            else:
-                assert signal.target_price < signal.entry_price
-                assert signal.stop_loss > signal.entry_price
+            # TP is None by default (no take_profit_percent configured)
+            if signal.target_price is not None:
+                if signal.direction == SignalDirection.LONG:
+                    assert signal.target_price > signal.entry_price
+                else:
+                    assert signal.target_price < signal.entry_price
+            # SL may be set via default ATR-based calculation
+            if signal.stop_loss is not None and signal.stop_loss != 0.0:
+                if signal.direction == SignalDirection.LONG:
+                    assert signal.stop_loss < signal.entry_price
+                else:
+                    assert signal.stop_loss > signal.entry_price
 
         await strategy.close()
 

@@ -39,6 +39,14 @@ from src.models.database import (  # noqa: E402
 )
 from src.auth.password import hash_password  # noqa: E402
 from src.auth.jwt_handler import create_access_token  # noqa: E402
+from src.errors import (  # noqa: E402
+    ERR_BOT_NOT_FOUND,
+    ERR_BOT_NOT_RUNNING,
+    ERR_MAX_BOTS_REACHED,
+    ERR_STOP_BOT_BEFORE_EDIT,
+    ERR_STOP_BOT_BEFORE_PRESET,
+    ERR_TELEGRAM_NOT_CONFIGURED,
+)
 
 # Reset Fernet singleton so it uses our test key
 import src.utils.encryption as _enc_mod  # noqa: E402
@@ -365,6 +373,7 @@ class TestConfigToResponse:
         config.strategy_type = "test_strategy"
         config.exchange_type = "bitget"
         config.mode = "demo"
+        config.margin_mode = "cross"
         config.trading_pairs = json.dumps(["BTCUSDT"])
         config.leverage = 4
         config.position_size_percent = 7.5
@@ -406,6 +415,7 @@ class TestConfigToResponse:
         config.strategy_type = "test_strategy"
         config.exchange_type = "bitget"
         config.mode = "demo"
+        config.margin_mode = "cross"
         config.trading_pairs = "not-valid-json"
         config.leverage = None
         config.position_size_percent = None
@@ -445,6 +455,7 @@ class TestConfigToResponse:
         config.strategy_type = "test_strategy"
         config.exchange_type = "bitget"
         config.mode = "live"
+        config.margin_mode = "cross"
         config.trading_pairs = json.dumps(["ETHUSDT"])
         config.leverage = 5
         config.position_size_percent = 10.0
@@ -488,6 +499,7 @@ class TestConfigToResponse:
         config.strategy_type = "test_strategy"
         config.exchange_type = "bitget"
         config.mode = "demo"
+        config.margin_mode = "cross"
         config.trading_pairs = json.dumps([])
         config.leverage = None
         config.position_size_percent = None
@@ -703,7 +715,7 @@ class TestCreateBot:
         }
         resp = await client.post("/api/bots", json=body, headers=auth_headers)
         assert resp.status_code == 400
-        assert "Maximum" in resp.json()["detail"]
+        assert resp.json()["detail"] == ERR_MAX_BOTS_REACHED.format(max_bots=10)
 
     async def test_create_bot_requires_auth(self, client, test_user):
         body = {
@@ -831,7 +843,7 @@ class TestGetBot:
     async def test_get_bot_not_found(self, client, auth_headers, test_user):
         resp = await client.get("/api/bots/99999", headers=auth_headers)
         assert resp.status_code == 404
-        assert "Bot not found" in resp.json()["detail"]
+        assert ERR_BOT_NOT_FOUND in resp.json()["detail"]
 
     async def test_get_bot_requires_auth(self, client, test_user):
         resp = await client.get("/api/bots/1")
@@ -888,7 +900,7 @@ class TestUpdateBot:
             headers=auth_headers,
         )
         assert resp.status_code == 400
-        assert "Stop the bot" in resp.json()["detail"]
+        assert ERR_STOP_BOT_BEFORE_EDIT in resp.json()["detail"]
         mock_orchestrator.is_running.return_value = False
 
     async def test_update_bot_invalid_strategy(self, client, auth_headers, sample_bot):
@@ -1030,7 +1042,7 @@ class TestDuplicateBot:
             f"/api/bots/{first_bot_id}/duplicate", headers=auth_headers
         )
         assert resp.status_code == 400
-        assert "Maximum" in resp.json()["detail"]
+        assert resp.json()["detail"] == ERR_MAX_BOTS_REACHED.format(max_bots=10)
 
 
 # ---------------------------------------------------------------------------
@@ -1077,7 +1089,7 @@ class TestBotLifecycle:
             f"/api/bots/{sample_bot.id}/stop", headers=auth_headers
         )
         assert resp.status_code == 400
-        assert "not running" in resp.json()["detail"]
+        assert ERR_BOT_NOT_RUNNING in resp.json()["detail"]
         mock_orchestrator.stop_bot.return_value = True
 
     async def test_restart_bot_success(self, client, auth_headers, sample_bot):
@@ -1330,7 +1342,7 @@ class TestApplyPreset:
             headers=auth_headers,
         )
         assert resp.status_code == 400
-        assert "Stop the bot" in resp.json()["detail"]
+        assert ERR_STOP_BOT_BEFORE_PRESET in resp.json()["detail"]
         mock_orchestrator.is_running.return_value = False
 
     async def test_apply_preset_updates_trading_pairs(
@@ -1363,4 +1375,4 @@ class TestTelegramTest:
             f"/api/bots/{sample_bot.id}/test-telegram", headers=auth_headers
         )
         assert resp.status_code == 400
-        assert "Telegram not configured" in resp.json()["detail"]
+        assert ERR_TELEGRAM_NOT_CONFIGURED in resp.json()["detail"]

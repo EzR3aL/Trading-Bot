@@ -21,6 +21,14 @@ from src.auth.dependencies import get_current_user
 from src.models.database import BacktestRun, User
 from src.models.session import get_db, get_session
 from src.strategy import StrategyRegistry
+from src.errors import (
+    ERR_BACKTEST_NOT_FOUND,
+    ERR_END_BEFORE_START,
+    ERR_END_IN_FUTURE,
+    ERR_INVALID_DATE_FORMAT,
+    ERR_MAX_DAYS_EXCEEDED,
+    ERR_START_TOO_EARLY,
+)
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -97,20 +105,20 @@ async def start_backtest(
         start_dt = datetime.fromisoformat(body.start_date)
         end_dt = datetime.fromisoformat(body.end_date)
     except ValueError:
-        raise HTTPException(status_code=400, detail="Ungültiges Datumsformat. Verwende YYYY-MM-DD")
+        raise HTTPException(status_code=400, detail=ERR_INVALID_DATE_FORMAT)
 
     if end_dt <= start_dt:
-        raise HTTPException(status_code=400, detail="Enddatum muss nach dem Startdatum liegen")
+        raise HTTPException(status_code=400, detail=ERR_END_BEFORE_START)
 
     # Date range validation
     today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
     if end_dt > today + timedelta(days=1):
-        raise HTTPException(status_code=400, detail="Enddatum darf nicht in der Zukunft liegen")
+        raise HTTPException(status_code=400, detail=ERR_END_IN_FUTURE)
 
     if start_dt < EARLIEST_DATE:
         raise HTTPException(
             status_code=400,
-            detail=f"Startdatum darf nicht vor dem {EARLIEST_DATE.strftime('%Y-%m-%d')} liegen (Beginn der Binance-Futures-Daten)",
+            detail=ERR_START_TOO_EARLY.format(date=EARLIEST_DATE.strftime('%Y-%m-%d')),
         )
 
     # Timeframe-specific maximum duration
@@ -119,7 +127,7 @@ async def start_backtest(
     if actual_days > max_days:
         raise HTTPException(
             status_code=400,
-            detail=f"Maximal {max_days} Tage für {body.timeframe}-Zeitrahmen (angefragt: {actual_days} Tage)",
+            detail=ERR_MAX_DAYS_EXCEEDED.format(max_days=max_days, timeframe=body.timeframe, actual_days=actual_days),
         )
 
     # Create DB record
@@ -246,7 +254,7 @@ async def get_run(
     )
     run = result.scalar_one_or_none()
     if not run:
-        raise HTTPException(status_code=404, detail="Backtest-Lauf nicht gefunden")
+        raise HTTPException(status_code=404, detail=ERR_BACKTEST_NOT_FOUND)
 
     metrics = None
     equity_curve = None
@@ -296,7 +304,7 @@ async def delete_run(
     )
     run = result.scalar_one_or_none()
     if not run:
-        raise HTTPException(status_code=404, detail="Backtest-Lauf nicht gefunden")
+        raise HTTPException(status_code=404, detail=ERR_BACKTEST_NOT_FOUND)
 
     await db.delete(run)
     return {"status": "ok", "message": "Backtest run deleted"}

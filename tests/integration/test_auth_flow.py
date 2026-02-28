@@ -14,6 +14,7 @@ Endpoints under test:
 
 import pytest
 
+from src.errors import ERR_INVALID_CREDENTIALS
 from tests.integration.conftest import auth_header
 
 
@@ -50,7 +51,7 @@ async def test_login_wrong_password(client, admin_token):
         json={"username": "admin", "password": "wrongpassword"},
     )
     assert response.status_code == 401
-    assert "Invalid" in response.json()["detail"]
+    assert response.json()["detail"] == ERR_INVALID_CREDENTIALS
 
 
 @pytest.mark.integration
@@ -61,7 +62,7 @@ async def test_login_nonexistent_user(client, test_db):
         json={"username": "ghost_user", "password": "doesntmatter"},
     )
     assert response.status_code == 401
-    assert "Invalid" in response.json()["detail"]
+    assert response.json()["detail"] == ERR_INVALID_CREDENTIALS
 
 
 # ---------------------------------------------------------------------------

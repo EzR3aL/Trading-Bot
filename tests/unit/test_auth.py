@@ -46,6 +46,17 @@ from src.auth.jwt_handler import (  # noqa: E402
 )
 from src.auth.password import hash_password, verify_password  # noqa: E402
 from src.auth.dependencies import get_current_user, get_current_admin  # noqa: E402
+from src.errors import (  # noqa: E402
+    ERR_ACCOUNT_DISABLED,
+    ERR_ADMIN_REQUIRED,
+    ERR_INVALID_CREDENTIALS,
+    ERR_INVALID_REFRESH_TOKEN,
+    ERR_INVALID_TOKEN,
+    ERR_INVALID_TOKEN_PAYLOAD,
+    ERR_NOT_AUTHENTICATED,
+    ERR_TOKEN_REVOKED,
+    ERR_USER_NOT_FOUND_OR_INACTIVE,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -315,7 +326,7 @@ class TestGetCurrentUser:
         with pytest.raises(HTTPException) as exc_info:
             await get_current_user(credentials=None, db=db)
         assert exc_info.value.status_code == 401
-        assert "Not authenticated" in exc_info.value.detail
+        assert ERR_NOT_AUTHENTICATED in exc_info.value.detail
 
     @pytest.mark.asyncio
     async def test_get_current_user_raises_401_for_invalid_token(self):
@@ -325,7 +336,7 @@ class TestGetCurrentUser:
         with pytest.raises(HTTPException) as exc_info:
             await get_current_user(credentials=credentials, db=db)
         assert exc_info.value.status_code == 401
-        assert "Invalid or expired token" in exc_info.value.detail
+        assert ERR_INVALID_TOKEN in exc_info.value.detail
 
     @pytest.mark.asyncio
     async def test_get_current_user_raises_401_for_refresh_token(self):
@@ -336,7 +347,7 @@ class TestGetCurrentUser:
         with pytest.raises(HTTPException) as exc_info:
             await get_current_user(credentials=credentials, db=db)
         assert exc_info.value.status_code == 401
-        assert "Invalid or expired token" in exc_info.value.detail
+        assert ERR_INVALID_TOKEN in exc_info.value.detail
 
     @pytest.mark.asyncio
     async def test_get_current_user_raises_401_for_expired_token(self):
@@ -361,7 +372,7 @@ class TestGetCurrentUser:
         with pytest.raises(HTTPException) as exc_info:
             await get_current_user(credentials=credentials, db=db)
         assert exc_info.value.status_code == 401
-        assert "User not found or inactive" in exc_info.value.detail
+        assert ERR_USER_NOT_FOUND_OR_INACTIVE in exc_info.value.detail
 
     @pytest.mark.asyncio
     async def test_get_current_user_raises_401_when_user_inactive(self):
@@ -374,7 +385,7 @@ class TestGetCurrentUser:
         with pytest.raises(HTTPException) as exc_info:
             await get_current_user(credentials=credentials, db=db)
         assert exc_info.value.status_code == 401
-        assert "User not found or inactive" in exc_info.value.detail
+        assert ERR_USER_NOT_FOUND_OR_INACTIVE in exc_info.value.detail
 
     @pytest.mark.asyncio
     async def test_get_current_user_raises_401_for_revoked_token_version(self):
@@ -388,7 +399,7 @@ class TestGetCurrentUser:
         with pytest.raises(HTTPException) as exc_info:
             await get_current_user(credentials=credentials, db=db)
         assert exc_info.value.status_code == 401
-        assert "Token revoked" in exc_info.value.detail
+        assert ERR_TOKEN_REVOKED in exc_info.value.detail
 
     @pytest.mark.asyncio
     async def test_get_current_user_accepts_matching_token_version(self):
@@ -438,7 +449,7 @@ class TestGetCurrentUser:
         with pytest.raises(HTTPException) as exc_info:
             await get_current_user(credentials=credentials, db=db)
         assert exc_info.value.status_code == 401
-        assert "Invalid token payload" in exc_info.value.detail
+        assert ERR_INVALID_TOKEN_PAYLOAD in exc_info.value.detail
 
 
 # ============================================================================
@@ -464,7 +475,7 @@ class TestGetCurrentAdmin:
         with pytest.raises(HTTPException) as exc_info:
             await get_current_admin(user=mock_user)
         assert exc_info.value.status_code == 403
-        assert "Admin access required" in exc_info.value.detail
+        assert ERR_ADMIN_REQUIRED in exc_info.value.detail
 
     @pytest.mark.asyncio
     async def test_get_current_admin_rejects_empty_role(self):
@@ -503,7 +514,7 @@ class TestLoginEndpointLogic:
         with pytest.raises(HTTPException) as exc_info:
             await login(request=mock_request, body=body, db=mock_db)
         assert exc_info.value.status_code == 403
-        assert "Account is disabled" in exc_info.value.detail
+        assert ERR_ACCOUNT_DISABLED in exc_info.value.detail
 
     @pytest.mark.asyncio
     async def test_login_deleted_user_returns_401(self):
@@ -525,7 +536,7 @@ class TestLoginEndpointLogic:
         with pytest.raises(HTTPException) as exc_info:
             await login(request=mock_request, body=body, db=mock_db)
         assert exc_info.value.status_code == 401
-        assert "Invalid username or password" in exc_info.value.detail
+        assert ERR_INVALID_CREDENTIALS in exc_info.value.detail
 
     @pytest.mark.asyncio
     async def test_login_nonexistent_user_returns_401(self):
@@ -546,7 +557,7 @@ class TestLoginEndpointLogic:
         with pytest.raises(HTTPException) as exc_info:
             await login(request=mock_request, body=body, db=mock_db)
         assert exc_info.value.status_code == 401
-        assert "Invalid username or password" in exc_info.value.detail
+        assert ERR_INVALID_CREDENTIALS in exc_info.value.detail
 
     @pytest.mark.asyncio
     async def test_login_wrong_password_returns_401(self):
@@ -654,7 +665,7 @@ class TestRefreshEndpointLogic:
         with pytest.raises(HTTPException) as exc_info:
             await refresh_endpoint(request=mock_request, body=body, db=mock_db)
         assert exc_info.value.status_code == 401
-        assert "Invalid refresh token" in exc_info.value.detail
+        assert ERR_INVALID_REFRESH_TOKEN in exc_info.value.detail
 
     @pytest.mark.asyncio
     async def test_refresh_with_garbage_token_returns_401(self):
@@ -692,7 +703,7 @@ class TestRefreshEndpointLogic:
         with pytest.raises(HTTPException) as exc_info:
             await refresh_endpoint(request=mock_request, body=body, db=mock_db)
         assert exc_info.value.status_code == 401
-        assert "User not found or inactive" in exc_info.value.detail
+        assert ERR_USER_NOT_FOUND_OR_INACTIVE in exc_info.value.detail
 
     @pytest.mark.asyncio
     async def test_refresh_with_deleted_user_returns_401(self):
@@ -737,7 +748,7 @@ class TestRefreshEndpointLogic:
         with pytest.raises(HTTPException) as exc_info:
             await refresh_endpoint(request=mock_request, body=body, db=mock_db)
         assert exc_info.value.status_code == 401
-        assert "Token revoked" in exc_info.value.detail
+        assert ERR_TOKEN_REVOKED in exc_info.value.detail
 
     @pytest.mark.asyncio
     async def test_refresh_with_matching_token_version_succeeds(self):

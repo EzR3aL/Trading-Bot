@@ -5,6 +5,7 @@ import re
 from fastapi import APIRouter, HTTPException, Request
 
 from src.api.rate_limit import limiter
+from src.errors import ERR_INVALID_EXCHANGE
 from src.api.schemas.exchange import ExchangeInfo, ExchangeListResponse
 from src.exchanges.factory import get_exchange_info, get_supported_exchanges
 
@@ -35,7 +36,7 @@ async def list_exchanges(request: Request):
 async def get_exchange_detail(request: Request, exchange_name: str):
     """Get details about a specific exchange."""
     if not _EXCHANGE_NAME_RE.match(exchange_name):
-        raise HTTPException(status_code=400, detail="Ungültiger Exchange-Name")
+        raise HTTPException(status_code=400, detail=ERR_INVALID_EXCHANGE)
 
     try:
         info = get_exchange_info(exchange_name)

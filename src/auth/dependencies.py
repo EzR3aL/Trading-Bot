@@ -8,6 +8,14 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.auth.jwt_handler import decode_token
+from src.errors import (
+    ERR_ADMIN_REQUIRED,
+    ERR_INVALID_TOKEN,
+    ERR_INVALID_TOKEN_PAYLOAD,
+    ERR_NOT_AUTHENTICATED,
+    ERR_TOKEN_REVOKED,
+    ERR_USER_NOT_FOUND_OR_INACTIVE,
+)
 from src.models.database import User
 from src.models.session import get_db
 
@@ -26,7 +34,7 @@ async def get_current_user(
     if not credentials:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Nicht authentifiziert",
+            detail=ERR_NOT_AUTHENTICATED,
             headers={"WWW-Authenticate": "Bearer"},
         )
 
@@ -34,7 +42,7 @@ async def get_current_user(
     if not payload:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Ungültiger oder abgelaufener Token",
+            detail=ERR_INVALID_TOKEN,
             headers={"WWW-Authenticate": "Bearer"},
         )
 
@@ -42,7 +50,7 @@ async def get_current_user(
     if not user_id:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Ungültiger Token-Inhalt",
+            detail=ERR_INVALID_TOKEN_PAYLOAD,
         )
 
     # Check token_version to support token revocation
@@ -54,7 +62,7 @@ async def get_current_user(
     if not user or not user.is_active or user.is_deleted:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Benutzer nicht gefunden oder inaktiv",
+            detail=ERR_USER_NOT_FOUND_OR_INACTIVE,
         )
 
     # Reject tokens issued before a password change / forced logout.
@@ -64,7 +72,7 @@ async def get_current_user(
         if effective_tv < user.token_version:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Token widerrufen — bitte erneut anmelden",
+                detail=ERR_TOKEN_REVOKED,
                 headers={"WWW-Authenticate": "Bearer"},
             )
 
@@ -78,6 +86,6 @@ async def get_current_admin(
     if user.role != "admin":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Admin-Zugriff erforderlich",
+            detail=ERR_ADMIN_REQUIRED,
         )
     return user

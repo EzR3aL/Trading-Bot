@@ -36,6 +36,12 @@ from src.models.database import (
     User,
 )
 from src.auth.password import hash_password
+from src.errors import (
+    ERR_BOT_NOT_RUNNING,
+    ERR_MAX_BOTS_REACHED,
+    ERR_STOP_BOT_BEFORE_EDIT,
+    ERR_TELEGRAM_NOT_CONFIGURED,
+)
 
 # Disable rate limiter before importing bots
 from src.api.routers.auth import limiter
@@ -524,7 +530,7 @@ class TestCreateBot:
             with pytest.raises(HTTPException) as exc_info:
                 await create_bot(request=mock_request, body=body, user=admin_user, db=session)
             assert exc_info.value.status_code == 400
-            assert "Maximum" in str(exc_info.value.detail)
+            assert ERR_MAX_BOTS_REACHED.format(max_bots=10) in str(exc_info.value.detail)
 
 
 # ---------------------------------------------------------------------------
@@ -968,7 +974,7 @@ class TestUpdateBot:
             with pytest.raises(HTTPException) as exc_info:
                 await update_bot(request=mock_request, bot_id=sample_bot.id, body=body, user=admin_user, db=session, orchestrator=mock_orchestrator)
             assert exc_info.value.status_code == 400
-            assert "Stop the bot" in str(exc_info.value.detail)
+            assert ERR_STOP_BOT_BEFORE_EDIT in str(exc_info.value.detail)
         mock_orchestrator.is_running.return_value = False
 
     async def test_update_bot_invalid_strategy(self, factory, admin_user, sample_bot, mock_orchestrator, mock_request):
@@ -1090,7 +1096,7 @@ class TestDuplicateBot:
             with pytest.raises(HTTPException) as exc_info:
                 await duplicate_bot(request=mock_request, bot_id=sample_bot.id, user=admin_user, db=session)
             assert exc_info.value.status_code == 400
-            assert "Maximum" in str(exc_info.value.detail)
+            assert ERR_MAX_BOTS_REACHED.format(max_bots=10) in str(exc_info.value.detail)
 
 
 # ---------------------------------------------------------------------------
@@ -1155,7 +1161,7 @@ class TestLifecycle:
             with pytest.raises(HTTPException) as exc_info:
                 await stop_bot(request=mock_request, bot_id=sample_bot.id, user=admin_user, db=session, orchestrator=mock_orchestrator)
             assert exc_info.value.status_code == 400
-            assert "not running" in str(exc_info.value.detail)
+            assert ERR_BOT_NOT_RUNNING in str(exc_info.value.detail)
         mock_orchestrator.stop_bot.return_value = True
 
     async def test_restart_bot_success(self, factory, admin_user, sample_bot, mock_orchestrator, mock_request):
@@ -1433,7 +1439,7 @@ class TestTelegram:
             with pytest.raises(HTTPException) as exc_info:
                 await send_test_telegram(request=mock_request, bot_id=sample_bot.id, user=admin_user, session=session)
             assert exc_info.value.status_code == 400
-            assert "Telegram not configured" in str(exc_info.value.detail)
+            assert ERR_TELEGRAM_NOT_CONFIGURED in str(exc_info.value.detail)
 
     async def test_telegram_send_success(self, factory, admin_user, mock_request):
         """Telegram test message succeeds (lines 813-823)."""

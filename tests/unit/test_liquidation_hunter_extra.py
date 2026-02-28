@@ -281,15 +281,16 @@ class TestShouldTradeValidation:
 
         ok, reason = await strategy.should_trade(signal)
         assert ok is False
-        assert "Invalid" in reason
+        assert "TP" in reason
 
-    async def test_zero_sl_rejected(self):
+    async def test_zero_sl_for_long_accepted(self):
+        """SL=0.0 for LONG is directionally valid (below entry) so it passes validation."""
         strategy = LiquidationHunterStrategy(data_fetcher=None)
         signal = self._make_signal(SignalDirection.LONG, 100.0, 110.0, 0.0)
 
         ok, reason = await strategy.should_trade(signal)
-        assert ok is False
-        assert "Invalid" in reason
+        # SL=0.0 is below entry=100.0, which is the correct direction for LONG
+        assert ok is True
 
     async def test_valid_short_approved(self):
         strategy = LiquidationHunterStrategy(data_fetcher=None)

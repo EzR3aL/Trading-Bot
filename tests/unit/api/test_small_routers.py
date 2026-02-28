@@ -25,6 +25,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from src.models.database import AffiliateLink, Base, FundingPayment, User
 from src.auth.password import hash_password
 from src.auth.jwt_handler import create_access_token
+from src.errors import ERR_INVALID_EXCHANGE
 
 
 # ===========================================================================
@@ -272,7 +273,7 @@ async def test_upsert_affiliate_link_invalid_exchange(client, admin_headers, adm
         },
     )
     assert resp.status_code == 400
-    assert "Invalid exchange" in resp.json()["detail"]
+    assert ERR_INVALID_EXCHANGE in resp.json()["detail"]
 
 
 async def test_upsert_affiliate_link_forbidden_for_user(

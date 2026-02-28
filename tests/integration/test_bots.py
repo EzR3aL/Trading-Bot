@@ -24,6 +24,7 @@ from tests.integration.conftest import auth_header
 
 from src.models.database import BotConfig, TradeRecord
 from src.models.session import get_session
+from src.errors import ERR_BOT_NOT_FOUND, ERR_STOP_BOT_BEFORE_EDIT
 
 
 # ---------------------------------------------------------------------------
@@ -326,7 +327,7 @@ async def test_get_bot_not_found(client, auth_headers, mock_orchestrator, test_u
     """Getting a nonexistent bot returns 404."""
     response = await client.get("/api/bots/99999", headers=auth_headers)
     assert response.status_code == 404
-    assert "Bot not found" in response.json()["detail"]
+    assert ERR_BOT_NOT_FOUND in response.json()["detail"]
 
 
 # ---------------------------------------------------------------------------
@@ -371,7 +372,7 @@ async def test_update_bot_while_running(client, auth_headers, mock_orchestrator,
         headers=auth_headers,
     )
     assert response.status_code == 400
-    assert "Stop the bot" in response.json()["detail"]
+    assert ERR_STOP_BOT_BEFORE_EDIT in response.json()["detail"]
     # Reset mock
     mock_orchestrator.is_running.return_value = False
 

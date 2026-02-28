@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.rate_limit import limiter
 from src.api.schemas.user import UserCreate, UserResponse, UserUpdate
+from src.errors import ERR_CANNOT_DELETE_SELF, ERR_USERNAME_EXISTS, ERR_USER_NOT_FOUND
 from src.auth.dependencies import get_current_admin
 from src.auth.password import hash_password
 from src.models.database import User
@@ -41,7 +42,7 @@ async def create_user(
         select(User).where(User.username == data.username)
     )
     if existing.scalar_one_or_none():
-        raise HTTPException(status_code=409, detail="Benutzername existiert bereits")
+        raise HTTPException(status_code=409, detail=ERR_USERNAME_EXISTS)
 
     user = User(
         username=data.username,
@@ -69,7 +70,7 @@ async def update_user(
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
     if not user:
-        raise HTTPException(status_code=404, detail="Benutzer nicht gefunden")
+        raise HTTPException(status_code=404, detail=ERR_USER_NOT_FOUND)
 
     if data.email is not None:
         user.email = data.email
@@ -101,12 +102,12 @@ async def delete_user(
     Financial records (trades, funding) are preserved for audit purposes.
     """
     if admin.id == user_id:
-        raise HTTPException(status_code=400, detail="Du kannst dich nicht selbst löschen")
+        raise HTTPException(status_code=400, detail=ERR_CANNOT_DELETE_SELF)
 
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
     if not user:
-        raise HTTPException(status_code=404, detail="Benutzer nicht gefunden")
+        raise HTTPException(status_code=404, detail=ERR_USER_NOT_FOUND)
 
     user.is_deleted = True
     user.is_active = False

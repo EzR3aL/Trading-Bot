@@ -36,6 +36,11 @@ from src.models.database import (  # noqa: E402
 )
 from src.auth.password import hash_password  # noqa: E402
 from src.auth.jwt_handler import create_access_token  # noqa: E402
+from src.errors import (  # noqa: E402
+    ERR_NO_DEMO_API_KEYS,
+    ERR_NO_HL_CONNECTION_PLAIN,
+    ERR_NO_LIVE_API_KEYS,
+)
 
 # Reset Fernet singleton so it uses our test key
 import src.utils.encryption as _enc_mod  # noqa: E402
@@ -737,7 +742,7 @@ class TestExchangeConnectionTest:
             params={"mode": "live"},
         )
         assert resp.status_code == 400
-        assert "No live API keys" in resp.json()["detail"]
+        assert resp.json()["detail"] == ERR_NO_LIVE_API_KEYS
 
     async def test_test_connection_no_demo_keys(self, client, user_headers, regular_user, exchange_conn_bitget):
         resp = await client.post(
@@ -746,7 +751,7 @@ class TestExchangeConnectionTest:
             params={"mode": "demo"},
         )
         assert resp.status_code == 400
-        assert "No demo API keys" in resp.json()["detail"]
+        assert resp.json()["detail"] == ERR_NO_DEMO_API_KEYS
 
     async def test_test_connection_invalid_exchange(self, client, user_headers, regular_user):
         resp = await client.post(
@@ -1109,7 +1114,7 @@ class TestConfirmBuilderApproval:
             headers=user_headers,
         )
         assert resp.status_code == 400
-        assert "connection" in resp.json()["detail"].lower()
+        assert resp.json()["detail"] == ERR_NO_HL_CONNECTION_PLAIN
 
 
 # ---------------------------------------------------------------------------

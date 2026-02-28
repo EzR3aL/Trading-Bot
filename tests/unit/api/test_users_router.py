@@ -23,6 +23,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from src.models.database import Base, User
 from src.auth.password import hash_password
 from src.auth.jwt_handler import create_access_token
+from src.errors import ERR_CANNOT_DELETE_SELF, ERR_USERNAME_EXISTS
 
 
 # ---------------------------------------------------------------------------
@@ -231,7 +232,7 @@ async def test_create_user_duplicate_username(client, admin_headers, admin_user)
         json={"username": "admin", "password": "Test@1234"},
     )
     assert resp.status_code == 409
-    assert "already exists" in resp.json()["detail"]
+    assert resp.json()["detail"] == ERR_USERNAME_EXISTS
 
 
 async def test_create_user_forbidden_for_regular_user(client, user_headers, regular_user):
@@ -392,7 +393,7 @@ async def test_delete_user_cannot_delete_self(client, admin_headers, admin_user)
     """Admin cannot delete themselves."""
     resp = await client.delete(f"/api/users/{admin_user.id}", headers=admin_headers)
     assert resp.status_code == 400
-    assert "Cannot delete yourself" in resp.json()["detail"]
+    assert resp.json()["detail"] == ERR_CANNOT_DELETE_SELF
 
 
 async def test_delete_user_not_found(client, admin_headers, admin_user):
