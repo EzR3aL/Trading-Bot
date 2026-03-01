@@ -75,7 +75,9 @@
     "dateFrom": "Von",
     "dateTo": "Bis",
     "fees": "Transaktionsgebühr",
-    "reset": "Zurücksetzen"
+    "reset": "Zurücksetzen",
+    "trailingStop": "Trailing Stop",
+    "trailingStopProtecting": "Gewinn abgesichert"
   },
   "settings": {
     "title": "Einstellungen",

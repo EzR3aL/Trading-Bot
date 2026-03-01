@@ -39,6 +39,11 @@ export interface Trade {
   demo_mode: boolean
   bot_name: string | null
   bot_exchange: string | null
+  trailing_stop_active?: boolean | null
+  trailing_stop_price?: number | null
+  trailing_stop_distance?: number | null
+  trailing_stop_distance_pct?: number | null
+  can_close_at_loss?: boolean | null
 }
 
 export interface TradeListResponse {

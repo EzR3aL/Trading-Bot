@@ -7,7 +7,7 @@ import type { Trade } from '../types'
 import { ExchangeIcon } from '../components/ui/ExchangeLogo'
 import { SkeletonTable } from '../components/ui/Skeleton'
 import PnlCell from '../components/ui/PnlCell'
-import { X } from 'lucide-react'
+import { X, ShieldCheck } from 'lucide-react'
 import Pagination from '../components/ui/Pagination'
 import DatePicker from '../components/ui/DatePicker'
 import FilterDropdown from '../components/ui/FilterDropdown'
@@ -184,7 +184,7 @@ export default function Trades() {
       </div>
 
       {/* Loading */}
-      {loading && <SkeletonTable rows={8} cols={10} />}
+      {loading && <SkeletonTable rows={8} cols={11} />}
 
       {/* Table */}
       {!loading && (
@@ -203,6 +203,7 @@ export default function Trades() {
                   <th className="text-right">{t('trades.entryPrice')}</th>
                   <th className="text-right">{t('trades.exitPrice')}</th>
                   <th className="text-right">{t('trades.pnl')}</th>
+                  <th className="text-right">{t('trades.trailingStop')}</th>
                   <th className="text-center">{t('trades.mode')}</th>
                   <th className="text-center">{t('trades.status')}</th>
                 </tr>
@@ -210,7 +211,7 @@ export default function Trades() {
               <tbody>
                 {trades.length === 0 ? (
                   <tr>
-                    <td colSpan={12} className="p-8 text-center text-gray-500">
+                    <td colSpan={13} className="p-8 text-center text-gray-500">
                       {t('dashboard.noTrades')}
                     </td>
                   </tr>
@@ -250,6 +251,20 @@ export default function Trades() {
                           status={trade.status}
                           className={trade.pnl && trade.pnl >= 0 ? 'pnl-positive' : 'pnl-negative'}
                         />
+                      </td>
+                      <td className="text-right">
+                        {trade.status === 'open' && trade.trailing_stop_active && trade.trailing_stop_price != null ? (
+                          <span className="inline-flex items-center gap-1 text-emerald-400">
+                            ${trade.trailing_stop_price.toLocaleString()} ({trade.trailing_stop_distance_pct?.toFixed(2)}%)
+                            {trade.can_close_at_loss === false && (
+                              <span title={t('trades.trailingStopProtecting')}>
+                                <ShieldCheck size={14} className="text-emerald-400" />
+                              </span>
+                            )}
+                          </span>
+                        ) : (
+                          <span className="text-gray-600">--</span>
+                        )}
                       </td>
                       <td className="text-center">
                         <span className={trade.demo_mode ? 'badge-demo' : 'badge-live'}>

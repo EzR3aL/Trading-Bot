@@ -75,7 +75,9 @@
     "dateFrom": "From",
     "dateTo": "To",
     "fees": "Transaction Fee",
-    "reset": "Reset"
+    "reset": "Reset",
+    "trailingStop": "Trailing Stop",
+    "trailingStopProtecting": "Protecting profit"
   },
   "settings": {
     "title": "Settings",
