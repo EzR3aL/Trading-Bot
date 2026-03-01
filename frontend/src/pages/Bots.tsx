@@ -69,6 +69,8 @@ interface BotStatus {
   llm_total_predictions?: number | null
   llm_total_tokens_used?: number | null
   llm_avg_tokens_per_call?: number | null
+  schedule_type?: string | null
+  schedule_config?: { interval_minutes?: number; hours?: number[] } | null
   active_preset_id?: number | null
   active_preset_name?: string | null
   builder_fee_approved?: boolean | null
@@ -178,6 +180,24 @@ function confidenceColor(value: number): string {
   if (value >= 75) return 'text-emerald-400'
   if (value >= 50) return 'text-amber-400'
   return 'text-red-400'
+}
+
+/* ── Schedule Dots Helper ───────────────────────────────── */
+
+function getScheduleHoursUtc(scheduleType?: string | null, scheduleConfig?: { interval_minutes?: number; hours?: number[] } | null): number[] | null {
+  if (scheduleType === 'market_sessions') return [1, 8, 14, 21]
+  if (scheduleType === 'custom_cron' && scheduleConfig?.hours) return [...scheduleConfig.hours].sort((a, b) => a - b)
+  return null
+}
+
+function utcHourToLocal(utcHour: number): number {
+  const d = new Date()
+  d.setUTCHours(utcHour, 0, 0, 0)
+  return d.getHours()
+}
+
+function formatHourLocal(utcHour: number): string {
+  return String(utcHourToLocal(utcHour)).padStart(2, '0')
 }
 
 /* ── Trade Detail Modal ──────────────────────────────────── */
@@ -1110,11 +1130,53 @@ export default function Bots() {
                   </div>
                 )}
 
-                {/* Last analysis */}
+                {/* Last analysis + schedule dots */}
                 {bot.last_analysis && (
-                  <div className="flex items-center gap-1.5 mb-3 text-sm text-gray-500">
-                    <Clock size={14} />
-                    {t('bots.lastAnalysis')}: {new Date(bot.last_analysis).toLocaleTimeString()}
+                  <div className="mb-3">
+                    <div className="flex items-center gap-1.5 text-sm text-gray-500">
+                      <Clock size={14} />
+                      {t('bots.lastAnalysis')}: {new Date(bot.last_analysis).toLocaleTimeString()}
+                    </div>
+                    {(() => {
+                      const hours = getScheduleHoursUtc(bot.schedule_type, bot.schedule_config)
+                      if (hours) {
+                        const nowLocal = new Date().getHours()
+                        const mapped = hours.map(utcH => {
+                          const local = utcHourToLocal(utcH)
+                          return { utcH, local, isPast: local <= nowLocal }
+                        })
+                        const lastDone = [...mapped].filter(h => h.isPast).pop()
+                        const nextUp = mapped.find(h => !h.isPast)
+                        return (
+                          <div className="flex items-center gap-3 mt-1.5 ml-5">
+                            {mapped.map(({ utcH, isPast }) => {
+                              const isLast = lastDone && lastDone.utcH === utcH
+                              const isNext = nextUp && nextUp.utcH === utcH
+                              return (
+                                <span key={utcH} className={`inline-flex items-center gap-1 text-xs ${
+                                  isLast ? 'text-emerald-400' : isPast ? 'text-gray-500' : 'text-white/30'
+                                }`}>
+                                  <span className={`w-1.5 h-1.5 rounded-full ${
+                                    isLast ? 'bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.5)]' : isPast ? 'bg-gray-500' : 'bg-white/20'
+                                  }`} />
+                                  {formatHourLocal(utcH)}
+                                  {isNext && <span className="text-[10px] text-white/40 ml-0.5">&#x25C2;</span>}
+                                </span>
+                              )
+                            })}
+                          </div>
+                        )
+                      }
+                      if (bot.schedule_type === 'interval' && bot.schedule_config?.interval_minutes) {
+                        return (
+                          <div className="flex items-center gap-1.5 mt-1 ml-5 text-xs text-gray-500">
+                            <RefreshCw size={10} />
+                            {t('bots.scheduleEvery', { minutes: bot.schedule_config.interval_minutes })}
+                          </div>
+                        )
+                      }
+                      return null
+                    })()}
                   </div>
                 )}
 

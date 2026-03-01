@@ -419,6 +419,8 @@
     "insufficientFunds": "Position-% reduzieren oder Guthaben aufladen",
     "overAllocated": "Überallokiert: Bots überschreiten 100% des Guthabens",
     "lastAnalysis": "Letzte Analyse",
+    "nextAnalysis": "Nächste",
+    "scheduleEvery": "alle {{minutes}}m",
     "totalPnl": "Gesamt-PnL",
     "llmLastSignal": "Letztes Signal",
     "confidence": "Konfidenz",

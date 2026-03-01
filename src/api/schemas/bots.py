@@ -210,6 +210,10 @@ class BotRuntimeStatus(BaseModel):
     affiliate_uid: Optional[str] = None
     affiliate_verified: Optional[bool] = None
 
+    # Schedule info (for card display)
+    schedule_type: Optional[str] = None
+    schedule_config: Optional[Dict[str, Any]] = None
+
     # LLM-specific metrics (only populated for llm_signal strategy)
     llm_provider: Optional[str] = None
     llm_model: Optional[str] = None

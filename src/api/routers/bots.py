@@ -729,6 +729,14 @@ async def list_bots(
                                         break
                                 break
 
+        # Parse schedule_config for card display
+        _sched_config = None
+        if config.schedule_config:
+            try:
+                _sched_config = json.loads(config.schedule_config) if isinstance(config.schedule_config, str) else config.schedule_config
+            except (json.JSONDecodeError, TypeError):
+                pass
+
         bots.append(BotRuntimeStatus(
             bot_config_id=config.id,
             name=config.name,
@@ -743,6 +751,8 @@ async def list_bots(
             last_analysis=runtime.get("last_analysis") if runtime else None,
             trades_today=runtime.get("trades_today", 0) if runtime else 0,
             is_enabled=config.is_enabled,
+            schedule_type=config.schedule_type,
+            schedule_config=_sched_config,
             total_trades=total_trades,
             total_pnl=round(float(total_pnl), 2),
             total_fees=round(float(total_fees), 2),
