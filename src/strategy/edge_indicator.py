@@ -59,7 +59,7 @@ DEFAULTS = {
     "momentum_bull_threshold": 0.35,
     "momentum_bear_threshold": -0.35,
     # Trade filters
-    "min_confidence": 40,
+    "min_confidence": 65,
     # ATR (for trailing stop)
     "atr_period": 14,
     # Trailing stop
@@ -839,7 +839,7 @@ class EdgeIndicatorStrategy(BaseStrategy):
             "min_confidence": {
                 "type": "int", "label": "Min. Konfidenz",
                 "description": "Minimaler Konfidenz-Score um einen Trade auszuführen",
-                "default": 40, "min": 10, "max": 80,
+                "default": 65, "min": 10, "max": 90,
             },
             "kline_interval": {
                 "type": "select", "label": "Kline Intervall",
