@@ -87,6 +87,11 @@ def _config_to_response(config: BotConfig) -> BotConfigResponse:
         is_enabled=config.is_enabled,
         discord_webhook_configured=bool(config.discord_webhook_url),
         telegram_configured=bool(config.telegram_bot_token and config.telegram_chat_id),
+        whatsapp_configured=bool(
+            config.whatsapp_phone_number_id
+            and config.whatsapp_access_token
+            and config.whatsapp_recipient
+        ),
         active_preset_id=config.active_preset_id,
         active_preset_name=getattr(config.active_preset, "name", None) if config.active_preset_id else None,
         created_at=config.created_at.isoformat() if config.created_at else None,
@@ -450,6 +455,14 @@ async def create_bot(
     if body.telegram_bot_token:
         encrypted_telegram_token = encrypt_value(body.telegram_bot_token)
 
+    # Encrypt WhatsApp credentials if provided
+    encrypted_wa_phone_id = None
+    encrypted_wa_token = None
+    if body.whatsapp_phone_number_id:
+        encrypted_wa_phone_id = encrypt_value(body.whatsapp_phone_number_id)
+    if body.whatsapp_access_token:
+        encrypted_wa_token = encrypt_value(body.whatsapp_access_token)
+
     config = BotConfig(
         user_id=user.id,
         name=body.name,
@@ -475,6 +488,9 @@ async def create_bot(
         discord_webhook_url=encrypted_webhook,
         telegram_bot_token=encrypted_telegram_token,
         telegram_chat_id=body.telegram_chat_id,
+        whatsapp_phone_number_id=encrypted_wa_phone_id,
+        whatsapp_access_token=encrypted_wa_token,
+        whatsapp_recipient=body.whatsapp_recipient,
         is_enabled=False,
     )
     db.add(config)
@@ -519,12 +535,12 @@ async def list_bots(
         hl_approved = getattr(hl_conn, "builder_fee_approved", False)
         hl_referral_verified = getattr(hl_conn, "referral_verified", False)
 
-    # Preload affiliate UID status (Bitget / Weex) — single query
+    # Preload affiliate UID status (CEX exchanges) — single query
     affiliate_data: dict[str, dict] = {}
     aff_result = await db.execute(
         select(ExchangeConnection).where(
             ExchangeConnection.user_id == user.id,
-            ExchangeConnection.exchange_type.in_(["bitget", "weex"]),
+            ExchangeConnection.exchange_type.in_(["bitget", "weex", "bitunix", "bingx"]),
         )
     )
     for aff_conn in aff_result.scalars().all():
@@ -760,12 +776,17 @@ async def list_bots(
             open_trades=open_trades,
             discord_webhook_configured=bool(config.discord_webhook_url),
             telegram_configured=bool(config.telegram_bot_token and config.telegram_chat_id),
+            whatsapp_configured=bool(
+                config.whatsapp_phone_number_id
+                and config.whatsapp_access_token
+                and config.whatsapp_recipient
+            ),
             active_preset_id=config.active_preset_id,
             active_preset_name=preset_names.get(config.active_preset_id) if config.active_preset_id else None,
             builder_fee_approved=hl_approved if config.exchange_type == "hyperliquid" else None,
             referral_verified=hl_referral_verified if config.exchange_type == "hyperliquid" else None,
-            affiliate_uid=affiliate_data.get(config.exchange_type, {}).get("uid") if config.exchange_type in ("bitget", "weex") else None,
-            affiliate_verified=affiliate_data.get(config.exchange_type, {}).get("verified") if config.exchange_type in ("bitget", "weex") else None,
+            affiliate_uid=affiliate_data.get(config.exchange_type, {}).get("uid") if config.exchange_type in ("bitget", "weex", "bitunix", "bingx") else None,
+            affiliate_verified=affiliate_data.get(config.exchange_type, {}).get("verified") if config.exchange_type in ("bitget", "weex", "bitunix", "bingx") else None,
             **llm_data,
         ))
 
@@ -842,6 +863,18 @@ async def update_bot(
             else:
                 setattr(config, field, None)
         elif field == "telegram_chat_id":
+            # Empty string = clear, non-empty = set
+            if value:
+                setattr(config, field, value)
+            else:
+                setattr(config, field, None)
+        elif field in ("whatsapp_phone_number_id", "whatsapp_access_token"):
+            # Empty string = clear, non-empty = encrypt
+            if value:
+                setattr(config, field, encrypt_value(value))
+            else:
+                setattr(config, field, None)
+        elif field == "whatsapp_recipient":
             # Empty string = clear, non-empty = set
             if value:
                 setattr(config, field, value)
@@ -935,6 +968,9 @@ async def duplicate_bot(
         discord_webhook_url=original.discord_webhook_url,
         telegram_bot_token=original.telegram_bot_token,
         telegram_chat_id=original.telegram_chat_id,
+        whatsapp_phone_number_id=original.whatsapp_phone_number_id,
+        whatsapp_access_token=original.whatsapp_access_token,
+        whatsapp_recipient=original.whatsapp_recipient,
         is_enabled=False,
     )
     db.add(copy)

@@ -8,7 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field
 class PresetCreate(BaseModel):
     name: str = Field(min_length=1, max_length=100)
     description: Optional[str] = None
-    exchange_type: str = Field(default="any", pattern="^(any|bitget|weex|hyperliquid)$")
+    exchange_type: str = Field(default="any", pattern="^(any|bitget|weex|hyperliquid|bitunix|bingx)$")
     trading_config: Optional[Dict[str, Any]] = None
     strategy_config: Optional[Dict[str, Any]] = None
     trading_pairs: List[str] = Field(default=["BTCUSDT", "ETHUSDT"])

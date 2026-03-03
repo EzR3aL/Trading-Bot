@@ -73,10 +73,24 @@ def create_exchange_client(
             rate_limiter=rate_limiter,
             **kwargs,
         )
-    else:
-        raise ValueError(
-            f"Unsupported exchange: '{exchange_type}'. "
-            f"Supported: {', '.join(e.value for e in ExchangeType)}"
+    elif exchange == ExchangeType.BITUNIX:
+        from src.exchanges.bitunix.client import BitunixClient
+        return BitunixClient(
+            api_key=api_key,
+            api_secret=api_secret,
+            passphrase=passphrase,
+            demo_mode=demo_mode,
+            rate_limiter=rate_limiter,
+            **kwargs,
+        )
+    elif exchange == ExchangeType.BINGX:
+        from src.exchanges.bingx.client import BingXClient
+        return BingXClient(
+            api_key=api_key,
+            api_secret=api_secret,
+            demo_mode=demo_mode,
+            rate_limiter=rate_limiter,
+            **kwargs,
         )
 
 
@@ -139,10 +153,10 @@ def create_exchange_websocket(
             demo_mode=demo_mode,
             **kwargs,
         )
-    else:
+    elif exchange in (ExchangeType.BITUNIX, ExchangeType.BINGX):
         raise ValueError(
-            f"Unsupported exchange: '{exchange_type}'. "
-            f"Supported: {', '.join(e.value for e in ExchangeType)}"
+            f"WebSocket not yet implemented for '{exchange_type}'. "
+            f"REST API is available."
         )
 
 
@@ -223,6 +237,22 @@ def get_exchange_info(exchange_type: str) -> dict:
             "supports_demo": True,
             "auth_type": "eth_wallet",
             "api_style": "json_rpc",
+            "requires_passphrase": False,
+        },
+        "bitunix": {
+            "name": "bitunix",
+            "display_name": "Bitunix",
+            "supports_demo": True,
+            "auth_type": "hmac_sha256",
+            "api_style": "rest",
+            "requires_passphrase": True,
+        },
+        "bingx": {
+            "name": "bingx",
+            "display_name": "BingX",
+            "supports_demo": True,
+            "auth_type": "hmac_sha256",
+            "api_style": "rest",
             "requires_passphrase": False,
         },
     }

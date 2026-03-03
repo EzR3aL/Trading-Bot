@@ -48,6 +48,8 @@ function PrerequisiteBanner() {
     { key: 'bitget', name: 'Bitget', icon: <ExchangeIcon exchange="bitget" size={22} /> },
     { key: 'weex', name: 'Weex', icon: <ExchangeIcon exchange="weex" size={22} /> },
     { key: 'hyperliquid', name: 'Hyperliquid', icon: <ExchangeIcon exchange="hyperliquid" size={22} /> },
+    { key: 'bitunix', name: 'Bitunix', icon: <ExchangeIcon exchange="bitunix" size={22} /> },
+    { key: 'bingx', name: 'BingX', icon: <ExchangeIcon exchange="bingx" size={22} /> },
   ]
 
   return (
@@ -372,6 +374,10 @@ function ExchangeComparisonTable() {
                   <ExchangeIcon exchange="bitget" size={20} />
                   <span>/</span>
                   <ExchangeIcon exchange="weex" size={20} />
+                  <span>/</span>
+                  <ExchangeIcon exchange="bitunix" size={20} />
+                  <span>/</span>
+                  <ExchangeIcon exchange="bingx" size={20} />
                 </span>
               </th>
               <th className="text-left py-2 px-2 text-green-400 font-medium">
@@ -536,6 +542,16 @@ export default function GettingStarted() {
       title: t('guide.hyperliquidSetupTitle'),
       icon: <ExchangeIcon exchange="hyperliquid" size={24} />,
       steps: [t('guide.hyperliquidSetup1'), t('guide.hyperliquidSetup2'), t('guide.hyperliquidSetup3'), t('guide.hyperliquidSetup4'), t('guide.hyperliquidSetup5'), t('guide.hyperliquidSetup6')],
+    },
+    {
+      title: t('guide.bitunixSetupTitle'),
+      icon: <ExchangeIcon exchange="bitunix" size={24} />,
+      steps: [t('guide.bitunixSetup1'), t('guide.bitunixSetup2'), t('guide.bitunixSetup3'), t('guide.bitunixSetup4')],
+    },
+    {
+      title: t('guide.bingxSetupTitle'),
+      icon: <ExchangeIcon exchange="bingx" size={24} />,
+      steps: [t('guide.bingxSetup1'), t('guide.bingxSetup2'), t('guide.bingxSetup3')],
     },
   ]
 

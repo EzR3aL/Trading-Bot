@@ -141,7 +141,7 @@ async def start_bot(
     if user.role != "admin":
         if config.exchange_type == "hyperliquid":
             await _enforce_hl_gates(user, db)
-        if config.exchange_type in ("bitget", "weex"):
+        if config.exchange_type in ("bitget", "weex", "bitunix", "bingx"):
             await _enforce_affiliate_gate(config.exchange_type, user, db)
 
     # Symbol conflict gate — one position per symbol per exchange
@@ -235,7 +235,7 @@ async def restart_bot(
     if user.role != "admin":
         if config.exchange_type == "hyperliquid":
             await _enforce_hl_gates(user, db)
-        if config.exchange_type in ("bitget", "weex"):
+        if config.exchange_type in ("bitget", "weex", "bitunix", "bingx"):
             await _enforce_affiliate_gate(config.exchange_type, user, db)
 
     # Symbol conflict gate — one position per symbol per exchange
@@ -420,6 +420,38 @@ async def test_telegram(
     success = await notifier.send_test_message()
     if not success:
         raise HTTPException(status_code=502, detail=ERR_TELEGRAM_SEND_FAILED)
+    return {"status": "ok", "message": "Test message sent"}
+
+
+@lifecycle_router.post("/{bot_id}/test-whatsapp")
+@limiter.limit("5/minute")
+async def test_whatsapp(
+    request: Request,
+    bot_id: int,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db),
+):
+    """Send a test WhatsApp message."""
+    result = await session.execute(
+        select(BotConfig).where(BotConfig.id == bot_id, BotConfig.user_id == user.id)
+    )
+    config = result.scalar_one_or_none()
+    if not config:
+        raise HTTPException(status_code=404, detail="Bot not found")
+    if not config.whatsapp_phone_number_id or not config.whatsapp_access_token or not config.whatsapp_recipient:
+        raise HTTPException(status_code=400, detail="WhatsApp not configured")
+
+    from src.notifications.whatsapp_notifier import WhatsAppNotifier
+    from src.utils.encryption import decrypt_value
+
+    notifier = WhatsAppNotifier(
+        phone_number_id=decrypt_value(config.whatsapp_phone_number_id),
+        access_token=decrypt_value(config.whatsapp_access_token),
+        recipient_number=config.whatsapp_recipient,
+    )
+    success = await notifier.send_test_message()
+    if not success:
+        raise HTTPException(status_code=502, detail="Failed to send WhatsApp message")
     return {"status": "ok", "message": "Test message sent"}
 
 

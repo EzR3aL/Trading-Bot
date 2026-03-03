@@ -17,12 +17,14 @@ from src.models.session import get_db
 
 router = APIRouter(prefix="/api/affiliate-links", tags=["affiliate"])
 
-VALID_EXCHANGES = {"bitget", "weex", "hyperliquid"}
+VALID_EXCHANGES = {"bitget", "weex", "hyperliquid", "bitunix", "bingx"}
 
 # UID format validators per exchange
 _UID_VALIDATORS = {
     "bitget": re.compile(r"^\d+$"),           # numeric only
     "weex": re.compile(r"^[A-Za-z0-9]+$"),    # alphanumeric
+    "bitunix": re.compile(r"^\d+$"),          # numeric only
+    "bingx": re.compile(r"^\d+$"),            # numeric only
 }
 
 
@@ -135,6 +137,16 @@ async def verify_uid(
             raise HTTPException(
                 status_code=422,
                 detail="Weex UID muss alphanumerisch sein",
+            )
+        elif exchange == "bitunix":
+            raise HTTPException(
+                status_code=422,
+                detail="Bitunix UID must be numeric only",
+            )
+        elif exchange == "bingx":
+            raise HTTPException(
+                status_code=422,
+                detail="BingX UID must be numeric only",
             )
 
     # Find or create ExchangeConnection for this user + exchange

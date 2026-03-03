@@ -199,6 +199,8 @@ async def _seed_exchanges():
             {"name": "bitget", "display_name": "Bitget", "is_enabled": True, "supports_demo": True},
             {"name": "weex", "display_name": "Weex", "is_enabled": True, "supports_demo": True},
             {"name": "hyperliquid", "display_name": "Hyperliquid", "is_enabled": True, "supports_demo": True},
+            {"name": "bitunix", "display_name": "Bitunix", "is_enabled": True, "supports_demo": True},
+            {"name": "bingx", "display_name": "BingX", "is_enabled": True, "supports_demo": True},
         ]
         for ex in exchanges_data:
             existing = await session.execute(

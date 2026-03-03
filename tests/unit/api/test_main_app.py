@@ -283,12 +283,14 @@ async def test_seed_exchanges_inserts_data():
         from src.api.main_app import _seed_exchanges
         await _seed_exchanges()
 
-    assert mock_session.add.call_count == 3
+    assert mock_session.add.call_count == 5
     exchanges = [call.args[0] for call in mock_session.add.call_args_list]
     names = [e.name for e in exchanges]
     assert "bitget" in names
     assert "weex" in names
     assert "hyperliquid" in names
+    assert "bitunix" in names
+    assert "bingx" in names
 
 
 async def test_seed_exchanges_skips_when_data_exists():

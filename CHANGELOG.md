@@ -486,6 +486,70 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.13.0] - 2026-03-03
+
+### WhatsApp-Benachrichtigungen, Bitunix & BingX Exchange-Integration
+
+Drei grosse Features in einem Release: WhatsApp als dritter Benachrichtigungskanal, zwei neue Exchanges (Bitunix, BingX) mit komplettem Full-Stack-Support, und erweiterter Affiliate-Bereich.
+
+#### Hinzugefuegt
+
+**WhatsApp Business Cloud API Notifier**
+- **`src/notifications/whatsapp_notifier.py`** — Neuer `WhatsAppNotifier` ueber Meta Graph API v21.0
+- Alle 8 Standard-Methoden: `send_trade_entry`, `send_trade_exit`, `send_daily_summary`, `send_risk_alert`, `send_bot_status`, `send_alert`, `send_error`, `send_test_message`
+- Async Context Manager mit `aiohttp.ClientSession` und Bearer-Token-Auth
+- `@async_retry` mit exponentiellem Backoff fuer 429/5xx-Fehler
+- Per-Bot WhatsApp-Konfiguration: `whatsapp_phone_number_id`, `whatsapp_access_token`, `whatsapp_recipient` (verschluesselt in DB)
+- `POST /api/bots/{id}/test-whatsapp` — Test-Endpoint fuer WhatsApp-Konfiguration
+- `NotificationsMixin._get_notifiers()` um WhatsApp erweitert
+
+**Bitunix Exchange Client**
+- **`src/exchanges/bitunix/`** — Komplettes Client-Package (Futures REST API v1)
+- `BitunixClient(ExchangeClient)` mit allen 12 ABC-Methoden + 4 optionalen Fee-Methoden
+- Zwei-Stufen SHA256 Signatur (nonce + timestamp + apiKey + params + body)
+- Circuit Breaker und Retry mit Backoff
+- `constants.py` mit 28 Endpoint-Pfaden, Base-URL `https://fapi.bitunix.com`
+
+**BingX Exchange Client**
+- **`src/exchanges/bingx/`** — Komplettes Client-Package (Perpetual Swap V2/V3)
+- `BingXClient(ExchangeClient)` mit allen 12 ABC-Methoden + 4 optionalen Fee-Methoden
+- HMAC-SHA256 Auth via `X-BX-APIKEY` Header, Signatur als Query-Parameter
+- Demo-Modus ueber VST-Domain (`open-api-vst.bingx.com`)
+- Symbol-Format: `BTC-USDT` (mit Bindestrich)
+- `constants.py` mit 30+ Endpoints, Error Codes, Order/Position/Margin Types
+
+**Exchange-Logos**
+- `BitunixLogo` SVG-Component (Markenfarbe #B9F641)
+- `BingXLogo` SVG-Component (Markenfarbe #2954FE)
+- `ExchangeIcon` und `ExchangeLogo` um Bitunix/BingX erweitert
+
+**Backend-Integration (Full-Stack)**
+- `Exchange Factory`: `create_exchange_client()` und `get_exchange_info()` um bitunix/bingx erweitert
+- `DB Models`: `BotConfig` um 3 WhatsApp-Felder erweitert, alle `exchange_type`-Kommentare aktualisiert
+- `Pydantic Schemas`: Exchange-Type-Regex auf 5 Exchanges erweitert, WhatsApp-Felder in Create/Update/Response
+- `API Endpoints`: Ping-URLs, Config-Validation, Bot-CRUD um neue Exchanges erweitert
+- `Affiliate System`: `VALID_EXCHANGES` und `UID_VALIDATORS` um bitunix/bingx erweitert
+- `Bot Lifecycle`: Affiliate-Gate-Checks um bitunix/bingx erweitert
+- `Symbol Map`: Mappings und Konvertierungslogik fuer bitunix (BTCUSDT) und bingx (BTC-USDT)
+- `ExecutionSimulator`: Fee Schedules fuer bitunix (0.06%/0.02%) und bingx (0.04%/0.02%)
+- `Exchange Seeding`: `_seed_exchanges()` um bitunix/bingx erweitert
+
+**Frontend-Integration**
+- `BotBuilder.tsx`: Exchanges-Array, BingX-Pairs, WhatsApp-Felder (Step 4), Trading-Pair-Konvertierung
+- `BotDetail.tsx`: WhatsApp-Status-Anzeige, Test-Buttons fuer Telegram/WhatsApp
+- `Settings.tsx`: Affiliate-Link-Verwaltung fuer 5 Exchanges (dynamisch)
+- `Portfolio.tsx`: Exchange-Farben fuer bitunix/bingx
+- `GettingStarted.tsx`: Setup-Cards, Prerequisite-Banner, Vergleichstabelle fuer neue Exchanges
+- `i18n`: Alle WhatsApp- und Exchange-Keys in de.json und en.json
+
+**Tests**
+- `test_whatsapp_notifier.py` — 14 Tests (Init, Context Manager, Session, Messages, alle Notification-Methoden)
+- `test_bitunix_client.py` — 19 Tests (Init, Auth, Balance, Ticker, Funding, Leverage, Positions, Orders, Constants)
+- `test_bingx_client.py` — 22 Tests (Init, Demo-Mode, Auth, Balance, Ticker, Funding, Leverage, Positions, Orders, Constants)
+- Bestehende Tests aktualisiert: Exchange Factory (5 statt 3), Symbol Map (Bitunix/BingX), Bot Worker (WhatsApp), Seed Exchanges
+
+---
+
 ## [3.12.0] - 2026-02-20
 
 ### Freie Datumswahl im Backtesting (Option A)

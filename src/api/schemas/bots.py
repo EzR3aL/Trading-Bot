@@ -15,7 +15,7 @@ class BotConfigCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=100)
     description: Optional[str] = None
     strategy_type: str = Field(..., min_length=1)
-    exchange_type: str = Field(..., pattern="^(bitget|weex|hyperliquid)$")
+    exchange_type: str = Field(..., pattern="^(bitget|weex|hyperliquid|bitunix|bingx)$")
     mode: str = Field(default="demo", pattern="^(demo|live|both)$")
     margin_mode: str = Field(default="cross", pattern="^(cross|isolated)$")
 
@@ -71,6 +71,11 @@ class BotConfigCreate(BaseModel):
     telegram_bot_token: Optional[str] = None
     telegram_chat_id: Optional[str] = None
 
+    # Per-bot WhatsApp notifications (optional)
+    whatsapp_phone_number_id: Optional[str] = None
+    whatsapp_access_token: Optional[str] = None
+    whatsapp_recipient: Optional[str] = None
+
     @field_validator("strategy_params", "schedule_config", "per_asset_config", mode="before")
     @classmethod
     def validate_dict_field_size(cls, v: Any) -> Any:
@@ -95,7 +100,7 @@ class BotConfigUpdate(BaseModel):
     name: Optional[str] = Field(None, min_length=1, max_length=100)
     description: Optional[str] = None
     strategy_type: Optional[str] = None
-    exchange_type: Optional[str] = Field(None, pattern="^(bitget|weex|hyperliquid)$")
+    exchange_type: Optional[str] = Field(None, pattern="^(bitget|weex|hyperliquid|bitunix|bingx)$")
     mode: Optional[str] = Field(None, pattern="^(demo|live|both)$")
     margin_mode: Optional[str] = Field(None, pattern="^(cross|isolated)$")
 
@@ -134,6 +139,11 @@ class BotConfigUpdate(BaseModel):
     telegram_bot_token: Optional[str] = None
     telegram_chat_id: Optional[str] = None
 
+    # Per-bot WhatsApp notifications (optional)
+    whatsapp_phone_number_id: Optional[str] = None
+    whatsapp_access_token: Optional[str] = None
+    whatsapp_recipient: Optional[str] = None
+
     @field_validator("strategy_params", "schedule_config", "per_asset_config", mode="before")
     @classmethod
     def validate_dict_field_size(cls, v: Any) -> Any:
@@ -169,6 +179,7 @@ class BotConfigResponse(BaseModel):
     is_enabled: bool
     discord_webhook_configured: bool = False
     telegram_configured: bool = False
+    whatsapp_configured: bool = False
     active_preset_id: Optional[int] = None
     active_preset_name: Optional[str] = None
     created_at: Optional[str] = None
@@ -199,6 +210,7 @@ class BotRuntimeStatus(BaseModel):
     open_trades: int = 0
     discord_webhook_configured: bool = False
     telegram_configured: bool = False
+    whatsapp_configured: bool = False
     active_preset_id: Optional[int] = None
     active_preset_name: Optional[str] = None
 

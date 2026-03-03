@@ -16,6 +16,8 @@ class ExchangeType(str, Enum):
     BITGET = "bitget"
     WEEX = "weex"
     HYPERLIQUID = "hyperliquid"
+    BITUNIX = "bitunix"
+    BINGX = "bingx"
 
 
 class TradeStatus(str, Enum):

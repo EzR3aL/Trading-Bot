@@ -23,6 +23,8 @@ const EXCHANGE_COLORS: Record<string, string> = {
   bitget: '#3b82f6',
   hyperliquid: '#22c55e',
   weex: '#f97316',
+  bitunix: '#b9f641',
+  bingx: '#2954fe',
 }
 
 function exchangeColor(name: string): string {

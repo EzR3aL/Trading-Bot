@@ -38,11 +38,35 @@ function HyperliquidLogo({ size = 18 }: { size: number }) {
   )
 }
 
+/* Bitunix icon mark — stylized "B" letterform, brand color green-yellow #B9F641 */
+function BitunixLogo({ size = 18 }: { size: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M6 3h6c2.76 0 5 1.79 5 4 0 1.48-.87 2.77-2.15 3.45C16.68 11.13 18 12.64 18 14.5c0 2.49-2.24 4.5-5 4.5H6V3z
+        M9 5.5v4h2.5c1.38 0 2.5-.9 2.5-2s-1.12-2-2.5-2H9z
+        M9 12v4.5h3c1.38 0 2.5-.9 2.5-2.25S13.38 12 12 12H9z"
+        fill="#B9F641" fillRule="evenodd" />
+    </svg>
+  )
+}
+
+/* BingX icon mark — abstract X/bowtie from four curved shapes, brand color blue #2954FE */
+function BingXLogo({ size = 18 }: { size: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M12 12L3.5 4.5C3.5 4.5 5.5 2 8 4l4 4.5L16 4c2.5-2 4.5.5 4.5.5L12 12z" fill="#2954FE" />
+      <path d="M12 12L3.5 19.5C3.5 19.5 5.5 22 8 20l4-4.5 4 4.5c2.5 2 4.5-.5 4.5-.5L12 12z" fill="#2954FE" />
+    </svg>
+  )
+}
+
 export function ExchangeIcon({ exchange, size = 18 }: { exchange: string; size?: number }) {
   const name = exchange.toLowerCase()
   if (name === 'bitget') return <BitgetLogo size={size} />
   if (name === 'weex') return <WeexLogo size={size} />
   if (name === 'hyperliquid') return <HyperliquidLogo size={size} />
+  if (name === 'bitunix') return <BitunixLogo size={size} />
+  if (name === 'bingx') return <BingXLogo size={size} />
   return null
 }
 
@@ -53,7 +77,7 @@ export default function ExchangeLogo({ exchange, size = 18, className = '', show
     <span className={`inline-flex items-center gap-1.5 ${className}`}>
       <ExchangeIcon exchange={name} size={size} />
       {showName && (
-        <span>{name === 'bitget' ? 'Bitget' : name === 'weex' ? 'Weex' : name === 'hyperliquid' ? 'Hyperliquid' : exchange}</span>
+        <span>{name === 'bitget' ? 'Bitget' : name === 'weex' ? 'Weex' : name === 'hyperliquid' ? 'Hyperliquid' : name === 'bitunix' ? 'Bitunix' : name === 'bingx' ? 'BingX' : exchange}</span>
       )}
     </span>
   )

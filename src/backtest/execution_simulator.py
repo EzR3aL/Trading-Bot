@@ -47,6 +47,14 @@ FEE_SCHEDULES: Dict[str, Dict[str, Dict[str, float]]] = {
         "standard": {"taker": 0.0004, "maker": 0.0002},    # 0.04% / 0.02%
         "vip1":     {"taker": 0.00036, "maker": 0.00016},
     },
+    "bitunix": {
+        "standard": {"taker": 0.0006, "maker": 0.0002},    # 0.06% / 0.02%
+        "vip1":     {"taker": 0.0004, "maker": 0.00016},
+    },
+    "bingx": {
+        "standard": {"taker": 0.0004, "maker": 0.0002},    # 0.04% / 0.02%
+        "vip1":     {"taker": 0.00032, "maker": 0.00016},
+    },
 }
 
 EIGHT_HOURS_SECONDS = 8 * 3600  # 28800

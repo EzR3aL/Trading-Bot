@@ -65,7 +65,7 @@ class UserConfig(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
-    exchange_type = Column(String(50), nullable=False, default="bitget")  # bitget | weex | hyperliquid
+    exchange_type = Column(String(50), nullable=False, default="bitget")  # bitget | weex | hyperliquid | bitunix | bingx
 
     # Encrypted API credentials
     api_key_encrypted = Column(Text, nullable=True)
@@ -101,7 +101,7 @@ class ConfigPreset(Base):
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     name = Column(String(100), nullable=False)
     description = Column(Text, nullable=True)
-    exchange_type = Column(String(50), nullable=False, default="any")  # any | bitget | weex | hyperliquid
+    exchange_type = Column(String(50), nullable=False, default="any")  # any | bitget | weex | hyperliquid | bitunix | bingx
     is_active = Column(Boolean, default=False)
 
     # Trading Config (JSON stored as text)
@@ -222,7 +222,7 @@ class ExchangeConnection(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
-    exchange_type = Column(String(50), nullable=False)  # bitget | weex | hyperliquid
+    exchange_type = Column(String(50), nullable=False)  # bitget | weex | hyperliquid | bitunix | bingx
 
     # Encrypted API credentials (live)
     api_key_encrypted = Column(Text, nullable=True)
@@ -301,7 +301,7 @@ class BotConfig(Base):
     strategy_type = Column(String(50), nullable=False)  # e.g. "liquidation_hunter"
 
     # Exchange & mode
-    exchange_type = Column(String(50), nullable=False)  # bitget | weex | hyperliquid
+    exchange_type = Column(String(50), nullable=False)  # bitget | weex | hyperliquid | bitunix | bingx
     mode = Column(String(10), nullable=False, default="demo")  # demo | live | both
     margin_mode = Column(String(10), nullable=False, default="cross")  # cross | isolated
 
@@ -336,6 +336,11 @@ class BotConfig(Base):
     telegram_bot_token = Column(Text, nullable=True)   # Encrypted
     telegram_chat_id = Column(String(50), nullable=True)
 
+    # Per-bot WhatsApp notifications (optional)
+    whatsapp_phone_number_id = Column(Text, nullable=True)   # Encrypted (Meta Business phone number ID)
+    whatsapp_access_token = Column(Text, nullable=True)      # Encrypted (Meta Graph API token)
+    whatsapp_recipient = Column(String(20), nullable=True)   # Recipient phone number (e.g. +491234567890)
+
     # Active preset (FK to config_presets, tracks which preset was last applied)
     active_preset_id = Column(Integer, ForeignKey("config_presets.id", ondelete="SET NULL"), nullable=True)
 
@@ -369,7 +374,7 @@ class AffiliateLink(Base):
     __tablename__ = "affiliate_links"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    exchange_type = Column(String(50), unique=True, nullable=False)  # bitget | weex | hyperliquid
+    exchange_type = Column(String(50), unique=True, nullable=False)  # bitget | weex | hyperliquid | bitunix | bingx
     affiliate_url = Column(Text, nullable=False)
     label = Column(String(200), nullable=True)
     is_active = Column(Boolean, default=True)

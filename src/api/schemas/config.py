@@ -28,7 +28,7 @@ class StrategyConfigUpdate(BaseModel):
 
 
 class ApiKeysUpdate(BaseModel):
-    exchange_type: str = Field(pattern="^(bitget|weex|hyperliquid)$")
+    exchange_type: str = Field(pattern="^(bitget|weex|hyperliquid|bitunix|bingx)$")
     api_key: str = ""
     api_secret: str = ""
     passphrase: str = ""
@@ -38,7 +38,7 @@ class ApiKeysUpdate(BaseModel):
 
 
 class ExchangeConfigUpdate(BaseModel):
-    exchange_type: str = Field(pattern="^(bitget|weex|hyperliquid)$")
+    exchange_type: str = Field(pattern="^(bitget|weex|hyperliquid|bitunix|bingx)$")
 
 
 class ExchangeConnectionResponse(BaseModel):

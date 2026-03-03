@@ -62,6 +62,29 @@ class TestCreateExchangeClient:
         )
         assert client is mock_instance
 
+    @patch("src.exchanges.bitunix.client.BitunixClient.__init__", return_value=None)
+    def test_create_bitunix_client(self, mock_cls):
+        """Factory returns a BitunixClient for exchange_type='bitunix'."""
+        client = create_exchange_client(
+            exchange_type="bitunix",
+            api_key="key",
+            api_secret="secret",
+            passphrase="pass",
+            demo_mode=True,
+        )
+        assert client is not None
+
+    @patch("src.exchanges.bingx.client.BingXClient.__init__", return_value=None)
+    def test_create_bingx_client(self, mock_cls):
+        """Factory returns a BingXClient for exchange_type='bingx'."""
+        client = create_exchange_client(
+            exchange_type="bingx",
+            api_key="key",
+            api_secret="secret",
+            demo_mode=True,
+        )
+        assert client is not None
+
     def test_create_unsupported_exchange_raises(self):
         """Requesting an unsupported exchange must raise ValueError."""
         with pytest.raises(ValueError, match="Unsupported exchange"):
@@ -74,9 +97,9 @@ class TestCreateExchangeClient:
 
 class TestGetSupportedExchanges:
     def test_get_supported_exchanges(self):
-        """Should return the three supported exchange identifiers."""
+        """Should return all supported exchange identifiers."""
         exchanges = get_supported_exchanges()
-        assert exchanges == ["bitget", "weex", "hyperliquid"]
+        assert exchanges == ["bitget", "weex", "hyperliquid", "bitunix", "bingx"]
 
 
 class TestGetExchangeInfo:
@@ -87,6 +110,19 @@ class TestGetExchangeInfo:
         assert info["display_name"] == "Bitget"
         assert info["supports_demo"] is True
         assert info["requires_passphrase"] is True
+
+    def test_get_exchange_info_bitunix(self):
+        """get_exchange_info('bitunix') returns correct metadata."""
+        info = get_exchange_info("bitunix")
+        assert info["name"] == "bitunix"
+        assert info["display_name"] == "Bitunix"
+        assert info["requires_passphrase"] is True
+
+    def test_get_exchange_info_bingx(self):
+        """get_exchange_info('bingx') returns correct metadata."""
+        info = get_exchange_info("bingx")
+        assert info["name"] == "bingx"
+        assert info["display_name"] == "BingX"
 
     def test_get_exchange_info_unknown_raises(self):
         """Requesting info for an unknown exchange must raise ValueError."""

@@ -74,12 +74,14 @@ class TestCreateExchangeWebsocket:
 class TestGetSupportedExchanges:
     """Tests for get_supported_exchanges."""
 
-    def test_returns_all_three(self):
+    def test_returns_all_five(self):
         result = get_supported_exchanges()
         assert "bitget" in result
         assert "weex" in result
         assert "hyperliquid" in result
-        assert len(result) == 3
+        assert "bitunix" in result
+        assert "bingx" in result
+        assert len(result) == 5
 
 
 class TestGetExchangeInfo:

@@ -61,6 +61,8 @@ EXCHANGE_PING_URLS: Dict[str, Dict[str, Any]] = {
     "bitget": {"label": "Bitget", "url": "https://api.bitget.com/api/v2/public/time"},
     "weex": {"label": "Weex", "url": "https://api.weex.com/api/v2/public/time"},
     "hyperliquid": {"label": "Hyperliquid", "url": "https://api.hyperliquid.xyz/info", "method": "POST", "json_body": {"type": "meta"}},
+    "bitunix": {"label": "Bitunix", "url": "https://fapi.bitunix.com/api/v1/common/server_time"},
+    "bingx": {"label": "BingX", "url": "https://open-api.bingx.com/openApi/swap/v2/server/time"},
 }
 
 
@@ -179,7 +181,7 @@ async def get_exchange_connections(
 async def upsert_exchange_connection(
     request: Request,
     data: ExchangeConnectionUpdate,
-    exchange_type: str = Path(pattern="^(bitget|weex|hyperliquid)$"),
+    exchange_type: str = Path(pattern="^(bitget|weex|hyperliquid|bitunix|bingx)$"),
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -242,7 +244,7 @@ async def upsert_exchange_connection(
 @limiter.limit("5/minute")
 async def delete_exchange_connection(
     request: Request,
-    exchange_type: str = Path(pattern="^(bitget|weex|hyperliquid)$"),
+    exchange_type: str = Path(pattern="^(bitget|weex|hyperliquid|bitunix|bingx)$"),
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -265,7 +267,7 @@ async def delete_exchange_connection(
 @limiter.limit("3/minute")
 async def test_exchange_connection(
     request: Request,
-    exchange_type: str = Path(pattern="^(bitget|weex|hyperliquid)$"),
+    exchange_type: str = Path(pattern="^(bitget|weex|hyperliquid|bitunix|bingx)$"),
     mode: Optional[Literal["live", "demo"]] = None,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -337,7 +339,7 @@ async def test_exchange_connection(
 async def set_affiliate_uid(
     request: Request,
     data: AffiliateUidUpdate,
-    exchange_type: str = Path(pattern="^(bitget|weex)$"),
+    exchange_type: str = Path(pattern="^(bitget|weex|bitunix|bingx)$"),
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):

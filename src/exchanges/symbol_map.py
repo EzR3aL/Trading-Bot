@@ -4,6 +4,8 @@
 # Bitget:       "BTCUSDT" (with productType=USDT-FUTURES)
 # Weex:         "BTCUSDT" (client transforms to cmt_btcusdt / cmt_btcsusdt for demo)
 # Hyperliquid:  "BTC"
+# Bitunix:      "BTCUSDT"
+# BingX:        "BTC-USDT"
 
 SYMBOL_MAP = {
     "bitget": {
@@ -42,6 +44,30 @@ SYMBOL_MAP = {
         "DOT": "DOT",
         "MATIC": "MATIC",
     },
+    "bitunix": {
+        "BTC": "BTCUSDT",
+        "ETH": "ETHUSDT",
+        "SOL": "SOLUSDT",
+        "XRP": "XRPUSDT",
+        "DOGE": "DOGEUSDT",
+        "ADA": "ADAUSDT",
+        "AVAX": "AVAXUSDT",
+        "LINK": "LINKUSDT",
+        "DOT": "DOTUSDT",
+        "MATIC": "MATICUSDT",
+    },
+    "bingx": {
+        "BTC": "BTC-USDT",
+        "ETH": "ETH-USDT",
+        "SOL": "SOL-USDT",
+        "XRP": "XRP-USDT",
+        "DOGE": "DOGE-USDT",
+        "ADA": "ADA-USDT",
+        "AVAX": "AVAX-USDT",
+        "LINK": "LINK-USDT",
+        "DOT": "DOT-USDT",
+        "MATIC": "MATIC-USDT",
+    },
 }
 
 
@@ -63,12 +89,14 @@ def normalize_symbol(exchange_symbol: str, exchange: str) -> str:
             return base
 
     # Fallback: try to strip common suffixes
-    if exchange == "bitget":
+    if exchange in ("bitget", "bitunix"):
         return exchange_symbol.replace("USDT", "")
     elif exchange == "weex":
         return exchange_symbol.replace("USDT", "")
     elif exchange == "hyperliquid":
         return exchange_symbol
+    elif exchange == "bingx":
+        return exchange_symbol.split("-")[0]
 
     return exchange_symbol
 
@@ -92,12 +120,14 @@ def to_exchange_symbol(base_symbol: str, exchange: str) -> str:
         return exchange_map[base]
 
     # Fallback: construct based on exchange convention
-    if exchange == "bitget":
+    if exchange in ("bitget", "bitunix"):
         return f"{base}USDT"
     elif exchange == "weex":
         return f"{base}USDT"
     elif exchange == "hyperliquid":
         return base
+    elif exchange == "bingx":
+        return f"{base}-USDT"
 
     return base_symbol
 

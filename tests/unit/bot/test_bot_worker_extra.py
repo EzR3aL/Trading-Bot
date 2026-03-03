@@ -54,6 +54,9 @@ def _make_mock_config(**overrides):
     config.rotation_start_time = overrides.get("rotation_start_time", None)
     config.is_enabled = overrides.get("is_enabled", True)
     config.per_asset_config = overrides.get("per_asset_config", None)
+    config.whatsapp_phone_number_id = overrides.get("whatsapp_phone_number_id", None)
+    config.whatsapp_access_token = overrides.get("whatsapp_access_token", None)
+    config.whatsapp_recipient = overrides.get("whatsapp_recipient", None)
     return config
 
 

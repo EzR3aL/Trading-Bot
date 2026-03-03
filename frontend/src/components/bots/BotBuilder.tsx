@@ -127,8 +127,9 @@ const STRATEGY_RECOMMENDATIONS: Record<string, { bestTimeframe: string }> = {
   edge_indicator: { bestTimeframe: '1h' },
 }
 
-const EXCHANGES = ['bitget', 'weex', 'hyperliquid']
+const EXCHANGES = ['bitget', 'weex', 'hyperliquid', 'bitunix', 'bingx']
 const PAIRS_CEX = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'XRPUSDT', 'DOGEUSDT', 'AVAXUSDT']
+const PAIRS_BINGX = ['BTC-USDT', 'ETH-USDT', 'SOL-USDT', 'XRP-USDT', 'DOGE-USDT', 'AVAX-USDT']
 const PAIRS_HL = ['BTC', 'ETH', 'SOL', 'XRP', 'DOGE', 'AVAX']
 
 export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps) {
@@ -167,6 +168,9 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
   const [discordWebhookUrl, setDiscordWebhookUrl] = useState('')
   const [telegramBotToken, setTelegramBotToken] = useState('')
   const [telegramChatId, setTelegramChatId] = useState('')
+  const [whatsappPhoneId, setWhatsappPhoneId] = useState('')
+  const [whatsappToken, setWhatsappToken] = useState('')
+  const [whatsappRecipient, setWhatsappRecipient] = useState('')
 
   // Symbol conflicts
   const [symbolConflicts, setSymbolConflicts] = useState<SymbolConflict[]>([])
@@ -237,8 +241,10 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
     // Apply trading pairs (convert based on current exchange)
     if (preset.trading_pairs && preset.trading_pairs.length > 0) {
       const converted = preset.trading_pairs.map(p => {
-        const base = p.replace(/(USDT|USDC)$/i, '')
-        return isHyperliquid ? base : (base.match(/(USDT|USDC)$/i) ? base : base + 'USDT')
+        const base = p.replace(/[-](USDT|USDC)$/i, '').replace(/(USDT|USDC)$/i, '')
+        if (isHyperliquid) return base
+        if (isBingx) return `${base}-USDT`
+        return base + 'USDT'
       })
       setTradingPairs(converted)
     }
@@ -314,7 +320,8 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
   }, [botId, isEdit, defaultSourceIds])
 
   const isHyperliquid = exchangeType === 'hyperliquid'
-  const activePairs = isHyperliquid ? PAIRS_HL : PAIRS_CEX
+  const isBingx = exchangeType === 'bingx'
+  const activePairs = isHyperliquid ? PAIRS_HL : isBingx ? PAIRS_BINGX : PAIRS_CEX
 
   const selectedStrategy = strategies.find(s => s.name === strategyType)
 
@@ -363,10 +370,14 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
   // Convert trading pairs when exchange type changes
   useEffect(() => {
     setTradingPairs(prev => prev.map(p => {
+      // Strip any suffix/format to get the base symbol
+      const base = p.replace(/[-](USDT|USDC)$/i, '').replace(/(USDT|USDC)$/i, '')
       if (isHyperliquid) {
-        return p.replace(/(USDT|USDC)$/i, '')
+        return base
+      } else if (isBingx) {
+        return `${base}-USDT`
       } else {
-        return p.match(/(USDT|USDC)$/i) ? p : p + 'USDT'
+        return base + 'USDT'
       }
     }))
   }, [exchangeType]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -485,6 +496,9 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
       discord_webhook_url: discordWebhookUrl || undefined,
       telegram_bot_token: telegramBotToken || undefined,
       telegram_chat_id: telegramChatId || undefined,
+      whatsapp_phone_id: whatsappPhoneId || undefined,
+      whatsapp_token: whatsappToken || undefined,
+      whatsapp_recipient: whatsappRecipient || undefined,
     }
   }
 
@@ -1479,6 +1493,43 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
                 </div>
                 <div className="bg-blue-900/20 border border-blue-800/50 rounded-xl p-2.5">
                   <p className="text-xs text-blue-300">{t('bots.builder.telegramHint')}</p>
+                </div>
+              </div>
+
+              {/* WhatsApp */}
+              <div className="space-y-3 mt-4">
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1.5">{t('bot.builder.whatsappPhoneId')}</label>
+                  <input
+                    type="text"
+                    value={whatsappPhoneId}
+                    onChange={e => setWhatsappPhoneId(e.target.value)}
+                    placeholder="100123456789012"
+                    className="filter-select w-full text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1.5">{t('bot.builder.whatsappToken')}</label>
+                  <input
+                    type="password"
+                    value={whatsappToken}
+                    onChange={e => setWhatsappToken(e.target.value)}
+                    placeholder="EAABs..."
+                    className="filter-select w-full text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1.5">{t('bot.builder.whatsappRecipient')}</label>
+                  <input
+                    type="text"
+                    value={whatsappRecipient}
+                    onChange={e => setWhatsappRecipient(e.target.value)}
+                    placeholder="491701234567"
+                    className="filter-select w-full text-sm"
+                  />
+                </div>
+                <div className="bg-green-900/20 border border-green-800/50 rounded-xl p-2.5">
+                  <p className="text-xs text-green-300">{t('bot.builder.whatsappHint')}</p>
                 </div>
               </div>
             </div>

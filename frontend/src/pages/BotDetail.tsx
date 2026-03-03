@@ -49,6 +49,7 @@ interface BotConfig {
   is_enabled: boolean
   discord_webhook_configured: boolean
   telegram_configured: boolean
+  whatsapp_configured: boolean
   created_at: string | null
 }
 
@@ -439,6 +440,42 @@ export default function BotDetail() {
           )}
           {config.telegram_configured && (
             <ConfigRow label="Telegram" value={`✓ ${d('telegramConfigured')}`} />
+          )}
+          {config.whatsapp_configured && (
+            <ConfigRow label="WhatsApp" value={`✓ ${d('whatsappConfigured')}`} />
+          )}
+          {/* Notification test buttons */}
+          {(config.telegram_configured || config.whatsapp_configured) && (
+            <div className="flex gap-2 pt-2 border-t border-white/5">
+              {config.telegram_configured && (
+                <button
+                  onClick={async () => {
+                    try {
+                      await api.post(`/bots/${botId}/test-telegram`)
+                    } catch (err: any) {
+                      setError(err.response?.data?.detail || t('common.error'))
+                    }
+                  }}
+                  className="px-3 py-1.5 text-xs bg-blue-900/30 text-blue-400 border border-blue-700 rounded-lg hover:bg-blue-900/50 transition-colors"
+                >
+                  {d('testTelegram')}
+                </button>
+              )}
+              {config.whatsapp_configured && (
+                <button
+                  onClick={async () => {
+                    try {
+                      await api.post(`/bots/${botId}/test-whatsapp`)
+                    } catch (err: any) {
+                      setError(err.response?.data?.detail || t('common.error'))
+                    }
+                  }}
+                  className="px-3 py-1.5 text-xs bg-green-900/30 text-green-400 border border-green-700 rounded-lg hover:bg-green-900/50 transition-colors"
+                >
+                  {d('testWhatsapp')}
+                </button>
+              )}
+            </div>
           )}
           {config.created_at && (
             <ConfigRow label={d('created')} value={new Date(config.created_at).toLocaleDateString()} />

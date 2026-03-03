@@ -380,7 +380,7 @@ export default function Settings() {
       setAffiliateLinks(map)
       // Pre-fill forms
       const forms: typeof affiliateForms = {}
-      for (const ex of ['bitget', 'weex', 'hyperliquid']) {
+      for (const ex of ['bitget', 'weex', 'hyperliquid', 'bitunix', 'bingx']) {
         const existing = map[ex]
         const existingRaw = res.data.find((l: any) => l.exchange_type === ex)
         forms[ex] = { url: existing?.affiliate_url || '', label: existing?.label || '', active: existing?.is_active ?? true, uidRequired: existingRaw?.uid_required || false }
@@ -950,7 +950,8 @@ export default function Settings() {
 
       {/* Affiliate Links Tab (admin only) */}
       {activeTab === 'affiliateLinks' && (() => {
-        const configuredAff = ['bitget', 'weex', 'hyperliquid'].filter(ex => !!affiliateLinks[ex]).length
+        const AFFILIATE_EXCHANGES = ['bitget', 'weex', 'hyperliquid', 'bitunix', 'bingx']
+        const configuredAff = AFFILIATE_EXCHANGES.filter(ex => !!affiliateLinks[ex]).length
         return (
           <div className="space-y-6">
             {/* ── Summary Bar ── */}
@@ -958,10 +959,10 @@ export default function Settings() {
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div className="flex items-center gap-4">
                   <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
-                    configuredAff === 3 ? 'bg-emerald-500/15' : configuredAff > 0 ? 'bg-yellow-500/15' : 'bg-white/5'
+                    configuredAff === AFFILIATE_EXCHANGES.length ? 'bg-emerald-500/15' : configuredAff > 0 ? 'bg-yellow-500/15' : 'bg-white/5'
                   }`}>
                     <ExternalLink size={22} className={
-                      configuredAff === 3 ? 'text-emerald-400' : configuredAff > 0 ? 'text-yellow-400' : 'text-gray-600'
+                      configuredAff === AFFILIATE_EXCHANGES.length ? 'text-emerald-400' : configuredAff > 0 ? 'text-yellow-400' : 'text-gray-600'
                     } />
                   </div>
                   <div>
@@ -969,7 +970,7 @@ export default function Settings() {
                       {t('settings.affiliateLinks')}
                     </h3>
                     <p className="text-gray-500 text-sm mt-0.5">
-                      {configuredAff}/3 {t('settings.configured')}
+                      {configuredAff}/{AFFILIATE_EXCHANGES.length} {t('settings.configured')}
                       {adminUidStats.pending > 0 && (
                         <> &middot; <span className="text-yellow-400">{adminUidStats.pending} {t('affiliate.uidPending')}</span></>
                       )}
@@ -1012,7 +1013,7 @@ export default function Settings() {
                   </button>
                 </div>
                 <div className="space-y-3">
-                  {['bitget', 'weex', 'hyperliquid'].map((ex) => {
+                  {AFFILIATE_EXCHANGES.map((ex) => {
                     const form = affiliateForms[ex] || { url: '', label: '', active: true }
                     const hasExisting = !!affiliateLinks[ex]
                     return (
