@@ -314,15 +314,41 @@ async def _run_data_backtest(
         data_sources = fetcher.data_sources
     except Exception as e:
         logger.warning(f"Failed to fetch live data, using mock: {e}")
-        from src.backtest.mock_data import generate_mock_historical_data
-        data_points = generate_mock_historical_data(days=fetch_days, interval=timeframe)
-        data_sources = ["Mock Data Generator"]
+        data_points = []
     finally:
         await fetcher.close()
+
+    # Quality check: detect if primary data (F&G, prices) is real.
+    # Binance only provides ~30 days of L/S and OI history, so those will
+    # be at defaults for older backtests — that's expected, not an error.
+    # Only fall back to mock if the PRIMARY data is missing (F&G all 50, no price data).
+    if data_points:
+        sample = data_points[-min(20, len(data_points)):]
+        all_fg_default = all(d.fear_greed_index == 50 for d in sample)
+        all_price_zero = all(d.btc_price == 0 for d in sample)
+        if all_fg_default and all_price_zero:
+            logger.warning(
+                "Primary data missing (F&G all default, prices zero) "
+                "— falling back to mock data"
+            )
+            data_points = []
+        else:
+            # Log data coverage info
+            total = len(data_points)
+            fg_real = sum(1 for d in data_points if d.fear_greed_index != 50)
+            ls_real = sum(1 for d in data_points if abs(d.long_short_ratio - 1.0) >= 0.001)
+            funding_real = sum(1 for d in data_points if d.funding_rate_btc != 0)
+            logger.info(
+                f"Data coverage: F&G {fg_real}/{total} ({fg_real*100//total}%), "
+                f"L/S {ls_real}/{total} ({ls_real*100//total}%), "
+                f"Funding {funding_real}/{total} ({funding_real*100//total}%) "
+                f"real data points (Binance L/S/OI limited to ~30 days)"
+            )
 
     if not data_points:
         from src.backtest.mock_data import generate_mock_historical_data
         data_points = generate_mock_historical_data(days=fetch_days, interval=timeframe)
+        data_sources = ["Mock Data Generator"]
 
     # Build config with strategy-specific defaults
     config = _build_strategy_config(strategy_type, initial_capital)
@@ -487,6 +513,18 @@ def _build_strategy_config(strategy_type: str, initial_capital: float) -> Backte
             leverage=5,
             position_size_percent=15.0,
             low_confidence_min=50,
+        )
+
+    if strategy_type == "contrarian_pulse":
+        return BacktestConfig(
+            **base,
+            take_profit_percent=2.0,
+            stop_loss_percent=1.0,
+            max_trades_per_day=2,
+            fear_greed_extreme_fear=30,
+            fear_greed_extreme_greed=70,
+            low_confidence_min=55,
+            position_size_percent=10.0,
         )
 
     # Fallback: generic config

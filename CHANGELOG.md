@@ -9,6 +9,65 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.35.2] - 2026-03-04
+
+### Geaendert
+- **Contrarian Pulse v2 Defaults auf Real-Data optimiert** — Basierend auf echten historischen Daten (Alternative.me F&G, Binance Klines+Funding, 90 Tage):
+  - F&G-Schwellen von 30/70 auf **35/65** geweitet (mehr Signale, bessere Win Rate)
+  - Ultra-F&G von 20/80 auf **25/75** angepasst
+  - Schema-Defaults synchronisiert
+- **Backtest-Datenqualitaetspruefung verbessert** — Prueft jetzt F&G und Preise statt L/S und OI. Binance speichert L/S/OI nur 30 Tage; aeltere Backtests nutzen korrekt Defaults statt auf Mock-Daten zu fallen
+- **Real-Data Backtest-Script** (`scripts/backtest_contrarian_real.py`) — Dokumentiert Datenabdeckung und testet mit echten historischen Daten
+
+### Real-Data Backtest-Ergebnisse (90 Tage, echte Daten, Bitget Standard Fees)
+- Datenabdeckung: F&G 98%, Klines 100%, Funding 100%, L/S 0%, OI 0%
+- **Bester Setup: F&G 35/65 @ 1h — 34 Trades, 44% WR, +2.13%, Sharpe 2.29**
+- Zweitbester: F&G 35/65 @ 30m — 43 Trades, 42% WR, +2.09%, Sharpe 1.94
+- 4h-Timeframe durchgehend negativ, nicht empfohlen
+
+---
+
+## [3.35.1] - 2026-03-04
+
+### Geaendert
+- **Contrarian Pulse v2 Optimierung** — 3 strukturelle Schwaechen behoben:
+  1. **EMA-Bypass fuer ultra-extreme F&G** — Bei F&G < 20 oder > 80 wird der EMA-Trendfilter uebersprungen (kontraeres Signal stark genug), erfordert aber +1 extra Bestaetigung
+  2. **RSI-Divergenz ersetzt CVD** — CVD war redundant zu Volume buy/sell split. RSI-Divergenz ist ein staerkeres kontraeres Signal (bullish: price lower low + RSI higher low)
+  3. **EMA200-Naehe ersetzt OI>0** — OI>0 war immer true (free pass). Jetzt: Preis innerhalb ±3% von EMA200 als echte Support/Resistance-Zone
+- **Graduierte Confidence-Bewertung** — F&G-Bonus proportional zur Extremitaet (F&G=5 gibt vollen Bonus, F&G=25 gibt partiellen Bonus statt binaer)
+- **Min. Bestaetigungen von 2 auf 1 gesenkt** — Da alle 5 Bestaetigungen jetzt aussagekraeftig sind (kein Free Pass mehr), reicht 1 aus
+- **Neue konfigurierbare Parameter** — `fg_ultra_fear`, `fg_ultra_greed`, `rsi_divergence_lookback`, `ema200_proximity_pct` im Frontend-Schema verfuegbar
+- **Strategie-Beschreibung aktualisiert** — Docstring und `get_description()` reflektieren v2-Aenderungen
+
+### Backtest-Ergebnisse v2 (90 Tage, Mock-Daten, Bitget Standard Fees)
+- **v2 1-confirm @ 30m: +12.94%, 62% WR, 53 Trades** ← NEUER BESTER (vs v1 +10.62%)
+- v2 aggressive @ 30m: +12.22%, 55% WR, 71 Trades
+- v2 no-bypass @ 15m: +7.37%, 100% WR, 12 Trades
+- v2 default @ 30m: +6.53%, 57% WR, 44 Trades
+- 15m und 30m konsistent beste Timeframes
+
+---
+
+## [3.35.0] - 2026-03-04
+
+### Hinzugefuegt
+- **Neue Strategie: Contrarian Pulse** — Rein algorithmische Fear & Greed Kontra-Scalping-Strategie fuer BTC. Nutzt den F&G Index als Kontraindikator (Long bei Extreme Fear, Short bei Extreme Greed), bestaetigt durch 50/200 EMA-Trend, RSI und 5 Derivate-Signale (CVD, L/S Ratio, Volume, OI, Funding). Kein LLM erforderlich.
+- **Backtest-Script** (`scripts/backtest_contrarian_pulse.py`) — Testet 8 Parameter-Varianten ueber 5 Timeframes (15m, 30m, 1h, 4h, 1d) mit Bitget-Gebuehren
+- **Frontend-Integration** — Contrarian Pulse im Bot Builder Wizard verfuegbar mit festen Datenquellen und konfigurierbaren Parametern (F&G-Schwellen, Min. Bestaetigungen, L/S-Limits, RSI-Grenzen)
+- **i18n** — Deutsche und englische Strategiebeschreibung hinzugefuegt
+
+### Geaendert
+- **Backtest-Datenqualitaetspruefung** (`strategy_adapter.py`) — Erkennt fehlende Derivate-Daten (L/S=1.0, OI=0) und faellt automatisch auf Mock-Daten zurueck statt mit fehlerhaften Live-API-Daten zu arbeiten
+- **Optimierte TP/SL-Defaults** — Basierend auf Backtest-Ergebnissen: 2.0% TP / 1.0% SL (2:1 R:R-Verhaeltnis). Bestes Ergebnis: +10.62% Return auf 15m-Timeframe
+
+### Backtest-Ergebnisse (90 Tage, Mock-Daten, Bitget Standard Fees)
+- Bester Timeframe: 15m (+4.57% bis +10.62% je nach Parametern)
+- Bester Setup: TP 2.0% / SL 1.0% auf 15m — 15 Trades, 100% Win Rate, +10.62%
+- 1d-Timeframe durchgehend negativ (-13% bis -20%), nicht empfohlen
+- Hoehere Confirmations (3) erhoehen Win Rate auf 100%, reduzieren aber Trade-Anzahl
+
+---
+
 ## [3.34.0] - 2026-02-28
 
 ### Hinzugefuegt

@@ -4,6 +4,7 @@ from .base import BaseStrategy, SignalDirection, StrategyRegistry, TradeSignal
 
 # Import each strategy with error handling so one broken strategy
 # doesn't prevent others from loading.
+from .contrarian_pulse import ContrarianPulseStrategy
 from .degen import DegenStrategy
 from .edge_indicator import EdgeIndicatorStrategy
 
@@ -13,6 +14,7 @@ from .sentiment_surfer import SentimentSurferStrategy
 
 __all__ = [
     "BaseStrategy",
+    "ContrarianPulseStrategy",
     "DegenStrategy",
     "EdgeIndicatorStrategy",
     "SignalDirection",

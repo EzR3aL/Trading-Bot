@@ -78,7 +78,7 @@ interface BotBuilderProps {
 }
 
 // Strategies that use market data and should show the data sources step
-const DATA_STRATEGIES = ['llm_signal', 'sentiment_surfer', 'liquidation_hunter', 'degen', 'edge_indicator']
+const DATA_STRATEGIES = ['llm_signal', 'sentiment_surfer', 'liquidation_hunter', 'degen', 'edge_indicator', 'contrarian_pulse']
 
 // Fixed data sources for non-LLM strategies (these strategies use hardcoded sources internally)
 const FIXED_STRATEGY_SOURCES: Record<string, string[]> = {
@@ -96,6 +96,10 @@ const FIXED_STRATEGY_SOURCES: Record<string, string[]> = {
   edge_indicator: [
     'spot_price', 'vwap', 'supertrend', 'spot_volume', 'volatility',
   ],
+  contrarian_pulse: [
+    'fear_greed', 'spot_price', 'spot_volume', 'cvd', 'long_short_ratio',
+    'open_interest', 'funding_rate',
+  ],
 }
 
 const STRATEGY_DISPLAY_NAMES: Record<string, string> = {
@@ -104,6 +108,7 @@ const STRATEGY_DISPLAY_NAMES: Record<string, string> = {
   liquidation_hunter: 'Liquidation Hunter',
   degen: 'Degen',
   edge_indicator: 'Edge Indicator',
+  contrarian_pulse: 'Contrarian Pulse',
 }
 
 // Strategy descriptions are now sourced from i18n keys: bots.builder.strategyDesc_{name}
