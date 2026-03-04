@@ -23,6 +23,7 @@ const STRATEGY_DISPLAY: Record<string, string> = {
   llm_signal: 'KI-Companion',
   degen: 'Degen',
   edge_indicator: 'Edge Indicator',
+  contrarian_pulse: 'Contrarian Pulse',
 }
 
 const TRADING_PAIRS = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'XRPUSDT', 'DOGEUSDT', 'AVAXUSDT']

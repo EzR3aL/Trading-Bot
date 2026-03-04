@@ -24,6 +24,7 @@ const STRATEGY_DISPLAY: Record<string, string> = {
   liquidation_hunter: 'Liquidation Hunter',
   degen: 'Degen',
   edge_indicator: 'Edge Indicator',
+  contrarian_pulse: 'Contrarian Pulse',
 }
 function strategyLabel(name: string): string {
   return STRATEGY_DISPLAY[name] || name.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
