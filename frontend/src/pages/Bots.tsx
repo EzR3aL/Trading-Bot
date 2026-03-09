@@ -35,6 +35,7 @@ import {
   Bot,
   MoreVertical,
   XCircle,
+  ShieldCheck,
 } from 'lucide-react'
 import GuidedTour, { TourHelpButton, type TourStep } from '../components/ui/GuidedTour'
 
@@ -116,6 +117,11 @@ interface BotTrade {
   exit_reason: string | null
   fees: number
   funding_paid: number
+  trailing_stop_active?: boolean | null
+  trailing_stop_price?: number | null
+  trailing_stop_distance?: number | null
+  trailing_stop_distance_pct?: number | null
+  can_close_at_loss?: boolean | null
 }
 
 interface BotStatistics {
@@ -255,6 +261,19 @@ function TradeDetailModal({ trade, onClose, t }: { trade: BotTrade; onClose: () 
             </div>
           </div>
         </div>
+
+        {/* Trailing Stop */}
+        {trade.status === 'open' && trade.trailing_stop_active && trade.trailing_stop_price != null && (
+          <div className="flex items-center justify-between mb-5 bg-emerald-500/5 rounded-xl p-4 border border-emerald-500/10">
+            <span className="text-sm text-gray-400 flex items-center gap-2">
+              <ShieldCheck size={16} className="text-emerald-400" />
+              {t('trades.trailingStop')}
+            </span>
+            <span className="font-bold text-lg text-emerald-400">
+              ${trade.trailing_stop_price.toLocaleString()} ({trade.trailing_stop_distance_pct?.toFixed(2)}%)
+            </span>
+          </div>
+        )}
 
         {/* Confidence */}
         <div className="flex items-center justify-between mb-5 bg-white/[0.03] rounded-xl p-4 border border-white/5">
@@ -521,6 +540,7 @@ function BotTradeHistoryModal({ bot, onClose, t }: { bot: BotStatus; onClose: ()
                     <th className="text-center px-3 py-2.5 text-xs text-gray-500 uppercase font-semibold tracking-wider">{t('trades.side')}</th>
                     <th className="text-right px-3 py-2.5 text-xs text-gray-500 uppercase font-semibold tracking-wider">{t('trades.entryPrice')}</th>
                     <th className="text-right px-3 py-2.5 text-xs text-gray-500 uppercase font-semibold tracking-wider">{t('trades.pnl')}</th>
+                    <th className="text-right px-3 py-2.5 text-xs text-gray-500 uppercase font-semibold tracking-wider">{t('trades.trailingStop')}</th>
                     <th className="text-center px-3 py-2.5 text-xs text-gray-500 uppercase font-semibold tracking-wider">{t('trades.mode')}</th>
                     <th className="text-center px-3 py-2.5 text-xs text-gray-500 uppercase font-semibold tracking-wider">{t('trades.status')}</th>
                     <th className="text-center px-3 py-2.5 text-xs text-gray-500 uppercase font-semibold tracking-wider">{t('bots.confidence')}</th>
@@ -558,6 +578,20 @@ function BotTradeHistoryModal({ bot, onClose, t }: { bot: BotStatus; onClose: ()
                             trade.pnl >= 0 ? 'text-profit' : 'text-loss'
                           }`}
                         />
+                      </td>
+                      <td className="px-3 py-2.5 text-right">
+                        {trade.status === 'open' && trade.trailing_stop_active && trade.trailing_stop_price != null ? (
+                          <span className="inline-flex items-center gap-1 text-emerald-400 text-sm">
+                            ${trade.trailing_stop_price.toLocaleString()} ({trade.trailing_stop_distance_pct?.toFixed(2)}%)
+                            {trade.can_close_at_loss === false && (
+                              <span title={t('trades.trailingStopProtecting')}>
+                                <ShieldCheck size={14} className="text-emerald-400" />
+                              </span>
+                            )}
+                          </span>
+                        ) : (
+                          <span className="text-gray-600">--</span>
+                        )}
                       </td>
                       <td className="px-3 py-2.5 text-center">
                         <span className={trade.demo_mode ? 'badge-demo' : 'badge-live'}>

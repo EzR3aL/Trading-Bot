@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.auth.dependencies import get_current_user
 from src.models.database import BotConfig, TradeRecord, User
 from src.models.session import get_db
+from src.api.routers.trades import _compute_trailing_stop
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -116,7 +117,7 @@ async def get_bot_statistics(
     )
     recent_trades = []
     for trade in recent_result.scalars().all():
-        recent_trades.append({
+        row = {
             "id": trade.id,
             "symbol": trade.symbol,
             "side": trade.side,
@@ -134,7 +135,13 @@ async def get_bot_statistics(
             "exit_reason": trade.exit_reason,
             "fees": round(float(trade.fees or 0), 4),
             "funding_paid": round(float(trade.funding_paid or 0), 4),
-        })
+        }
+        if trade.status == "open":
+            ts = await _compute_trailing_stop(
+                trade, config.strategy_type, config.strategy_params,
+            )
+            row.update(ts)
+        recent_trades.append(row)
 
     return {
         "bot_id": bot_id,

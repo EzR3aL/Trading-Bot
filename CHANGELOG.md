@@ -9,6 +9,20 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.37.0] - 2026-03-09
+
+### Hinzugefuegt
+- **Trailing Stop im Dashboard** — Bot-Statistik-API (`/bots/{id}/statistics`) liefert jetzt Trailing-Stop-Daten fuer offene Trades (Preis, Distanz, Shield-Status)
+- **Trailing Stop in Frontend** — Anzeige in Bot-Detail Trades-Tabelle, Dashboard Trade-History Modal, Bot-Performance Latest-Trade-Card und Trade-Detail-Modals mit ShieldCheck-Icon
+
+### Geaendert
+- `src/api/routers/bots_statistics.py` — `_compute_trailing_stop()` Import und Enrichment fuer offene Trades
+- `frontend/src/pages/BotDetail.tsx` — Neue Spalte "Trailing Stop" in Trades-Tabelle
+- `frontend/src/pages/Bots.tsx` — Trailing Stop in Trade-History-Tabelle und Trade-Detail-Modal
+- `frontend/src/pages/BotPerformance.tsx` — Open-Trade Trailing-Stop-Card und Trade-Detail-Modal
+
+---
+
 ## [3.36.0] - 2026-03-09
 
 ### Hinzugefuegt

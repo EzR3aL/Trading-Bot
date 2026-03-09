@@ -7,7 +7,7 @@ import {
 } from 'recharts'
 import {
   ArrowLeft, Play, Square, Settings, TrendingUp, TrendingDown,
-  Activity, AlertCircle, CheckCircle, Bot,
+  Activity, AlertCircle, CheckCircle, Bot, ShieldCheck,
 } from 'lucide-react'
 import api from '../api/client'
 import { getApiErrorMessage } from '../utils/api-error'
@@ -80,6 +80,11 @@ interface BotTrade {
   exit_reason: string | null
   fees: number
   funding_paid: number
+  trailing_stop_active?: boolean | null
+  trailing_stop_price?: number | null
+  trailing_stop_distance?: number | null
+  trailing_stop_distance_pct?: number | null
+  can_close_at_loss?: boolean | null
 }
 
 interface BotStats {
@@ -371,6 +376,7 @@ export default function BotDetail() {
                     <th className="text-center">{t('trades.side')}</th>
                     <th className="text-right">{t('trades.entryPrice')}</th>
                     <th className="text-right">{t('trades.pnl')}</th>
+                    <th className="text-right">{t('trades.trailingStop')}</th>
                     <th className="text-center">{t('trades.mode')}</th>
                     <th className="text-center">{t('trades.status')}</th>
                   </tr>
@@ -397,6 +403,20 @@ export default function BotDetail() {
                       </td>
                       <td className="text-right">
                         <PnlCell pnl={trade.pnl} fees={trade.fees || 0} fundingPaid={trade.funding_paid || 0} status={trade.status} className={trade.pnl >= 0 ? 'pnl-positive' : 'pnl-negative'} />
+                      </td>
+                      <td className="text-right">
+                        {trade.status === 'open' && trade.trailing_stop_active && trade.trailing_stop_price != null ? (
+                          <span className="inline-flex items-center gap-1 text-emerald-400">
+                            ${trade.trailing_stop_price.toLocaleString()} ({trade.trailing_stop_distance_pct?.toFixed(2)}%)
+                            {trade.can_close_at_loss === false && (
+                              <span title={t('trades.trailingStopProtecting')}>
+                                <ShieldCheck size={14} className="text-emerald-400" />
+                              </span>
+                            )}
+                          </span>
+                        ) : (
+                          <span className="text-gray-600">--</span>
+                        )}
                       </td>
                       <td className="text-center">
                         <span className={trade.demo_mode ? 'badge-demo' : 'badge-live'}>
