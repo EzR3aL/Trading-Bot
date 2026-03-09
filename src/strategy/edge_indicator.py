@@ -726,6 +726,21 @@ class EdgeIndicatorStrategy(BaseStrategy):
         confidence = self._calculate_confidence(adx_data, momentum, ribbon)
         take_profit, stop_loss = self._calculate_targets(direction, current_price)
 
+        # Calculate native trailing stop parameters (for exchange-side placement)
+        trailing_callback_pct = None
+        trailing_trigger_price = None
+        if self._p.get("trailing_stop_enabled") and current_price > 0:
+            atr_series = MarketDataFetcher.calculate_atr(klines, self._p["atr_period"])
+            atr_val = atr_series[-1] if atr_series else current_price * 0.015
+            trail_atr = self._p.get("trailing_trail_atr", 2.5)
+            breakeven_atr = self._p.get("trailing_breakeven_atr", 1.5)
+
+            trailing_callback_pct = round((atr_val * trail_atr) / current_price * 100, 2)
+            if direction == SignalDirection.LONG:
+                trailing_trigger_price = round(current_price + atr_val * breakeven_atr, 2)
+            else:
+                trailing_trigger_price = round(current_price - atr_val * breakeven_atr, 2)
+
         snapshot = {
             "ema_fast": round(ribbon["ema_fast"][-1], 2) if ribbon["ema_fast"] else 0,
             "ema_slow": round(ribbon["ema_slow"][-1], 2) if ribbon["ema_slow"] else 0,
@@ -755,6 +770,8 @@ class EdgeIndicatorStrategy(BaseStrategy):
             entry_price=current_price, target_price=take_profit, stop_loss=stop_loss,
             reason=f"[Edge] {reason}", metrics_snapshot=snapshot,
             timestamp=datetime.now(),
+            trailing_callback_pct=trailing_callback_pct,
+            trailing_trigger_price=trailing_trigger_price,
         )
 
         logger.info(

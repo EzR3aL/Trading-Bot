@@ -9,6 +9,23 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.38.0] - 2026-03-09
+
+### Hinzugefuegt
+- **Nativer Bitget Trailing Stop** — Nach dem Trade-Entry wird automatisch ein nativer Trailing Stop (`track_plan`) auf der Boerse platziert. Der Stop laeuft direkt auf Bitget und schuetzt die Position auch wenn der Bot offline ist.
+  - Neues Bitget API Endpoint: `place-plan-order` mit `planType="track_plan"`
+  - `place_trailing_stop()` Methode im Bitget Client (und als optionale Methode im Base Client)
+  - Trail-Distanz und Aktivierungspreis werden aus ATR-Parametern der EdgeIndicator-Strategie berechnet (`trailing_trail_atr` und `trailing_breakeven_atr`)
+  - `TradeSignal` um `trailing_callback_pct` und `trailing_trigger_price` Felder erweitert
+  - Trade Executor platziert den nativen Trailing Stop automatisch nach der Market Order
+  - Bei Fehler: Software-Trailing-Stop bleibt als Backup aktiv (kein Trade-Abbruch)
+  - Trailing-Info in Logs aufgenommen
+  - **Auto-Placement fuer bestehende Positionen**: Der Position Monitor erkennt offene Positionen ohne nativen Trailing Stop und platziert ihn automatisch nach (innerhalb 1 Minute)
+  - Neues DB-Feld `native_trailing_stop` auf `trade_records` verhindert doppelte Platzierung
+  - Alembic-Migration 003 + SQLite-Inline-Migration
+
+---
+
 ## [3.37.0] - 2026-03-09
 
 ### Hinzugefuegt

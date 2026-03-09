@@ -97,6 +97,18 @@ class ExchangeClient(ABC):
         """Close HTTP session and clean up resources."""
         ...
 
+    async def place_trailing_stop(
+        self,
+        symbol: str,
+        hold_side: str,
+        size: float,
+        callback_ratio: float,
+        trigger_price: float,
+        margin_mode: str = "cross",
+    ) -> Optional[dict]:
+        """Place a native trailing stop on the exchange. Override in exchange-specific client."""
+        return None
+
     async def get_order_fees(self, symbol: str, order_id: str) -> float:
         """Get fees for a single order. Override in exchange-specific client."""
         return 0.0

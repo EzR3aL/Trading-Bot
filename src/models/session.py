@@ -116,6 +116,8 @@ async def _run_sqlite_migrations(conn) -> None:
         # Alert history table
         "CREATE TABLE IF NOT EXISTS alert_history (id INTEGER PRIMARY KEY AUTOINCREMENT, alert_id INTEGER NOT NULL REFERENCES alerts(id) ON DELETE CASCADE, triggered_at DATETIME DEFAULT CURRENT_TIMESTAMP, current_value FLOAT, message TEXT NOT NULL)",
         "CREATE INDEX IF NOT EXISTS ix_alert_history_alert ON alert_history(alert_id)",
+        # Native trailing stop tracking (v3.36)
+        "ALTER TABLE trade_records ADD COLUMN native_trailing_stop BOOLEAN NOT NULL DEFAULT 0",
     ]
     for migration in migrations:
         try:

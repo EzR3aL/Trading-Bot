@@ -158,6 +158,7 @@ class TradeRecord(Base):
     exit_reason = Column(String(50), nullable=True)
     metrics_snapshot = Column(Text, nullable=True)  # JSON string
     highest_price = Column(Float, nullable=True)  # Trailing stop: highest mark price since entry
+    native_trailing_stop = Column(Boolean, default=False, nullable=False, server_default=text("false"))
     demo_mode = Column(Boolean, default=False, nullable=False, server_default=text("false"))
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())

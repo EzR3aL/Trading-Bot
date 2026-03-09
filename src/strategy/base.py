@@ -39,6 +39,8 @@ class TradeSignal:
     reason: str
     metrics_snapshot: dict
     timestamp: datetime
+    trailing_callback_pct: float | None = None  # Trail distance in % for native exchange trailing stop
+    trailing_trigger_price: float | None = None  # Activation price for native trailing stop
 
     def to_dict(self) -> dict:
         """Convert to dictionary."""
@@ -51,6 +53,8 @@ class TradeSignal:
             "stop_loss": self.stop_loss,
             "reason": self.reason,
             "timestamp": self.timestamp.isoformat(),
+            "trailing_callback_pct": self.trailing_callback_pct,
+            "trailing_trigger_price": self.trailing_trigger_price,
         }
 
 

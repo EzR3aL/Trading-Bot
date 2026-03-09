@@ -134,6 +134,31 @@ class TradeExecutorMixin:
                 signal.target_price = None
                 signal.stop_loss = None
 
+            # Place native trailing stop on exchange (if strategy provided params)
+            trailing_placed = False
+            if signal.trailing_callback_pct and signal.trailing_trigger_price:
+                try:
+                    await asyncio.sleep(0.3)
+                    await client.place_trailing_stop(
+                        symbol=signal.symbol,
+                        hold_side=side,
+                        size=position_size,
+                        callback_ratio=signal.trailing_callback_pct,
+                        trigger_price=signal.trailing_trigger_price,
+                        margin_mode=margin_mode,
+                    )
+                    trailing_placed = True
+                    logger.info(
+                        "%s [%s] Native trailing stop placed: %s callback=%.2f%% trigger=$%.2f",
+                        log_prefix, mode_str, signal.symbol,
+                        signal.trailing_callback_pct, signal.trailing_trigger_price,
+                    )
+                except Exception as e:
+                    logger.warning(
+                        "%s [%s] Native trailing stop failed (software backup active): %s",
+                        log_prefix, mode_str, e,
+                    )
+
             # Get fill price — prefer order.price (avgPx from exchange)
             fill_price = order.price if order.price > 0 else signal.entry_price
             if order.order_id:
@@ -164,6 +189,7 @@ class TradeExecutorMixin:
                     entry_time=datetime.now(timezone.utc),
                     demo_mode=demo_mode,
                     metrics_snapshot=json.dumps(signal.metrics_snapshot),
+                    native_trailing_stop=trailing_placed,
                 )
                 session.add(trade)
 
@@ -206,9 +232,16 @@ class TradeExecutorMixin:
                     "position is open WITHOUT stop-loss protection"
                 )
 
+            trailing_info = ""
+            if trailing_placed:
+                trailing_info = (
+                    f" [Trailing: {signal.trailing_callback_pct:.2f}% "
+                    f"trigger=${signal.trailing_trigger_price:,.2f}]"
+                )
             logger.info(
                 f"{log_prefix} [{mode_str}] Trade opened: {signal.direction.value.upper()} "
-                f"{signal.symbol} @ ${fill_price:,.2f} (conf: {signal.confidence}%){tpsl_warning}"
+                f"{signal.symbol} @ ${fill_price:,.2f} (conf: {signal.confidence}%)"
+                f"{tpsl_warning}{trailing_info}"
             )
 
             # Broadcast via WebSocket

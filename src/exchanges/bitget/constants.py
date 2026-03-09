@@ -30,6 +30,7 @@ ENDPOINTS = {
     "order_fills": "/api/v2/mix/order/fills",
     "close_positions": "/api/v2/mix/order/close-positions",
     "account_bill": "/api/v2/mix/account/bill",
+    "place_plan_order": "/api/v2/mix/order/place-plan-order",
 }
 
 # Bitget success code

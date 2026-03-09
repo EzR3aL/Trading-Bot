@@ -3,6 +3,7 @@
 import json
 from datetime import datetime, timezone
 
+from src.data.market_data import MarketDataFetcher
 from src.exchanges.base import ExchangeClient
 from src.models.database import TradeRecord
 from src.models.session import get_session
@@ -75,6 +76,10 @@ class PositionMonitorMixin:
                 if new_highest != trade.highest_price:
                     trade.highest_price = new_highest
                     await session.commit()
+
+            # Auto-place native trailing stop for existing positions
+            if not trade.native_trailing_stop and self._strategy and hasattr(self._strategy, '_p'):
+                await self._try_place_native_trailing_stop(trade, client, position, current_price, session)
 
             # Skip strategy exit when exchange handles TP/SL
             has_exchange_tpsl = trade.take_profit is not None or trade.stop_loss is not None
@@ -156,6 +161,75 @@ class PositionMonitorMixin:
 
         except Exception as e:
             logger.error("[Bot:%s] Position check error: %s", self.bot_config_id, e)
+
+    async def _try_place_native_trailing_stop(self, trade, client, position, current_price, session):
+        """Auto-place a native trailing stop on the exchange for an existing position."""
+        log_prefix = f"[Bot:{self.bot_config_id}]"
+        try:
+            params = self._strategy._p
+            if not params.get("trailing_stop_enabled"):
+                return
+
+            entry_price = trade.entry_price
+            if not entry_price or entry_price <= 0:
+                return
+
+            # Fetch ATR from Binance klines
+            fetcher = MarketDataFetcher()
+            try:
+                klines = await fetcher.get_binance_klines(
+                    trade.symbol,
+                    params.get("kline_interval", "1h"),
+                    params.get("kline_count", 200),
+                )
+            finally:
+                await fetcher.close()
+
+            if not klines:
+                return
+
+            atr_series = MarketDataFetcher.calculate_atr(klines, params.get("atr_period", 14))
+            if not atr_series:
+                return
+
+            atr_val = atr_series[-1]
+            trail_atr = params.get("trailing_trail_atr", 2.5)
+            breakeven_atr = params.get("trailing_breakeven_atr", 1.5)
+
+            callback_pct = round((atr_val * trail_atr) / entry_price * 100, 2)
+            if trade.side == "long":
+                trigger_price = round(entry_price + atr_val * breakeven_atr, 2)
+            else:
+                trigger_price = round(entry_price - atr_val * breakeven_atr, 2)
+
+            margin_mode = getattr(self._config, "margin_mode", "cross")
+            result = await client.place_trailing_stop(
+                symbol=trade.symbol,
+                hold_side=trade.side,
+                size=trade.size,
+                callback_ratio=callback_pct,
+                trigger_price=trigger_price,
+                margin_mode=margin_mode,
+            )
+
+            if result is not None:
+                trade.native_trailing_stop = True
+                await session.commit()
+                logger.info(
+                    "%s Native trailing stop placed for existing %s %s position: "
+                    "callback=%.2f%% trigger=$%.2f",
+                    log_prefix, trade.symbol, trade.side, callback_pct, trigger_price,
+                )
+            else:
+                logger.debug(
+                    "%s Exchange does not support native trailing stop for %s",
+                    log_prefix, trade.symbol,
+                )
+        except Exception as e:
+            logger.warning(
+                "%s Failed to place native trailing stop for %s (software backup active): %s",
+                log_prefix, trade.symbol, e,
+            )
 
     async def _handle_closed_position(self, trade: TradeRecord, client: ExchangeClient, session):
         """Handle a position that was closed externally (TP/SL/manual)."""

@@ -460,6 +460,56 @@ class BitgetExchangeClient(ExchangeClient):
             current_rate=float(data.get("fundingRate", 0)),
         )
 
+    # ==================== Trailing Stop ====================
+
+    async def place_trailing_stop(
+        self,
+        symbol: str,
+        hold_side: str,
+        size: float,
+        callback_ratio: float,
+        trigger_price: float,
+        margin_mode: str = "cross",
+    ) -> Optional[dict]:
+        """Place a native trailing stop (track_plan) on Bitget.
+
+        Args:
+            symbol: Trading pair (e.g. "BTCUSDT")
+            hold_side: "long" or "short"
+            size: Position size
+            callback_ratio: Trail distance in % (e.g. 2.5 = 2.5%)
+            trigger_price: Price at which trailing begins
+            margin_mode: "cross" or "isolated"
+
+        Returns:
+            API response dict or None on failure.
+        """
+        api_margin = "crossed" if margin_mode == "cross" else "isolated"
+        side = "sell" if hold_side == "long" else "buy"
+
+        data = {
+            "symbol": symbol,
+            "productType": PRODUCT_TYPE_USDT,
+            "marginMode": api_margin,
+            "marginCoin": "USDT",
+            "planType": "track_plan",
+            "triggerPrice": str(trigger_price),
+            "triggerType": "fill_price",
+            "callbackRatio": str(callback_ratio),
+            "size": str(size),
+            "side": side,
+            "tradeSide": "close",
+            "holdSide": hold_side,
+            "orderType": "market",
+        }
+
+        result = await self._request("POST", ENDPOINTS["place_plan_order"], data=data)
+        logger.info(
+            "Trailing stop placed on Bitget: %s %s callback=%.2f%% trigger=$%.2f",
+            symbol, hold_side, callback_ratio, trigger_price,
+        )
+        return result
+
     # ==================== Additional Bitget-specific methods ====================
 
     async def get_order_fees(self, symbol: str, order_id: str) -> float:
