@@ -4,11 +4,13 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from src.models.enums import EXCHANGE_OR_ANY_PATTERN
+
 
 class PresetCreate(BaseModel):
     name: str = Field(min_length=1, max_length=100)
     description: Optional[str] = None
-    exchange_type: str = Field(default="any", pattern="^(any|bitget|weex|hyperliquid|bitunix|bingx)$")
+    exchange_type: str = Field(default="any", pattern=EXCHANGE_OR_ANY_PATTERN)
     trading_config: Optional[Dict[str, Any]] = None
     strategy_config: Optional[Dict[str, Any]] = None
     trading_pairs: List[str] = Field(default=["BTCUSDT", "ETHUSDT"])

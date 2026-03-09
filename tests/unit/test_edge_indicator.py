@@ -156,7 +156,7 @@ class TestEdgeIndicatorInit:
         assert strategy._p["ema_slow_period"] == 21
         assert strategy._p["adx_period"] == 14
         assert strategy._p["adx_chop_threshold"] == 18.0
-        assert strategy._p["min_confidence"] == 40
+        assert strategy._p["min_confidence"] == 65
 
     def test_custom_params_override_defaults(self):
         """Custom params should override defaults."""
@@ -589,7 +589,7 @@ class TestShouldTrade:
     async def test_approved_with_sufficient_confidence(self):
         """Signal with good confidence and trending ADX should pass."""
         strategy = EdgeIndicatorStrategy()
-        signal = _make_signal(confidence=60, adx=25.0, is_choppy=False)
+        signal = _make_signal(confidence=70, adx=25.0, is_choppy=False)
 
         ok, reason = await strategy.should_trade(signal)
 
@@ -643,7 +643,7 @@ class TestShouldTrade:
     async def test_choppy_market_passes_when_adx_filter_disabled(self):
         """When use_adx_filter is False, choppy signal should pass."""
         strategy = EdgeIndicatorStrategy(params={"use_adx_filter": False})
-        signal = _make_signal(confidence=60, adx=10.0, is_choppy=True)
+        signal = _make_signal(confidence=70, adx=10.0, is_choppy=True)
 
         ok, _ = await strategy.should_trade(signal)
 
@@ -651,9 +651,9 @@ class TestShouldTrade:
 
     @pytest.mark.asyncio
     async def test_exactly_at_min_confidence_accepted(self):
-        """Signal at exactly min_confidence (40) should be accepted."""
+        """Signal at exactly min_confidence (65) should be accepted."""
         strategy = EdgeIndicatorStrategy()
-        signal = _make_signal(confidence=40, adx=25.0, is_choppy=False)
+        signal = _make_signal(confidence=65, adx=25.0, is_choppy=False)
 
         ok, _ = await strategy.should_trade(signal)
 
@@ -661,9 +661,9 @@ class TestShouldTrade:
 
     @pytest.mark.asyncio
     async def test_exactly_below_min_confidence_rejected(self):
-        """Signal one below min_confidence (39) should be rejected."""
+        """Signal one below min_confidence (64) should be rejected."""
         strategy = EdgeIndicatorStrategy()
-        signal = _make_signal(confidence=39, adx=25.0, is_choppy=False)
+        signal = _make_signal(confidence=64, adx=25.0, is_choppy=False)
 
         ok, _ = await strategy.should_trade(signal)
 
@@ -712,13 +712,13 @@ class TestSchemaAndDescription:
                 assert "default" in entry, f"{key} missing 'default'"
 
     def test_min_confidence_bounds(self):
-        """min_confidence should have min=10, max=80, default=40."""
+        """min_confidence should have min=10, max=90, default=65."""
         schema = EdgeIndicatorStrategy.get_param_schema()
         conf = schema["min_confidence"]
 
-        assert conf["default"] == 40
+        assert conf["default"] == 65
         assert conf["min"] == 10
-        assert conf["max"] == 80
+        assert conf["max"] == 90
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

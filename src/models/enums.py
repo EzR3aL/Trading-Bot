@@ -20,6 +20,14 @@ class ExchangeType(str, Enum):
     BINGX = "bingx"
 
 
+# Derived constants — add new exchanges ONLY to ExchangeType above
+EXCHANGE_NAMES: list[str] = [e.value for e in ExchangeType]
+EXCHANGE_PATTERN: str = "^(" + "|".join(EXCHANGE_NAMES) + ")$"
+CEX_EXCHANGES: list[str] = [e.value for e in ExchangeType if e != ExchangeType.HYPERLIQUID]
+CEX_EXCHANGE_PATTERN: str = "^(" + "|".join(CEX_EXCHANGES) + ")$"
+EXCHANGE_OR_ANY_PATTERN: str = "^(any|" + "|".join(EXCHANGE_NAMES) + ")$"
+
+
 class TradeStatus(str, Enum):
     OPEN = "open"
     CLOSED = "closed"

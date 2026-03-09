@@ -45,6 +45,14 @@ def validate_startup_config():
             "Set a strong random password in .env for production"
         )
 
+    # Grafana admin password
+    gf_password = os.getenv("GF_ADMIN_PASSWORD", "")
+    if gf_password and gf_password in _WEAK_PASSWORDS:
+        warnings.append(
+            "GF_ADMIN_PASSWORD is a default/weak value. "
+            "Set a strong random password for the Grafana dashboard"
+        )
+
     # CORS origins in production
     if environment == "production" and not os.getenv("CORS_ORIGINS"):
         warnings.append("CORS_ORIGINS not set in production; API will reject cross-origin requests")

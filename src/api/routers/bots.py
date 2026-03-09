@@ -35,6 +35,7 @@ from src.models.database import BotConfig, ConfigPreset, ExchangeConnection, Tra
 from src.models.session import get_db
 from src.strategy import StrategyRegistry  # imports __init__.py → registers all strategies
 from src.api.rate_limit import limiter
+from src.models.enums import CEX_EXCHANGES, EXCHANGE_NAMES, EXCHANGE_PATTERN
 from src.utils.encryption import encrypt_value
 from src.utils.json_helpers import parse_json_field
 from src.utils.logger import get_logger
@@ -180,7 +181,7 @@ async def list_data_sources(user: User = Depends(get_current_user)):
 @limiter.limit("15/minute")
 async def get_balance_preview(
     request: Request,
-    exchange_type: str = Query(..., pattern="^(bitget|weex|hyperliquid|bitunix|bingx)$"),
+    exchange_type: str = Query(..., pattern=EXCHANGE_PATTERN),
     mode: str = Query(..., pattern="^(demo|live|both)$"),
     exclude_bot_id: Optional[int] = Query(None),
     user: User = Depends(get_current_user),
@@ -317,7 +318,7 @@ async def get_balance_overview(
 
     # Build (exchange, mode) pairs to query
     exchange_modes: list[tuple[str, str]] = []
-    for ex_type in ["bitget", "weex", "hyperliquid", "bitunix", "bingx"]:
+    for ex_type in EXCHANGE_NAMES:
         conn = connections.get(ex_type)
         if not conn:
             continue
@@ -406,7 +407,7 @@ async def get_balance_overview(
 @limiter.limit("30/minute")
 async def check_symbol_conflicts(
     request: Request,
-    exchange_type: str = Query(..., pattern="^(bitget|weex|hyperliquid|bitunix|bingx)$"),
+    exchange_type: str = Query(..., pattern=EXCHANGE_PATTERN),
     mode: str = Query(..., pattern="^(demo|live|both)$"),
     trading_pairs: str = Query(..., description="Comma-separated list of trading pairs"),
     exclude_bot_id: Optional[int] = Query(None),
@@ -487,10 +488,10 @@ async def create_bot(
         rotation_start_time=body.rotation_start_time,
         discord_webhook_url=encrypted_webhook,
         telegram_bot_token=encrypted_telegram_token,
-        telegram_chat_id=body.telegram_chat_id,
+        telegram_chat_id=encrypt_value(body.telegram_chat_id) if body.telegram_chat_id else None,
         whatsapp_phone_number_id=encrypted_wa_phone_id,
         whatsapp_access_token=encrypted_wa_token,
-        whatsapp_recipient=body.whatsapp_recipient,
+        whatsapp_recipient=encrypt_value(body.whatsapp_recipient) if body.whatsapp_recipient else None,
         is_enabled=False,
     )
     db.add(config)
@@ -540,7 +541,7 @@ async def list_bots(
     aff_result = await db.execute(
         select(ExchangeConnection).where(
             ExchangeConnection.user_id == user.id,
-            ExchangeConnection.exchange_type.in_(["bitget", "weex", "bitunix", "bingx"]),
+            ExchangeConnection.exchange_type.in_(CEX_EXCHANGES),
         )
     )
     for aff_conn in aff_result.scalars().all():
@@ -785,8 +786,8 @@ async def list_bots(
             active_preset_name=preset_names.get(config.active_preset_id) if config.active_preset_id else None,
             builder_fee_approved=hl_approved if config.exchange_type == "hyperliquid" else None,
             referral_verified=hl_referral_verified if config.exchange_type == "hyperliquid" else None,
-            affiliate_uid=affiliate_data.get(config.exchange_type, {}).get("uid") if config.exchange_type in ("bitget", "weex", "bitunix", "bingx") else None,
-            affiliate_verified=affiliate_data.get(config.exchange_type, {}).get("verified") if config.exchange_type in ("bitget", "weex", "bitunix", "bingx") else None,
+            affiliate_uid=affiliate_data.get(config.exchange_type, {}).get("uid") if config.exchange_type in CEX_EXCHANGES else None,
+            affiliate_verified=affiliate_data.get(config.exchange_type, {}).get("verified") if config.exchange_type in CEX_EXCHANGES else None,
             **llm_data,
         ))
 
@@ -863,9 +864,9 @@ async def update_bot(
             else:
                 setattr(config, field, None)
         elif field == "telegram_chat_id":
-            # Empty string = clear, non-empty = set
+            # Empty string = clear, non-empty = encrypt
             if value:
-                setattr(config, field, value)
+                setattr(config, field, encrypt_value(value))
             else:
                 setattr(config, field, None)
         elif field in ("whatsapp_phone_number_id", "whatsapp_access_token"):
@@ -875,9 +876,9 @@ async def update_bot(
             else:
                 setattr(config, field, None)
         elif field == "whatsapp_recipient":
-            # Empty string = clear, non-empty = set
+            # Empty string = clear, non-empty = encrypt
             if value:
-                setattr(config, field, value)
+                setattr(config, field, encrypt_value(value))
             else:
                 setattr(config, field, None)
         elif value is not None:

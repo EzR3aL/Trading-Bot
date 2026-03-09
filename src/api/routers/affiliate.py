@@ -13,11 +13,12 @@ from src.api.schemas.affiliate import AffiliateLinkResponse, AffiliateLinkUpdate
 from src.auth.dependencies import get_current_admin, get_current_user
 from src.errors import ERR_INVALID_EXCHANGE
 from src.models.database import AffiliateLink, ExchangeConnection, User
+from src.models.enums import EXCHANGE_NAMES
 from src.models.session import get_db
 
 router = APIRouter(prefix="/api/affiliate-links", tags=["affiliate"])
 
-VALID_EXCHANGES = {"bitget", "weex", "hyperliquid", "bitunix", "bingx"}
+VALID_EXCHANGES = set(EXCHANGE_NAMES)
 
 # UID format validators per exchange
 _UID_VALIDATORS = {

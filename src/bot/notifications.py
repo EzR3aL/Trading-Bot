@@ -33,7 +33,7 @@ class NotificationsMixin:
                 from src.notifications.telegram_notifier import TelegramNotifier
                 notifiers.append(TelegramNotifier(
                     bot_token=decrypt_value(self._config.telegram_bot_token),
-                    chat_id=self._config.telegram_chat_id,
+                    chat_id=decrypt_value(self._config.telegram_chat_id),
                 ))
         except Exception as e:
             logger.warning(f"[Bot:{self.bot_config_id}] Could not load Telegram config: {e}")
@@ -46,7 +46,7 @@ class NotificationsMixin:
                 notifiers.append(WhatsAppNotifier(
                     phone_number_id=decrypt_value(self._config.whatsapp_phone_number_id),
                     access_token=decrypt_value(self._config.whatsapp_access_token),
-                    recipient_number=self._config.whatsapp_recipient,
+                    recipient_number=decrypt_value(self._config.whatsapp_recipient),
                 ))
         except Exception as e:
             logger.warning(f"[Bot:{self.bot_config_id}] Could not load WhatsApp config: {e}")

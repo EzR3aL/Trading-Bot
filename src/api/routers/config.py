@@ -50,6 +50,7 @@ from src.models.database import ExchangeConnection, LLMConnection, TradeRecord, 
 from src.models.session import get_db
 from src.utils.circuit_breaker import circuit_registry
 from src.api.rate_limit import limiter
+from src.models.enums import CEX_EXCHANGE_PATTERN, EXCHANGE_PATTERN
 from src.utils.encryption import decrypt_value, encrypt_value
 from src.utils.logger import get_logger
 
@@ -181,7 +182,7 @@ async def get_exchange_connections(
 async def upsert_exchange_connection(
     request: Request,
     data: ExchangeConnectionUpdate,
-    exchange_type: str = Path(pattern="^(bitget|weex|hyperliquid|bitunix|bingx)$"),
+    exchange_type: str = Path(pattern=EXCHANGE_PATTERN),
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -244,7 +245,7 @@ async def upsert_exchange_connection(
 @limiter.limit("5/minute")
 async def delete_exchange_connection(
     request: Request,
-    exchange_type: str = Path(pattern="^(bitget|weex|hyperliquid|bitunix|bingx)$"),
+    exchange_type: str = Path(pattern=EXCHANGE_PATTERN),
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -267,7 +268,7 @@ async def delete_exchange_connection(
 @limiter.limit("3/minute")
 async def test_exchange_connection(
     request: Request,
-    exchange_type: str = Path(pattern="^(bitget|weex|hyperliquid|bitunix|bingx)$"),
+    exchange_type: str = Path(pattern=EXCHANGE_PATTERN),
     mode: Optional[Literal["live", "demo"]] = None,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -339,7 +340,7 @@ async def test_exchange_connection(
 async def set_affiliate_uid(
     request: Request,
     data: AffiliateUidUpdate,
-    exchange_type: str = Path(pattern="^(bitget|weex|bitunix|bingx)$"),
+    exchange_type: str = Path(pattern=CEX_EXCHANGE_PATTERN),
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):

@@ -35,6 +35,7 @@ from src.errors import (
 )
 from src.exceptions import BotError
 from src.models.database import AffiliateLink, BotConfig, ConfigPreset, ExchangeConnection, TradeRecord, User
+from src.models.enums import CEX_EXCHANGES
 from src.models.session import get_db
 from src.utils.logger import get_logger
 
@@ -141,7 +142,7 @@ async def start_bot(
     if user.role != "admin":
         if config.exchange_type == "hyperliquid":
             await _enforce_hl_gates(user, db)
-        if config.exchange_type in ("bitget", "weex", "bitunix", "bingx"):
+        if config.exchange_type in CEX_EXCHANGES:
             await _enforce_affiliate_gate(config.exchange_type, user, db)
 
     # Symbol conflict gate — one position per symbol per exchange
@@ -235,7 +236,7 @@ async def restart_bot(
     if user.role != "admin":
         if config.exchange_type == "hyperliquid":
             await _enforce_hl_gates(user, db)
-        if config.exchange_type in ("bitget", "weex", "bitunix", "bingx"):
+        if config.exchange_type in CEX_EXCHANGES:
             await _enforce_affiliate_gate(config.exchange_type, user, db)
 
     # Symbol conflict gate — one position per symbol per exchange
@@ -415,7 +416,7 @@ async def test_telegram(
 
     notifier = TelegramNotifier(
         bot_token=decrypt_value(config.telegram_bot_token),
-        chat_id=config.telegram_chat_id,
+        chat_id=decrypt_value(config.telegram_chat_id),
     )
     success = await notifier.send_test_message()
     if not success:
@@ -447,7 +448,7 @@ async def test_whatsapp(
     notifier = WhatsAppNotifier(
         phone_number_id=decrypt_value(config.whatsapp_phone_number_id),
         access_token=decrypt_value(config.whatsapp_access_token),
-        recipient_number=config.whatsapp_recipient,
+        recipient_number=decrypt_value(config.whatsapp_recipient),
     )
     success = await notifier.send_test_message()
     if not success:

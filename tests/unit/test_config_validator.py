@@ -84,3 +84,25 @@ def test_production_missing_encryption_key_warning(caplog):
         os.environ.pop("ENCRYPTION_KEY", None)
         validate_startup_config()
     assert "ENCRYPTION_KEY" in caplog.text
+
+
+def test_grafana_weak_password_warning(caplog):
+    """Weak GF_ADMIN_PASSWORD should warn."""
+    env = {
+        "ENVIRONMENT": "development",
+        "GF_ADMIN_PASSWORD": "admin",
+    }
+    with patch.dict(os.environ, env, clear=False):
+        validate_startup_config()
+    assert "GF_ADMIN_PASSWORD" in caplog.text
+
+
+def test_grafana_strong_password_no_warning(caplog):
+    """Strong GF_ADMIN_PASSWORD should not warn."""
+    env = {
+        "ENVIRONMENT": "development",
+        "GF_ADMIN_PASSWORD": "Str0ng!Grafana#2026",
+    }
+    with patch.dict(os.environ, env, clear=False):
+        validate_startup_config()
+    assert "GF_ADMIN_PASSWORD" not in caplog.text

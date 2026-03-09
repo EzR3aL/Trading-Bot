@@ -334,12 +334,12 @@ class BotConfig(Base):
 
     # Per-bot Telegram notifications (optional)
     telegram_bot_token = Column(Text, nullable=True)   # Encrypted
-    telegram_chat_id = Column(String(50), nullable=True)
+    telegram_chat_id = Column(Text, nullable=True)     # Encrypted
 
     # Per-bot WhatsApp notifications (optional)
     whatsapp_phone_number_id = Column(Text, nullable=True)   # Encrypted (Meta Business phone number ID)
     whatsapp_access_token = Column(Text, nullable=True)      # Encrypted (Meta Graph API token)
-    whatsapp_recipient = Column(String(20), nullable=True)   # Recipient phone number (e.g. +491234567890)
+    whatsapp_recipient = Column(Text, nullable=True)         # Encrypted (recipient phone number)
 
     # Active preset (FK to config_presets, tracks which preset was last applied)
     active_preset_id = Column(Integer, ForeignKey("config_presets.id", ondelete="SET NULL"), nullable=True)

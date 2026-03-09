@@ -9,6 +9,30 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.36.0] - 2026-03-09
+
+### Hinzugefuegt
+- **Exchange-Konstanten zentralisiert** — `EXCHANGE_NAMES`, `EXCHANGE_PATTERN`, `CEX_EXCHANGES`, `CEX_EXCHANGE_PATTERN`, `EXCHANGE_OR_ANY_PATTERN` in `src/models/enums.py`. Neue Exchanges nur noch an einer Stelle (ExchangeType Enum) hinzufuegen
+- **PII-Verschluesselung** — `telegram_chat_id` und `whatsapp_recipient` werden jetzt Fernet-verschluesselt gespeichert (waren vorher Klartext). Migration 004 verschluesselt bestehende Werte idempotent
+- **Grafana-Passwort-Validierung** — `config_validator.py` warnt bei schwachem `GF_ADMIN_PASSWORD`
+
+### Geaendert
+- **40+ hardcodierte Exchange-Patterns ersetzt** — 11 Regex-Patterns und 6 Listen/Sets in Schemas und Routern nutzen jetzt die zentralen Konstanten aus `enums.py`
+- **Rate Limiter erweitert** — `bitunix` und `bingx` zu `EXCHANGE_LIMITS` hinzugefuegt (fehlten vorher, fielen auf Defaults zurueck)
+- **Datenbank-Spaltentypen** — `telegram_chat_id` von `String(50)` auf `Text`, `whatsapp_recipient` von `String(20)` auf `Text` (fuer verschluesselte Werte)
+
+### Betroffene Dateien
+- `src/models/enums.py` — 5 abgeleitete Konstanten
+- `src/api/schemas/bots.py`, `config.py`, `preset.py` — Pattern-Imports
+- `src/api/routers/bots.py`, `config.py`, `bots_lifecycle.py`, `affiliate.py` — Konstanten-Imports
+- `src/models/database.py` — Spaltentyp-Aenderungen
+- `src/bot/notifications.py` — decrypt_value fuer chat_id und recipient
+- `src/exchanges/rate_limiter.py` — 2 neue Exchange-Eintraege
+- `src/utils/config_validator.py` — Grafana-Passwort-Check
+- `migrations/versions/004_encrypt_pii_fields.py` — Neue Migration
+
+---
+
 ## [3.35.2] - 2026-03-04
 
 ### Geaendert

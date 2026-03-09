@@ -17,6 +17,8 @@ EXCHANGE_LIMITS: Dict[str, Dict[str, int]] = {
     "bitget": {"requests_per_second": 10, "burst": 15},
     "weex": {"requests_per_second": 10, "burst": 15},
     "hyperliquid": {"requests_per_second": 5, "burst": 10},
+    "bitunix": {"requests_per_second": 10, "burst": 15},
+    "bingx": {"requests_per_second": 10, "burst": 15},
 }
 
 

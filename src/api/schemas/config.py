@@ -4,6 +4,8 @@ from typing import List, Optional
 
 from pydantic import BaseModel, Field, field_validator
 
+from src.models.enums import EXCHANGE_PATTERN
+
 
 class TradingConfigUpdate(BaseModel):
     max_trades_per_day: int = Field(ge=1, le=10, default=3)
@@ -28,7 +30,7 @@ class StrategyConfigUpdate(BaseModel):
 
 
 class ApiKeysUpdate(BaseModel):
-    exchange_type: str = Field(pattern="^(bitget|weex|hyperliquid|bitunix|bingx)$")
+    exchange_type: str = Field(pattern=EXCHANGE_PATTERN)
     api_key: str = ""
     api_secret: str = ""
     passphrase: str = ""
@@ -38,7 +40,7 @@ class ApiKeysUpdate(BaseModel):
 
 
 class ExchangeConfigUpdate(BaseModel):
-    exchange_type: str = Field(pattern="^(bitget|weex|hyperliquid|bitunix|bingx)$")
+    exchange_type: str = Field(pattern=EXCHANGE_PATTERN)
 
 
 class ExchangeConnectionResponse(BaseModel):

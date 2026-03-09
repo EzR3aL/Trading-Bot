@@ -1451,7 +1451,7 @@ class TestTelegram:
                 strategy_type="test_strategy", exchange_type="bitget",
                 mode="demo", trading_pairs=json.dumps(["BTCUSDT"]),
                 telegram_bot_token=encrypt_value("123:ABCdef"),
-                telegram_chat_id="999888", is_enabled=False,
+                telegram_chat_id=encrypt_value("999888"), is_enabled=False,
             )
             session.add(config)
             await session.commit()
@@ -1476,7 +1476,7 @@ class TestTelegram:
                 strategy_type="test_strategy", exchange_type="bitget",
                 mode="demo", trading_pairs=json.dumps(["BTCUSDT"]),
                 telegram_bot_token=encrypt_value("123:ABCdef"),
-                telegram_chat_id="999888", is_enabled=False,
+                telegram_chat_id=encrypt_value("999888"), is_enabled=False,
             )
             session.add(config)
             await session.commit()

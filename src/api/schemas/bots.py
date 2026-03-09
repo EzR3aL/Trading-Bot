@@ -6,6 +6,8 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
+from src.models.enums import EXCHANGE_PATTERN
+
 # Maximum serialized JSON size for dict fields (10 KB)
 _MAX_JSON_FIELD_BYTES = 10240
 
@@ -15,7 +17,7 @@ class BotConfigCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=100)
     description: Optional[str] = None
     strategy_type: str = Field(..., min_length=1)
-    exchange_type: str = Field(..., pattern="^(bitget|weex|hyperliquid|bitunix|bingx)$")
+    exchange_type: str = Field(..., pattern=EXCHANGE_PATTERN)
     mode: str = Field(default="demo", pattern="^(demo|live|both)$")
     margin_mode: str = Field(default="cross", pattern="^(cross|isolated)$")
 
@@ -100,7 +102,7 @@ class BotConfigUpdate(BaseModel):
     name: Optional[str] = Field(None, min_length=1, max_length=100)
     description: Optional[str] = None
     strategy_type: Optional[str] = None
-    exchange_type: Optional[str] = Field(None, pattern="^(bitget|weex|hyperliquid|bitunix|bingx)$")
+    exchange_type: Optional[str] = Field(None, pattern=EXCHANGE_PATTERN)
     mode: Optional[str] = Field(None, pattern="^(demo|live|both)$")
     margin_mode: Optional[str] = Field(None, pattern="^(cross|isolated)$")
 
