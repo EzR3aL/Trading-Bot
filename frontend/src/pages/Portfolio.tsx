@@ -368,7 +368,7 @@ export default function Portfolio() {
                     key={ex}
                     type="monotone"
                     dataKey={ex}
-                    name={ex}
+                    name={ex.charAt(0).toUpperCase() + ex.slice(1)}
                     stackId="1"
                     stroke={exchangeColor(ex)}
                     fill={`url(#grad-${ex})`}
@@ -402,7 +402,7 @@ export default function Portfolio() {
                   cy="45%"
                   innerRadius={55}
                   outerRadius={85}
-                  paddingAngle={3}
+                  paddingAngle={pieData.length > 1 ? 3 : 0}
                   dataKey="value"
                   nameKey="name"
                   stroke="none"
