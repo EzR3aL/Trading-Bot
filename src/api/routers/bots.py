@@ -180,7 +180,7 @@ async def list_data_sources(user: User = Depends(get_current_user)):
 @limiter.limit("15/minute")
 async def get_balance_preview(
     request: Request,
-    exchange_type: str = Query(..., pattern="^(bitget|weex|hyperliquid)$"),
+    exchange_type: str = Query(..., pattern="^(bitget|weex|hyperliquid|bitunix|bingx)$"),
     mode: str = Query(..., pattern="^(demo|live|both)$"),
     exclude_bot_id: Optional[int] = Query(None),
     user: User = Depends(get_current_user),
@@ -317,7 +317,7 @@ async def get_balance_overview(
 
     # Build (exchange, mode) pairs to query
     exchange_modes: list[tuple[str, str]] = []
-    for ex_type in ["bitget", "weex", "hyperliquid"]:
+    for ex_type in ["bitget", "weex", "hyperliquid", "bitunix", "bingx"]:
         conn = connections.get(ex_type)
         if not conn:
             continue
@@ -406,7 +406,7 @@ async def get_balance_overview(
 @limiter.limit("30/minute")
 async def check_symbol_conflicts(
     request: Request,
-    exchange_type: str = Query(..., pattern="^(bitget|weex|hyperliquid)$"),
+    exchange_type: str = Query(..., pattern="^(bitget|weex|hyperliquid|bitunix|bingx)$"),
     mode: str = Query(..., pattern="^(demo|live|both)$"),
     trading_pairs: str = Query(..., description="Comma-separated list of trading pairs"),
     exclude_bot_id: Optional[int] = Query(None),

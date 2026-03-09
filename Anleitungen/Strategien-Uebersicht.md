@@ -1,6 +1,6 @@
 # Strategien-Uebersicht
 
-Alle 5 Trading-Strategien erklaert: Funktionsweise, Risikoprofil, Parameter-Empfehlungen und wann welche Strategie sinnvoll ist.
+Alle 6 Trading-Strategien erklaert: Funktionsweise, Risikoprofil, Parameter-Empfehlungen und wann welche Strategie sinnvoll ist.
 
 ---
 
@@ -12,7 +12,8 @@ Alle 5 Trading-Strategien erklaert: Funktionsweise, Risikoprofil, Parameter-Empf
 4. [Sentiment Surfer](#4-sentiment-surfer)
 5. [Degen](#5-degen)
 6. [Edge Indicator](#6-edge-indicator)
-7. [Welche Strategie passt zu mir?](#7-welche-strategie-passt-zu-mir)
+7. [Contrarian Pulse](#7-contrarian-pulse)
+8. [Welche Strategie passt zu mir?](#8-welche-strategie-passt-zu-mir)
 
 ---
 
@@ -27,6 +28,7 @@ Alle 5 Trading-Strategien erklaert: Funktionsweise, Risikoprofil, Parameter-Empf
 | Sentiment Surfer | Hybrid | 6 Quellen | Keine | Mittel | Balanced Trading |
 | Degen | KI-Arena | 19 feste Quellen | LLM-API | Hoch | Experimentell |
 | Edge Indicator | Technisch | Nur Klines | Keine | Niedrig-Mittel | Anfaenger/Technisch |
+| Contrarian Pulse | Algo | F&G, EMA, RSI, Derivate | Keine | Mittel | Contrarian-Scalper |
 
 ### Backtest-Ergebnisse (90 Tage, BTCUSDT, $10k, 1h)
 
@@ -235,7 +237,51 @@ KEIN TRADE: Neutral ODER choppy Market
 
 ---
 
-## 7. Welche Strategie passt zu mir?
+## 7. Contrarian Pulse
+
+### Was macht sie?
+
+Eine **rein algorithmische Contrarian-Strategie** fuer BTC, die den Fear & Greed Index als Haupt-Signalgeber nutzt. Bei extremer Angst (<30) wird Long gegangen, bei extremer Gier (>70) Short. Das Signal wird durch mehrere Bestaetiger validiert.
+
+### Fuer wen?
+
+- Trader, die Contrarian-Scalping bevorzugen
+- Wer keine KI/LLM-Kosten moechte
+- Mittleres Risikoprofil mit klaren Regeln
+
+### Datenquellen & Bestaetiger
+
+| # | Quelle | Logik |
+|---|--------|-------|
+| 1 | Fear & Greed Index | Primaer-Signal: <30 = Long, >70 = Short |
+| 2 | EMA 50/200 | Trend-Bestaetigung |
+| 3 | RSI (14) | Ueberkauft/Ueberverkauft |
+| 4 | CVD (Cumulative Volume Delta) | Kauf-/Verkaufsdruck |
+| 5 | Long/Short Ratio | Positionierung der Masse |
+| 6 | Volume | Volumen-Bestaetigung |
+| 7 | Open Interest | Markt-Engagement |
+| 8 | Funding Rate | Contrarian-Signal |
+
+### Besonderheiten
+
+- **Kein LLM erforderlich** — rein algorithmisch
+- **HOLD bei neutralem F&G** (30-70) — handelt nur bei Extremen
+- **Backtest-verifiziert** mit echten Marktdaten
+- Alle Derivate-Daten von Binance Futures
+
+### Parameter-Empfehlungen
+
+| Parameter | Konservativ | Standard | Aggressiv |
+|-----------|------------|----------|-----------|
+| Leverage | 2x | 3x | 4x |
+| Take Profit | 3.0% | 2.5% | 2.0% |
+| Stop Loss | 1.5% | 1.5% | 1.0% |
+| Position Size | 5% | 10% | 15% |
+| Timeframe | 1h | 1h | 30m |
+
+---
+
+## 8. Welche Strategie passt zu mir?
 
 ### Entscheidungsbaum
 
@@ -249,7 +295,9 @@ Willst du KI/LLM nutzen?
          Nein -> Degen (fester Prompt, 19 Datenquellen)
 
 Bevorzugst du Contrarian-Trading?
-  Ja -> LiquidationHunter (gegen die Masse wetten)
+  Ja -> Regelbasiert?
+         Ja -> Contrarian Pulse (F&G + Bestaetiger, kein LLM)
+         Nein -> LiquidationHunter (L/S Ratio, Funding)
 
 Willst du einen ausgewogenen Multi-Faktor-Ansatz?
   Ja -> Sentiment Surfer (6 Quellen, gewichtet)
@@ -287,7 +335,7 @@ Du kannst **mehrere Bots parallel** laufen lassen:
 
 # Strategy Overview (English)
 
-All 5 trading strategies explained: how they work, risk profiles, parameter recommendations, and when to use each.
+All 6 trading strategies explained: how they work, risk profiles, parameter recommendations, and when to use each.
 
 ---
 
@@ -300,6 +348,7 @@ All 5 trading strategies explained: how they work, risk profiles, parameter reco
 | Sentiment Surfer | Hybrid | 6 sources | None | Medium | Balanced trading |
 | Degen | AI Arena | 19 fixed sources | LLM API | High | Experimental |
 | Edge Indicator | Technical | Kline only | None | Low-Medium | Beginners / Technical |
+| Contrarian Pulse | Algo | F&G, EMA, RSI, Derivatives | None | Medium | Contrarian scalpers |
 
 ---
 
@@ -319,6 +368,9 @@ Pre-configured AI arena with fixed prompt and 19 data sources. Aggressive 1h BTC
 
 ### Edge Indicator (v2 — Optimized Exits)
 Pure technical strategy using only Binance kline data. Three layers: EMA Ribbon (8/21), ADX filter, Predator Momentum Score. No external API dependencies. v2 exit tuning lets profitable trades run longer (+200% avg return on 1h).
+
+### Contrarian Pulse
+Algorithmic contrarian Fear & Greed scalping strategy for BTC. Goes Long on extreme fear (<30), Short on extreme greed (>70). Confirmed by 50/200 EMA trend, RSI, and derivatives signals (CVD, Long/Short Ratio, Volume, OI, Funding Rate). No LLM required. HOLDs when F&G is neutral (30-70).
 
 ---
 

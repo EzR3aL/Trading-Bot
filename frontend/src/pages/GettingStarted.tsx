@@ -201,6 +201,7 @@ function StrategyOverview() {
     { name: 'Sentiment Surfer', icon: <TrendingUp size={18} className="text-cyan-400" />, desc: t('guide.stratSentiment'), tf: t('guide.stratSentimentTf'), type: t('guide.stratTypeSentiment') },
     { name: 'Liquidation Hunter', icon: <Target size={18} className="text-red-400" />, desc: t('guide.stratLiquidation'), tf: t('guide.stratLiquidationTf'), type: t('guide.stratTypeLiq') },
     { name: 'Degen', icon: <Zap size={18} className="text-amber-400" />, desc: t('guide.stratDegen'), tf: t('guide.stratDegenTf'), type: t('guide.stratTypeKi') },
+    { name: 'Contrarian Pulse', icon: <Target size={18} className="text-orange-400" />, desc: t('guide.stratContrarianPulse'), tf: t('guide.stratContrarianPulseTf'), type: t('guide.stratTypeAlgo') },
     { name: 'Edge Indicator', icon: <Activity size={18} className="text-green-400" />, desc: t('guide.stratEdge'), tf: t('guide.stratEdgeTf'), type: t('guide.stratTypeKline') },
   ]
 
