@@ -9,6 +9,19 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.39.0] - 2026-03-09
+
+### Hinzugefuegt
+- **Risikoprofil-Auswahl fuer EdgeIndicator** — Im Bot Builder kann jetzt ein Risikoprofil gewaehlt werden (Konservativ / Standard / Aggressiv) statt 10+ Einzelparameter manuell zu konfigurieren.
+  - **Konservativ:** Weniger Trades, weite Stops, 4h-Intervall (ADX 22, Momentum ±0.40, Trail 3.0 ATR)
+  - **Standard:** Ausgewogene Defaults, 1h-Intervall (bisheriges Verhalten, keine Aenderung)
+  - **Aggressiv:** Mehr Trades, enge Stops, 15m-Intervall (EMA 5/13, ADX 15, Momentum ±0.25, Trail 2.0 ATR)
+  - Dropdown erscheint als erstes Element im Bot Builder (select-Typ)
+  - Explizite User-Parameter ueberschreiben Profil-Werte (Profil = Ausgangsbasis, nicht Zwang)
+  - Bestehende Bots ohne `risk_profile` nutzen automatisch "Standard" — kein Breaking Change
+
+---
+
 ## [3.38.0] - 2026-03-09
 
 ### Hinzugefuegt

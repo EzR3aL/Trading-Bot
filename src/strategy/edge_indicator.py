@@ -75,6 +75,30 @@ DEFAULTS = {
     "kline_count": 200,
 }
 
+RISK_PROFILES = {
+    "standard": {},  # = DEFAULTS
+    "konservativ": {
+        "adx_chop_threshold": 22.0,
+        "momentum_bull_threshold": 0.40,
+        "momentum_bear_threshold": -0.40,
+        "trailing_trail_atr": 3.0,
+        "trailing_breakeven_atr": 2.0,
+        "momentum_smooth_period": 7,
+        "kline_interval": "4h",
+    },
+    "aggressiv": {
+        "ema_fast_period": 5,
+        "ema_slow_period": 13,
+        "adx_chop_threshold": 15.0,
+        "momentum_bull_threshold": 0.25,
+        "momentum_bear_threshold": -0.25,
+        "trailing_trail_atr": 2.0,
+        "trailing_breakeven_atr": 1.0,
+        "momentum_smooth_period": 3,
+        "kline_interval": "15m",
+    },
+}
+
 
 def _tanh(x: float) -> float:
     """Hyperbolic tangent, matching the Pine Script implementation."""
@@ -111,6 +135,12 @@ class EdgeIndicatorStrategy(BaseStrategy):
         super().__init__(params)
         self.data_fetcher = data_fetcher
         self._p = {**DEFAULTS, **self.params}
+        # Apply risk profile: DEFAULTS → RISK_PROFILE → explicit user params
+        profile = self._p.get("risk_profile", "standard")
+        if profile in RISK_PROFILES:
+            for key, val in RISK_PROFILES[profile].items():
+                if key not in self.params:  # User has not explicitly overridden
+                    self._p[key] = val
 
     async def _ensure_fetcher(self):
         """Ensure data fetcher is available."""
@@ -818,6 +848,13 @@ class EdgeIndicatorStrategy(BaseStrategy):
     @classmethod
     def get_param_schema(cls) -> Dict[str, Any]:
         return {
+            "risk_profile": {
+                "type": "select",
+                "label": "Risikoprofil",
+                "description": "Konservativ = weniger Trades, weite Stops, 4h. Standard = ausgewogen, 1h. Aggressiv = mehr Trades, enge Stops, 15m.",
+                "default": "standard",
+                "options": ["konservativ", "standard", "aggressiv"],
+            },
             "ema_fast_period": {
                 "type": "int", "label": "EMA Schnell-Periode",
                 "description": "Schnelle EMA-Periode für das Trend-Ribbon (Standard 8)",
