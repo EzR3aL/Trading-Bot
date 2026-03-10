@@ -921,8 +921,8 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
                                     className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                                   />
                                   <div className="flex justify-between mt-1">
-                                    <span className="text-[9px] text-gray-400">{t('bots.builder.deterministic')}</span>
-                                    <span className="text-[9px] text-gray-400">{t('bots.builder.creative')}</span>
+                                    <span className="text-[10px] text-gray-400">{t('bots.builder.deterministic')}</span>
+                                    <span className="text-[10px] text-gray-400">{t('bots.builder.creative')}</span>
                                   </div>
                                 </div>
                               )
@@ -965,7 +965,7 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
                                       key={key}
                                       className="rounded-md bg-gray-800/30 px-2.5 py-2 border border-white/[0.04] hover:border-white/[0.08] transition-colors"
                                     >
-                                      <label className="block text-[11px] text-gray-500 mb-1 truncate">{d.label}</label>
+                                      <label className="block text-xs text-gray-400 mb-1 truncate">{d.label}</label>
                                       <NumInput
                                         value={val}
                                         onChange={e => setStrategyParams(prev => ({ ...prev, [key]: parseFloat(e.target.value) || 0 }))}
@@ -974,7 +974,7 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
                                         step={d.type === 'float' ? 0.0001 : 1}
                                         className="filter-select text-sm !w-full text-gray-200"
                                       />
-                                      {d.description && <p className="text-[9px] text-gray-400 mt-1 leading-tight">{d.description}</p>}
+                                      {d.description && <p className="text-[10px] text-gray-400 mt-1 leading-tight">{d.description}</p>}
                                     </div>
                                   )
                                 })}
@@ -1266,13 +1266,13 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
                         <div className="text-sm font-medium text-white mb-2">{pair}</div>
                         <div className="grid grid-cols-3 gap-2">
                           <div>
-                            <label className="block text-[10px] text-gray-500 mb-1">{t('bots.builder.balancePct')}</label>
+                            <label className="block text-xs text-gray-300 mb-1">{t('bots.builder.balancePct')}</label>
                             <NumInput value={cfg.position_pct ?? ''} onChange={e => updateAsset('position_pct', e.target.value)}
                               placeholder="-" min={1} max={100} step={1}
                               className="filter-select w-full text-sm tabular-nums text-center" />
                           </div>
                           <div>
-                            <label className="flex items-center gap-0.5 text-[10px] text-gray-500 mb-1">
+                            <label className="flex items-center gap-0.5 text-xs text-gray-300 mb-1">
                               {b.leverage}
                               <span className="relative group">
                                 <Info size={10} className="text-blue-400 cursor-help" />
@@ -1286,7 +1286,7 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
                               className="filter-select w-full text-sm tabular-nums text-center" />
                           </div>
                           <div>
-                            <label className="flex items-center gap-0.5 text-[10px] text-gray-500 mb-1">
+                            <label className="flex items-center gap-0.5 text-xs text-gray-300 mb-1">
                               TP %
                               <span className="relative group">
                                 <Info size={10} className="text-blue-400 cursor-help" />
@@ -1300,7 +1300,7 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
                               className="filter-select w-full text-sm tabular-nums text-center" />
                           </div>
                           <div>
-                            <label className="flex items-center gap-0.5 text-[10px] text-gray-500 mb-1">
+                            <label className="flex items-center gap-0.5 text-xs text-gray-300 mb-1">
                               SL %
                               <span className="relative group">
                                 <Info size={10} className="text-blue-400 cursor-help" />
@@ -1314,13 +1314,13 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
                               className="filter-select w-full text-sm tabular-nums text-center" />
                           </div>
                           <div>
-                            <label className="block text-[10px] text-gray-500 mb-1">{b.maxTrades}</label>
+                            <label className="block text-xs text-gray-300 mb-1">{b.maxTrades}</label>
                             <NumInput value={cfg.max_trades ?? ''} onChange={e => updateAsset('max_trades', e.target.value)}
                               placeholder="-" min={1} max={50}
                               className="filter-select w-full text-sm tabular-nums text-center" />
                           </div>
                           <div>
-                            <label className="block text-[10px] text-gray-500 mb-1">{b.dailyLossLimit}</label>
+                            <label className="block text-xs text-gray-300 mb-1">{b.dailyLossLimit}</label>
                             <NumInput value={cfg.loss_limit ?? ''} onChange={e => updateAsset('loss_limit', e.target.value)}
                               placeholder="-" min={1} max={50} step={0.5}
                               className="filter-select w-full text-sm tabular-nums text-center" />
