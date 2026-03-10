@@ -706,7 +706,7 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
                           {getStrategyDisplayName(s.name)}
                           {['llm_signal', 'degen'].includes(s.name) && <Bot size={14} className="text-emerald-400" />}
                         </div>
-                        <div className="text-xs text-gray-500 mt-1 line-clamp-2">
+                        <div className="text-xs text-gray-400 mt-1 line-clamp-2">
                           {t(`bots.builder.strategyDesc_${s.name}`, { defaultValue: s.description })}
                         </div>
                       </button>
@@ -734,7 +734,7 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
                           </span>
                           {['llm_signal', 'degen'].includes(s.name) && <Bot size={14} className="text-emerald-400" />}
                         </div>
-                        <p className="text-xs text-gray-500 leading-relaxed">
+                        <p className="text-xs text-gray-400 leading-relaxed">
                           {t(`bots.builder.strategyDesc_${s.name}`, { defaultValue: s.description })}
                         </p>
                       </button>
@@ -789,20 +789,25 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
                           {selectEntries.map(([key, def]) => {
                             const d = def as ParamDef
                             if (d.type === 'select' && d.options) {
-                              const selectOptions = d.options.map(opt => ({
-                                value: typeof opt === 'string' ? opt : opt.value,
-                                label: typeof opt === 'string' ? opt : opt.label,
-                              }))
+                              const selectOptions = d.options.map(opt => {
+                                const value = typeof opt === 'string' ? opt : opt.value
+                                const rawLabel = typeof opt === 'string' ? opt : opt.label
+                                const i18nKey = `bots.builder.paramOption_${key}_${value}`
+                                const translated = t(i18nKey, '')
+                                return { value, label: translated || rawLabel }
+                              })
+                              const paramLabel = t(`bots.builder.paramLabel_${key}`, '') || d.label
+                              const paramDesc = t(`bots.builder.paramDesc_${key}`, '') || d.description
                               return (
                                 <div key={key}>
-                                  <label className="block text-xs text-gray-500 mb-1">{d.label}</label>
+                                  <label className="block text-xs text-gray-500 mb-1">{paramLabel}</label>
                                   <FilterDropdown
                                     value={String(strategyParams[key] ?? d.default)}
                                     onChange={val => setStrategyParams(prev => ({ ...prev, [key]: val }))}
                                     options={selectOptions}
-                                    ariaLabel={d.label}
+                                    ariaLabel={paramLabel}
                                   />
-                                  {d.description && <p className="text-[10px] text-gray-600 mt-1">{d.description}</p>}
+                                  {paramDesc && <p className="text-[10px] text-gray-400 mt-1">{paramDesc}</p>}
                                 </div>
                               )
                             }
@@ -824,7 +829,7 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
                                     options={depOptions}
                                     ariaLabel={d.label}
                                   />
-                                  {d.description && <p className="text-[10px] text-gray-600 mt-1">{d.description}</p>}
+                                  {d.description && <p className="text-[10px] text-gray-400 mt-1">{d.description}</p>}
                                 </div>
                               )
                             }
@@ -838,7 +843,7 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
                         return (
                           <div key={key}>
                             <label className="block text-xs text-gray-500 mb-1">{d.label}</label>
-                            {d.description && <p className="text-[10px] text-gray-600 mb-1.5">{d.description}</p>}
+                            {d.description && <p className="text-[10px] text-gray-400 mb-1.5">{d.description}</p>}
                             <textarea
                               value={strategyParams[key] ?? ''}
                               onChange={e => setStrategyParams(prev => ({ ...prev, [key]: e.target.value }))}
@@ -916,8 +921,8 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
                                     className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                                   />
                                   <div className="flex justify-between mt-1">
-                                    <span className="text-[9px] text-gray-600">{t('bots.builder.deterministic')}</span>
-                                    <span className="text-[9px] text-gray-600">{t('bots.builder.creative')}</span>
+                                    <span className="text-[9px] text-gray-400">{t('bots.builder.deterministic')}</span>
+                                    <span className="text-[9px] text-gray-400">{t('bots.builder.creative')}</span>
                                   </div>
                                 </div>
                               )
@@ -969,7 +974,7 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
                                         step={d.type === 'float' ? 0.0001 : 1}
                                         className="filter-select text-sm !w-full text-gray-200"
                                       />
-                                      {d.description && <p className="text-[9px] text-gray-600 mt-1 leading-tight">{d.description}</p>}
+                                      {d.description && <p className="text-[9px] text-gray-400 mt-1 leading-tight">{d.description}</p>}
                                     </div>
                                   )
                                 })}
@@ -1345,7 +1350,7 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
                     })
                   })()}
                 </div>
-                <p className="text-xs text-gray-600 mt-1">{t('bots.builder.perAssetHint')}</p>
+                <p className="text-xs text-gray-400 mt-1">{t('bots.builder.perAssetHint')}</p>
                 {/* TP/SL warning */}
                 {(() => {
                   const pairsWithoutSl = tradingPairs.filter(p => !perAssetConfig[p]?.sl)
