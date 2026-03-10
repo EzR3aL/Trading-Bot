@@ -758,7 +758,7 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
                 <span className="text-xs text-primary-300">
                   <Trans i18nKey="bots.builder.recommendedTimeframe" values={{ timeframe: STRATEGY_RECOMMENDATIONS[strategyType].bestTimeframe }} components={{ strong: <strong /> }} />
                 </span>
-                <span className="text-[10px] text-gray-500 ml-auto">{t('bots.builder.backtestDays')}</span>
+                <span className="text-xs text-gray-400 ml-auto">{t('bots.builder.backtestDays')}</span>
               </div>
             )}
 
@@ -800,7 +800,7 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
                               const paramDesc = t(`bots.builder.paramDesc_${key}`, '') || d.description
                               return (
                                 <div key={key}>
-                                  <label className="block text-xs text-gray-500 mb-1">{paramLabel}</label>
+                                  <label className="block text-xs text-gray-300 mb-1">{paramLabel}</label>
                                   <FilterDropdown
                                     value={String(strategyParams[key] ?? d.default)}
                                     onChange={val => setStrategyParams(prev => ({ ...prev, [key]: val }))}
@@ -822,7 +822,7 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
                               const displayValue = isValid ? String(currentValue) : (depOptions[0]?.value ?? '')
                               return (
                                 <div key={key}>
-                                  <label className="block text-xs text-gray-500 mb-1">{d.label}</label>
+                                  <label className="block text-xs text-gray-300 mb-1">{d.label}</label>
                                   <FilterDropdown
                                     value={displayValue}
                                     onChange={val => setStrategyParams(prev => ({ ...prev, [key]: val }))}
@@ -842,7 +842,7 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
                         const d = def as ParamDef
                         return (
                           <div key={key}>
-                            <label className="block text-xs text-gray-500 mb-1">{d.label}</label>
+                            <label className="block text-xs text-gray-300 mb-1">{d.label}</label>
                             {d.description && <p className="text-[10px] text-gray-400 mb-1.5">{d.description}</p>}
                             <textarea
                               value={strategyParams[key] ?? ''}
@@ -865,7 +865,7 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
                           <Zap size={15} className={proMode ? 'text-amber-400' : 'text-gray-500'} />
                           <div>
                             <span className="text-sm font-medium text-gray-300">Pro Mode</span>
-                            <p className="text-xs text-gray-500">
+                            <p className="text-xs text-gray-400">
                               {proMode
                                 ? b.proModeParamsActiveHint
                                 : b.proModeParamsHint}
@@ -997,7 +997,7 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
             <div className="flex items-center justify-between">
               <div>
                 <label className="block text-sm text-gray-400">{b.dataSources}</label>
-                <p className="text-xs text-gray-500 mt-0.5">
+                <p className="text-xs text-gray-400 mt-0.5">
                   {selectedSources.length} {b.sourcesSelected}
                 </p>
               </div>
@@ -1038,7 +1038,7 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
                     <div className="flex gap-2">
                       <button
                         onClick={() => selectAllInCategory(cat)}
-                        className={`text-xs px-2 py-0.5 rounded ${allSelected ? 'text-gray-600' : 'text-primary-400 hover:text-primary-300'}`}
+                        className={`text-xs px-2 py-0.5 rounded ${allSelected ? 'text-gray-400' : 'text-primary-400 hover:text-primary-300'}`}
                         disabled={allSelected}
                       >
                         {b.selectAll}
@@ -1070,9 +1070,9 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
                               <span className={`text-sm font-medium ${isSelected ? 'text-green-300' : 'text-white'}`}>
                                 {src.name}
                               </span>
-                              <span className="text-[10px] text-gray-500 shrink-0">{src.provider}</span>
+                              <span className="text-xs text-gray-400 shrink-0">{src.provider}</span>
                             </div>
-                            <div className="text-xs text-gray-500 mt-0.5 line-clamp-2">{src.description}</div>
+                            <div className="text-xs text-gray-400 mt-0.5 line-clamp-2">{src.description}</div>
                           </button>
                         )
                       })}
@@ -1099,7 +1099,7 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
                             <span className={`text-sm font-medium ${isSelected ? 'text-green-300' : 'text-white'}`}>
                               {src.name}
                             </span>
-                            <span className="text-xs text-gray-500 truncate ml-auto">{src.provider}</span>
+                            <span className="text-xs text-gray-400 truncate ml-auto">{src.provider}</span>
                           </button>
                         )
                       })}
@@ -1174,7 +1174,7 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
                     <Wallet size={16} className="text-primary-400" />
                     <span className="text-sm font-medium text-gray-300">{t('bots.builder.allExchanges')}</span>
                     {mode === 'both' && (
-                      <span className="text-[10px] text-gray-500 ml-auto">{t('bots.builder.bothModeNote')}</span>
+                      <span className="text-xs text-gray-400 ml-auto">{t('bots.builder.bothModeNote')}</span>
                     )}
                   </div>
 
@@ -1182,7 +1182,7 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
                   <div className="overflow-hidden rounded-lg border border-white/[0.04]">
                     <table className="w-full text-xs">
                       <thead>
-                        <tr className="bg-white/[0.03] text-gray-500 text-[10px] uppercase tracking-wider">
+                        <tr className="bg-white/[0.03] text-gray-400 text-xs uppercase tracking-wider">
                           <th className="text-left px-3 py-1.5 font-medium">{t('bots.builder.exchange')}</th>
                           <th className="text-left px-2 py-1.5 font-medium">{t('bots.builder.mode')}</th>
                           <th className="text-right px-2 py-1.5 font-medium">{t('bots.builder.equity')}</th>
@@ -1211,11 +1211,11 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
                               </td>
                               <td className="px-2 py-2 text-right tabular-nums text-gray-300">
                                 ${entry.exchange_equity.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
-                                <span className="text-gray-600 ml-0.5 text-[10px]">{entry.currency}</span>
+                                <span className="text-gray-400 ml-0.5 text-xs">{entry.currency}</span>
                               </td>
                               <td className={`px-2 py-2 text-right tabular-nums ${isOver ? 'text-red-400' : 'text-amber-400'}`}>
                                 {entry.existing_allocated_pct.toFixed(0)}%
-                                <span className="text-gray-600 ml-1">(${entry.existing_allocated_amount.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })})</span>
+                                <span className="text-gray-400 ml-1">(${entry.existing_allocated_amount.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })})</span>
                               </td>
                               <td className="px-3 py-2 text-right tabular-nums text-green-400">
                                 ${entry.remaining_balance.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
@@ -1331,7 +1331,7 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
                   })}
                 </div>
                 {/* Balance preview */}
-                <div className="mt-3 flex flex-wrap gap-2 text-xs text-gray-500">
+                <div className="mt-3 flex flex-wrap gap-2 text-xs text-gray-400">
                   {(() => {
                     const fixed = tradingPairs.reduce((sum, p) => sum + (perAssetConfig[p]?.position_pct || 0), 0)
                     const unfixedCount = tradingPairs.filter(p => !perAssetConfig[p]?.position_pct).length
@@ -1344,7 +1344,7 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
                       return (
                         <span key={p} className="bg-white/5 px-2 py-0.5 rounded">
                           {p}: {pct.toFixed(1)}%
-                          {equity > 0 && <span className="text-gray-600 ml-1">(${dollar.toFixed(0)})</span>}
+                          {equity > 0 && <span className="text-gray-400 ml-1">(${dollar.toFixed(0)})</span>}
                         </span>
                       )
                     })
@@ -1443,7 +1443,7 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
                   )
                 })}
               </div>
-              <p className="text-xs text-gray-500 mt-1.5">{t('bots.builder.marginModeHint')}</p>
+              <p className="text-xs text-gray-400 mt-1.5">{t('bots.builder.marginModeHint')}</p>
             </div>
 
             {/* Symbol conflict warning */}
@@ -1464,11 +1464,18 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
 
             {/* Notifications section */}
             <div className="pt-4 border-t border-white/5">
-              <label className="block text-sm text-gray-400 mb-3">{t('settings.notifications')}</label>
+              <label className="block text-sm text-gray-300 mb-3">{t('settings.notifications')}</label>
 
               {/* Discord */}
-              <div className="mb-4">
-                <label className="block text-xs text-gray-500 mb-1.5">{t('bots.builder.discordWebhook')}</label>
+              <div className="mb-5 rounded-xl border border-white/[0.06] bg-white/[0.02] p-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <div className="w-5 h-5 rounded-full bg-indigo-500/20 flex items-center justify-center">
+                    <span className="text-[10px] text-indigo-400">D</span>
+                  </div>
+                  <span className="text-sm font-medium text-white">Discord</span>
+                  <span className="text-[10px] text-gray-400 ml-auto">{t('bots.builder.optional')}</span>
+                </div>
+                <label className="block text-xs text-gray-300 mb-1.5">{t('bots.builder.discordWebhook')}</label>
                 <input
                   type="url"
                   value={discordWebhookUrl}
@@ -1476,70 +1483,91 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
                   placeholder="https://discord.com/api/webhooks/..."
                   className="filter-select w-full text-sm"
                 />
-                <p className="text-xs text-gray-500 mt-1">{t('bots.builder.discordWebhookHint')}</p>
+                <p className="text-xs text-gray-400 mt-2">{t('bots.builder.discordWebhookHint')}</p>
+                <div className="bg-indigo-900/15 border border-indigo-800/40 rounded-lg p-2.5 mt-2">
+                  <p className="text-xs text-indigo-300 leading-relaxed">{t('bots.builder.discordSetupGuide')}</p>
+                </div>
               </div>
 
               {/* Telegram */}
-              <div className="space-y-3">
-                <div>
-                  <label className="block text-xs text-gray-500 mb-1.5">{t('bots.builder.telegramToken')}</label>
-                  <input
-                    type="password"
-                    value={telegramBotToken}
-                    onChange={e => setTelegramBotToken(e.target.value)}
-                    placeholder="6123456789:ABCdef..."
-                    className="filter-select w-full text-sm"
-                  />
+              <div className="mb-5 rounded-xl border border-white/[0.06] bg-white/[0.02] p-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <div className="w-5 h-5 rounded-full bg-blue-500/20 flex items-center justify-center">
+                    <span className="text-[10px] text-blue-400">T</span>
+                  </div>
+                  <span className="text-sm font-medium text-white">Telegram</span>
+                  <span className="text-[10px] text-gray-400 ml-auto">{t('bots.builder.optional')}</span>
                 </div>
-                <div>
-                  <label className="block text-xs text-gray-500 mb-1.5">{t('bots.builder.telegramChatId')}</label>
-                  <input
-                    type="text"
-                    value={telegramChatId}
-                    onChange={e => setTelegramChatId(e.target.value)}
-                    placeholder="123456789"
-                    className="filter-select w-full text-sm"
-                  />
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-xs text-gray-300 mb-1.5">{t('bots.builder.telegramToken')}</label>
+                    <input
+                      type="password"
+                      value={telegramBotToken}
+                      onChange={e => setTelegramBotToken(e.target.value)}
+                      placeholder="6123456789:ABCdef..."
+                      className="filter-select w-full text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-300 mb-1.5">{t('bots.builder.telegramChatId')}</label>
+                    <input
+                      type="text"
+                      value={telegramChatId}
+                      onChange={e => setTelegramChatId(e.target.value)}
+                      placeholder="123456789"
+                      className="filter-select w-full text-sm"
+                    />
+                  </div>
                 </div>
-                <div className="bg-blue-900/20 border border-blue-800/50 rounded-xl p-2.5">
-                  <p className="text-xs text-blue-300">{t('bots.builder.telegramHint')}</p>
+                <div className="bg-blue-900/15 border border-blue-800/40 rounded-lg p-2.5 mt-3">
+                  <p className="text-xs text-blue-300 leading-relaxed">{t('bots.builder.telegramHint')}</p>
                 </div>
               </div>
 
               {/* WhatsApp */}
-              <div className="space-y-3 mt-4">
-                <div>
-                  <label className="block text-xs text-gray-500 mb-1.5">{t('bot.builder.whatsappPhoneId')}</label>
-                  <input
-                    type="text"
-                    value={whatsappPhoneId}
-                    onChange={e => setWhatsappPhoneId(e.target.value)}
-                    placeholder="100123456789012"
-                    className="filter-select w-full text-sm"
-                  />
+              <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <div className="w-5 h-5 rounded-full bg-green-500/20 flex items-center justify-center">
+                    <span className="text-[10px] text-green-400">W</span>
+                  </div>
+                  <span className="text-sm font-medium text-white">WhatsApp</span>
+                  <span className="text-[10px] text-gray-400 ml-auto">{t('bots.builder.optional')}</span>
                 </div>
-                <div>
-                  <label className="block text-xs text-gray-500 mb-1.5">{t('bot.builder.whatsappToken')}</label>
-                  <input
-                    type="password"
-                    value={whatsappToken}
-                    onChange={e => setWhatsappToken(e.target.value)}
-                    placeholder="EAABs..."
-                    className="filter-select w-full text-sm"
-                  />
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-xs text-gray-300 mb-1.5">{t('bots.builder.whatsappPhoneId')}</label>
+                    <input
+                      type="text"
+                      value={whatsappPhoneId}
+                      onChange={e => setWhatsappPhoneId(e.target.value)}
+                      placeholder="100123456789012"
+                      className="filter-select w-full text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-300 mb-1.5">{t('bots.builder.whatsappToken')}</label>
+                    <input
+                      type="password"
+                      value={whatsappToken}
+                      onChange={e => setWhatsappToken(e.target.value)}
+                      placeholder="EAABs..."
+                      className="filter-select w-full text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-300 mb-1.5">{t('bots.builder.whatsappRecipient')}</label>
+                    <input
+                      type="text"
+                      value={whatsappRecipient}
+                      onChange={e => setWhatsappRecipient(e.target.value)}
+                      placeholder="491701234567"
+                      className="filter-select w-full text-sm"
+                    />
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-xs text-gray-500 mb-1.5">{t('bot.builder.whatsappRecipient')}</label>
-                  <input
-                    type="text"
-                    value={whatsappRecipient}
-                    onChange={e => setWhatsappRecipient(e.target.value)}
-                    placeholder="491701234567"
-                    className="filter-select w-full text-sm"
-                  />
-                </div>
-                <div className="bg-green-900/20 border border-green-800/50 rounded-xl p-2.5">
-                  <p className="text-xs text-green-300">{t('bot.builder.whatsappHint')}</p>
+                <div className="bg-green-900/15 border border-green-800/40 rounded-lg p-2.5 mt-3">
+                  <p className="text-xs text-green-300 leading-relaxed">{t('bots.builder.whatsappHint')}</p>
                 </div>
               </div>
             </div>
@@ -1587,7 +1615,7 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
                           : 'border-white/10 bg-white/[0.03] hover:border-white/20 hover:bg-white/[0.06]'
                       }`}>
                       <div className={`text-sm font-medium ${isSelected ? 'text-primary-400' : 'text-white'}`}>{labelMap[st]}</div>
-                      {descMap[st] && <div className="text-xs text-gray-500 mt-0.5 line-clamp-2">{descMap[st]}</div>}
+                      {descMap[st] && <div className="text-xs text-gray-400 mt-0.5 line-clamp-2">{descMap[st]}</div>}
                     </button>
                   )
                 })}
@@ -1619,7 +1647,7 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
 
             {scheduleType === 'interval' && (
               <div className="mt-2">
-                <label className="block text-xs text-gray-500 mb-1.5">{b.intervalMinutes}</label>
+                <label className="block text-xs text-gray-300 mb-1.5">{b.intervalMinutes}</label>
                 <NumInput value={intervalMinutes} onChange={e => setIntervalMinutes(parseInt(e.target.value) || 5)} min={5} max={1440}
                   className="filter-select w-36 text-sm tabular-nums" />
               </div>
@@ -1627,7 +1655,7 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
 
             {scheduleType === 'custom_cron' && (
               <div className="mt-2">
-                <label className="block text-xs text-gray-500 mb-2">{b.customHours}</label>
+                <label className="block text-xs text-gray-300 mb-2">{b.customHours}</label>
                 <div className="flex flex-wrap gap-1">
                   {Array.from({ length: 24 }, (_, i) => {
                     const active = customHours.includes(i)
@@ -1644,7 +1672,7 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
                   })}
                 </div>
                 {customHours.length > 0 && (
-                  <p className="text-[11px] text-gray-500 mt-1.5">
+                  <p className="text-xs text-gray-400 mt-1.5">
                     {customHours.map(h => `${String(h).padStart(2, '0')}:00`).join(', ')} UTC
                   </p>
                 )}
@@ -1657,7 +1685,7 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
                 <div className="flex items-center justify-between">
                   <div>
                     <span className="text-sm text-gray-300">{b.tradeRotation}</span>
-                    <p className="text-xs text-gray-500 mt-0.5">{b.tradeRotationDesc}</p>
+                    <p className="text-xs text-gray-400 mt-0.5">{b.tradeRotationDesc}</p>
                   </div>
                   <button onClick={() => setRotationEnabled(!rotationEnabled)}
                     className={`relative w-11 h-6 rounded-full transition-colors ${rotationEnabled ? 'bg-primary-600' : 'bg-gray-700'}`}>
@@ -1690,14 +1718,14 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
 
                 <div className="flex gap-4">
                   <div>
-                    <label className="block text-xs text-gray-500 mb-1.5">{b.customMinutes}</label>
+                    <label className="block text-xs text-gray-300 mb-1.5">{b.customMinutes}</label>
                     <NumInput value={rotationMinutes}
                       onChange={e => setRotationMinutes(Math.max(5, parseInt(e.target.value) || 5))}
                       min={5} max={10080}
                       className="filter-select w-36 text-sm tabular-nums" />
                   </div>
                   <div>
-                    <label className="block text-xs text-gray-500 mb-1.5">{b.rotationStartTime}</label>
+                    <label className="block text-xs text-gray-300 mb-1.5">{b.rotationStartTime}</label>
                     <FilterDropdown
                       value={rotationStartTime}
                       onChange={val => setRotationStartTime(val)}
