@@ -300,21 +300,21 @@ export default function Portfolio() {
                   </div>
                   <div className="grid grid-cols-2 gap-3 text-sm">
                     <div>
-                      <div className="text-gray-500 text-xs">{t('portfolio.totalPnl')}</div>
+                      <div className="text-gray-400 text-xs">{t('portfolio.totalPnl')}</div>
                       <div className={`font-medium ${ex.total_pnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
                         ${ex.total_pnl.toFixed(2)}
                       </div>
                     </div>
                     <div>
-                      <div className="text-gray-500 text-xs">{t('portfolio.winRate')}</div>
+                      <div className="text-gray-400 text-xs">{t('portfolio.winRate')}</div>
                       <div className="text-white font-medium">{ex.win_rate.toFixed(1)}%</div>
                     </div>
                     <div>
-                      <div className="text-gray-500 text-xs">{t('portfolio.totalTrades')}</div>
+                      <div className="text-gray-400 text-xs">{t('portfolio.totalTrades')}</div>
                       <div className="text-white font-medium">{ex.total_trades}</div>
                     </div>
                     <div>
-                      <div className="text-gray-500 text-xs">{t('portfolio.fees')}</div>
+                      <div className="text-gray-400 text-xs">{t('portfolio.fees')}</div>
                       <div className="text-yellow-400 font-medium">${ex.total_fees.toFixed(2)}</div>
                     </div>
                   </div>

@@ -9,6 +9,15 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.39.1] - 2026-03-11
+
+### Behoben
+- **Schriftfarbe vereinheitlicht** — Alle Labels und Ueberschriften verwenden jetzt einheitlich `text-gray-400` statt teils `text-gray-500` fuer bessere Lesbarkeit. Betrifft: Bots, BotPerformance, Portfolio, Settings, AppLayout
+- **Horizontales Scrollen auf Desktop behoben** — `overflow-x-hidden` auf Main-Container, unnoetige `min-w-[640px]` und uebergrosse Paddings aus Tabellen entfernt
+- **Trailing Stop Spalte zentriert** — War vorher `text-right` und dadurch leicht versetzt; jetzt `text-center` in allen Tabellen (Trades, BotDetail, Bots)
+
+---
+
 ## [3.39.0] - 2026-03-09
 
 ### Hinzugefuegt

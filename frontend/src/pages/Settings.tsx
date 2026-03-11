@@ -1154,7 +1154,7 @@ export default function Settings() {
                     <div className="overflow-x-auto">
                       <table className="w-full text-sm">
                         <thead>
-                          <tr className="border-b border-white/[0.06] text-gray-500 text-[10px] uppercase tracking-wider">
+                          <tr className="border-b border-white/[0.06] text-gray-400 text-[10px] uppercase tracking-wider">
                             <th className="text-left py-2.5 px-3 font-medium">User</th>
                             <th className="text-left py-2.5 px-3 font-medium">Exchange</th>
                             <th className="text-left py-2.5 px-3 font-medium">UID</th>
@@ -1330,19 +1330,19 @@ export default function Settings() {
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div className="border border-white/[0.08] bg-white/[0.02] rounded-xl p-4 hover:bg-white/[0.04] transition-colors">
-                  <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">{t('settings.hlBuilderFees30d')}</p>
+                  <p className="text-[10px] text-gray-400 uppercase tracking-wider mb-1">{t('settings.hlBuilderFees30d')}</p>
                   <p className="text-xl font-bold text-emerald-400 tabular-nums">
                     ${(hlRevenue.earnings.total_builder_fees_30d || 0).toFixed(4)}
                   </p>
                 </div>
                 <div className="border border-white/[0.08] bg-white/[0.02] rounded-xl p-4 hover:bg-white/[0.04] transition-colors">
-                  <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">{t('settings.hlTradesWithFee')}</p>
+                  <p className="text-[10px] text-gray-400 uppercase tracking-wider mb-1">{t('settings.hlTradesWithFee')}</p>
                   <p className="text-xl font-bold text-white tabular-nums">
                     {hlRevenue.earnings.trades_with_builder_fee || 0}
                   </p>
                 </div>
                 <div className="border border-white/[0.08] bg-white/[0.02] rounded-xl p-4 hover:bg-white/[0.04] transition-colors">
-                  <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">{t('settings.hlMonthlyEstimate')}</p>
+                  <p className="text-[10px] text-gray-400 uppercase tracking-wider mb-1">{t('settings.hlMonthlyEstimate')}</p>
                   <p className="text-xl font-bold text-emerald-400 tabular-nums">
                     ${(hlRevenue.earnings.monthly_estimate || 0).toFixed(2)}
                     <span className="text-xs text-gray-500 font-normal ml-0.5">/mo</span>

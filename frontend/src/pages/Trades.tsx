@@ -203,7 +203,7 @@ export default function Trades() {
                   <th className="text-right">{t('trades.entryPrice')}</th>
                   <th className="text-right">{t('trades.exitPrice')}</th>
                   <th className="text-right">{t('trades.pnl')}</th>
-                  <th className="text-right">{t('trades.trailingStop')}</th>
+                  <th className="text-center">{t('trades.trailingStop')}</th>
                   <th className="text-center">{t('trades.mode')}</th>
                   <th className="text-center">{t('trades.status')}</th>
                 </tr>
@@ -252,9 +252,9 @@ export default function Trades() {
                           className={trade.pnl && trade.pnl >= 0 ? 'pnl-positive' : 'pnl-negative'}
                         />
                       </td>
-                      <td className="text-right">
+                      <td className="text-center">
                         {trade.status === 'open' && trade.trailing_stop_active && trade.trailing_stop_price != null ? (
-                          <span className="inline-flex items-center gap-1 text-emerald-400">
+                          <span className="inline-flex items-center justify-center gap-1 text-emerald-400">
                             ${trade.trailing_stop_price.toLocaleString()} ({trade.trailing_stop_distance_pct?.toFixed(2)}%)
                             {trade.can_close_at_loss === false && (
                               <span title={t('trades.trailingStopProtecting')}>

@@ -201,7 +201,7 @@ function BotCard({ bot, color, isSelected, isHovered, onClick, onMouseEnter, onM
 
       {/* LLM Provider + Model */}
       {['llm_signal', 'degen'].includes(bot.strategy_type) && bot.llm_provider && (
-        <div className="flex items-center gap-1.5 mb-2 ml-4 text-[10px] text-gray-500">
+        <div className="flex items-center gap-1.5 mb-2 ml-4 text-[10px] text-gray-400">
           <Bot size={11} className="text-emerald-400" />
           <span>{providerNameMap[bot.llm_provider] || bot.llm_provider}</span>
           {bot.llm_model && (
@@ -225,7 +225,7 @@ function BotCard({ bot, color, isSelected, isHovered, onClick, onMouseEnter, onM
       </div>
 
       {/* Stats row */}
-      <div className="flex items-center gap-3 text-[10px] text-gray-500 mb-3">
+      <div className="flex items-center gap-3 text-[10px] text-gray-400 mb-3">
         <span className="flex items-center gap-0.5 text-amber-400" title={t('performance.tooltipWinRate', { rate: bot.win_rate })}>
           <Trophy size={9} />
           <span className={bot.win_rate >= 60 ? 'text-profit' : bot.win_rate >= 40 ? 'text-yellow-400' : 'text-loss'}>{bot.win_rate}%</span>
@@ -308,7 +308,7 @@ function SmallMultipleCard({ bot, color, yDomain, chartGridColor, chartTickColor
 
       {/* LLM Provider + Model */}
       {['llm_signal', 'degen'].includes(bot.strategy_type) && bot.llm_provider && (
-        <div className="flex items-center gap-1.5 mb-1 ml-4 text-[10px] text-gray-500">
+        <div className="flex items-center gap-1.5 mb-1 ml-4 text-[10px] text-gray-400">
           <Bot size={11} className="text-emerald-400" />
           <span>{providerNameMap[bot.llm_provider] || bot.llm_provider}</span>
           {bot.llm_model && (
@@ -321,7 +321,7 @@ function SmallMultipleCard({ bot, color, yDomain, chartGridColor, chartTickColor
       )}
 
       {/* Stats row */}
-      <div className="flex items-center gap-4 text-[10px] text-gray-500 mb-3">
+      <div className="flex items-center gap-4 text-[10px] text-gray-400 mb-3">
         <span className="flex items-center gap-0.5 text-amber-400" title={t('performance.tooltipWinRate', { rate: bot.win_rate })}>
           <Trophy size={9} />
           <span className={bot.win_rate >= 60 ? 'text-profit' : bot.win_rate >= 40 ? 'text-yellow-400' : 'text-loss'}>{bot.win_rate}%</span>
@@ -446,7 +446,7 @@ function StatCard({ label, value, color, isPositive }: {
 }) {
   return (
     <div className="bg-white/5 rounded-xl p-3 border border-white/5 text-center">
-      <div className="text-[10px] text-gray-500 mb-1 uppercase tracking-wider font-medium">{label}</div>
+      <div className="text-[10px] text-gray-400 mb-1 uppercase tracking-wider font-medium">{label}</div>
       <div className={`text-lg font-bold flex items-center justify-center gap-1 ${color || 'text-white'}`}>
         {value}
         {isPositive === true && <ArrowUpRight size={16} className="text-profit" />}
@@ -695,7 +695,7 @@ export default function BotPerformance() {
               {/* Summary Cards (centered) */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
                 <div className="bg-white/5 rounded-xl p-3 border border-white/5 text-center">
-                  <div className="text-[10px] text-gray-500 mb-1 uppercase tracking-wider font-medium">{t('performance.totalPnl')}</div>
+                  <div className="text-[10px] text-gray-400 mb-1 uppercase tracking-wider font-medium">{t('performance.totalPnl')}</div>
                   <div className={`text-lg font-bold flex items-center justify-center gap-1 ${botDetail.summary.total_pnl >= 0 ? 'text-profit' : 'text-loss'}`}>
                     <PnlCell
                       pnl={botDetail.summary.total_pnl}
@@ -743,15 +743,15 @@ export default function BotPerformance() {
                     </div>
                     <div className="grid grid-cols-3 gap-4">
                       <div>
-                        <div className="text-xs text-gray-500 mb-0.5">{t('trades.trailingStop')}</div>
+                        <div className="text-xs text-gray-400 mb-0.5">{t('trades.trailingStop')}</div>
                         <div className="text-lg font-bold text-emerald-400">${openTrade.trailing_stop_price!.toLocaleString()}</div>
                       </div>
                       <div>
-                        <div className="text-xs text-gray-500 mb-0.5">{t('bots.entryPrice')}</div>
+                        <div className="text-xs text-gray-400 mb-0.5">{t('bots.entryPrice')}</div>
                         <div className="text-lg font-bold text-white">${openTrade.entry_price.toLocaleString()}</div>
                       </div>
                       <div>
-                        <div className="text-xs text-gray-500 mb-0.5">Distance</div>
+                        <div className="text-xs text-gray-400 mb-0.5">Distance</div>
                         <div className="text-lg font-bold text-emerald-400">{openTrade.trailing_stop_distance_pct?.toFixed(2)}%</div>
                       </div>
                     </div>
@@ -768,7 +768,7 @@ export default function BotPerformance() {
                 return (
                   <div className="mb-5">
                     <div className="flex items-center justify-between mb-2">
-                      <div className="text-xs text-gray-500 uppercase tracking-wider font-semibold">{t('bots.latestTrade')}</div>
+                      <div className="text-xs text-gray-400 uppercase tracking-wider font-semibold">{t('bots.latestTrade')}</div>
                       <button
                         onClick={async () => {
                           if (!latestCardRef.current) return
@@ -814,7 +814,7 @@ export default function BotPerformance() {
                       </div>
                       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                         <div>
-                          <div className="text-xs text-gray-500 uppercase tracking-wider mb-0.5">{t('bots.result')}</div>
+                          <div className="text-xs text-gray-400 uppercase tracking-wider mb-0.5">{t('bots.result')}</div>
                           <div className={`text-2xl font-bold tracking-tight ${latestClosed.pnl_percent >= 0 ? 'text-profit' : 'text-loss'}`}>
                             {formatPnlPercent(latestClosed.pnl_percent)}
                           </div>
@@ -829,17 +829,17 @@ export default function BotPerformance() {
                           </div>
                         </div>
                         <div>
-                          <div className="text-xs text-gray-500 uppercase tracking-wider mb-0.5">{t('bots.entryPrice')}</div>
+                          <div className="text-xs text-gray-400 uppercase tracking-wider mb-0.5">{t('bots.entryPrice')}</div>
                           <div className="text-lg font-bold text-white">${latestClosed.entry_price.toLocaleString()}</div>
                         </div>
                         <div>
-                          <div className="text-xs text-gray-500 uppercase tracking-wider mb-0.5">{t('bots.exitPrice')}</div>
+                          <div className="text-xs text-gray-400 uppercase tracking-wider mb-0.5">{t('bots.exitPrice')}</div>
                           <div className="text-lg font-bold text-white">
                             {latestClosed.exit_price ? `$${latestClosed.exit_price.toLocaleString()}` : '--'}
                           </div>
                         </div>
                         <div>
-                          <div className="text-xs text-gray-500 uppercase tracking-wider mb-0.5">{t('bots.confidence')}</div>
+                          <div className="text-xs text-gray-400 uppercase tracking-wider mb-0.5">{t('bots.confidence')}</div>
                           <div className={`text-lg font-bold ${confidenceColor(latestClosed.confidence)}`}>{latestClosed.confidence}%</div>
                         </div>
                       </div>
@@ -1043,7 +1043,7 @@ export default function BotPerformance() {
             {/* Capturable Card Content */}
             <div ref={tradeCardRef} className="p-7">
               <div className="text-center py-6 mb-5 bg-white/[0.02] rounded-xl border border-white/5">
-                <div className="text-xs text-gray-500 uppercase tracking-wider mb-2">{t('bots.result')}</div>
+                <div className="text-xs text-gray-400 uppercase tracking-wider mb-2">{t('bots.result')}</div>
                 <div className={`text-5xl font-bold tracking-tight ${selectedTrade.pnl_percent >= 0 ? 'text-profit' : 'text-loss'}`}>
                   {formatPnlPercent(selectedTrade.pnl_percent)}
                 </div>
@@ -1060,11 +1060,11 @@ export default function BotPerformance() {
 
               <div className="grid grid-cols-2 gap-3 mb-5">
                 <div className="bg-white/[0.03] rounded-xl p-4 border border-white/5">
-                  <div className="text-xs text-gray-500 mb-1.5">{t('trades.entryPrice')}</div>
+                  <div className="text-xs text-gray-400 mb-1.5">{t('trades.entryPrice')}</div>
                   <div className="text-white font-semibold text-lg">${selectedTrade.entry_price.toLocaleString()}</div>
                 </div>
                 <div className="bg-white/[0.03] rounded-xl p-4 border border-white/5">
-                  <div className="text-xs text-gray-500 mb-1.5">{t('trades.exitPrice')}</div>
+                  <div className="text-xs text-gray-400 mb-1.5">{t('trades.exitPrice')}</div>
                   <div className="text-white font-semibold text-lg">
                     {selectedTrade.exit_price ? `$${selectedTrade.exit_price.toLocaleString()}` : '--'}
                   </div>
@@ -1090,7 +1090,7 @@ export default function BotPerformance() {
 
               {selectedTrade.reason && (
                 <div className="mb-5">
-                  <div className="text-xs text-gray-500 uppercase tracking-wider mb-2">{t('bots.reasoning')}</div>
+                  <div className="text-xs text-gray-400 uppercase tracking-wider mb-2">{t('bots.reasoning')}</div>
                   <p className="text-sm text-gray-300 leading-relaxed bg-white/[0.03] rounded-xl p-4 border border-white/5 max-h-60 overflow-y-auto">
                     {selectedTrade.reason}
                   </p>

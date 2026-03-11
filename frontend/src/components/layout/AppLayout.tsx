@@ -156,13 +156,13 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           </div>
           <div className="flex-1 min-w-0">
             <div className="text-sm text-white font-medium truncate">{user?.username}</div>
-            <div className="text-[10px] text-gray-500 uppercase tracking-wider">{user?.role}</div>
+            <div className="text-[10px] text-gray-400 uppercase tracking-wider">{user?.role}</div>
           </div>
         </div>
 
         {/* Demo/Live toggle - pill switch */}
         <div>
-          <div className="text-[10px] text-gray-500 uppercase tracking-wider mb-1.5 font-medium">{t('common.demoLiveFilter')}</div>
+          <div className="text-[10px] text-gray-400 uppercase tracking-wider mb-1.5 font-medium">{t('common.demoLiveFilter')}</div>
           <div className="flex bg-white/5 rounded-xl p-0.5 border border-white/5">
             {filterOptions.map((opt) => (
               <button
@@ -255,7 +255,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       </aside>
 
       {/* Main content */}
-      <main id="main-content" role="main" className="lg:ml-60 p-6 pt-20 lg:pt-6 min-h-screen">
+      <main id="main-content" role="main" className="lg:ml-60 p-6 pt-20 lg:pt-6 min-h-screen overflow-x-hidden">
         {children}
       </main>
     </div>

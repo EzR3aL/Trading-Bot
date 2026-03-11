@@ -376,7 +376,7 @@ export default function BotDetail() {
                     <th className="text-center">{t('trades.side')}</th>
                     <th className="text-right">{t('trades.entryPrice')}</th>
                     <th className="text-right">{t('trades.pnl')}</th>
-                    <th className="text-right">{t('trades.trailingStop')}</th>
+                    <th className="text-center">{t('trades.trailingStop')}</th>
                     <th className="text-center">{t('trades.mode')}</th>
                     <th className="text-center">{t('trades.status')}</th>
                   </tr>
@@ -404,9 +404,9 @@ export default function BotDetail() {
                       <td className="text-right">
                         <PnlCell pnl={trade.pnl} fees={trade.fees || 0} fundingPaid={trade.funding_paid || 0} status={trade.status} className={trade.pnl >= 0 ? 'pnl-positive' : 'pnl-negative'} />
                       </td>
-                      <td className="text-right">
+                      <td className="text-center">
                         {trade.status === 'open' && trade.trailing_stop_active && trade.trailing_stop_price != null ? (
-                          <span className="inline-flex items-center gap-1 text-emerald-400">
+                          <span className="inline-flex items-center justify-center gap-1 text-emerald-400">
                             ${trade.trailing_stop_price.toLocaleString()} ({trade.trailing_stop_distance_pct?.toFixed(2)}%)
                             {trade.can_close_at_loss === false && (
                               <span title={t('trades.trailingStopProtecting')}>
