@@ -473,6 +473,80 @@ Persistent memory system for Claude Code by [@thedotmack](https://github.com/the
 
 Community marketplace with 32,000+ agent skills using the open SKILL.md format. Browse skills compatible with Claude Code, OpenAI Codex CLI, and GitHub Copilot.
 
+## Projekt-Architektur (Trading Bot)
+
+### Tech Stack
+- **Backend**: FastAPI 0.109 + SQLAlchemy 2.0 (async) + APScheduler
+- **Frontend**: React 18 + TypeScript + Vite + Tailwind + Zustand
+- **DB**: PostgreSQL 16 (Docker) + Alembic Migrationen (5 Versionen, auto-run beim Start)
+- **Tests**: pytest (Backend, asyncio_mode=auto) + Vitest (Frontend)
+- **Deployment**: Docker Compose auf VPS (46.101.130.50)
+
+### Strategien (6 Stueck in `src/strategy/`)
+| Strategie | Datei | Signalquelle |
+|-----------|-------|-------------|
+| Edge Indicator | `edge_indicator.py` | EMA + MACD + ADX + ATR (Risikoprofile) |
+| Contrarian Pulse | `contrarian_pulse.py` | Fear/Greed + Funding Rate |
+| Liquidation Hunter | `liquidation_hunter.py` | Liquidations-Kaskaden |
+| LLM Signal | `llm_signal.py` | KI-Analyse (7 LLM-Provider) |
+| Degen | `degen.py` | Aggressiv, hohe Konfidenz |
+| Sentiment Surfer | `sentiment_surfer.py` | Sentiment-basiert |
+
+### Exchanges (5 Adapter in `src/exchanges/`)
+Bitget, Weex, Hyperliquid (DEX), Bitunix, BingX — alle via `ExchangeClient` Interface
+
+### API-Endpunkte (Wichtigste)
+| Pfad | Zweck |
+|------|-------|
+| `POST /api/auth/login` | Login (5/min Rate Limit) |
+| `GET/POST /api/bots` | Bot-Liste / Bot erstellen |
+| `POST /api/bots/{id}/start\|stop` | Bot Lifecycle |
+| `GET /api/trades` | Trade-Liste (Filter: status, symbol, bot, dates) |
+| `GET /api/statistics` | PnL-Zusammenfassung |
+| `POST /api/backtest` | Backtest starten |
+| `GET /api/health` | Health Check |
+
+### Bot-Architektur (`src/bot/`)
+- `bot_worker.py`: Hauptloop — Schedule → `strategy.generate_signal()` → Risk Check → Trade
+- `orchestrator.py`: Multi-Bot Lifecycle Manager
+- Mixins: TradeExecutor, PositionMonitor, RotationManager, Notifications
+- Locks: Per-Symbol Lock + Per-User Trade Lock (verhindert Race Conditions)
+
+### Datenbank (15 Tabellen, Details in `skills/ops/alembic-migrations`)
+Wichtigste: `bot_configs`, `trade_records`, `exchange_connections`, `users`, `backtest_runs`
+
+## Operations Skills
+
+### Deployment (`skills/ops/deployment`)
+- Ablauf: commit → push → ssh pull → docker build --no-cache → up -d → verify
+- Bei Frontend-Aenderungen IMMER `--no-cache` verwenden
+- Nach Deploy IMMER Container-Status und Quellcode verifizieren
+
+### Bot Operations (`skills/ops/trading-bot-ops`)
+- SSH Host: `trading-bot`, Pfad: `/home/trading/Trading-Bot`
+- Container: `bitget-trading-bot`, DB: `tradingbot-postgres`
+
+### Alembic Migrations (`skills/ops/alembic-migrations`)
+- 5 Migrationen, auto-run beim App-Start, Namensschema: `{NNN}_{beschreibung}.py`
+
+### Backtest Runner (`skills/ops/backtest-runner`)
+- Backtests via API, Metriken: Winrate, Profit Factor, Max Drawdown, Sharpe
+
+### MCP Server
+- **Playwright**: UI-Verifikation nach Deploy
+- **PostgreSQL**: DB-Abfragen via SSH-Tunnel auf Port 15432 (`bash scripts/db-tunnel.sh`)
+- **GitHub**: Issues, PRs
+- **Sequential Thinking**: Komplexe Problemloesung
+
+### Plugins
+- **frontend-design**: UI/UX Design (projekt-scope)
+- **code-simplifier**: Code-Cleanup nach Sessions (user-scope)
+
+### Hooks (`.claude/settings.json`)
+- **PreToolUse**: Warnt bei Push/Deploy mit uncommitteten Aenderungen
+- **PreToolUse**: Warnt bei destruktiven Operationen (docker down, DROP TABLE)
+- **PostToolUse**: Erinnert an CHANGELOG-Update nach Code-Edits
+
 ## Projektkonventionen (Bitget-Trading-Bot)
 
 ### Anleitungen

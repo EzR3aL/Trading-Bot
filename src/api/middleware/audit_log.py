@@ -30,7 +30,7 @@ class AuditLogMiddleware(BaseHTTPMiddleware):
         client_ip = request.client.host if request.client else "unknown"
         method = request.method
         # Only log the path, never query parameters (may contain tokens/keys)
-        path = request.url.path
+        path = request.url.path[:500]
 
         # Try to extract user_id from JWT token (best-effort, no validation)
         user_id = _extract_user_id(request)

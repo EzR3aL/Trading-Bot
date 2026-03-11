@@ -312,6 +312,15 @@ For more information, see the README.md file.
             parser.error("--create-admin requires --username and --password")
         if len(args.password) < 8:
             parser.error("Password must be at least 8 characters")
+        import re
+        if not re.search(r'[A-Z]', args.password):
+            parser.error("Password must contain at least one uppercase letter")
+        if not re.search(r'[a-z]', args.password):
+            parser.error("Password must contain at least one lowercase letter")
+        if not re.search(r'[0-9]', args.password):
+            parser.error("Password must contain at least one digit")
+        if not re.search(r'[^A-Za-z0-9]', args.password):
+            parser.error("Password must contain at least one special character")
         return asyncio.run(create_admin(args.username, args.password))
 
     # Setup logging

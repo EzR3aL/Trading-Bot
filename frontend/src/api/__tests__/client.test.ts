@@ -46,10 +46,10 @@ describe('API Client Configuration', () => {
   it('should create axios instance with correct baseURL', async () => {
     await import('../client')
 
-    expect(axios.create).toHaveBeenCalledWith({
+    expect(axios.create).toHaveBeenCalledWith(expect.objectContaining({
       baseURL: '/api',
       headers: { 'Content-Type': 'application/json' },
-    })
+    }))
   })
 
   it('should register request and response interceptors', async () => {

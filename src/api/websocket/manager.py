@@ -16,6 +16,10 @@ from src.utils.logger import get_logger
 logger = get_logger(__name__)
 
 
+MAX_CONNECTIONS_PER_USER = 5
+MAX_TOTAL_CONNECTIONS = 100
+
+
 class ConnectionManager:
     """Manages WebSocket connections grouped by user."""
 
@@ -23,12 +27,20 @@ class ConnectionManager:
         self._connections: Dict[int, Set[WebSocket]] = {}
         self._lock = asyncio.Lock()
 
-    async def connect(self, websocket: WebSocket, user_id: int) -> None:
+    async def connect(self, websocket: WebSocket, user_id: int) -> bool:
+        """Connect a WebSocket. Returns False if limit exceeded."""
         async with self._lock:
+            if self.total_connections >= MAX_TOTAL_CONNECTIONS:
+                logger.warning("WS rejected: total limit reached (%d)", MAX_TOTAL_CONNECTIONS)
+                return False
             if user_id not in self._connections:
                 self._connections[user_id] = set()
+            if len(self._connections[user_id]) >= MAX_CONNECTIONS_PER_USER:
+                logger.warning("WS rejected: per-user limit for user=%s (%d)", user_id, MAX_CONNECTIONS_PER_USER)
+                return False
             self._connections[user_id].add(websocket)
         logger.debug("WS connected: user=%s (total=%d)", user_id, self.total_connections)
+        return True
 
     async def disconnect(self, websocket: WebSocket, user_id: int) -> None:
         async with self._lock:

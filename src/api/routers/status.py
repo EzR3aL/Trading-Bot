@@ -56,14 +56,8 @@ async def health_check(request: Request):
 
 @router.get("/api/status")
 async def get_status():
-    """Get overall system status."""
+    """Get overall system status (no version info for security)."""
     return {
         "status": "running",
         "timestamp": datetime.now(timezone.utc).isoformat(),
-        "version": "3.0.0",
-        "features": {
-            "multi_exchange": True,
-            "multi_user": True,
-            "config_presets": True,
-        },
     }

@@ -70,7 +70,10 @@ async def websocket_endpoint(websocket: WebSocket):
             await websocket.close(code=4001, reason="Token revoked")
             return
 
-    await ws_manager.connect(websocket, user_id)
+    connected = await ws_manager.connect(websocket, user_id)
+    if not connected:
+        await websocket.close(code=4008, reason="Connection limit exceeded")
+        return
     WEBSOCKET_CONNECTIONS.set(ws_manager.total_connections)
     await websocket.send_text("authenticated")
 

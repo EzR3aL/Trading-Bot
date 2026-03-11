@@ -9,6 +9,26 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.39.3] - 2026-03-11
+
+### Behoben
+- **Security: WebSocket Connection-Limits** — Max 5 Verbindungen pro User, 100 gesamt. Verhindert Resource-Exhaustion-Angriffe
+- **Security: /api/status gibt keine Version/Features mehr preis** — Reduziert Informationsleck fuer Angreifer
+- **Security: Audit-Log Path-Truncation** — Verhindert DB-Fehler bei extrem langen URLs (max 500 Zeichen)
+- **Security: CLI Admin-Passwort-Validierung** — Gleiche Komplexitaetsanforderungen wie API (Gross/Klein/Zahl/Sonderzeichen)
+- **API-Routing: /api/bots/budget-info** — Route vor /{bot_id} verschoben, verhindert 422-Fehler
+- **Frontend-Test: client.test.ts** — `toHaveBeenCalledWith` auf `objectContaining` geaendert (timeout-Feld)
+
+### Hinzugefuegt
+- **Skills: Alembic Migrations** — Skill fuer DB-Migrationen mit Namenskonvention und Tabellen-Referenz
+- **Skills: Deployment, Bot-Ops, Backtest-Runner** — Standardisierte Operations-Skills
+- **Hooks: Pre-Deploy Check** — Warnt bei Push/Deploy mit uncommitteten Aenderungen
+- **Hooks: CHANGELOG-Erinnerung** — Erinnert nach Code-Edits an CHANGELOG-Update
+- **Plugins: code-simplifier** — Code-Cleanup nach Sessions
+- **MCP: Playwright + PostgreSQL** — UI-Verifikation und DB-Abfragen
+
+---
+
 ## [3.39.2] - 2026-03-11
 
 ### Hinzugefuegt

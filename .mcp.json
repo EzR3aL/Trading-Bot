@@ -1,12 +1,12 @@
 {
   "mcpServers": {
-    "lighthouse": {
+    "playwright": {
       "command": "npx",
-      "args": ["-y", "lighthouse-mcp@latest"]
+      "args": ["-y", "@anthropic/mcp-playwright"]
     },
-    "chrome-devtools": {
+    "postgres": {
       "command": "npx",
-      "args": ["-y", "chrome-devtools-mcp@latest"]
+      "args": ["-y", "@anthropic/mcp-postgres", "postgresql://tradingbot:lqMlycVrWmQcEwzfgnKPzIr3m5G063Pprlih6MHcUwY@localhost:15432/tradingbot"]
     },
     "github": {
       "command": "npx",
@@ -19,5 +19,6 @@
       "command": "npx",
       "args": ["-y", "@anthropic/mcp-sequential-thinking"]
     }
-  }
+  },
+  "disabledMcpServers": ["lighthouse", "chrome-devtools"]
 }
