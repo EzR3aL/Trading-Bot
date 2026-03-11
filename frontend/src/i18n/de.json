@@ -570,6 +570,8 @@
       "noTpSlWarning": "Ohne TP/SL verlässt sich der Bot vollständig auf die Strategie-Exit-Signale. Stelle sicher, dass die Strategie Exit-Logik hat.",
       "noTpSlLabel": "Kein TP/SL (Strategie-Exit)",
       "balancePct": "Balance %",
+      "budgetUsdt": "Budget (USDT)",
+      "availableShort": "Verfügbar",
       "positionPct": "Position %",
       "equalSplit": "gleich verteilt",
       "balancePreview": "Balance-Vorschau",

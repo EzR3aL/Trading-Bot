@@ -7,7 +7,7 @@ import { useToastStore } from '../stores/toastStore'
 import NumInput from '../components/ui/NumInput'
 import type { Preset } from '../types'
 
-type PerAssetCfg = Record<string, { position_pct?: number; leverage?: number; tp?: number; sl?: number; max_trades?: number; loss_limit?: number }>
+type PerAssetCfg = Record<string, { position_usdt?: number; leverage?: number; tp?: number; sl?: number; max_trades?: number; loss_limit?: number }>
 
 const PAIRS_CEX = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'XRPUSDT', 'DOGEUSDT', 'AVAXUSDT']
 
@@ -56,7 +56,7 @@ export default function Presets() {
     const filteredPerAsset: Record<string, Record<string, number>> = {}
     for (const [symbol, cfg] of Object.entries(perAssetConfig)) {
       const clean: Record<string, number> = {}
-      if (cfg.position_pct != null && cfg.position_pct > 0) clean.position_pct = cfg.position_pct
+      if (cfg.position_usdt != null && cfg.position_usdt > 0) clean.position_usdt = cfg.position_usdt
       if (cfg.leverage != null && cfg.leverage > 0) clean.leverage = cfg.leverage
       if (cfg.tp != null && cfg.tp > 0) clean.tp = cfg.tp
       if (cfg.sl != null && cfg.sl > 0) clean.sl = cfg.sl
@@ -134,15 +134,10 @@ export default function Presets() {
   const getAssetSummary = (preset: Preset) => {
     const pairs = preset.trading_pairs || []
     const pac = preset.trading_config?.per_asset_config || {}
-    const fixed = pairs.reduce((sum, p) => sum + (pac[p]?.position_pct || 0), 0)
-    const unfixedCount = pairs.filter(p => !pac[p]?.position_pct).length
-    const remaining = Math.max(0, 100 - fixed)
-    const perUnfixed = unfixedCount > 0 ? remaining / unfixedCount : 0
-
     return pairs.map(p => {
       const cfg = pac[p] || {}
-      const pct = cfg.position_pct || perUnfixed
-      const parts = [`${pct.toFixed(0)}%`]
+      const usdt = cfg.position_usdt
+      const parts = usdt ? [`$${usdt.toFixed(0)}`] : ['auto']
       if (cfg.leverage) parts.push(`${cfg.leverage}x`)
       if (cfg.tp) parts.push(`TP ${cfg.tp}%`)
       if (cfg.sl) parts.push(`SL ${cfg.sl}%`)
@@ -223,9 +218,9 @@ export default function Presets() {
                       <div className="text-sm font-medium text-white mb-2">{pair}</div>
                       <div className="grid grid-cols-3 gap-2">
                         <div>
-                          <label className="block text-[10px] text-gray-500 mb-1">{t('bots.builder.balancePct')}</label>
-                          <NumInput value={cfg.position_pct ?? ''} onChange={e => updateAsset('position_pct', e.target.value)}
-                            placeholder="-" min={1} max={100} step={1}
+                          <label className="block text-[10px] text-gray-500 mb-1">{t('bots.builder.budgetUsdt')}</label>
+                          <NumInput value={cfg.position_usdt ?? ''} onChange={e => updateAsset('position_usdt', e.target.value)}
+                            placeholder="-" min={1} max={999999} step={1}
                             className="filter-select w-full text-sm tabular-nums text-center" />
                         </div>
                         <div>
@@ -266,13 +261,9 @@ export default function Presets() {
               {/* Balance preview */}
               <div className="mt-3 flex flex-wrap gap-2 text-xs text-gray-500">
                 {(() => {
-                  const fixed = tradingPairs.reduce((sum, p) => sum + (perAssetConfig[p]?.position_pct || 0), 0)
-                  const unfixedCount = tradingPairs.filter(p => !perAssetConfig[p]?.position_pct).length
-                  const remaining = Math.max(0, 100 - fixed)
-                  const perUnfixed = unfixedCount > 0 ? remaining / unfixedCount : 0
                   return tradingPairs.map(p => {
-                    const pct = perAssetConfig[p]?.position_pct || perUnfixed
-                    return <span key={p} className="bg-white/5 px-2 py-0.5 rounded">{p}: {pct.toFixed(1)}%</span>
+                    const usdt = perAssetConfig[p]?.position_usdt
+                    return <span key={p} className="bg-white/5 px-2 py-0.5 rounded">{p}: {usdt ? `$${usdt.toFixed(0)}` : 'auto'}</span>
                   })
                 })()}
               </div>

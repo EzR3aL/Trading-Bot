@@ -264,6 +264,7 @@ async def get_balance_preview(
     bots_result = await db.execute(select(BotConfig).where(*bot_filter))
     existing_bots = bots_result.scalars().all()
 
+    total_allocated_amount = 0.0
     total_allocated_pct = 0.0
     for bot in existing_bots:
         pac = parse_json_field(bot.per_asset_config, field_name="per_asset_config", context=f"bot {bot.id}", default={})
@@ -272,11 +273,17 @@ async def get_balance_preview(
         except (json.JSONDecodeError, TypeError):
             pairs = []
         for symbol in pairs:
-            pct = (pac.get(symbol) or {}).get("position_pct")
-            if pct and pct > 0:
-                total_allocated_pct += pct
+            asset_cfg = pac.get(symbol) or {}
+            usdt = asset_cfg.get("position_usdt")
+            pct = asset_cfg.get("position_pct")
+            if usdt and usdt > 0:
+                total_allocated_amount += usdt
+            elif pct and pct > 0:
+                total_allocated_amount += equity * pct / 100 if equity > 0 else 0.0
 
-    allocated_amount = equity * total_allocated_pct / 100 if equity > 0 else 0.0
+    if equity > 0:
+        total_allocated_pct = (total_allocated_amount / equity) * 100
+    allocated_amount = total_allocated_amount
     remaining = max(0.0, equity - allocated_amount)
 
     return ExchangeBalancePreview(
@@ -367,8 +374,8 @@ async def get_balance_overview(
                 ))
                 return
 
-        # Calculate allocated % from existing bots on this exchange/mode
-        total_pct = 0.0
+        # Calculate allocated amount from existing bots on this exchange/mode
+        total_alloc = 0.0
         for bot in all_bots:
             if bot.exchange_type != ex_type:
                 continue
@@ -381,11 +388,15 @@ async def get_balance_overview(
             except (json.JSONDecodeError, TypeError):
                 pairs = []
             for symbol in pairs:
-                pct = (pac.get(symbol) or {}).get("position_pct")
-                if pct and pct > 0:
-                    total_pct += pct
+                asset_cfg = pac.get(symbol) or {}
+                usdt = asset_cfg.get("position_usdt")
+                pct = asset_cfg.get("position_pct")
+                if usdt and usdt > 0:
+                    total_alloc += usdt
+                elif pct and pct > 0:
+                    total_alloc += equity * pct / 100 if equity > 0 else 0.0
 
-        allocated_amount = equity * total_pct / 100 if equity > 0 else 0.0
+        total_pct = (total_alloc / equity * 100) if equity > 0 else 0.0
         results.append(ExchangeBalancePreview(
             exchange_type=ex_type,
             mode=mode,
@@ -393,8 +404,8 @@ async def get_balance_overview(
             exchange_balance=round(available, 2),
             exchange_equity=round(equity, 2),
             existing_allocated_pct=round(total_pct, 1),
-            existing_allocated_amount=round(allocated_amount, 2),
-            remaining_balance=round(max(0.0, equity - allocated_amount), 2),
+            existing_allocated_amount=round(total_alloc, 2),
+            remaining_balance=round(max(0.0, equity - total_alloc), 2),
             has_connection=True,
         ))
 
@@ -913,17 +924,29 @@ async def get_budget_info(
             has_fixed = False
             for symbol in pairs:
                 asset_cfg = pac.get(symbol, {})
-                pct = asset_cfg.get("position_pct")
-                if pct is not None and pct > 0:
-                    bot_pct += pct
+                usdt_val = asset_cfg.get("position_usdt")
+                pct_val = asset_cfg.get("position_pct")
+                if usdt_val is not None and usdt_val > 0:
+                    # Store as pseudo-pct for the budget calculation
+                    eq = balances.get((exchange_type, mode), (0, 0, "USDT"))[1]
+                    bot_pct += (usdt_val / eq * 100) if eq > 0 else 0.0
+                    has_fixed = True
+                elif pct_val is not None and pct_val > 0:
+                    bot_pct += pct_val
                     has_fixed = True
 
             if not has_fixed:
-                bot_pct = 100.0 / max(len(bots), 1) if not any(
-                    parse_json_field(b.per_asset_config, default={}).get(s, {}).get("position_pct")
-                    for b in bots
-                    for s in (json.loads(b.trading_pairs) if isinstance(b.trading_pairs, str) else [])
-                ) else 0.0
+                def _has_fixed_alloc(b):
+                    _pac = parse_json_field(b.per_asset_config, default={})
+                    try:
+                        _pairs = json.loads(b.trading_pairs) if isinstance(b.trading_pairs, str) else []
+                    except (json.JSONDecodeError, TypeError):
+                        _pairs = []
+                    return any(
+                        (_pac.get(s, {}).get("position_usdt") or _pac.get(s, {}).get("position_pct"))
+                        for s in _pairs
+                    )
+                bot_pct = 100.0 / max(len(bots), 1) if not any(_has_fixed_alloc(b) for b in bots) else 0.0
 
             bot_pct_map[(bot.id, mode)] = bot_pct
             total_pct += bot_pct

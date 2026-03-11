@@ -9,6 +9,16 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.40.0] - 2026-03-11
+
+### Geaendert
+- **Budget: Absolute USDT-Betraege statt Prozent** — Per-Asset Balance-Feld zeigt nun verfuegbaren Betrag in USDT, Eingabe als exakter Betrag statt Prozent. Warnung wenn Betrag die verfuegbare Balance uebersteigt. Backend unterstuetzt `position_usdt` (neu) und `position_pct` (Legacy-Kompatibilitaet)
+
+### Hinzugefuegt
+- **Skill: /feierabend** — End-of-Day Automation: Test, Commit, Changelog, Push, Deploy, Verify, Summary
+
+---
+
 ## [3.39.4] - 2026-03-11
 
 ### Behoben

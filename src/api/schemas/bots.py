@@ -42,7 +42,7 @@ class BotConfigCreate(BaseModel):
     # Per-asset configuration (optional overrides per trading pair)
     per_asset_config: Optional[Dict[str, Dict[str, Any]]] = Field(
         default=None,
-        description='Per-asset overrides, e.g. {"BTCUSDT": {"position_pct": 10, "leverage": 5}}',
+        description='Per-asset overrides, e.g. {"BTCUSDT": {"position_usdt": 500, "leverage": 5}}',
     )
 
     # Strategy-specific parameters

@@ -515,7 +515,8 @@ class BotWorker(
     def _calculate_asset_budgets(self, total_balance: float, trading_pairs: list[str]) -> dict[str, float]:
         """Calculate per-asset budget based on per_asset_config.
 
-        Assets with a fixed position_pct get that share of the total balance.
+        Assets with a fixed position_usdt get that exact amount.
+        Legacy: position_pct is converted to absolute amount.
         Remaining balance is split equally among unconfigured assets.
         If no per_asset_config exists, all assets share equally.
         """
@@ -532,8 +533,13 @@ class BotWorker(
 
         for symbol in trading_pairs:
             asset_cfg = per_asset_cfg.get(symbol, {})
+            # Prefer position_usdt (absolute), fall back to position_pct (legacy)
+            usdt = asset_cfg.get("position_usdt")
             pct = asset_cfg.get("position_pct")
-            if pct is not None and pct > 0:
+            if usdt is not None and usdt > 0:
+                budgets[symbol] = min(usdt, total_balance)
+                fixed_total += budgets[symbol]
+            elif pct is not None and pct > 0:
                 budgets[symbol] = total_balance * pct / 100
                 fixed_total += budgets[symbol]
             else:

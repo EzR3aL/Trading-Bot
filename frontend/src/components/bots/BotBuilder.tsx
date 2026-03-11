@@ -163,7 +163,7 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
   const [tradingPairs, setTradingPairs] = useState<string[]>(['BTCUSDT'])
   const [maxTrades, setMaxTrades] = useState<number | null>(null)
   const [dailyLossLimit, setDailyLossLimit] = useState<number | null>(null)
-  const [perAssetConfig, setPerAssetConfig] = useState<Record<string, { position_pct?: number; leverage?: number; tp?: number; sl?: number; max_trades?: number; loss_limit?: number }>>({})
+  const [perAssetConfig, setPerAssetConfig] = useState<Record<string, { position_usdt?: number; leverage?: number; tp?: number; sl?: number; max_trades?: number; loss_limit?: number }>>({})
   const [scheduleType, setScheduleType] = useState('market_sessions')
   const [intervalMinutes, setIntervalMinutes] = useState(60)
   const [customHours, setCustomHours] = useState<number[]>([])
@@ -497,7 +497,7 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
     const filteredPerAsset: Record<string, Record<string, number>> = {}
     for (const [symbol, cfg] of Object.entries(perAssetConfig)) {
       const clean: Record<string, number> = {}
-      if (cfg.position_pct != null && cfg.position_pct > 0) clean.position_pct = cfg.position_pct
+      if (cfg.position_usdt != null && cfg.position_usdt > 0) clean.position_usdt = cfg.position_usdt
       if (cfg.leverage != null && cfg.leverage > 0) clean.leverage = cfg.leverage
       if (cfg.tp != null && cfg.tp > 0) clean.tp = cfg.tp
       if (cfg.sl != null && cfg.sl > 0) clean.sl = cfg.sl
@@ -1188,13 +1188,12 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
               }
 
               // Calculate this bot's allocation for warning on selected exchange
-              const thisBotPct = tradingPairs.reduce((sum, p) => sum + (perAssetConfig[p]?.position_pct || 0), 0)
+              const thisBotUsdt = tradingPairs.reduce((sum, p) => sum + (perAssetConfig[p]?.position_usdt || 0), 0)
               const effectiveMode = mode === 'both' ? 'live' : mode
               const selectedEntry = balanceOverview.find(e => e.exchange_type === exchangeType && e.mode === effectiveMode)
-              const totalPctWithThis = selectedEntry ? selectedEntry.existing_allocated_pct + thisBotPct : 0
-              const thisBotAmount = selectedEntry && selectedEntry.exchange_equity > 0 ? selectedEntry.exchange_equity * thisBotPct / 100 : 0
-              const isOverAllocated = totalPctWithThis > 100
-              const isInsufficientBalance = selectedEntry ? thisBotAmount > selectedEntry.remaining_balance && thisBotPct > 0 : false
+              const totalAllocated = selectedEntry ? selectedEntry.existing_allocated_amount + thisBotUsdt : 0
+              const isOverAllocated = selectedEntry ? totalAllocated > selectedEntry.exchange_equity : false
+              const isInsufficientBalance = selectedEntry ? thisBotUsdt > selectedEntry.remaining_balance && thisBotUsdt > 0 : false
 
               return (
                 <div className={`rounded-xl border p-4 ${
@@ -1263,14 +1262,14 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
                   {isOverAllocated && (
                     <div className="mt-3 flex items-center gap-1.5 text-xs text-amber-400">
                       <AlertTriangle size={13} />
-                      {t('bots.builder.overAllocatedWarning', { pct: totalPctWithThis.toFixed(0) })}
+                      {t('bots.builder.overAllocatedWarning', { pct: selectedEntry ? (totalAllocated / selectedEntry.exchange_equity * 100).toFixed(0) : '0' })}
                     </div>
                   )}
                   {!isOverAllocated && isInsufficientBalance && (
                     <div className="mt-3 flex items-center gap-1.5 text-xs text-amber-400">
                       <AlertTriangle size={13} />
                       {t('bots.builder.insufficientBalanceWarning', {
-                        needed: thisBotAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+                        needed: thisBotUsdt.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
                         available: (selectedEntry?.remaining_balance ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
                       })}
                     </div>
@@ -1295,13 +1294,22 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
                     }
                     return (
                       <div key={pair} className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-3">
-                        <div className="text-sm font-medium text-white mb-2">{pair}</div>
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-sm font-medium text-white">{pair}</span>
+                          {balancePreview && balancePreview.remaining_balance > 0 && (
+                            <span className="text-[10px] text-gray-400">
+                              {t('bots.builder.availableShort')}: <span className="text-green-400 tabular-nums">${balancePreview.remaining_balance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                            </span>
+                          )}
+                        </div>
                         <div className="grid grid-cols-3 gap-2">
                           <div>
-                            <label className="block text-xs text-gray-300 mb-1">{t('bots.builder.balancePct')}</label>
-                            <NumInput value={cfg.position_pct ?? ''} onChange={e => updateAsset('position_pct', e.target.value)}
-                              placeholder="-" min={1} max={100} step={1}
-                              className="filter-select w-full text-sm tabular-nums text-center" />
+                            <label className="block text-xs text-gray-300 mb-1">{t('bots.builder.budgetUsdt')}</label>
+                            <NumInput value={cfg.position_usdt ?? ''} onChange={e => updateAsset('position_usdt', e.target.value)}
+                              placeholder="-" min={1} max={999999} step={1}
+                              className={`filter-select w-full text-sm tabular-nums text-center ${
+                                balancePreview && cfg.position_usdt && cfg.position_usdt > balancePreview.remaining_balance ? 'border-amber-500/50' : ''
+                              }`} />
                           </div>
                           <div>
                             <label className="flex items-center gap-0.5 text-xs text-gray-300 mb-1">
@@ -1365,18 +1373,17 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
                 {/* Balance preview */}
                 <div className="mt-3 flex flex-wrap gap-2 text-xs text-gray-400">
                   {(() => {
-                    const fixed = tradingPairs.reduce((sum, p) => sum + (perAssetConfig[p]?.position_pct || 0), 0)
-                    const unfixedCount = tradingPairs.filter(p => !perAssetConfig[p]?.position_pct).length
-                    const remaining = Math.max(0, 100 - fixed)
-                    const perUnfixed = unfixedCount > 0 ? remaining / unfixedCount : 0
+                    const totalFixed = tradingPairs.reduce((sum, p) => sum + (perAssetConfig[p]?.position_usdt || 0), 0)
+                    const unfixedCount = tradingPairs.filter(p => !perAssetConfig[p]?.position_usdt).length
                     const equity = balancePreview?.exchange_equity || 0
+                    const remaining = Math.max(0, equity - totalFixed)
+                    const perUnfixed = unfixedCount > 0 ? remaining / unfixedCount : 0
                     return tradingPairs.map(p => {
-                      const pct = perAssetConfig[p]?.position_pct || perUnfixed
-                      const dollar = equity > 0 ? (equity * pct / 100) : 0
+                      const usdt = perAssetConfig[p]?.position_usdt || perUnfixed
                       return (
                         <span key={p} className="bg-white/5 px-2 py-0.5 rounded">
-                          {p}: {pct.toFixed(1)}%
-                          {equity > 0 && <span className="text-gray-400 ml-1">(${dollar.toFixed(0)})</span>}
+                          {p}: <span className="tabular-nums">${usdt.toFixed(0)}</span>
+                          {equity > 0 && <span className="text-gray-400 ml-1">({(usdt / equity * 100).toFixed(1)}%)</span>}
                         </span>
                       )
                     })
@@ -1861,14 +1868,15 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
                 <h4 className="text-sm text-gray-400 mb-2">{t('bots.builder.perAssetConfig')}</h4>
                 <div className="flex flex-wrap gap-2 text-xs">
                   {(() => {
-                    const fixed = tradingPairs.reduce((sum, p) => sum + (perAssetConfig[p]?.position_pct || 0), 0)
-                    const unfixedCount = tradingPairs.filter(p => !perAssetConfig[p]?.position_pct).length
-                    const remaining = Math.max(0, 100 - fixed)
+                    const totalFixed = tradingPairs.reduce((sum, p) => sum + (perAssetConfig[p]?.position_usdt || 0), 0)
+                    const unfixedCount = tradingPairs.filter(p => !perAssetConfig[p]?.position_usdt).length
+                    const equity = balancePreview?.exchange_equity || 0
+                    const remaining = Math.max(0, equity - totalFixed)
                     const perUnfixed = unfixedCount > 0 ? remaining / unfixedCount : 0
                     return tradingPairs.map(p => {
                       const cfg = perAssetConfig[p] || {}
-                      const pct = cfg.position_pct || perUnfixed
-                      const parts = [`${pct.toFixed(0)}%`]
+                      const usdt = cfg.position_usdt || perUnfixed
+                      const parts = [`$${usdt.toFixed(0)}`]
                       if (cfg.leverage) parts.push(`${cfg.leverage}x`)
                       if (cfg.tp) parts.push(`TP ${cfg.tp}%`)
                       if (cfg.sl) parts.push(`SL ${cfg.sl}%`)
