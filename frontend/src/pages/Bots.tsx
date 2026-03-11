@@ -1063,25 +1063,22 @@ export default function Bots() {
                   const bi = budgetInfo[bot.bot_config_id]
                   return (
                     <div className="mb-3 pt-2 border-t border-white/5">
-                      <div className="grid grid-cols-2 gap-2 text-sm mb-1">
-                        <div>
-                          <span className="text-gray-500">{t('bots.budget', 'Budget')}: </span>
-                          <span className="text-white font-mono">${bi.allocated_budget.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</span>
-                          <span className="text-gray-500"> / ${bi.exchange_balance.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })} {t('bots.exchangeAvailable', 'available')}</span>
-                        </div>
-                        <div className="text-right">
-                          <span className="text-gray-500">{t('bots.allocation', 'Allocation')}: </span>
-                          <span className={`font-mono font-semibold ${bi.total_allocated_pct > 100 ? 'text-amber-400' : 'text-white'}`}>
-                            {bi.allocated_pct.toFixed(0)}% / {bi.total_allocated_pct.toFixed(0)}%
+                      <div className="text-sm mb-1">
+                        <span className="text-gray-500">{t('bots.budget', 'Budget')}: </span>
+                        <span className="text-white font-mono">${bi.allocated_budget.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</span>
+                        <span className="text-gray-500"> / ${bi.exchange_balance.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })} {t('bots.exchangeAvailable', 'available')}</span>
+                        {bi.allocated_pct > 0 && (
+                          <span className={`ml-2 font-mono text-xs ${bi.total_allocated_pct > 100 ? 'text-amber-400' : 'text-gray-500'}`}>
+                            ({bi.allocated_pct.toFixed(0)}%)
                           </span>
-                        </div>
+                        )}
                       </div>
                       {!bi.has_sufficient_funds && bi.warning_message && (
                         <div className="flex items-start gap-2 mt-2 p-2 rounded-lg bg-amber-500/10 border border-amber-500/20">
                           <AlertTriangle className="w-4 h-4 text-amber-400 mt-0.5 flex-shrink-0" />
                           <div className="text-xs text-amber-300">
                             <div>{bi.warning_message}</div>
-                            <div className="mt-0.5 text-amber-400/70">{t('bots.insufficientFunds', 'Reduce position % or add funds')}</div>
+                            <div className="mt-0.5 text-amber-400/70">{t('bots.insufficientFunds', 'Reduce budget or add funds')}</div>
                           </div>
                         </div>
                       )}

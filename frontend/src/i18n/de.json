@@ -428,7 +428,7 @@
     "budget": "Budget",
     "exchangeAvailable": "verfügbar",
     "allocation": "Allokation",
-    "insufficientFunds": "Position-% reduzieren oder Guthaben aufladen",
+    "insufficientFunds": "Budget reduzieren oder Guthaben aufladen",
     "overAllocated": "Überallokiert: Bots überschreiten 100% des Guthabens",
     "lastAnalysis": "Letzte Analyse",
     "nextAnalysis": "Nächste",

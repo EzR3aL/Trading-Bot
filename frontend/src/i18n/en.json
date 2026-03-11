@@ -428,7 +428,7 @@
     "budget": "Budget",
     "exchangeAvailable": "available",
     "allocation": "Allocation",
-    "insufficientFunds": "Reduce position % or add funds",
+    "insufficientFunds": "Reduce budget or add funds",
     "overAllocated": "Over-allocated: bots exceed 100% of balance",
     "lastAnalysis": "Last analysis",
     "nextAnalysis": "Next",
