@@ -5,6 +5,7 @@ export interface User {
   role: 'admin' | 'user'
   language: 'de' | 'en'
   is_active: boolean
+  totp_enabled?: boolean
 }
 
 export interface TokenResponse {

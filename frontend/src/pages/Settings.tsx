@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { ChevronDown, Search, CheckCircle, Clock, Users, Activity, Wifi, WifiOff, Shield, Zap, BarChart3, TrendingUp, Database, Cpu, DollarSign, ExternalLink, Settings2 } from 'lucide-react'
+import { ChevronDown, Search, CheckCircle, Clock, Users, Activity, Wifi, WifiOff, Shield, ShieldCheck, ShieldOff, Zap, BarChart3, TrendingUp, Database, Cpu, DollarSign, ExternalLink, Settings2, Copy, KeyRound, X } from 'lucide-react'
 import Pagination from '../components/ui/Pagination'
 import api from '../api/client'
 import { getApiErrorMessage } from '../utils/api-error'
@@ -197,6 +197,17 @@ export default function Settings() {
   const [adminUidSearch, setAdminUidSearch] = useState('')
   const [adminUidFilter, setAdminUidFilter] = useState<'all' | 'pending' | 'verified'>('all')
   const [adminUidStats, setAdminUidStats] = useState({ total: 0, verified: 0, pending: 0 })
+
+  // 2FA state
+  const fetchUser = useAuthStore((s) => s.fetchUser)
+  const [tfaStep, setTfaStep] = useState<'idle' | 'setup' | 'verify' | 'backup' | 'disable' | 'regenerate'>('idle')
+  const [tfaLoading, setTfaLoading] = useState(false)
+  const [tfaSecret, setTfaSecret] = useState('')
+  const [tfaQrCode, setTfaQrCode] = useState('')
+  const [tfaBackupCodes, setTfaBackupCodes] = useState<string[]>([])
+  const [tfaCode, setTfaCode] = useState('')
+  const [tfaPassword, setTfaPassword] = useState('')
+  const [tfaCopied, setTfaCopied] = useState(false)
 
   useEffect(() => {
     const load = async () => {
@@ -538,7 +549,81 @@ export default function Settings() {
     return t('settings.circuitHalfOpen')
   }
 
+  // ── 2FA Handlers ──
 
+  const tfaResetState = () => {
+    setTfaStep('idle')
+    setTfaCode('')
+    setTfaPassword('')
+    setTfaSecret('')
+    setTfaQrCode('')
+    setTfaBackupCodes([])
+    setTfaCopied(false)
+  }
+
+  const tfaStartSetup = async () => {
+    setTfaLoading(true)
+    try {
+      const res = await api.post('/auth/2fa/setup')
+      setTfaSecret(res.data.secret)
+      setTfaQrCode(res.data.qr_code_base64)
+      setTfaBackupCodes(res.data.backup_codes)
+      setTfaStep('setup')
+    } catch (err) {
+      showMessage(getApiErrorMessage(err, t('settings.twoFactorSetupError')))
+    }
+    setTfaLoading(false)
+  }
+
+  const tfaVerifySetup = async () => {
+    if (!tfaCode || tfaCode.length < 6) return
+    setTfaLoading(true)
+    try {
+      await api.post('/auth/2fa/verify-setup', { code: tfaCode })
+      setTfaStep('backup')
+      setTfaCode('')
+      await fetchUser()
+    } catch (err) {
+      showMessage(getApiErrorMessage(err, t('settings.twoFactorVerifyError')))
+    }
+    setTfaLoading(false)
+  }
+
+  const tfaDisable = async () => {
+    if (!tfaPassword || !tfaCode || tfaCode.length < 6) return
+    setTfaLoading(true)
+    try {
+      await api.post('/auth/2fa/disable', { password: tfaPassword, code: tfaCode })
+      showMessage(t('settings.twoFactorDisabled2'))
+      tfaResetState()
+      await fetchUser()
+    } catch (err) {
+      showMessage(getApiErrorMessage(err, t('settings.twoFactorDisableError')))
+    }
+    setTfaLoading(false)
+  }
+
+  const tfaRegenerateBackup = async () => {
+    if (!tfaCode || tfaCode.length < 6) return
+    setTfaLoading(true)
+    try {
+      const res = await api.post('/auth/2fa/backup-codes', { code: tfaCode })
+      setTfaBackupCodes(res.data.backup_codes)
+      setTfaStep('backup')
+      setTfaCode('')
+    } catch (err) {
+      showMessage(getApiErrorMessage(err, t('settings.twoFactorRegenerateError')))
+    }
+    setTfaLoading(false)
+  }
+
+  const tfaCopyBackupCodes = async () => {
+    try {
+      await navigator.clipboard.writeText(tfaBackupCodes.join('\n'))
+      setTfaCopied(true)
+      setTimeout(() => setTfaCopied(false), 2000)
+    } catch { /* clipboard not available */ }
+  }
 
   return (
     <div>
@@ -1732,6 +1817,251 @@ export default function Settings() {
           )}
         </div>
       )}
+
+      {/* ── Two-Factor Authentication ── */}
+      <div className="mt-8 border border-white/10 bg-white/[0.03] rounded-xl p-5 max-w-2xl">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-3">
+            <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
+              user?.totp_enabled ? 'bg-emerald-500/15' : 'bg-white/5'
+            }`}>
+              <Shield size={20} className={user?.totp_enabled ? 'text-emerald-400' : 'text-gray-500'} />
+            </div>
+            <div>
+              <h3 className="text-white font-semibold text-sm">{t('settings.twoFactor')}</h3>
+              <p className="text-gray-500 text-xs mt-0.5">{t('settings.twoFactorDesc')}</p>
+            </div>
+          </div>
+          <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${
+            user?.totp_enabled
+              ? 'bg-emerald-500/10 text-emerald-400'
+              : 'bg-white/5 text-gray-500'
+          }`}>
+            {user?.totp_enabled ? t('settings.twoFactorEnabled') : t('settings.twoFactorDisabled')}
+          </span>
+        </div>
+
+        {/* Idle state — show enable/disable buttons */}
+        {tfaStep === 'idle' && (
+          <div className="flex gap-2">
+            {!user?.totp_enabled ? (
+              <button
+                onClick={tfaStartSetup}
+                disabled={tfaLoading}
+                className="px-3 py-1.5 text-xs bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 transition-colors flex items-center gap-1.5"
+              >
+                <ShieldCheck size={14} />
+                {tfaLoading ? t('common.loading') : t('settings.twoFactorEnable')}
+              </button>
+            ) : (
+              <>
+                <button
+                  onClick={() => setTfaStep('disable')}
+                  className="px-3 py-1.5 text-xs bg-red-500/10 text-red-400 border border-red-500/20 rounded-lg hover:bg-red-500/20 transition-colors flex items-center gap-1.5"
+                >
+                  <ShieldOff size={14} />
+                  {t('settings.twoFactorDisable')}
+                </button>
+                <button
+                  onClick={() => setTfaStep('regenerate')}
+                  className="px-3 py-1.5 text-xs bg-white/5 border border-white/10 text-gray-300 rounded-lg hover:bg-white/10 transition-colors flex items-center gap-1.5"
+                >
+                  <KeyRound size={14} />
+                  {t('settings.twoFactorRegenerateBackup')}
+                </button>
+              </>
+            )}
+          </div>
+        )}
+
+        {/* Setup step — QR code + secret + code input */}
+        {tfaStep === 'setup' && (
+          <div className="space-y-4 border-t border-white/[0.06] pt-4 mt-4">
+            <div className="flex items-center justify-between">
+              <h4 className="text-sm font-medium text-white">{t('settings.twoFactorSetupTitle')}</h4>
+              <button onClick={tfaResetState} className="text-gray-500 hover:text-gray-300 transition-colors">
+                <X size={16} />
+              </button>
+            </div>
+
+            {/* QR Code */}
+            <div>
+              <p className="text-xs text-gray-400 mb-2">{t('settings.twoFactorScanQr')}</p>
+              <div className="inline-block bg-white p-3 rounded-lg">
+                <img src={`data:image/png;base64,${tfaQrCode}`} alt="2FA QR Code" className="w-48 h-48" />
+              </div>
+            </div>
+
+            {/* Manual secret */}
+            <div>
+              <p className="text-xs text-gray-400 mb-1">{t('settings.twoFactorManualEntry')}</p>
+              <code className="block text-sm font-mono text-primary-400 bg-white/5 border border-white/10 rounded px-3 py-2 break-all select-all">
+                {tfaSecret}
+              </code>
+            </div>
+
+            {/* Code input */}
+            <div>
+              <p className="text-xs text-gray-400 mb-1">{t('settings.twoFactorEnterCode')}</p>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={tfaCode}
+                  onChange={(e) => setTfaCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                  placeholder={t('settings.twoFactorCodePlaceholder')}
+                  className="filter-select w-40 text-sm font-mono tracking-widest text-center"
+                  maxLength={6}
+                  autoFocus
+                />
+                <button
+                  onClick={tfaVerifySetup}
+                  disabled={tfaLoading || tfaCode.length < 6}
+                  className="px-3 py-1.5 text-xs bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 transition-colors"
+                >
+                  {tfaLoading ? t('settings.twoFactorVerifying') : t('settings.twoFactorVerify')}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Backup codes display */}
+        {tfaStep === 'backup' && (
+          <div className="space-y-4 border-t border-white/[0.06] pt-4 mt-4">
+            <div className="flex items-center justify-between">
+              <h4 className="text-sm font-medium text-white">{t('settings.twoFactorBackupCodes')}</h4>
+              <button onClick={tfaResetState} className="text-gray-500 hover:text-gray-300 transition-colors">
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="p-3 bg-amber-900/20 border border-amber-800/40 rounded-lg text-xs text-amber-300">
+              {t('settings.twoFactorBackupWarning')}
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+              {tfaBackupCodes.map((code) => (
+                <div key={code} className="text-center font-mono text-sm text-white bg-white/5 border border-white/10 rounded px-2 py-1.5">
+                  {code}
+                </div>
+              ))}
+            </div>
+
+            <div className="flex gap-2">
+              <button
+                onClick={tfaCopyBackupCodes}
+                className="px-3 py-1.5 text-xs bg-white/5 border border-white/10 text-gray-300 rounded-lg hover:bg-white/10 transition-colors flex items-center gap-1.5"
+              >
+                <Copy size={12} />
+                {tfaCopied ? t('settings.twoFactorBackupCopied') : t('settings.twoFactorBackupCopyAll')}
+              </button>
+              <button
+                onClick={tfaResetState}
+                className="px-3 py-1.5 text-xs bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
+              >
+                {t('settings.twoFactorBackupDone')}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Disable 2FA modal */}
+        {tfaStep === 'disable' && (
+          <div className="space-y-4 border-t border-white/[0.06] pt-4 mt-4">
+            <div className="flex items-center justify-between">
+              <h4 className="text-sm font-medium text-white">{t('settings.twoFactorDisableTitle')}</h4>
+              <button onClick={tfaResetState} className="text-gray-500 hover:text-gray-300 transition-colors">
+                <X size={16} />
+              </button>
+            </div>
+
+            <p className="text-xs text-gray-400">{t('settings.twoFactorDisableDesc')}</p>
+
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">{t('settings.twoFactorDisablePassword')}</label>
+                <input
+                  type="password"
+                  value={tfaPassword}
+                  onChange={(e) => setTfaPassword(e.target.value)}
+                  className="filter-select w-full text-sm"
+                  autoFocus
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">{t('settings.twoFactorDisableCode')}</label>
+                <input
+                  type="text"
+                  value={tfaCode}
+                  onChange={(e) => setTfaCode(e.target.value.replace(/\D/g, '').slice(0, 8))}
+                  placeholder={t('settings.twoFactorCodePlaceholder')}
+                  className="filter-select w-40 text-sm font-mono tracking-widest text-center"
+                  maxLength={8}
+                />
+              </div>
+            </div>
+
+            <div className="flex gap-2">
+              <button
+                onClick={tfaDisable}
+                disabled={tfaLoading || !tfaPassword || tfaCode.length < 6}
+                className="px-3 py-1.5 text-xs bg-red-500/10 text-red-400 border border-red-500/20 rounded-lg hover:bg-red-500/20 disabled:opacity-50 transition-colors"
+              >
+                {tfaLoading ? t('common.loading') : t('settings.twoFactorDisable')}
+              </button>
+              <button
+                onClick={tfaResetState}
+                className="px-3 py-1.5 text-xs bg-white/5 border border-white/10 text-gray-300 rounded-lg hover:bg-white/10 transition-colors"
+              >
+                {t('common.cancel')}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Regenerate backup codes */}
+        {tfaStep === 'regenerate' && (
+          <div className="space-y-4 border-t border-white/[0.06] pt-4 mt-4">
+            <div className="flex items-center justify-between">
+              <h4 className="text-sm font-medium text-white">{t('settings.twoFactorRegenerateBackup')}</h4>
+              <button onClick={tfaResetState} className="text-gray-500 hover:text-gray-300 transition-colors">
+                <X size={16} />
+              </button>
+            </div>
+
+            <p className="text-xs text-gray-400">{t('settings.twoFactorRegenerateDesc')}</p>
+
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">{t('settings.twoFactorDisableCode')}</label>
+              <input
+                type="text"
+                value={tfaCode}
+                onChange={(e) => setTfaCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                placeholder={t('settings.twoFactorCodePlaceholder')}
+                className="filter-select w-40 text-sm font-mono tracking-widest text-center"
+                maxLength={6}
+                autoFocus
+              />
+            </div>
+
+            <div className="flex gap-2">
+              <button
+                onClick={tfaRegenerateBackup}
+                disabled={tfaLoading || tfaCode.length < 6}
+                className="px-3 py-1.5 text-xs bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 transition-colors"
+              >
+                {tfaLoading ? t('common.loading') : t('settings.twoFactorRegenerateButton')}
+              </button>
+              <button
+                onClick={tfaResetState}
+                className="px-3 py-1.5 text-xs bg-white/5 border border-white/10 text-gray-300 rounded-lg hover:bg-white/10 transition-colors"
+              >
+                {t('common.cancel')}
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
 
       {/* Guided Tour */}
       <GuidedTour tourId="settings" steps={settingsTourSteps} />
