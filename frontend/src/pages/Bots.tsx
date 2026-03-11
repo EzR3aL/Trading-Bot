@@ -1324,17 +1324,6 @@ export default function Bots() {
                             <Copy size={14} />
                             {t('bots.duplicate')}
                           </button>
-                          {bot.trading_pairs.map(symbol => (
-                            <button
-                              key={symbol}
-                              onClick={() => { setMoreMenuOpen(null); handleClosePosition(bot.bot_config_id, symbol) }}
-                              disabled={actionLoading === bot.bot_config_id}
-                              className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-amber-400 hover:bg-amber-500/5 disabled:opacity-30 transition-colors"
-                            >
-                              <XCircle size={14} />
-                              {t('bots.closePosition')} {symbol}
-                            </button>
-                          ))}
                           <div className="border-t border-white/5" />
                           <button
                             onClick={() => { setMoreMenuOpen(null); handleDelete(bot.bot_config_id, bot.name) }}
