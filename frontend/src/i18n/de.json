@@ -520,6 +520,7 @@
       "tradeRotation": "Trade-Rotation",
       "tradeRotationDesc": "Zusätzlich Trades automatisch in festen Intervallen schließen und neu eröffnen",
       "customMinutes": "Eigener Wert (Minuten)",
+      "scheduleKlineWarning": "Dein Analyse-Intervall ({{schedule}}) ist kürzer als das Kline-Intervall ({{kline}}). Der Bot analysiert dieselbe Kerze mehrfach ohne neue Informationen. Empfohlen: Analyse-Intervall ≥ Kline-Intervall.",
       "rotationStartTime": "Startzeit (UTC)",
       "review": "Übersicht",
       "create": "Bot erstellen",

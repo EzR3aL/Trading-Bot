@@ -456,6 +456,28 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
     setSelectedSources(prev => prev.filter(s => !ids.has(s)))
   }
 
+  // Convert kline interval string to minutes for comparison with schedule
+  const klineToMinutes = (kline: string): number => {
+    const map: Record<string, number> = { '15m': 15, '30m': 30, '1h': 60, '4h': 240 }
+    return map[kline] || 60
+  }
+
+  // Check if schedule interval is shorter than kline interval
+  const scheduleKlineMismatch = useMemo(() => {
+    const kline = strategyParams.kline_interval as string | undefined
+    if (!kline) return false
+    const klineMin = klineToMinutes(kline)
+    if (scheduleType === 'interval') return intervalMinutes < klineMin
+    if (scheduleType === 'custom_cron' && customHours.length >= 2) {
+      const sorted = [...customHours].sort((a, b) => a - b)
+      let minGap = 1440
+      for (let i = 1; i < sorted.length; i++) minGap = Math.min(minGap, (sorted[i] - sorted[i - 1]) * 60)
+      minGap = Math.min(minGap, (24 - sorted[sorted.length - 1] + sorted[0]) * 60)
+      return minGap < klineMin
+    }
+    return false
+  }, [scheduleType, intervalMinutes, customHours, strategyParams.kline_interval])
+
   const buildPayload = () => {
     const isRotationOnly = scheduleType === 'rotation_only'
     const scheduleConfig = scheduleType === 'interval'
@@ -1711,6 +1733,20 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
                     {customHours.map(h => `${String(h).padStart(2, '0')}:00`).join(', ')} UTC
                   </p>
                 )}
+              </div>
+            )}
+
+            {/* Kline vs Schedule mismatch warning */}
+            {scheduleKlineMismatch && (
+              <div className="mt-3 flex items-start gap-2.5 rounded-xl border border-amber-500/20 bg-amber-500/5 px-3.5 py-3">
+                <AlertTriangle size={16} className="text-amber-400 shrink-0 mt-0.5" />
+                <div className="text-xs text-amber-300/90 leading-relaxed">
+                  {t('bots.builder.scheduleKlineWarning', {
+                    schedule: scheduleType === 'interval' ? `${intervalMinutes}m` : t('bots.builder.customCron'),
+                    kline: strategyParams.kline_interval ?? '1h',
+                    defaultValue: `Your analysis interval (${scheduleType === 'interval' ? `${intervalMinutes}m` : 'custom'}) is shorter than the Kline interval (${strategyParams.kline_interval ?? '1h'}). The bot will analyze the same candle multiple times without new information. Recommended: analysis interval ≥ Kline interval.`
+                  })}
+                </div>
               </div>
             )}
 

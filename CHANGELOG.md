@@ -9,6 +9,16 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.39.2] - 2026-03-11
+
+### Hinzugefuegt
+- **Kline/Zeitplan-Warnung im Bot Builder** — Zeigt ein Info-Banner wenn das Analyse-Intervall kuerzer ist als das Kline-Intervall (z.B. 15m Schedule + 4h Kline). Verhindert unnoetige Mehrfachanalysen derselben Kerze.
+
+### Entfernt
+- **"Position schliessen" Button aus 3-Dot-Menu** — Der Button wird bereits direkt in der Bot-Karte angezeigt wenn ein Trade offen ist
+
+---
+
 ## [3.39.1] - 2026-03-11
 
 ### Behoben
