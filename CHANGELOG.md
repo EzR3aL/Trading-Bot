@@ -9,6 +9,32 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [4.0.0] - 2026-03-11
+
+### Hinzugefuegt
+- **2FA (TOTP)** — Authenticator-App Support mit QR-Code, 10 Backup-Codes (bcrypt), Temp-Token Login-Flow
+- **Passwort-Reset** — Forgot-Password mit sicherem Token (15min Ablauf), Rate-Limited, invalidiert alle Sessions
+- **Bot Crash Recovery** — PendingTrade-Tabelle trackt laufende Orders, Orphaned Detection beim Startup, manuelles Resolve
+- **Notification History** — NotificationLog-Tabelle mit Delivery-Status, GET /api/notifications mit Filtern
+- **Session Management** — Aktive Sessions anzeigen/widerrufen, Logout-All, Device-Tracking
+- **Config Change Audit Trail** — Alle Config-Aenderungen (Bots, Presets, Exchanges) mit Old/New-Diffs geloggt
+- **Backup Restore Testing** — scripts/test-backup-restore.sh fuer wöchentliche Backup-Verifikation
+- **WebSocket Auto-Reconnect** — Exponential Backoff (1s→30s), Tab-Visibility Reconnect, Status-Banner
+
+### Geaendert
+- **Graceful Shutdown** — Wartet auf laufende Trades (max 20s), loggt offene Positionen, Fallback auf Hard-Stop
+- **Rate Limits** — Alle mutierenden Endpoints konsistent limitiert (fehlende ergaenzt)
+- **Error Messages** — Alle Inline-Strings in src/errors.py zentralisiert (12 neue Konstanten)
+- **Docker Hardening** — Health Checks + Resource Limits fuer Prometheus, AlertManager, Grafana
+
+### Verbessert
+- **Accessibility (WCAG 2.1 AA)** — ARIA-Labels, role="alert", Keyboard-Navigation, Form-Labels, Farbblind-Indikatoren
+
+### Datenbank
+- 6 neue Migrationen (006-011): TOTP-Spalten, Password-Reset, PendingTrades, NotificationLogs, ConfigChangeLogs, UserSessions
+
+---
+
 ## [3.40.0] - 2026-03-11
 
 ### Geaendert
