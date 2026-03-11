@@ -6,7 +6,7 @@
     },
     "postgres": {
       "command": "npx",
-      "args": ["-y", "@anthropic/mcp-postgres", "postgresql://tradingbot:lqMlycVrWmQcEwzfgnKPzIr3m5G063Pprlih6MHcUwY@localhost:15432/tradingbot"]
+      "args": ["-y", "@anthropic/mcp-postgres", "postgresql://tradingbot:${POSTGRES_PASSWORD}@localhost:15432/tradingbot"]
     },
     "github": {
       "command": "npx",
