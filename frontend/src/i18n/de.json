@@ -19,7 +19,6 @@
     "password": "Passwort",
     "submit": "Anmelden",
     "error": "Ungültige Anmeldedaten",
-    "forgotPassword": "Passwort vergessen?",
     "2fa": {
       "title": "Zwei-Faktor-Authentifizierung",
       "codeLabel": "Authenticator-Code eingeben",
@@ -32,24 +31,6 @@
       "back": "Zurück",
       "error": "Ungültiger Code. Bitte erneut versuchen."
     }
-  },
-  "forgotPassword": {
-    "title": "Passwort zurücksetzen",
-    "usernameLabel": "Benutzername",
-    "requestButton": "Reset anfordern",
-    "successMessage": "Falls ein Account mit diesem Benutzernamen existiert, wurde ein Reset-Token generiert. Kontaktiere den Administrator für den Token.",
-    "tokenLabel": "Reset-Token",
-    "tokenPlaceholder": "Token vom Administrator eingeben",
-    "newPasswordLabel": "Neues Passwort",
-    "confirmPasswordLabel": "Passwort bestätigen",
-    "resetButton": "Passwort zurücksetzen",
-    "backToLogin": "Zurück zum Login",
-    "passwordMismatch": "Passwörter stimmen nicht überein",
-    "resetSuccess": "Passwort wurde erfolgreich zurückgesetzt. Du kannst dich jetzt anmelden.",
-    "resetError": "Ungültiger oder abgelaufener Token. Bitte fordere einen neuen an.",
-    "showPassword": "Passwort anzeigen",
-    "hidePassword": "Passwort verbergen",
-    "step2Title": "Neues Passwort setzen"
   },
   "dashboard": {
     "title": "Dashboard",

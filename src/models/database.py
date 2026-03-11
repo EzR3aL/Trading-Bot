@@ -41,8 +41,6 @@ class User(Base):
     language = Column(String(10), default="de")  # de | en
     failed_login_attempts = Column(Integer, default=0, server_default="0")
     locked_until = Column(DateTime(timezone=True), nullable=True)
-    reset_token_hash = Column(String(255), nullable=True)
-    reset_token_expires = Column(DateTime(timezone=True), nullable=True)
     is_deleted = Column(Boolean, default=False)
     deleted_at = Column(DateTime(timezone=True), nullable=True)
     # Two-Factor Authentication (TOTP)

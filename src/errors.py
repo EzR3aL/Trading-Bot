@@ -18,7 +18,6 @@ ERR_ACCOUNT_LOCKED = "Konto vorübergehend gesperrt. Versuche es später erneut.
 ERR_ACCOUNT_DISABLED = "Konto ist deaktiviert"
 ERR_INVALID_REFRESH_TOKEN = "Ungültiger Refresh-Token"
 ERR_CURRENT_PASSWORD_WRONG = "Aktuelles Passwort ist falsch"
-ERR_RESET_TOKEN_INVALID = "Ungültiger oder abgelaufener Reset-Token"
 
 # ── Auth / Two-Factor Authentication ────────────────────────────────
 ERR_2FA_ALREADY_ENABLED = "Zwei-Faktor-Authentifizierung ist bereits aktiviert"
@@ -28,7 +27,6 @@ ERR_2FA_INVALID_CODE = "Ungültiger 2FA-Code"
 ERR_2FA_REQUIRED = "Zwei-Faktor-Authentifizierung erforderlich"
 ERR_2FA_TEMP_TOKEN_INVALID = "Ungültiger oder abgelaufener temporärer Token"
 ERR_2FA_RATE_LIMIT = "Zu viele 2FA-Versuche. Bitte warte eine Minute."
-ERR_RESET_REQUEST_ACCEPTED = "Falls ein Konto mit diesem Benutzernamen existiert, wurde ein Reset-Token generiert. Bitte kontaktiere den Administrator."
 
 # ── Auth / Sessions ─────────────────────────────────────────────────
 ERR_SESSION_NOT_FOUND = "Sitzung nicht gefunden"

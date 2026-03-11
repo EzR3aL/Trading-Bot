@@ -19,7 +19,6 @@
     "password": "Password",
     "submit": "Sign In",
     "error": "Invalid credentials",
-    "forgotPassword": "Forgot password?",
     "2fa": {
       "title": "Two-Factor Authentication",
       "codeLabel": "Enter authenticator code",
@@ -32,24 +31,6 @@
       "back": "Back",
       "error": "Invalid code. Please try again."
     }
-  },
-  "forgotPassword": {
-    "title": "Reset Password",
-    "usernameLabel": "Username",
-    "requestButton": "Request Reset",
-    "successMessage": "If an account with this username exists, a reset token has been generated. Contact the administrator for the token.",
-    "tokenLabel": "Reset Token",
-    "tokenPlaceholder": "Enter token from administrator",
-    "newPasswordLabel": "New Password",
-    "confirmPasswordLabel": "Confirm Password",
-    "resetButton": "Reset Password",
-    "backToLogin": "Back to Login",
-    "passwordMismatch": "Passwords do not match",
-    "resetSuccess": "Password has been reset successfully. You can now sign in.",
-    "resetError": "Invalid or expired token. Please request a new one.",
-    "showPassword": "Show password",
-    "hidePassword": "Hide password",
-    "step2Title": "Set New Password"
   },
   "dashboard": {
     "title": "Dashboard",

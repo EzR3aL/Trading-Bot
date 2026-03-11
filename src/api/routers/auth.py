@@ -17,12 +17,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.api.rate_limit import _get_real_client_ip, limiter  # noqa: F401 — re-export for backward compat
 from src.api.schemas.auth import (
     ChangePasswordRequest,
-    ForgotPasswordRequest,
-    ForgotPasswordResponse,
     LoginRequest,
     LoginResponse,
     RefreshRequest,
-    ResetPasswordRequest,
     SessionListResponse,
     SessionResponse,
     TokenResponse,
@@ -51,8 +48,6 @@ from src.errors import (
     ERR_CURRENT_PASSWORD_WRONG,
     ERR_INVALID_CREDENTIALS,
     ERR_INVALID_REFRESH_TOKEN,
-    ERR_RESET_REQUEST_ACCEPTED,
-    ERR_RESET_TOKEN_INVALID,
     ERR_SESSION_NOT_FOUND,
     ERR_TOKEN_REVOKED,
     ERR_USER_NOT_FOUND_OR_INACTIVE,
@@ -62,7 +57,6 @@ from src.models.session import get_db
 from src.utils.encryption import decrypt_value, encrypt_value
 from src.utils.logger import get_logger
 
-RESET_TOKEN_EXPIRY_MINUTES = 15
 TOTP_TEMP_TOKEN_EXPIRE_MINUTES = 5
 BACKUP_CODE_COUNT = 10
 BACKUP_CODE_LENGTH = 8
@@ -422,91 +416,6 @@ async def change_password(
         "token_type": "bearer",
         "message": "Password changed successfully",
     }
-
-
-@router.post("/forgot-password", response_model=ForgotPasswordResponse)
-@limiter.limit("3/minute")
-async def forgot_password(
-    request: Request,
-    body: ForgotPasswordRequest,
-    db: AsyncSession = Depends(get_db),
-):
-    """Request a password reset token.
-
-    Always returns success to avoid revealing whether a user exists.
-    The raw token is logged server-side for admin retrieval (no email service).
-    """
-    client_ip = _get_real_client_ip(request)
-
-    result = await db.execute(
-        select(User).where(User.username == body.username)
-    )
-    user = result.scalar_one_or_none()
-
-    if user and user.is_active and not user.is_deleted:
-        raw_token = secrets.token_urlsafe(32)
-        user.reset_token_hash = hash_password(raw_token)
-        user.reset_token_expires = datetime.now(timezone.utc) + timedelta(
-            minutes=RESET_TOKEN_EXPIRY_MINUTES
-        )
-        await db.commit()
-        logger.info(
-            "AUTH: Password reset token generated for '%s' (id=%s) from %s — token: %s",
-            user.username, user.id, client_ip, raw_token,
-        )
-    else:
-        logger.info(
-            "AUTH: Password reset requested for unknown/inactive user '%s' from %s",
-            body.username, client_ip,
-        )
-
-    return ForgotPasswordResponse(message=ERR_RESET_REQUEST_ACCEPTED)
-
-
-@router.post("/reset-password")
-@limiter.limit("5/minute")
-async def reset_password(
-    request: Request,
-    body: ResetPasswordRequest,
-    db: AsyncSession = Depends(get_db),
-):
-    """Reset password using a valid reset token."""
-    client_ip = _get_real_client_ip(request)
-
-    result = await db.execute(
-        select(User).where(
-            User.reset_token_hash.isnot(None),
-            User.reset_token_expires > datetime.now(timezone.utc),
-            User.is_active.is_(True),
-            User.is_deleted.is_(False),
-        )
-    )
-    users_with_tokens = result.scalars().all()
-
-    matched_user = None
-    for candidate in users_with_tokens:
-        if verify_password(body.token, candidate.reset_token_hash):
-            matched_user = candidate
-            break
-
-    if not matched_user:
-        logger.warning("AUTH: Invalid/expired reset token attempt from %s", client_ip)
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=ERR_RESET_TOKEN_INVALID,
-        )
-
-    matched_user.password_hash = hash_password(body.new_password)
-    matched_user.token_version = (matched_user.token_version or 0) + 1
-    matched_user.reset_token_hash = None
-    matched_user.reset_token_expires = None
-    await db.commit()
-
-    logger.info(
-        "AUTH: Password reset successful for '%s' (id=%s) from %s",
-        matched_user.username, matched_user.id, client_ip,
-    )
-    return {"message": "Passwort wurde erfolgreich zurückgesetzt"}
 
 
 # ── Profile ─────────────────────────────────────────────────────────

@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, FormEvent } from 'react'
-import { useNavigate, Link } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '../stores/authStore'
 import { TrendingUp, Loader2, ArrowLeft, ShieldCheck } from 'lucide-react'
@@ -212,14 +212,6 @@ export default function Login() {
                   required
                   autoComplete="current-password"
                 />
-              </div>
-              <div className="text-right">
-                <Link
-                  to="/forgot-password"
-                  className="text-xs text-gray-400 hover:text-primary-400 transition-colors"
-                >
-                  {t('login.forgotPassword')}
-                </Link>
               </div>
               <button
                 type="submit"

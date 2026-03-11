@@ -1,7 +1,7 @@
 """Add config_change_logs table for configuration audit trail.
 
-Revision ID: 010
-Revises: 009
+Revision ID: 009
+Revises: 008
 Create Date: 2026-03-11
 
 Tracks all configuration changes (bot configs, presets, exchange connections,
@@ -12,8 +12,8 @@ from typing import Sequence, Union
 from alembic import op
 import sqlalchemy as sa
 
-revision: str = "010"
-down_revision: Union[str, None] = "009"
+revision: str = "009"
+down_revision: Union[str, None] = "008"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
