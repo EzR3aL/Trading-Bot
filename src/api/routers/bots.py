@@ -6,7 +6,9 @@ Lifecycle (start/stop) and statistics live in sub-modules
 (bots_lifecycle, bots_statistics) and are included via sub-routers.
 """
 
+import asyncio
 import json
+import time as _time
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -795,9 +797,6 @@ async def list_bots(
 
 
 # ─── Budget / Balance Info (must be before /{bot_id} to avoid route conflict) ──
-
-import asyncio
-import time as _time
 
 _budget_cache: dict[str, tuple[float, any]] = {}
 _BUDGET_CACHE_TTL = 30  # seconds

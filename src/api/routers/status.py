@@ -45,7 +45,6 @@ async def health_check(request: Request):
         "status": status,
         "checks": checks,
         "timestamp": datetime.now(timezone.utc).isoformat(),
-        "version": "3.0.0",
     }
 
     if not is_healthy:

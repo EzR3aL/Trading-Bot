@@ -87,6 +87,7 @@ static/frontend/
 *.pem
 *.key
 credentials.json
+.mcp.json
 
 # Claude Code - local dev artifacts
 .claude/sessions/

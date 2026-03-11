@@ -9,6 +9,16 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.39.4] - 2026-03-11
+
+### Behoben
+- **Security: .mcp.json in .gitignore** — Verhindert versehentliches Committen von DB-Credentials
+- **Security: Version aus /api/health entfernt** — Kein Informationsleck mehr ueber Server-Version
+- **Code-Qualitaet: bots.py Imports an Dateianfang verschoben** — asyncio/time Imports waren mitten in der Datei
+- **Security: Postgres-Passwort rotiert** — Nach Credential-Leak in Git-History neues Passwort gesetzt
+
+---
+
 ## [3.39.3] - 2026-03-11
 
 ### Behoben
