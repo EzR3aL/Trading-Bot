@@ -30,8 +30,12 @@ from src.errors import (
     ERR_STOP_BOT_BEFORE_PRESET,
     ERR_STOP_BOT_BEFORE_RESET,
     ERR_SYMBOL_CONFLICT,
+    ERR_PENDING_TRADE_NOT_FOUND,
     ERR_TELEGRAM_NOT_CONFIGURED,
     ERR_TELEGRAM_SEND_FAILED,
+    ERR_TRADE_ALREADY_RESOLVED,
+    ERR_WHATSAPP_NOT_CONFIGURED,
+    ERR_WHATSAPP_SEND_FAILED,
 )
 from src.exceptions import BotError
 from src.models.database import AffiliateLink, BotConfig, ConfigPreset, ExchangeConnection, TradeRecord, User
@@ -438,9 +442,9 @@ async def test_whatsapp(
     )
     config = result.scalar_one_or_none()
     if not config:
-        raise HTTPException(status_code=404, detail="Bot not found")
+        raise HTTPException(status_code=404, detail=ERR_BOT_NOT_FOUND)
     if not config.whatsapp_phone_number_id or not config.whatsapp_access_token or not config.whatsapp_recipient:
-        raise HTTPException(status_code=400, detail="WhatsApp not configured")
+        raise HTTPException(status_code=400, detail=ERR_WHATSAPP_NOT_CONFIGURED)
 
     from src.notifications.whatsapp_notifier import WhatsAppNotifier
     from src.utils.encryption import decrypt_value
@@ -452,7 +456,7 @@ async def test_whatsapp(
     )
     success = await notifier.send_test_message()
     if not success:
-        raise HTTPException(status_code=502, detail="Failed to send WhatsApp message")
+        raise HTTPException(status_code=502, detail=ERR_WHATSAPP_SEND_FAILED)
     return {"status": "ok", "message": "Test message sent"}
 
 
@@ -573,3 +577,104 @@ async def reset_preset(
 
     logger.info(f"Preset removed from bot {config.name} (id={bot_id})")
     return _config_to_response(config)
+
+
+# ─── Pending Trades (Crash Recovery) ─────────────────────────
+
+@lifecycle_router.get("/{bot_id}/pending-trades")
+@limiter.limit("30/minute")
+async def list_pending_trades(
+    request: Request,
+    bot_id: int,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """List pending and orphaned trades for a bot (crash recovery visibility)."""
+    from src.api.schemas.bots import PendingTradeListResponse, PendingTradeResponse
+    from src.models.database import PendingTrade
+
+    result = await db.execute(
+        select(BotConfig).where(BotConfig.id == bot_id, BotConfig.user_id == user.id)
+    )
+    if not result.scalar_one_or_none():
+        raise HTTPException(status_code=404, detail=ERR_BOT_NOT_FOUND)
+
+    trades_result = await db.execute(
+        select(PendingTrade)
+        .where(
+            PendingTrade.bot_config_id == bot_id,
+            PendingTrade.status.in_(["pending", "orphaned", "failed"]),
+        )
+        .order_by(PendingTrade.created_at.desc())
+    )
+    trades = trades_result.scalars().all()
+
+    items = []
+    for t in trades:
+        order_data = None
+        if t.order_data:
+            try:
+                order_data = json.loads(t.order_data)
+            except (json.JSONDecodeError, TypeError):
+                pass
+        items.append(PendingTradeResponse(
+            id=t.id,
+            bot_config_id=t.bot_config_id,
+            symbol=t.symbol,
+            side=t.side,
+            action=t.action,
+            order_data=order_data,
+            status=t.status,
+            error_message=t.error_message,
+            created_at=t.created_at.isoformat() if t.created_at else None,
+            resolved_at=t.resolved_at.isoformat() if t.resolved_at else None,
+        ))
+
+    return PendingTradeListResponse(pending_trades=items)
+
+
+@lifecycle_router.post("/{bot_id}/pending-trades/{trade_id}/resolve")
+@limiter.limit("20/minute")
+async def resolve_pending_trade(
+    request: Request,
+    bot_id: int,
+    trade_id: int,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Manually mark a pending/orphaned trade as resolved."""
+    from src.models.database import PendingTrade
+
+    result = await db.execute(
+        select(BotConfig).where(BotConfig.id == bot_id, BotConfig.user_id == user.id)
+    )
+    if not result.scalar_one_or_none():
+        raise HTTPException(status_code=404, detail=ERR_BOT_NOT_FOUND)
+
+    trade_result = await db.execute(
+        select(PendingTrade).where(
+            PendingTrade.id == trade_id,
+            PendingTrade.bot_config_id == bot_id,
+        )
+    )
+    trade = trade_result.scalar_one_or_none()
+    if not trade:
+        raise HTTPException(status_code=404, detail=ERR_PENDING_TRADE_NOT_FOUND)
+
+    if trade.status not in ("pending", "orphaned", "failed"):
+        raise HTTPException(status_code=400, detail=ERR_TRADE_ALREADY_RESOLVED)
+
+    trade.status = "completed"
+    trade.resolved_at = datetime.now(timezone.utc)
+    trade.error_message = "Manually resolved by user"
+    await db.flush()
+
+    from src.utils.event_logger import log_event
+    await log_event(
+        "pending_trade_resolved",
+        f"Pending trade #{trade_id} ({trade.symbol} {trade.side}) manually resolved",
+        user_id=user.id,
+        bot_id=bot_id,
+    )
+
+    return {"status": "ok", "message": f"Pending trade #{trade_id} resolved"}

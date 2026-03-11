@@ -62,12 +62,17 @@ function BingXLogo({ size = 18 }: { size: number }) {
 
 export function ExchangeIcon({ exchange, size = 18 }: { exchange: string; size?: number }) {
   const name = exchange.toLowerCase()
-  if (name === 'bitget') return <BitgetLogo size={size} />
-  if (name === 'weex') return <WeexLogo size={size} />
-  if (name === 'hyperliquid') return <HyperliquidLogo size={size} />
-  if (name === 'bitunix') return <BitunixLogo size={size} />
-  if (name === 'bingx') return <BingXLogo size={size} />
-  return null
+  const displayName = name === 'bitget' ? 'Bitget' : name === 'weex' ? 'Weex' : name === 'hyperliquid' ? 'Hyperliquid' : name === 'bitunix' ? 'Bitunix' : name === 'bingx' ? 'BingX' : exchange
+  const icon = (() => {
+    if (name === 'bitget') return <BitgetLogo size={size} />
+    if (name === 'weex') return <WeexLogo size={size} />
+    if (name === 'hyperliquid') return <HyperliquidLogo size={size} />
+    if (name === 'bitunix') return <BitunixLogo size={size} />
+    if (name === 'bingx') return <BingXLogo size={size} />
+    return null
+  })()
+  if (!icon) return null
+  return <span role="img" aria-label={displayName}>{icon}</span>
 }
 
 export default function ExchangeLogo({ exchange, size = 18, className = '', showName = true }: ExchangeLogoProps) {

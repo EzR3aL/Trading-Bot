@@ -65,6 +65,13 @@ async def create_preset(
     db.add(preset)
     await db.flush()
     await db.refresh(preset)
+
+    from src.utils.config_audit import log_config_change
+    await log_config_change(
+        user_id=user.id, entity_type="preset", entity_id=preset.id,
+        action="create", new_data=data.model_dump(),
+    )
+
     return _preset_to_response(preset)
 
 
@@ -105,6 +112,10 @@ async def update_preset(
     if not preset:
         raise HTTPException(status_code=404, detail=ERR_PRESET_NOT_FOUND)
 
+    # Snapshot old values for audit trail
+    update_fields = data.model_dump(exclude_unset=True)
+    _audit_old = {f: getattr(preset, f, None) for f in update_fields}
+
     if data.name is not None:
         preset.name = data.name
     if data.description is not None:
@@ -118,6 +129,13 @@ async def update_preset(
 
     await db.flush()
     await db.refresh(preset)
+
+    from src.utils.config_audit import log_config_change
+    await log_config_change(
+        user_id=user.id, entity_type="preset", entity_id=preset_id,
+        action="update", old_data=_audit_old, new_data=update_fields,
+    )
+
     return _preset_to_response(preset)
 
 
@@ -140,7 +158,15 @@ async def delete_preset(
         raise HTTPException(status_code=404, detail=ERR_PRESET_NOT_FOUND)
     if preset.is_active:
         raise HTTPException(status_code=400, detail=ERR_PRESET_ACTIVE_CANNOT_DELETE)
+
+    preset_name = preset.name
     await db.delete(preset)
+
+    from src.utils.config_audit import log_config_change
+    await log_config_change(
+        user_id=user.id, entity_type="preset", entity_id=preset_id,
+        action="delete", old_data={"name": preset_name},
+    )
 
 
 @router.post("/{preset_id}/activate")

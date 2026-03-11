@@ -216,6 +216,9 @@ class BotRuntimeStatus(BaseModel):
     active_preset_id: Optional[int] = None
     active_preset_name: Optional[str] = None
 
+    # Crash recovery: count of orphaned trades from previous crashes
+    orphaned_trades: int = 0
+
     # Hyperliquid revenue gates
     builder_fee_approved: Optional[bool] = None
     referral_verified: Optional[bool] = None
@@ -309,3 +312,22 @@ class SymbolConflictResponse(BaseModel):
     """Response for symbol conflict checks."""
     has_conflicts: bool = False
     conflicts: list[SymbolConflict] = []
+
+
+class PendingTradeResponse(BaseModel):
+    """A single pending/orphaned trade record."""
+    id: int
+    bot_config_id: int
+    symbol: str
+    side: str
+    action: str
+    order_data: Optional[Dict[str, Any]] = None
+    status: str
+    error_message: Optional[str] = None
+    created_at: Optional[str] = None
+    resolved_at: Optional[str] = None
+
+
+class PendingTradeListResponse(BaseModel):
+    """Response listing pending/orphaned trades for a bot."""
+    pending_trades: List[PendingTradeResponse] = []

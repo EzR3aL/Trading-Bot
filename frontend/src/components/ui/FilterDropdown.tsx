@@ -32,6 +32,17 @@ export default function FilterDropdown({ value, onChange, options, ariaLabel }: 
     return () => document.removeEventListener('mousedown', handler)
   }, [])
 
+  useEffect(() => {
+    if (!isOpen) return
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setIsOpen(false)
+      }
+    }
+    document.addEventListener('keydown', handler)
+    return () => document.removeEventListener('keydown', handler)
+  }, [isOpen])
+
   const select = (val: string) => {
     onChange(val)
     setIsOpen(false)
@@ -43,6 +54,8 @@ export default function FilterDropdown({ value, onChange, options, ariaLabel }: 
         type="button"
         onClick={() => setIsOpen(!isOpen)}
         aria-label={ariaLabel}
+        aria-expanded={isOpen}
+        aria-haspopup="listbox"
         className={`filter-select inline-flex items-center gap-2 cursor-pointer whitespace-nowrap ${
           isOpen
             ? isLight
@@ -66,13 +79,15 @@ export default function FilterDropdown({ value, onChange, options, ariaLabel }: 
             ? 'bg-white border-gray-200 shadow-gray-200/50'
             : 'bg-[#141a2a]/95 border-white/10 shadow-black/60'
         }`}>
-          <div className="py-1.5 max-h-60 overflow-y-auto">
+          <div className="py-1.5 max-h-60 overflow-y-auto" role="listbox" aria-label={ariaLabel}>
             {options.map((opt) => {
               const isActive = opt.value === value
               return (
                 <button
                   key={opt.value}
                   type="button"
+                  role="option"
+                  aria-selected={isActive}
                   onClick={() => select(opt.value)}
                   className={`w-full flex items-center justify-between gap-4 px-3.5 py-2 text-sm transition-colors ${
                     isActive

@@ -397,6 +397,7 @@ async def test_lifespan_startup_and_shutdown():
 
     mock_orchestrator = MagicMock()
     mock_orchestrator.restore_on_startup = AsyncMock()
+    mock_orchestrator.shutdown_gracefully = AsyncMock()
     mock_orchestrator.shutdown_all = AsyncMock()
 
     app = FastAPI()
@@ -412,7 +413,7 @@ async def test_lifespan_startup_and_shutdown():
             mock_seed.assert_awaited_once()
             mock_orchestrator.restore_on_startup.assert_awaited_once()
 
-        mock_orchestrator.shutdown_all.assert_awaited_once()
+        mock_orchestrator.shutdown_gracefully.assert_awaited_once()
         mock_close_db.assert_awaited_once()
 
 
@@ -423,6 +424,7 @@ async def test_lifespan_production_without_encryption_key_warns():
 
     mock_orchestrator = MagicMock()
     mock_orchestrator.restore_on_startup = AsyncMock()
+    mock_orchestrator.shutdown_gracefully = AsyncMock()
     mock_orchestrator.shutdown_all = AsyncMock()
 
     app = FastAPI()

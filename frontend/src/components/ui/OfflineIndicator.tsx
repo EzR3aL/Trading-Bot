@@ -56,7 +56,7 @@ export default function OfflineIndicator() {
   if (dismissed || (!isOffline && !apiDown)) return null
 
   return (
-    <div className="fixed top-0 left-0 right-0 z-50 bg-yellow-600 text-white text-center py-2 text-sm font-medium flex items-center justify-center gap-2">
+    <div role="alert" aria-live="assertive" className="fixed top-0 left-0 right-0 z-50 bg-yellow-600 text-white text-center py-2 text-sm font-medium flex items-center justify-center gap-2">
       <WifiOff className="h-4 w-4" />
       {isOffline
         ? t('common.noInternet', 'No internet connection')

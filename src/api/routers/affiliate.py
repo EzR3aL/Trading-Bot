@@ -11,7 +11,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.api.rate_limit import limiter
 from src.api.schemas.affiliate import AffiliateLinkResponse, AffiliateLinkUpdate
 from src.auth.dependencies import get_current_admin, get_current_user
-from src.errors import ERR_INVALID_EXCHANGE
+from src.errors import (
+    ERR_AFFILIATE_LINK_NOT_FOUND,
+    ERR_BINGX_UID_NUMERIC,
+    ERR_BITGET_UID_NUMERIC,
+    ERR_BITUNIX_UID_NUMERIC,
+    ERR_INVALID_EXCHANGE,
+    ERR_UID_EMPTY,
+    ERR_WEEX_UID_ALPHANUMERIC,
+)
 from src.models.database import AffiliateLink, ExchangeConnection, User
 from src.models.enums import EXCHANGE_NAMES
 from src.models.session import get_db
@@ -98,7 +106,7 @@ async def delete_affiliate_link(
     )
     link = result.scalar_one_or_none()
     if not link:
-        raise HTTPException(status_code=404, detail="Affiliate-Link nicht gefunden")
+        raise HTTPException(status_code=404, detail=ERR_AFFILIATE_LINK_NOT_FOUND)
 
     await db.delete(link)
     return {"detail": "deleted"}
@@ -124,7 +132,7 @@ async def verify_uid(
         raise HTTPException(status_code=400, detail=ERR_INVALID_EXCHANGE)
 
     if not uid:
-        raise HTTPException(status_code=400, detail="UID must not be empty")
+        raise HTTPException(status_code=400, detail=ERR_UID_EMPTY)
 
     # Validate UID format per exchange
     validator = _UID_VALIDATORS.get(exchange)
@@ -132,22 +140,22 @@ async def verify_uid(
         if exchange == "bitget":
             raise HTTPException(
                 status_code=422,
-                detail="Bitget UID muss rein numerisch sein",
+                detail=ERR_BITGET_UID_NUMERIC,
             )
         elif exchange == "weex":
             raise HTTPException(
                 status_code=422,
-                detail="Weex UID muss alphanumerisch sein",
+                detail=ERR_WEEX_UID_ALPHANUMERIC,
             )
         elif exchange == "bitunix":
             raise HTTPException(
                 status_code=422,
-                detail="Bitunix UID must be numeric only",
+                detail=ERR_BITUNIX_UID_NUMERIC,
             )
         elif exchange == "bingx":
             raise HTTPException(
                 status_code=422,
-                detail="BingX UID must be numeric only",
+                detail=ERR_BINGX_UID_NUMERIC,
             )
 
     # Find or create ExchangeConnection for this user + exchange

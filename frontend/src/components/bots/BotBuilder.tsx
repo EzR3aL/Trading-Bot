@@ -600,7 +600,7 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
     <div>
       {/* Header */}
       <div className="flex items-center gap-4 mb-6">
-        <button onClick={onCancel} className="text-gray-400 hover:text-white">
+        <button onClick={onCancel} aria-label={t('common.back')} className="text-gray-400 hover:text-white">
           <ArrowLeft size={20} />
         </button>
         <h1 className="text-2xl font-bold text-white">
@@ -628,7 +628,7 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
       </div>
 
       {error && (
-        <div className="mb-4 p-3 bg-red-900/30 border border-red-800 rounded text-red-400 text-sm">{error}</div>
+        <div role="alert" className="mb-4 p-3 bg-red-900/30 border border-red-800 rounded text-red-400 text-sm">{error}</div>
       )}
 
       {/* Step content */}
@@ -637,8 +637,9 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
         {currentStepKey === 'step1' && (
           <div className="space-y-4 max-w-md">
             <div>
-              <label className="block text-sm text-gray-400 mb-1">{b.name}</label>
+              <label htmlFor="bot-name" className="block text-sm text-gray-400 mb-1">{b.name}</label>
               <input
+                id="bot-name"
                 type="text"
                 value={name}
                 onChange={e => setName(e.target.value)}
@@ -648,8 +649,9 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
               />
             </div>
             <div>
-              <label className="block text-sm text-gray-400 mb-1">{b.description}</label>
+              <label htmlFor="bot-description" className="block text-sm text-gray-400 mb-1">{b.description}</label>
               <input
+                id="bot-description"
                 type="text"
                 value={description}
                 onChange={e => setDescription(e.target.value)}
@@ -907,6 +909,9 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
                         <button
                           type="button"
                           onClick={toggleProMode}
+                          role="switch"
+                          aria-checked={proMode}
+                          aria-label="Pro Mode"
                           className={`relative w-11 h-6 rounded-full transition-colors ${proMode ? 'bg-amber-500' : 'bg-gray-700'}`}
                         >
                           <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform ${proMode ? 'translate-x-5' : ''}`} />
@@ -950,6 +955,7 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
                                   <input
                                     type="range" min={td.min} max={td.max} step={0.1} value={tVal}
                                     onChange={e => setStrategyParams(prev => ({ ...prev, [tKey]: parseFloat(e.target.value) }))}
+                                    aria-label={td.label}
                                     className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                                   />
                                   <div className="flex justify-between mt-1">
@@ -1522,8 +1528,9 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
                 {openNotif === 'discord' && (
                   <div className="px-3.5 pb-3.5 space-y-3">
                     <div>
-                      <label className="block text-xs text-gray-300 mb-1.5">{t('bots.builder.discordWebhook')}</label>
+                      <label htmlFor="notif-discord-webhook" className="block text-xs text-gray-300 mb-1.5">{t('bots.builder.discordWebhook')}</label>
                       <input
+                        id="notif-discord-webhook"
                         type="url"
                         value={discordWebhookUrl}
                         onChange={e => setDiscordWebhookUrl(e.target.value)}
@@ -1555,8 +1562,9 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
                 {openNotif === 'telegram' && (
                   <div className="px-3.5 pb-3.5 space-y-3">
                     <div>
-                      <label className="block text-xs text-gray-300 mb-1.5">{t('bots.builder.telegramToken')}</label>
+                      <label htmlFor="notif-telegram-token" className="block text-xs text-gray-300 mb-1.5">{t('bots.builder.telegramToken')}</label>
                       <input
+                        id="notif-telegram-token"
                         type="password"
                         value={telegramBotToken}
                         onChange={e => setTelegramBotToken(e.target.value)}
@@ -1565,8 +1573,9 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
                       />
                     </div>
                     <div>
-                      <label className="block text-xs text-gray-300 mb-1.5">{t('bots.builder.telegramChatId')}</label>
+                      <label htmlFor="notif-telegram-chatid" className="block text-xs text-gray-300 mb-1.5">{t('bots.builder.telegramChatId')}</label>
                       <input
+                        id="notif-telegram-chatid"
                         type="text"
                         value={telegramChatId}
                         onChange={e => setTelegramChatId(e.target.value)}
@@ -1597,8 +1606,9 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
                 {openNotif === 'whatsapp' && (
                   <div className="px-3.5 pb-3.5 space-y-3">
                     <div>
-                      <label className="block text-xs text-gray-300 mb-1.5">{t('bots.builder.whatsappPhoneId')}</label>
+                      <label htmlFor="notif-wa-phoneid" className="block text-xs text-gray-300 mb-1.5">{t('bots.builder.whatsappPhoneId')}</label>
                       <input
+                        id="notif-wa-phoneid"
                         type="text"
                         value={whatsappPhoneId}
                         onChange={e => setWhatsappPhoneId(e.target.value)}
@@ -1607,8 +1617,9 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
                       />
                     </div>
                     <div>
-                      <label className="block text-xs text-gray-300 mb-1.5">{t('bots.builder.whatsappToken')}</label>
+                      <label htmlFor="notif-wa-token" className="block text-xs text-gray-300 mb-1.5">{t('bots.builder.whatsappToken')}</label>
                       <input
+                        id="notif-wa-token"
                         type="password"
                         value={whatsappToken}
                         onChange={e => setWhatsappToken(e.target.value)}
@@ -1617,8 +1628,9 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
                       />
                     </div>
                     <div>
-                      <label className="block text-xs text-gray-300 mb-1.5">{t('bots.builder.whatsappRecipient')}</label>
+                      <label htmlFor="notif-wa-recipient" className="block text-xs text-gray-300 mb-1.5">{t('bots.builder.whatsappRecipient')}</label>
                       <input
+                        id="notif-wa-recipient"
                         type="text"
                         value={whatsappRecipient}
                         onChange={e => setWhatsappRecipient(e.target.value)}

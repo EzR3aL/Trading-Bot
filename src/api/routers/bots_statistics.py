@@ -9,6 +9,7 @@ from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.auth.dependencies import get_current_user
+from src.errors import ERR_BOT_NOT_FOUND
 from src.models.database import BotConfig, TradeRecord, User
 from src.models.session import get_db
 from src.api.routers.trades import _compute_trailing_stop
@@ -33,7 +34,7 @@ async def get_bot_statistics(
     )
     config = result.scalar_one_or_none()
     if not config:
-        raise HTTPException(status_code=404, detail="Bot nicht gefunden")
+        raise HTTPException(status_code=404, detail=ERR_BOT_NOT_FOUND)
 
     since = datetime.now(timezone.utc) - timedelta(days=days)
 

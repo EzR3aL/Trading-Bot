@@ -110,7 +110,7 @@ export default function Trades() {
       <h1 className="text-2xl font-bold text-white mb-6 tracking-tight">{t('trades.title')}</h1>
 
       {error && (
-        <div className="mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-sm">
+        <div role="alert" className="mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-sm">
           {error}
         </div>
       )}

@@ -555,6 +555,8 @@ class TestAuthLoginLockoutFlow:
         user.locked_until = None
         user.failed_login_attempts = 0
         user.language = "en"
+        user.totp_enabled = False
+        user.totp_secret = None
         return user
 
     @pytest.mark.asyncio
@@ -1103,7 +1105,7 @@ class TestTradeFailureNotification:
         mixin._config.name = "MyBot"
         captured_fn = None
 
-        async def capture_notification(fn):
+        async def capture_notification(fn, **kwargs):
             nonlocal captured_fn
             captured_fn = fn
 

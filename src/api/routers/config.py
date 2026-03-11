@@ -217,6 +217,7 @@ async def upsert_exchange_connection(
         )
     )
     conn = result.scalar_one_or_none()
+    is_new = conn is None
 
     if not conn:
         conn = ExchangeConnection(user_id=user.id, exchange_type=exchange_type)
@@ -237,6 +238,16 @@ async def upsert_exchange_connection(
 
     from src.utils.event_logger import log_event
     await log_event("config_changed", f"Exchange connection '{exchange_type}' updated", user_id=user.id)
+
+    # Flush to get conn.id for new connections
+    await db.flush()
+
+    from src.utils.config_audit import log_config_change
+    await log_config_change(
+        user_id=user.id, entity_type="exchange_connection", entity_id=conn.id,
+        action="create" if is_new else "update",
+        new_data={"exchange_type": exchange_type, **data.model_dump(exclude_unset=True)},
+    )
 
     return {"status": "ok", "message": f"{exchange_type} API keys updated"}
 
@@ -260,7 +271,15 @@ async def delete_exchange_connection(
     if not conn:
         raise HTTPException(status_code=404, detail=f"No connection for {exchange_type}")
 
+    conn_id = conn.id
     await db.delete(conn)
+
+    from src.utils.config_audit import log_config_change
+    await log_config_change(
+        user_id=user.id, entity_type="exchange_connection", entity_id=conn_id,
+        action="delete", old_data={"exchange_type": exchange_type},
+    )
+
     return {"status": "ok", "message": f"{exchange_type} connection deleted"}
 
 
@@ -612,6 +631,7 @@ async def upsert_llm_connection(
         )
     )
     conn = result.scalar_one_or_none()
+    is_new = conn is None
 
     if not conn:
         conn = LLMConnection(user_id=user.id, provider_type=provider_type)
@@ -622,6 +642,15 @@ async def upsert_llm_connection(
     from src.utils.event_logger import log_event
     display = LLM_PROVIDERS_INFO.get(provider_type, {}).get("name", provider_type)
     await log_event("config_changed", f"LLM connection '{display}' updated", user_id=user.id)
+
+    await db.flush()
+
+    from src.utils.config_audit import log_config_change
+    await log_config_change(
+        user_id=user.id, entity_type="llm_connection", entity_id=conn.id,
+        action="create" if is_new else "update",
+        new_data={"provider_type": provider_type, "api_key": "***"},
+    )
 
     return {"status": "ok", "message": f"{display} API key updated"}
 
@@ -645,7 +674,15 @@ async def delete_llm_connection(
     if not conn:
         raise HTTPException(status_code=404, detail=f"No connection for {provider_type}")
 
+    conn_id = conn.id
     await db.delete(conn)
+
+    from src.utils.config_audit import log_config_change
+    await log_config_change(
+        user_id=user.id, entity_type="llm_connection", entity_id=conn_id,
+        action="delete", old_data={"provider_type": provider_type},
+    )
+
     return {"status": "ok", "message": f"{provider_type} connection deleted"}
 
 

@@ -32,7 +32,7 @@ from src.api.schemas.bots import (
     SymbolConflictResponse,
 )
 from src.auth.dependencies import get_current_user
-from src.errors import ERR_BOT_NOT_FOUND, ERR_MAX_BOTS_REACHED, ERR_STOP_BOT_BEFORE_EDIT
+from src.errors import ERR_BOT_NOT_FOUND, ERR_MAX_BOTS_REACHED, ERR_ORCHESTRATOR_NOT_INITIALIZED, ERR_STOP_BOT_BEFORE_EDIT
 from src.models.database import BotConfig, ConfigPreset, ExchangeConnection, TradeRecord, User
 from src.models.session import get_db
 from src.strategy import StrategyRegistry  # imports __init__.py → registers all strategies
@@ -53,7 +53,7 @@ def get_orchestrator(request: Request):
     """FastAPI dependency: retrieve orchestrator from app.state."""
     orchestrator = getattr(request.app.state, "orchestrator", None)
     if orchestrator is None:
-        raise HTTPException(status_code=503, detail="Bot-Orchestrator nicht initialisiert")
+        raise HTTPException(status_code=503, detail=ERR_ORCHESTRATOR_NOT_INITIALIZED)
     return orchestrator
 
 
@@ -516,6 +516,12 @@ async def create_bot(
     from src.utils.event_logger import log_event
     await log_event("bot_created", f"Bot '{config.name}' created", user_id=user.id, bot_id=config.id)
 
+    from src.utils.config_audit import log_config_change
+    await log_config_change(
+        user_id=user.id, entity_type="bot_config", entity_id=config.id,
+        action="create", new_data=body.model_dump(),
+    )
+
     return _config_to_response(config)
 
 
@@ -582,6 +588,7 @@ async def list_bots(
     # Maps: bot_config_id → (count, pnl, fees, funding)
     trade_stats: dict[int, tuple] = {}
     open_counts: dict[int, int] = {}
+    orphaned_counts: dict[int, int] = {}
     closed_stats: dict[int, tuple] = {}
     last_trades: dict[int, TradeRecord] = {}
     bot_snapshots: dict[int, list[str]] = {}
@@ -621,6 +628,19 @@ async def list_bots(
             .group_by(TradeRecord.bot_config_id)
         )
         open_counts = dict(open_result.all())
+
+        # Batch: Orphaned/pending trade counts per bot (crash recovery)
+        from src.models.database import PendingTrade
+        orphaned_result = await db.execute(
+            select(
+                PendingTrade.bot_config_id,
+                func.count(PendingTrade.id),
+            ).where(
+                PendingTrade.bot_config_id.in_(bot_ids),
+                PendingTrade.status == "orphaned",
+            ).group_by(PendingTrade.bot_config_id)
+        )
+        orphaned_counts = dict(orphaned_result.all())
 
     if llm_bot_ids:
         # Batch 3: Closed trade stats for LLM accuracy
@@ -685,6 +705,7 @@ async def list_bots(
             config.id, (0, 0, 0, 0)
         )
         open_trades = open_counts.get(config.id, 0)
+        orphaned_trade_count = orphaned_counts.get(config.id, 0)
 
         # LLM-specific metrics
         llm_data = {}
@@ -788,6 +809,7 @@ async def list_bots(
             total_fees=round(float(total_fees), 2),
             total_funding=round(float(total_funding), 2),
             open_trades=open_trades,
+            orphaned_trades=orphaned_trade_count,
             discord_webhook_configured=bool(config.discord_webhook_url),
             telegram_configured=bool(config.telegram_bot_token and config.telegram_chat_id),
             whatsapp_configured=bool(
@@ -1043,8 +1065,11 @@ async def update_bot(
         except KeyError as e:
             raise HTTPException(status_code=400, detail=str(e))
 
-    # Apply updates
+    # Snapshot old values for audit trail (only fields being updated)
     update_data = body.model_dump(exclude_unset=True)
+    _audit_old = {f: getattr(config, f, None) for f in update_data}
+
+    # Apply updates
     for field, value in update_data.items():
         if field == "trading_pairs" and value is not None:
             setattr(config, field, json.dumps(value))
@@ -1091,6 +1116,13 @@ async def update_bot(
     await db.refresh(config)
 
     logger.info(f"Bot updated: {config.name} (id={bot_id})")
+
+    from src.utils.config_audit import log_config_change
+    await log_config_change(
+        user_id=user.id, entity_type="bot_config", entity_id=bot_id,
+        action="update", old_data=_audit_old, new_data=update_data,
+    )
+
     return _config_to_response(config)
 
 
@@ -1121,6 +1153,12 @@ async def delete_bot(
 
     from src.utils.event_logger import log_event
     await log_event("bot_deleted", f"Bot '{bot_name}' deleted", user_id=user.id, bot_id=bot_id)
+
+    from src.utils.config_audit import log_config_change
+    await log_config_change(
+        user_id=user.id, entity_type="bot_config", entity_id=bot_id,
+        action="delete", old_data={"name": bot_name},
+    )
 
     return {"status": "ok", "message": f"Bot '{bot_name}' deleted"}
 

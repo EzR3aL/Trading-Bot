@@ -54,6 +54,17 @@ export default function DatePicker({ value, onChange, placeholder, label, minDat
     return () => document.removeEventListener('mousedown', handler)
   }, [])
 
+  useEffect(() => {
+    if (!isOpen) return
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setIsOpen(false)
+      }
+    }
+    document.addEventListener('keydown', handler)
+    return () => document.removeEventListener('keydown', handler)
+  }, [isOpen])
+
   const daysInMonth = getDaysInMonth(viewYear, viewMonth)
   const firstDay = getFirstDayOfWeek(viewYear, viewMonth)
 
@@ -109,6 +120,8 @@ export default function DatePicker({ value, onChange, placeholder, label, minDat
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
+        aria-expanded={isOpen}
+        aria-label={label || placeholder || 'Date picker'}
         className={`filter-select inline-flex items-center gap-2 cursor-pointer ${
           isOpen ? (isLight ? 'border-emerald-400/40 bg-white ring-1 ring-emerald-400/30' : '!border-emerald-500/50 !bg-white/[0.07] ring-1 ring-emerald-500/30') : ''
         }`}
@@ -135,6 +148,7 @@ export default function DatePicker({ value, onChange, placeholder, label, minDat
             <button
               type="button"
               onClick={prevMonth}
+              aria-label="Previous month"
               className={`p-1.5 rounded-lg transition-colors ${
                 isLight ? 'hover:bg-gray-100 text-gray-500' : 'hover:bg-white/10 text-gray-400'
               }`}
@@ -147,6 +161,7 @@ export default function DatePicker({ value, onChange, placeholder, label, minDat
             <button
               type="button"
               onClick={nextMonth}
+              aria-label="Next month"
               className={`p-1.5 rounded-lg transition-colors ${
                 isLight ? 'hover:bg-gray-100 text-gray-500' : 'hover:bg-white/10 text-gray-400'
               }`}

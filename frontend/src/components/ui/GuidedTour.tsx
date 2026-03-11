@@ -151,6 +151,16 @@ export default function GuidedTour({ tourId, steps, autoStart = true, onComplete
     }
   }, [currentStep, isActive])
 
+  // Escape key to close tour
+  useEffect(() => {
+    if (!isActive) return
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') handleSkip()
+    }
+    document.addEventListener('keydown', handler)
+    return () => document.removeEventListener('keydown', handler)
+  }, [isActive]) // eslint-disable-line react-hooks/exhaustive-deps
+
   const handleNext = () => {
     if (currentStep < steps.length - 1) {
       setCurrentStep(currentStep + 1)
@@ -251,6 +261,8 @@ export default function GuidedTour({ tourId, steps, autoStart = true, onComplete
       {/* Tooltip */}
       <div
         ref={tooltipRef}
+        role="dialog"
+        aria-label={t(step.titleKey)}
         className="absolute w-80 bg-gray-900 border border-white/10 rounded-xl shadow-2xl p-4 pointer-events-auto"
         style={{
           top: tooltipPos.top,

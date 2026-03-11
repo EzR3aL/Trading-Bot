@@ -41,8 +41,14 @@ class User(Base):
     language = Column(String(10), default="de")  # de | en
     failed_login_attempts = Column(Integer, default=0, server_default="0")
     locked_until = Column(DateTime(timezone=True), nullable=True)
+    reset_token_hash = Column(String(255), nullable=True)
+    reset_token_expires = Column(DateTime(timezone=True), nullable=True)
     is_deleted = Column(Boolean, default=False)
     deleted_at = Column(DateTime(timezone=True), nullable=True)
+    # Two-Factor Authentication (TOTP)
+    totp_secret = Column(Text, nullable=True)  # Fernet-encrypted TOTP secret
+    totp_enabled = Column(Boolean, default=False, server_default="false")
+    totp_backup_codes = Column(Text, nullable=True)  # JSON list of bcrypt-hashed backup codes
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
@@ -58,6 +64,30 @@ class User(Base):
     llm_connections = relationship("LLMConnection", back_populates="user", cascade="all")
     bot_configs = relationship("BotConfig", back_populates="user", cascade="all")
     backtest_runs = relationship("BacktestRun", back_populates="user", cascade="all")
+    notification_logs = relationship("NotificationLog", back_populates="user", cascade="all")
+    sessions = relationship("UserSession", back_populates="user", cascade="all")
+
+
+class UserSession(Base):
+    """Tracks active login sessions for a user (device/IP/expiry)."""
+    __tablename__ = "user_sessions"
+    __table_args__ = (
+        Index("ix_session_user_active", "user_id", "is_active"),
+    )
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    session_token_hash = Column(String(255), nullable=False)
+    device_name = Column(String(255), nullable=True)
+    ip_address = Column(String(45), nullable=True)
+    user_agent = Column(String(500), nullable=True)
+    last_activity = Column(DateTime(timezone=True), server_default=func.now())
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+    is_active = Column(Boolean, default=True, server_default="true")
+
+    # Relationships
+    user = relationship("User", back_populates="sessions")
 
 
 class UserConfig(Base):
@@ -447,6 +477,75 @@ class AuditLog(Base):
     response_time_ms = Column(Float, nullable=False)
     client_ip = Column(String(45), nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+
+
+class PendingTrade(Base):
+    """Tracks in-flight trades for crash recovery visibility.
+
+    Before placing an order, a pending record is created. After confirmation
+    it is marked completed; on error it is marked failed. If the bot crashes
+    mid-trade, the record stays as 'pending' and is later marked 'orphaned'
+    on the next startup so the user can inspect and manually resolve it.
+    """
+    __tablename__ = "pending_trades"
+    __table_args__ = (
+        Index("ix_pending_bot_status", "bot_config_id", "status"),
+    )
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    bot_config_id = Column(Integer, ForeignKey("bot_configs.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    symbol = Column(String(50), nullable=False)
+    side = Column(String(10), nullable=False)  # LONG | SHORT
+    action = Column(String(10), nullable=False)  # open | close
+    order_data = Column(Text, nullable=True)  # JSON of order params
+    status = Column(String(20), default="pending")  # pending | completed | failed | orphaned
+    error_message = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    resolved_at = Column(DateTime(timezone=True), nullable=True)
+
+    # Relationships
+    bot_config = relationship("BotConfig", foreign_keys=[bot_config_id])
+    user = relationship("User", foreign_keys=[user_id])
+
+
+class NotificationLog(Base):
+    """Log of notification delivery attempts across all channels."""
+    __tablename__ = "notification_logs"
+    __table_args__ = (
+        Index("ix_notif_user_created", "user_id", "created_at"),
+        Index("ix_notif_channel_status", "channel", "status"),
+    )
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    bot_config_id = Column(Integer, nullable=True)
+    channel = Column(String(20), nullable=False)  # discord | telegram | whatsapp
+    event_type = Column(String(50), nullable=False)  # trade_entry | trade_exit | error | status | alert | daily_summary | risk_alert
+    status = Column(String(10), nullable=False, default="sent")  # sent | failed
+    error_message = Column(Text, nullable=True)
+    retry_count = Column(Integer, default=0)
+    payload_summary = Column(String(500), nullable=True)  # truncated message preview
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+
+    # Relationships
+    user = relationship("User", back_populates="notification_logs")
+
+
+class ConfigChangeLog(Base):
+    """Audit trail for configuration changes (bot configs, presets, exchange connections)."""
+    __tablename__ = "config_change_logs"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    entity_type = Column(String(50), nullable=False, index=True)  # bot_config | preset | exchange_connection | llm_connection
+    entity_id = Column(Integer, nullable=False)
+    action = Column(String(20), nullable=False)  # create | update | delete
+    changes = Column(Text, nullable=True)  # JSON: {"field": {"old": x, "new": y}}
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+
+    # Relationships
+    user = relationship("User")
 
 
 class EventLog(Base):

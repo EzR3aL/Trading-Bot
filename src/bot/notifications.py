@@ -3,10 +3,23 @@
 from typing import Callable, Optional
 
 from src.notifications.discord_notifier import DiscordNotifier
+from src.notifications.log_helper import log_notification
 from src.utils.encryption import decrypt_value
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
+
+
+def _channel_name(notifier) -> str:
+    """Derive channel name from notifier class."""
+    name = type(notifier).__name__.lower()
+    if "discord" in name:
+        return "discord"
+    if "telegram" in name:
+        return "telegram"
+    if "whatsapp" in name:
+        return "whatsapp"
+    return "unknown"
 
 
 class NotificationsMixin:
@@ -52,20 +65,45 @@ class NotificationsMixin:
             logger.warning(f"[Bot:{self.bot_config_id}] Could not load WhatsApp config: {e}")
         return notifiers
 
-    async def _send_notification(self, send_fn: Callable) -> None:
+    async def _send_notification(self, send_fn: Callable, event_type: str = "unknown", summary: str | None = None) -> None:
         """Dispatch a notification to all configured notifiers.
 
         Args:
             send_fn: async callable that takes a notifier and sends the message.
                      e.g. ``lambda n: n.send_trade_entry(...)``
+            event_type: notification category for logging (e.g. "trade_entry").
+            summary: optional short text for the log payload_summary field.
         """
         log_prefix = f"[Bot:{self.bot_config_id}]"
+        user_id = getattr(self._config, "user_id", None) if self._config else None
         try:
             for notifier in await self._get_notifiers():
+                channel = _channel_name(notifier)
                 try:
                     async with notifier:
                         await send_fn(notifier)
+                    # Log successful delivery (fire-and-forget)
+                    if user_id:
+                        await log_notification(
+                            user_id=user_id,
+                            bot_config_id=self.bot_config_id,
+                            channel=channel,
+                            event_type=event_type,
+                            status="sent",
+                            summary=summary,
+                        )
                 except Exception as ne:
                     logger.warning(f"{log_prefix} Notification failed: {ne}")
+                    # Log failed delivery (fire-and-forget)
+                    if user_id:
+                        await log_notification(
+                            user_id=user_id,
+                            bot_config_id=self.bot_config_id,
+                            channel=channel,
+                            event_type=event_type,
+                            status="failed",
+                            error=str(ne),
+                            summary=summary,
+                        )
         except Exception as notify_err:
             logger.warning(f"{log_prefix} Notifier setup failed: {notify_err}")

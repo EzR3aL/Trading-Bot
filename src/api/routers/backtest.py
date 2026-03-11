@@ -290,7 +290,9 @@ async def get_run(
 
 
 @router.delete("/{run_id}")
+@limiter.limit("3/minute")
 async def delete_run(
+    request: Request,
     run_id: int,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),

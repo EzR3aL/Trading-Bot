@@ -84,6 +84,8 @@ def _make_mock_user(
     user.is_deleted = is_deleted
     user.token_version = token_version
     user.language = language
+    user.totp_enabled = False
+    user.totp_secret = None
     user.password_hash = hash_password("correct_password")
     user.locked_until = None
     user.failed_login_attempts = 0

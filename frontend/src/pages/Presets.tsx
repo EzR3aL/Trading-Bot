@@ -161,7 +161,7 @@ export default function Presets() {
         </div>
 
         {error && (
-          <div className="mb-4 p-3 bg-red-900/30 border border-red-800 rounded text-red-400 text-sm">{error}</div>
+          <div role="alert" className="mb-4 p-3 bg-red-900/30 border border-red-800 rounded text-red-400 text-sm">{error}</div>
         )}
 
         <div className="border border-white/10 bg-white/[0.03] rounded-xl p-6 mb-6 space-y-6">

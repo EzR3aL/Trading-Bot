@@ -22,6 +22,7 @@ import {
   X,
   Sun,
   Moon,
+  WifiOff,
   type LucideIcon,
 } from 'lucide-react'
 import { useThemeStore } from '../../stores/themeStore'
@@ -77,7 +78,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     },
   }), [pushEvent, updateBotStatus, addToast, t])
 
-  useWebSocket(wsHandlers)
+  const { status: wsStatus } = useWebSocket(wsHandlers)
 
   const filterOptions: { value: DemoFilter; labelKey: string }[] = [
     { value: 'all', labelKey: 'common.all' },
@@ -215,6 +216,18 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         Skip to content
       </a>
       <OfflineIndicator />
+      {wsStatus === 'failed' && (
+        <div className="fixed top-0 left-0 right-0 z-[49] bg-red-600 text-white text-center py-2 text-sm font-medium flex items-center justify-center gap-2">
+          <WifiOff className="h-4 w-4" />
+          {t('ws.connectionLost', { defaultValue: 'Live connection lost. Reload the page to retry.' })}
+        </div>
+      )}
+      {wsStatus === 'disconnected' && (
+        <div className="fixed bottom-4 right-4 z-[49] bg-yellow-600/90 text-white text-xs font-medium px-3 py-1.5 rounded-lg flex items-center gap-1.5 shadow-lg backdrop-blur-sm">
+          <WifiOff className="h-3.5 w-3.5" />
+          {t('ws.reconnecting', { defaultValue: 'Reconnecting...' })}
+        </div>
+      )}
       {/* Mobile hamburger */}
       <div className="lg:hidden fixed top-0 left-0 right-0 z-40 bg-[#0a0e17]/90 backdrop-blur-xl border-b border-white/5 px-4 py-3 flex items-center justify-between">
         <div className="flex items-center gap-2">

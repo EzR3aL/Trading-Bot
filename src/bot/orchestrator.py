@@ -16,7 +16,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from sqlalchemy import select, update
 
 from src.bot.bot_worker import BotWorker
-from src.models.database import BotConfig, BotInstance
+from src.models.database import BotConfig, BotInstance, PendingTrade
 from src.models.enums import BotStatus
 from src.models.session import get_session
 from src.strategy import StrategyRegistry  # noqa: F401 — triggers registration
@@ -172,6 +172,9 @@ class BotOrchestrator:
         """
         logger.info("Orchestrator: Restoring bots from database...")
 
+        # Mark any pending trades from a previous crash as orphaned
+        await self._mark_orphaned_trades()
+
         # Start shared scheduler if not already running
         if not self._scheduler.running:
             self._scheduler.start()
@@ -211,8 +214,91 @@ class BotOrchestrator:
                         stopped += 1
             return stopped
 
+    async def shutdown_gracefully(self, grace_period: float = 20.0):
+        """Gracefully stop all bots, waiting for in-flight trades.
+
+        1. Sets shutdown flag on all workers (stops new trades immediately)
+        2. Waits for in-flight operations to complete (with timeout)
+        3. Logs warnings about open positions
+        4. Then cleans up resources
+
+        Args:
+            grace_period: Max seconds to wait for in-flight operations per bot.
+        """
+        async with self._lock:
+            running_workers = {
+                bot_id: worker
+                for bot_id, worker in self._workers.items()
+                if worker.status == BotStatus.RUNNING
+            }
+
+            if not running_workers:
+                logger.info("Orchestrator: No running bots to shut down")
+            else:
+                logger.info(
+                    "Orchestrator: Graceful shutdown — stopping %d bot(s)",
+                    len(running_workers),
+                )
+
+                # Phase 1: Set shutdown flag on ALL workers immediately
+                for worker in running_workers.values():
+                    worker._shutting_down = True
+
+                # Phase 2: Graceful stop all workers concurrently (with timeout)
+                async def _graceful_stop_one(bot_id: int, worker: BotWorker):
+                    try:
+                        open_positions = await worker.graceful_stop(
+                            grace_period=grace_period,
+                        )
+                        if open_positions:
+                            for pos in open_positions:
+                                protection = []
+                                if pos.get("has_tp"):
+                                    protection.append("TP")
+                                if pos.get("has_sl"):
+                                    protection.append("SL")
+                                prot_str = "+".join(protection) if protection else "NONE"
+                                mode_str = "DEMO" if pos["demo_mode"] else "LIVE"
+                                logger.warning(
+                                    "Orchestrator: OPEN POSITION at shutdown — "
+                                    "Bot %d | %s %s %s | size=%.6f entry=$%.2f | "
+                                    "protection=%s",
+                                    bot_id, pos["side"].upper(), pos["symbol"],
+                                    mode_str, pos["size"], pos["entry_price"],
+                                    prot_str,
+                                )
+                    except Exception as e:
+                        logger.error(
+                            "Orchestrator: Error during graceful stop of bot %d: %s",
+                            bot_id, e,
+                        )
+
+                tasks = [
+                    _graceful_stop_one(bot_id, worker)
+                    for bot_id, worker in running_workers.items()
+                ]
+                await asyncio.gather(*tasks)
+
+            # Mark all as not running in DB
+            try:
+                async with get_session() as session:
+                    await session.execute(
+                        update(BotInstance).where(
+                            BotInstance.is_running.is_(True)
+                        ).values(is_running=False, stopped_at=datetime.now(timezone.utc))
+                    )
+            except Exception as e:
+                logger.error(f"Orchestrator: Error updating DB on shutdown: {e}")
+
+            # Shutdown shared scheduler
+            if self._scheduler.running:
+                self._scheduler.shutdown(wait=False)
+
+            self._workers.clear()
+            logger.info("Orchestrator: Graceful shutdown complete")
+
     async def shutdown_all(self):
-        """Gracefully stop all running bots (called on app shutdown)."""
+        """Hard stop all running bots (fallback if graceful shutdown times out)."""
         async with self._lock:
             for bot_id in list(self._workers.keys()):
                 worker = self._workers[bot_id]
@@ -238,7 +324,7 @@ class BotOrchestrator:
                 self._scheduler.shutdown(wait=False)
 
             self._workers.clear()
-            logger.info("Orchestrator: All bots shut down")
+            logger.info("Orchestrator: All bots force-stopped")
 
     def get_status(self, user_id: int) -> List[dict]:
         """Get status of all bots for a user."""
@@ -276,6 +362,42 @@ class BotOrchestrator:
         if user_id not in self._user_trade_locks:
             self._user_trade_locks[user_id] = asyncio.Lock()
         return self._user_trade_locks[user_id]
+
+    async def _mark_orphaned_trades(self):
+        """Mark any pending trades from a previous crash as orphaned.
+
+        Called once during startup. Trades stuck in 'pending' status mean
+        the bot crashed mid-order — we mark them 'orphaned' so the user
+        can see them and manually verify on the exchange.
+        """
+        try:
+            async with get_session() as session:
+                result = await session.execute(
+                    select(PendingTrade).where(PendingTrade.status == "pending")
+                )
+                orphaned = result.scalars().all()
+
+                if not orphaned:
+                    return
+
+                now = datetime.now(timezone.utc)
+                for trade in orphaned:
+                    trade.status = "orphaned"
+                    trade.resolved_at = now
+                    trade.error_message = "Bot crashed or restarted while trade was in-flight"
+                    logger.warning(
+                        "Orchestrator: Orphaned pending trade #%d — bot=%d symbol=%s side=%s action=%s (created %s)",
+                        trade.id, trade.bot_config_id, trade.symbol, trade.side, trade.action,
+                        trade.created_at,
+                    )
+
+                logger.warning(
+                    "Orchestrator: Marked %d pending trade(s) as orphaned — "
+                    "check exchange positions manually",
+                    len(orphaned),
+                )
+        except Exception as e:
+            logger.error("Orchestrator: Failed to check orphaned trades: %s", e)
 
     async def _update_instance_state(self, bot_config_id: int, is_running: bool, error_msg: Optional[str] = None):
         """Update or create BotInstance record in database."""

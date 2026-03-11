@@ -114,19 +114,23 @@ class TradeCloserMixin:
             )
 
         reason_text = strategy_reason or f"[{self._config.name}]"
-        await self._send_notification(lambda n: n.send_trade_exit(
-            symbol=trade.symbol,
-            side=trade.side,
-            size=trade.size,
-            entry_price=trade.entry_price,
-            exit_price=exit_price,
-            pnl=pnl,
-            pnl_percent=pnl_percent,
-            fees=trade.fees or 0,
-            funding_paid=trade.funding_paid or 0,
-            reason=exit_reason,
-            order_id=trade.order_id or "",
-            duration_minutes=duration_minutes,
-            demo_mode=trade.demo_mode,
-            strategy_reason=reason_text,
-        ))
+        await self._send_notification(
+            lambda n: n.send_trade_exit(
+                symbol=trade.symbol,
+                side=trade.side,
+                size=trade.size,
+                entry_price=trade.entry_price,
+                exit_price=exit_price,
+                pnl=pnl,
+                pnl_percent=pnl_percent,
+                fees=trade.fees or 0,
+                funding_paid=trade.funding_paid or 0,
+                reason=exit_reason,
+                order_id=trade.order_id or "",
+                duration_minutes=duration_minutes,
+                demo_mode=trade.demo_mode,
+                strategy_reason=reason_text,
+            ),
+            event_type="trade_exit",
+            summary=f"{trade.side} {trade.symbol} PnL={pnl:+.2f}",
+        )

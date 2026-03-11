@@ -19,6 +19,12 @@ function formatPnl(value: number | null): string {
   return `${prefix}$${value.toFixed(2)}`
 }
 
+/** Screen-reader-only label describing profit/loss beyond color alone */
+function pnlSrLabel(value: number | null): string {
+  if (value === null) return ''
+  return value >= 0 ? 'Profit' : 'Loss'
+}
+
 export default function PnlCell({ pnl, fees, fundingPaid, status = 'closed', className, children }: PnlCellProps) {
   const { t } = useTranslation()
   const [show, setShow] = useState(false)
@@ -49,6 +55,11 @@ export default function PnlCell({ pnl, fees, fundingPaid, status = 'closed', cla
         className={`cursor-default ${className ?? pnlColor}`}
         onMouseEnter={handleEnter}
         onMouseLeave={handleLeave}
+        onFocus={handleEnter}
+        onBlur={handleLeave}
+        tabIndex={canShow ? 0 : undefined}
+        role="cell"
+        aria-label={pnl !== null ? `${pnlSrLabel(pnl)}: ${formatPnl(pnl)}` : undefined}
       >
         {children ?? formatPnl(pnl)}
       </span>

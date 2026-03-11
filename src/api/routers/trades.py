@@ -18,6 +18,7 @@ from src.models.session import get_db
 from src.strategy.edge_indicator import DEFAULTS as EDGE_DEFAULTS
 from src.utils.encryption import decrypt_value
 from src.api.rate_limit import limiter
+from src.errors import ERR_TRADE_NOT_FOUND
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -461,7 +462,7 @@ async def get_trade(
     )
     row = result.one_or_none()
     if not row:
-        raise HTTPException(status_code=404, detail="Trade nicht gefunden")
+        raise HTTPException(status_code=404, detail=ERR_TRADE_NOT_FOUND)
 
     trade, bot_name, bot_exchange, strat_type, strat_params = row
 

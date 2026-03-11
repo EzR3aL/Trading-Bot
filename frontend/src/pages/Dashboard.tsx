@@ -115,7 +115,7 @@ export default function Dashboard() {
     <div className="animate-in">
       {/* Error */}
       {error && (
-        <div className="mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-sm">
+        <div role="alert" className="mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-sm">
           {error}
         </div>
       )}
@@ -145,7 +145,7 @@ export default function Dashboard() {
       </div>
 
       {/* Stats grid */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-4 mb-6" data-tour="dash-stats">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-4 mb-6" data-tour="dash-stats" aria-live="polite">
         <StatCard
           label={t('dashboard.totalPnl')}
           value={stats ? `$${stats.net_pnl.toFixed(2)}` : '--'}

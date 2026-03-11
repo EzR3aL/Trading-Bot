@@ -18,6 +18,20 @@ ERR_ACCOUNT_LOCKED = "Konto vorübergehend gesperrt. Versuche es später erneut.
 ERR_ACCOUNT_DISABLED = "Konto ist deaktiviert"
 ERR_INVALID_REFRESH_TOKEN = "Ungültiger Refresh-Token"
 ERR_CURRENT_PASSWORD_WRONG = "Aktuelles Passwort ist falsch"
+ERR_RESET_TOKEN_INVALID = "Ungültiger oder abgelaufener Reset-Token"
+
+# ── Auth / Two-Factor Authentication ────────────────────────────────
+ERR_2FA_ALREADY_ENABLED = "Zwei-Faktor-Authentifizierung ist bereits aktiviert"
+ERR_2FA_NOT_ENABLED = "Zwei-Faktor-Authentifizierung ist nicht aktiviert"
+ERR_2FA_SETUP_NOT_STARTED = "2FA-Einrichtung nicht gestartet. Bitte zuerst /2fa/setup aufrufen."
+ERR_2FA_INVALID_CODE = "Ungültiger 2FA-Code"
+ERR_2FA_REQUIRED = "Zwei-Faktor-Authentifizierung erforderlich"
+ERR_2FA_TEMP_TOKEN_INVALID = "Ungültiger oder abgelaufener temporärer Token"
+ERR_2FA_RATE_LIMIT = "Zu viele 2FA-Versuche. Bitte warte eine Minute."
+ERR_RESET_REQUEST_ACCEPTED = "Falls ein Konto mit diesem Benutzernamen existiert, wurde ein Reset-Token generiert. Bitte kontaktiere den Administrator."
+
+# ── Auth / Sessions ─────────────────────────────────────────────────
+ERR_SESSION_NOT_FOUND = "Sitzung nicht gefunden"
 
 # ── Bots / Lifecycle ─────────────────────────────────────────────────
 ERR_BOT_NOT_FOUND = "Bot nicht gefunden"
@@ -34,6 +48,11 @@ ERR_STOP_BOT_BEFORE_EDIT = "Stoppe den Bot bevor du die Konfiguration bearbeites
 ERR_STOP_BOT_BEFORE_PRESET = "Stoppe den Bot bevor du ein Preset anwendest"
 ERR_STOP_BOT_BEFORE_RESET = "Stoppe den Bot bevor du das Preset entfernst"
 ERR_MAX_BOTS_REACHED = "Maximal {max_bots} Bots pro Benutzer erlaubt"
+ERR_ORCHESTRATOR_NOT_INITIALIZED = "Bot-Orchestrator nicht initialisiert"
+ERR_WHATSAPP_NOT_CONFIGURED = "WhatsApp not configured"
+ERR_WHATSAPP_SEND_FAILED = "Failed to send WhatsApp message"
+ERR_PENDING_TRADE_NOT_FOUND = "Pending trade not found"
+ERR_TRADE_ALREADY_RESOLVED = "Trade is already resolved"
 
 # ── Bots / Affiliate Gate ────────────────────────────────────────────
 ERR_AFFILIATE_REQUIRED = "Registriere dich zuerst über unseren Affiliate-Link, trage dann deine UID unter Einstellungen → API Keys ein."
@@ -66,6 +85,12 @@ ERR_REVENUE_SUMMARY_FAILED = "Umsatzübersicht konnte nicht geladen werden. Sieh
 
 # ── Config / Affiliate UID ───────────────────────────────────────────
 ERR_AFFILIATE_UID_NOT_FOUND = "Affiliate-UID nicht gefunden"
+ERR_AFFILIATE_LINK_NOT_FOUND = "Affiliate-Link nicht gefunden"
+ERR_UID_EMPTY = "UID must not be empty"
+ERR_BITGET_UID_NUMERIC = "Bitget UID muss rein numerisch sein"
+ERR_WEEX_UID_ALPHANUMERIC = "Weex UID muss alphanumerisch sein"
+ERR_BITUNIX_UID_NUMERIC = "Bitunix UID must be numeric only"
+ERR_BINGX_UID_NUMERIC = "BingX UID must be numeric only"
 
 # ── Presets ──────────────────────────────────────────────────────────
 ERR_PRESET_NOT_FOUND = "Preset nicht gefunden"
@@ -86,3 +111,6 @@ ERR_INVALID_EXCHANGE = "Ungültiger Exchange-Name"
 ERR_USERNAME_EXISTS = "Benutzername existiert bereits"
 ERR_USER_NOT_FOUND = "Benutzer nicht gefunden"
 ERR_CANNOT_DELETE_SELF = "Du kannst dich nicht selbst löschen"
+
+# ── Trades ─────────────────────────────────────────────────────────
+ERR_TRADE_NOT_FOUND = "Trade nicht gefunden"

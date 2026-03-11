@@ -7,7 +7,7 @@ from typing import Optional
 
 from src.exceptions import ExchangeError, OrderError
 from src.exchanges.base import ExchangeClient
-from src.models.database import TradeRecord
+from src.models.database import PendingTrade, TradeRecord
 from src.models.session import get_session
 from src.strategy import TradeSignal
 from src.utils.json_helpers import parse_json_field
@@ -62,6 +62,7 @@ class TradeExecutorMixin:
             )
         # else: preserve strategy-computed SL (e.g. default ATR SL)
 
+        pending_trade_id = None
         try:
             # Validate entry price before any calculations
             if not signal.entry_price or signal.entry_price <= 0:
@@ -113,8 +114,40 @@ class TradeExecutorMixin:
             margin_mode = getattr(self._config, "margin_mode", "cross")
             await client.set_leverage(signal.symbol, leverage, margin_mode=margin_mode)
 
-            # Place order
+            # Record pending trade BEFORE placing the order (crash recovery)
             side = "long" if signal.direction.value == "long" else "short"
+            try:
+                order_params = json.dumps({
+                    "symbol": str(signal.symbol),
+                    "side": side,
+                    "size": float(position_size),
+                    "leverage": int(leverage),
+                    "take_profit": float(signal.target_price) if signal.target_price else None,
+                    "stop_loss": float(signal.stop_loss) if signal.stop_loss else None,
+                    "margin_mode": margin_mode,
+                    "demo_mode": demo_mode,
+                    "entry_price": float(signal.entry_price),
+                })
+            except (TypeError, ValueError):
+                order_params = None
+            try:
+                async with get_session() as session:
+                    pending = PendingTrade(
+                        bot_config_id=self.bot_config_id,
+                        user_id=self._config.user_id,
+                        symbol=signal.symbol,
+                        side=side.upper(),
+                        action="open",
+                        order_data=order_params,
+                        status="pending",
+                    )
+                    session.add(pending)
+                    await session.flush()
+                    pending_trade_id = pending.id
+            except Exception as pt_err:
+                logger.warning("%s [%s] Could not record pending trade: %s", log_prefix, mode_str, pt_err)
+
+            # Place order
             order = await client.place_market_order(
                 symbol=signal.symbol,
                 side=side,
@@ -127,6 +160,7 @@ class TradeExecutorMixin:
 
             if not order:
                 logger.error(f"{log_prefix} [{mode_str}] Failed to place order")
+                await self._resolve_pending_trade(pending_trade_id, "failed", "Order returned None")
                 return
 
             # Safety: if exchange couldn't set TP/SL, clear them so should_exit() takes over
@@ -192,6 +226,9 @@ class TradeExecutorMixin:
                     native_trailing_stop=trailing_placed,
                 )
                 session.add(trade)
+
+            # Mark pending trade as completed
+            await self._resolve_pending_trade(pending_trade_id, "completed")
 
             # Record in risk manager
             self._risk_manager.record_trade_entry(
@@ -268,29 +305,37 @@ class TradeExecutorMixin:
             trade_reason = f"[{self._config.name}] {signal.reason}"
             if getattr(order, "tpsl_failed", False):
                 trade_reason += " | TP/SL FAILED — MANUAL INTERVENTION REQUIRED"
-            await self._send_notification(lambda n, r=trade_reason: n.send_trade_entry(
-                symbol=signal.symbol,
-                side=signal.direction.value,
-                size=position_size,
-                entry_price=fill_price,
-                leverage=leverage,
-                take_profit=signal.target_price,
-                stop_loss=signal.stop_loss,
-                confidence=signal.confidence,
-                reason=r,
-                order_id=order.order_id or "",
-                demo_mode=demo_mode,
-            ))
+            await self._send_notification(
+                lambda n, r=trade_reason: n.send_trade_entry(
+                    symbol=signal.symbol,
+                    side=signal.direction.value,
+                    size=position_size,
+                    entry_price=fill_price,
+                    leverage=leverage,
+                    take_profit=signal.target_price,
+                    stop_loss=signal.stop_loss,
+                    confidence=signal.confidence,
+                    reason=r,
+                    order_id=order.order_id or "",
+                    demo_mode=demo_mode,
+                ),
+                event_type="trade_entry",
+                summary=f"{signal.direction.value} {signal.symbol} @ {fill_price}",
+            )
 
             # Send dedicated risk alert if TP/SL failed
             if getattr(order, "tpsl_failed", False):
-                await self._send_notification(lambda n: n.send_risk_alert(
-                    alert_type="TPSL_FAILED",
-                    message=(
-                        f"{signal.symbol}: TP/SL placement failed after order fill. "
-                        f"Position is UNPROTECTED. Manual TP/SL required."
+                await self._send_notification(
+                    lambda n: n.send_risk_alert(
+                        alert_type="TPSL_FAILED",
+                        message=(
+                            f"{signal.symbol}: TP/SL placement failed after order fill. "
+                            f"Position is UNPROTECTED. Manual TP/SL required."
+                        ),
                     ),
-                ))
+                    event_type="risk_alert",
+                    summary=f"TPSL_FAILED {signal.symbol}",
+                )
 
         except OrderError as e:
             err_msg = str(e).lower()
@@ -299,9 +344,11 @@ class TradeExecutorMixin:
             else:
                 logger.error(f"{log_prefix} [{mode_str}] Order failed: {e}")
                 await self._notify_trade_failure(signal, mode_str, str(e))
+            await self._resolve_pending_trade(pending_trade_id, "failed", str(e))
         except ExchangeError as e:
             logger.error(f"{log_prefix} [{mode_str}] Trade execution failed: {e}")
             await self._notify_trade_failure(signal, mode_str, str(e))
+            await self._resolve_pending_trade(pending_trade_id, "failed", str(e))
         except Exception as e:
             err_msg = str(e).lower()
             if "minimum amount" in err_msg or "minimum order" in err_msg:
@@ -309,6 +356,30 @@ class TradeExecutorMixin:
             else:
                 logger.error(f"{log_prefix} [{mode_str}] Trade execution failed: {e}")
                 await self._notify_trade_failure(signal, mode_str, str(e))
+            await self._resolve_pending_trade(pending_trade_id, "failed", str(e))
+
+    async def _resolve_pending_trade(
+        self, pending_trade_id: int | None, status: str, error_message: str | None = None
+    ):
+        """Update a pending trade record to its final status."""
+        if pending_trade_id is None:
+            return
+        try:
+            async with get_session() as session:
+                from sqlalchemy import select
+                result = await session.execute(
+                    select(PendingTrade).where(PendingTrade.id == pending_trade_id)
+                )
+                pending = result.scalar_one_or_none()
+                if pending:
+                    pending.status = status
+                    pending.error_message = error_message
+                    pending.resolved_at = datetime.now(timezone.utc)
+        except Exception as e:
+            logger.warning(
+                "[Bot:%s] Could not resolve pending trade #%s: %s",
+                self.bot_config_id, pending_trade_id, e,
+            )
 
     async def _notify_trade_failure(self, signal: TradeSignal, mode_str: str, error: str):
         """Notify user of trade execution failure via WebSocket and notifications."""
@@ -330,12 +401,16 @@ class TradeExecutorMixin:
             pass
 
         try:
-            await self._send_notification(lambda n: n.send_risk_alert(
-                alert_type="TRADE_FAILED",
-                message=(
-                    f"[{self._config.name}] {mode_str} order failed for "
-                    f"{signal.symbol} ({signal.direction.value}): {error}"
+            await self._send_notification(
+                lambda n: n.send_risk_alert(
+                    alert_type="TRADE_FAILED",
+                    message=(
+                        f"[{self._config.name}] {mode_str} order failed for "
+                        f"{signal.symbol} ({signal.direction.value}): {error}"
+                    ),
                 ),
-            ))
+                event_type="error",
+                summary=f"TRADE_FAILED {signal.symbol}",
+            )
         except Exception:
             pass

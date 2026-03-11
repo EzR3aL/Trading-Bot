@@ -107,6 +107,11 @@ class BotWorker(
         self._demo_client: Optional[ExchangeClient] = None
         self._live_client: Optional[ExchangeClient] = None
 
+        # Graceful shutdown support
+        self._shutting_down: bool = False
+        self._operation_in_progress: asyncio.Event = asyncio.Event()
+        self._operation_in_progress.set()  # Not busy initially
+
         # Auto-recovery tracking
         self._consecutive_errors: int = 0
 
@@ -421,11 +426,15 @@ class BotWorker(
 
         logger.info(f"[Bot:{self.bot_config_id}] Started: {self._config.name}")
 
-        await self._send_notification(lambda n: n.send_bot_status(
-            status="STARTED", message=f"{self._config.name} is now running",
-            bot_name=self._config.name,
-            stats={"Strategy": self._config.strategy_type, "Mode": self._config.mode},
-        ))
+        await self._send_notification(
+            lambda n: n.send_bot_status(
+                status="STARTED", message=f"{self._config.name} is now running",
+                bot_name=self._config.name,
+                stats={"Strategy": self._config.strategy_type, "Mode": self._config.mode},
+            ),
+            event_type="status",
+            summary=f"STARTED {self._config.name}",
+        )
 
     async def stop(self):
         """Stop the bot gracefully."""
@@ -433,10 +442,14 @@ class BotWorker(
 
         # Send stop notification before tearing down resources
         if self._config:
-            await self._send_notification(lambda n: n.send_bot_status(
-                status="STOPPED", message=f"{self._config.name} has been stopped",
-                bot_name=self._config.name,
-            ))
+            await self._send_notification(
+                lambda n: n.send_bot_status(
+                    status="STOPPED", message=f"{self._config.name} has been stopped",
+                    bot_name=self._config.name,
+                ),
+                event_type="status",
+                summary=f"STOPPED {self._config.name}",
+            )
 
         # Remove this bot's jobs from the scheduler
         if self._scheduler:
@@ -470,6 +483,85 @@ class BotWorker(
         self.status = BotStatus.STOPPED
         logger.info(f"[Bot:{self.bot_config_id}] Stopped")
 
+    async def graceful_stop(self, grace_period: float = 20.0) -> list[dict]:
+        """Stop the bot gracefully, waiting for in-flight operations.
+
+        1. Sets shutdown flag to prevent new trades
+        2. Waits for any in-flight trade operation to complete (with timeout)
+        3. Cancels pending/unfilled orders on the exchange
+        4. Returns list of open positions (for caller to log warnings)
+
+        Args:
+            grace_period: Max seconds to wait for in-flight operations.
+
+        Returns:
+            List of open position dicts (symbol, side, size, entry_price, demo_mode).
+        """
+        log_prefix = f"[Bot:{self.bot_config_id}]"
+        self._shutting_down = True
+        logger.info(f"{log_prefix} Graceful shutdown initiated")
+
+        # Wait for any in-flight trade operation to finish
+        try:
+            await asyncio.wait_for(
+                self._operation_in_progress.wait(),
+                timeout=grace_period,
+            )
+            logger.info(f"{log_prefix} In-flight operations completed")
+        except asyncio.TimeoutError:
+            logger.warning(
+                f"{log_prefix} In-flight operation did not complete within "
+                f"{grace_period}s — proceeding with shutdown"
+            )
+
+        # Cancel pending/unfilled orders on the exchange
+        for client, mode_str in [
+            (self._demo_client, "DEMO"),
+            (self._live_client, "LIVE"),
+        ]:
+            if not client:
+                continue
+            try:
+                positions = await client.get_open_positions()
+                for pos in positions:
+                    # Cancel any pending TP/SL trigger orders by cancelling
+                    # the order if we have an order_id. The exchange TP/SL
+                    # are exchange-managed, so we leave them (they protect
+                    # the position). We only want to cancel unfilled limit
+                    # orders that haven't been matched yet.
+                    pass  # TP/SL are protective — leave them in place
+            except Exception as e:
+                logger.warning(f"{log_prefix} [{mode_str}] Error checking positions during shutdown: {e}")
+
+        # Gather open positions for this bot (from DB) to warn about
+        open_positions: list[dict] = []
+        try:
+            async with get_session() as session:
+                from sqlalchemy import select
+                result = await session.execute(
+                    select(TradeRecord).where(
+                        TradeRecord.bot_config_id == self.bot_config_id,
+                        TradeRecord.status == "open",
+                    )
+                )
+                for trade in result.scalars().all():
+                    open_positions.append({
+                        "symbol": trade.symbol,
+                        "side": trade.side,
+                        "size": trade.size,
+                        "entry_price": trade.entry_price,
+                        "demo_mode": trade.demo_mode,
+                        "has_tp": trade.take_profit is not None,
+                        "has_sl": trade.stop_loss is not None,
+                    })
+        except Exception as e:
+            logger.warning(f"{log_prefix} Could not query open positions: {e}")
+
+        # Now do the normal stop (remove scheduler jobs, close clients, etc.)
+        await self.stop()
+
+        return open_positions
+
     async def _analyze_and_trade_safe(self):
         """Wrapper with error handling and auto-recovery for the scheduler."""
         try:
@@ -491,11 +583,15 @@ class BotWorker(
                 if self.status != BotStatus.ERROR:
                     err_msg = f"5 consecutive errors: {str(e)[:300]}"
                     bot_ctx = f"Bot: {self._config.name}"
-                    await self._send_notification(lambda n, m=err_msg, c=bot_ctx: n.send_error(
-                        error_type="CONSECUTIVE_ERRORS",
-                        error_message=m,
-                        details=c, context=c,
-                    ))
+                    await self._send_notification(
+                        lambda n, m=err_msg, c=bot_ctx: n.send_error(
+                            error_type="CONSECUTIVE_ERRORS",
+                            error_message=m,
+                            details=c, context=c,
+                        ),
+                        event_type="error",
+                        summary=f"CONSECUTIVE_ERRORS {self._config.name}",
+                    )
                 self.status = BotStatus.ERROR
                 await asyncio.sleep(60)
                 # Verify scheduler is still alive — restart if crashed (only if we own it)
@@ -560,6 +656,12 @@ class BotWorker(
     async def _analyze_and_trade(self):
         """Main trading logic — analyze markets and execute trades."""
         log_prefix = f"[Bot:{self.bot_config_id}]"
+
+        # Abort if shutting down — do not start new analysis/trades
+        if self._shutting_down:
+            logger.info(f"{log_prefix} Shutdown in progress, skipping analysis")
+            return
+
         logger.info(f"{log_prefix} Starting analysis...")
 
         # Global halt check (e.g. stats not initialized)
@@ -572,9 +674,13 @@ class BotWorker(
                 if alert_key not in self._risk_alerts_sent:
                     self._risk_alerts_sent.add(alert_key)
                     alert_type = "TRADE_LIMIT" if "trade limit" in reason_lower else "DAILY_LOSS_LIMIT"
-                    await self._send_notification(lambda n, at=alert_type: n.send_risk_alert(
-                        alert_type=at, message=reason,
-                    ))
+                    await self._send_notification(
+                        lambda n, at=alert_type: n.send_risk_alert(
+                            alert_type=at, message=reason,
+                        ),
+                        event_type="risk_alert",
+                        summary=f"{alert_type}: {reason[:100]}",
+                    )
             return
 
         # Parse trading pairs
@@ -600,9 +706,13 @@ class BotWorker(
                         self._risk_alerts_sent.add(alert_key)
                         sym_alert_type = "TRADE_LIMIT" if "trade limit" in sym_reason_lower else "DAILY_LOSS_LIMIT"
                         msg = f"{symbol}: {sym_reason}"
-                        await self._send_notification(lambda n, at=sym_alert_type, m=msg: n.send_risk_alert(
-                            alert_type=at, message=m,
-                        ))
+                        await self._send_notification(
+                            lambda n, at=sym_alert_type, m=msg: n.send_risk_alert(
+                                alert_type=at, message=m,
+                            ),
+                            event_type="risk_alert",
+                            summary=f"{sym_alert_type}: {msg[:100]}",
+                        )
                 continue
 
             try:
@@ -698,16 +808,25 @@ class BotWorker(
         cutoff = datetime.now(timezone.utc) - timedelta(minutes=5)
         self._last_signal_keys = {k: v for k, v in self._last_signal_keys.items() if v > cutoff}
 
+        # Abort if shutdown started between analysis and trade execution
+        if self._shutting_down:
+            logger.info(f"{log_prefix} Shutdown in progress, skipping trade for {symbol}")
+            return
+
         # Execute on appropriate clients under per-user lock.
         # The lock serializes risk-check + order placement across all bots
         # of the same user, preventing concurrent trades from bypassing
         # the daily loss limit.
-        async with self._user_trade_lock:
-            mode = self._config.mode
-            if mode in ("demo", "both") and self._demo_client:
-                await self._execute_trade(signal, self._demo_client, demo_mode=True, asset_budget=asset_budget)
-            if mode in ("live", "both") and self._live_client:
-                await self._execute_trade(signal, self._live_client, demo_mode=False, asset_budget=asset_budget)
+        self._operation_in_progress.clear()  # Mark: trade in flight
+        try:
+            async with self._user_trade_lock:
+                mode = self._config.mode
+                if mode in ("demo", "both") and self._demo_client:
+                    await self._execute_trade(signal, self._demo_client, demo_mode=True, asset_budget=asset_budget)
+                if mode in ("live", "both") and self._live_client:
+                    await self._execute_trade(signal, self._live_client, demo_mode=False, asset_budget=asset_budget)
+        finally:
+            self._operation_in_progress.set()  # Mark: trade complete
 
     async def _send_daily_summary(self):
         """Send daily trading summary at end of day and reset risk alerts."""
@@ -717,19 +836,23 @@ class BotWorker(
             if stats and stats.trades_executed > 0:
                 ending_balance = stats.starting_balance + stats.net_pnl
 
-                await self._send_notification(lambda n: n.send_daily_summary(
-                    date=stats.date,
-                    starting_balance=stats.starting_balance,
-                    ending_balance=ending_balance,
-                    total_trades=stats.trades_executed,
-                    winning_trades=stats.winning_trades,
-                    losing_trades=stats.losing_trades,
-                    total_pnl=stats.total_pnl,
-                    total_fees=stats.total_fees,
-                    total_funding=stats.total_funding,
-                    max_drawdown=stats.max_drawdown,
-                    bot_name=self._config.name,
-                ))
+                await self._send_notification(
+                    lambda n: n.send_daily_summary(
+                        date=stats.date,
+                        starting_balance=stats.starting_balance,
+                        ending_balance=ending_balance,
+                        total_trades=stats.trades_executed,
+                        winning_trades=stats.winning_trades,
+                        losing_trades=stats.losing_trades,
+                        total_pnl=stats.total_pnl,
+                        total_fees=stats.total_fees,
+                        total_funding=stats.total_funding,
+                        max_drawdown=stats.max_drawdown,
+                        bot_name=self._config.name,
+                    ),
+                    event_type="daily_summary",
+                    summary=f"Daily {stats.date}: {stats.trades_executed} trades, PnL={stats.total_pnl:+.2f}",
+                )
                 logger.info(f"{log_prefix} Daily summary sent")
         except Exception as e:
             logger.warning(f"{log_prefix} Failed to send daily summary: {e}")

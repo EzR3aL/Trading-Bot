@@ -30,9 +30,11 @@ from src.api.routers import (  # noqa: E402
     backtest,
     bots,
     config,
+    config_audit,
     exchanges,
     funding,
     metrics,
+    notifications,
     portfolio,
     presets,
     statistics,
@@ -153,11 +155,27 @@ async def lifespan(app: FastAPI):
     yield
 
     # Shutdown
-    logger.info("Shutting down...")
+    logger.info("Shutting down — graceful shutdown initiated...")
     collector_task.cancel()
-    await orchestrator.shutdown_all()
 
-    # Drain pending audit + event writes before closing DB
+    # Graceful bot shutdown: wait for in-flight trades, log open positions.
+    # Total timeout of 25s leaves margin within Docker's 30s stop_grace_period.
+    try:
+        await asyncio.wait_for(
+            orchestrator.shutdown_gracefully(grace_period=20.0),
+            timeout=25.0,
+        )
+    except asyncio.TimeoutError:
+        logger.error(
+            "Graceful shutdown timed out after 25s — force stopping remaining bots"
+        )
+        # Fall back to hard stop for any stragglers
+        try:
+            await orchestrator.shutdown_all()
+        except Exception as e:
+            logger.error("Force shutdown error: %s", e)
+
+    # Drain pending audit + event writes after bots are stopped
     from src.api.middleware.audit_log import drain_pending_audit_tasks
     from src.utils.event_logger import drain_pending_event_tasks
     await drain_pending_audit_tasks(timeout=5.0)
@@ -313,6 +331,8 @@ def create_app() -> FastAPI:
     app.include_router(backtest.router)
     app.include_router(portfolio.router)
     app.include_router(websocket.router)
+    app.include_router(notifications.router)
+    app.include_router(config_audit.router)
     app.include_router(admin_logs.router)
 
     # Store WebSocket manager on app state for access

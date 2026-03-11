@@ -118,6 +118,12 @@ async def _run_sqlite_migrations(conn) -> None:
         "CREATE INDEX IF NOT EXISTS ix_alert_history_alert ON alert_history(alert_id)",
         # Native trailing stop tracking (v3.36)
         "ALTER TABLE trade_records ADD COLUMN native_trailing_stop BOOLEAN NOT NULL DEFAULT 0",
+        # Notification logs table
+        "CREATE TABLE IF NOT EXISTS notification_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, bot_config_id INTEGER, channel VARCHAR(20) NOT NULL, event_type VARCHAR(50) NOT NULL, status VARCHAR(10) NOT NULL DEFAULT 'sent', error_message TEXT, retry_count INTEGER DEFAULT 0, payload_summary VARCHAR(500), created_at DATETIME DEFAULT CURRENT_TIMESTAMP)",
+        "CREATE INDEX IF NOT EXISTS ix_notification_logs_user_id ON notification_logs(user_id)",
+        "CREATE INDEX IF NOT EXISTS ix_notif_user_created ON notification_logs(user_id, created_at)",
+        "CREATE INDEX IF NOT EXISTS ix_notif_channel_status ON notification_logs(channel, status)",
+        "CREATE INDEX IF NOT EXISTS ix_notification_logs_created_at ON notification_logs(created_at)",
     ]
     for migration in migrations:
         try:
