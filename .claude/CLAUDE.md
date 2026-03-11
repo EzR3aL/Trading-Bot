@@ -20,6 +20,7 @@ An assistant library for Claude Code.
 | `/brainstorm [topic]` | Discuss approach before implementing |
 | `/plan [feature]` | Sprint planning with RICE/MoSCoW prioritization |
 | `/verify` | Final checks before completing work |
+| `/feierabend` | End-of-day: test, commit, changelog, push, deploy, verify, summary |
 
 ## Git Branch Commands
 
