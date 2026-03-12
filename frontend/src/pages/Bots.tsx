@@ -210,6 +210,24 @@ function formatHourLocal(utcHour: number): string {
 /* ── Trade Detail Modal ──────────────────────────────────── */
 
 function TradeDetailModal({ trade, onClose, t }: { trade: BotTrade; onClose: () => void; t: (key: string) => string }) {
+  const copyRef = useRef<HTMLDivElement>(null)
+  const theme = useThemeStore((s) => s.theme)
+  const [copied, setCopied] = useState(false)
+
+  const handleCopyImage = async () => {
+    if (!copyRef.current) return
+    try {
+      const blob = await toBlob(copyRef.current, {
+        pixelRatio: 2,
+        backgroundColor: theme === 'light' ? '#f8fafc' : '#0b0f19',
+      })
+      if (!blob) return
+      await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })])
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch (err) { console.error('Failed to copy image:', err) }
+  }
+
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 backdrop-blur-md" onClick={onClose} role="dialog" aria-modal="true" onKeyDown={(e) => { if (e.key === 'Escape') onClose() }}>
       <div
@@ -227,9 +245,23 @@ function TradeDetailModal({ trade, onClose, t }: { trade: BotTrade; onClose: () 
               {trade.side === 'long' ? '+ LONG' : '- SHORT'}
             </span>
           </div>
-          <button onClick={onClose} className="p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-white/5 transition-all" aria-label="Close">
-            <X size={20} />
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleCopyImage}
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg transition-all border ${
+                copied
+                  ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20'
+                  : 'text-gray-400 hover:text-white bg-white/5 hover:bg-white/10 border-white/5'
+              }`}
+              title={t('bots.copyImage')}
+            >
+              <Copy size={13} />
+              {copied ? t('bots.copied') : t('bots.copyImage')}
+            </button>
+            <button onClick={onClose} className="p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-white/5 transition-all" aria-label="Close">
+              <X size={20} />
+            </button>
+          </div>
         </div>
 
         {/* Result - Hero */}
@@ -298,6 +330,54 @@ function TradeDetailModal({ trade, onClose, t }: { trade: BotTrade; onClose: () 
           <span className={trade.status === 'open' ? 'text-amber-400 font-medium' : 'text-gray-500'}>
             {trade.status === 'open' ? t('bots.pending') : trade.exit_reason || trade.status}
           </span>
+        </div>
+      </div>
+
+      {/* Hidden compact card for image copy */}
+      <div className="absolute -left-[9999px] pointer-events-none" aria-hidden="true">
+        <div ref={copyRef} className="bg-[#0f1420] rounded-2xl p-7 w-[420px] border border-white/10 shadow-2xl">
+          <div className="flex items-center gap-3 mb-5">
+            <h3 className="text-xl font-bold text-white">{trade.symbol}</h3>
+            <span className={`px-3 py-1 rounded-lg text-xs font-bold ${
+              trade.side === 'long' ? 'bg-emerald-500/15 text-profit border border-emerald-500/20' : 'bg-red-500/15 text-loss border border-red-500/20'
+            }`}>
+              {trade.side === 'long' ? '+ LONG' : '- SHORT'}
+            </span>
+          </div>
+          <div className="text-center py-6 mb-5 bg-white/[0.02] rounded-xl border border-white/5">
+            <div className="text-xs text-gray-400 uppercase tracking-wider mb-2">{t('bots.result')}</div>
+            <div className={`text-5xl font-bold tracking-tight ${trade.pnl_percent >= 0 ? 'text-profit' : 'text-loss'}`}>
+              {formatPnlPercent(trade.pnl_percent)}
+            </div>
+            <div className={`text-lg font-semibold mt-1 ${trade.pnl >= 0 ? 'text-profit/70' : 'text-loss/70'}`}>
+              <PnlCell pnl={trade.pnl} fees={trade.fees ?? 0} fundingPaid={trade.funding_paid ?? 0} status={trade.status}
+                className={`text-lg font-semibold ${trade.pnl >= 0 ? 'text-profit/70' : 'text-loss/70'}`} />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3 mb-5">
+            <div className="bg-white/[0.03] rounded-xl p-4 border border-white/5">
+              <div className="text-xs text-gray-400 mb-1.5">{t('bots.entryPrice')}</div>
+              <div className="text-white font-semibold text-lg">${trade.entry_price.toLocaleString()}</div>
+            </div>
+            <div className="bg-white/[0.03] rounded-xl p-4 border border-white/5">
+              <div className="text-xs text-gray-400 mb-1.5">{t('bots.exitPrice')}</div>
+              <div className="text-white font-semibold text-lg">{trade.exit_price ? `$${trade.exit_price.toLocaleString()}` : '--'}</div>
+            </div>
+          </div>
+          <div className="flex items-center justify-between mb-5 bg-white/[0.03] rounded-xl p-4 border border-white/5">
+            <span className="text-sm text-gray-400">{t('bots.confidence')}</span>
+            <span className={`font-bold text-lg ${confidenceColor(trade.confidence)}`}>{trade.confidence}%</span>
+          </div>
+          {trade.reason && (
+            <div className="mb-5">
+              <div className="text-xs text-gray-400 uppercase tracking-wider mb-2">{t('bots.reasoning')}</div>
+              <p className="text-sm text-gray-300 leading-relaxed bg-white/[0.03] rounded-xl p-4 border border-white/5">{trade.reason}</p>
+            </div>
+          )}
+          <div className="flex items-center justify-between text-sm text-gray-500 pt-4 border-t border-white/5">
+            <span>{formatDateTime(trade.entry_time)}</span>
+            <span>{trade.exit_reason || trade.status}</span>
+          </div>
         </div>
       </div>
     </div>
