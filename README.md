@@ -7,14 +7,14 @@ A production-grade automated cryptocurrency trading platform with multi-exchange
 ## Features
 
 **Multi-Exchange Execution**
-- Bitget, Weex, and Hyperliquid via a unified adapter pattern
+- Bitget, Weex, Hyperliquid, Bitunix, and BingX via a unified adapter pattern
 - Cross-exchange symbol normalization
 - Exchange-specific auth (HMAC-SHA256, wallet signatures)
 - Demo and Live mode isolation per exchange
 
 **Strategy Engine**
 - Six pluggable strategies with a common `BaseStrategy` interface
-- LLM-powered signal generation (OpenAI, Anthropic, local models)
+- LLM-powered signal generation (9 providers: OpenAI, Anthropic, Gemini Flash, Gemini Pro, Groq, Mistral, xAI, Perplexity, DeepSeek)
 - Strategy registry for runtime selection per bot instance
 
 **Real-Time Dashboard**
@@ -39,7 +39,7 @@ A production-grade automated cryptocurrency trading platform with multi-exchange
 
 **Operational Tooling**
 - Prometheus metrics export with Grafana dashboards
-- Discord and Telegram trade notifications
+- Discord, Telegram, and WhatsApp trade notifications
 - Health check endpoint with Docker healthcheck integration
 - Structured logging with configurable levels
 - Tax report generation with CSV export
@@ -51,7 +51,7 @@ A production-grade automated cryptocurrency trading platform with multi-exchange
 ```
 Frontend (React/TS)  --->  FastAPI Backend  --->  Exchange Adapters
      |                          |                       |
-  WebSocket            SQLAlchemy ORM             Bitget / Weex / Hyperliquid
+  WebSocket            SQLAlchemy ORM             Bitget / Weex / Hyperliquid / Bitunix / BingX
   Zustand              Pydantic Schemas
   React Router         APScheduler
   Recharts             Prometheus Client
@@ -68,7 +68,7 @@ Frontend (React/TS)  --->  FastAPI Backend  --->  Exchange Adapters
 | Auth | JWT (PyJWT), bcrypt, Fernet encryption |
 | Scheduling | APScheduler (async) |
 | Monitoring | Prometheus, Grafana |
-| Notifications | Discord webhooks, Telegram Bot API |
+| Notifications | Discord webhooks, Telegram Bot API, WhatsApp (CallMeBot) |
 | Infrastructure | Docker, Docker Compose, multi-stage builds |
 
 ### Project Structure
@@ -87,11 +87,11 @@ trading-department/
 ├── src/
 │   ├── api/                     # FastAPI app, routers, schemas
 │   ├── auth/                    # JWT, password hashing, dependencies
-│   ├── exchanges/               # Bitget, Weex, Hyperliquid adapters
+│   ├── exchanges/               # Bitget, Weex, Hyperliquid, Bitunix, BingX adapters
 │   ├── bot/                     # Orchestrator, BotWorker, BotManager
 │   ├── strategy/                # Pluggable strategy engine
 │   ├── risk/                    # Position sizing, daily loss limits
-│   ├── notifications/           # Discord, Telegram
+│   ├── notifications/           # Discord, Telegram, WhatsApp
 │   ├── models/                  # SQLAlchemy ORM, async sessions
 │   └── utils/                   # Encryption, logging, circuit breaker
 ├── tests/
@@ -209,6 +209,7 @@ The strategy engine uses a plugin architecture. All strategies implement `BaseSt
 | Strategy | Type | Description |
 |----------|------|-------------|
 | **Liquidation Hunter** | Contrarian | Bets against crowded positions using long/short ratio, funding rate, and Fear & Greed Index |
+| **Contrarian Pulse** | Contrarian | Mean-reversion strategy combining Fear & Greed extremes (<35/>65) with funding rate divergence |
 | **LLM Signal** | AI-Powered | Delegates signal generation to configurable LLM providers (OpenAI, Anthropic, local). Stateless, prompt-driven |
 | **Degen** | AI-Powered | Pre-configured LLM arena strategy with 19 fixed data sources (funding, order flow, options, volatility) |
 | **Edge Indicator** | Technical | EMA ribbon + ADX chop filter + MACD/RSI momentum score. Pure price action from Binance klines |
@@ -303,6 +304,7 @@ Returns service status with database connectivity check. Used by Docker healthch
 |---------|--------|
 | Discord | Trade entry/exit with strategy reasoning, daily summaries, risk alerts, bot status changes |
 | Telegram | Trade notifications, error alerts |
+| WhatsApp | Trade notifications via CallMeBot API |
 
 ---
 
@@ -326,12 +328,12 @@ python -m pytest tests/ --cov=src --cov-report=html
 
 ## Multi-Exchange Support
 
-| Feature | Bitget | Weex | Hyperliquid |
-|---------|--------|------|-------------|
-| Authentication | HMAC-SHA256 + Passphrase | HMAC-SHA256 | EIP-712 Wallet Signature |
-| Demo Mode | X-SIMULATED-TRADING header | Testnet URL | Testnet URL |
-| Symbol Format | `BTCUSDT` | `BTC/USDT:USDT` | `BTC` |
-| API Style | REST v2 | REST | JSON-RPC |
+| Feature | Bitget | Weex | Hyperliquid | Bitunix | BingX |
+|---------|--------|------|-------------|---------|-------|
+| Authentication | HMAC-SHA256 + Passphrase | HMAC-SHA256 | EIP-712 Wallet Signature | HMAC-SHA256 + Passphrase | HMAC-SHA256 |
+| Demo Mode | X-SIMULATED-TRADING header | Testnet URL | Testnet URL | Testnet URL | VST Mode |
+| Symbol Format | `BTCUSDT` | `BTC/USDT:USDT` | `BTC` | `BTCUSDT` | `BTC-USDT` |
+| API Style | REST v2 | REST | JSON-RPC | REST | REST |
 
 All exchanges implement the `ExchangeClient` abstract base class, making them interchangeable at runtime.
 
