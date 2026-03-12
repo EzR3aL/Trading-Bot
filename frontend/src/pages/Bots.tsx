@@ -318,6 +318,7 @@ function BotTradeHistoryModal({ bot, onClose, t }: { bot: BotStatus; onClose: ()
   const [selectedTrade, setSelectedTrade] = useState<BotTrade | null>(null)
   const [affiliateLink, setAffiliateLink] = useState<AffiliateLink | null>(null)
   const latestCardRef = useRef<HTMLDivElement>(null)
+  const copyCardRef = useRef<HTMLDivElement>(null)
   const theme = useThemeStore((s) => s.theme)
 
   useEffect(() => {
@@ -341,9 +342,9 @@ function BotTradeHistoryModal({ bot, onClose, t }: { bot: BotStatus; onClose: ()
   const [copied, setCopied] = useState(false)
 
   const handleCopyImage = async () => {
-    if (!latestCardRef.current) return
+    if (!copyCardRef.current) return
     try {
-      const blob = await toBlob(latestCardRef.current, {
+      const blob = await toBlob(copyCardRef.current, {
         pixelRatio: 2,
         backgroundColor: theme === 'light' ? '#f8fafc' : '#0b0f19',
       })
@@ -465,81 +466,114 @@ function BotTradeHistoryModal({ bot, onClose, t }: { bot: BotStatus; onClose: ()
                       {copied ? t('bots.copied') : t('bots.copyImage')}
                     </button>
                   </div>
+                  {/* Visible card — original wide layout */}
                   <div
                     ref={latestCardRef}
-                    className="bg-[#0f1420] rounded-2xl p-7 max-w-lg border border-white/10 shadow-2xl cursor-pointer hover:border-white/15 transition-all"
+                    className="bg-white/[0.02] rounded-xl p-4 border border-white/5 cursor-pointer hover:border-white/10 transition-all"
                     onClick={() => setSelectedTrade(latestClosed)}
                   >
-                    {/* Header: Symbol + Side */}
-                    <div className="flex items-center gap-3 mb-5">
-                      <h3 className="text-xl font-bold text-white">{latestClosed.symbol}</h3>
-                      <span className={`px-3 py-1 rounded-lg text-xs font-bold ${
-                        latestClosed.side === 'long' ? 'bg-emerald-500/15 text-profit border border-emerald-500/20' : 'bg-red-500/15 text-loss border border-red-500/20'
-                      }`}>
-                        {latestClosed.side === 'long' ? '+ LONG' : '- SHORT'}
-                      </span>
+                    {/* Header: Symbol + Side + Date */}
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-3">
+                        <span className="text-white font-bold text-lg">{latestClosed.symbol}</span>
+                        <span className={`px-2.5 py-0.5 rounded-lg text-xs font-bold ${
+                          latestClosed.side === 'long' ? 'bg-emerald-500/15 text-profit border border-emerald-500/20' : 'bg-red-500/15 text-loss border border-red-500/20'
+                        }`}>
+                          {latestClosed.side === 'long' ? '+ LONG' : '- SHORT'}
+                        </span>
+                      </div>
+                      <span className="text-xs text-gray-500 cursor-default" title={formatTime(latestClosed.entry_time)}>{formatDate(latestClosed.entry_time)}</span>
                     </div>
 
-                    {/* Result - Hero */}
-                    <div className="text-center py-6 mb-5 bg-white/[0.02] rounded-xl border border-white/5">
-                      <div className="text-xs text-gray-400 uppercase tracking-wider mb-2">{t('bots.result')}</div>
-                      <div className={`text-5xl font-bold tracking-tight ${latestClosed.pnl_percent >= 0 ? 'text-profit' : 'text-loss'}`}>
-                        {formatPnlPercent(latestClosed.pnl_percent)}
+                    {/* 4-column grid: PnL | Einstieg | Ausstieg | Konfidenz */}
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                      <div>
+                        <div className="text-xs text-gray-400 uppercase tracking-wider mb-0.5">{t('bots.result')}</div>
+                        <div className={`text-2xl font-bold tracking-tight ${latestClosed.pnl_percent >= 0 ? 'text-profit' : 'text-loss'}`}>
+                          {formatPnlPercent(latestClosed.pnl_percent)}
+                        </div>
+                        <div className={`text-sm font-medium ${latestClosed.pnl >= 0 ? 'text-profit/60' : 'text-loss/60'}`}>
+                          <PnlCell
+                            pnl={latestClosed.pnl}
+                            fees={latestClosed.fees ?? 0}
+                            fundingPaid={latestClosed.funding_paid ?? 0}
+                            status={latestClosed.status}
+                            className={`text-sm font-medium ${latestClosed.pnl >= 0 ? 'text-profit/60' : 'text-loss/60'}`}
+                          />
+                        </div>
                       </div>
-                      <div className={`text-lg font-semibold mt-1 ${latestClosed.pnl >= 0 ? 'text-profit/70' : 'text-loss/70'}`}>
-                        <PnlCell
-                          pnl={latestClosed.pnl}
-                          fees={latestClosed.fees ?? 0}
-                          fundingPaid={latestClosed.funding_paid ?? 0}
-                          status={latestClosed.status}
-                          className={`text-lg font-semibold ${latestClosed.pnl >= 0 ? 'text-profit/70' : 'text-loss/70'}`}
-                        />
+                      <div>
+                        <div className="text-xs text-gray-400 uppercase tracking-wider mb-0.5">{t('bots.entryPrice')}</div>
+                        <div className="text-lg font-bold text-white">${latestClosed.entry_price.toLocaleString()}</div>
                       </div>
-                    </div>
-
-                    {/* Entry / Exit Price */}
-                    <div className="grid grid-cols-2 gap-3 mb-5">
-                      <div className="bg-white/[0.03] rounded-xl p-4 border border-white/5">
-                        <div className="text-xs text-gray-400 mb-1.5">{t('bots.entryPrice')}</div>
-                        <div className="text-white font-semibold text-lg">${latestClosed.entry_price.toLocaleString()}</div>
-                      </div>
-                      <div className="bg-white/[0.03] rounded-xl p-4 border border-white/5">
-                        <div className="text-xs text-gray-400 mb-1.5">{t('bots.exitPrice')}</div>
-                        <div className="text-white font-semibold text-lg">
+                      <div>
+                        <div className="text-xs text-gray-400 uppercase tracking-wider mb-0.5">{t('bots.exitPrice')}</div>
+                        <div className="text-lg font-bold text-white">
                           {latestClosed.exit_price ? `$${latestClosed.exit_price.toLocaleString()}` : '--'}
                         </div>
                       </div>
-                    </div>
-
-                    {/* Confidence */}
-                    <div className="flex items-center justify-between mb-5 bg-white/[0.03] rounded-xl p-4 border border-white/5">
-                      <span className="text-sm text-gray-400">{t('bots.confidence')}</span>
-                      <span className={`font-bold text-lg ${confidenceColor(latestClosed.confidence)}`}>{latestClosed.confidence}%</span>
-                    </div>
-
-                    {/* Reasoning */}
-                    {latestClosed.reason && (
-                      <div className="mb-5">
-                        <div className="text-xs text-gray-400 uppercase tracking-wider mb-2">{t('bots.reasoning')}</div>
-                        <p className="text-sm text-gray-300 leading-relaxed bg-white/[0.03] rounded-xl p-4 border border-white/5">
-                          {latestClosed.reason}
-                        </p>
+                      <div>
+                        <div className="text-xs text-gray-400 uppercase tracking-wider mb-0.5">{t('bots.confidence')}</div>
+                        <div className={`text-lg font-bold ${confidenceColor(latestClosed.confidence)}`}>{latestClosed.confidence}%</div>
                       </div>
-                    )}
-
-                    {/* Footer info */}
-                    <div className="flex items-center justify-between text-sm text-gray-500 pt-4 border-t border-white/5">
-                      <span>{formatDateTime(latestClosed.entry_time)}</span>
-                      <span className="text-gray-500">{latestClosed.exit_reason || latestClosed.status}</span>
                     </div>
+                  </div>
 
-                    {/* Affiliate Link (inside card for screenshot capture) */}
-                    {affiliateLink && (
-                      <div className="mt-3 pt-2 border-t border-white/5 flex items-center justify-between">
-                        <span className="text-xs text-gray-500">{affiliateLink.label || t('bots.affiliateLink')}</span>
-                        <span className="text-xs text-primary-400 font-medium">{affiliateLink.affiliate_url}</span>
+                  {/* Hidden compact card — only used for "Bild kopieren" image export */}
+                  <div className="absolute -left-[9999px] pointer-events-none" aria-hidden="true">
+                    <div
+                      ref={copyCardRef}
+                      className="bg-[#0f1420] rounded-2xl p-7 w-[420px] border border-white/10 shadow-2xl"
+                    >
+                      <div className="flex items-center gap-3 mb-5">
+                        <h3 className="text-xl font-bold text-white">{latestClosed.symbol}</h3>
+                        <span className={`px-3 py-1 rounded-lg text-xs font-bold ${
+                          latestClosed.side === 'long' ? 'bg-emerald-500/15 text-profit border border-emerald-500/20' : 'bg-red-500/15 text-loss border border-red-500/20'
+                        }`}>
+                          {latestClosed.side === 'long' ? '+ LONG' : '- SHORT'}
+                        </span>
                       </div>
-                    )}
+                      <div className="text-center py-6 mb-5 bg-white/[0.02] rounded-xl border border-white/5">
+                        <div className="text-xs text-gray-400 uppercase tracking-wider mb-2">{t('bots.result')}</div>
+                        <div className={`text-5xl font-bold tracking-tight ${latestClosed.pnl_percent >= 0 ? 'text-profit' : 'text-loss'}`}>
+                          {formatPnlPercent(latestClosed.pnl_percent)}
+                        </div>
+                        <div className={`text-lg font-semibold mt-1 ${latestClosed.pnl >= 0 ? 'text-profit/70' : 'text-loss/70'}`}>
+                          <PnlCell pnl={latestClosed.pnl} fees={latestClosed.fees ?? 0} fundingPaid={latestClosed.funding_paid ?? 0} status={latestClosed.status}
+                            className={`text-lg font-semibold ${latestClosed.pnl >= 0 ? 'text-profit/70' : 'text-loss/70'}`} />
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-3 mb-5">
+                        <div className="bg-white/[0.03] rounded-xl p-4 border border-white/5">
+                          <div className="text-xs text-gray-400 mb-1.5">{t('bots.entryPrice')}</div>
+                          <div className="text-white font-semibold text-lg">${latestClosed.entry_price.toLocaleString()}</div>
+                        </div>
+                        <div className="bg-white/[0.03] rounded-xl p-4 border border-white/5">
+                          <div className="text-xs text-gray-400 mb-1.5">{t('bots.exitPrice')}</div>
+                          <div className="text-white font-semibold text-lg">{latestClosed.exit_price ? `$${latestClosed.exit_price.toLocaleString()}` : '--'}</div>
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-between mb-5 bg-white/[0.03] rounded-xl p-4 border border-white/5">
+                        <span className="text-sm text-gray-400">{t('bots.confidence')}</span>
+                        <span className={`font-bold text-lg ${confidenceColor(latestClosed.confidence)}`}>{latestClosed.confidence}%</span>
+                      </div>
+                      {latestClosed.reason && (
+                        <div className="mb-5">
+                          <div className="text-xs text-gray-400 uppercase tracking-wider mb-2">{t('bots.reasoning')}</div>
+                          <p className="text-sm text-gray-300 leading-relaxed bg-white/[0.03] rounded-xl p-4 border border-white/5">{latestClosed.reason}</p>
+                        </div>
+                      )}
+                      <div className="flex items-center justify-between text-sm text-gray-500 pt-4 border-t border-white/5">
+                        <span>{formatDateTime(latestClosed.entry_time)}</span>
+                        <span>{latestClosed.exit_reason || latestClosed.status}</span>
+                      </div>
+                      {affiliateLink && (
+                        <div className="mt-3 pt-2 border-t border-white/5 flex items-center justify-between">
+                          <span className="text-xs text-gray-500">{affiliateLink.label || t('bots.affiliateLink')}</span>
+                          <span className="text-xs text-primary-400 font-medium">{affiliateLink.affiliate_url}</span>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
               )}

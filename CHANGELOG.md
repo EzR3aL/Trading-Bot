@@ -9,6 +9,13 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [4.0.1] - 2026-03-12
+
+### Behoben
+- **Letzter Trade Karte: Layout korrigiert** — Sichtbare Karte auf der Bots-Seite zeigt wieder das originale breite 4-Spalten-Layout. Kompaktes Design wird nur noch fuer die Bild-Kopie (Bild kopieren) verwendet, unsichtbar gerendert
+
+---
+
 ## [4.0.0] - 2026-03-11
 
 ### Hinzugefuegt
