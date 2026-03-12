@@ -18,6 +18,7 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 - **Affiliate-Link Layout** — Label und URL werden nun untereinander statt nebeneinander angezeigt fuer bessere Lesbarkeit in den kopierten Trade-Bildern
 
 ### Behoben
+- **2FA nur unter API-Schluessel** — 2FA-Bereich wird nur noch im Tab "API-Schluessel" angezeigt, nicht mehr auf allen Einstellungs-Tabs
 - **Letzter Trade Karte: Layout korrigiert** — Sichtbare Karte auf der Bots-Seite zeigt wieder das originale breite 4-Spalten-Layout. Kompaktes Design wird nur noch fuer die Bild-Kopie (Bild kopieren) verwendet, unsichtbar gerendert
 
 ---

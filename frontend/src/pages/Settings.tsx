@@ -882,6 +882,7 @@ export default function Settings() {
                 )
               })}
             </div>
+
           </div>
         )
       })()}
@@ -1818,7 +1819,8 @@ export default function Settings() {
         </div>
       )}
 
-      {/* ── Two-Factor Authentication ── */}
+      {/* ── Two-Factor Authentication (only on API Keys tab) ── */}
+      {activeTab === 'apiKeys' && (
       <div className="mt-8 border border-white/10 bg-white/[0.03] rounded-xl p-5 max-w-2xl">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-3">
@@ -2062,6 +2064,7 @@ export default function Settings() {
           </div>
         )}
       </div>
+      )}
 
       {/* Guided Tour */}
       <GuidedTour tourId="settings" steps={settingsTourSteps} />
