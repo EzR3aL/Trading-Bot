@@ -1,10 +1,10 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { Trans, useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
 import api from '../../api/client'
 import { getApiErrorMessage } from '../../utils/api-error'
 import { useToastStore } from '../../stores/toastStore'
-import { ArrowLeft, ArrowRight, Check, Play, Brain, TrendingUp, BarChart3, DollarSign, Activity, Building, LayoutGrid, List, Bot, Info, Zap, Clock, AlertTriangle, Wallet, ChevronDown } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Check, Play, Brain, TrendingUp, BarChart3, DollarSign, Activity, Building, LayoutGrid, List, Bot, Info, Zap, Clock, AlertTriangle, Wallet, ChevronDown, Search, X, Loader2 } from 'lucide-react'
 import ExchangeLogo from '../ui/ExchangeLogo'
 import FilterDropdown from '../ui/FilterDropdown'
 import NumInput from '../ui/NumInput'
@@ -133,9 +133,7 @@ const STRATEGY_RECOMMENDATIONS: Record<string, { bestTimeframe: string }> = {
 }
 
 const EXCHANGES = ['bitget', 'weex', 'hyperliquid', 'bitunix', 'bingx']
-const PAIRS_CEX = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'XRPUSDT', 'DOGEUSDT', 'AVAXUSDT']
-const PAIRS_BINGX = ['BTC-USDT', 'ETH-USDT', 'SOL-USDT', 'XRP-USDT', 'DOGE-USDT', 'AVAX-USDT']
-const PAIRS_HL = ['BTC', 'ETH', 'SOL', 'XRP', 'DOGE', 'AVAX']
+const POPULAR_BASES = ['BTC', 'ETH', 'SOL', 'XRP', 'DOGE', 'AVAX']
 
 export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps) {
   const { t } = useTranslation()
@@ -180,6 +178,13 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
   // Symbol conflicts
   const [symbolConflicts, setSymbolConflicts] = useState<SymbolConflict[]>([])
 
+  // Dynamic exchange symbols
+  const [exchangeSymbols, setExchangeSymbols] = useState<string[]>([])
+  const [symbolsLoading, setSymbolsLoading] = useState(false)
+  const [symbolSearch, setSymbolSearch] = useState('')
+  const [symbolDropdownOpen, setSymbolDropdownOpen] = useState(false)
+  const symbolDropdownRef = useRef<HTMLDivElement>(null)
+
   // Balance preview for Step 3
   const [balancePreview, setBalancePreview] = useState<BalancePreview | null>(null)
   const [balanceOverview, setBalanceOverview] = useState<BalancePreview[]>([])
@@ -206,6 +211,7 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
   const hasFixedSources = !!FIXED_STRATEGY_SOURCES[strategyType]
 
   // Dynamic steps: insert data sources step only for LLM strategy (manual selection)
+  // step3 = Exchange & Assets (merged), step4 = Notifications, step5 = Schedule, step6 = Review
   const steps = useMemo(() => {
     if (usesData && !hasFixedSources) {
       return ['step1', 'step2', 'step2b', 'step3', 'step4', 'step5', 'step6'] as const
@@ -329,7 +335,39 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
 
   const isHyperliquid = exchangeType === 'hyperliquid'
   const isBingx = exchangeType === 'bingx'
-  const activePairs = isHyperliquid ? PAIRS_HL : isBingx ? PAIRS_BINGX : PAIRS_CEX
+
+  // Fetch available symbols when exchange changes
+  useEffect(() => {
+    let cancelled = false
+    setSymbolsLoading(true)
+    api.get(`/exchanges/${exchangeType}/symbols`)
+      .then(res => {
+        if (!cancelled) setExchangeSymbols(res.data.symbols || [])
+      })
+      .catch(() => {
+        if (!cancelled) setExchangeSymbols([])
+      })
+      .finally(() => { if (!cancelled) setSymbolsLoading(false) })
+    return () => { cancelled = true }
+  }, [exchangeType])
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    const handleClick = (e: MouseEvent) => {
+      if (symbolDropdownRef.current && !symbolDropdownRef.current.contains(e.target as Node)) {
+        setSymbolDropdownOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [])
+
+  // Filter symbols by search query
+  const filteredSymbols = useMemo(() => {
+    if (!symbolSearch.trim()) return exchangeSymbols
+    const q = symbolSearch.toUpperCase()
+    return exchangeSymbols.filter(s => s.toUpperCase().includes(q))
+  }, [exchangeSymbols, symbolSearch])
 
   const selectedStrategy = strategies.find(s => s.name === strategyType)
 
@@ -375,20 +413,26 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
     }
   }, [strategyParams.llm_provider, selectedStrategy])
 
-  // Convert trading pairs when exchange type changes
+  // Convert trading pairs when exchange type changes and new symbols are loaded
   useEffect(() => {
-    setTradingPairs(prev => prev.map(p => {
-      // Strip any suffix/format to get the base symbol
-      const base = p.replace(/[-](USDT|USDC)$/i, '').replace(/(USDT|USDC)$/i, '')
-      if (isHyperliquid) {
-        return base
-      } else if (isBingx) {
-        return `${base}-USDT`
-      } else {
-        return base + 'USDT'
-      }
-    }))
-  }, [exchangeType]) // eslint-disable-line react-hooks/exhaustive-deps
+    if (exchangeSymbols.length === 0) return
+    setTradingPairs(prev => {
+      const converted = prev.map(p => {
+        const base = p.replace(/[-](USDT|USDC)$/i, '').replace(/(USDT|USDC)$/i, '')
+        let target: string
+        if (isHyperliquid) {
+          target = base
+        } else if (isBingx) {
+          target = `${base}-USDT`
+        } else {
+          target = base + 'USDT'
+        }
+        // Only keep if the converted symbol exists on this exchange
+        return exchangeSymbols.includes(target) ? target : null
+      }).filter((p): p is string => p !== null)
+      return converted.length > 0 ? converted : prev
+    })
+  }, [exchangeType, exchangeSymbols]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Fetch exchange balance preview when exchange/mode changes
   useEffect(() => {
@@ -430,7 +474,7 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
 
   const togglePair = (pair: string) => {
     setTradingPairs(prev =>
-      prev.includes(pair) ? prev.filter(p => p !== pair) : [...prev, pair]
+      prev.includes(pair) ? prev.filter(p => p !== pair) : prev.length >= 20 ? prev : [...prev, pair]
     )
   }
 
@@ -1149,28 +1193,180 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
           </div>
         )}
 
-        {/* Step 3: Trading Parameters */}
+        {/* Step 3: Exchange & Assets (merged) */}
         {currentStepKey === 'step3' && (
           <div className="space-y-6">
-            {/* Trading pairs */}
+            {/* Exchange selection */}
             <div>
-              <label className="block text-sm text-gray-400 mb-2">{b.tradingPairs}</label>
-              <div className="flex flex-wrap gap-1.5">
-                {activePairs.map(pair => {
-                  const active = tradingPairs.includes(pair)
+              <label className="block text-sm text-gray-400 mb-2">{b.exchange}</label>
+              <div className="flex gap-2">
+                {EXCHANGES.map(ex => {
+                  const active = exchangeType === ex
                   return (
-                    <button key={pair} onClick={() => togglePair(pair)}
-                      className={`px-3 py-1.5 text-sm rounded-lg border transition-all ${
+                    <button key={ex} onClick={() => setExchangeType(ex)}
+                      className={`px-4 py-2 rounded-xl border transition-all ${
                         active
-                          ? 'border-primary-500 bg-primary-500/15 text-primary-400 ring-1 ring-primary-500/30'
-                          : 'border-white/10 bg-white/[0.03] text-gray-400 hover:border-white/20 hover:bg-white/[0.06] hover:text-gray-300'
+                          ? 'border-primary-500 bg-primary-500/10 text-white ring-1 ring-primary-500/30'
+                          : 'border-white/10 bg-white/[0.03] text-gray-400 hover:border-white/20 hover:bg-white/[0.06]'
                       }`}>
-                      {pair}
+                      <ExchangeLogo exchange={ex} size={16} />
                     </button>
                   )
                 })}
               </div>
             </div>
+
+            {/* Mode + Margin Mode */}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm text-gray-400 mb-2">{b.mode}</label>
+                <div className="flex gap-2">
+                  {(['demo', 'live', 'both'] as const).map(m => {
+                    const active = mode === m
+                    const colorMap = {
+                      demo: active ? 'border-blue-500 bg-blue-500/10 text-blue-400 ring-1 ring-blue-500/30' : '',
+                      live: active ? 'border-orange-500 bg-orange-500/10 text-orange-400 ring-1 ring-orange-500/30' : '',
+                      both: active ? 'border-purple-500 bg-purple-500/10 text-purple-400 ring-1 ring-purple-500/30' : '',
+                    }
+                    return (
+                      <button key={m} onClick={() => setMode(m)}
+                        className={`px-4 py-2 rounded-xl border transition-all ${
+                          active
+                            ? colorMap[m]
+                            : 'border-white/10 bg-white/[0.03] text-gray-400 hover:border-white/20 hover:bg-white/[0.06]'
+                        }`}>
+                        {b[m]}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm text-gray-400 mb-2">{t('bots.builder.marginMode')}</label>
+                <div className="flex gap-2">
+                  {(['cross', 'isolated'] as const).map(mm => {
+                    const active = marginMode === mm
+                    return (
+                      <button key={mm} onClick={() => setMarginMode(mm)}
+                        className={`px-4 py-2 rounded-xl border transition-all ${
+                          active
+                            ? 'border-primary-500 bg-primary-500/10 text-white ring-1 ring-primary-500/30'
+                            : 'border-white/10 bg-white/[0.03] text-gray-400 hover:border-white/20 hover:bg-white/[0.06]'
+                        }`}>
+                        {t(`bots.builder.${mm}`)}
+                      </button>
+                    )
+                  })}
+                </div>
+                <p className="text-xs text-gray-400 mt-1.5">{t('bots.builder.marginModeHint')}</p>
+              </div>
+            </div>
+
+            {/* Trading pairs — searchable multi-select */}
+            <div>
+              <label className="block text-sm text-gray-400 mb-2">{b.tradingPairs}</label>
+
+              {/* Selected pairs as chips */}
+              {tradingPairs.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 mb-2">
+                  {tradingPairs.map(pair => (
+                    <span key={pair} className="inline-flex items-center gap-1 px-2.5 py-1 text-sm rounded-lg border border-primary-500/30 bg-primary-500/15 text-primary-400">
+                      {pair}
+                      <button onClick={() => togglePair(pair)} className="hover:text-white transition-colors" aria-label={`Remove ${pair}`}>
+                        <X size={13} />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
+
+              {/* Popular quick buttons */}
+              <div className="flex flex-wrap gap-1.5 mb-2">
+                {POPULAR_BASES.map(base => {
+                  const symbol = isHyperliquid ? base : isBingx ? `${base}-USDT` : `${base}USDT`
+                  const isSelected = tradingPairs.includes(symbol)
+                  const isAvailable = exchangeSymbols.includes(symbol)
+                  if (!isAvailable && !symbolsLoading) return null
+                  return (
+                    <button key={base} onClick={() => togglePair(symbol)} disabled={symbolsLoading}
+                      className={`px-3 py-1.5 text-xs rounded-lg border transition-all ${
+                        isSelected
+                          ? 'border-primary-500 bg-primary-500/15 text-primary-400'
+                          : 'border-white/10 bg-white/[0.03] text-gray-400 hover:border-white/20 hover:bg-white/[0.06]'
+                      }`}>
+                      {base}
+                    </button>
+                  )
+                })}
+              </div>
+
+              {/* Searchable dropdown */}
+              <div className="relative" ref={symbolDropdownRef}>
+                <div className="relative">
+                  <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
+                  <input
+                    type="text"
+                    value={symbolSearch}
+                    onChange={e => { setSymbolSearch(e.target.value); setSymbolDropdownOpen(true) }}
+                    onFocus={() => setSymbolDropdownOpen(true)}
+                    placeholder={t('bots.builder.searchSymbols')}
+                    className="filter-select w-full text-sm pl-9 pr-10"
+                  />
+                  {symbolsLoading && (
+                    <Loader2 size={15} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 animate-spin" />
+                  )}
+                  {!symbolsLoading && exchangeSymbols.length > 0 && (
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-gray-500">
+                      {exchangeSymbols.length} {t('bots.builder.available')}
+                    </span>
+                  )}
+                </div>
+
+                {symbolDropdownOpen && !symbolsLoading && filteredSymbols.length > 0 && (
+                  <div className="absolute z-30 w-full mt-1 max-h-60 overflow-y-auto rounded-xl border border-white/10 bg-[#0f1420] shadow-2xl">
+                    {filteredSymbols.slice(0, 100).map(sym => {
+                      const isSelected = tradingPairs.includes(sym)
+                      return (
+                        <button
+                          key={sym}
+                          onClick={() => { togglePair(sym); setSymbolSearch('') }}
+                          className={`w-full text-left px-3 py-2 text-sm transition-colors ${
+                            isSelected
+                              ? 'bg-primary-500/10 text-primary-400'
+                              : 'text-gray-300 hover:bg-white/[0.04] hover:text-white'
+                          }`}
+                        >
+                          <span className="font-medium">{sym}</span>
+                          {isSelected && <Check size={14} className="float-right mt-0.5 text-primary-400" />}
+                        </button>
+                      )
+                    })}
+                    {filteredSymbols.length > 100 && (
+                      <div className="px-3 py-2 text-xs text-gray-500 text-center">
+                        {t('bots.builder.moreResults', { count: filteredSymbols.length - 100 })}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+              <p className="text-xs text-gray-400 mt-1">{t('bots.builder.maxPairs')}</p>
+            </div>
+
+            {/* Symbol conflict warning */}
+            {symbolConflicts.length > 0 && (
+              <div className="p-3 bg-amber-900/30 border border-amber-800 rounded-xl space-y-1.5">
+                <div className="flex items-center gap-2 text-amber-400 font-medium text-sm">
+                  <AlertTriangle size={16} />
+                  {t('bots.builder.symbolConflictTitle')}
+                </div>
+                {symbolConflicts.map((c, i) => (
+                  <div key={i} className="text-sm text-amber-300/80 ml-6">
+                    {t('bots.builder.symbolConflictItem', { symbol: c.symbol, botName: c.existing_bot_name, mode: c.existing_bot_mode.toUpperCase() })}
+                  </div>
+                ))}
+                <p className="text-xs text-amber-400/60 ml-6">{t('bots.builder.symbolConflictHint')}</p>
+              </div>
+            )}
 
             {/* Exchange Balance Overview — all exchanges */}
             {(() => {
@@ -1424,91 +1620,10 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
           </div>
         )}
 
-        {/* Step 4: Exchange & Mode */}
+        {/* Step 4: Notifications */}
         {currentStepKey === 'step4' && (
           <div className="space-y-6">
             <div>
-              <label className="block text-sm text-gray-400 mb-2">{b.exchange}</label>
-              <div className="flex gap-2">
-                {EXCHANGES.map(ex => {
-                  const active = exchangeType === ex
-                  return (
-                    <button key={ex} onClick={() => setExchangeType(ex)}
-                      className={`px-4 py-2 rounded-xl border transition-all ${
-                        active
-                          ? 'border-primary-500 bg-primary-500/10 text-white ring-1 ring-primary-500/30'
-                          : 'border-white/10 bg-white/[0.03] text-gray-400 hover:border-white/20 hover:bg-white/[0.06]'
-                      }`}>
-                      <ExchangeLogo exchange={ex} size={16} />
-                    </button>
-                  )
-                })}
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-sm text-gray-400 mb-2">{b.mode}</label>
-              <div className="flex gap-2">
-                {(['demo', 'live', 'both'] as const).map(m => {
-                  const active = mode === m
-                  const colorMap = {
-                    demo: active ? 'border-blue-500 bg-blue-500/10 text-blue-400 ring-1 ring-blue-500/30' : '',
-                    live: active ? 'border-orange-500 bg-orange-500/10 text-orange-400 ring-1 ring-orange-500/30' : '',
-                    both: active ? 'border-purple-500 bg-purple-500/10 text-purple-400 ring-1 ring-purple-500/30' : '',
-                  }
-                  return (
-                    <button key={m} onClick={() => setMode(m)}
-                      className={`px-4 py-2 rounded-xl border transition-all ${
-                        active
-                          ? colorMap[m]
-                          : 'border-white/10 bg-white/[0.03] text-gray-400 hover:border-white/20 hover:bg-white/[0.06]'
-                      }`}>
-                      {b[m]}
-                    </button>
-                  )
-                })}
-              </div>
-            </div>
-
-            {/* Margin Mode */}
-            <div>
-              <label className="block text-sm text-gray-400 mb-2">{t('bots.builder.marginMode')}</label>
-              <div className="flex gap-2">
-                {(['cross', 'isolated'] as const).map(mm => {
-                  const active = marginMode === mm
-                  return (
-                    <button key={mm} onClick={() => setMarginMode(mm)}
-                      className={`px-4 py-2 rounded-xl border transition-all ${
-                        active
-                          ? 'border-primary-500 bg-primary-500/10 text-white ring-1 ring-primary-500/30'
-                          : 'border-white/10 bg-white/[0.03] text-gray-400 hover:border-white/20 hover:bg-white/[0.06]'
-                      }`}>
-                      {t(`bots.builder.${mm}`)}
-                    </button>
-                  )
-                })}
-              </div>
-              <p className="text-xs text-gray-400 mt-1.5">{t('bots.builder.marginModeHint')}</p>
-            </div>
-
-            {/* Symbol conflict warning */}
-            {symbolConflicts.length > 0 && (
-              <div className="p-3 bg-amber-900/30 border border-amber-800 rounded-xl space-y-1.5">
-                <div className="flex items-center gap-2 text-amber-400 font-medium text-sm">
-                  <AlertTriangle size={16} />
-                  {t('bots.builder.symbolConflictTitle')}
-                </div>
-                {symbolConflicts.map((c, i) => (
-                  <div key={i} className="text-sm text-amber-300/80 ml-6">
-                    {t('bots.builder.symbolConflictItem', { symbol: c.symbol, botName: c.existing_bot_name, mode: c.existing_bot_mode.toUpperCase() })}
-                  </div>
-                ))}
-                <p className="text-xs text-amber-400/60 ml-6">{t('bots.builder.symbolConflictHint')}</p>
-              </div>
-            )}
-
-            {/* Notifications section */}
-            <div className="pt-4 border-t border-white/5">
               <label className="block text-sm text-gray-300 mb-3">{t('settings.notifications')}</label>
               <div className="space-y-2">
 

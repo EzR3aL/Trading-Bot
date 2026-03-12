@@ -8,6 +8,7 @@ from src.api.rate_limit import limiter
 from src.errors import ERR_INVALID_EXCHANGE
 from src.api.schemas.exchange import ExchangeInfo, ExchangeListResponse
 from src.exchanges.factory import get_exchange_info, get_supported_exchanges
+from src.exchanges.symbol_fetcher import get_exchange_symbols
 
 router = APIRouter(prefix="/api/exchanges", tags=["exchanges"])
 
@@ -50,3 +51,19 @@ async def get_exchange_detail(request: Request, exchange_name: str):
         auth_type=info["auth_type"],
         requires_passphrase=info["requires_passphrase"],
     )
+
+
+@router.get("/{exchange_name}/symbols")
+@limiter.limit("10/minute")
+async def get_symbols(request: Request, exchange_name: str):
+    """Get all available perpetual futures symbols for an exchange."""
+    if not _EXCHANGE_NAME_RE.match(exchange_name):
+        raise HTTPException(status_code=400, detail=ERR_INVALID_EXCHANGE)
+
+    exchange_name = exchange_name.lower()
+    supported = get_supported_exchanges()
+    if exchange_name not in supported:
+        raise HTTPException(status_code=404, detail=f"Exchange '{exchange_name}' not found")
+
+    symbols = await get_exchange_symbols(exchange_name)
+    return {"exchange": exchange_name, "symbols": symbols, "count": len(symbols)}
