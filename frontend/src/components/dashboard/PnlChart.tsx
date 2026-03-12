@@ -7,6 +7,7 @@ import { useTranslation } from 'react-i18next'
 import { useThemeStore } from '../../stores/themeStore'
 import type { DailyStats } from '../../types'
 import { Eye, EyeOff } from 'lucide-react'
+import { formatChartDate } from '../../utils/dateUtils'
 
 const PNL_POS = '#22c55e'
 const PNL_NEG = '#ef4444'
@@ -85,7 +86,7 @@ export default function PnlChart({ data }: Props) {
     return data.map((d) => {
       cumulative += d.pnl
       return {
-        date: new Date(d.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }),
+        date: formatChartDate(d.date),
         dailyPnl: Number(d.pnl.toFixed(2)),
         fees: Number(Math.abs(d.fees).toFixed(2)),
         funding: Number(Math.abs(d.funding).toFixed(2)),

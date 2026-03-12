@@ -4,6 +4,7 @@ import csv
 import io
 from datetime import datetime, timezone
 from typing import Optional
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import StreamingResponse
@@ -13,6 +14,25 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.auth.dependencies import get_current_user
 from src.models.database import TradeRecord, User
 from src.models.session import get_db
+
+
+def _resolve_tz(tz_name: Optional[str]) -> ZoneInfo:
+    """Resolve an IANA timezone name to a ZoneInfo object, falling back to UTC."""
+    if not tz_name:
+        return ZoneInfo("UTC")
+    try:
+        return ZoneInfo(tz_name)
+    except (ZoneInfoNotFoundError, KeyError):
+        return ZoneInfo("UTC")
+
+
+def _fmt_dt(dt: Optional[datetime], tz: ZoneInfo) -> str:
+    """Format a datetime in the user's local timezone for the CSV export."""
+    if not dt:
+        return ""
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(tz).strftime("%Y-%m-%d %H:%M")
 
 router = APIRouter(prefix="/api/tax-report", tags=["tax-report"])
 
@@ -84,12 +104,15 @@ async def get_tax_report(
 async def download_tax_report_csv(
     year: int = Query(default=None, ge=2020, le=2030),
     demo_mode: Optional[bool] = Query(None),
+    tz: Optional[str] = Query(None, description="IANA timezone, e.g. Europe/Berlin"),
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """Download tax report as CSV — German tax-compliant format with bilingual headers."""
     if year is None:
         year = datetime.now(timezone.utc).year
+    user_tz = _resolve_tz(tz)
+    tz_label = str(user_tz)
 
     result = await db.execute(_query_trades(user.id, year, demo_mode))
     trades = result.scalars().all()
@@ -102,7 +125,7 @@ async def download_tax_report_csv(
     # ── Header section ──
     writer.writerow(["STEUERREPORT KRYPTOWAEHRUNGSHANDEL / TAX REPORT CRYPTOCURRENCY TRADING"])
     writer.writerow(["Berichtszeitraum / Reporting Period", f"{year}-01-01 bis/to {year}-12-31"])
-    writer.writerow(["Erstellt am / Generated on", datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")])
+    writer.writerow(["Erstellt am / Generated on", datetime.now(timezone.utc).astimezone(user_tz).strftime(f"%Y-%m-%d %H:%M ({tz_label})")])
     mode_label = "Demo" if demo_mode is True else "Live" if demo_mode is False else "Alle/All"
     writer.writerow(["Modus / Mode", mode_label])
     writer.writerow([])
@@ -169,6 +192,7 @@ async def download_tax_report_csv(
 
     # ── Detailed trades ──
     writer.writerow(["EINZELTRANSAKTIONEN / DETAILED TRADES"])
+    writer.writerow(["Zeitzone / Timezone", tz_label])
     writer.writerow([
         "Einstieg / Entry Date",
         "Ausstieg / Exit Date",
@@ -202,8 +226,8 @@ async def download_tax_report_csv(
             duration_h = f"{dur_sec / 3600:.1f}"
 
         writer.writerow([
-            t.entry_time.strftime("%Y-%m-%d %H:%M") if t.entry_time else "",
-            t.exit_time.strftime("%Y-%m-%d %H:%M") if t.exit_time else "",
+            _fmt_dt(t.entry_time, user_tz),
+            _fmt_dt(t.exit_time, user_tz),
             t.symbol,
             (t.side or "").upper(),
             t.leverage or 1,

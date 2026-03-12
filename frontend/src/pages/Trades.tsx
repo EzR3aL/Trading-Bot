@@ -8,6 +8,7 @@ import { ExchangeIcon } from '../components/ui/ExchangeLogo'
 import { SkeletonTable } from '../components/ui/Skeleton'
 import PnlCell from '../components/ui/PnlCell'
 import { X, ShieldCheck } from 'lucide-react'
+import { formatDate, formatTimeWithTz } from '../utils/dateUtils'
 import Pagination from '../components/ui/Pagination'
 import DatePicker from '../components/ui/DatePicker'
 import FilterDropdown from '../components/ui/FilterDropdown'
@@ -219,7 +220,7 @@ export default function Trades() {
                   trades.map((trade) => (
                     <tr key={trade.id}>
                       <td className="text-gray-500 text-xs">{trade.id}</td>
-                      <td className="text-gray-300 cursor-default" title={new Date(trade.entry_time).toLocaleTimeString('de-DE', { timeZone: 'UTC', hour: '2-digit', minute: '2-digit' }) + ' UTC'}>{new Date(trade.entry_time).toLocaleDateString()}</td>
+                      <td className="text-gray-300 cursor-default" title={formatTimeWithTz(trade.entry_time)}>{formatDate(trade.entry_time)}</td>
                       <td>
                         {trade.bot_name ? (
                           <span className="text-white font-medium">{trade.bot_name}</span>

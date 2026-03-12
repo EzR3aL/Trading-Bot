@@ -1261,7 +1261,7 @@ export default function Settings() {
                               <td className="py-2 px-3 text-gray-300 font-mono text-[10px]">{item.affiliate_uid}</td>
                               <td className="py-2 px-3 text-gray-500 text-[10px] whitespace-nowrap tabular-nums">
                                 {item.submitted_at
-                                  ? new Date(item.submitted_at).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' })
+                                  ? new Date(item.submitted_at).toLocaleDateString(undefined, { day: '2-digit', month: '2-digit', year: 'numeric' })
                                   : '—'}
                               </td>
                               <td className="py-2 px-3">

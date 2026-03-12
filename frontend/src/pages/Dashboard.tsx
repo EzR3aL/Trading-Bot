@@ -12,6 +12,7 @@ import PnlCell from '../components/ui/PnlCell'
 import { ArrowUpRight, ArrowDownRight } from 'lucide-react'
 import { ExchangeIcon } from '../components/ui/ExchangeLogo'
 import GuidedTour, { TourHelpButton, type TourStep } from '../components/ui/GuidedTour'
+import { formatDate, formatTimeWithTz } from '../utils/dateUtils'
 
 /* ── Animated Number ─────────────────────────────────────── */
 
@@ -244,8 +245,8 @@ export default function Dashboard() {
               ) : (
                 recentTrades.map((trade) => (
                   <tr key={trade.id}>
-                    <td className="text-gray-300 cursor-default" title={new Date(trade.entry_time).toLocaleTimeString('de-DE', { timeZone: 'UTC', hour: '2-digit', minute: '2-digit' }) + ' UTC'}>
-                      {new Date(trade.entry_time).toLocaleDateString()}
+                    <td className="text-gray-300 cursor-default" title={formatTimeWithTz(trade.entry_time)}>
+                      {formatDate(trade.entry_time)}
                     </td>
                     <td>
                       {trade.bot_name ? (

@@ -38,6 +38,7 @@ import {
   ShieldCheck,
 } from 'lucide-react'
 import GuidedTour, { TourHelpButton, type TourStep } from '../components/ui/GuidedTour'
+import { formatDate, formatDateTime, formatTime, formatTimeWithTz } from '../utils/dateUtils'
 
 const STRATEGY_DISPLAY: Record<string, string> = { llm_signal: 'KI-Companion', sentiment_surfer: 'Sentiment Surfer', liquidation_hunter: 'Liquidation Hunter', degen: 'Degen', edge_indicator: 'Edge Indicator', contrarian_pulse: 'Contrarian Pulse' }
 const AI_STRATEGIES = new Set(['llm_signal', 'degen'])
@@ -293,7 +294,7 @@ function TradeDetailModal({ trade, onClose, t }: { trade: BotTrade; onClose: () 
 
         {/* Footer info */}
         <div className="flex items-center justify-between text-sm text-gray-500 pt-4 border-t border-white/5">
-          <span>{new Date(trade.entry_time).toLocaleString()}</span>
+          <span>{formatDateTime(trade.entry_time)}</span>
           <span className={trade.status === 'open' ? 'text-amber-400 font-medium' : 'text-gray-500'}>
             {trade.status === 'open' ? t('bots.pending') : trade.exit_reason || trade.status}
           </span>
@@ -479,7 +480,7 @@ function BotTradeHistoryModal({ bot, onClose, t }: { bot: BotStatus; onClose: ()
                           {latestClosed.side === 'long' ? '+ LONG' : '- SHORT'}
                         </span>
                       </div>
-                      <span className="text-xs text-gray-500 cursor-default" title={new Date(latestClosed.entry_time).toLocaleTimeString('de-DE', { timeZone: 'UTC', hour: '2-digit', minute: '2-digit' }) + ' UTC'}>{new Date(latestClosed.entry_time).toLocaleDateString()}</span>
+                      <span className="text-xs text-gray-500 cursor-default" title={formatTimeWithTz(latestClosed.entry_time)}>{formatDate(latestClosed.entry_time)}</span>
                     </div>
 
                     {/* 4-column grid: PnL | Einstieg | Ausstieg | Konfidenz */}
@@ -550,8 +551,8 @@ function BotTradeHistoryModal({ bot, onClose, t }: { bot: BotStatus; onClose: ()
                 <tbody>
                   {stats.recent_trades.map((trade) => (
                     <tr key={trade.id} className="border-b border-white/5 hover:bg-white/[0.02] transition-colors">
-                      <td className="px-3 py-2.5 text-sm text-gray-300" title={new Date(trade.entry_time).toLocaleTimeString('de-DE', { timeZone: 'UTC', hour: '2-digit', minute: '2-digit' }) + ' UTC'}>
-                        {new Date(trade.entry_time).toLocaleDateString()}
+                      <td className="px-3 py-2.5 text-sm text-gray-300" title={formatTimeWithTz(trade.entry_time)}>
+                        {formatDate(trade.entry_time)}
                       </td>
                       <td className="px-3 py-2.5 text-center">
                         <span className="inline-flex justify-center">
@@ -1166,7 +1167,7 @@ export default function Bots() {
                   <div className="mb-3">
                     <div className="flex items-center gap-1.5 text-sm text-gray-500">
                       <Clock size={14} />
-                      {t('bots.lastAnalysis')}: {new Date(bot.last_analysis).toLocaleTimeString()}
+                      {t('bots.lastAnalysis')}: {formatTime(bot.last_analysis)}
                     </div>
                     {(() => {
                       const hours = getScheduleHoursUtc(bot.schedule_type, bot.schedule_config)

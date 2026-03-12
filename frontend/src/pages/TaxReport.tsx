@@ -5,6 +5,7 @@ import { useFilterStore } from '../stores/filterStore'
 import { SkeletonCard, SkeletonTable } from '../components/ui/Skeleton'
 import { Download, ArrowUpRight, ArrowDownRight, Loader2 } from 'lucide-react'
 import FilterDropdown from '../components/ui/FilterDropdown'
+import { USER_TIMEZONE } from '../utils/dateUtils'
 
 interface TaxData {
   year: number
@@ -53,7 +54,7 @@ export default function TaxReport() {
     setDownloading(true)
     try {
       const demoParam = demoFilter === 'demo' ? '&demo_mode=true' : demoFilter === 'live' ? '&demo_mode=false' : ''
-      const res = await api.get(`/tax-report/csv?year=${year}${demoParam}`, {
+      const res = await api.get(`/tax-report/csv?year=${year}${demoParam}&tz=${encodeURIComponent(USER_TIMEZONE)}`, {
         responseType: 'blob',
       })
       const url = window.URL.createObjectURL(new Blob([res.data], { type: 'text/csv; charset=utf-8' }))

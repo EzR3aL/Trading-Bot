@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { ChevronLeft, ChevronRight, Calendar } from 'lucide-react'
 import { useThemeStore } from '../../stores/themeStore'
+import { formatDatePickerDisplay, getLocalizedMonths, getLocalizedWeekdays } from '../../utils/dateUtils'
 
 interface Props {
   value: string
@@ -11,11 +12,8 @@ interface Props {
   maxDate?: string  // YYYY-MM-DD
 }
 
-const WEEKDAYS_DE = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So']
-const MONTHS_DE = [
-  'Januar', 'Februar', 'März', 'April', 'Mai', 'Juni',
-  'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember',
-]
+// Localized month and weekday names are derived from the browser locale
+// via Intl.DateTimeFormat — no hardcoded German strings needed.
 
 function getDaysInMonth(year: number, month: number) {
   return new Date(year, month + 1, 0).getDate()
@@ -31,6 +29,8 @@ export default function DatePicker({ value, onChange, placeholder, label, minDat
   const isLight = theme === 'light'
   const [isOpen, setIsOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
+  const MONTHS = useMemo(() => getLocalizedMonths(), [])
+  const WEEKDAYS = useMemo(() => getLocalizedWeekdays(), [])
 
   const today = new Date()
   const parsed = value ? new Date(value + 'T00:00:00') : null
@@ -103,8 +103,8 @@ export default function DatePicker({ value, onChange, placeholder, label, minDat
     return false
   }
 
-  const displayValue = parsed
-    ? parsed.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' })
+  const displayValue = parsed && value
+    ? formatDatePickerDisplay(value)
     : ''
 
   // Previous month trailing days
@@ -156,7 +156,7 @@ export default function DatePicker({ value, onChange, placeholder, label, minDat
               <ChevronLeft size={16} />
             </button>
             <span className={`text-sm font-semibold tracking-wide ${isLight ? 'text-gray-800' : 'text-white'}`}>
-              {MONTHS_DE[viewMonth]} {viewYear}
+              {MONTHS[viewMonth]} {viewYear}
             </span>
             <button
               type="button"
@@ -172,7 +172,7 @@ export default function DatePicker({ value, onChange, placeholder, label, minDat
 
           {/* Weekday Headers */}
           <div className="grid grid-cols-7 px-3 pb-1">
-            {WEEKDAYS_DE.map((d) => (
+            {WEEKDAYS.map((d) => (
               <div key={d} className={`text-center text-[10px] font-medium py-1 ${
                 isLight ? 'text-gray-400' : 'text-gray-500'
               }`}>

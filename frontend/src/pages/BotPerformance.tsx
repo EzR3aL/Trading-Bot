@@ -15,6 +15,7 @@ import PnlCell from '../components/ui/PnlCell'
 import { ExchangeIcon } from '../components/ui/ExchangeLogo'
 import { Eye, EyeOff, ArrowUpRight, ArrowDownRight, Trophy, Target, LayoutGrid, BarChart3, Bot, FileText, X, Copy, ShieldCheck } from 'lucide-react'
 import type { LlmConnection } from '../types'
+import { formatDate, formatDateTime, formatChartDate, formatTimeWithTz } from '../utils/dateUtils'
 
 /* ── Strategy Labels ─────────────────────────────────────── */
 
@@ -272,7 +273,7 @@ function SmallMultipleCard({ bot, color, yDomain, chartGridColor, chartTickColor
   const { t } = useTranslation()
   const isPositive = bot.total_pnl >= 0
   const chartData = bot.series.map(s => ({
-    date: new Date(s.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }),
+    date: formatChartDate(s.date),
     value: s.cumulative_pnl,
   }))
 
@@ -539,7 +540,7 @@ export default function BotPerformance() {
     return botDetail.daily_series.map((d) => {
       cumulative += d.pnl
       return {
-        date: new Date(d.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }),
+        date: formatChartDate(d.date),
         dailyPnl: Number(d.pnl.toFixed(2)),
         fees: Number(Math.abs(d.fees || 0).toFixed(2)),
         funding: Number(Math.abs(d.funding || 0).toFixed(2)),
@@ -808,8 +809,8 @@ export default function BotPerformance() {
                             {latestClosed.side === 'long' ? '+ LONG' : '- SHORT'}
                           </span>
                         </div>
-                        <span className="text-xs text-gray-500" title={latestClosed.entry_time ? new Date(latestClosed.entry_time).toLocaleTimeString('de-DE', { timeZone: 'UTC', hour: '2-digit', minute: '2-digit' }) + ' UTC' : undefined}>
-                          {latestClosed.entry_time ? new Date(latestClosed.entry_time).toLocaleDateString() : '--'}
+                        <span className="text-xs text-gray-500" title={formatTimeWithTz(latestClosed.entry_time)}>
+                          {formatDate(latestClosed.entry_time)}
                         </span>
                       </div>
                       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
@@ -926,8 +927,8 @@ export default function BotPerformance() {
                       const botExchange = compareData.find(b => b.bot_id === selectedBot)?.exchange_type || ''
                       return botDetail.recent_trades.map((trade) => (
                         <tr key={trade.id}>
-                          <td className="text-gray-300 cursor-default" title={trade.entry_time ? new Date(trade.entry_time).toLocaleTimeString('de-DE', { timeZone: 'UTC', hour: '2-digit', minute: '2-digit' }) + ' UTC' : undefined}>
-                            {trade.entry_time ? new Date(trade.entry_time).toLocaleDateString() : '--'}
+                          <td className="text-gray-300 cursor-default" title={formatTimeWithTz(trade.entry_time)}>
+                            {formatDate(trade.entry_time)}
                           </td>
                           <td className="text-center">
                             <span className="inline-flex justify-center">
@@ -1098,7 +1099,7 @@ export default function BotPerformance() {
               )}
 
               <div className="flex items-center justify-between text-sm text-gray-500 pt-4 border-t border-white/5">
-                <span>{selectedTrade.entry_time ? new Date(selectedTrade.entry_time).toLocaleString() : '--'}</span>
+                <span>{formatDateTime(selectedTrade.entry_time)}</span>
                 <span className={selectedTrade.status === 'open' ? 'text-amber-400 font-medium' : 'text-gray-500'}>
                   {selectedTrade.status === 'open' ? t('bots.pending') : selectedTrade.exit_reason || selectedTrade.status}
                 </span>

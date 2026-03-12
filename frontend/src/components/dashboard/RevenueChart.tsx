@@ -3,6 +3,7 @@ import {
   Tooltip, ResponsiveContainer, Legend,
 } from 'recharts'
 import { useTranslation } from 'react-i18next'
+import { formatChartDate } from '../../utils/dateUtils'
 import { useThemeStore } from '../../stores/themeStore'
 import type { DailyStats } from '../../types'
 import ChartTooltip from './ChartTooltip'
@@ -18,7 +19,7 @@ export default function RevenueChart({ data }: Props) {
   const tickColor = theme === 'light' ? '#64748b' : '#9ca3af'
 
   const chartData = data.map((d) => ({
-    date: new Date(d.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }),
+    date: formatChartDate(d.date),
     builderFees: Number((d.builder_fees || 0).toFixed(4)),
   }))
 

@@ -16,6 +16,7 @@ import { useFilterStore } from '../stores/filterStore'
 import { ExchangeIcon } from '../components/ui/ExchangeLogo'
 import PnlCell from '../components/ui/PnlCell'
 import type { LlmConnection } from '../types'
+import { formatDate, formatDateTime, formatTimeWithTz } from '../utils/dateUtils'
 
 const STRATEGY_DISPLAY: Record<string, string> = {
   llm_signal: 'KI-Companion',
@@ -384,8 +385,8 @@ export default function BotDetail() {
                 <tbody>
                   {stats.recent_trades.map(trade => (
                     <tr key={trade.id}>
-                      <td className="text-gray-300 cursor-default" title={trade.entry_time ? new Date(trade.entry_time).toLocaleTimeString('de-DE', { timeZone: 'UTC', hour: '2-digit', minute: '2-digit' }) + ' UTC' : undefined}>
-                        {trade.entry_time ? new Date(trade.entry_time).toLocaleDateString() : '—'}
+                      <td className="text-gray-300 cursor-default" title={formatTimeWithTz(trade.entry_time)}>
+                        {formatDate(trade.entry_time)}
                       </td>
                       <td className="text-center">
                         <span className="inline-flex justify-center">
@@ -499,13 +500,13 @@ export default function BotDetail() {
             </div>
           )}
           {config.created_at && (
-            <ConfigRow label={d('created')} value={new Date(config.created_at).toLocaleDateString()} />
+            <ConfigRow label={d('created')} value={formatDate(config.created_at)} />
           )}
           {runtime?.started_at && (
-            <ConfigRow label={d('started')} value={new Date(runtime.started_at).toLocaleString()} />
+            <ConfigRow label={d('started')} value={formatDateTime(runtime.started_at)} />
           )}
           {runtime?.last_analysis && (
-            <ConfigRow label={d('lastAnalysis')} value={new Date(runtime.last_analysis).toLocaleString()} />
+            <ConfigRow label={d('lastAnalysis')} value={formatDateTime(runtime.last_analysis)} />
           )}
         </div>
       </div>
