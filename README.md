@@ -68,7 +68,7 @@ Frontend (React/TS)  --->  FastAPI Backend  --->  Exchange Adapters
 | Auth | JWT (PyJWT), bcrypt, Fernet encryption |
 | Scheduling | APScheduler (async) |
 | Monitoring | Prometheus, Grafana |
-| Notifications | Discord webhooks, Telegram Bot API, WhatsApp (CallMeBot) |
+| Notifications | Discord webhooks, Telegram Bot API, WhatsApp (Business Cloud API) |
 | Infrastructure | Docker, Docker Compose, multi-stage builds |
 
 ### Project Structure
@@ -304,7 +304,7 @@ Returns service status with database connectivity check. Used by Docker healthch
 |---------|--------|
 | Discord | Trade entry/exit with strategy reasoning, daily summaries, risk alerts, bot status changes |
 | Telegram | Trade notifications, error alerts |
-| WhatsApp | Trade notifications via CallMeBot API |
+| WhatsApp | Trade notifications via WhatsApp Business Cloud API |
 
 ---
 

@@ -28,7 +28,7 @@ Trading Department is an automated trading assistant for cryptocurrencies. It:
 - **Analyzes the market** automatically (Bitcoin, Ethereum)
 - **Detects trading signals** based on market data
 - **Executes trades** on your Bitget account (if you choose to)
-- **Notifies you** via Discord about all activities
+- **Notifies you** via Discord, Telegram, or WhatsApp about all activities
 
 ### Who is this bot for?
 
@@ -52,7 +52,7 @@ Before you start, make sure you have the following:
 |------|-----|------------|
 | Computer with internet | Bot runs locally | - |
 | Bitget account | This is where trades are executed | Easy |
-| Discord account | For notifications | Easy |
+| Discord, Telegram, or WhatsApp | For notifications (at least 1 channel) | Easy |
 | Python 3.10+ | Bot software | Medium |
 
 ### Installing Python (if not already installed)
@@ -416,7 +416,7 @@ If you want to make the dashboard accessible from outside:
 
 ## 9. Understanding Notifications
 
-The bot sends various messages to Discord:
+The bot sends various messages to your configured channels (Discord, Telegram, and/or WhatsApp):
 
 ### Trade Entry (New Position Opened)
 
@@ -643,7 +643,7 @@ pip install -r requirements.txt
 - [ ] Check account balance on Bitget
 - [ ] Review bot logs for errors
 - [ ] Check the dashboard regularly
-- [ ] Read Discord notifications
+- [ ] Read notifications (Discord/Telegram/WhatsApp)
 
 ---
 
