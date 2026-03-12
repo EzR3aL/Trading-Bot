@@ -12,6 +12,7 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 ## [4.0.1] - 2026-03-12
 
 ### Hinzugefuegt
+- **Anleitungen mit Navigation** — Seite "Erste Schritte" komplett ueberarbeitet: Sidebar-Navigation (Desktop) bzw. horizontale Tabs (Mobile) mit 6 Sektionen (Schnellstart, Schritt-fuer-Schritt, Strategien, Risiko & Konfig, Exchanges, Sicherheit). Prerequisite-Banner bleibt immer oben sichtbar
 - **Bild kopieren fuer alle Trades** — In der Bot-Detailansicht kann nun jeder einzelne Trade (nicht nur der letzte) als kompaktes Bild in die Zwischenablage kopiert werden. Button im Trade-Detail-Modal. Affiliate-Link wird bei allen Trades im Bild angezeigt
 
 ### Geaendert
