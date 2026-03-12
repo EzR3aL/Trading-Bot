@@ -12,7 +12,10 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 ## [4.0.1] - 2026-03-12
 
 ### Hinzugefuegt
-- **Bild kopieren fuer alle Trades** — In der Bot-Detailansicht kann nun jeder einzelne Trade (nicht nur der letzte) als kompaktes Bild in die Zwischenablage kopiert werden. Button im Trade-Detail-Modal
+- **Bild kopieren fuer alle Trades** — In der Bot-Detailansicht kann nun jeder einzelne Trade (nicht nur der letzte) als kompaktes Bild in die Zwischenablage kopiert werden. Button im Trade-Detail-Modal. Affiliate-Link wird bei allen Trades im Bild angezeigt
+
+### Geaendert
+- **Affiliate-Link Layout** — Label und URL werden nun untereinander statt nebeneinander angezeigt fuer bessere Lesbarkeit in den kopierten Trade-Bildern
 
 ### Behoben
 - **Letzter Trade Karte: Layout korrigiert** — Sichtbare Karte auf der Bots-Seite zeigt wieder das originale breite 4-Spalten-Layout. Kompaktes Design wird nur noch fuer die Bild-Kopie (Bild kopieren) verwendet, unsichtbar gerendert

@@ -209,7 +209,7 @@ function formatHourLocal(utcHour: number): string {
 
 /* ── Trade Detail Modal ──────────────────────────────────── */
 
-function TradeDetailModal({ trade, onClose, t }: { trade: BotTrade; onClose: () => void; t: (key: string) => string }) {
+function TradeDetailModal({ trade, onClose, t, affiliateLink }: { trade: BotTrade; onClose: () => void; t: (key: string) => string; affiliateLink?: AffiliateLink | null }) {
   const copyRef = useRef<HTMLDivElement>(null)
   const theme = useThemeStore((s) => s.theme)
   const [copied, setCopied] = useState(false)
@@ -378,6 +378,12 @@ function TradeDetailModal({ trade, onClose, t }: { trade: BotTrade; onClose: () 
             <span>{formatDateTime(trade.entry_time)}</span>
             <span>{trade.exit_reason || trade.status}</span>
           </div>
+          {affiliateLink && (
+            <div className="mt-3 pt-3 border-t border-white/5">
+              <div className="text-xs text-gray-500 mb-1">{affiliateLink.label || t('bots.affiliateLink')}</div>
+              <div className="text-xs text-primary-400 font-medium">{affiliateLink.affiliate_url}</div>
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -648,9 +654,9 @@ function BotTradeHistoryModal({ bot, onClose, t }: { bot: BotStatus; onClose: ()
                         <span>{latestClosed.exit_reason || latestClosed.status}</span>
                       </div>
                       {affiliateLink && (
-                        <div className="mt-3 pt-2 border-t border-white/5 flex items-center justify-between">
-                          <span className="text-xs text-gray-500">{affiliateLink.label || t('bots.affiliateLink')}</span>
-                          <span className="text-xs text-primary-400 font-medium">{affiliateLink.affiliate_url}</span>
+                        <div className="mt-3 pt-3 border-t border-white/5">
+                          <div className="text-xs text-gray-500 mb-1">{affiliateLink.label || t('bots.affiliateLink')}</div>
+                          <div className="text-xs text-primary-400 font-medium">{affiliateLink.affiliate_url}</div>
                         </div>
                       )}
                     </div>
@@ -761,7 +767,7 @@ function BotTradeHistoryModal({ bot, onClose, t }: { bot: BotStatus; onClose: ()
 
       {/* Trade Detail Modal (nested, higher z-index) */}
       {selectedTrade && (
-        <TradeDetailModal trade={selectedTrade} onClose={() => setSelectedTrade(null)} t={t} />
+        <TradeDetailModal trade={selectedTrade} onClose={() => setSelectedTrade(null)} t={t} affiliateLink={affiliateLink} />
       )}
     </div>
   )
