@@ -66,7 +66,7 @@ Combines market sentiment (Fear & Greed, social media) with technical indicators
 
 ### Degen (AI Arena)
 
-AI arena with 14 data sources and fixed prompt. Highest profit potential but also highest risk.
+AI arena with 19 data sources and fixed prompt. Highest profit potential but also highest risk.
 
 | Timeframe | Period | Return % | Win Rate | Max DD % | Sharpe | Profit Factor | Trades | End Capital |
 |-----------|--------|----------|----------|----------|--------|---------------|--------|-------------|

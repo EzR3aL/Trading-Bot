@@ -70,7 +70,7 @@ Kombiniert Marktstimmung (Fear & Greed, Social Media) mit technischen Indikatore
 
 ### Degen (KI-Arena)
 
-KI-Arena mit 14 Datenquellen und festem Prompt. Hoechstes Gewinnpotenzial aber auch hoechstes Risiko.
+KI-Arena mit 19 Datenquellen und festem Prompt. Hoechstes Gewinnpotenzial aber auch hoechstes Risiko.
 
 | Timeframe | Zeitraum | Return % | Win Rate | Max DD % | Sharpe | Profit Factor | Trades | Endkapital |
 |-----------|----------|----------|----------|----------|--------|---------------|--------|------------|

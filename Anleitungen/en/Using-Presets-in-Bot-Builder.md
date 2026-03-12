@@ -54,7 +54,7 @@ Presets are **saved configuration templates** for your bots. Instead of manually
    - Example: `Conservative BTC/ETH`, `Aggressive Altcoins`, `Scalping 5min`
 
 2. **Exchange** -- Select an exchange or **"All Exchanges"**
-   - "All Exchanges" makes the preset usable for Bitget and Hyperliquid
+   - "All Exchanges" makes the preset usable for all 5 exchanges (Bitget, Weex, Hyperliquid, Bitunix, BingX)
    - Trading pairs are automatically converted (see Section 5)
 
 3. **Trading Settings** -- Set the default values:
@@ -114,7 +114,7 @@ Loading a preset only fills in the fields -- you can **change everything** after
 
 ### What does "cross-exchange" mean?
 
-A preset with exchange type **"All Exchanges"** can be used for both Bitget and Hyperliquid. The trading pairs are automatically adjusted:
+A preset with exchange type **"All Exchanges"** can be used for all 5 supported exchanges (Bitget, Weex, Hyperliquid, Bitunix, BingX). The trading pairs are automatically adjusted:
 
 ### Automatic Pair Conversion
 

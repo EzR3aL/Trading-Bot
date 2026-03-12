@@ -1,6 +1,6 @@
 # Trading Strategies Overview
 
-All 5 trading strategies explained: how they work, risk profiles, parameter recommendations, and when to use each.
+All 6 trading strategies explained: how they work, risk profiles, parameter recommendations, and when to use each.
 
 ---
 
@@ -12,7 +12,8 @@ All 5 trading strategies explained: how they work, risk profiles, parameter reco
 4. [Sentiment Surfer](#4-sentiment-surfer)
 5. [Degen](#5-degen)
 6. [Edge Indicator](#6-edge-indicator)
-7. [Which Strategy is Right for You?](#7-which-strategy-is-right-for-you)
+7. [Contrarian Pulse](#7-contrarian-pulse)
+8. [Which Strategy is Right for You?](#8-which-strategy-is-right-for-you)
 
 ---
 
@@ -27,6 +28,7 @@ All 5 trading strategies explained: how they work, risk profiles, parameter reco
 | Sentiment Surfer | Hybrid | 6 sources | None | Medium | Balanced trading |
 | Degen | AI Arena | 19 fixed sources | LLM API | High | Experimental |
 | Edge Indicator | Technical | Kline only | None | Low-Medium | Beginners / Technical |
+| Contrarian Pulse | Algo | F&G, EMA, RSI, Derivatives | None | Medium | Contrarian scalpers |
 
 ### Backtest Results (90 Days, BTCUSDT, $10k, 1h)
 
@@ -86,7 +88,7 @@ Bets **against the crowd**. When too many traders are long (L/S Ratio > 2.5), th
 
 ### What does it do?
 
-Sends current market data to an **external AI model** (GPT-4, Claude, Llama, etc.), which then decides: LONG or SHORT. Each cycle is stateless -- the LLM has no memory of previous trades.
+Sends current market data to an **external AI model** (GPT-4.1, Claude, Llama 4, etc.), which then decides: LONG or SHORT. Each cycle is stateless -- the LLM has no memory of previous trades.
 
 ### Who is it for?
 
@@ -96,9 +98,9 @@ Sends current market data to an **external AI model** (GPT-4, Claude, Llama, etc
 
 ### Special Features
 
-- **7+ LLM providers** supported (OpenAI, Anthropic, Gemini, Groq, Mistral, xAI, Perplexity, DeepSeek)
+- **9 LLM providers** supported (OpenAI, Anthropic, Gemini Flash, Gemini Pro, Groq, Mistral, xAI, Perplexity, DeepSeek)
 - **Custom prompts** possible (max 4000 characters)
-- **Model selection** per bot (e.g., GPT-4o vs. GPT-4o-mini)
+- **Model selection** per bot (e.g., GPT-4.1 vs. GPT-4.1 Mini)
 - **Configurable data sources** (choose which data the LLM receives)
 
 ### Parameter Recommendations
@@ -117,9 +119,9 @@ Estimated LLM API costs per analysis cycle:
 
 | Provider | Per Call | Per Day (1h TF, 24 Calls) |
 |----------|---------|---------------------------|
-| GPT-4o | ~$0.03 | ~$0.72 |
-| GPT-4o-mini | ~$0.005 | ~$0.12 |
-| Groq (Llama 70B) | ~$0.003 | ~$0.07 |
+| GPT-4.1 | ~$0.03 | ~$0.72 |
+| GPT-4.1 Mini | ~$0.005 | ~$0.12 |
+| Groq (Llama 4 Maverick) | ~$0.003 | ~$0.07 |
 | DeepSeek | ~$0.002 | ~$0.05 |
 
 ---
@@ -235,7 +237,51 @@ NO TRADE: Neutral OR choppy market
 
 ---
 
-## 7. Which Strategy is Right for You?
+## 7. Contrarian Pulse
+
+### What does it do?
+
+A **purely algorithmic contrarian strategy** for BTC that uses the Fear & Greed Index as its primary signal. Goes Long on extreme fear (<35), Short on extreme greed (>65). The signal is validated by multiple confirmations.
+
+### Who is it for?
+
+- Traders who prefer contrarian scalping
+- Those who want no AI/LLM costs
+- Medium risk profile with clear rules
+
+### Data Sources & Confirmations
+
+| # | Source | Logic |
+|---|--------|-------|
+| 1 | Fear & Greed Index | Primary signal: <35 = Long, >65 = Short |
+| 2 | EMA 50/200 | Trend confirmation |
+| 3 | RSI (14) | Overbought/oversold |
+| 4 | CVD (Cumulative Volume Delta) | Buy/sell pressure |
+| 5 | Long/Short Ratio | Crowd positioning |
+| 6 | Volume | Volume confirmation |
+| 7 | Open Interest | Market engagement |
+| 8 | Funding Rate | Contrarian signal |
+
+### Special Features
+
+- **No LLM required** — purely algorithmic
+- **HOLD when F&G is neutral** (35-65) — only trades at extremes
+- **Backtest-verified** with real market data
+- All derivatives data from Binance Futures
+
+### Parameter Recommendations
+
+| Parameter | Conservative | Standard | Aggressive |
+|-----------|-------------|----------|------------|
+| Leverage | 2x | 3x | 4x |
+| Take Profit | 3.0% | 2.5% | 2.0% |
+| Stop Loss | 1.5% | 1.5% | 1.0% |
+| Position Size | 5% | 10% | 15% |
+| Timeframe | 1h | 1h | 30m |
+
+---
+
+## 8. Which Strategy is Right for You?
 
 ### Decision Tree
 
@@ -249,7 +295,9 @@ Do you want to use AI/LLM?
          No  -> Degen (fixed prompt, 19 data sources)
 
 Do you prefer contrarian trading?
-  Yes -> LiquidationHunter (bet against the crowd)
+  Yes -> Rule-based?
+         Yes -> Contrarian Pulse (F&G + confirmations, no LLM)
+         No  -> LiquidationHunter (L/S Ratio, Funding)
 
 Do you want a balanced multi-factor approach?
   Yes -> Sentiment Surfer (6 sources, weighted)

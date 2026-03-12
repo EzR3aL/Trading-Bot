@@ -28,7 +28,7 @@ Presets sind **gespeicherte Konfigurationen** fuer deine Trading Bots. Statt bei
 | **Zeitersparnis** | Parameter mit einem Klick laden |
 | **Konsistenz** | Gleiche Einstellungen fuer mehrere Bots |
 | **Experimentieren** | Verschiedene Konfigurationen speichern und vergleichen |
-| **Exchange-agnostisch** | Ein Preset funktioniert auf Bitget, Weex und Hyperliquid |
+| **Exchange-agnostisch** | Ein Preset funktioniert auf Bitget, Weex, Hyperliquid, Bitunix und BingX |
 
 ### Was wird im Preset gespeichert?
 
@@ -158,10 +158,12 @@ Presets sind **exchange-agnostisch** — sie funktionieren auf allen unterstuetz
 | **Bitget** | BTCUSDT | Preset: BTCUSDT -> Bot: BTCUSDT |
 | **Weex** | BTCUSDT | Preset: BTCUSDT -> Bot: BTCUSDT |
 | **Hyperliquid** | BTC | Preset: BTCUSDT -> Bot: BTC (automatisch) |
+| **Bitunix** | BTCUSDT | Preset: BTCUSDT -> Bot: BTCUSDT |
+| **BingX** | BTC-USDT | Preset: BTCUSDT -> Bot: BTC-USDT (automatisch) |
 
 ### Wie funktioniert die Konvertierung?
 
-Wenn du ein Preset mit Paar `BTCUSDT` auf Hyperliquid laeadst, wird es automatisch zu `BTC` konvertiert. Umgekehrt wird bei Bitget/Weex das Suffix `USDT` angehaengt, falls es fehlt.
+Wenn du ein Preset mit Paar `BTCUSDT` auf Hyperliquid laeadst, wird es automatisch zu `BTC` konvertiert. Bei BingX wird es zu `BTC-USDT` konvertiert. Umgekehrt wird bei Bitget/Weex/Bitunix das Suffix `USDT` angehaengt, falls es fehlt.
 
 ---
 

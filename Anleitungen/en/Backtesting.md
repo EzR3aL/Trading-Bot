@@ -24,8 +24,10 @@ Version **3.3.1** (February 2026). Fully integrated in the frontend.
 
 ### Supported Strategies
 
-All 5 strategies can be tested:
+All 6 strategies can be tested:
+- Edge Indicator
 - LiquidationHunter
+- Contrarian Pulse
 - LLM Signal
 - Sentiment Surfer
 - Degen

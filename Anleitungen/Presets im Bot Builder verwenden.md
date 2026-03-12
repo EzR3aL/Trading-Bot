@@ -35,7 +35,7 @@ Presets sind **gespeicherte Konfigurationsvorlagen** für deine Bots. Statt bei 
 
 - **Zeitersparnis** — Einmal konfigurieren, beliebig oft verwenden
 - **Konsistenz** — Gleiche Einstellungen für mehrere Bots
-- **Exchange-übergreifend** — Ein Preset für Bitget UND Hyperliquid
+- **Exchange-übergreifend** — Ein Preset für alle 5 Exchanges (Bitget, Weex, Hyperliquid, Bitunix, BingX)
 - **Flexibel** — Nach dem Laden jederzeit anpassbar
 
 ---
@@ -54,7 +54,7 @@ Presets sind **gespeicherte Konfigurationsvorlagen** für deine Bots. Statt bei 
    - Beispiel: `Konservativ BTC/ETH`, `Aggressiv Altcoins`, `Scalping 5min`
 
 2. **Exchange** — Wähle eine Exchange oder **"Alle Exchanges"**
-   - "Alle Exchanges" macht das Preset für Bitget und Hyperliquid nutzbar
+   - "Alle Exchanges" macht das Preset fuer alle 5 Exchanges nutzbar (Bitget, Weex, Hyperliquid, Bitunix, BingX)
    - Trading Pairs werden automatisch konvertiert (siehe Abschnitt 5)
 
 3. **Trading-Einstellungen** — Lege die Standardwerte fest:
@@ -114,18 +114,19 @@ Das Laden eines Presets füllt nur die Felder aus — du kannst danach **alles �
 
 ### Was bedeutet "Exchange-übergreifend"?
 
-Ein Preset mit Exchange-Typ **"Alle Exchanges"** kann sowohl für Bitget als auch für Hyperliquid verwendet werden. Die Trading Pairs werden dabei automatisch angepasst:
+Ein Preset mit Exchange-Typ **"Alle Exchanges"** kann fuer alle 5 unterstuetzten Exchanges (Bitget, Weex, Hyperliquid, Bitunix, BingX) verwendet werden. Die Trading Pairs werden dabei automatisch angepasst:
 
 ### Automatische Pair-Konvertierung
 
-| Preset-Pair | Bitget | Hyperliquid |
-|-------------|--------|-------------|
-| BTC | BTCUSDT | BTC |
-| ETH | ETHUSDT | ETH |
-| SOL | SOLUSDT | SOL |
+| Preset-Pair | Bitget / Weex / Bitunix | Hyperliquid | BingX |
+|-------------|-------------------------|-------------|-------|
+| BTC | BTCUSDT | BTC | BTC-USDT |
+| ETH | ETHUSDT | ETH | ETH-USDT |
+| SOL | SOLUSDT | SOL | SOL-USDT |
 
-- **Bitget** verwendet das Format `SYMBOLUSDT` (z.B. `BTCUSDT`)
+- **Bitget, Weex, Bitunix** verwenden das Format `SYMBOLUSDT` (z.B. `BTCUSDT`)
 - **Hyperliquid** verwendet das Basis-Symbol (z.B. `BTC`)
+- **BingX** verwendet das Format `SYMBOL-USDT` (z.B. `BTC-USDT`)
 - Die Konvertierung passiert **automatisch** beim Laden des Presets
 
 ### Empfehlung

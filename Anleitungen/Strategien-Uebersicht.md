@@ -88,7 +88,7 @@ Wettet **gegen die Masse**. Wenn zu viele Trader Long sind (L/S Ratio > 2.5), ge
 
 ### Was macht sie?
 
-Sendet aktuelle Marktdaten an ein **externes KI-Modell** (GPT-4, Claude, Llama, etc.), das dann entscheidet: LONG oder SHORT. Jeder Zyklus ist stateless -- der LLM hat kein Gedaechtnis ueber vorherige Trades.
+Sendet aktuelle Marktdaten an ein **externes KI-Modell** (GPT-4.1, Claude, Llama 4, etc.), das dann entscheidet: LONG oder SHORT. Jeder Zyklus ist stateless -- der LLM hat kein Gedaechtnis ueber vorherige Trades.
 
 ### Fuer wen?
 
@@ -98,9 +98,9 @@ Sendet aktuelle Marktdaten an ein **externes KI-Modell** (GPT-4, Claude, Llama, 
 
 ### Besonderheiten
 
-- **7+ LLM-Provider** unterstuetzt (OpenAI, Anthropic, Gemini, Groq, Mistral, xAI, Perplexity, DeepSeek)
+- **9 LLM-Provider** unterstuetzt (OpenAI, Anthropic, Gemini Flash, Gemini Pro, Groq, Mistral, xAI, Perplexity, DeepSeek)
 - **Custom Prompts** moeglich (max. 4000 Zeichen)
-- **Model Selection** pro Bot (z.B. GPT-4o vs. GPT-4o-mini)
+- **Model Selection** pro Bot (z.B. GPT-4.1 vs. GPT-4.1 Mini)
 - **Konfigurierbare Datenquellen** (waehle welche Daten der LLM erhaelt)
 
 ### Parameter-Empfehlungen
@@ -119,9 +119,9 @@ LLM-API-Kosten pro Analysezyklus (geschaetzt):
 
 | Provider | Pro Aufruf | Pro Tag (1h TF, 24 Calls) |
 |----------|-----------|---------------------------|
-| GPT-4o | ~$0.03 | ~$0.72 |
-| GPT-4o-mini | ~$0.005 | ~$0.12 |
-| Groq (Llama 70B) | ~$0.003 | ~$0.07 |
+| GPT-4.1 | ~$0.03 | ~$0.72 |
+| GPT-4.1 Mini | ~$0.005 | ~$0.12 |
+| Groq (Llama 4 Maverick) | ~$0.003 | ~$0.07 |
 | DeepSeek | ~$0.002 | ~$0.05 |
 
 ---
@@ -241,7 +241,7 @@ KEIN TRADE: Neutral ODER choppy Market
 
 ### Was macht sie?
 
-Eine **rein algorithmische Contrarian-Strategie** fuer BTC, die den Fear & Greed Index als Haupt-Signalgeber nutzt. Bei extremer Angst (<30) wird Long gegangen, bei extremer Gier (>70) Short. Das Signal wird durch mehrere Bestaetiger validiert.
+Eine **rein algorithmische Contrarian-Strategie** fuer BTC, die den Fear & Greed Index als Haupt-Signalgeber nutzt. Bei extremer Angst (<35) wird Long gegangen, bei extremer Gier (>65) Short. Das Signal wird durch mehrere Bestaetiger validiert.
 
 ### Fuer wen?
 
@@ -253,7 +253,7 @@ Eine **rein algorithmische Contrarian-Strategie** fuer BTC, die den Fear & Greed
 
 | # | Quelle | Logik |
 |---|--------|-------|
-| 1 | Fear & Greed Index | Primaer-Signal: <30 = Long, >70 = Short |
+| 1 | Fear & Greed Index | Primaer-Signal: <35 = Long, >65 = Short |
 | 2 | EMA 50/200 | Trend-Bestaetigung |
 | 3 | RSI (14) | Ueberkauft/Ueberverkauft |
 | 4 | CVD (Cumulative Volume Delta) | Kauf-/Verkaufsdruck |
@@ -265,7 +265,7 @@ Eine **rein algorithmische Contrarian-Strategie** fuer BTC, die den Fear & Greed
 ### Besonderheiten
 
 - **Kein LLM erforderlich** — rein algorithmisch
-- **HOLD bei neutralem F&G** (30-70) — handelt nur bei Extremen
+- **HOLD bei neutralem F&G** (35-65) — handelt nur bei Extremen
 - **Backtest-verifiziert** mit echten Marktdaten
 - Alle Derivate-Daten von Binance Futures
 
@@ -358,7 +358,7 @@ All 6 trading strategies explained: how they work, risk profiles, parameter reco
 Contrarian strategy that bets against crowded positions. Uses L/S Ratio, Fear & Greed, and Funding Rate. Best when markets are at extremes.
 
 ### LLM Signal
-Sends market data to an external LLM (GPT-4, Claude, Llama, etc.) for analysis. Customizable prompts and data sources. 7+ providers supported.
+Sends market data to an external LLM (GPT-4.1, Claude, Llama 4, etc.) for analysis. Customizable prompts and data sources. 9 providers supported.
 
 ### Sentiment Surfer
 Combines 6 weighted data sources (News, Fear & Greed, VWAP, Supertrend, Volume, Momentum). Requires minimum agreement of 3/6 sources.
@@ -370,7 +370,7 @@ Pre-configured AI arena with fixed prompt and 19 data sources. Aggressive 1h BTC
 Pure technical strategy using only Binance kline data. Three layers: EMA Ribbon (8/21), ADX filter, Predator Momentum Score. No external API dependencies. v2 exit tuning lets profitable trades run longer (+200% avg return on 1h).
 
 ### Contrarian Pulse
-Algorithmic contrarian Fear & Greed scalping strategy for BTC. Goes Long on extreme fear (<30), Short on extreme greed (>70). Confirmed by 50/200 EMA trend, RSI, and derivatives signals (CVD, Long/Short Ratio, Volume, OI, Funding Rate). No LLM required. HOLDs when F&G is neutral (30-70).
+Algorithmic contrarian Fear & Greed scalping strategy for BTC. Goes Long on extreme fear (<35), Short on extreme greed (>65). Confirmed by 50/200 EMA trend, RSI, and derivatives signals (CVD, Long/Short Ratio, Volume, OI, Funding Rate). No LLM required. HOLDs when F&G is neutral (35-65).
 
 ---
 

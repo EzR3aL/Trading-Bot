@@ -17,16 +17,16 @@ Anleitung zur Einrichtung der Weex Exchange im Trading Bot.
 
 ## 1. Ueberblick
 
-**Weex** ist eine Krypto-Futures-Exchange, die im Trading Bot als Alternative zu Bitget und Hyperliquid unterstuetzt wird.
+**Weex** ist eine Krypto-Futures-Exchange, die im Trading Bot neben Bitget, Hyperliquid, Bitunix und BingX unterstuetzt wird.
 
 ### Weex im Vergleich
 
-| Feature | Weex | Bitget | Hyperliquid |
-|---------|------|--------|-------------|
-| Auth-Typ | API Key | API Key | Wallet |
-| Passphrase | Ja | Ja | Nein |
-| Demo-Modus | Ja | Ja | Ja |
-| Futures-Handel | Ja (USDT-M) | Ja (USDT-M) | Ja (Perp) |
+| Feature | Weex | Bitget | Hyperliquid | Bitunix | BingX |
+|---------|------|--------|-------------|---------|-------|
+| Auth-Typ | API Key | API Key | Wallet | API Key | API Key |
+| Passphrase | Ja | Ja | Nein | Ja | Nein |
+| Demo-Modus | Ja | Ja | Ja | Ja | Ja (VST) |
+| Futures-Handel | Ja (USDT-M) | Ja (USDT-M) | Ja (Perp) | Ja (USDT-M) | Ja (Perp Swap) |
 
 ---
 
@@ -226,14 +226,14 @@ Guide for setting up the Weex exchange in the Trading Bot.
 
 ## Overview
 
-**Weex** is a crypto futures exchange supported in the Trading Bot as an alternative to Bitget and Hyperliquid.
+**Weex** is a crypto futures exchange supported in the Trading Bot alongside Bitget, Hyperliquid, Bitunix, and BingX.
 
-| Feature | Weex | Bitget | Hyperliquid |
-|---------|------|--------|-------------|
-| Auth Type | API Key | API Key | Wallet |
-| Passphrase | Yes | Yes | No |
-| Demo Mode | Yes | Yes | Yes |
-| Futures | Yes (USDT-M) | Yes (USDT-M) | Yes (Perp) |
+| Feature | Weex | Bitget | Hyperliquid | Bitunix | BingX |
+|---------|------|--------|-------------|---------|-------|
+| Auth Type | API Key | API Key | Wallet | API Key | API Key |
+| Passphrase | Yes | Yes | No | Yes | No |
+| Demo Mode | Yes | Yes | Yes | Yes | Yes (VST) |
+| Futures | Yes (USDT-M) | Yes (USDT-M) | Yes (Perp) | Yes (USDT-M) | Yes (Perp Swap) |
 
 ---
 

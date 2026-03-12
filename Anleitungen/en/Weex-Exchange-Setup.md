@@ -17,7 +17,7 @@ Guide for setting up the Weex exchange in Trading Department.
 
 ## 1. Overview
 
-**Weex** is a crypto futures exchange supported in Trading Department as an alternative to Bitget and Hyperliquid.
+**Weex** is a crypto futures exchange supported in the Trading Bot alongside Bitget, Hyperliquid, Bitunix, and BingX.
 
 ### Weex Comparison
 

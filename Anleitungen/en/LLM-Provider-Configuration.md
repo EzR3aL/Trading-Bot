@@ -20,14 +20,15 @@ The **LLM Signal** and **Degen** strategies use external AI models for signal ge
 
 | Provider | Models | Speed | Cost | Recommendation |
 |----------|--------|-------|------|----------------|
-| **OpenAI** | GPT-4o, GPT-4o-mini | Medium | Medium | Best quality |
-| **Anthropic** | Claude 3.5 Sonnet, Claude 3 Haiku | Medium | Medium | Excellent for analysis |
-| **Gemini** | Gemini 1.5 Pro, Gemini 1.5 Flash | Fast | Affordable | Good value for money |
-| **Groq** | Llama 3.1 70B, Mixtral 8x7B | Very fast | Affordable | Fastest responses |
-| **Mistral** | Mistral Large, Mistral Small | Fast | Affordable | European provider |
-| **xAI** | Grok-2 | Medium | Medium | Real-time data |
-| **Perplexity** | Sonar Large, Sonar Small | Fast | Medium | Internet access |
-| **DeepSeek** | DeepSeek Chat, DeepSeek Coder | Fast | Very cheap | Best price-performance ratio |
+| **OpenAI** | GPT-4.1, GPT-4.1 Mini | Medium | Medium | Best quality |
+| **Anthropic** | Claude Haiku 4.5 | Medium | Medium | Excellent for analysis |
+| **Gemini Flash** | Gemini 2.5 Flash | Fast | Affordable | Good value for money |
+| **Gemini Pro** | Gemini 3 Pro (Preview) | Medium | Medium | Best Google model |
+| **Groq** | Llama 4 Maverick | Very fast | Affordable | Fastest responses |
+| **Mistral** | Mistral Small 3.2 | Fast | Affordable | European provider |
+| **xAI** | Grok 3 Mini | Medium | Medium | Real-time data |
+| **Perplexity** | Sonar | Fast | Medium | Internet access |
+| **DeepSeek** | DeepSeek V3 Chat, DeepSeek Reasoner | Fast | Very cheap | Best price-performance ratio |
 
 ---
 
@@ -45,8 +46,8 @@ The **LLM Signal** and **Degen** strategies use external AI models for signal ge
 **Important:** The key is only shown once! Save it securely.
 
 **Recommended models:**
-- `gpt-4o` -- Best quality, higher price
-- `gpt-4o-mini` -- More affordable, sufficient for most use cases
+- `gpt-4.1` -- Best quality, higher price
+- `gpt-4.1-mini` -- More affordable, sufficient for most use cases (default)
 
 ### Anthropic
 
@@ -57,8 +58,7 @@ The **LLM Signal** and **Degen** strategies use external AI models for signal ge
 5. Copy the key (starts with `sk-ant-`)
 
 **Recommended models:**
-- `claude-3-5-sonnet-20241022` -- Best analysis quality
-- `claude-3-haiku-20240307` -- Fast and affordable
+- `claude-haiku-4-5-20251001` -- Fast and affordable (default)
 
 ### Gemini (Google)
 
@@ -69,8 +69,8 @@ The **LLM Signal** and **Degen** strategies use external AI models for signal ge
 5. Copy the key
 
 **Recommended models:**
-- `gemini-1.5-pro` -- Best Google model
-- `gemini-1.5-flash` -- Faster, more affordable
+- `gemini-3-pro-preview` -- Best Google model (as `gemini_pro` provider)
+- `gemini-2.5-flash` -- Faster, more affordable (default for `gemini` provider)
 
 ### Groq
 
@@ -81,8 +81,7 @@ The **LLM Signal** and **Degen** strategies use external AI models for signal ge
 5. Copy the key (starts with `gsk_`)
 
 **Recommended models:**
-- `llama-3.1-70b-versatile` -- Best open-source model
-- `mixtral-8x7b-32768` -- Large context window
+- `meta-llama/llama-4-maverick-17b-128e-instruct` -- Llama 4 Maverick (default)
 
 **Special feature:** Groq offers **extremely fast inference** (often < 1 second). Ideal for real-time trading.
 
@@ -95,8 +94,7 @@ The **LLM Signal** and **Degen** strategies use external AI models for signal ge
 5. Copy the key
 
 **Recommended models:**
-- `mistral-large-latest` -- Best Mistral model
-- `mistral-small-latest` -- More affordable
+- `mistral-small-2506` -- Mistral Small 3.2 (default)
 
 ### xAI (Grok)
 
@@ -107,7 +105,7 @@ The **LLM Signal** and **Degen** strategies use external AI models for signal ge
 5. Copy the key
 
 **Recommended models:**
-- `grok-2` -- Latest model
+- `grok-3-mini` -- Grok 3 Mini (default)
 
 ### Perplexity
 
@@ -118,8 +116,7 @@ The **LLM Signal** and **Degen** strategies use external AI models for signal ge
 5. Copy the key
 
 **Recommended models:**
-- `sonar-large` -- Larger model with internet access
-- `sonar-small` -- Faster, more affordable
+- `sonar` -- Default model with internet access
 
 **Special feature:** Perplexity has access to the internet and can include up-to-date information.
 
@@ -178,11 +175,11 @@ When creating a bot with the **LLM Signal** or **Degen** strategy:
 
 | Use Case | Recommended Provider | Model | Why |
 |----------|----------------------|-------|-----|
-| **Fast trading (1h)** | Groq | Llama 3.1 70B | Fastest responses |
-| **Best analysis quality** | OpenAI | GPT-4o | Most precise predictions |
-| **Budget-friendly** | DeepSeek | DeepSeek Chat | Best price-performance ratio |
-| **European provider** | Mistral | Mistral Large | EU data hosting |
-| **With internet access** | Perplexity | Sonar Large | Can query current data |
+| **Fast trading (1h)** | Groq | Llama 4 Maverick | Fastest responses |
+| **Best analysis quality** | OpenAI | GPT-4.1 | Most precise predictions |
+| **Budget-friendly** | DeepSeek | DeepSeek V3 Chat | Best price-performance ratio |
+| **European provider** | Mistral | Mistral Small 3.2 | EU data hosting |
+| **With internet access** | Perplexity | Sonar | Can query current data |
 
 ### Temperature Recommendations
 
@@ -216,7 +213,7 @@ When creating a bot with the **LLM Signal** or **Degen** strategy:
 
 ### Issue: High API costs
 
-- Use more affordable models (GPT-4o-mini instead of GPT-4o)
+- Use more affordable models (GPT-4.1 Mini instead of GPT-4.1)
 - Switch to Groq or DeepSeek
 - Reduce the number of bots with LLM strategies
 - Use longer timeframes (4h instead of 1h = 4x fewer API calls)
