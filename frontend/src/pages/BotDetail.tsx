@@ -16,7 +16,7 @@ import { useFilterStore } from '../stores/filterStore'
 import { ExchangeIcon } from '../components/ui/ExchangeLogo'
 import PnlCell from '../components/ui/PnlCell'
 import type { LlmConnection } from '../types'
-import { formatDate, formatDateTime, formatTimeWithTz } from '../utils/dateUtils'
+import { formatDate, formatDateTime, formatTime } from '../utils/dateUtils'
 
 const STRATEGY_DISPLAY: Record<string, string> = {
   llm_signal: 'KI-Companion',
@@ -385,7 +385,7 @@ export default function BotDetail() {
                 <tbody>
                   {stats.recent_trades.map(trade => (
                     <tr key={trade.id}>
-                      <td className="text-gray-300 cursor-default" title={formatTimeWithTz(trade.entry_time)}>
+                      <td className="text-gray-300 cursor-default" title={formatTime(trade.entry_time)}>
                         {formatDate(trade.entry_time)}
                       </td>
                       <td className="text-center">

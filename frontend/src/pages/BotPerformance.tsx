@@ -15,7 +15,7 @@ import PnlCell from '../components/ui/PnlCell'
 import { ExchangeIcon } from '../components/ui/ExchangeLogo'
 import { Eye, EyeOff, ArrowUpRight, ArrowDownRight, Trophy, Target, LayoutGrid, BarChart3, Bot, FileText, X, Copy, ShieldCheck } from 'lucide-react'
 import type { LlmConnection } from '../types'
-import { formatDate, formatDateTime, formatChartDate, formatTimeWithTz } from '../utils/dateUtils'
+import { formatDate, formatDateTime, formatChartDate, formatTime } from '../utils/dateUtils'
 
 /* ── Strategy Labels ─────────────────────────────────────── */
 
@@ -809,7 +809,7 @@ export default function BotPerformance() {
                             {latestClosed.side === 'long' ? '+ LONG' : '- SHORT'}
                           </span>
                         </div>
-                        <span className="text-xs text-gray-500" title={formatTimeWithTz(latestClosed.entry_time)}>
+                        <span className="text-xs text-gray-500" title={formatTime(latestClosed.entry_time)}>
                           {formatDate(latestClosed.entry_time)}
                         </span>
                       </div>
@@ -927,7 +927,7 @@ export default function BotPerformance() {
                       const botExchange = compareData.find(b => b.bot_id === selectedBot)?.exchange_type || ''
                       return botDetail.recent_trades.map((trade) => (
                         <tr key={trade.id}>
-                          <td className="text-gray-300 cursor-default" title={formatTimeWithTz(trade.entry_time)}>
+                          <td className="text-gray-300 cursor-default" title={formatTime(trade.entry_time)}>
                             {formatDate(trade.entry_time)}
                           </td>
                           <td className="text-center">

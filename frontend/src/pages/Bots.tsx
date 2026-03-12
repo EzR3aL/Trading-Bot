@@ -38,7 +38,7 @@ import {
   ShieldCheck,
 } from 'lucide-react'
 import GuidedTour, { TourHelpButton, type TourStep } from '../components/ui/GuidedTour'
-import { formatDate, formatDateTime, formatTime, formatTimeWithTz } from '../utils/dateUtils'
+import { formatDate, formatDateTime, formatTime } from '../utils/dateUtils'
 
 const STRATEGY_DISPLAY: Record<string, string> = { llm_signal: 'KI-Companion', sentiment_surfer: 'Sentiment Surfer', liquidation_hunter: 'Liquidation Hunter', degen: 'Degen', edge_indicator: 'Edge Indicator', contrarian_pulse: 'Contrarian Pulse' }
 const AI_STRATEGIES = new Set(['llm_signal', 'degen'])
@@ -568,7 +568,7 @@ function BotTradeHistoryModal({ bot, onClose, t }: { bot: BotStatus; onClose: ()
                 <tbody>
                   {stats.recent_trades.map((trade) => (
                     <tr key={trade.id} className="border-b border-white/5 hover:bg-white/[0.02] transition-colors">
-                      <td className="px-3 py-2.5 text-sm text-gray-300" title={formatTimeWithTz(trade.entry_time)}>
+                      <td className="px-3 py-2.5 text-sm text-gray-300" title={formatTime(trade.entry_time)}>
                         {formatDate(trade.entry_time)}
                       </td>
                       <td className="px-3 py-2.5 text-center">
