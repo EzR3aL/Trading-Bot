@@ -1,6 +1,8 @@
 """Pydantic schemas for portfolio views."""
 
 
+from typing import Optional
+
 from pydantic import BaseModel
 
 
@@ -33,6 +35,11 @@ class PortfolioPosition(BaseModel):
     unrealized_pnl: float
     leverage: int
     margin: float = 0
+    bot_name: Optional[str] = None
+    trailing_stop_active: bool = False
+    trailing_stop_price: Optional[float] = None
+    trailing_stop_distance_pct: Optional[float] = None
+    can_close_at_loss: Optional[bool] = None
 
 
 class PortfolioAllocation(BaseModel):

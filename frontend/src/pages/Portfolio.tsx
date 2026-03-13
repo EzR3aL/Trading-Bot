@@ -6,7 +6,7 @@ import {
 } from 'recharts'
 import {
   Briefcase, ArrowUpRight, ArrowDownRight, TrendingUp,
-  ChevronUp, ChevronDown,
+  ChevronUp, ChevronDown, ShieldCheck,
 } from 'lucide-react'
 import api from '../api/client'
 import { ExchangeIcon } from '../components/ui/ExchangeLogo'
@@ -479,6 +479,7 @@ export default function Portfolio() {
                     </button>
                   </th>
                   <th className="text-center">{t('portfolio.leverage')}</th>
+                  <th className="text-center">{t('bots.trailingStop')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -515,6 +516,21 @@ export default function Portfolio() {
                       {pos.unrealized_pnl >= 0 ? '+' : ''}${pos.unrealized_pnl.toFixed(2)}
                     </td>
                     <td className="text-center text-gray-300 text-sm">{pos.leverage}x</td>
+                    <td className="text-center">
+                      {pos.trailing_stop_active && pos.trailing_stop_price != null ? (
+                        <span className="inline-flex items-center justify-center gap-1 text-emerald-400 text-sm">
+                          ${pos.trailing_stop_price.toLocaleString()}
+                          <span className="text-xs text-gray-400">({pos.trailing_stop_distance_pct?.toFixed(2)}%)</span>
+                          {pos.can_close_at_loss === false && (
+                            <span title={t('bots.trailingStopProtecting')}>
+                              <ShieldCheck size={14} className="text-emerald-400" />
+                            </span>
+                          )}
+                        </span>
+                      ) : (
+                        <span className="text-gray-600 text-sm">--</span>
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>

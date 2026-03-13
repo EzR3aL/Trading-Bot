@@ -17,7 +17,7 @@ from src.api.schemas.portfolio import (
     PortfolioSummary,
 )
 from src.auth.dependencies import get_current_user
-from src.models.database import ExchangeConnection, TradeRecord, User
+from src.models.database import BotConfig, ExchangeConnection, TradeRecord, User
 from src.models.session import get_db
 from src.utils.logger import get_logger
 
@@ -134,6 +134,28 @@ async def get_portfolio_positions(
     if not clients:
         return []
 
+    # Pre-load open trades with bot configs for trailing stop calculation
+    from src.api.routers.trades import _compute_trailing_stop
+    open_trades_result = await db.execute(
+        select(TradeRecord)
+        .where(TradeRecord.user_id == user.id, TradeRecord.status == "open")
+    )
+    open_trades = open_trades_result.scalars().all()
+
+    # Build lookup: (exchange, symbol, side) -> trade + bot config
+    trade_lookup: dict[tuple, TradeRecord] = {}
+    bot_cache: dict[int, BotConfig] = {}
+    for t in open_trades:
+        key = (t.exchange, t.symbol, t.side)
+        trade_lookup[key] = t
+        if t.bot_config_id and t.bot_config_id not in bot_cache:
+            bot_result = await db.execute(
+                select(BotConfig).where(BotConfig.id == t.bot_config_id)
+            )
+            bot = bot_result.scalar_one_or_none()
+            if bot:
+                bot_cache[t.bot_config_id] = bot
+
     positions: list[PortfolioPosition] = []
 
     async def fetch_positions(exchange_type: str, client):
@@ -142,6 +164,21 @@ async def get_portfolio_positions(
                 client.get_open_positions(), timeout=10.0
             )
             for pos in open_positions:
+                # Match with DB trade for trailing stop info
+                key = (exchange_type, pos.symbol, pos.side)
+                trade = trade_lookup.get(key)
+                bot_name = None
+                ts_info: dict = {}
+                if trade:
+                    bot = bot_cache.get(trade.bot_config_id) if trade.bot_config_id else None
+                    bot_name = bot.name if bot else None
+                    strat_type = bot.strategy_type if bot else None
+                    strat_params = bot.strategy_params if bot else None
+                    try:
+                        ts_info = await _compute_trailing_stop(trade, strat_type, strat_params)
+                    except Exception:
+                        pass
+
                 positions.append(PortfolioPosition(
                     exchange=exchange_type,
                     symbol=pos.symbol,
@@ -152,6 +189,11 @@ async def get_portfolio_positions(
                     unrealized_pnl=pos.unrealized_pnl,
                     leverage=pos.leverage,
                     margin=pos.margin,
+                    bot_name=bot_name,
+                    trailing_stop_active=ts_info.get("trailing_stop_active", False),
+                    trailing_stop_price=ts_info.get("trailing_stop_price"),
+                    trailing_stop_distance_pct=ts_info.get("trailing_stop_distance_pct"),
+                    can_close_at_loss=ts_info.get("can_close_at_loss"),
                 ))
         except asyncio.TimeoutError:
             logger.warning(f"Position fetch timeout for {exchange_type}")

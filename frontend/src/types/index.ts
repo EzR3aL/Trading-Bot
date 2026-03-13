@@ -328,6 +328,11 @@ export interface PortfolioPosition {
   unrealized_pnl: number
   leverage: number
   margin: number
+  bot_name?: string
+  trailing_stop_active?: boolean
+  trailing_stop_price?: number
+  trailing_stop_distance_pct?: number
+  can_close_at_loss?: boolean
 }
 
 export interface PortfolioDaily {

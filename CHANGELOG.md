@@ -38,6 +38,7 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
   - Session-Ablauf-Meldung uebersetzt via `common.sessionExpired`
 - **Automatische Spracherkennung** — Browser-/PC-Sprache wird beim ersten Besuch erkannt (DE/EN). Manuell gewaehlt Sprache wird in localStorage gespeichert und hat Vorrang
 - **Hardcodierte Strings uebersetzt** — Backtest-Tabellen "Symbol", PnlChart "Netto", Settings Admin-UID-Tabelle (User/Exchange/Status/Aktion), BotPerformance "Distance" — alle durch i18n-Keys ersetzt
+- **Trailing Stop von Trades nach Portfolio verschoben** — Trailing-Stop-Anzeige aus der Trade-Uebersicht entfernt und stattdessen in der Portfolio-Seite unter "Offene Positionen" eingebaut. Zeigt pro Position: Trailing-Stop-Preis, Distanz in % und Schutz-Icon. Backend berechnet Trailing-Stop live via ATR fuer jede offene Position
 
 ---
 
