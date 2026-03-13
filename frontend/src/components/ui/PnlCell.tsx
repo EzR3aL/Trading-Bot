@@ -15,8 +15,8 @@ interface PnlCellProps {
 
 function formatPnl(value: number | null): string {
   if (value === null) return '--'
-  const prefix = value >= 0 ? '+' : ''
-  return `${prefix}$${value.toFixed(2)}`
+  const prefix = value >= 0 ? '▲ +' : '▼ '
+  return `${prefix}$${Math.abs(value).toFixed(2)}`
 }
 
 /** Screen-reader-only label describing profit/loss beyond color alone */

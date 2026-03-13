@@ -47,6 +47,14 @@ function renderPage() {
   )
 }
 
+/** Navigate to a section by clicking its tab button */
+function navigateTo(sectionKey: string) {
+  const navKey = `guide.nav${sectionKey.charAt(0).toUpperCase() + sectionKey.slice(1)}`
+  // There may be both mobile and desktop nav buttons — click the first one
+  const buttons = screen.getAllByText(navKey)
+  fireEvent.click(buttons[0])
+}
+
 describe('GettingStarted', () => {
   describe('page structure', () => {
     it('renders guide.title', () => {
@@ -58,9 +66,14 @@ describe('GettingStarted', () => {
       renderPage()
       expect(screen.getByText('guide.subtitle')).toBeInTheDocument()
     })
+
+    it('renders prerequisite banner', () => {
+      const { container } = renderPage()
+      expect(container.querySelector('[data-tour="guide-prereq"]')).toBeInTheDocument()
+    })
   })
 
-  describe('QuickStartFlow', () => {
+  describe('QuickStartFlow (default section)', () => {
     it('renders guide.qsTitle', () => {
       renderPage()
       expect(screen.getByText('guide.qsTitle')).toBeInTheDocument()
@@ -71,7 +84,6 @@ describe('GettingStarted', () => {
       expect(screen.getByText('guide.qsStep1')).toBeInTheDocument()
       expect(screen.getByText('guide.qsStep2')).toBeInTheDocument()
       expect(screen.getByText('guide.qsStep3')).toBeInTheDocument()
-      // qsStep4 appears in both QuickStartFlow and WorkflowDiagram
       expect(screen.getAllByText('guide.qsStep4').length).toBeGreaterThanOrEqual(1)
     })
 
@@ -85,83 +97,54 @@ describe('GettingStarted', () => {
     })
   })
 
-  describe('How It Works', () => {
-    it('renders guide.howItWorksTitle', () => {
+  describe('Tutorial section', () => {
+    it('renders step titles after clicking tutorial tab', () => {
       renderPage()
-      expect(screen.getByText('guide.howItWorksTitle')).toBeInTheDocument()
+      navigateTo('tutorial')
+      expect(screen.getByText('guide.step1Title')).toBeInTheDocument()
+      expect(screen.getByText('guide.step2Title')).toBeInTheDocument()
+      expect(screen.getByText('guide.step3Title')).toBeInTheDocument()
     })
 
-    it('renders all 3 card titles', () => {
+    it('renders all 6 step descriptions', () => {
       renderPage()
-      expect(screen.getAllByText('guide.connectTitle').length).toBeGreaterThanOrEqual(1)
-      expect(screen.getAllByText('guide.configureTitle').length).toBeGreaterThanOrEqual(1)
-      expect(screen.getAllByText('guide.tradeTitle').length).toBeGreaterThanOrEqual(1)
+      navigateTo('tutorial')
+      expect(screen.getByText('guide.step1Desc')).toBeInTheDocument()
+      expect(screen.getByText('guide.step2Desc')).toBeInTheDocument()
+      expect(screen.getByText('guide.step3Desc')).toBeInTheDocument()
+      expect(screen.getByText('guide.step4Desc')).toBeInTheDocument()
+      expect(screen.getByText('guide.step5Desc')).toBeInTheDocument()
+      expect(screen.getByText('guide.step6Desc')).toBeInTheDocument()
     })
 
-    it('renders card descriptions', () => {
+    it('first step is expanded by default', () => {
       renderPage()
-      expect(screen.getByText('guide.connectDesc')).toBeInTheDocument()
-      expect(screen.getByText('guide.configureDesc')).toBeInTheDocument()
-      expect(screen.getByText('guide.tradeDesc')).toBeInTheDocument()
-    })
-
-    it('renders bullet points for each card', () => {
-      renderPage()
-      expect(screen.getByText('guide.connectBullet1')).toBeInTheDocument()
-      expect(screen.getByText('guide.configureBullet1')).toBeInTheDocument()
-      expect(screen.getByText('guide.tradeBullet1')).toBeInTheDocument()
+      navigateTo('tutorial')
+      // Step 1 detail should be visible (expanded by default)
+      expect(screen.getByText('guide.step1Detail1')).toBeInTheDocument()
     })
   })
 
-  describe('StrategyOverview', () => {
-    it('renders guide.stratTitle', () => {
+  describe('StrategyOverview section', () => {
+    it('renders guide.stratTitle after clicking strategies tab', () => {
       renderPage()
+      navigateTo('strategies')
       expect(screen.getByText('guide.stratTitle')).toBeInTheDocument()
     })
 
-    it('renders all 6 strategy names', () => {
+    it('renders strategy column headers', () => {
       renderPage()
-      expect(screen.getByText('KI-Companion')).toBeInTheDocument()
-      expect(screen.getByText('Sentiment Surfer')).toBeInTheDocument()
-      expect(screen.getByText('Liquidation Hunter')).toBeInTheDocument()
-      expect(screen.getAllByText(/^Degen$/).length).toBeGreaterThanOrEqual(1)
-      expect(screen.getByText('Edge Indicator')).toBeInTheDocument()
-    })
-
-    it('renders column headers', () => {
-      renderPage()
+      navigateTo('strategies')
       expect(screen.getByText('guide.stratColName')).toBeInTheDocument()
       expect(screen.getByText('guide.stratColDesc')).toBeInTheDocument()
       expect(screen.getByText('guide.stratColTf')).toBeInTheDocument()
     })
   })
 
-  describe('data-tour attributes', () => {
-    it('has data-tour on all major sections', () => {
-      const { container } = renderPage()
-      expect(container.querySelector('[data-tour="guide-prereq"]')).toBeInTheDocument()
-      expect(container.querySelector('[data-tour="guide-quickstart"]')).toBeInTheDocument()
-      expect(container.querySelector('[data-tour="guide-how-it-works"]')).toBeInTheDocument()
-      expect(container.querySelector('[data-tour="guide-strategies"]')).toBeInTheDocument()
-      expect(container.querySelector('[data-tour="guide-exchanges"]')).toBeInTheDocument()
-    })
-  })
-
-  describe('GuidedTour', () => {
-    it('renders GuidedTour component', () => {
+  describe('Risk section', () => {
+    it('renders risk profile section after clicking risk tab', () => {
       renderPage()
-      expect(screen.getByTestId('guided-tour-getting-started')).toBeInTheDocument()
-    })
-
-    it('renders TourHelpButton', () => {
-      renderPage()
-      expect(screen.getByTestId('tour-help-getting-started')).toBeInTheDocument()
-    })
-  })
-
-  describe('Risk Gauge', () => {
-    it('renders risk profile section', () => {
-      renderPage()
+      navigateTo('risk')
       expect(screen.getByText('guide.riskTitle')).toBeInTheDocument()
       expect(screen.getByText('guide.riskConservative')).toBeInTheDocument()
       expect(screen.getByText('guide.riskModerate')).toBeInTheDocument()
@@ -169,22 +152,23 @@ describe('GettingStarted', () => {
     })
   })
 
-  describe('Exchange Comparison', () => {
-    it('renders guide.exchangeCompTitle', () => {
+  describe('Exchanges section', () => {
+    it('renders exchange comparison after clicking exchanges tab', () => {
       renderPage()
+      navigateTo('exchanges')
       expect(screen.getByText('guide.exchangeCompTitle')).toBeInTheDocument()
     })
 
-    it('renders exchange icons for bitget and hyperliquid', () => {
+    it('renders exchange icons', () => {
       renderPage()
+      navigateTo('exchanges')
       expect(screen.getAllByTestId('exchange-bitget').length).toBeGreaterThanOrEqual(1)
       expect(screen.getAllByTestId('exchange-hyperliquid').length).toBeGreaterThanOrEqual(1)
     })
-  })
 
-  describe('Exchange Setup Cards', () => {
-    it('renders 3 setup cards', () => {
+    it('renders setup cards', () => {
       renderPage()
+      navigateTo('exchanges')
       expect(screen.getByText('guide.bitgetSetupTitle')).toBeInTheDocument()
       expect(screen.getByText('guide.weexSetupTitle')).toBeInTheDocument()
       expect(screen.getByText('guide.hyperliquidSetupTitle')).toBeInTheDocument()
@@ -192,11 +176,14 @@ describe('GettingStarted', () => {
 
     it('Bitget card is open by default and shows bitgetSetup1', () => {
       renderPage()
+      navigateTo('exchanges')
       expect(screen.getByText('guide.bitgetSetup1')).toBeInTheDocument()
     })
 
     it('toggles weex card open and closed', () => {
       renderPage()
+      navigateTo('exchanges')
+
       // weex card is closed by default
       expect(screen.queryByText('guide.weexSetup1')).not.toBeInTheDocument()
 
@@ -210,22 +197,27 @@ describe('GettingStarted', () => {
     })
   })
 
-  describe('Example Config', () => {
-    it('renders guide.exampleTitle', () => {
+  describe('Navigation', () => {
+    it('renders all 6 section tabs', () => {
       renderPage()
-      expect(screen.getByText('guide.exampleTitle')).toBeInTheDocument()
+      expect(screen.getAllByText('guide.navQuickstart').length).toBeGreaterThanOrEqual(1)
+      expect(screen.getAllByText('guide.navTutorial').length).toBeGreaterThanOrEqual(1)
+      expect(screen.getAllByText('guide.navStrategies').length).toBeGreaterThanOrEqual(1)
+      expect(screen.getAllByText('guide.navRisk').length).toBeGreaterThanOrEqual(1)
+      expect(screen.getAllByText('guide.navExchanges').length).toBeGreaterThanOrEqual(1)
+      expect(screen.getAllByText('guide.navSecurity').length).toBeGreaterThanOrEqual(1)
     })
   })
 
-  describe('Tip Box', () => {
-    it('renders guide.tipTitle', () => {
+  describe('GuidedTour', () => {
+    it('renders GuidedTour component', () => {
       renderPage()
-      expect(screen.getByText('guide.tipTitle')).toBeInTheDocument()
+      expect(screen.getByTestId('guided-tour-getting-started')).toBeInTheDocument()
     })
 
-    it('renders guide.tipText', () => {
+    it('renders TourHelpButton', () => {
       renderPage()
-      expect(screen.getByText('guide.tipText')).toBeInTheDocument()
+      expect(screen.getByTestId('tour-help-getting-started')).toBeInTheDocument()
     })
   })
 })

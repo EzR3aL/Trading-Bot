@@ -4,9 +4,39 @@ import json as _json
 import re
 from typing import Any, Dict, List, Optional
 
+from urllib.parse import urlparse
+
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from src.models.enums import EXCHANGE_PATTERN
+
+# Allowed webhook domains to prevent SSRF attacks
+_ALLOWED_WEBHOOK_DOMAINS = {
+    "discord.com",
+    "discordapp.com",
+    "hooks.slack.com",
+    "api.telegram.org",
+}
+
+
+def _validate_webhook_url(url: str | None) -> str | None:
+    """Validate that a webhook URL points to an allowed domain (SSRF prevention)."""
+    if url is None or url == "":
+        return url
+    try:
+        parsed = urlparse(url)
+    except Exception:
+        raise ValueError("Invalid webhook URL format")
+    if parsed.scheme not in ("https",):
+        raise ValueError("Webhook URL must use HTTPS")
+    host = parsed.hostname or ""
+    # Allow subdomains (e.g. ptb.discord.com)
+    if not any(host == d or host.endswith(f".{d}") for d in _ALLOWED_WEBHOOK_DOMAINS):
+        raise ValueError(
+            f"Webhook URL domain '{host}' is not allowed. "
+            f"Allowed: {', '.join(sorted(_ALLOWED_WEBHOOK_DOMAINS))}"
+        )
+    return url
 
 # Maximum serialized JSON size for dict fields (10 KB)
 _MAX_JSON_FIELD_BYTES = 10240
@@ -78,6 +108,11 @@ class BotConfigCreate(BaseModel):
     whatsapp_access_token: Optional[str] = None
     whatsapp_recipient: Optional[str] = None
 
+    @field_validator("discord_webhook_url", mode="before")
+    @classmethod
+    def validate_webhook_domain(cls, v: str | None) -> str | None:
+        return _validate_webhook_url(v)
+
     @field_validator("strategy_params", "schedule_config", "per_asset_config", mode="before")
     @classmethod
     def validate_dict_field_size(cls, v: Any) -> Any:
@@ -145,6 +180,11 @@ class BotConfigUpdate(BaseModel):
     whatsapp_phone_number_id: Optional[str] = None
     whatsapp_access_token: Optional[str] = None
     whatsapp_recipient: Optional[str] = None
+
+    @field_validator("discord_webhook_url", mode="before")
+    @classmethod
+    def validate_webhook_domain(cls, v: str | None) -> str | None:
+        return _validate_webhook_url(v)
 
     @field_validator("strategy_params", "schedule_config", "per_asset_config", mode="before")
     @classmethod

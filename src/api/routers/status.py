@@ -6,6 +6,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
+from src.api.rate_limit import limiter
 from src.models.session import get_session
 from src.utils.logger import get_logger
 
@@ -15,6 +16,7 @@ router = APIRouter(tags=["status"])
 
 
 @router.get("/api/health")
+@limiter.limit("30/minute")
 async def health_check(request: Request):
     """Health check endpoint with DB and orchestrator verification."""
     checks = {"database": "ok", "bots": "ok"}

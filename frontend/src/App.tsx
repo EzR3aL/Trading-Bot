@@ -1,5 +1,6 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { lazy, Suspense, useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useAuthStore } from './stores/authStore'
 import AppLayout from './components/layout/AppLayout'
 import ToastContainer from './components/ui/Toast'
@@ -46,6 +47,12 @@ function AdminRoute({ children }: { children: React.ReactNode }) {
 
 export default function App() {
   const { isAuthenticated, fetchUser } = useAuthStore()
+  const { i18n } = useTranslation()
+
+  // Keep html lang attribute in sync with current language (accessibility)
+  useEffect(() => {
+    document.documentElement.lang = i18n.language || 'en'
+  }, [i18n.language])
 
   useEffect(() => {
     if (isAuthenticated) {

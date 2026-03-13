@@ -724,9 +724,9 @@ class BotWorker(
 
     def _get_symbol_lock(self, symbol: str) -> asyncio.Lock:
         """Get or create a per-symbol lock to prevent duplicate position opening."""
-        if symbol not in self._symbol_locks:
-            self._symbol_locks[symbol] = asyncio.Lock()
-        return self._symbol_locks[symbol]
+        # setdefault is atomic — prevents race where two coroutines create
+        # separate Lock objects for the same symbol concurrently.
+        return self._symbol_locks.setdefault(symbol, asyncio.Lock())
 
     async def _analyze_symbol(self, symbol: str, force: bool = False, asset_budget: Optional[float] = None):
         """Analyze a single symbol and potentially trade it.

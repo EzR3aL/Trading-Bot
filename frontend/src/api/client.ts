@@ -5,6 +5,7 @@ const api = axios.create({
   baseURL: '/api',
   headers: { 'Content-Type': 'application/json' },
   timeout: 15_000,
+  withCredentials: true,
 })
 
 // Refresh lock to prevent multiple simultaneous refresh attempts
@@ -34,7 +35,6 @@ function handleSessionExpiry() {
   sessionExpiring = true
 
   localStorage.removeItem('access_token')
-  localStorage.removeItem('refresh_token')
 
   // Show a brief message before redirect — use existing element or create one
   let msg = document.getElementById('session-expiry-msg')
@@ -75,12 +75,6 @@ api.interceptors.response.use(
     if (error.response?.status === 401 && !originalRequest._retry) {
       originalRequest._retry = true
 
-      const refreshToken = localStorage.getItem('refresh_token')
-      if (!refreshToken) {
-        handleSessionExpiry()
-        return Promise.reject(error)
-      }
-
       // If already refreshing, queue this request
       if (isRefreshing) {
         return new Promise((resolve) => {
@@ -102,12 +96,11 @@ api.interceptors.response.use(
       refreshRetryCount++
 
       try {
-        const res = await axios.post('/api/auth/refresh', {
-          refresh_token: refreshToken,
+        const res = await axios.post('/api/auth/refresh', {}, {
+          withCredentials: true,
         })
-        const { access_token, refresh_token: newRefresh } = res.data
+        const { access_token } = res.data
         localStorage.setItem('access_token', access_token)
-        localStorage.setItem('refresh_token', newRefresh)
 
         // Reset retry count on success
         refreshRetryCount = 0

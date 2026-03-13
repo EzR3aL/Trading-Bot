@@ -5,6 +5,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 import jwt
+from fastapi import Response
 from jwt.exceptions import PyJWTError
 
 from src.utils.logger import get_logger
@@ -14,6 +15,8 @@ _jwt_logger = get_logger(__name__)
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 REFRESH_TOKEN_EXPIRE_DAYS = 7
+
+REFRESH_COOKIE_NAME = "refresh_token"
 
 
 def _get_secret_key() -> str:
@@ -104,3 +107,35 @@ def decode_token(token: str, expected_type: Optional[str] = None) -> Optional[di
         return payload
     except PyJWTError:
         return None
+
+
+def set_refresh_cookie(response: Response, refresh_token: str) -> None:
+    """Set the refresh token as an httpOnly secure cookie.
+
+    Security properties:
+    - httponly: JS cannot read the cookie (XSS protection)
+    - secure: Only sent over HTTPS (except in development)
+    - samesite=lax: Prevents CSRF on cross-origin POST
+    - path=/api/auth: Cookie only sent to auth endpoints (minimizes exposure)
+    """
+    environment = os.getenv("ENVIRONMENT", "development").lower()
+    is_prod = environment == "production"
+
+    response.set_cookie(
+        key=REFRESH_COOKIE_NAME,
+        value=refresh_token,
+        httponly=True,
+        secure=is_prod,
+        samesite="lax",
+        path="/api/auth",
+        max_age=REFRESH_TOKEN_EXPIRE_DAYS * 86400,
+    )
+
+
+def clear_refresh_cookie(response: Response) -> None:
+    """Clear the refresh token cookie (on logout or token revocation)."""
+    response.delete_cookie(
+        key=REFRESH_COOKIE_NAME,
+        httponly=True,
+        path="/api/auth",
+    )

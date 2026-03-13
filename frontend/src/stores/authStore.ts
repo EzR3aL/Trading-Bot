@@ -13,7 +13,7 @@ interface AuthState {
   isLoading: boolean
   login: (username: string, password: string) => Promise<LoginResult>
   verify2fa: (tempToken: string, code: string) => Promise<void>
-  logout: () => void
+  logout: () => Promise<void>
   fetchUser: () => Promise<void>
 }
 
@@ -26,7 +26,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     set({ isLoading: true })
     try {
       const res = await api.post('/auth/login', { username, password })
-      const { access_token, refresh_token, requires_2fa, temp_token } = res.data
+      const { access_token, requires_2fa, temp_token } = res.data
 
       if (requires_2fa) {
         set({ isLoading: false })
@@ -34,7 +34,6 @@ export const useAuthStore = create<AuthState>((set) => ({
       }
 
       localStorage.setItem('access_token', access_token)
-      localStorage.setItem('refresh_token', refresh_token)
 
       // Fetch user profile
       const userRes = await api.get('/auth/me')
@@ -53,9 +52,8 @@ export const useAuthStore = create<AuthState>((set) => ({
         temp_token: tempToken,
         code,
       })
-      const { access_token, refresh_token } = res.data
+      const { access_token } = res.data
       localStorage.setItem('access_token', access_token)
-      localStorage.setItem('refresh_token', refresh_token)
 
       // Fetch user profile
       const userRes = await api.get('/auth/me')
@@ -66,9 +64,13 @@ export const useAuthStore = create<AuthState>((set) => ({
     }
   },
 
-  logout: () => {
+  logout: async () => {
+    try {
+      await api.post('/auth/logout')
+    } catch {
+      // Best-effort — clear local state regardless
+    }
     localStorage.removeItem('access_token')
-    localStorage.removeItem('refresh_token')
     set({ user: null, isAuthenticated: false })
   },
 

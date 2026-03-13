@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { Fragment, useState, useEffect, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -6,7 +6,7 @@ import {
 } from 'recharts'
 import {
   Briefcase, ArrowUpRight, ArrowDownRight, TrendingUp,
-  ChevronUp, ChevronDown, ShieldCheck,
+  ChevronUp, ChevronDown, ChevronRight, ShieldCheck,
 } from 'lucide-react'
 import api from '../api/client'
 import { ExchangeIcon } from '../components/ui/ExchangeLogo'
@@ -68,6 +68,7 @@ export default function Portfolio() {
 
   // Sorting state for positions
   const [sortAsc, setSortAsc] = useState(false)
+  const [expandedIdx, setExpandedIdx] = useState<number | null>(null)
 
   /* ── Data Fetching ──────────────────────────────────────── */
 
@@ -484,54 +485,104 @@ export default function Portfolio() {
               </thead>
               <tbody>
                 {sortedPositions.map((pos, idx) => (
-                  <tr key={`${pos.exchange}-${pos.symbol}-${idx}`}>
-                    <td>
-                      <span className="inline-flex items-center gap-2">
-                        <ExchangeIcon exchange={pos.exchange} size={16} />
-                        <span className="text-gray-300 capitalize text-sm hidden md:inline">{pos.exchange}</span>
-                      </span>
-                    </td>
-                    <td className="text-white font-medium text-sm">{pos.symbol}</td>
-                    <td className="text-center">
-                      <span className={`text-xs font-medium px-2 py-0.5 rounded ${
-                        pos.side.toLowerCase() === 'long'
-                          ? 'bg-emerald-500/10 text-emerald-400'
-                          : 'bg-red-500/10 text-red-400'
-                      }`}>
-                        {pos.side.toUpperCase()}
-                      </span>
-                    </td>
-                    <td className="text-right text-gray-300 text-sm font-mono hidden xl:table-cell">
-                      {pos.size.toFixed(4)}
-                    </td>
-                    <td className="text-right text-gray-300 text-sm font-mono hidden lg:table-cell">
-                      ${pos.entry_price.toLocaleString()}
-                    </td>
-                    <td className="text-right text-gray-300 text-sm font-mono hidden lg:table-cell">
-                      ${pos.current_price.toLocaleString()}
-                    </td>
-                    <td className={`text-right text-sm font-medium font-mono ${
-                      pos.unrealized_pnl >= 0 ? 'text-emerald-400' : 'text-red-400'
-                    }`}>
-                      {pos.unrealized_pnl >= 0 ? '+' : ''}${pos.unrealized_pnl.toFixed(2)}
-                    </td>
-                    <td className="text-center text-gray-300 text-sm hidden 2xl:table-cell">{pos.leverage}x</td>
-                    <td className="text-center hidden xl:table-cell">
-                      {pos.trailing_stop_active && pos.trailing_stop_price != null ? (
-                        <span className="inline-flex items-center justify-center gap-1 text-emerald-400 text-sm">
-                          ${pos.trailing_stop_price.toLocaleString()}
-                          <span className="text-xs text-gray-400">({pos.trailing_stop_distance_pct?.toFixed(2)}%)</span>
-                          {pos.can_close_at_loss === false && (
-                            <span title={t('bots.trailingStopProtecting')}>
-                              <ShieldCheck size={14} className="text-emerald-400" />
-                            </span>
-                          )}
+                  <Fragment key={`${pos.exchange}-${pos.symbol}-${idx}`}>
+                    <tr
+                      onClick={() => setExpandedIdx(expandedIdx === idx ? null : idx)}
+                      className="cursor-pointer"
+                    >
+                      <td>
+                        <span className="inline-flex items-center gap-2">
+                          <ChevronRight size={14} className={`expand-chevron ${expandedIdx === idx ? 'open' : ''}`} />
+                          <ExchangeIcon exchange={pos.exchange} size={16} />
+                          <span className="text-gray-300 capitalize text-sm hidden md:inline">{pos.exchange}</span>
                         </span>
-                      ) : (
-                        <span className="text-gray-600 text-sm">--</span>
-                      )}
-                    </td>
-                  </tr>
+                      </td>
+                      <td className="text-white font-medium text-sm">{pos.symbol}</td>
+                      <td className="text-center">
+                        <span className={`text-xs font-medium px-2 py-0.5 rounded ${
+                          pos.side.toLowerCase() === 'long'
+                            ? 'bg-emerald-500/10 text-emerald-400'
+                            : 'bg-red-500/10 text-red-400'
+                        }`}>
+                          {pos.side.toUpperCase()}
+                        </span>
+                      </td>
+                      <td className="text-right text-gray-300 text-sm font-mono hidden xl:table-cell">
+                        {pos.size.toFixed(4)}
+                      </td>
+                      <td className="text-right text-gray-300 text-sm font-mono hidden lg:table-cell">
+                        ${pos.entry_price.toLocaleString()}
+                      </td>
+                      <td className="text-right text-gray-300 text-sm font-mono hidden lg:table-cell">
+                        ${pos.current_price.toLocaleString()}
+                      </td>
+                      <td className={`text-right text-sm font-medium font-mono ${
+                        pos.unrealized_pnl >= 0 ? 'text-emerald-400' : 'text-red-400'
+                      }`}>
+                        {pos.unrealized_pnl >= 0 ? '▲ +' : '▼ '}${Math.abs(pos.unrealized_pnl).toFixed(2)}
+                      </td>
+                      <td className="text-center text-gray-300 text-sm hidden 2xl:table-cell">{pos.leverage}x</td>
+                      <td className="text-center hidden xl:table-cell">
+                        {pos.trailing_stop_active && pos.trailing_stop_price != null ? (
+                          <span className="inline-flex items-center justify-center gap-1 text-emerald-400 text-sm">
+                            ${pos.trailing_stop_price.toLocaleString()}
+                            <span className="text-xs text-gray-400">({pos.trailing_stop_distance_pct?.toFixed(2)}%)</span>
+                            {pos.can_close_at_loss === false && (
+                              <span title={t('bots.trailingStopProtecting')}>
+                                <ShieldCheck size={14} className="text-emerald-400" />
+                              </span>
+                            )}
+                          </span>
+                        ) : (
+                          <span className="text-gray-600 text-sm">--</span>
+                        )}
+                      </td>
+                    </tr>
+                    {expandedIdx === idx && (
+                      <tr className="table-expand-row">
+                        <td colSpan={9} className="!p-0 !border-b-0">
+                          <dl className="table-expand-content">
+                            <div className="xl:hidden">
+                              <dt>{t('portfolio.size')}</dt>
+                              <dd>{pos.size.toFixed(4)}</dd>
+                            </div>
+                            <div className="lg:hidden">
+                              <dt>{t('portfolio.entryPrice')}</dt>
+                              <dd>${pos.entry_price.toLocaleString()}</dd>
+                            </div>
+                            <div className="lg:hidden">
+                              <dt>{t('portfolio.currentPrice')}</dt>
+                              <dd>${pos.current_price.toLocaleString()}</dd>
+                            </div>
+                            <div className="2xl:hidden">
+                              <dt>{t('portfolio.leverage')}</dt>
+                              <dd>{pos.leverage}x</dd>
+                            </div>
+                            <div className="xl:hidden">
+                              <dt>{t('bots.trailingStop')}</dt>
+                              <dd>
+                                {pos.trailing_stop_active && pos.trailing_stop_price != null
+                                  ? `$${pos.trailing_stop_price.toLocaleString()} (${pos.trailing_stop_distance_pct?.toFixed(2)}%)`
+                                  : '--'}
+                              </dd>
+                            </div>
+                            {pos.bot_name && (
+                              <div>
+                                <dt>{t('trades.bot')}</dt>
+                                <dd>{pos.bot_name}</dd>
+                              </div>
+                            )}
+                            {pos.margin != null && pos.margin > 0 && (
+                              <div>
+                                <dt>{t('portfolio.margin', 'Margin')}</dt>
+                                <dd>${pos.margin.toFixed(2)}</dd>
+                              </div>
+                            )}
+                          </dl>
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
                 ))}
               </tbody>
             </table>

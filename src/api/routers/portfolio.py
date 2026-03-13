@@ -144,17 +144,19 @@ async def get_portfolio_positions(
 
     # Build lookup: (exchange, symbol, side) -> trade + bot config
     trade_lookup: dict[tuple, TradeRecord] = {}
-    bot_cache: dict[int, BotConfig] = {}
     for t in open_trades:
         key = (t.exchange, t.symbol, t.side)
         trade_lookup[key] = t
-        if t.bot_config_id and t.bot_config_id not in bot_cache:
-            bot_result = await db.execute(
-                select(BotConfig).where(BotConfig.id == t.bot_config_id)
-            )
-            bot = bot_result.scalar_one_or_none()
-            if bot:
-                bot_cache[t.bot_config_id] = bot
+
+    # Batch-load all referenced BotConfigs in a single query (fix N+1)
+    bot_cache: dict[int, BotConfig] = {}
+    bot_ids = {t.bot_config_id for t in open_trades if t.bot_config_id}
+    if bot_ids:
+        bot_result = await db.execute(
+            select(BotConfig).where(BotConfig.id.in_(bot_ids))
+        )
+        for bot in bot_result.scalars().all():
+            bot_cache[bot.id] = bot
 
     positions: list[PortfolioPosition] = []
 

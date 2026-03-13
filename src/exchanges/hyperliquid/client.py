@@ -22,6 +22,7 @@ from src.exceptions import ExchangeError
 from src.exchanges.base import ExchangeClient
 from src.exchanges.hyperliquid.constants import DEFAULT_BUILDER_FEE
 from src.exchanges.types import Balance, FundingRateInfo, Order, Position, Ticker
+from src.utils.circuit_breaker import CircuitBreaker, CircuitBreakerError
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -87,6 +88,14 @@ class SafeExchange:
             if hasattr(self._exchange, name) and callable(getattr(self._exchange, name)):
                 logger.warning(f"Hyperliquid: calling non-whitelisted method '{name}'")
         return getattr(self._exchange, name)
+
+
+# Circuit breaker for Hyperliquid API calls (consistent with other exchanges)
+_hl_breaker = CircuitBreaker(
+    name="hyperliquid_api",
+    fail_threshold=5,
+    reset_timeout=60.0,
+)
 
 
 class HyperliquidClient(ExchangeClient):
@@ -180,11 +189,20 @@ class HyperliquidClient(ExchangeClient):
     async def close(self) -> None:
         pass  # SDK uses requests (sync), no session to close
 
+    async def _cb_call(self, func, *args, **kwargs):
+        """Execute a function through the Hyperliquid circuit breaker."""
+        async def _wrapper():
+            return func(*args, **kwargs)
+        try:
+            return await _hl_breaker.call(_wrapper)
+        except CircuitBreakerError as e:
+            raise HyperliquidClientError(f"API temporarily unavailable: {e}")
+
     # ── Read Operations ─────────────────────────────────────────────────────
 
     async def get_account_balance(self) -> Balance:
         address = self.wallet_address or self._wallet.address
-        data = self._info.user_state(address)
+        data = await self._cb_call(self._info.user_state, address)
         margin = data.get("marginSummary", {})
         perp_total = float(margin.get("accountValue", 0))
         perp_available = float(data.get("withdrawable", margin.get("totalRawUsd", 0)))
@@ -211,7 +229,7 @@ class HyperliquidClient(ExchangeClient):
     async def get_position(self, symbol: str) -> Optional[Position]:
         coin = self._normalize_symbol(symbol)
         address = self.wallet_address or self._wallet.address
-        data = self._info.user_state(address)
+        data = await self._cb_call(self._info.user_state, address)
         for pos in data.get("assetPositions", []):
             pd = pos.get("position", {})
             if pd.get("coin", "") == coin:
@@ -288,7 +306,7 @@ class HyperliquidClient(ExchangeClient):
     async def set_leverage(self, symbol: str, leverage: int, margin_mode: str = "cross") -> bool:
         coin = self._normalize_symbol(symbol)
         try:
-            result = self._exchange.update_leverage(leverage=leverage, name=coin, is_cross=(margin_mode == "cross"))
+            result = await self._cb_call(self._exchange.update_leverage, leverage=leverage, name=coin, is_cross=(margin_mode == "cross"))
             logger.info(f"Hyperliquid leverage set to {leverage}x for {coin}: {result}")
             return True
         except Exception as e:
@@ -318,7 +336,8 @@ class HyperliquidClient(ExchangeClient):
 
         # Place market order via SDK (handles EIP-712 signing + slippage)
         builder_kwargs = {"builder": self._builder} if self._builder else {}
-        result = self._exchange.market_open(
+        result = await self._cb_call(
+            self._exchange.market_open,
             name=coin,
             is_buy=is_buy,
             sz=size,
@@ -423,7 +442,8 @@ class HyperliquidClient(ExchangeClient):
 
         try:
             builder_kwargs = {"builder": self._builder} if self._builder else {}
-            result = self._exchange.order(
+            result = await self._cb_call(
+                self._exchange.order,
                 name=coin,
                 is_buy=is_buy,
                 sz=size,
@@ -457,7 +477,8 @@ class HyperliquidClient(ExchangeClient):
         )
 
         builder_kwargs = {"builder": self._builder} if self._builder else {}
-        result = self._exchange.market_close(
+        result = await self._cb_call(
+            self._exchange.market_close,
             coin=coin,
             sz=pos.size,
             slippage=DEFAULT_SLIPPAGE,
@@ -611,7 +632,7 @@ class HyperliquidClient(ExchangeClient):
     async def cancel_order(self, symbol: str, order_id: str) -> bool:
         coin = self._normalize_symbol(symbol)
         try:
-            self._exchange.cancel(name=coin, oid=int(order_id))
+            await self._cb_call(self._exchange.cancel, name=coin, oid=int(order_id))
             logger.info(f"Hyperliquid order cancelled: {coin} oid={order_id}")
             return True
         except Exception as e:

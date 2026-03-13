@@ -9,6 +9,31 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [4.0.4] - 2026-03-13
+
+### Sicherheit (Security Fixes)
+- **httpOnly Cookie fuer Refresh Tokens**: Refresh-Tokens werden nicht mehr im localStorage gespeichert (XSS-anfaellig), sondern als httpOnly, secure, samesite=lax Cookie gesetzt. Nur der Access-Token bleibt im localStorage (kurzlebig, 30min). Cookie ist auf `/api/auth` Pfad beschraenkt
+  - Login, 2FA-Verify, Refresh und Change-Password setzen den Cookie serverseitig
+  - Neuer `/api/auth/logout` Endpoint loescht den Cookie
+  - Frontend sendet `withCredentials: true` — Refresh-Request schickt Cookie automatisch
+  - Backward-kompatibel: Refresh-Endpoint akzeptiert noch Body-Parameter (fuer bestehende Clients)
+- **SSRF-Schutz fuer Webhook-URLs**: Discord-Webhook-URLs werden nun gegen eine Allowlist validiert (nur `discord.com`, `discordapp.com`, `hooks.slack.com`, `api.telegram.org`). Verhindert Server-Side Request Forgery durch manipulierte URLs
+- **Rate Limit auf `/api/health`**: Health-Check-Endpoint hat nun ein Rate Limit von 30/min, um DDoS-Vektoren zu schliessen
+- **Hyperliquid Circuit Breaker**: Alle API-Aufrufe zum Hyperliquid-SDK laufen nun durch einen Circuit Breaker (5 Fehler → 60s Pause), konsistent mit den anderen Exchanges
+
+### Behoben (Bug Fixes)
+- **N+1 Query in Portfolio Positions**: BotConfig-Abfragen fuer offene Positionen werden nun per Batch geladen statt einzeln pro Trade (Performance-Fix)
+- **Symbol Lock Race Condition**: `_get_symbol_lock()` nutzt nun `setdefault()` statt manuelles if/set — verhindert theoretische Doppel-Lock-Erstellung bei gleichzeitigem Zugriff
+- **Toast Overflow**: Toast-Container hat nun `max-height` und `overflow-y-auto` — bei vielen gleichzeitigen Toasts scrollbar statt ueber den Bildschirmrand hinaus
+- **GettingStarted Tests**: Tests an die neue Tab-basierte Seitenstruktur angepasst (vorher wurde erwartet, dass alle Sektionen gleichzeitig sichtbar sind)
+
+### Hinzugefuegt (UX)
+- **Portfolio Expand-Row**: Positions-Tabelle hat nun das gleiche klickbare Expand-Detail-Pattern wie Trades und Dashboard (Size, Entry/Current Price, Leverage, Trailing Stop, Bot-Name, Margin)
+- **Farbenblinden-freundliche PnL-Indikatoren**: Alle PnL-Werte zeigen nun ▲/▼ Symbole zusaetzlich zur Farbe (nicht nur Farbe fuer Profit/Loss)
+- **HTML `lang`-Attribut**: Das `<html lang>` Attribut wird automatisch mit der aktuellen Sprache synchronisiert (Accessibility)
+
+---
+
 ## [4.0.3] - 2026-03-13
 
 ### Hinzugefuegt

@@ -63,7 +63,6 @@ describe('authStore', () => {
       mockPost.mockResolvedValueOnce({
         data: {
           access_token: 'new-access-token',
-          refresh_token: 'new-refresh-token',
         },
       })
       mockGet.mockResolvedValueOnce({ data: mockUser })
@@ -77,7 +76,6 @@ describe('authStore', () => {
       expect(mockGet).toHaveBeenCalledWith('/auth/me')
 
       expect(localStorage.getItem('access_token')).toBe('new-access-token')
-      expect(localStorage.getItem('refresh_token')).toBe('new-refresh-token')
 
       const state = useAuthStore.getState()
       expect(state.user).toEqual(mockUser)
@@ -103,7 +101,6 @@ describe('authStore', () => {
       resolvePost!({
         data: {
           access_token: 'token',
-          refresh_token: 'refresh',
         },
       })
       await loginPromise
@@ -127,19 +124,39 @@ describe('authStore', () => {
   })
 
   describe('logout', () => {
-    it('should clear tokens and reset state', () => {
+    it('should call logout API, clear access token, and reset state', async () => {
+      const mockPost = vi.mocked(api.post)
+      mockPost.mockResolvedValueOnce({ data: { message: 'Logged out' } })
+
       localStorage.setItem('access_token', 'some-token')
-      localStorage.setItem('refresh_token', 'some-refresh')
       useAuthStore.setState({
         user: mockUser,
         isAuthenticated: true,
       })
 
-      useAuthStore.getState().logout()
+      await useAuthStore.getState().logout()
+
+      expect(mockPost).toHaveBeenCalledWith('/auth/logout')
+      expect(localStorage.getItem('access_token')).toBeNull()
+
+      const state = useAuthStore.getState()
+      expect(state.user).toBeNull()
+      expect(state.isAuthenticated).toBe(false)
+    })
+
+    it('should clear state even if logout API fails', async () => {
+      const mockPost = vi.mocked(api.post)
+      mockPost.mockRejectedValueOnce(new Error('Network error'))
+
+      localStorage.setItem('access_token', 'some-token')
+      useAuthStore.setState({
+        user: mockUser,
+        isAuthenticated: true,
+      })
+
+      await useAuthStore.getState().logout()
 
       expect(localStorage.getItem('access_token')).toBeNull()
-      expect(localStorage.getItem('refresh_token')).toBeNull()
-
       const state = useAuthStore.getState()
       expect(state.user).toBeNull()
       expect(state.isAuthenticated).toBe(false)

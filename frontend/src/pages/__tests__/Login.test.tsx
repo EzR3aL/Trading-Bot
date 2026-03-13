@@ -100,7 +100,7 @@ describe('Login Page', () => {
   })
 
   it('should call login and navigate on successful submit', async () => {
-    const mockLogin = vi.fn().mockResolvedValueOnce(undefined)
+    const mockLogin = vi.fn().mockResolvedValueOnce({ requires2fa: false })
     useAuthStore.setState({ login: mockLogin } as unknown as Parameters<typeof useAuthStore.setState>[0])
 
     const user = userEvent.setup()
@@ -153,7 +153,7 @@ describe('Login Page', () => {
   it('should clear error on new submit attempt', async () => {
     const mockLogin = vi.fn()
       .mockRejectedValueOnce(new Error('fail'))
-      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce({ requires2fa: false })
     useAuthStore.setState({ login: mockLogin } as unknown as Parameters<typeof useAuthStore.setState>[0])
 
     const user = userEvent.setup()

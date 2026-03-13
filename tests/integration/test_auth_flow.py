@@ -108,25 +108,27 @@ async def test_access_protected_endpoint_with_invalid_token(client, test_db):
 
 @pytest.mark.integration
 async def test_refresh_token(client, admin_token):
-    """A valid refresh token can be exchanged for a new token pair."""
-    # First, obtain the refresh token via login.
+    """A valid refresh token (httpOnly cookie) can be exchanged for a new access token."""
+    # First, obtain the refresh token cookie via login.
     login_resp = await client.post(
         "/api/auth/login",
         json={"username": "admin", "password": "admin123456"},
     )
     assert login_resp.status_code == 200
-    refresh_token = login_resp.json()["refresh_token"]
 
-    # Exchange the refresh token.
+    # Extract refresh_token cookie from Set-Cookie header
+    refresh_cookie = login_resp.cookies.get("refresh_token")
+    assert refresh_cookie, "Login should set refresh_token httpOnly cookie"
+
+    # Exchange the refresh token via cookie.
     refresh_resp = await client.post(
         "/api/auth/refresh",
-        json={"refresh_token": refresh_token},
+        cookies={"refresh_token": refresh_cookie},
     )
     assert refresh_resp.status_code == 200
 
     body = refresh_resp.json()
     assert "access_token" in body
-    assert "refresh_token" in body
     assert body["token_type"] == "bearer"
 
     # The new access token should work on a protected endpoint.

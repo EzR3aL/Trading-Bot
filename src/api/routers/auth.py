@@ -10,7 +10,7 @@ from datetime import datetime, timedelta, timezone
 
 import pyotp
 import qrcode
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Cookie, Depends, HTTPException, Request, Response, status
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -31,10 +31,13 @@ from src.api.schemas.auth import (
 )
 from src.auth.dependencies import get_current_user
 from src.auth.jwt_handler import (
+    REFRESH_COOKIE_NAME,
     REFRESH_TOKEN_EXPIRE_DAYS,
+    clear_refresh_cookie,
     create_access_token,
     create_refresh_token,
     decode_token,
+    set_refresh_cookie,
 )
 from src.auth.password import hash_password, verify_password
 from src.errors import (
@@ -189,7 +192,7 @@ def _generate_qr_code_base64(secret: str, username: str, issuer: str = "TradingB
 
 @router.post("/login")
 @limiter.limit("5/minute")
-async def login(request: Request, body: LoginRequest, db: AsyncSession = Depends(get_db)):
+async def login(request: Request, response: Response, body: LoginRequest, db: AsyncSession = Depends(get_db)):
     """Authenticate user and return JWT tokens, or request 2FA if enabled."""
     result = await db.execute(
         select(User).where(User.username == body.username)
@@ -282,17 +285,20 @@ async def login(request: Request, body: LoginRequest, db: AsyncSession = Depends
     refresh_token = create_refresh_token(token_data)
     await db.commit()
 
+    # Set refresh token as httpOnly cookie (XSS-safe)
+    set_refresh_cookie(response, refresh_token)
+
     logger.info("AUTH: User '%s' (id=%s) logged in from %s", user.username, user.id, client_ip)
     return LoginResponse(
         access_token=access_token,
-        refresh_token=refresh_token,
+        # refresh_token intentionally NOT in response body — httpOnly cookie only
     )
 
 
 @router.post("/2fa/verify-login")
 @limiter.limit("5/minute")
 async def verify_2fa_login(
-    request: Request, body: TwoFactorVerifyLoginRequest, db: AsyncSession = Depends(get_db)
+    request: Request, response: Response, body: TwoFactorVerifyLoginRequest, db: AsyncSession = Depends(get_db)
 ):
     """Complete login by verifying TOTP code with temp token."""
     client_ip = _get_real_client_ip(request)
@@ -337,10 +343,11 @@ async def verify_2fa_login(
     refresh_token = create_refresh_token(token_data)
     await db.commit()
 
+    set_refresh_cookie(response, refresh_token)
+
     logger.info("AUTH: User '%s' (id=%s) completed 2FA login from %s", user.username, user.id, client_ip)
     return LoginResponse(
         access_token=access_token,
-        refresh_token=refresh_token,
     )
 
 
@@ -349,12 +356,34 @@ async def verify_2fa_login(
 
 @router.post("/refresh", response_model=TokenResponse)
 @limiter.limit("10/minute")
-async def refresh_token(request: Request, body: RefreshRequest, db: AsyncSession = Depends(get_db)):
-    """Refresh access token using a valid refresh token."""
+async def refresh_token(
+    request: Request,
+    response: Response,
+    body: RefreshRequest | None = None,
+    refresh_token_cookie: str | None = Cookie(None, alias=REFRESH_COOKIE_NAME),
+    db: AsyncSession = Depends(get_db),
+):
+    """Refresh access token using refresh token from httpOnly cookie or request body.
+
+    Accepts the refresh token from:
+    1. httpOnly cookie (preferred, XSS-safe)
+    2. Request body (backward compatibility for existing clients)
+    """
     client_ip = _get_real_client_ip(request)
 
-    payload = decode_token(body.refresh_token, expected_type="refresh")
+    # Prefer cookie, fall back to body for backward compatibility
+    raw_token = refresh_token_cookie or (body.refresh_token if body else None)
+    if not raw_token:
+        logger.warning("AUTH: Missing refresh token from %s", client_ip)
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=ERR_INVALID_REFRESH_TOKEN,
+        )
+
+    payload = decode_token(raw_token, expected_type="refresh")
     if not payload:
+        # Clear stale cookie if present
+        clear_refresh_cookie(response)
         logger.warning("AUTH: Invalid refresh token from %s", client_ip)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -366,6 +395,7 @@ async def refresh_token(request: Request, body: RefreshRequest, db: AsyncSession
     user = result.scalar_one_or_none()
 
     if not user or not user.is_active or user.is_deleted:
+        clear_refresh_cookie(response)
         logger.warning("AUTH: Refresh for inactive/deleted user_id=%s from %s", user_id, client_ip)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -375,6 +405,7 @@ async def refresh_token(request: Request, body: RefreshRequest, db: AsyncSession
     token_tv = payload.get("tv")
     user_tv = getattr(user, "token_version", 0) or 0
     if token_tv is not None and token_tv < user_tv:
+        clear_refresh_cookie(response)
         logger.warning("AUTH: Revoked refresh token used for user_id=%s (tv=%s < %s) from %s", user_id, token_tv, user_tv, client_ip)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -383,13 +414,26 @@ async def refresh_token(request: Request, body: RefreshRequest, db: AsyncSession
 
     token_data = {"sub": str(user.id), "role": user.role, "tv": user_tv}
     access_token = create_access_token(token_data)
-    refresh_token = create_refresh_token(token_data)
+    new_refresh = create_refresh_token(token_data)
+
+    # Rotate refresh token cookie
+    set_refresh_cookie(response, new_refresh)
 
     logger.info("AUTH: Token refreshed for user_id=%s (tv=%s) from %s", user.id, user.token_version, client_ip)
     return TokenResponse(
         access_token=access_token,
-        refresh_token=refresh_token,
+        # refresh_token NOT in body — httpOnly cookie only
     )
+
+
+# ── Logout ─────────────────────────────────────────────────────────
+
+
+@router.post("/logout")
+async def logout(response: Response):
+    """Clear the httpOnly refresh token cookie."""
+    clear_refresh_cookie(response)
+    return {"message": "Logged out"}
 
 
 # ── Password Management ────────────────────────────────────────────
@@ -399,6 +443,7 @@ async def refresh_token(request: Request, body: RefreshRequest, db: AsyncSession
 @limiter.limit("3/minute")
 async def change_password(
     request: Request,
+    response: Response,
     body: ChangePasswordRequest,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -410,9 +455,10 @@ async def change_password(
     user.token_version = (user.token_version or 0) + 1
     await db.commit()
     token_data = {"sub": str(user.id), "role": user.role, "tv": user.token_version}
+    new_refresh = create_refresh_token(token_data)
+    set_refresh_cookie(response, new_refresh)
     return {
         "access_token": create_access_token(token_data),
-        "refresh_token": create_refresh_token(token_data),
         "token_type": "bearer",
         "message": "Password changed successfully",
     }
