@@ -98,7 +98,7 @@ async def test_hsts_set_in_production():
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             resp = await client.get("/api/status")
             hsts = resp.headers.get("strict-transport-security", "")
-            assert "max-age=31536000" in hsts
+            assert "max-age=63072000" in hsts
             assert "includeSubDomains" in hsts
 
 
@@ -112,7 +112,7 @@ async def test_hsts_set_when_enable_hsts_true():
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             resp = await client.get("/api/status")
             hsts = resp.headers.get("strict-transport-security", "")
-            assert "max-age=31536000" in hsts
+            assert "max-age=63072000" in hsts
 
 
 # ---------------------------------------------------------------------------

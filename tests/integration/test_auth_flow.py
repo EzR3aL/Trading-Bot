@@ -148,3 +148,30 @@ async def test_refresh_token_with_invalid_token(client, test_db):
         json={"refresh_token": "not.a.real.token"},
     )
     assert response.status_code == 401
+
+
+@pytest.mark.integration
+async def test_logout_invalidates_session(client, admin_token):
+    """After logout, the refresh token cookie should no longer work."""
+    # Login to get a refresh cookie
+    login_resp = await client.post(
+        "/api/auth/login",
+        json={"username": "admin", "password": "admin123456"},
+    )
+    assert login_resp.status_code == 200
+    refresh_cookie = login_resp.cookies.get("refresh_token")
+    assert refresh_cookie
+
+    # Logout — invalidates session in DB and clears cookie
+    logout_resp = await client.post(
+        "/api/auth/logout",
+        cookies={"refresh_token": refresh_cookie},
+    )
+    assert logout_resp.status_code == 200
+
+    # Try to refresh with the old cookie — should be rejected
+    refresh_resp = await client.post(
+        "/api/auth/refresh",
+        cookies={"refresh_token": refresh_cookie},
+    )
+    assert refresh_resp.status_code == 401

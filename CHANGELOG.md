@@ -9,6 +9,21 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [4.0.5] - 2026-03-13
+
+### Sicherheit (Security Hardening)
+- **Session-Invalidierung bei Logout**: Logout deaktiviert die Session in der Datenbank (`is_active=false`), nicht nur den Cookie. Refresh mit invalidierter Session wird abgelehnt
+- **Session-Tracking bei Login**: Login und 2FA-Verify erstellen nun einen `UserSession`-Eintrag in der DB fuer explizite Revocation
+- **Refresh Token Rotation mit DB-Update**: Bei Token-Refresh wird der Session-Hash in der DB rotiert und `last_activity` aktualisiert
+- **Security Headers gehaertet**:
+  - CSP: `object-src 'none'`, `base-uri 'self'`, `form-action 'self'`, `frame-ancestors 'none'`
+  - Neu: `Permissions-Policy` (kamera, mikrofon, geolocation etc. deaktiviert)
+  - Neu: `Cross-Origin-Opener-Policy: same-origin`, `Cross-Origin-Resource-Policy: same-origin`
+  - HSTS: `max-age` auf 2 Jahre erhoet + `preload` Flag
+- **Refresh Rate Limit verschaerft**: Von 10/min auf 5/min reduziert
+
+---
+
 ## [4.0.4] - 2026-03-13
 
 ### Sicherheit (Security Fixes)

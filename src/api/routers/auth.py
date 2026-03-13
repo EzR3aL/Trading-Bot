@@ -283,6 +283,9 @@ async def login(request: Request, response: Response, body: LoginRequest, db: As
     token_data = {"sub": str(user.id), "role": user.role, "tv": tv}
     access_token = create_access_token(token_data)
     refresh_token = create_refresh_token(token_data)
+
+    # Track session in DB for explicit revocation
+    await _create_session(db, user.id, refresh_token, request)
     await db.commit()
 
     # Set refresh token as httpOnly cookie (XSS-safe)
@@ -341,6 +344,9 @@ async def verify_2fa_login(
     token_data = {"sub": str(user.id), "role": user.role, "tv": tv}
     access_token = create_access_token(token_data)
     refresh_token = create_refresh_token(token_data)
+
+    # Track session in DB for explicit revocation
+    await _create_session(db, user.id, refresh_token, request)
     await db.commit()
 
     set_refresh_cookie(response, refresh_token)
@@ -355,7 +361,7 @@ async def verify_2fa_login(
 
 
 @router.post("/refresh", response_model=TokenResponse)
-@limiter.limit("10/minute")
+@limiter.limit("5/minute")
 async def refresh_token(
     request: Request,
     response: Response,
@@ -412,12 +418,40 @@ async def refresh_token(
             detail=ERR_TOKEN_REVOKED,
         )
 
+    # Validate session is still active in DB (catches explicit logout)
+    if raw_token and refresh_token_cookie:
+        token_hash = _hash_token(raw_token)
+        session_result = await db.execute(
+            select(UserSession).where(
+                UserSession.session_token_hash == token_hash,
+                UserSession.user_id == int(user_id),
+                UserSession.is_active.is_(True),
+            ).limit(1)
+        )
+        session = session_result.scalar_one_or_none()
+        if not session:
+            clear_refresh_cookie(response)
+            logger.warning("AUTH: Refresh with invalidated session for user_id=%s from %s", user_id, client_ip)
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail=ERR_INVALID_REFRESH_TOKEN,
+            )
+
     token_data = {"sub": str(user.id), "role": user.role, "tv": user_tv}
     access_token = create_access_token(token_data)
     new_refresh = create_refresh_token(token_data)
 
-    # Rotate refresh token cookie
+    # Rotate refresh token cookie and update session hash in DB
     set_refresh_cookie(response, new_refresh)
+    if raw_token and refresh_token_cookie:
+        old_hash = _hash_token(raw_token)
+        new_hash = _hash_token(new_refresh)
+        await db.execute(
+            update(UserSession)
+            .where(UserSession.session_token_hash == old_hash)
+            .values(session_token_hash=new_hash, last_activity=datetime.now(timezone.utc))
+        )
+        await db.commit()
 
     logger.info("AUTH: Token refreshed for user_id=%s (tv=%s) from %s", user.id, user.token_version, client_ip)
     return TokenResponse(
@@ -430,8 +464,22 @@ async def refresh_token(
 
 
 @router.post("/logout")
-async def logout(response: Response):
-    """Clear the httpOnly refresh token cookie."""
+async def logout(
+    response: Response,
+    refresh_token_cookie: str | None = Cookie(None, alias=REFRESH_COOKIE_NAME),
+    db: AsyncSession = Depends(get_db),
+):
+    """Invalidate the current session in DB and clear the httpOnly cookie."""
+    if refresh_token_cookie:
+        token_hash = _hash_token(refresh_token_cookie)
+        await db.execute(
+            update(UserSession)
+            .where(UserSession.session_token_hash == token_hash, UserSession.is_active.is_(True))
+            .values(is_active=False)
+        )
+        await db.commit()
+        logger.info("AUTH: Session invalidated via logout")
+
     clear_refresh_cookie(response)
     return {"message": "Logged out"}
 
