@@ -78,9 +78,9 @@ interface BotBuilderProps {
 }
 
 // Strategies that use market data and should show the data sources step
-const DATA_STRATEGIES = ['llm_signal', 'sentiment_surfer', 'liquidation_hunter', 'degen', 'edge_indicator', 'contrarian_pulse']
+const DATA_STRATEGIES = ['sentiment_surfer', 'liquidation_hunter', 'edge_indicator', 'llm_signal', 'degen', 'contrarian_pulse']
 
-// Fixed data sources for non-LLM strategies (these strategies use hardcoded sources internally)
+// Fixed data sources per strategy (used after selection to show which sources are used)
 const FIXED_STRATEGY_SOURCES: Record<string, string[]> = {
   sentiment_surfer: [
     'fear_greed', 'news_sentiment', 'vwap', 'supertrend', 'spot_volume', 'spot_price', 'oiwap',
@@ -88,13 +88,14 @@ const FIXED_STRATEGY_SOURCES: Record<string, string[]> = {
   liquidation_hunter: [
     'fear_greed', 'long_short_ratio', 'funding_rate', 'open_interest', 'spot_price',
   ],
+  edge_indicator: [
+    'spot_price', 'vwap', 'supertrend', 'spot_volume', 'volatility',
+  ],
+  // Hidden strategies — kept for existing bots that still use them
   degen: [
     'spot_price', 'fear_greed', 'news_sentiment', 'funding_rate', 'open_interest',
     'long_short_ratio', 'order_book', 'liquidations', 'supertrend', 'vwap',
     'oiwap', 'spot_volume', 'volatility', 'coingecko_market',
-  ],
-  edge_indicator: [
-    'spot_price', 'vwap', 'supertrend', 'spot_volume', 'volatility',
   ],
   contrarian_pulse: [
     'fear_greed', 'spot_price', 'spot_volume', 'cvd', 'long_short_ratio',
