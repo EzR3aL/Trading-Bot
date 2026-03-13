@@ -9,6 +9,28 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [4.0.2] - 2026-03-13
+
+### Hinzugefuegt
+- **Liquidation Hunter: 3-Schicht-Exit-System** — Automatische Exit-Strategie (`should_exit`) fuer den Liquidation Hunter:
+  - **Schicht 1 — ATR Trailing Stop**: Schuetzt Gewinne mit aggressiven Defaults (Breakeven bei 1.0× ATR, Trail bei 1.5× ATR). Aktiviert sich sobald der Trade profitabel ist
+  - **Schicht 2 — Thesen-Invalidierung**: Schliesst den Trade wenn L/S Ratio UND Sentiment sich normalisieren (Kaskaden-Potenzial aufgebraucht). Mit 30min Cooldown nach Entry
+  - **Schicht 3 — Max. Haltezeit**: Schliesst nach X Stunden, aber NUR wenn der Trade im Gewinn ist. Im Verlust bleibt er offen (verhindert unnoetige Verluste)
+  - **Risikoprofil-Auswahl** im Bot Builder: Konservativ (weite Stops, 48h Haltezeit), Standard (ausgewogen, 24h), Aggressiv (enge Stops, 12h, schnelle Gewinnmitnahme)
+  - Greift nur wenn der User KEIN eigenes TP/SL gesetzt hat
+- **StrategyRegistry: Hidden-Flag** — Strategien koennen mit `hidden=True` registriert werden. Sie bleiben fuer bestehende Bots nutzbar, werden aber nicht mehr im Bot Builder angezeigt
+
+### Geaendert
+- **Contrarian Pulse ausgeblendet** — Strategie aus dem Bot Builder entfernt wegen 70% Signal-Ueberlappung mit Liquidation Hunter (gleiche Datenquellen, schlechtere Exit-Logik). Kann jederzeit wieder aktiviert werden (siehe [#107](https://github.com/EzR3aL/Trading-Bot/issues/107))
+- **LLM Signal + Degen ausgeblendet** — KI-Strategien aus dem Bot Builder entfernt, da sie LLM API-Keys erfordern die normale User nicht haben. Wieder aktivierbar (siehe [#108](https://github.com/EzR3aL/Trading-Bot/issues/108))
+- **LLM Keys Tab nur fuer Admins** — Der LLM-Schluessel-Tab in den Einstellungen ist nur noch fuer Admins sichtbar, nicht mehr fuer normale User
+
+### Behoben
+- **"Something went wrong" Fehler (removeChild)** — React-DOM-Crash wenn mehrere API-Requests gleichzeitig 401 zurueckgeben (z.B. bei Session-Ablauf). `handleSessionExpiry()` wurde mehrfach aufgerufen und manipulierte das DOM unkontrolliert. Fix: Guard gegen Mehrfachaufruf + ErrorBoundary erholt sich automatisch von DOM-Fehlern (max. 3 Retries)
+- **Budget-Warnung bei offenen Positionen** — "Insufficient balance"-Warnung wurde faelschlicherweise angezeigt, obwohl Trades bereits ausgefuehrt waren. Die Pruefung verglich das gesamte Bot-Budget mit dem freien Guthaben, ohne die bereits gebundene Margin offener Positionen zu beruecksichtigen. Fix: Die Margin offener Trades wird nun zum verfuegbaren Guthaben hinzugerechnet
+
+---
+
 ## [4.0.1] - 2026-03-12
 
 ### Hinzugefuegt

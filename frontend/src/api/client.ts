@@ -25,22 +25,33 @@ function onRefreshFailed() {
   refreshSubscribers = []
 }
 
+let sessionExpiring = false
+
 function handleSessionExpiry() {
+  // Guard: prevent multiple calls from concurrent 401 responses
+  if (sessionExpiring) return
+  sessionExpiring = true
+
   localStorage.removeItem('access_token')
   localStorage.removeItem('refresh_token')
 
-  // Show a brief message before redirect
-  const msg = document.createElement('div')
-  msg.textContent = 'Session expired. Redirecting to login...'
-  msg.style.cssText = `
-    position: fixed; top: 20px; left: 50%; transform: translateX(-50%);
-    padding: 12px 24px; background: rgba(239,68,68,0.9); color: white;
-    border-radius: 12px; font-size: 14px; z-index: 99999;
-    backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.1);
-  `
-  document.body.appendChild(msg)
+  // Show a brief message before redirect — use existing element or create one
+  let msg = document.getElementById('session-expiry-msg')
+  if (!msg) {
+    msg = document.createElement('div')
+    msg.id = 'session-expiry-msg'
+    msg.textContent = 'Session expired. Redirecting to login...'
+    msg.style.cssText = `
+      position: fixed; top: 20px; left: 50%; transform: translateX(-50%);
+      padding: 12px 24px; background: rgba(239,68,68,0.9); color: white;
+      border-radius: 12px; font-size: 14px; z-index: 99999;
+      backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.1);
+    `
+    document.body.appendChild(msg)
+  }
 
   setTimeout(() => {
+    sessionExpiring = false
     window.location.href = '/login'
   }, 1500)
 }

@@ -349,5 +349,6 @@ class LLMSignalStrategy(BaseStrategy):
         self.llm_api_key = ""
 
 
-# Register the strategy
-StrategyRegistry.register("llm_signal", LLMSignalStrategy)
+# Register (hidden: LLM strategies require API keys that normal users don't have.
+# To re-enable, set hidden=False.)
+StrategyRegistry.register("llm_signal", LLMSignalStrategy, hidden=True)

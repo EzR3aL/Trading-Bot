@@ -160,14 +160,17 @@ class StrategyRegistry:
     instantiate the correct strategy by name.
     """
     _strategies: Dict[str, Type[BaseStrategy]] = {}
+    _hidden: set = set()  # Strategies hidden from UI but still usable by existing bots
 
     @classmethod
-    def register(cls, name: str, strategy_class: Type[BaseStrategy]):
+    def register(cls, name: str, strategy_class: Type[BaseStrategy], hidden: bool = False):
         """Register a strategy class under a name."""
         if not issubclass(strategy_class, BaseStrategy):
             raise TypeError(f"{strategy_class} must be a subclass of BaseStrategy")
         cls._strategies[name] = strategy_class
-        logger.info(f"Strategy registered: {name}")
+        if hidden:
+            cls._hidden.add(name)
+        logger.info(f"Strategy registered: {name}{'  (hidden)' if hidden else ''}")
 
     @classmethod
     def get(cls, name: str) -> Type[BaseStrategy]:
@@ -193,6 +196,8 @@ class StrategyRegistry:
         """
         result = []
         for name, strategy_class in cls._strategies.items():
+            if name in cls._hidden:
+                continue
             result.append({
                 "name": name,
                 "description": strategy_class.get_description(),

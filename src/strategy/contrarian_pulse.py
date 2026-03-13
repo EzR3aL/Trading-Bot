@@ -690,5 +690,6 @@ class ContrarianPulseStrategy(BaseStrategy):
             await self.data_fetcher.close()
 
 
-# Register
-StrategyRegistry.register("contrarian_pulse", ContrarianPulseStrategy)
+# Register (hidden: superseded by Liquidation Hunter which shares 70% of signal sources
+# but has superior exit logic. To re-enable, set hidden=False.)
+StrategyRegistry.register("contrarian_pulse", ContrarianPulseStrategy, hidden=True)

@@ -13,6 +13,7 @@ interface State {
 
 export default class ErrorBoundary extends Component<Props, State> {
   state: State = { hasError: false, error: null }
+  private retryCount = 0
 
   static getDerivedStateFromError(error: Error): State {
     return { hasError: true, error }
@@ -22,9 +23,20 @@ export default class ErrorBoundary extends Component<Props, State> {
     if (import.meta.env.DEV) {
       console.error('ErrorBoundary caught:', error, info.componentStack)
     }
+
+    // Auto-recover from DOM manipulation errors (caused by browser extensions
+    // or concurrent DOM modifications during session expiry redirects)
+    const isDomError = error.message?.includes('removeChild') ||
+                       error.message?.includes('insertBefore') ||
+                       error.message?.includes('not a child')
+    if (isDomError && this.retryCount < 3) {
+      this.retryCount++
+      this.setState({ hasError: false, error: null })
+    }
   }
 
   handleReset = () => {
+    this.retryCount = 0
     this.setState({ hasError: false, error: null })
   }
 

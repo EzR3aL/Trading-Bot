@@ -975,6 +975,22 @@ async def get_budget_info(
 
         group_total_pct[(exchange_type, mode)] = total_pct
 
+    # Query open trades to calculate margin already in use per bot
+    open_trades_result = await db.execute(
+        select(TradeRecord).where(
+            TradeRecord.user_id == user.id,
+            TradeRecord.status == "open",
+        )
+    )
+    open_trades = open_trades_result.scalars().all()
+
+    # Build map: bot_id -> total margin used by open positions
+    bot_margin_used: dict[int, float] = {}
+    for trade in open_trades:
+        if trade.entry_price and trade.size and trade.leverage:
+            margin = trade.entry_price * trade.size / trade.leverage
+            bot_margin_used[trade.bot_config_id] = bot_margin_used.get(trade.bot_config_id, 0.0) + margin
+
     budgets: list[BotBudgetInfo] = []
     seen = set()
 
@@ -993,13 +1009,17 @@ async def get_budget_info(
 
             pct = bot_pct_map.get((bot.id, mode), 0.0)
             allocated_budget = equity * pct / 100 if pct > 0 else 0.0
-            has_funds = allocated_budget <= available and total_pct <= 100.0
+
+            # Account for margin already used by this bot's open positions
+            margin_in_use = bot_margin_used.get(bot.id, 0.0)
+            effective_available = available + margin_in_use
+            has_funds = allocated_budget <= effective_available and total_pct <= 100.0
 
             warning = None
             if total_pct > 100.0:
                 warning = f"Overallocated: {total_pct:.0f}% of 100% used on {exchange_type} ({mode})"
-            elif allocated_budget > available:
-                warning = f"Insufficient balance: ${allocated_budget:,.2f} needed, ${available:,.2f} available"
+            elif allocated_budget > effective_available:
+                warning = f"Insufficient balance: ${allocated_budget:,.2f} needed, ${effective_available:,.2f} available"
 
             budgets.append(BotBudgetInfo(
                 bot_config_id=bot.id,

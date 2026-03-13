@@ -28,8 +28,8 @@ CONSTRAINTS:
 - Be Decisive: No "market is uncertain" - say "High leverage signals a squeeze"
 """
 
-from datetime import datetime
-from typing import Any, Dict, Optional, Tuple
+from datetime import datetime, timezone
+from typing import Any, Dict, List, Optional, Tuple
 
 from src.data.market_data import MarketDataFetcher
 from src.strategy.base import BaseStrategy, SignalDirection, StrategyRegistry, TradeSignal
@@ -50,6 +50,38 @@ DEFAULTS = {
     # Data
     "kline_interval": "1h",
     "kline_count": 200,
+    # Exit: ATR Trailing Stop
+    "trailing_stop_enabled": True,
+    "trailing_breakeven_atr": 1.0,
+    "trailing_trail_atr": 1.5,
+    "atr_period": 14,
+    # Exit: Thesis invalidation
+    "exit_on_thesis_invalid": True,
+    "thesis_cooldown_minutes": 30,
+    # Exit: Max hold time (only closes in profit)
+    "max_hold_hours": 24,
+}
+
+RISK_PROFILES = {
+    "standard": {},  # = DEFAULTS
+    "conservative": {
+        "long_short_crowded_longs": 3.0,
+        "long_short_crowded_shorts": 0.3,
+        "low_confidence_min": 70,
+        "trailing_breakeven_atr": 1.5,
+        "trailing_trail_atr": 2.5,
+        "thesis_cooldown_minutes": 60,
+        "max_hold_hours": 48,
+    },
+    "aggressive": {
+        "long_short_crowded_longs": 2.0,
+        "long_short_crowded_shorts": 0.5,
+        "low_confidence_min": 50,
+        "trailing_breakeven_atr": 0.5,
+        "trailing_trail_atr": 1.0,
+        "thesis_cooldown_minutes": 15,
+        "max_hold_hours": 12,
+    },
 }
 
 
@@ -64,8 +96,13 @@ class LiquidationHunterStrategy(BaseStrategy):
     def __init__(self, params: Optional[Dict[str, Any]] = None, data_fetcher: Optional[MarketDataFetcher] = None):
         super().__init__(params)
         self.data_fetcher = data_fetcher
-        # Merge defaults with user-provided params
+        # Merge: DEFAULTS → RISK_PROFILE → explicit user params
         self._p = {**DEFAULTS, **self.params}
+        profile = self._p.get("risk_profile", "standard")
+        if profile in RISK_PROFILES:
+            for key, val in RISK_PROFILES[profile].items():
+                if key not in self.params:  # User has not explicitly overridden
+                    self._p[key] = val
 
     async def _ensure_fetcher(self):
         """Ensure data fetcher is available."""
@@ -310,6 +347,185 @@ class LiquidationHunterStrategy(BaseStrategy):
 
         return True, f"Signal approved with {signal.confidence}% confidence"
 
+    # ------------------------------------------------------------------
+    # Exit logic (3 layers)
+    # ------------------------------------------------------------------
+
+    async def should_exit(
+        self,
+        symbol: str,
+        side: str,
+        entry_price: float,
+        metrics_at_entry: dict | None = None,
+        current_price: float | None = None,
+        highest_price: float | None = None,
+        entry_time: datetime | None = None,
+        **kwargs,
+    ) -> Tuple[bool, str]:
+        """Check if an open position should be closed.
+
+        3-layer exit system:
+        1. ATR Trailing Stop — protect profits (aggressive, cascade-tuned)
+        2. Thesis Invalidation — L/S ratio + sentiment normalized
+        3. Max Hold Time — close after N hours, but only when in profit
+        """
+        try:
+            await self._ensure_fetcher()
+
+            interval = self._p["kline_interval"]
+            count = self._p["kline_count"]
+            klines = await self.data_fetcher.get_binance_klines(symbol, interval, count)
+
+            if current_price is None and klines:
+                try:
+                    current_price = float(klines[-1][4])
+                except (IndexError, ValueError, TypeError):
+                    pass
+
+            if not current_price or not entry_price:
+                return False, "Missing price data for exit check"
+
+            # --- Layer 1: ATR Trailing Stop ---
+            if self._p.get("trailing_stop_enabled") and highest_price and klines:
+                trail_exit, trail_reason = self._check_trailing_stop(
+                    side, entry_price, current_price, highest_price, klines,
+                )
+                if trail_exit:
+                    return True, trail_reason
+
+            # --- Layer 2: Thesis Invalidation ---
+            if self._p.get("exit_on_thesis_invalid") and entry_time:
+                cooldown_mins = self._p.get("thesis_cooldown_minutes", 30)
+                now = datetime.now(timezone.utc)
+                entry_utc = entry_time if entry_time.tzinfo else entry_time.replace(tzinfo=timezone.utc)
+                elapsed_mins = (now - entry_utc).total_seconds() / 60
+
+                if elapsed_mins >= cooldown_mins:
+                    thesis_exit, thesis_reason = await self._check_thesis_invalidation(
+                        side, metrics_at_entry,
+                    )
+                    if thesis_exit:
+                        return True, thesis_reason
+
+            # --- Layer 3: Max Hold Time (only in profit) ---
+            max_hours = self._p.get("max_hold_hours")
+            if max_hours and entry_time:
+                now = datetime.now(timezone.utc)
+                entry_utc = entry_time if entry_time.tzinfo else entry_time.replace(tzinfo=timezone.utc)
+                elapsed_hours = (now - entry_utc).total_seconds() / 3600
+
+                if elapsed_hours >= max_hours:
+                    if side == "long":
+                        in_profit = current_price > entry_price
+                    else:
+                        in_profit = current_price < entry_price
+
+                    if in_profit:
+                        pnl_pct = abs(current_price - entry_price) / entry_price * 100
+                        return True, (
+                            "Max Haltezeit: %.0fh ueberschritten (Limit: %.0fh). "
+                            "Trade im Profit (+%.2f%%), Gewinnmitnahme."
+                            % (elapsed_hours, max_hours, pnl_pct)
+                        )
+                    else:
+                        logger.debug(
+                            "[%s] Max hold reached (%.0fh) but trade in loss — keeping open",
+                            symbol, elapsed_hours,
+                        )
+
+            return False, ""
+
+        except Exception as e:
+            logger.error("Exit check error for %s: %s", symbol, e)
+            return False, ""
+
+    def _check_trailing_stop(
+        self,
+        side: str,
+        entry_price: float,
+        current_price: float,
+        highest_price: float,
+        klines: List[List],
+    ) -> Tuple[bool, str]:
+        """ATR-based trailing stop with breakeven floor."""
+        atr_series = MarketDataFetcher.calculate_atr(klines, self._p["atr_period"])
+        atr_val = atr_series[-1] if atr_series else current_price * 0.015
+
+        breakeven_atr = self._p.get("trailing_breakeven_atr", 1.0)
+        trail_atr = self._p.get("trailing_trail_atr", 1.5)
+        trail_distance = atr_val * trail_atr
+        breakeven_threshold = atr_val * breakeven_atr
+
+        if side == "long":
+            was_profitable = (highest_price - entry_price) >= breakeven_threshold
+            if not was_profitable:
+                return False, ""
+
+            trailing_stop = max(highest_price - trail_distance, entry_price)
+            if current_price <= trailing_stop:
+                pnl_pct = (current_price - entry_price) / entry_price * 100
+                return True, (
+                    "Trailing Stop: Preis $%.2f unter Stop $%.2f "
+                    "(Hoechst=$%.2f, ATR=%.0f, Trail=%.1fx). PnL=%.2f%%"
+                    % (current_price, trailing_stop, highest_price, atr_val, trail_atr, pnl_pct)
+                )
+        else:
+            was_profitable = (entry_price - highest_price) >= breakeven_threshold
+            if not was_profitable:
+                return False, ""
+
+            trailing_stop = min(highest_price + trail_distance, entry_price)
+            if current_price >= trailing_stop:
+                pnl_pct = (entry_price - current_price) / entry_price * 100
+                return True, (
+                    "Trailing Stop: Preis $%.2f ueber Stop $%.2f "
+                    "(Tiefst=$%.2f, ATR=%.0f, Trail=%.1fx). PnL=%.2f%%"
+                    % (current_price, trailing_stop, highest_price, atr_val, trail_atr, pnl_pct)
+                )
+
+        return False, ""
+
+    async def _check_thesis_invalidation(
+        self,
+        side: str,
+        metrics_at_entry: dict | None,
+    ) -> Tuple[bool, str]:
+        """Check if the original entry thesis is still valid.
+
+        The thesis is invalidated when:
+        - L/S ratio returns to neutral range (no longer crowded)
+        - AND sentiment returns to neutral range (no longer extreme)
+        """
+        try:
+            metrics = await self.data_fetcher.fetch_all_metrics()
+        except Exception as e:
+            logger.warning("Thesis check: metrics fetch failed: %s", e)
+            return False, ""
+
+        long_short_ratio = metrics.long_short_ratio if metrics.long_short_ratio is not None else 1.0
+        fear_greed = metrics.fear_greed_index if metrics.fear_greed_index is not None else 50
+
+        crowded_longs = self._p["long_short_crowded_longs"]
+        crowded_shorts = self._p["long_short_crowded_shorts"]
+        extreme_fear = self._p["fear_greed_extreme_fear"]
+        extreme_greed = self._p["fear_greed_extreme_greed"]
+
+        # Check if L/S ratio has normalized (back in neutral range)
+        ratio_neutral = crowded_shorts <= long_short_ratio <= crowded_longs
+
+        # Check if sentiment has normalized
+        sentiment_neutral = extreme_fear <= fear_greed <= extreme_greed
+
+        if ratio_neutral and sentiment_neutral:
+            return True, (
+                "These invalidiert: L/S Ratio normalisiert (%.2f, neutral: %.1f-%.1f) "
+                "und Sentiment neutral (FGI=%d, neutral: %d-%d). Kaskaden-Potenzial aufgebraucht."
+                % (long_short_ratio, crowded_shorts, crowded_longs,
+                   fear_greed, extreme_fear, extreme_greed)
+            )
+
+        return False, ""
+
     @classmethod
     def get_description(cls) -> str:
         return (
@@ -321,6 +537,17 @@ class LiquidationHunterStrategy(BaseStrategy):
     @classmethod
     def get_param_schema(cls) -> Dict[str, Any]:
         return {
+            "risk_profile": {
+                "type": "select",
+                "label": "Risikoprofil",
+                "description": (
+                    "Konservativ = weniger Trades, weite Stops, laengere Haltezeit. "
+                    "Standard = ausgewogen. "
+                    "Aggressiv = mehr Trades, enge Stops, schnelle Gewinnmitnahme."
+                ),
+                "default": "standard",
+                "options": ["conservative", "standard", "aggressive"],
+            },
             "fear_greed_extreme_fear": {
                 "type": "int",
                 "label": "Extreme-Angst-Schwelle",
@@ -337,22 +564,6 @@ class LiquidationHunterStrategy(BaseStrategy):
                 "min": 60,
                 "max": 95,
             },
-            "long_short_crowded_longs": {
-                "type": "float",
-                "label": "Überfüllte-Longs-Schwelle",
-                "description": "L/S Ratio über diesem Wert = überfüllte Longs (SHORT-Signal)",
-                "default": 2.5,
-                "min": 1.5,
-                "max": 5.0,
-            },
-            "long_short_crowded_shorts": {
-                "type": "float",
-                "label": "Überfüllte-Shorts-Schwelle",
-                "description": "L/S Ratio unter diesem Wert = überfüllte Shorts (LONG-Signal)",
-                "default": 0.4,
-                "min": 0.1,
-                "max": 0.8,
-            },
             "funding_rate_high": {
                 "type": "float",
                 "label": "Hohe Funding Rate",
@@ -368,22 +579,6 @@ class LiquidationHunterStrategy(BaseStrategy):
                 "default": -0.0002,
                 "min": -0.005,
                 "max": -0.0001,
-            },
-            "high_confidence_min": {
-                "type": "int",
-                "label": "Hohe Konfidenz Minimum",
-                "description": "Minimale Konfidenz wenn Leverage + Stimmung übereinstimmen",
-                "default": 85,
-                "min": 70,
-                "max": 95,
-            },
-            "low_confidence_min": {
-                "type": "int",
-                "label": "Niedrige Konfidenz Minimum",
-                "description": "Minimale Konfidenz um überhaupt zu traden",
-                "default": 60,
-                "min": 40,
-                "max": 80,
             },
         }
 

@@ -327,10 +327,9 @@ class TestClassMethods:
     def test_get_param_schema_contains_all_params(self):
         schema = LiquidationHunterStrategy.get_param_schema()
         expected_keys = [
+            "risk_profile",
             "fear_greed_extreme_fear", "fear_greed_extreme_greed",
-            "long_short_crowded_longs", "long_short_crowded_shorts",
             "funding_rate_high", "funding_rate_low",
-            "high_confidence_min", "low_confidence_min",
         ]
         for key in expected_keys:
             assert key in schema

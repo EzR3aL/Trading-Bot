@@ -540,5 +540,6 @@ class DegenStrategy(BaseStrategy):
         self.llm_api_key = ""
 
 
-# Register
-StrategyRegistry.register("degen", DegenStrategy)
+# Register (hidden: LLM strategies require API keys that normal users don't have.
+# To re-enable, set hidden=False.)
+StrategyRegistry.register("degen", DegenStrategy, hidden=True)

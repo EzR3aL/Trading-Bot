@@ -11,8 +11,8 @@ import { ExchangeIcon } from '../components/ui/ExchangeLogo'
 import FilterDropdown from '../components/ui/FilterDropdown'
 import GuidedTour, { TourHelpButton, type TourStep } from '../components/ui/GuidedTour'
 
-const BASE_TABS = ['apiKeys', 'llmKeys'] as const
-const ADMIN_TABS = [...BASE_TABS, 'connections', 'affiliateLinks', 'hyperliquid'] as const
+const BASE_TABS = ['apiKeys'] as const
+const ADMIN_TABS = [...BASE_TABS, 'llmKeys', 'connections', 'affiliateLinks', 'hyperliquid'] as const
 
 /* ------------------------------------------------------------------ */
 /*  Inline Key Form (used inside accordion)                           */
