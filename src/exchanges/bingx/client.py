@@ -469,8 +469,8 @@ class BingXClient(ExchangeClient):
             try:
                 await self._request("POST", ENDPOINTS["set_leverage"], data=params)
             except BingXClientError as e:
-                # May fail if leverage is already set or position is open
-                logger.debug(f"Set leverage {pos_side} for {symbol}: {e}")
+                logger.warning("set_leverage failed for %s %s: %s", symbol, pos_side, e)
+                return False
         return True
 
     async def get_ticker(self, symbol: str) -> Ticker:

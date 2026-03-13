@@ -110,9 +110,15 @@ class TradeExecutorMixin:
                 f"entry=${signal.entry_price:,.2f}"
             )
 
-            # Set leverage
+            # Set leverage — abort trade if leverage cannot be set (e.g. open position with different leverage)
             margin_mode = getattr(self._config, "margin_mode", "cross")
-            await client.set_leverage(signal.symbol, leverage, margin_mode=margin_mode)
+            leverage_ok = await client.set_leverage(signal.symbol, leverage, margin_mode=margin_mode)
+            if not leverage_ok:
+                logger.warning(
+                    "%s Cannot set %dx leverage for %s — position may be open with different leverage. Skipping trade.",
+                    log_prefix, leverage, signal.symbol,
+                )
+                return
 
             # Record pending trade BEFORE placing the order (crash recovery)
             side = "long" if signal.direction.value == "long" else "short"

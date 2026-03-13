@@ -26,6 +26,7 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 - **LLM Keys Tab nur fuer Admins** — Der LLM-Schluessel-Tab in den Einstellungen ist nur noch fuer Admins sichtbar, nicht mehr fuer normale User
 
 ### Behoben
+- **Leverage-Default immer 1x** — Wenn der User keinen Hebel konfiguriert, wird jetzt explizit 1x gesetzt. Vorher wurde der Fehler bei `set_leverage` still ignoriert und der zuletzt auf der Exchange gesetzte Leverage (z.B. 10x) weiterverwendet. Betrifft alle Exchanges (Bitget, Weex, BingX, Bitunix). Trade wird abgebrochen wenn Leverage nicht gesetzt werden kann
 - **"Something went wrong" Fehler (removeChild)** — React-DOM-Crash wenn mehrere API-Requests gleichzeitig 401 zurueckgeben (z.B. bei Session-Ablauf). `handleSessionExpiry()` wurde mehrfach aufgerufen und manipulierte das DOM unkontrolliert. Fix: Guard gegen Mehrfachaufruf + ErrorBoundary erholt sich automatisch von DOM-Fehlern (max. 3 Retries)
 - **Budget-Warnung bei offenen Positionen** — "Insufficient balance"-Warnung wurde faelschlicherweise angezeigt, obwohl Trades bereits ausgefuehrt waren. Die Pruefung verglich das gesamte Bot-Budget mit dem freien Guthaben, ohne die bereits gebundene Margin offener Positionen zu beruecksichtigen. Fix: Die Margin offener Trades wird nun zum verfuegbaren Guthaben hinzugerechnet
 

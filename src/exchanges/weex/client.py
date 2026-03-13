@@ -349,8 +349,9 @@ class WeexClient(ExchangeClient):
                 "longLeverage": str(leverage),
                 "shortLeverage": str(leverage),
             })
-        except WeexClientError:
-            pass
+        except WeexClientError as e:
+            logger.warning("set_leverage failed for %s: %s", symbol, e)
+            return False
         return True
 
     # ── Market data ────────────────────────────────────────────────

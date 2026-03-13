@@ -424,8 +424,14 @@ class BitgetExchangeClient(ExchangeClient):
                 # a position already exists and should not poison the breaker
                 await self._request("POST", ENDPOINTS["set_leverage"], data=data,
                                     use_circuit_breaker=False)
-            except BitgetClientError:
-                pass  # May fail if already set or position open
+            except BitgetClientError as e:
+                err_msg = str(e).lower()
+                # "already set" is fine — leverage matches what we want
+                if "same" in err_msg or "not changed" in err_msg or "equal" in err_msg:
+                    continue
+                # Position open with different leverage — cannot change
+                logger.warning("set_leverage failed for %s %s: %s", symbol, hold_side, e)
+                return False
         return True
 
     async def get_ticker(self, symbol: str) -> Ticker:
