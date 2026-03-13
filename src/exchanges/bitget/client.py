@@ -9,6 +9,7 @@ import base64
 import hashlib
 import hmac
 import json
+import math
 import time
 from typing import Any, Dict, List, Literal, Optional
 
@@ -468,6 +469,22 @@ class BitgetExchangeClient(ExchangeClient):
 
     # ==================== Trailing Stop ====================
 
+    async def _get_volume_place(self, symbol: str) -> int:
+        """Fetch volumePlace (size decimal precision) for a symbol from Bitget contracts API."""
+        try:
+            result = await self._request(
+                "GET", ENDPOINTS["contracts"],
+                params={"productType": PRODUCT_TYPE_USDT, "symbol": symbol},
+                use_circuit_breaker=False,
+            )
+            contracts = result if isinstance(result, list) else [result] if result else []
+            for c in contracts:
+                if c.get("symbol") == symbol:
+                    return int(c.get("volumePlace", 2))
+        except Exception:
+            pass
+        return 2  # safe default
+
     async def place_trailing_stop(
         self,
         symbol: str,
@@ -493,6 +510,10 @@ class BitgetExchangeClient(ExchangeClient):
         api_margin = "crossed" if margin_mode == "cross" else "isolated"
         side = "sell" if hold_side == "long" else "buy"
 
+        # Round size to exchange precision (volumePlace)
+        volume_place = await self._get_volume_place(symbol)
+        rounded_size = math.floor(size * 10**volume_place) / 10**volume_place
+
         data = {
             "symbol": symbol,
             "productType": PRODUCT_TYPE_USDT,
@@ -502,17 +523,20 @@ class BitgetExchangeClient(ExchangeClient):
             "triggerPrice": str(trigger_price),
             "triggerType": "fill_price",
             "callbackRatio": str(callback_ratio),
-            "size": str(size),
+            "size": str(rounded_size),
             "side": side,
             "tradeSide": "close",
             "holdSide": hold_side,
             "orderType": "market",
         }
 
-        result = await self._request("POST", ENDPOINTS["place_plan_order"], data=data)
+        result = await self._request(
+            "POST", ENDPOINTS["place_plan_order"], data=data,
+            use_circuit_breaker=False,  # don't trip breaker on trailing stop failures
+        )
         logger.info(
-            "Trailing stop placed on Bitget: %s %s callback=%.2f%% trigger=$%.2f",
-            symbol, hold_side, callback_ratio, trigger_price,
+            "Trailing stop placed on Bitget: %s %s size=%s callback=%.2f%% trigger=$%.2f",
+            symbol, hold_side, rounded_size, callback_ratio, trigger_price,
         )
         return result
 
