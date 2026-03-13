@@ -494,7 +494,10 @@ class BitgetExchangeClient(ExchangeClient):
         trigger_price: float,
         margin_mode: str = "cross",
     ) -> Optional[dict]:
-        """Place a native trailing stop (track_plan) on Bitget.
+        """Place a position-level trailing stop (moving_plan) on Bitget.
+
+        Uses place-tpsl-order with planType=moving_plan, which shows up in
+        the Bitget UI under "Trailing TP/SL" on the position card.
 
         Args:
             symbol: Trading pair (e.g. "BTCUSDT")
@@ -508,35 +511,34 @@ class BitgetExchangeClient(ExchangeClient):
             API response dict or None on failure.
         """
         api_margin = "crossed" if margin_mode == "cross" else "isolated"
-        side = "sell" if hold_side == "long" else "buy"
 
         # Round size to exchange precision (volumePlace)
         volume_place = await self._get_volume_place(symbol)
         rounded_size = math.floor(size * 10**volume_place) / 10**volume_place
+
+        # rangeRate must have exactly 2 decimal places
+        range_rate = f"{callback_ratio:.2f}"
 
         data = {
             "symbol": symbol,
             "productType": PRODUCT_TYPE_USDT,
             "marginMode": api_margin,
             "marginCoin": "USDT",
-            "planType": "track_plan",
+            "planType": "moving_plan",
             "triggerPrice": str(trigger_price),
-            "triggerType": "fill_price",
-            "callbackRatio": str(callback_ratio),
-            "size": str(rounded_size),
-            "side": side,
-            "tradeSide": "close",
+            "triggerType": "mark_price",
+            "rangeRate": range_rate,
             "holdSide": hold_side,
-            "orderType": "market",
+            "size": str(rounded_size),
         }
 
         result = await self._request(
-            "POST", ENDPOINTS["place_plan_order"], data=data,
-            use_circuit_breaker=False,  # don't trip breaker on trailing stop failures
+            "POST", ENDPOINTS["place_tpsl_order"], data=data,
+            use_circuit_breaker=False,
         )
         logger.info(
-            "Trailing stop placed on Bitget: %s %s size=%s callback=%.2f%% trigger=$%.2f",
-            symbol, hold_side, rounded_size, callback_ratio, trigger_price,
+            "Trailing stop placed on Bitget: %s %s size=%s rangeRate=%s%% trigger=$%.2f",
+            symbol, hold_side, rounded_size, range_rate, trigger_price,
         )
         return result
 
