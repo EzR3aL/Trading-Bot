@@ -597,7 +597,7 @@ export default function Backtest() {
                     <tr>
                       <th className="text-left">#</th>
                       <th className="text-left">{t('backtest.direction')}</th>
-                      <th className="text-left">Symbol</th>
+                      <th className="text-left">{t('backtest.symbol', 'Symbol')}</th>
                       <th className="text-right">{t('backtest.entryPrice')}</th>
                       <th className="text-right">{t('backtest.exitPrice')}</th>
                       <th className="text-right">{t('backtest.pnl')}</th>
@@ -695,7 +695,7 @@ export default function Backtest() {
               <thead>
                 <tr>
                   <th className="text-left">{t('backtest.strategy')}</th>
-                  <th className="text-left">Symbol</th>
+                  <th className="text-left">{t('backtest.symbol', 'Symbol')}</th>
                   <th className="text-left">{t('backtest.timeframe')}</th>
                   <th className="text-left">{t('backtest.startDate')}</th>
                   <th className="text-left">{t('backtest.endDate')}</th>

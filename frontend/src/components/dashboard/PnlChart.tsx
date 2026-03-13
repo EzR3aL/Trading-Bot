@@ -4,6 +4,7 @@ import {
   Tooltip, ResponsiveContainer, ReferenceLine, Cell,
 } from 'recharts'
 import { useTranslation } from 'react-i18next'
+import i18n from '../../i18n/config'
 import { useThemeStore } from '../../stores/themeStore'
 import type { DailyStats } from '../../types'
 import { Eye, EyeOff } from 'lucide-react'
@@ -59,7 +60,7 @@ function PnlTooltip({ active, payload, label }: {
       )}
       {(feesEntry || fundingEntry) && (fees > 0 || funding > 0) && (
         <div className="flex justify-between text-sm mt-1.5 pt-1.5 border-t border-white/10">
-          <span className="text-gray-400">Netto</span>
+          <span className="text-gray-400">{i18n.t('common.net')}</span>
           <span className="font-bold ml-4" style={{ color: total >= 0 ? PNL_POS : PNL_NEG }}>${total.toFixed(2)}</span>
         </div>
       )}

@@ -1,4 +1,5 @@
 import axios from 'axios'
+import i18n from '../i18n/config'
 
 const api = axios.create({
   baseURL: '/api',
@@ -40,7 +41,7 @@ function handleSessionExpiry() {
   if (!msg) {
     msg = document.createElement('div')
     msg.id = 'session-expiry-msg'
-    msg.textContent = 'Session expired. Redirecting to login...'
+    msg.textContent = i18n.t('common.sessionExpired', 'Session expired. Redirecting to login...')
     msg.style.cssText = `
       position: fixed; top: 20px; left: 50%; transform: translateX(-50%);
       padding: 12px 24px; background: rgba(239,68,68,0.9); color: white;

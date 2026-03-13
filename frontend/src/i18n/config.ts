@@ -1,13 +1,22 @@
 import i18n from 'i18next'
 import { initReactI18next } from 'react-i18next'
+import LanguageDetector from 'i18next-browser-languagedetector'
 import de from './de.json'
 import en from './en.json'
 
-i18n.use(initReactI18next).init({
-  resources: { de: { translation: de }, en: { translation: en } },
-  lng: localStorage.getItem('language') || 'de',
-  fallbackLng: 'en',
-  interpolation: { escapeValue: false },
-})
+i18n
+  .use(LanguageDetector)
+  .use(initReactI18next)
+  .init({
+    resources: { de: { translation: de }, en: { translation: en } },
+    fallbackLng: 'en',
+    supportedLngs: ['de', 'en'],
+    detection: {
+      order: ['localStorage', 'navigator'],
+      lookupLocalStorage: 'language',
+      caches: ['localStorage'],
+    },
+    interpolation: { escapeValue: false },
+  })
 
 export default i18n

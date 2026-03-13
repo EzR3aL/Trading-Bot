@@ -235,7 +235,7 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
     if (!isEdit) {
       api.get('/presets').then(res => {
         setPresets(res.data || [])
-      }).catch((err) => { console.error('Failed to load presets:', err); addToast('error', 'Failed to load data') })
+      }).catch((err) => { console.error('Failed to load presets:', err); addToast('error', t('common.loadError', 'Failed to load data')) })
     }
   }, [isEdit])
 
@@ -282,7 +282,7 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
         })
         setStrategyParams(defaults)
       }
-    })
+    }).catch((err) => { console.error('Failed to load strategies:', err); addToast('error', t('common.loadError', 'Failed to load data')) })
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Load data sources catalog
@@ -294,7 +294,7 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
       if (!isEdit) {
         setSelectedSources([])
       }
-    }).catch((err) => { console.error('Failed to load data sources:', err); addToast('error', 'Failed to load data') })
+    }).catch((err) => { console.error('Failed to load data sources:', err); addToast('error', t('common.loadError', 'Failed to load data')) })
   }, [isEdit])
 
   // Load existing bot if editing

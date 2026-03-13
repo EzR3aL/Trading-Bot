@@ -29,6 +29,15 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 - **Leverage-Default immer 1x** — Wenn der User keinen Hebel konfiguriert, wird jetzt explizit 1x gesetzt. Vorher wurde der Fehler bei `set_leverage` still ignoriert und der zuletzt auf der Exchange gesetzte Leverage (z.B. 10x) weiterverwendet. Betrifft alle Exchanges (Bitget, Weex, BingX, Bitunix). Trade wird abgebrochen wenn Leverage nicht gesetzt werden kann
 - **"Something went wrong" Fehler (removeChild)** — React-DOM-Crash wenn mehrere API-Requests gleichzeitig 401 zurueckgeben (z.B. bei Session-Ablauf). `handleSessionExpiry()` wurde mehrfach aufgerufen und manipulierte das DOM unkontrolliert. Fix: Guard gegen Mehrfachaufruf + ErrorBoundary erholt sich automatisch von DOM-Fehlern (max. 3 Retries)
 - **Budget-Warnung bei offenen Positionen** — "Insufficient balance"-Warnung wurde faelschlicherweise angezeigt, obwohl Trades bereits ausgefuehrt waren. Die Pruefung verglich das gesamte Bot-Budget mit dem freien Guthaben, ohne die bereits gebundene Margin offener Positionen zu beruecksichtigen. Fix: Die Margin offener Trades wird nun zum verfuegbaren Guthaben hinzugerechnet
+- **Frontend-Fehlermeldungen verbessert** — Umfassendes Audit und Fixes:
+  - `getApiErrorMessage` verarbeitet jetzt FastAPI 422-Validierungsfehler korrekt (Array-Format mit Feldnamen)
+  - Fehlender i18n-Key `common.loadError` hinzugefuegt (DE + EN)
+  - Fehlender `.catch()` bei Strategy-Loading im BotBuilder ergaenzt
+  - 5 hardcodierte `'Failed to load data'` Strings durch `t('common.loadError')` ersetzt
+  - Settings: Alle `catch`-Bloecke nutzen jetzt `getApiErrorMessage()` statt generischem `t('common.error')`
+  - Session-Ablauf-Meldung uebersetzt via `common.sessionExpired`
+- **Automatische Spracherkennung** — Browser-/PC-Sprache wird beim ersten Besuch erkannt (DE/EN). Manuell gewaehlt Sprache wird in localStorage gespeichert und hat Vorrang
+- **Hardcodierte Strings uebersetzt** — Backtest-Tabellen "Symbol", PnlChart "Netto", Settings Admin-UID-Tabelle (User/Exchange/Status/Aktion), BotPerformance "Distance" — alle durch i18n-Keys ersetzt
 
 ---
 

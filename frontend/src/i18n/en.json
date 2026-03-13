@@ -89,7 +89,8 @@
     "fees": "Transaction Fee",
     "reset": "Reset",
     "trailingStop": "Trailing Stop",
-    "trailingStopProtecting": "Protecting profit"
+    "trailingStopProtecting": "Protecting profit",
+    "trailingDistance": "Distance"
   },
   "settings": {
     "title": "Settings",
@@ -781,7 +782,9 @@
     "tryAgain": "Try again",
     "saveFailed": "Save failed",
     "noInternet": "No internet connection",
-    "apiUnreachable": "API server temporarily unreachable"
+    "apiUnreachable": "API server temporarily unreachable",
+    "loadError": "Failed to load data. Please try again.",
+    "sessionExpired": "Session expired. Redirecting to login..."
   },
   "admin": {
     "users": "Users",
@@ -823,7 +826,9 @@
     "referralRegisterVia": "Register via this link:",
     "referralVerified": "Referral verified",
     "referralNotVerified": "Not verified",
-    "verifyReferral": "Verify now"
+    "verifyReferral": "Verify now",
+    "status": "Status",
+    "action": "Action"
   },
   "backtest": {
     "title": "Backtest Lab",

@@ -89,7 +89,8 @@
     "fees": "Transaktionsgebühr",
     "reset": "Zurücksetzen",
     "trailingStop": "Trailing Stop",
-    "trailingStopProtecting": "Gewinn abgesichert"
+    "trailingStopProtecting": "Gewinn abgesichert",
+    "trailingDistance": "Abstand"
   },
   "settings": {
     "title": "Einstellungen",
@@ -781,7 +782,9 @@
     "tryAgain": "Erneut versuchen",
     "saveFailed": "Speichern fehlgeschlagen",
     "noInternet": "Keine Internetverbindung",
-    "apiUnreachable": "API-Server vorübergehend nicht erreichbar"
+    "apiUnreachable": "API-Server vorübergehend nicht erreichbar",
+    "loadError": "Daten konnten nicht geladen werden. Bitte versuche es erneut.",
+    "sessionExpired": "Sitzung abgelaufen. Weiterleitung zum Login..."
   },
   "admin": {
     "users": "Benutzer",
@@ -823,7 +826,9 @@
     "referralRegisterVia": "Registriere dich über diesen Link:",
     "referralVerified": "Referral verifiziert",
     "referralNotVerified": "Nicht verifiziert",
-    "verifyReferral": "Jetzt prüfen"
+    "verifyReferral": "Jetzt prüfen",
+    "status": "Status",
+    "action": "Aktion"
   },
   "backtest": {
     "title": "Backtest Labor",

@@ -752,7 +752,7 @@ export default function BotPerformance() {
                         <div className="text-lg font-bold text-white">${openTrade.entry_price.toLocaleString()}</div>
                       </div>
                       <div>
-                        <div className="text-xs text-gray-400 mb-0.5">Distance</div>
+                        <div className="text-xs text-gray-400 mb-0.5">{t('bots.trailingDistance', 'Distance')}</div>
                         <div className="text-lg font-bold text-emerald-400">{openTrade.trailing_stop_distance_pct?.toFixed(2)}%</div>
                       </div>
                     </div>

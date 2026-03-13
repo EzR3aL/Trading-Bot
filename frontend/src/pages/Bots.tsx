@@ -950,7 +950,7 @@ export default function Bots() {
     try {
       await api.post(`/bots/${botId}/reset-preset`)
       await fetchBots()
-      addToast('success', t('bots.presetReset', 'Preset entfernt – Standard wiederhergestellt'))
+      addToast('success', t('bots.presetReset', 'Preset removed – default restored'))
     } catch (err) {
       addToast('error', getApiErrorMessage(err, t('bots.presetSwitchFailed')))
     }

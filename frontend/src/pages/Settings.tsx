@@ -274,7 +274,7 @@ export default function Settings() {
       setConnections(res.data.connections || [])
       updateForm(exchangeType, { apiKey: '', apiSecret: '', passphrase: '' })
       showMessage(t('settings.saved'))
-    } catch { showMessage(t('common.error')) }
+    } catch (err) { showMessage(getApiErrorMessage(err, t('common.saveFailed'))) }
     setSaving(false)
   }
 
@@ -289,7 +289,7 @@ export default function Settings() {
       setConnections(res.data.connections || [])
       updateForm(exchangeType, { demoApiKey: '', demoApiSecret: '', demoPassphrase: '' })
       showMessage(t('settings.saved'))
-    } catch { showMessage(t('common.error')) }
+    } catch (err) { showMessage(getApiErrorMessage(err, t('common.saveFailed'))) }
     setSaving(false)
   }
 
@@ -298,7 +298,7 @@ export default function Settings() {
       const res = await api.post(`/config/exchange-connections/${exchangeType}/test?mode=${mode}`)
       const modeLabel = mode === 'demo' ? t('common.demo') : t('common.live')
       showMessage(t('settings.testConnectionResult', { mode: modeLabel, exchange: exchangeType, balance: res.data.balance }))
-    } catch { showMessage(t('settings.connectionFailed')) }
+    } catch (err) { showMessage(getApiErrorMessage(err, t('settings.connectionFailed'))) }
   }
 
   const saveLlmKey = async (provider: string) => {
@@ -311,7 +311,7 @@ export default function Settings() {
       setLlmConnections(res.data.connections || [])
       setLlmKeyForms(prev => ({ ...prev, [provider]: '' }))
       showMessage(t('settings.saved'))
-    } catch { showMessage(t('common.error')) }
+    } catch (err) { showMessage(getApiErrorMessage(err, t('common.saveFailed'))) }
     setSaving(false)
   }
 
@@ -333,7 +333,7 @@ export default function Settings() {
       const res = await api.get('/config/llm-connections')
       setLlmConnections(res.data.connections || [])
       showMessage(t('settings.saved'))
-    } catch { showMessage(t('common.error')) }
+    } catch (err) { showMessage(getApiErrorMessage(err, t('common.saveFailed'))) }
     setSaving(false)
   }
 
@@ -342,7 +342,7 @@ export default function Settings() {
     try {
       const res = await api.get('/config/connections')
       setConnStatus(res.data)
-    } catch { showMessage(t('common.error')) }
+    } catch (err) { showMessage(getApiErrorMessage(err, t('common.loadError', 'Failed to load data'))) }
     setConnLoading(false)
   }
 
@@ -398,7 +398,7 @@ export default function Settings() {
       }
       setAffiliateForms(forms)
       setAffiliateLoaded(true)
-    } catch (err) { console.error('Failed to load affiliate links:', err); useToastStore.getState().addToast('error', 'Failed to load data') }
+    } catch (err) { console.error('Failed to load affiliate links:', err); useToastStore.getState().addToast('error', t('common.loadError', 'Failed to load data')) }
   }
 
   const saveAffiliateLink = async (exchange: string) => {
@@ -414,7 +414,7 @@ export default function Settings() {
       })
       showMessage(t('settings.saved'))
       loadAffiliateLinks()
-    } catch { showMessage(t('common.error')) }
+    } catch (err) { showMessage(getApiErrorMessage(err, t('common.saveFailed'))) }
     setSaving(false)
   }
 
@@ -433,7 +433,7 @@ export default function Settings() {
       ))
       showMessage(t('settings.saved'))
       loadAffiliateLinks()
-    } catch { showMessage(t('common.error')) }
+    } catch (err) { showMessage(getApiErrorMessage(err, t('common.saveFailed'))) }
     setSaving(false)
   }
 
@@ -443,7 +443,7 @@ export default function Settings() {
       await api.delete(`/affiliate-links/${exchange}`)
       showMessage(t('settings.saved'))
       loadAffiliateLinks()
-    } catch { showMessage(t('common.error')) }
+    } catch (err) { showMessage(getApiErrorMessage(err, t('common.saveFailed'))) }
     setSaving(false)
   }
 
@@ -1241,12 +1241,12 @@ export default function Settings() {
                       <table className="w-full text-sm">
                         <thead>
                           <tr className="border-b border-white/[0.06] text-gray-400 text-[10px] uppercase tracking-wider">
-                            <th className="text-left py-2.5 px-3 font-medium">User</th>
-                            <th className="text-left py-2.5 px-3 font-medium">Exchange</th>
+                            <th className="text-left py-2.5 px-3 font-medium">{t('admin.users', 'User')}</th>
+                            <th className="text-left py-2.5 px-3 font-medium">{t('trades.exchange', 'Exchange')}</th>
                             <th className="text-left py-2.5 px-3 font-medium">UID</th>
                             <th className="text-left py-2.5 px-3 font-medium">{t('affiliate.submittedAt')}</th>
-                            <th className="text-left py-2.5 px-3 font-medium">Status</th>
-                            <th className="text-right py-2.5 px-3 font-medium">Aktion</th>
+                            <th className="text-left py-2.5 px-3 font-medium">{t('affiliate.status', 'Status')}</th>
+                            <th className="text-right py-2.5 px-3 font-medium">{t('affiliate.action', 'Action')}</th>
                           </tr>
                         </thead>
                         <tbody>

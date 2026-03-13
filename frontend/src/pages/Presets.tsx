@@ -31,7 +31,7 @@ export default function Presets() {
     try {
       const res = await api.get('/presets')
       setPresets(res.data)
-    } catch (err) { console.error('Failed to load presets:', err); useToastStore.getState().addToast('error', 'Failed to load data') }
+    } catch (err) { console.error('Failed to load presets:', err); useToastStore.getState().addToast('error', t('common.loadError', 'Failed to load data')) }
   }
 
   useEffect(() => { loadPresets() }, [])
