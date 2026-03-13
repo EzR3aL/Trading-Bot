@@ -309,6 +309,41 @@ html.light .num-input-wrap .num-arrow-up {
   @apply px-4 py-3;
 }
 
+/* ── Responsive Table: Expand Row ──────────────────────────── */
+
+.table-expand-row > td {
+  padding: 0 !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.table-expand-content {
+  @apply px-4 py-3 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-x-6 gap-y-2.5 text-sm;
+  background: rgba(255, 255, 255, 0.015);
+  border-top: 1px solid rgba(255, 255, 255, 0.04);
+  animation: expandFadeIn 0.15s ease-out;
+}
+
+.table-expand-content dt {
+  @apply text-gray-500 text-xs uppercase tracking-wider;
+}
+
+.table-expand-content dd {
+  @apply text-gray-300 mt-0.5;
+}
+
+@keyframes expandFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.expand-chevron {
+  @apply inline-flex items-center justify-center w-4 h-4 mr-1.5 text-gray-600 transition-transform duration-150;
+}
+
+.expand-chevron.open {
+  transform: rotate(90deg);
+}
+
 /* ── Login Background Animation ──────────────────────────── */
 
 @keyframes gradientShift {
@@ -541,6 +576,23 @@ html.light .table-premium tbody tr:nth-child(even) {
 
 html.light .table-premium tbody tr:nth-child(even):hover {
   background: #f1f5f9;
+}
+
+html.light .table-expand-content {
+  background: rgba(0, 0, 0, 0.02);
+  border-top-color: #e2e8f0;
+}
+
+html.light .table-expand-content dt {
+  color: #64748b;
+}
+
+html.light .table-expand-content dd {
+  color: #334155;
+}
+
+html.light .expand-chevron {
+  color: #94a3b8;
 }
 
 /* ── Scrollbar ──────────────────────────────────────────────── */

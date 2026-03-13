@@ -254,7 +254,12 @@ def create_app() -> FastAPI:
             "[422] %s %s | errors=%s",
             request.method, request.url.path, exc.errors(),
         )
-        return JSONResponse(status_code=422, content={"detail": exc.errors()})
+        # Sanitize errors: Pydantic v2 can include bytes in 'input' field
+        sanitized = []
+        for err in exc.errors():
+            clean = {k: (v.decode() if isinstance(v, bytes) else v) for k, v in err.items() if k != "input"}
+            sanitized.append(clean)
+        return JSONResponse(status_code=422, content={"detail": sanitized})
 
     # Prometheus metrics middleware
     from src.monitoring.middleware import PrometheusMiddleware

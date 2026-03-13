@@ -90,7 +90,9 @@
     "reset": "Zurücksetzen",
     "trailingStop": "Trailing Stop",
     "trailingStopProtecting": "Gewinn abgesichert",
-    "trailingDistance": "Abstand"
+    "trailingDistance": "Abstand",
+    "exitTime": "Exit-Zeit",
+    "exitReason": "Exit-Grund"
   },
   "settings": {
     "title": "Einstellungen",

@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react'
+import { Fragment, useEffect, useState, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import api from '../api/client'
 import { useToastStore } from '../stores/toastStore'
@@ -9,7 +9,7 @@ import WinLossChart from '../components/dashboard/WinLossChart'
 import RevenueChart from '../components/dashboard/RevenueChart'
 import { DashboardSkeleton } from '../components/ui/Skeleton'
 import PnlCell from '../components/ui/PnlCell'
-import { ArrowUpRight, ArrowDownRight } from 'lucide-react'
+import { ArrowUpRight, ArrowDownRight, ChevronRight } from 'lucide-react'
 import { ExchangeIcon } from '../components/ui/ExchangeLogo'
 import GuidedTour, { TourHelpButton, type TourStep } from '../components/ui/GuidedTour'
 import { formatDate, formatTime } from '../utils/dateUtils'
@@ -88,7 +88,7 @@ export default function Dashboard() {
       setLoading(true)
       setError('')
       try {
-        await api.post('/trades/sync').catch((err) => { console.error('Failed to sync trades:', err); useToastStore.getState().addToast('error', t('common.loadError', 'Failed to load data')) })
+        await api.post('/trades/sync').catch((err) => { console.error('Failed to sync trades:', err) })
 
         const demoParam = demoFilter === 'demo' ? '&demo_mode=true' : demoFilter === 'live' ? '&demo_mode=false' : ''
         const [statsRes, dailyRes, tradesRes] = await Promise.all([
@@ -214,48 +214,68 @@ export default function Dashboard() {
       )}
 
       {/* Recent trades */}
-      <div className="glass-card rounded-xl overflow-hidden" data-tour="dash-trades">
-        <div className="p-5 border-b border-white/5">
-          <h2 className="text-base font-semibold text-white">
-            {t('dashboard.recentTrades')}
-          </h2>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="table-premium">
-            <thead>
+      <DashboardRecentTrades trades={recentTrades} />
+
+      {/* Guided Tour */}
+      <GuidedTour tourId="dashboard" steps={dashboardTourSteps} />
+    </div>
+  )
+}
+
+function DashboardRecentTrades({ trades }: { trades: Trade[] }) {
+  const { t } = useTranslation()
+  const [expandedId, setExpandedId] = useState<number | null>(null)
+
+  return (
+    <div className="glass-card rounded-xl overflow-hidden" data-tour="dash-trades">
+      <div className="p-5 border-b border-white/5">
+        <h2 className="text-base font-semibold text-white">
+          {t('dashboard.recentTrades')}
+        </h2>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="table-premium">
+          <thead>
+            <tr>
+              <th className="text-left">{t('trades.date')}</th>
+              <th className="text-left hidden xl:table-cell">{t('trades.bot')}</th>
+              <th className="text-center hidden lg:table-cell">{t('trades.exchange')}</th>
+              <th className="text-left">{t('trades.symbol')}</th>
+              <th className="text-center">{t('trades.side')}</th>
+              <th className="text-right hidden xl:table-cell">{t('trades.entryPrice')}</th>
+              <th className="text-right">{t('trades.pnl')}</th>
+              <th className="text-center hidden 2xl:table-cell">{t('trades.mode')}</th>
+              <th className="text-center">{t('trades.status')}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {trades.length === 0 ? (
               <tr>
-                <th className="text-left">{t('trades.date')}</th>
-                <th className="text-left">{t('trades.bot')}</th>
-                <th className="text-center">{t('trades.exchange')}</th>
-                <th className="text-left">{t('trades.symbol')}</th>
-                <th className="text-center">{t('trades.side')}</th>
-                <th className="text-right">{t('trades.entryPrice')}</th>
-                <th className="text-right">{t('trades.pnl')}</th>
-                <th className="text-center">{t('trades.mode')}</th>
-                <th className="text-center">{t('trades.status')}</th>
+                <td colSpan={9} className="p-8 text-center text-gray-500">
+                  {t('dashboard.noTrades')}
+                </td>
               </tr>
-            </thead>
-            <tbody>
-              {recentTrades.length === 0 ? (
-                <tr>
-                  <td colSpan={9} className="p-8 text-center text-gray-500">
-                    {t('dashboard.noTrades')}
-                  </td>
-                </tr>
-              ) : (
-                recentTrades.map((trade) => (
-                  <tr key={trade.id}>
-                    <td className="text-gray-300 cursor-default" title={formatTime(trade.entry_time)}>
-                      {formatDate(trade.entry_time)}
+            ) : (
+              trades.map((trade) => (
+                <Fragment key={trade.id}>
+                  <tr
+                    onClick={() => setExpandedId(expandedId === trade.id ? null : trade.id)}
+                    className="cursor-pointer"
+                  >
+                    <td className="text-gray-300">
+                      <span className="inline-flex items-center">
+                        <ChevronRight size={14} className={`expand-chevron ${expandedId === trade.id ? 'open' : ''}`} />
+                        <span title={formatTime(trade.entry_time)}>{formatDate(trade.entry_time)}</span>
+                      </span>
                     </td>
-                    <td>
+                    <td className="hidden xl:table-cell">
                       {trade.bot_name ? (
                         <span className="text-white font-medium text-xs">{trade.bot_name}</span>
                       ) : (
                         <span className="text-gray-600">--</span>
                       )}
                     </td>
-                    <td className="text-center">
+                    <td className="text-center hidden lg:table-cell">
                       <span className="inline-flex justify-center">
                         <ExchangeIcon exchange={trade.bot_exchange || trade.exchange} size={18} />
                       </span>
@@ -266,7 +286,7 @@ export default function Dashboard() {
                         {trade.side === 'long' ? '+' : '-'} {trade.side.toUpperCase()}
                       </span>
                     </td>
-                    <td className="text-right text-gray-300">
+                    <td className="text-right text-gray-300 hidden xl:table-cell">
                       ${trade.entry_price.toLocaleString()}
                     </td>
                     <td className="text-right">
@@ -278,7 +298,7 @@ export default function Dashboard() {
                         className={trade.pnl && trade.pnl >= 0 ? 'pnl-positive' : 'pnl-negative'}
                       />
                     </td>
-                    <td className="text-center">
+                    <td className="text-center hidden 2xl:table-cell">
                       <span className={trade.demo_mode ? 'badge-demo' : 'badge-live'}>
                         {trade.demo_mode ? t('common.demo') : t('common.live')}
                       </span>
@@ -293,15 +313,40 @@ export default function Dashboard() {
                       </span>
                     </td>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
+                  {expandedId === trade.id && (
+                    <tr className="table-expand-row">
+                      <td colSpan={9} className="!p-0 !border-b-0">
+                        <dl className="table-expand-content">
+                          <div className="xl:hidden">
+                            <dt>{t('trades.bot')}</dt>
+                            <dd>{trade.bot_name || '--'}</dd>
+                          </div>
+                          <div className="lg:hidden">
+                            <dt>{t('trades.exchange')}</dt>
+                            <dd className="capitalize">{trade.bot_exchange || trade.exchange}</dd>
+                          </div>
+                          <div className="xl:hidden">
+                            <dt>{t('trades.entryPrice')}</dt>
+                            <dd>${trade.entry_price.toLocaleString()}</dd>
+                          </div>
+                          <div>
+                            <dt>{t('trades.exitPrice')}</dt>
+                            <dd>{trade.exit_price ? `$${trade.exit_price.toLocaleString()}` : '--'}</dd>
+                          </div>
+                          <div className="2xl:hidden">
+                            <dt>{t('trades.mode')}</dt>
+                            <dd>{trade.demo_mode ? t('common.demo') : t('common.live')}</dd>
+                          </div>
+                        </dl>
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
+              ))
+            )}
+          </tbody>
+        </table>
       </div>
-
-      {/* Guided Tour */}
-      <GuidedTour tourId="dashboard" steps={dashboardTourSteps} />
     </div>
   )
 }

@@ -90,7 +90,9 @@
     "reset": "Reset",
     "trailingStop": "Trailing Stop",
     "trailingStopProtecting": "Protecting profit",
-    "trailingDistance": "Distance"
+    "trailingDistance": "Distance",
+    "exitTime": "Exit Time",
+    "exitReason": "Exit Reason"
   },
   "settings": {
     "title": "Settings",

@@ -466,9 +466,9 @@ export default function Portfolio() {
                   <th className="text-left">{t('portfolio.exchange')}</th>
                   <th className="text-left">{t('portfolio.symbol')}</th>
                   <th className="text-center">{t('portfolio.side')}</th>
-                  <th className="text-right">{t('portfolio.size')}</th>
-                  <th className="text-right">{t('portfolio.entryPrice')}</th>
-                  <th className="text-right">{t('portfolio.currentPrice')}</th>
+                  <th className="text-right hidden xl:table-cell">{t('portfolio.size')}</th>
+                  <th className="text-right hidden lg:table-cell">{t('portfolio.entryPrice')}</th>
+                  <th className="text-right hidden lg:table-cell">{t('portfolio.currentPrice')}</th>
                   <th className="text-right">
                     <button
                       onClick={() => setSortAsc(!sortAsc)}
@@ -478,8 +478,8 @@ export default function Portfolio() {
                       {sortAsc ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
                     </button>
                   </th>
-                  <th className="text-center">{t('portfolio.leverage')}</th>
-                  <th className="text-center">{t('bots.trailingStop')}</th>
+                  <th className="text-center hidden 2xl:table-cell">{t('portfolio.leverage')}</th>
+                  <th className="text-center hidden xl:table-cell">{t('bots.trailingStop')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -488,7 +488,7 @@ export default function Portfolio() {
                     <td>
                       <span className="inline-flex items-center gap-2">
                         <ExchangeIcon exchange={pos.exchange} size={16} />
-                        <span className="text-gray-300 capitalize text-sm">{pos.exchange}</span>
+                        <span className="text-gray-300 capitalize text-sm hidden md:inline">{pos.exchange}</span>
                       </span>
                     </td>
                     <td className="text-white font-medium text-sm">{pos.symbol}</td>
@@ -501,13 +501,13 @@ export default function Portfolio() {
                         {pos.side.toUpperCase()}
                       </span>
                     </td>
-                    <td className="text-right text-gray-300 text-sm font-mono">
+                    <td className="text-right text-gray-300 text-sm font-mono hidden xl:table-cell">
                       {pos.size.toFixed(4)}
                     </td>
-                    <td className="text-right text-gray-300 text-sm font-mono">
+                    <td className="text-right text-gray-300 text-sm font-mono hidden lg:table-cell">
                       ${pos.entry_price.toLocaleString()}
                     </td>
-                    <td className="text-right text-gray-300 text-sm font-mono">
+                    <td className="text-right text-gray-300 text-sm font-mono hidden lg:table-cell">
                       ${pos.current_price.toLocaleString()}
                     </td>
                     <td className={`text-right text-sm font-medium font-mono ${
@@ -515,8 +515,8 @@ export default function Portfolio() {
                     }`}>
                       {pos.unrealized_pnl >= 0 ? '+' : ''}${pos.unrealized_pnl.toFixed(2)}
                     </td>
-                    <td className="text-center text-gray-300 text-sm">{pos.leverage}x</td>
-                    <td className="text-center">
+                    <td className="text-center text-gray-300 text-sm hidden 2xl:table-cell">{pos.leverage}x</td>
+                    <td className="text-center hidden xl:table-cell">
                       {pos.trailing_stop_active && pos.trailing_stop_price != null ? (
                         <span className="inline-flex items-center justify-center gap-1 text-emerald-400 text-sm">
                           ${pos.trailing_stop_price.toLocaleString()}

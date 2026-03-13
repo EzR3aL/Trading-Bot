@@ -595,38 +595,38 @@ export default function Backtest() {
                 <table className="table-premium">
                   <thead>
                     <tr>
-                      <th className="text-left">#</th>
+                      <th className="text-left hidden 2xl:table-cell">#</th>
                       <th className="text-left">{t('backtest.direction')}</th>
                       <th className="text-left">{t('backtest.symbol', 'Symbol')}</th>
-                      <th className="text-right">{t('backtest.entryPrice')}</th>
-                      <th className="text-right">{t('backtest.exitPrice')}</th>
+                      <th className="text-right hidden lg:table-cell">{t('backtest.entryPrice')}</th>
+                      <th className="text-right hidden xl:table-cell">{t('backtest.exitPrice')}</th>
                       <th className="text-right">{t('backtest.pnl')}</th>
-                      <th className="text-right">{t('backtest.netPnl')}</th>
-                      <th className="text-right">{t('backtest.confidence')}</th>
+                      <th className="text-right hidden xl:table-cell">{t('backtest.netPnl')}</th>
+                      <th className="text-right hidden 2xl:table-cell">{t('backtest.confidence')}</th>
                       <th className="text-left">{t('backtest.result')}</th>
                     </tr>
                   </thead>
                   <tbody>
                     {activeRun.trades.map((trade, idx) => (
                       <tr key={idx}>
-                        <td className="text-gray-500 text-xs">{idx + 1}</td>
+                        <td className="text-gray-500 text-xs hidden 2xl:table-cell">{idx + 1}</td>
                         <td>
                           <span className={trade.direction === 'long' ? 'text-profit' : 'text-loss'}>
                             {trade.direction === 'long' ? '+' : '-'} {trade.direction.toUpperCase()}
                           </span>
                         </td>
                         <td className="text-white font-medium">{trade.symbol}</td>
-                        <td className="text-right text-gray-300 font-mono">${trade.entry_price.toLocaleString()}</td>
-                        <td className="text-right text-gray-300 font-mono">
+                        <td className="text-right text-gray-300 font-mono hidden lg:table-cell">${trade.entry_price.toLocaleString()}</td>
+                        <td className="text-right text-gray-300 font-mono hidden xl:table-cell">
                           {trade.exit_price ? `$${trade.exit_price.toLocaleString()}` : '--'}
                         </td>
                         <td className={`text-right font-mono ${trade.pnl >= 0 ? 'text-profit' : 'text-loss'}`}>
                           {trade.pnl >= 0 ? '+' : ''}${trade.pnl.toFixed(2)}
                         </td>
-                        <td className={`text-right font-mono ${trade.net_pnl >= 0 ? 'text-profit' : 'text-loss'}`}>
+                        <td className={`text-right font-mono hidden xl:table-cell ${trade.net_pnl >= 0 ? 'text-profit' : 'text-loss'}`}>
                           {trade.net_pnl >= 0 ? '+' : ''}${trade.net_pnl.toFixed(2)}
                         </td>
-                        <td className="text-right text-gray-400">{trade.confidence}%</td>
+                        <td className="text-right text-gray-400 hidden 2xl:table-cell">{trade.confidence}%</td>
                         <td>
                           <span className={`text-xs ${
                             trade.result === 'take_profit' ? 'text-emerald-400' :
@@ -696,13 +696,13 @@ export default function Backtest() {
                 <tr>
                   <th className="text-left">{t('backtest.strategy')}</th>
                   <th className="text-left">{t('backtest.symbol', 'Symbol')}</th>
-                  <th className="text-left">{t('backtest.timeframe')}</th>
-                  <th className="text-left">{t('backtest.startDate')}</th>
-                  <th className="text-left">{t('backtest.endDate')}</th>
+                  <th className="text-left hidden 2xl:table-cell">{t('backtest.timeframe')}</th>
+                  <th className="text-left hidden xl:table-cell">{t('backtest.startDate')}</th>
+                  <th className="text-left hidden xl:table-cell">{t('backtest.endDate')}</th>
                   <th className="text-right">{t('backtest.totalReturn')}</th>
-                  <th className="text-right">{t('backtest.profit')}</th>
-                  <th className="text-right">{t('backtest.winRate')}</th>
-                  <th className="text-right">{t('backtest.totalTrades')}</th>
+                  <th className="text-right hidden xl:table-cell">{t('backtest.profit')}</th>
+                  <th className="text-right hidden lg:table-cell">{t('backtest.winRate')}</th>
+                  <th className="text-right hidden 2xl:table-cell">{t('backtest.totalTrades')}</th>
                   <th className="text-center">{t('backtest.status')}</th>
                   <th className="text-right"></th>
                 </tr>
@@ -716,9 +716,9 @@ export default function Backtest() {
                   >
                     <td className="text-white font-medium">{strategyLabel(run.strategy_type)}</td>
                     <td className="text-gray-300">{run.symbol}</td>
-                    <td className="text-gray-400">{run.timeframe}</td>
-                    <td className="text-gray-400">{formatDateEU(run.start_date)}</td>
-                    <td className="text-gray-400">{formatDateEU(run.end_date)}</td>
+                    <td className="text-gray-400 hidden 2xl:table-cell">{run.timeframe}</td>
+                    <td className="text-gray-400 hidden xl:table-cell">{formatDateEU(run.start_date)}</td>
+                    <td className="text-gray-400 hidden xl:table-cell">{formatDateEU(run.end_date)}</td>
                     <td className={`text-right font-mono ${
                       run.total_return_percent !== null
                         ? (run.total_return_percent >= 0 ? 'text-profit' : 'text-loss')
@@ -728,7 +728,7 @@ export default function Backtest() {
                         ? `${run.total_return_percent >= 0 ? '+' : ''}${run.total_return_percent.toFixed(2)}%`
                         : '--'}
                     </td>
-                    <td className={`text-right font-mono ${
+                    <td className={`text-right font-mono hidden xl:table-cell ${
                       run.total_return_percent !== null
                         ? (run.total_return_percent >= 0 ? 'text-profit' : 'text-loss')
                         : 'text-gray-500'
@@ -737,14 +737,14 @@ export default function Backtest() {
                         ? `${run.total_return_percent >= 0 ? '+' : ''}$${Math.abs(run.initial_capital * run.total_return_percent / 100).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
                         : '--'}
                     </td>
-                    <td className={`text-right font-mono ${
+                    <td className={`text-right font-mono hidden lg:table-cell ${
                       run.win_rate !== null
                         ? (run.win_rate >= 60 ? 'text-profit' : run.win_rate >= 40 ? 'text-yellow-400' : 'text-loss')
                         : 'text-gray-500'
                     }`}>
                       {run.win_rate !== null ? `${run.win_rate.toFixed(1)}%` : '--'}
                     </td>
-                    <td className="text-right text-gray-400">
+                    <td className="text-right text-gray-400 hidden 2xl:table-cell">
                       {run.total_trades ?? '--'}
                     </td>
                     <td className="text-center">

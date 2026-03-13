@@ -9,6 +9,22 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [4.0.3] - 2026-03-13
+
+### Hinzugefuegt
+- **Responsive Tabellen-Design (Industrie-Standard)** — Alle 7 Tabellen im Frontend reagieren jetzt dynamisch auf die Bildschirmgroesse:
+  - **Column Priority Hiding**: Spalten mit niedriger Prioritaet werden auf kleineren Bildschirmen automatisch ausgeblendet (Tailwind responsive classes: `hidden lg:table-cell`, `hidden xl:table-cell`, `hidden 2xl:table-cell`)
+  - **Row-Expand (Trades & Dashboard)**: Klick auf eine Zeile oeffnet ein Detail-Panel mit allen versteckten Informationen — kein Informationsverlust
+  - **Betroffene Seiten**: Trades (12→6 Spalten auf Tablet), Dashboard Recent Trades, Portfolio Positions, BotDetail, BotPerformance, Backtest Trade Log, Backtest History
+  - **Breakpoint-Strategie**: Smartphone (<1024px) 4-6 Spalten, 13" Laptop (1024-1535px) 6-8 Spalten, Desktop (≥1536px) alle Spalten
+  - **Light-Mode Support**: Expand-Rows haben angepasste Farben fuer den Light-Mode
+  - Ansatz basiert auf Recherche der groessten Trading-Plattformen (Binance, Bybit, Coinbase, Stripe) — alle nutzen Column Hiding + Detail-Expand als Standard
+
+### Geaendert
+- **i18n**: Neue Uebersetzungsschluessel `trades.exitTime` und `trades.exitReason` (DE/EN) fuer die Expand-Detail-Ansicht
+
+---
+
 ## [4.0.2] - 2026-03-13
 
 ### Hinzugefuegt

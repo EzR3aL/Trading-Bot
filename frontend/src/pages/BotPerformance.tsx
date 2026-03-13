@@ -910,15 +910,15 @@ export default function BotPerformance() {
                   <thead>
                     <tr>
                       <th className="text-left">{t('trades.date')}</th>
-                      <th className="text-center">{t('trades.exchange')}</th>
+                      <th className="text-center hidden lg:table-cell">{t('trades.exchange')}</th>
                       <th className="text-left">{t('trades.symbol')}</th>
                       <th className="text-center">{t('trades.side')}</th>
-                      <th className="text-right">{t('trades.entryPrice')}</th>
+                      <th className="text-right hidden xl:table-cell">{t('trades.entryPrice')}</th>
                       <th className="text-right">{t('trades.pnl')}</th>
-                      <th className="text-center">{t('trades.mode')}</th>
+                      <th className="text-center hidden 2xl:table-cell">{t('trades.mode')}</th>
                       <th className="text-center">{t('trades.status')}</th>
-                      <th className="text-center">{t('bots.confidence')}</th>
-                      <th className="text-left">{t('bots.reasoning')}</th>
+                      <th className="text-center hidden xl:table-cell">{t('bots.confidence')}</th>
+                      <th className="text-left hidden 2xl:table-cell">{t('bots.reasoning')}</th>
                       <th className="text-center">{t('bots.details')}</th>
                     </tr>
                   </thead>
@@ -930,7 +930,7 @@ export default function BotPerformance() {
                           <td className="text-gray-300 cursor-default" title={formatTime(trade.entry_time)}>
                             {formatDate(trade.entry_time)}
                           </td>
-                          <td className="text-center">
+                          <td className="text-center hidden lg:table-cell">
                             <span className="inline-flex justify-center">
                               <ExchangeIcon exchange={botExchange} size={18} />
                             </span>
@@ -941,7 +941,7 @@ export default function BotPerformance() {
                               {trade.side === 'long' ? '+' : '-'} {trade.side.toUpperCase()}
                             </span>
                           </td>
-                          <td className="text-right text-gray-300">
+                          <td className="text-right text-gray-300 hidden xl:table-cell">
                             ${trade.entry_price.toLocaleString()}
                           </td>
                           <td className="text-right">
@@ -953,7 +953,7 @@ export default function BotPerformance() {
                               className={trade.pnl && trade.pnl >= 0 ? 'pnl-positive' : 'pnl-negative'}
                             />
                           </td>
-                          <td className="text-center">
+                          <td className="text-center hidden 2xl:table-cell">
                             <span className={trade.demo_mode ? 'badge-demo' : 'badge-live'}>
                               {trade.demo_mode ? t('common.demo') : t('common.live')}
                             </span>
@@ -967,8 +967,8 @@ export default function BotPerformance() {
                               {t(`trades.${trade.status}`)}
                             </span>
                           </td>
-                          <td className={`text-center text-sm font-medium ${confidenceColor(trade.confidence)}`}>{trade.confidence}%</td>
-                          <td className="text-sm text-gray-400 max-w-[280px] truncate" title={trade.reason}>
+                          <td className={`text-center text-sm font-medium hidden xl:table-cell ${confidenceColor(trade.confidence)}`}>{trade.confidence}%</td>
+                          <td className="text-sm text-gray-400 max-w-[280px] truncate hidden 2xl:table-cell" title={trade.reason}>
                             {trade.reason || '--'}
                           </td>
                           <td className="text-center">
