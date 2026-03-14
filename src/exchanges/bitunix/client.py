@@ -710,17 +710,11 @@ class BitunixClient(ExchangeClient):
         take_profit: Optional[float] = None,
         stop_loss: Optional[float] = None,
     ) -> Optional[str]:
-        """
-        Set TP/SL for an existing position via the dedicated TP/SL endpoint.
+        """Set position-level TP/SL via /tpsl/position/place_order.
 
-        Args:
-            symbol: Trading pair
-            position_id: Position ID (from get_position response)
-            take_profit: Optional take profit trigger price
-            stop_loss: Optional stop loss trigger price
-
-        Returns:
-            TP/SL order ID on success, None on failure.
+        Position-level TP/SL automatically adjusts to the current position
+        size at trigger time (closes at market price). Only 1 per position.
+        Falls back to regular /tpsl/place_order if position endpoint fails.
         """
         if take_profit is None and stop_loss is None:
             return None
@@ -731,25 +725,87 @@ class BitunixClient(ExchangeClient):
         }
         if take_profit is not None:
             tpsl_data["tpPrice"] = str(take_profit)
-            tpsl_data["tpStopType"] = "LAST_PRICE"
-            tpsl_data["tpOrderType"] = "MARKET"
+            tpsl_data["tpStopType"] = "MARK_PRICE"
         if stop_loss is not None:
             tpsl_data["slPrice"] = str(stop_loss)
-            tpsl_data["slStopType"] = "LAST_PRICE"
-            tpsl_data["slOrderType"] = "MARKET"
+            tpsl_data["slStopType"] = "MARK_PRICE"
 
+        # Try position-level endpoint first (auto-adjusts to position size)
         try:
             result = await self._request(
-                "POST", ENDPOINTS["tpsl_place_order"], data=tpsl_data
+                "POST", ENDPOINTS["tpsl_position_place"], data=tpsl_data
             )
             order_id = result.get("orderId", "") if isinstance(result, dict) else ""
             logger.info(
-                f"TP/SL set for {symbol} positionId={position_id}: "
-                f"TP={take_profit}, SL={stop_loss} (orderId={order_id})"
+                "Position TP/SL set for %s positionId=%s: TP=%s, SL=%s (orderId=%s)",
+                symbol, position_id, take_profit, stop_loss, order_id,
             )
             return order_id or None
         except Exception as e:
-            logger.warning(f"Failed to set TP/SL for {symbol}: {e}")
+            logger.info("Position TP/SL endpoint failed for %s, trying regular: %s", symbol, e)
+
+        # Fallback to regular TP/SL endpoint (fixed quantity)
+        tpsl_data_regular: Dict[str, Any] = {
+            "symbol": symbol,
+            "positionId": position_id,
+        }
+        if take_profit is not None:
+            tpsl_data_regular["tpPrice"] = str(take_profit)
+            tpsl_data_regular["tpStopType"] = "LAST_PRICE"
+            tpsl_data_regular["tpOrderType"] = "MARKET"
+        if stop_loss is not None:
+            tpsl_data_regular["slPrice"] = str(stop_loss)
+            tpsl_data_regular["slStopType"] = "LAST_PRICE"
+            tpsl_data_regular["slOrderType"] = "MARKET"
+
+        try:
+            result = await self._request(
+                "POST", ENDPOINTS["tpsl_place_order"], data=tpsl_data_regular
+            )
+            order_id = result.get("orderId", "") if isinstance(result, dict) else ""
+            logger.info(
+                "Regular TP/SL set for %s positionId=%s: TP=%s, SL=%s (orderId=%s)",
+                symbol, position_id, take_profit, stop_loss, order_id,
+            )
+            return order_id or None
+        except Exception as e:
+            logger.warning("Failed to set TP/SL for %s: %s", symbol, e)
+            return None
+
+    async def modify_position_tpsl(
+        self,
+        symbol: str,
+        position_id: str,
+        take_profit: Optional[float] = None,
+        stop_loss: Optional[float] = None,
+    ) -> Optional[str]:
+        """Modify position-level TP/SL prices on an existing position."""
+        if take_profit is None and stop_loss is None:
+            return None
+
+        data: Dict[str, Any] = {
+            "symbol": symbol,
+            "positionId": position_id,
+        }
+        if take_profit is not None:
+            data["tpPrice"] = str(take_profit)
+            data["tpStopType"] = "MARK_PRICE"
+        if stop_loss is not None:
+            data["slPrice"] = str(stop_loss)
+            data["slStopType"] = "MARK_PRICE"
+
+        try:
+            result = await self._request(
+                "POST", ENDPOINTS["tpsl_position_modify"], data=data
+            )
+            order_id = result.get("orderId", "") if isinstance(result, dict) else ""
+            logger.info(
+                "Position TP/SL modified for %s: TP=%s, SL=%s",
+                symbol, take_profit, stop_loss,
+            )
+            return order_id or None
+        except Exception as e:
+            logger.warning("Failed to modify position TP/SL for %s: %s", symbol, e)
             return None
 
 

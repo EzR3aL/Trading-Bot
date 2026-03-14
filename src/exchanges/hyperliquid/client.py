@@ -589,6 +589,91 @@ class HyperliquidClient(ExchangeClient):
             logger.warning(f"Failed to get trade total fees for {symbol}: {e}")
         return round(total_fees, 6)
 
+    async def set_position_tpsl(
+        self,
+        symbol: str,
+        position_id: str = "",
+        take_profit: Optional[float] = None,
+        stop_loss: Optional[float] = None,
+        side: str = "long",
+        size: Optional[float] = None,
+    ) -> Optional[str]:
+        """Set position-level TP/SL on Hyperliquid using positionTpsl grouping.
+
+        Unlike normalTpsl (separate trigger orders), positionTpsl:
+        - Uses size=0 (auto-matches position size)
+        - Adjusts automatically when position size changes
+        - Always executes as market order
+        """
+        if take_profit is None and stop_loss is None:
+            return None
+
+        coin = self._normalize_symbol(symbol)
+        # For position TP/SL: closing side is opposite
+        is_buy_close = side != "long"
+        tick_size = self._get_tick_size(coin)
+        order_req = []
+        builder_kwargs = {"builder": self._builder} if self._builder else {}
+
+        if take_profit is not None:
+            rounded_tp = self._round_price(take_profit, tick_size)
+            order_req.append({
+                "name": coin,
+                "is_buy": is_buy_close,
+                "sz": 0,
+                "limit_px": float(rounded_tp),
+                "order_type": {
+                    "trigger": {
+                        "isMarket": True,
+                        "triggerPx": float(rounded_tp),
+                        "tpsl": "tp",
+                    }
+                },
+                "reduce_only": True,
+            })
+
+        if stop_loss is not None:
+            rounded_sl = self._round_price(stop_loss, tick_size)
+            order_req.append({
+                "name": coin,
+                "is_buy": is_buy_close,
+                "sz": 0,
+                "limit_px": float(rounded_sl),
+                "order_type": {
+                    "trigger": {
+                        "isMarket": True,
+                        "triggerPx": float(rounded_sl),
+                        "tpsl": "sl",
+                    }
+                },
+                "reduce_only": True,
+            })
+
+        try:
+            result = await self._cb_call(
+                self._exchange.bulk_orders,
+                order_req,
+                grouping="positionTpsl",
+                **builder_kwargs,
+            )
+            logger.info(
+                "Hyperliquid position TP/SL set for %s: TP=%s SL=%s result=%s",
+                coin, take_profit, stop_loss, result,
+            )
+            return str(result)
+        except Exception as e:
+            logger.warning("Hyperliquid position TP/SL failed for %s: %s", coin, e)
+            # Fallback to individual trigger orders
+            try:
+                if take_profit is not None:
+                    await self._place_trigger_order(coin, is_buy_close, size or 0, take_profit, "tp")
+                if stop_loss is not None:
+                    await self._place_trigger_order(coin, is_buy_close, size or 0, stop_loss, "sl")
+                return "fallback"
+            except Exception as e2:
+                logger.warning("Hyperliquid trigger fallback also failed: %s", e2)
+        return None
+
     async def get_close_fill_price(self, symbol: str) -> Optional[float]:
         """Get fill price of the most recent close fill from Hyperliquid."""
         coin = self._normalize_symbol(symbol)

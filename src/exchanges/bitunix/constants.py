@@ -43,6 +43,9 @@ ENDPOINTS = {
     "tpsl_cancel_order": "/api/v1/futures/tpsl/cancel_order",
     "tpsl_get_pending_orders": "/api/v1/futures/tpsl/get_pending_orders",
     "tpsl_get_history_orders": "/api/v1/futures/tpsl/get_history_orders",
+    # Position-level TP/SL (auto-adjusts to position size, 1 per position)
+    "tpsl_position_place": "/api/v1/futures/tpsl/position/place_order",
+    "tpsl_position_modify": "/api/v1/futures/tpsl/position/modify_order",
 }
 
 # --- Success Code ---
