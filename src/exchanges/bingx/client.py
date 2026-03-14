@@ -712,6 +712,72 @@ class BingXClient(ExchangeClient):
         )
         return {"orderId": order_id}
 
+    async def set_position_tpsl(
+        self,
+        symbol: str,
+        position_id: str = "",
+        take_profit: Optional[float] = None,
+        stop_loss: Optional[float] = None,
+        side: str = "long",
+        size: Optional[float] = None,
+    ) -> Optional[str]:
+        """Set TP/SL on an existing position via STOP_MARKET/TAKE_PROFIT_MARKET orders.
+
+        BingX doesn't have a dedicated TP/SL endpoint. Instead, we place
+        reduce-only conditional orders on the existing position.
+        """
+        if take_profit is None and stop_loss is None:
+            return None
+
+        # Get position size if not provided
+        if size is None:
+            pos = await self.get_position(symbol)
+            if not pos:
+                return None
+            size = pos.size
+            side = pos.side
+
+        # Closing side is opposite of position
+        close_side = SIDE_SELL if side == "long" else SIDE_BUY
+        position_side = POSITION_LONG if side == "long" else POSITION_SHORT
+        order_ids = []
+
+        if take_profit is not None:
+            try:
+                result = await self._request("POST", ENDPOINTS["place_order"], data={
+                    "symbol": symbol,
+                    "side": close_side,
+                    "positionSide": position_side,
+                    "type": "TAKE_PROFIT_MARKET",
+                    "quantity": str(size),
+                    "stopPrice": str(take_profit),
+                    "workingType": "MARK_PRICE",
+                })
+                oid = result.get("order", result).get("orderId", "") if isinstance(result, dict) else ""
+                order_ids.append(str(oid))
+                logger.info("BingX TP set for %s: $%.2f", symbol, take_profit)
+            except Exception as e:
+                logger.warning("Failed to set TP for %s: %s", symbol, e)
+
+        if stop_loss is not None:
+            try:
+                result = await self._request("POST", ENDPOINTS["place_order"], data={
+                    "symbol": symbol,
+                    "side": close_side,
+                    "positionSide": position_side,
+                    "type": "STOP_MARKET",
+                    "quantity": str(size),
+                    "stopPrice": str(stop_loss),
+                    "workingType": "MARK_PRICE",
+                })
+                oid = result.get("order", result).get("orderId", "") if isinstance(result, dict) else ""
+                order_ids.append(str(oid))
+                logger.info("BingX SL set for %s: $%.2f", symbol, stop_loss)
+            except Exception as e:
+                logger.warning("Failed to set SL for %s: %s", symbol, e)
+
+        return ",".join(order_ids) if order_ids else None
+
     async def get_funding_fees(
         self, symbol: str, start_time_ms: int, end_time_ms: int
     ) -> float:
