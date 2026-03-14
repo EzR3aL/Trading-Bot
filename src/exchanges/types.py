@@ -48,6 +48,7 @@ class Position:
     liquidation_price: Optional[float] = None
     take_profit: Optional[float] = None
     stop_loss: Optional[float] = None
+    position_id: Optional[str] = None
 
 
 @dataclass

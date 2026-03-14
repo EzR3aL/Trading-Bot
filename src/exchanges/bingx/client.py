@@ -454,12 +454,26 @@ class BingXClient(ExchangeClient):
                     positions.append(normalized)
         return positions
 
-    async def set_leverage(self, symbol: str, leverage: int) -> bool:
+    async def set_leverage(self, symbol: str, leverage: int, margin_mode: str = "cross") -> bool:
         """
-        Set leverage for a symbol on both long and short sides.
+        Set leverage and margin type for a symbol.
 
-        BingX endpoint: POST /openApi/swap/v2/trade/leverage
+        BingX endpoints:
+          POST /openApi/swap/v2/trade/marginType - set margin mode
+          POST /openApi/swap/v2/trade/leverage - set leverage per side
         """
+        # Set margin type first
+        bingx_margin = MARGIN_CROSSED if margin_mode == "cross" else MARGIN_ISOLATED
+        try:
+            await self._request("POST", ENDPOINTS["set_margin_type"], data={
+                "symbol": symbol,
+                "marginType": bingx_margin,
+            })
+        except BingXClientError as e:
+            err_msg = str(e).lower()
+            if "no need" not in err_msg and "same" not in err_msg:
+                logger.warning("set_margin_type failed for %s: %s", symbol, e)
+
         for pos_side in (POSITION_LONG, POSITION_SHORT):
             params = {
                 "symbol": symbol,
@@ -469,6 +483,9 @@ class BingXClient(ExchangeClient):
             try:
                 await self._request("POST", ENDPOINTS["set_leverage"], data=params)
             except BingXClientError as e:
+                err_msg = str(e).lower()
+                if "same" in err_msg or "not changed" in err_msg:
+                    continue
                 logger.warning("set_leverage failed for %s %s: %s", symbol, pos_side, e)
                 return False
         return True
@@ -654,6 +671,46 @@ class BingXClient(ExchangeClient):
         except Exception as e:
             logger.warning(f"Failed to get close fill price for {symbol}: {e}")
         return None
+
+    async def place_trailing_stop(
+        self,
+        symbol: str,
+        hold_side: str,
+        size: float,
+        callback_ratio: float,
+        trigger_price: float,
+        margin_mode: str = "cross",
+    ) -> Optional[dict]:
+        """Place a trailing stop order on BingX.
+
+        Uses TRAILING_STOP_MARKET order type with activationPrice and
+        callbackRate (trail percentage).
+        """
+        # Closing side is opposite of position side
+        close_side = SIDE_SELL if hold_side == "long" else SIDE_BUY
+        position_side = POSITION_LONG if hold_side == "long" else POSITION_SHORT
+
+        order_params = {
+            "symbol": symbol,
+            "side": close_side,
+            "positionSide": position_side,
+            "type": ORDER_TYPE_TRAILING_STOP_MARKET,
+            "quantity": str(size),
+            "activationPrice": str(trigger_price),
+            "callbackRate": str(callback_ratio),
+        }
+
+        result = await self._request("POST", ENDPOINTS["place_order"], data=order_params)
+        order_data = result.get("order", result) if isinstance(result, dict) else result
+        order_id = ""
+        if isinstance(order_data, dict):
+            order_id = str(order_data.get("orderId", ""))
+
+        logger.info(
+            "Trailing stop placed on BingX: %s %s size=%s callback=%.2f%% trigger=$%.2f (orderId=%s)",
+            symbol, hold_side, size, callback_ratio, trigger_price, order_id,
+        )
+        return {"orderId": order_id}
 
     async def get_funding_fees(
         self, symbol: str, start_time_ms: int, end_time_ms: int

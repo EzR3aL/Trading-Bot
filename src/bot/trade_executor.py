@@ -169,10 +169,37 @@ class TradeExecutorMixin:
                 await self._resolve_pending_trade(pending_trade_id, "failed", "Order returned None")
                 return
 
-            # Safety: if exchange couldn't set TP/SL, clear them so should_exit() takes over
+            # Safety: if exchange couldn't set TP/SL, try dedicated endpoint as fallback
             if getattr(order, "tpsl_failed", False):
-                signal.target_price = None
-                signal.stop_loss = None
+                if hasattr(client, "set_position_tpsl"):
+                    try:
+                        await asyncio.sleep(0.3)
+                        pos = await client.get_position(signal.symbol)
+                        pos_id = getattr(pos, "position_id", None) if pos else None
+                        if pos_id:
+                            await client.set_position_tpsl(
+                                symbol=signal.symbol,
+                                position_id=pos_id,
+                                take_profit=signal.target_price,
+                                stop_loss=signal.stop_loss,
+                            )
+                            logger.info(
+                                "%s [%s] TP/SL set via fallback endpoint for %s",
+                                log_prefix, mode_str, signal.symbol,
+                            )
+                        else:
+                            signal.target_price = None
+                            signal.stop_loss = None
+                    except Exception as tpsl_err:
+                        logger.warning(
+                            "%s [%s] TP/SL fallback also failed for %s: %s",
+                            log_prefix, mode_str, signal.symbol, tpsl_err,
+                        )
+                        signal.target_price = None
+                        signal.stop_loss = None
+                else:
+                    signal.target_price = None
+                    signal.stop_loss = None
 
             # Place native trailing stop on exchange (if strategy provided params)
             trailing_placed = False

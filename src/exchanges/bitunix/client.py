@@ -414,6 +414,7 @@ class BitunixClient(ExchangeClient):
                     exchange="bitunix",
                     margin=float(pos.get("margin", 0)),
                     liquidation_price=float(pos.get("liqPrice", 0) or 0),
+                    position_id=pos.get("positionId"),
                 )
         return None
 
@@ -440,6 +441,7 @@ class BitunixClient(ExchangeClient):
                         exchange="bitunix",
                         margin=float(pos.get("margin", 0)),
                         liquidation_price=float(pos.get("liqPrice", 0) or 0),
+                        position_id=pos.get("positionId"),
                     )
                 )
         return positions
