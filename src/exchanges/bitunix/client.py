@@ -631,6 +631,24 @@ class BitunixClient(ExchangeClient):
             await asyncio.sleep(retry_delay * (2**attempt))
         return None
 
+    async def get_close_fill_price(self, symbol: str) -> Optional[float]:
+        """Get fill price of the most recent close order from Bitunix history."""
+        try:
+            params = {"symbol": symbol, "limit": "20"}
+            data = await self._request("GET", ENDPOINTS["get_history_orders"], params=params)
+            orders = data.get("orderList", data) if isinstance(data, dict) else data
+            if isinstance(orders, list):
+                for order in orders:
+                    trade_side = order.get("tradeSide", "")
+                    status = order.get("status", "")
+                    if trade_side == "CLOSE" and status == "FILLED":
+                        price = order.get("avgPrice") or order.get("filledPrice") or order.get("price")
+                        if price and float(price) > 0:
+                            return float(price)
+        except Exception as e:
+            logger.warning(f"Failed to get close fill price for {symbol}: {e}")
+        return None
+
     async def get_funding_fees(
         self, symbol: str, start_time_ms: int, end_time_ms: int
     ) -> float:

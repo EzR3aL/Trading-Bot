@@ -386,6 +386,29 @@ class WeexClient(ExchangeClient):
             rate = float(data.get("fundingRate", 0))
         return FundingRateInfo(symbol=symbol, current_rate=rate)
 
+    async def get_close_fill_price(self, symbol: str) -> Optional[float]:
+        """Get fill price of the most recent close order from Weex orders-history."""
+        try:
+            weex_symbol = self._to_weex_symbol(symbol) if hasattr(self, '_to_weex_symbol') else symbol
+            data = await self._request("GET", ENDPOINTS["orders_history"], params={
+                "symbol": weex_symbol,
+                "pageSize": "20",
+            })
+            orders = data.get("entrustedList", data) if isinstance(data, dict) else data
+            if isinstance(orders, list):
+                for order in orders:
+                    trade_side = order.get("tradeSide", order.get("direction", ""))
+                    status = order.get("state", order.get("status", ""))
+                    # Weex close types: 3=close_long, 4=close_short
+                    is_close = "close" in str(trade_side).lower() or str(trade_side) in ("3", "4")
+                    if is_close and status in ("filled", "FILLED", "2"):
+                        price = order.get("priceAvg") or order.get("filledPrice") or order.get("avgPrice")
+                        if price and float(price) > 0:
+                            return float(price)
+        except Exception as e:
+            logger.warning(f"Failed to get close fill price for {symbol}: {e}")
+        return None
+
     # ── Affiliate ──────────────────────────────────────────────────
 
     async def check_affiliate_uid(self, uid: str) -> bool:

@@ -633,6 +633,28 @@ class BingXClient(ExchangeClient):
             await asyncio.sleep(retry_delay * (2 ** attempt))
         return None
 
+    async def get_close_fill_price(self, symbol: str) -> Optional[float]:
+        """Get fill price of the most recent close order from BingX fills."""
+        try:
+            params = {"symbol": symbol, "limit": "20"}
+            data = await self._request("GET", ENDPOINTS["all_fill_orders"], params=params)
+            fills = data if isinstance(data, list) else data.get("fills", []) if isinstance(data, dict) else []
+            if isinstance(fills, list):
+                for fill in fills:
+                    pos_side = fill.get("positionSide", "")
+                    fill_side = fill.get("side", "")
+                    is_close = (
+                        (fill_side == "SELL" and pos_side == "LONG") or
+                        (fill_side == "BUY" and pos_side == "SHORT")
+                    )
+                    if is_close:
+                        price = fill.get("price") or fill.get("avgPrice")
+                        if price and float(price) > 0:
+                            return float(price)
+        except Exception as e:
+            logger.warning(f"Failed to get close fill price for {symbol}: {e}")
+        return None
+
     async def get_funding_fees(
         self, symbol: str, start_time_ms: int, end_time_ms: int
     ) -> float:

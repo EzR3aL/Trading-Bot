@@ -589,6 +589,21 @@ class HyperliquidClient(ExchangeClient):
             logger.warning(f"Failed to get trade total fees for {symbol}: {e}")
         return round(total_fees, 6)
 
+    async def get_close_fill_price(self, symbol: str) -> Optional[float]:
+        """Get fill price of the most recent close fill from Hyperliquid."""
+        coin = self._normalize_symbol(symbol)
+        address = (self.wallet_address or self._wallet.address).lower()
+        try:
+            fills = self._info.user_fills(address)
+            for fill in reversed(fills):
+                if fill.get("coin") == coin and fill.get("dir", "").startswith("Close"):
+                    price = fill.get("px")
+                    if price and float(price) > 0:
+                        return float(price)
+        except Exception as e:
+            logger.warning(f"Failed to get close fill price for {symbol}: {e}")
+        return None
+
     async def get_funding_fees(
         self, symbol: str, start_time_ms: int, end_time_ms: int
     ) -> float:
