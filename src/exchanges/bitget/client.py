@@ -640,13 +640,14 @@ class BitgetExchangeClient(ExchangeClient):
                     "limit": "20",
                 }
                 data = await self._request("GET", ENDPOINTS["orders_history"], params=params)
-                orders = data.get("orderList", data) if isinstance(data, dict) else data
+                orders = (
+                    data.get("entrustedList") or data.get("orderList") or data
+                    if isinstance(data, dict) else data
+                )
                 if isinstance(orders, list):
                     for order in orders:
                         trade_side = order.get("tradeSide", "")
-                        status = order.get("status", "")
-                        # Match close orders: "close", "reduce_close_long", "reduce_close_short",
-                        # "burst_close_long", "burst_close_short", etc.
+                        status = order.get("state", order.get("status", ""))
                         if "close" in trade_side and status == "filled":
                             fee_str = order.get("fee")
                             if fee_str:
@@ -656,6 +657,35 @@ class BitgetExchangeClient(ExchangeClient):
                 logger.warning(f"Failed to get close order fees from history for {symbol}: {e}")
 
         return round(total_fees, 6)
+
+    async def get_close_fill_price(self, symbol: str) -> Optional[float]:
+        """Get the fill price of the most recent close order from orders-history.
+
+        Searches for the latest filled close order (TP/SL/trailing/manual) and
+        returns its average fill price. Returns None if not found.
+        """
+        try:
+            params = {
+                "symbol": symbol,
+                "productType": PRODUCT_TYPE_USDT,
+                "limit": "20",
+            }
+            data = await self._request("GET", ENDPOINTS["orders_history"], params=params)
+            orders = (
+                data.get("entrustedList") or data.get("orderList") or data
+                if isinstance(data, dict) else data
+            )
+            if isinstance(orders, list):
+                for order in orders:
+                    trade_side = order.get("tradeSide", "")
+                    status = order.get("state", order.get("status", ""))
+                    if "close" in trade_side and status == "filled":
+                        price_avg = order.get("priceAvg") or order.get("fillPrice")
+                        if price_avg and float(price_avg) > 0:
+                            return float(price_avg)
+        except Exception as e:
+            logger.warning(f"Failed to get close fill price for {symbol}: {e}")
+        return None
 
     async def get_funding_fees(
         self, symbol: str, start_time_ms: int, end_time_ms: int

@@ -133,9 +133,19 @@ class PositionMonitorMixin:
                             self.bot_config_id, trade.symbol, trade.side, exit_reason,
                         )
                         try:
-                            await client.close_position(trade.symbol, trade.side)
+                            margin_mode = getattr(self._config, "margin_mode", "cross")
+                            close_order = await client.close_position(trade.symbol, trade.side, margin_mode=margin_mode)
                         except Exception as close_err:
                             logger.error("[Bot:%s] Failed to close position: %s", self.bot_config_id, close_err)
+                            return
+
+                        if close_order is None:
+                            # Position already closed (native TS/TP/SL beat us)
+                            logger.info(
+                                "[Bot:%s] Strategy exit for %s — position already closed on exchange, "
+                                "deferring to _handle_closed_position on next cycle",
+                                self.bot_config_id, trade.symbol,
+                            )
                             return
 
                         ticker = await client.get_ticker(trade.symbol)
@@ -255,9 +265,21 @@ class PositionMonitorMixin:
         log_prefix = f"[Bot:{self.bot_config_id}]"
 
         try:
-            # Get current price as exit price estimate
-            ticker = await client.get_ticker(trade.symbol)
-            exit_price = ticker.last_price if ticker else trade.entry_price
+            # Get actual fill price from the close order (TP/SL/trailing/manual)
+            exit_price = None
+            try:
+                exit_price = await client.get_close_fill_price(trade.symbol)
+                if exit_price:
+                    logger.info(
+                        "%s Actual close fill price for %s: $%.2f",
+                        log_prefix, trade.symbol, exit_price,
+                    )
+            except Exception:
+                pass
+            # Fallback to current ticker if fill price unavailable
+            if not exit_price:
+                ticker = await client.get_ticker(trade.symbol)
+                exit_price = ticker.last_price if ticker else trade.entry_price
 
             # Determine exit reason
             exit_reason = "EXTERNAL_CLOSE"

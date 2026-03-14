@@ -125,6 +125,10 @@ class ExchangeClient(ABC):
         """Get actual fill price for a completed order. Override in exchange-specific client."""
         return None
 
+    async def get_close_fill_price(self, symbol: str) -> Optional[float]:
+        """Get fill price of the most recent close order. Override in exchange-specific client."""
+        return None
+
     async def get_funding_fees(
         self, symbol: str, start_time_ms: int, end_time_ms: int
     ) -> float:
