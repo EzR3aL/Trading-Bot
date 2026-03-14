@@ -464,7 +464,7 @@ function BotTradeHistoryModal({ bot, onClose, t }: { bot: BotStatus; onClose: ()
                       'text-gray-500'
                     }`}>
                       <Shield size={11} />
-                      {t(`bots.paramOption_risk_profile_${bot.risk_profile}`)}
+                      {t(`botBuilder.paramOption_risk_profile_${bot.risk_profile}`)}
                     </span>
                   </>
                 )}
@@ -1077,7 +1077,7 @@ export default function Bots() {
                             'text-gray-500'
                           }`}>
                             <Shield size={11} />
-                            {t(`bots.paramOption_risk_profile_${bot.risk_profile}`)}
+                            {t(`botBuilder.paramOption_risk_profile_${bot.risk_profile}`)}
                           </span>
                         </>
                       )}
