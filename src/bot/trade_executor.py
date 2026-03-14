@@ -175,14 +175,19 @@ class TradeExecutorMixin:
                     try:
                         await asyncio.sleep(0.3)
                         pos = await client.get_position(signal.symbol)
-                        pos_id = getattr(pos, "position_id", None) if pos else None
-                        if pos_id:
-                            await client.set_position_tpsl(
-                                symbol=signal.symbol,
-                                position_id=pos_id,
-                                take_profit=signal.target_price,
-                                stop_loss=signal.stop_loss,
-                            )
+                        if pos:
+                            kwargs = {
+                                "symbol": signal.symbol,
+                                "take_profit": signal.target_price,
+                                "stop_loss": signal.stop_loss,
+                            }
+                            # Bitunix needs position_id, Weex needs side+size
+                            if getattr(pos, "position_id", None):
+                                kwargs["position_id"] = pos.position_id
+                            if "side" in client.set_position_tpsl.__code__.co_varnames:
+                                kwargs["side"] = side
+                                kwargs["size"] = position_size
+                            await client.set_position_tpsl(**kwargs)
                             logger.info(
                                 "%s [%s] TP/SL set via fallback endpoint for %s",
                                 log_prefix, mode_str, signal.symbol,

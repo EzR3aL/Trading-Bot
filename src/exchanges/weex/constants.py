@@ -32,6 +32,9 @@ ENDPOINTS = {
     "orders_current": "/capi/v2/order/current",
     "orders_history": "/capi/v2/order/history",
     "order_fills": "/capi/v2/order/fills",
+    # v3 TP/SL and trigger order endpoints
+    "place_tpsl_order": "/capi/v3/placeTpSlOrder",
+    "place_trigger_order": "/capi/v3/placePendingOrder",
 }
 
 # Order direction types (Weex-specific)

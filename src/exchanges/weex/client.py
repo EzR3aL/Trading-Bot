@@ -409,6 +409,75 @@ class WeexClient(ExchangeClient):
             logger.warning(f"Failed to get close fill price for {symbol}: {e}")
         return None
 
+    # ── TP/SL Management (v3 endpoints) ─────────────────────────────
+
+    async def set_position_tpsl(
+        self,
+        symbol: str,
+        position_id: str = "",
+        take_profit: Optional[float] = None,
+        stop_loss: Optional[float] = None,
+        side: str = "long",
+        size: Optional[float] = None,
+    ) -> Optional[str]:
+        """Set TP/SL for an existing position via Weex v3 endpoint.
+
+        Weex uses /capi/v3/placeTpSlOrder with planType TAKE_PROFIT or STOP_LOSS.
+        Each TP and SL must be placed as separate orders.
+        """
+        api_symbol = self._to_api_symbol(symbol)
+        position_side = "LONG" if side == "long" else "SHORT"
+        order_ids = []
+
+        # Get position size if not provided
+        if size is None:
+            pos = await self.get_position(symbol)
+            if not pos:
+                return None
+            size = pos.size
+
+        if take_profit is not None:
+            try:
+                result = await self._request("POST", ENDPOINTS["place_tpsl_order"], data={
+                    "symbol": api_symbol,
+                    "clientAlgoId": uuid.uuid4().hex[:32],
+                    "planType": "TAKE_PROFIT",
+                    "triggerPrice": str(take_profit),
+                    "executePrice": "0",
+                    "quantity": str(size),
+                    "positionSide": position_side,
+                    "triggerPriceType": "MARK_PRICE",
+                })
+                orders = result if isinstance(result, list) else [result]
+                for o in orders:
+                    if isinstance(o, dict) and o.get("success"):
+                        order_ids.append(str(o.get("orderId", "")))
+                logger.info("Weex TP set for %s: $%.2f", symbol, take_profit)
+            except Exception as e:
+                logger.warning("Failed to set TP for %s: %s", symbol, e)
+
+        if stop_loss is not None:
+            try:
+                result = await self._request("POST", ENDPOINTS["place_tpsl_order"], data={
+                    "symbol": api_symbol,
+                    "clientAlgoId": uuid.uuid4().hex[:32],
+                    "planType": "STOP_LOSS",
+                    "triggerPrice": str(stop_loss),
+                    "executePrice": "0",
+                    "quantity": str(size),
+                    "positionSide": position_side,
+                    "triggerPriceType": "MARK_PRICE",
+                })
+                orders = result if isinstance(result, list) else [result]
+                for o in orders:
+                    if isinstance(o, dict) and o.get("success"):
+                        order_ids.append(str(o.get("orderId", "")))
+                logger.info("Weex SL set for %s: $%.2f", symbol, stop_loss)
+            except Exception as e:
+                logger.warning("Failed to set SL for %s: %s", symbol, e)
+
+        return ",".join(order_ids) if order_ids else None
+
     # ── Affiliate ──────────────────────────────────────────────────
 
     async def check_affiliate_uid(self, uid: str) -> bool:
