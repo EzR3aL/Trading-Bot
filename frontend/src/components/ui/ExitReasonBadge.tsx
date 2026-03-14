@@ -37,6 +37,12 @@ const EXIT_REASON_CONFIG: Record<string, {
     text: 'text-gray-400',
     border: 'border-white/10',
   },
+  MANUAL_CLOSE: {
+    icon: LogOut,
+    bg: 'bg-white/5',
+    text: 'text-gray-400',
+    border: 'border-white/10',
+  },
 }
 
 const DEFAULT_CONFIG = {

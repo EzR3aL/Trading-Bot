@@ -99,6 +99,7 @@
       "TAKE_PROFIT": "Take Profit",
       "STOP_LOSS": "Stop Loss",
       "EXTERNAL_CLOSE": "Manuell geschlossen",
+      "MANUAL_CLOSE": "Manuell geschlossen",
       "unknown": "Geschlossen"
     }
   },
