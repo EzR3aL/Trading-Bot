@@ -788,6 +788,15 @@ async def list_bots(
             except (json.JSONDecodeError, TypeError):
                 pass
 
+        # Extract risk_profile from strategy_params
+        _risk_profile = None
+        if config.strategy_params:
+            try:
+                _sp = json.loads(config.strategy_params) if isinstance(config.strategy_params, str) else config.strategy_params
+                _risk_profile = _sp.get("risk_profile")
+            except (json.JSONDecodeError, TypeError):
+                pass
+
         bots.append(BotRuntimeStatus(
             bot_config_id=config.id,
             name=config.name,
@@ -796,6 +805,7 @@ async def list_bots(
             mode=config.mode,
             margin_mode=getattr(config, "margin_mode", None) or "cross",
             trading_pairs=trading_pairs,
+            risk_profile=_risk_profile,
             status=runtime["status"] if runtime else ("idle" if not config.is_enabled else "stopped"),
             error_message=runtime.get("error_message") if runtime else None,
             started_at=runtime.get("started_at") if runtime else None,

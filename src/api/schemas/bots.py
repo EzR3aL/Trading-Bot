@@ -267,6 +267,9 @@ class BotRuntimeStatus(BaseModel):
     affiliate_uid: Optional[str] = None
     affiliate_verified: Optional[bool] = None
 
+    # Strategy display info
+    risk_profile: Optional[str] = None
+
     # Schedule info (for card display)
     schedule_type: Optional[str] = None
     schedule_config: Optional[Dict[str, Any]] = None

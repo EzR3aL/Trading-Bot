@@ -36,6 +36,7 @@ import {
   Bot,
   MoreVertical,
   XCircle,
+  Shield,
   ShieldCheck,
 } from 'lucide-react'
 import GuidedTour, { TourHelpButton, type TourStep } from '../components/ui/GuidedTour'
@@ -76,6 +77,7 @@ interface BotStatus {
   schedule_config?: { interval_minutes?: number; hours?: number[] } | null
   active_preset_id?: number | null
   active_preset_name?: string | null
+  risk_profile?: string | null
   builder_fee_approved?: boolean | null
   referral_verified?: boolean | null
 }
@@ -452,6 +454,19 @@ function BotTradeHistoryModal({ bot, onClose, t }: { bot: BotStatus; onClose: ()
                 <span className="text-xs text-gray-500">{strategyLabel(bot.strategy_type)}</span>
                 {AI_STRATEGIES.has(bot.strategy_type) && (
                   <Bot size={13} className="text-emerald-400" />
+                )}
+                {bot.risk_profile && (
+                  <>
+                    <span className="text-gray-700">·</span>
+                    <span className={`inline-flex items-center gap-0.5 text-xs ${
+                      bot.risk_profile === 'aggressive' ? 'text-red-400' :
+                      bot.risk_profile === 'conservative' ? 'text-blue-400' :
+                      'text-gray-500'
+                    }`}>
+                      <Shield size={11} />
+                      {t(`bots.paramOption_risk_profile_${bot.risk_profile}`)}
+                    </span>
+                  </>
                 )}
                 <span className="text-gray-700">|</span>
                 <span className={`text-xs font-medium ${bot.mode === 'demo' ? 'text-blue-400' : 'text-amber-400'}`}>
@@ -1052,6 +1067,19 @@ export default function Bots() {
                       <span className="text-xs text-gray-500">{strategyLabel(bot.strategy_type)}</span>
                       {AI_STRATEGIES.has(bot.strategy_type) && (
                         <Bot size={15} className="text-emerald-400" />
+                      )}
+                      {bot.risk_profile && (
+                        <>
+                          <span className="text-gray-700">·</span>
+                          <span className={`inline-flex items-center gap-0.5 text-xs ${
+                            bot.risk_profile === 'aggressive' ? 'text-red-400' :
+                            bot.risk_profile === 'conservative' ? 'text-blue-400' :
+                            'text-gray-500'
+                          }`}>
+                            <Shield size={11} />
+                            {t(`bots.paramOption_risk_profile_${bot.risk_profile}`)}
+                          </span>
+                        </>
                       )}
                     </div>
                   </div>
