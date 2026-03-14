@@ -261,6 +261,8 @@ class PositionMonitorMixin:
 
             # Determine exit reason
             exit_reason = "EXTERNAL_CLOSE"
+            if trade.native_trailing_stop:
+                exit_reason = "TRAILING_STOP"
             if trade.take_profit is not None and trade.entry_price > 0:
                 if abs(exit_price - trade.take_profit) < trade.entry_price * 0.002:
                     exit_reason = "TAKE_PROFIT"

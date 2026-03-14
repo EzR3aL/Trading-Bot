@@ -297,6 +297,10 @@ class BitgetExchangeClient(ExchangeClient):
         stop_loss: Optional[float] = None,
     ) -> None:
         """Set Entire TP/SL for a position (covers full position size)."""
+        contract = await self._get_contract_info(symbol)
+        pp = contract["pricePlace"]
+        ps = contract["priceEndStep"]
+
         tpsl_data: Dict[str, str] = {
             "symbol": symbol,
             "productType": PRODUCT_TYPE_USDT,
@@ -304,10 +308,10 @@ class BitgetExchangeClient(ExchangeClient):
             "holdSide": hold_side,
         }
         if take_profit is not None:
-            tpsl_data["stopSurplusTriggerPrice"] = f"{take_profit:.1f}"
+            tpsl_data["stopSurplusTriggerPrice"] = str(self._round_price(take_profit, pp, ps))
             tpsl_data["stopSurplusTriggerType"] = "fill_price"
         if stop_loss is not None:
-            tpsl_data["stopLossTriggerPrice"] = f"{stop_loss:.1f}"
+            tpsl_data["stopLossTriggerPrice"] = str(self._round_price(stop_loss, pp, ps))
             tpsl_data["stopLossTriggerType"] = "fill_price"
 
         await self._request(
@@ -469,8 +473,11 @@ class BitgetExchangeClient(ExchangeClient):
 
     # ==================== Trailing Stop ====================
 
-    async def _get_volume_place(self, symbol: str) -> int:
-        """Fetch volumePlace (size decimal precision) for a symbol from Bitget contracts API."""
+    async def _get_contract_info(self, symbol: str) -> dict:
+        """Fetch contract specification for a symbol from Bitget contracts API.
+
+        Returns dict with 'volumePlace' and 'pricePlace' (decimal precision).
+        """
         try:
             result = await self._request(
                 "GET", ENDPOINTS["contracts"],
@@ -480,10 +487,30 @@ class BitgetExchangeClient(ExchangeClient):
             contracts = result if isinstance(result, list) else [result] if result else []
             for c in contracts:
                 if c.get("symbol") == symbol:
-                    return int(c.get("volumePlace", 2))
+                    return {
+                        "volumePlace": int(c.get("volumePlace", 2)),
+                        "pricePlace": int(c.get("pricePlace", 2)),
+                        "priceEndStep": int(c.get("priceEndStep", 1)),
+                    }
         except Exception:
             pass
-        return 2  # safe default
+        return {"volumePlace": 2, "pricePlace": 2, "priceEndStep": 1}
+
+    async def _get_volume_place(self, symbol: str) -> int:
+        """Fetch volumePlace (size decimal precision) for a symbol."""
+        info = await self._get_contract_info(symbol)
+        return info["volumePlace"]
+
+    def _round_price(self, price: float, price_place: int, price_end_step: int) -> float:
+        """Round price to exchange precision using pricePlace and priceEndStep.
+
+        pricePlace = number of decimal places (e.g. 1 for BTC → $70000.1)
+        priceEndStep = minimum tick increment at the last decimal
+                       (e.g. 5 means price must end in 0 or 5)
+        """
+        factor = 10 ** price_place
+        stepped = math.floor(price * factor / price_end_step) * price_end_step
+        return stepped / factor
 
     async def place_trailing_stop(
         self,
@@ -512,9 +539,15 @@ class BitgetExchangeClient(ExchangeClient):
         """
         api_margin = "crossed" if margin_mode == "cross" else "isolated"
 
-        # Round size to exchange precision (volumePlace)
-        volume_place = await self._get_volume_place(symbol)
+        # Fetch contract precision for size and price
+        contract = await self._get_contract_info(symbol)
+        volume_place = contract["volumePlace"]
         rounded_size = math.floor(size * 10**volume_place) / 10**volume_place
+
+        # Round trigger price to exchange precision
+        rounded_trigger = self._round_price(
+            trigger_price, contract["pricePlace"], contract["priceEndStep"],
+        )
 
         # rangeRate must have exactly 2 decimal places
         range_rate = f"{callback_ratio:.2f}"
@@ -525,7 +558,7 @@ class BitgetExchangeClient(ExchangeClient):
             "marginMode": api_margin,
             "marginCoin": "USDT",
             "planType": "moving_plan",
-            "triggerPrice": str(trigger_price),
+            "triggerPrice": str(rounded_trigger),
             "triggerType": "mark_price",
             "rangeRate": range_rate,
             "holdSide": hold_side,

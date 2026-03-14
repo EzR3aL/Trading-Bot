@@ -13,6 +13,7 @@ import { useThemeStore } from '../stores/themeStore'
 import { SkeletonChart, SkeletonTable } from '../components/ui/Skeleton'
 import PnlCell from '../components/ui/PnlCell'
 import { ExchangeIcon } from '../components/ui/ExchangeLogo'
+import ExitReasonBadge from '../components/ui/ExitReasonBadge'
 import { Eye, EyeOff, ArrowUpRight, ArrowDownRight, Trophy, Target, LayoutGrid, BarChart3, Bot, FileText, X, Copy, ShieldCheck } from 'lucide-react'
 import type { LlmConnection } from '../types'
 import { formatDate, formatDateTime, formatChartDate, formatTime } from '../utils/dateUtils'
@@ -1100,9 +1101,10 @@ export default function BotPerformance() {
 
               <div className="flex items-center justify-between text-sm text-gray-500 pt-4 border-t border-white/5">
                 <span>{formatDateTime(selectedTrade.entry_time)}</span>
-                <span className={selectedTrade.status === 'open' ? 'text-amber-400 font-medium' : 'text-gray-500'}>
-                  {selectedTrade.status === 'open' ? t('bots.pending') : selectedTrade.exit_reason || selectedTrade.status}
-                </span>
+                {selectedTrade.status === 'open'
+                  ? <span className="text-amber-400 font-medium">{t('bots.pending')}</span>
+                  : <ExitReasonBadge reason={selectedTrade.exit_reason} compact />
+                }
               </div>
             </div>
           </div>

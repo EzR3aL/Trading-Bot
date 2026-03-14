@@ -628,28 +628,6 @@ class EdgeIndicatorStrategy(BaseStrategy):
                     )
 
             if indicator_exit:
-                # Breakeven protection: if trade was profitable enough, don't exit at a loss
-                if self._p.get("trailing_stop_enabled") and highest_price and entry_price:
-                    breakeven_atr = self._p.get("trailing_breakeven_atr", 1.5)
-                    atr_series = MarketDataFetcher.calculate_atr(klines, self._p["atr_period"])
-                    atr_val = atr_series[-1] if atr_series else current_price * 0.015
-                    breakeven_threshold = atr_val * breakeven_atr
-
-                    if side == "long":
-                        was_profitable = (highest_price - entry_price) >= breakeven_threshold
-                        is_loss = current_price < entry_price
-                    else:
-                        was_profitable = (entry_price - highest_price) >= breakeven_threshold
-                        is_loss = current_price > entry_price
-
-                    if was_profitable and is_loss:
-                        logger.info(
-                            "Breakeven protection: blocking indicator exit at loss "
-                            "(entry=%.2f, current=%.2f, highest=%.2f)",
-                            entry_price, current_price, highest_price,
-                        )
-                        return False, ""
-
                 return True, indicator_reason
 
             return False, ""

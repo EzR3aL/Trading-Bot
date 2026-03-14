@@ -13,6 +13,7 @@ import BotBuilder from '../components/bots/BotBuilder'
 import BuilderFeeApproval from '../components/hyperliquid/BuilderFeeApproval'
 import { SkeletonBotCard } from '../components/ui/Skeleton'
 import PnlCell from '../components/ui/PnlCell'
+import ExitReasonBadge from '../components/ui/ExitReasonBadge'
 import {
   Plus,
   Play,
@@ -313,9 +314,10 @@ function TradeDetailModal({ trade, onClose, t, affiliateLink }: { trade: BotTrad
         {/* Footer info */}
         <div className="flex items-center justify-between text-sm text-gray-500 pt-4 border-t border-white/5">
           <span>{formatDateTime(trade.entry_time)}</span>
-          <span className={trade.status === 'open' ? 'text-amber-400 font-medium' : 'text-gray-500'}>
-            {trade.status === 'open' ? t('bots.pending') : trade.exit_reason || trade.status}
-          </span>
+          {trade.status === 'open'
+            ? <span className="text-amber-400 font-medium">{t('bots.pending')}</span>
+            : <ExitReasonBadge reason={trade.exit_reason} compact />
+          }
         </div>
       </div>
 
@@ -362,7 +364,7 @@ function TradeDetailModal({ trade, onClose, t, affiliateLink }: { trade: BotTrad
           )}
           <div className="flex items-center justify-between text-sm text-gray-500 pt-4 border-t border-white/5">
             <span>{formatDateTime(trade.entry_time)}</span>
-            <span>{trade.exit_reason || trade.status}</span>
+            <ExitReasonBadge reason={trade.exit_reason} compact />
           </div>
           {affiliateLink && (
             <div className="mt-3 pt-3 border-t border-white/5">
@@ -637,7 +639,7 @@ function BotTradeHistoryModal({ bot, onClose, t }: { bot: BotStatus; onClose: ()
                       )}
                       <div className="flex items-center justify-between text-sm text-gray-500 pt-4 border-t border-white/5">
                         <span>{formatDateTime(latestClosed.entry_time)}</span>
-                        <span>{latestClosed.exit_reason || latestClosed.status}</span>
+                        <ExitReasonBadge reason={latestClosed.exit_reason} compact />
                       </div>
                       {affiliateLink && (
                         <div className="mt-3 pt-3 border-t border-white/5">

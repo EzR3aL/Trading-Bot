@@ -12,6 +12,7 @@ import { formatDate, formatTime } from '../utils/dateUtils'
 import Pagination from '../components/ui/Pagination'
 import DatePicker from '../components/ui/DatePicker'
 import FilterDropdown from '../components/ui/FilterDropdown'
+import ExitReasonBadge from '../components/ui/ExitReasonBadge'
 
 export default function Trades() {
   const { t } = useTranslation()
@@ -324,7 +325,7 @@ export default function Trades() {
                               {trade.exit_reason && (
                                 <div>
                                   <dt>{t('trades.exitReason')}</dt>
-                                  <dd>{trade.exit_reason}</dd>
+                                  <dd><ExitReasonBadge reason={trade.exit_reason} /></dd>
                                 </div>
                               )}
                             </dl>

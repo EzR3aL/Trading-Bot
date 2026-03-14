@@ -92,7 +92,15 @@
     "trailingStopProtecting": "Protecting profit",
     "trailingDistance": "Distance",
     "exitTime": "Exit Time",
-    "exitReason": "Exit Reason"
+    "exitReason": "Exit Reason",
+    "exitReasons": {
+      "TRAILING_STOP": "Trailing Stop",
+      "STRATEGY_EXIT": "Strategy Exit",
+      "TAKE_PROFIT": "Take Profit",
+      "STOP_LOSS": "Stop Loss",
+      "EXTERNAL_CLOSE": "Manual Close",
+      "unknown": "Closed"
+    }
   },
   "settings": {
     "title": "Settings",
