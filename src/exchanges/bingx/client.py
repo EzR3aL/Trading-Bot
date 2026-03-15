@@ -26,6 +26,7 @@ from src.exchanges.bingx.constants import (
     ERROR_CODES,
     MARGIN_CROSSED,
     ORDER_TYPE_MARKET,
+    ORDER_TYPE_TRAILING_STOP_MARKET,
     POSITION_LONG,
     POSITION_SHORT,
     SIDE_BUY,
