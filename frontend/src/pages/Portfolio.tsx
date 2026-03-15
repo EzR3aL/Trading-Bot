@@ -14,6 +14,8 @@ import type {
   PortfolioSummary, PortfolioPosition,
   PortfolioDaily, PortfolioAllocation,
 } from '../types'
+import MobilePositionCard from '../components/ui/MobilePositionCard'
+import useIsMobile from '../hooks/useIsMobile'
 
 /* ── Constants ────────────────────────────────────────────── */
 
@@ -65,6 +67,7 @@ export default function Portfolio() {
   const [loading, setLoading] = useState(true)
   const [loadingExchange, setLoadingExchange] = useState(true)
   const [error, setError] = useState('')
+  const isMobile = useIsMobile()
 
   // Sorting state for positions
   const [sortAsc, setSortAsc] = useState(false)
@@ -456,6 +459,12 @@ export default function Portfolio() {
           </div>
         ) : sortedPositions.length === 0 ? (
           <div className="p-8 text-center text-gray-500">{t('portfolio.noPositions')}</div>
+        ) : isMobile ? (
+          <div className="px-3 pb-3 space-y-1.5">
+            {sortedPositions.map((pos, idx) => (
+              <MobilePositionCard key={`${pos.exchange}-${pos.symbol}-${idx}`} pos={pos} />
+            ))}
+          </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="table-premium w-full">
