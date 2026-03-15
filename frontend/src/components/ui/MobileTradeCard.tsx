@@ -56,37 +56,41 @@ export default function MobileTradeCard({ trade, extraDetails }: MobileTradeCard
       className="border border-white/[0.06] rounded-lg bg-white/[0.02] overflow-hidden"
       onClick={() => setOpen(!open)}
     >
-      {/* ── Header Row: Symbol + Direction + PnL ── */}
-      <div className="flex items-center justify-between px-3 py-2.5 cursor-pointer">
-        <div className="flex items-center gap-2 min-w-0">
-          <ExchangeIcon exchange={exchange} size={16} />
-          <span className="text-white font-semibold text-sm truncate">{trade.symbol}</span>
-          <span className={`text-xs font-medium ${isLong ? 'text-emerald-400' : 'text-red-400'}`}>
+      {/* ── Header: Symbol + Direction | Date + PnL ── */}
+      <div className="flex items-center justify-between px-3 py-2 cursor-pointer">
+        <div className="flex items-center gap-1.5 min-w-0">
+          <ExchangeIcon exchange={exchange} size={14} />
+          <span className="text-white font-semibold text-[13px] truncate">{trade.symbol}</span>
+          <span className={`text-[10px] font-medium px-1 py-px rounded ${
+            isLong ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400'
+          }`}>
             {isLong ? 'LONG' : 'SHORT'}
           </span>
-        </div>
-        <div className="flex items-center gap-2 shrink-0">
-          {trade.status === 'closed' && trade.pnl != null ? (
-            <span className={`text-sm font-semibold tabular-nums ${isPnlPositive ? 'text-emerald-400' : 'text-red-400'}`}>
-              {formatPnl(trade.pnl)}
-            </span>
-          ) : (
-            <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${
-              trade.status === 'open' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-gray-500/10 text-gray-400'
-            }`}>
-              {t(`trades.${trade.status}`)}
-            </span>
+          {trade.demo_mode && (
+            <span className="text-[8px] font-medium px-1 py-px rounded bg-amber-500/10 text-amber-400">DEMO</span>
           )}
-          <ChevronDown size={14} className={`text-gray-500 transition-transform ${open ? 'rotate-180' : ''}`} />
+        </div>
+        <div className="flex items-center gap-1.5 shrink-0">
+          <span className="text-[10px] text-gray-500 tabular-nums">{formatDate(trade.entry_time)}</span>
+          <ChevronDown size={12} className={`text-gray-500 transition-transform ${open ? 'rotate-180' : ''}`} />
         </div>
       </div>
 
-      {/* ── Summary Row: Date + Size ── */}
-      <div className="flex items-center justify-between px-3 pb-2 text-[11px] text-gray-500">
-        <span>{formatDate(trade.entry_time)}</span>
-        {trade.size != null && <span>{trade.size} {trade.symbol.replace('USDT', '')}</span>}
-        {trade.demo_mode && (
-          <span className="text-[9px] font-medium px-1 py-px rounded bg-amber-500/10 text-amber-400">DEMO</span>
+      {/* ── Sub Row: Size + PnL ── */}
+      <div className="flex items-center justify-between px-3 pb-2 text-[11px]">
+        <span className="text-gray-500">
+          {trade.size != null && `${trade.size} ${trade.symbol.replace('USDT', '')}`}
+        </span>
+        {trade.status === 'closed' && trade.pnl != null ? (
+          <span className={`font-semibold tabular-nums ${isPnlPositive ? 'text-emerald-400' : 'text-red-400'}`}>
+            {formatPnl(trade.pnl)}
+          </span>
+        ) : (
+          <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${
+            trade.status === 'open' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-gray-500/10 text-gray-400'
+          }`}>
+            {t(`trades.${trade.status}`)}
+          </span>
         )}
       </div>
 

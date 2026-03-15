@@ -34,34 +34,33 @@ export default function MobilePositionCard({ pos }: { pos: Position }) {
       className="border border-white/[0.06] rounded-lg bg-white/[0.02] overflow-hidden"
       onClick={() => setOpen(!open)}
     >
-      {/* Header: Exchange + Symbol + Side + PnL */}
-      <div className="flex items-center justify-between px-3 py-2.5 cursor-pointer">
-        <div className="flex items-center gap-2 min-w-0">
-          <ExchangeIcon exchange={pos.exchange} size={16} />
-          <span className="text-white font-semibold text-sm truncate">{pos.symbol}</span>
-          <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${
+      {/* Header: Symbol + Side | PnL + Chevron */}
+      <div className="flex items-center justify-between px-3 py-2 cursor-pointer">
+        <div className="flex items-center gap-1.5 min-w-0">
+          <ExchangeIcon exchange={pos.exchange} size={14} />
+          <span className="text-white font-semibold text-[13px] truncate">{pos.symbol}</span>
+          <span className={`text-[10px] font-medium px-1 py-px rounded ${
             isLong ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400'
           }`}>
             {pos.side.toUpperCase()}
           </span>
+          {pos.trailing_stop_active && (
+            <ShieldCheck size={10} className="text-emerald-400" />
+          )}
         </div>
-        <div className="flex items-center gap-2 shrink-0">
-          <span className={`text-sm font-semibold tabular-nums ${isPnlPositive ? 'text-emerald-400' : 'text-red-400'}`}>
-            {isPnlPositive ? '▲ +' : '▼ '}${Math.abs(pos.unrealized_pnl).toFixed(2)}
+        <div className="flex items-center gap-1.5 shrink-0">
+          <span className={`text-[13px] font-semibold tabular-nums ${isPnlPositive ? 'text-emerald-400' : 'text-red-400'}`}>
+            {isPnlPositive ? '+' : ''}${pos.unrealized_pnl.toFixed(2)}
           </span>
-          <ChevronDown size={14} className={`text-gray-500 transition-transform ${open ? 'rotate-180' : ''}`} />
+          <ChevronDown size={12} className={`text-gray-500 transition-transform ${open ? 'rotate-180' : ''}`} />
         </div>
       </div>
 
-      {/* Summary: Size + Leverage */}
+      {/* Sub Row: Size + Leverage + Price */}
       <div className="flex items-center justify-between px-3 pb-2 text-[11px] text-gray-500">
         <span>{pos.size.toFixed(4)} {pos.symbol.replace('USDT', '')}</span>
         <span>{pos.leverage}x</span>
-        {pos.trailing_stop_active && (
-          <span className="flex items-center gap-0.5 text-emerald-400">
-            <ShieldCheck size={10} /> TS
-          </span>
-        )}
+        <span className="tabular-nums">${pos.current_price.toLocaleString()}</span>
       </div>
 
       {/* Expandable Details */}
