@@ -829,6 +829,31 @@ class BingXClient(ExchangeClient):
             return [data] if data else []
         return []
 
+    # ── Affiliate ──────────────────────────────────────────────────
+
+    async def check_affiliate_uid(self, uid: str) -> bool:
+        """Check if a UID was referred by us via BingX Agent API.
+
+        Uses GET /openApi/agent/v1/account/inviteRelationCheck with uid param
+        to verify the invitation relationship exists.
+        """
+        try:
+            result = await self._request(
+                "GET",
+                "/openApi/agent/v1/account/inviteRelationCheck",
+                params={"uid": str(uid)},
+            )
+            # Endpoint returns relationship data if the UID is an invitee.
+            # Empty/null result or error means no relationship.
+            if isinstance(result, dict) and result:
+                return True
+            if isinstance(result, list) and len(result) > 0:
+                return True
+            return False
+        except Exception as e:
+            logger.warning(f"Affiliate UID check failed for {uid}: {e}")
+            return False
+
     def _normalize_position(self, pos: Dict[str, Any]) -> Optional[Position]:
         """Convert a BingX position dict to a normalized Position object."""
         try:

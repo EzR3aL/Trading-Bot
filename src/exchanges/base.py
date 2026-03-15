@@ -135,6 +135,10 @@ class ExchangeClient(ABC):
         """Get total funding fees for a symbol between two timestamps. Override in exchange-specific client."""
         return 0.0
 
+    async def check_affiliate_uid(self, uid: str) -> bool:
+        """Check if a UID is in our affiliate/referral list. Override in exchange-specific client."""
+        return False
+
     @property
     @abstractmethod
     def exchange_name(self) -> str:

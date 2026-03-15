@@ -35,6 +35,9 @@ ENDPOINTS = {
     # v3 TP/SL and trigger order endpoints
     "place_tpsl_order": "/capi/v3/placeTpSlOrder",
     "place_trigger_order": "/capi/v3/placePendingOrder",
+    # v3 Fee/Income endpoints
+    "user_trades": "/capi/v3/userTrades",
+    "account_income": "/capi/v3/account/income",
 }
 
 # Order direction types (Weex-specific)

@@ -1191,6 +1191,9 @@ async def list_affiliate_uids(
     )
     rows = result.all()
 
+    # Exchanges without affiliate API require manual admin verification
+    MANUAL_VERIFY_EXCHANGES = {"bitunix"}
+
     return {
         "items": [
             {
@@ -1214,6 +1217,11 @@ async def list_affiliate_uids(
                     conn.updated_at.isoformat()
                     if conn.updated_at
                     else None
+                ),
+                "verify_method": (
+                    "manual"
+                    if conn.exchange_type in MANUAL_VERIFY_EXCHANGES
+                    else "auto"
                 ),
             }
             for conn, username in rows

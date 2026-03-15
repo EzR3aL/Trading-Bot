@@ -420,7 +420,7 @@ function SectionExchanges() {
     { title: t('guide.weexSetupTitle'), icon: <ExchangeIcon exchange="weex" size={24} />, steps: [t('guide.weexSetup1'), t('guide.weexSetup2'), t('guide.weexSetup3'), t('guide.weexSetup4')] },
     { title: t('guide.hyperliquidSetupTitle'), icon: <ExchangeIcon exchange="hyperliquid" size={24} />, steps: [t('guide.hyperliquidSetup1'), t('guide.hyperliquidSetup2'), t('guide.hyperliquidSetup3'), t('guide.hyperliquidSetup4'), t('guide.hyperliquidSetup5'), t('guide.hyperliquidSetup6')] },
     { title: t('guide.bitunixSetupTitle'), icon: <ExchangeIcon exchange="bitunix" size={24} />, steps: [t('guide.bitunixSetup1'), t('guide.bitunixSetup2'), t('guide.bitunixSetup3'), t('guide.bitunixSetup4')] },
-    { title: t('guide.bingxSetupTitle'), icon: <ExchangeIcon exchange="bingx" size={24} />, steps: [t('guide.bingxSetup1'), t('guide.bingxSetup2'), t('guide.bingxSetup3')] },
+    { title: t('guide.bingxSetupTitle'), icon: <ExchangeIcon exchange="bingx" size={24} />, steps: [t('guide.bingxSetup1'), t('guide.bingxSetup2'), t('guide.bingxSetup3'), t('guide.bingxSetup4')] },
   ]
 
   return (
@@ -457,6 +457,60 @@ function SectionExchanges() {
               ))}
             </tbody>
           </table>
+        </div>
+      </div>
+
+      {/* Feature Matrix */}
+      <div className="border border-white/10 bg-white/[0.03] rounded-xl p-5">
+        <div className="flex items-center gap-2 mb-1">
+          <Activity size={20} className="text-emerald-400" />
+          <h3 className="text-lg font-semibold text-white">{t('guide.featureMatrixTitle')}</h3>
+        </div>
+        <p className="text-gray-400 text-sm mb-3">{t('guide.featureMatrixSubtitle')}</p>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-gray-700">
+                <th className="text-left py-2 px-2 text-gray-400 font-medium">{t('guide.featureMatrixFeature')}</th>
+                {['bitget', 'weex', 'bingx', 'bitunix', 'hyperliquid'].map(ex => (
+                  <th key={ex} className="text-center py-2 px-1.5">
+                    <ExchangeIcon exchange={ex} size={18} />
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {[
+                { key: 'trading', values: [true, true, true, true, true] },
+                { key: 'tpsl', values: [true, true, true, true, true] },
+                { key: 'trailingNative', values: [true, false, true, false, false] },
+                { key: 'trailingSoftware', values: [true, true, true, true, true] },
+                { key: 'feeTracking', values: [true, true, true, true, true] },
+                { key: 'fundingFees', values: [true, true, true, true, true] },
+                { key: 'websocket', values: [true, true, true, true, true] },
+                { key: 'demo', values: [true, true, true, true, true] },
+              ].map((row, i) => (
+                <tr key={row.key} className={i % 2 === 0 ? 'bg-gray-800/30' : ''}>
+                  <td className="py-2 px-2 text-gray-300 font-medium text-xs">{t(`guide.fm_${row.key}`)}</td>
+                  {row.values.map((v, j) => (
+                    <td key={j} className="py-2 px-1.5 text-center">
+                      {v
+                        ? <span className="text-emerald-400 text-sm">&#10003;</span>
+                        : <span className="text-gray-600 text-sm">&#10005;</span>}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div className="mt-3 space-y-1.5">
+          <p className="text-[11px] text-gray-500 flex items-center gap-1.5">
+            <span className="text-emerald-400">&#10003;</span> {t('guide.fm_noteTrailingNative')}
+          </p>
+          <p className="text-[11px] text-gray-500 flex items-center gap-1.5">
+            <span className="text-emerald-400">&#10003;</span> {t('guide.fm_noteTrailingSoftware')}
+          </p>
         </div>
       </div>
 

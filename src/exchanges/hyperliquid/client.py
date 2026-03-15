@@ -558,6 +558,21 @@ class HyperliquidClient(ExchangeClient):
             logger.warning(f"Failed to get referral info: {e}")
             return None
 
+    async def check_affiliate_uid(self, uid: str) -> bool:
+        """Check if a wallet address has been referred via our referral code.
+
+        For Hyperliquid, the 'uid' is the user's wallet address (0x...).
+        Checks if `referred_by` is set in the referral state.
+        """
+        try:
+            info = await self.get_referral_info(user_address=uid)
+            if info and info.get("referred_by"):
+                return True
+            return False
+        except Exception as e:
+            logger.warning(f"Affiliate UID check failed for {uid}: {e}")
+            return False
+
     async def get_user_fees(self, user_address: str = None) -> Optional[dict]:
         """Get user fee/volume tier info (includes trading volume data)."""
         addr = (user_address or self.wallet_address).lower()
@@ -569,6 +584,20 @@ class HyperliquidClient(ExchangeClient):
             return None
 
     # ── Fee Tracking Methods ─────────────────────────────────────────────
+
+    async def get_order_fees(self, symbol: str, order_id: str) -> float:
+        """Get fees for a single order from fills history."""
+        coin = self._normalize_symbol(symbol)
+        address = (self.wallet_address or self._wallet.address).lower()
+        total = 0.0
+        try:
+            fills = self._info.user_fills(address)
+            for fill in fills:
+                if str(fill.get("oid", "")) == str(order_id) and fill.get("coin") == coin:
+                    total += abs(float(fill.get("fee", 0)))
+        except Exception as e:
+            logger.warning(f"Failed to get order fees for {order_id}: {e}")
+        return round(total, 6)
 
     async def get_trade_total_fees(
         self, symbol: str, entry_order_id: str, close_order_id: Optional[str] = None
@@ -588,6 +617,33 @@ class HyperliquidClient(ExchangeClient):
         except Exception as e:
             logger.warning(f"Failed to get trade total fees for {symbol}: {e}")
         return round(total_fees, 6)
+
+    async def get_fill_price(
+        self, symbol: str, order_id: str, **kwargs
+    ) -> Optional[float]:
+        """Get actual fill price for an order from fills history.
+
+        Uses userFills endpoint — each fill has px (price) and sz (size).
+        Calculates weighted average across partial fills.
+        """
+        coin = self._normalize_symbol(symbol)
+        address = (self.wallet_address or self._wallet.address).lower()
+        try:
+            fills = self._info.user_fills(address)
+            total_value = 0.0
+            total_size = 0.0
+            for fill in fills:
+                if str(fill.get("oid", "")) == str(order_id) and fill.get("coin") == coin:
+                    px = float(fill.get("px", 0))
+                    sz = float(fill.get("sz", 0))
+                    if px > 0 and sz > 0:
+                        total_value += px * sz
+                        total_size += sz
+            if total_size > 0:
+                return round(total_value / total_size, 8)
+        except Exception as e:
+            logger.warning(f"Failed to get fill price for {order_id}: {e}")
+        return None
 
     async def set_position_tpsl(
         self,

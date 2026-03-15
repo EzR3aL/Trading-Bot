@@ -409,6 +409,91 @@ class WeexClient(ExchangeClient):
             logger.warning(f"Failed to get close fill price for {symbol}: {e}")
         return None
 
+    # ── Fee Tracking ────────────────────────────────────────────────
+
+    async def get_order_fees(self, symbol: str, order_id: str) -> float:
+        """Get fees for a single order via v3 userTrades (fills) endpoint.
+
+        Weex /capi/v3/userTrades returns fills with `commission` field.
+        """
+        try:
+            params = {"orderId": order_id, "limit": "50"}
+            data = await self._request("GET", ENDPOINTS["user_trades"], params=params)
+            fills = data if isinstance(data, list) else data.get("fills", []) if isinstance(data, dict) else []
+            total = 0.0
+            for fill in fills:
+                commission = fill.get("commission", "0")
+                if commission:
+                    total += abs(float(commission))
+            return round(total, 6)
+        except Exception as e:
+            logger.warning(f"Failed to get order fees for {order_id}: {e}")
+            return 0.0
+
+    async def get_trade_total_fees(
+        self, symbol: str, entry_order_id: str, close_order_id: Optional[str] = None
+    ) -> float:
+        """Get total fees (entry + exit) for a complete trade."""
+        total_fees = 0.0
+        if entry_order_id:
+            total_fees += await self.get_order_fees(symbol, entry_order_id)
+        if close_order_id:
+            total_fees += await self.get_order_fees(symbol, close_order_id)
+        return round(total_fees, 6)
+
+    async def get_fill_price(
+        self, symbol: str, order_id: str, max_retries: int = 3, retry_delay: float = 0.5
+    ) -> Optional[float]:
+        """Get actual fill price for a completed order via userTrades."""
+        for attempt in range(max_retries):
+            try:
+                params = {"orderId": order_id, "limit": "10"}
+                data = await self._request("GET", ENDPOINTS["user_trades"], params=params)
+                fills = data if isinstance(data, list) else data.get("fills", []) if isinstance(data, dict) else []
+                if fills:
+                    # Weighted average price across all fills
+                    total_qty = 0.0
+                    total_value = 0.0
+                    for fill in fills:
+                        qty = float(fill.get("qty", fill.get("quantity", 0)))
+                        price = float(fill.get("price", 0))
+                        if qty > 0 and price > 0:
+                            total_qty += qty
+                            total_value += qty * price
+                    if total_qty > 0:
+                        return round(total_value / total_qty, 8)
+            except Exception as e:
+                logger.warning(f"Error getting fill price (attempt {attempt + 1}): {e}")
+            await asyncio.sleep(retry_delay * (2 ** attempt))
+        return None
+
+    async def get_funding_fees(
+        self, symbol: str, start_time_ms: int, end_time_ms: int
+    ) -> float:
+        """Get total funding fees via v3 account income endpoint.
+
+        Uses POST /capi/v3/account/income with incomeType=position_funding.
+        """
+        try:
+            api_symbol = self._to_api_symbol(symbol)
+            data = await self._request("POST", ENDPOINTS["account_income"], data={
+                "symbol": api_symbol,
+                "incomeType": "position_funding",
+                "startTime": str(start_time_ms),
+                "endTime": str(end_time_ms),
+                "limit": "100",
+            })
+            items = data if isinstance(data, list) else data.get("bills", data.get("list", [])) if isinstance(data, dict) else []
+            total_funding = 0.0
+            for item in items:
+                amount = item.get("income", item.get("amount", "0"))
+                if amount:
+                    total_funding += abs(float(amount))
+            return round(total_funding, 6)
+        except Exception as e:
+            logger.warning(f"Failed to get funding fees for {symbol}: {e}")
+            return 0.0
+
     # ── TP/SL Management (v3 endpoints) ─────────────────────────────
 
     async def set_position_tpsl(
@@ -481,15 +566,24 @@ class WeexClient(ExchangeClient):
     # ── Affiliate ──────────────────────────────────────────────────
 
     async def check_affiliate_uid(self, uid: str) -> bool:
-        """Check if a UID is in our affiliate referral list."""
+        """Check if a UID is in our affiliate referral list via Weex v3 Rebate API.
+
+        Uses GET /api/v3/rebate/affiliate/getAffiliateUIDs with uid filter
+        to check if the given UID was referred by the admin account.
+        """
         try:
             result = await self._request(
                 "GET",
-                "/api/v2/rebate/affiliate/getChannelUserTradeAndAsset",
+                "/api/v3/rebate/affiliate/getAffiliateUIDs",
                 params={"uid": str(uid), "pageSize": "10"},
             )
-            records = result if isinstance(result, list) else result.get("records", [])
-            for item in records:
+            items = (
+                result.get("channelUserInfoItemList", [])
+                if isinstance(result, dict)
+                else result if isinstance(result, list)
+                else []
+            )
+            for item in items:
                 if str(item.get("uid", "")) == str(uid):
                     return True
             return False

@@ -8,6 +8,10 @@ BASE_URL = "https://fapi.bitunix.com"
 # Demo mode is handled via a separate demo API key provided by the exchange.
 TESTNET_URL = BASE_URL
 
+# --- WebSocket URLs ---
+WS_PUBLIC_URL = "wss://fapi.bitunix.com/public/"
+WS_PRIVATE_URL = "wss://fapi.bitunix.com/private/"
+
 # --- API Endpoints (Futures v1) ---
 ENDPOINTS = {
     # Account

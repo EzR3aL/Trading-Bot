@@ -1201,6 +1201,11 @@ export default function Settings() {
                   <span className="text-xs px-2 py-0.5 rounded-full bg-white/5 text-gray-500 border border-white/[0.08] tabular-nums">
                     {adminUidStats.total}
                   </span>
+                  {adminUidStats.pending > 0 && (
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-yellow-500/10 text-yellow-400 border border-yellow-500/20 tabular-nums animate-pulse">
+                      {adminUidStats.pending} offen
+                    </span>
+                  )}
                 </div>
                 <div className="border border-white/[0.08] bg-white/[0.02] rounded-xl overflow-hidden">
                   {/* Search + Filter header */}
@@ -1242,7 +1247,6 @@ export default function Settings() {
                         <thead>
                           <tr className="border-b border-white/[0.06] text-gray-400 text-[10px] uppercase tracking-wider">
                             <th className="text-left py-2.5 px-3 font-medium">{t('admin.users', 'User')}</th>
-                            <th className="text-left py-2.5 px-3 font-medium">{t('trades.exchange', 'Exchange')}</th>
                             <th className="text-left py-2.5 px-3 font-medium">UID</th>
                             <th className="text-left py-2.5 px-3 font-medium">{t('affiliate.submittedAt')}</th>
                             <th className="text-left py-2.5 px-3 font-medium">{t('affiliate.status', 'Status')}</th>
@@ -1250,13 +1254,25 @@ export default function Settings() {
                           </tr>
                         </thead>
                         <tbody>
-                          {adminUids.map((item) => (
-                            <tr key={item.connection_id} className="border-b border-white/[0.04] hover:bg-white/[0.03] transition-colors">
-                              <td className="py-2 px-3 text-white text-xs font-medium">{item.username}</td>
+                          {adminUids.map((item) => {
+                            const isPending = !item.affiliate_verified
+                            const isManual = item.verify_method === 'manual'
+                            const needsAttention = isPending && isManual
+                            return (
+                            <tr key={item.connection_id} className={`border-b transition-colors ${
+                              needsAttention
+                                ? 'border-yellow-500/10 bg-yellow-500/[0.03] hover:bg-yellow-500/[0.06]'
+                                : isPending
+                                  ? 'border-white/[0.04] bg-white/[0.01] hover:bg-white/[0.03]'
+                                  : 'border-white/[0.04] hover:bg-white/[0.03]'
+                            }`}>
                               <td className="py-2 px-3">
-                                <div className="flex items-center gap-1.5">
-                                  <ExchangeIcon exchange={item.exchange_type} size={14} />
-                                  <span className="text-gray-400 capitalize text-xs">{item.exchange_type}</span>
+                                <div className="flex items-center gap-2">
+                                  <ExchangeIcon exchange={item.exchange_type} size={20} />
+                                  <div className="min-w-0">
+                                    <div className="text-white text-xs font-medium truncate">{item.username}</div>
+                                    <div className="text-gray-500 text-[10px] capitalize">{item.exchange_type}</div>
+                                  </div>
                                 </div>
                               </td>
                               <td className="py-2 px-3 text-gray-300 font-mono text-[10px]">{item.affiliate_uid}</td>
@@ -1266,17 +1282,31 @@ export default function Settings() {
                                   : '—'}
                               </td>
                               <td className="py-2 px-3">
-                                <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${
-                                  item.affiliate_verified
-                                    ? 'bg-emerald-500/10 text-emerald-400'
-                                    : 'bg-yellow-500/10 text-yellow-400'
-                                }`}>
-                                  {item.affiliate_verified ? t('affiliate.uidVerified') : t('affiliate.uidPending')}
-                                </span>
+                                <div className="flex flex-col gap-0.5">
+                                  <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded inline-block w-fit ${
+                                    item.affiliate_verified
+                                      ? 'bg-emerald-500/10 text-emerald-400'
+                                      : needsAttention
+                                        ? 'bg-orange-500/10 text-orange-400'
+                                        : 'bg-yellow-500/10 text-yellow-400'
+                                  }`}>
+                                    {item.affiliate_verified
+                                      ? t('affiliate.uidVerified')
+                                      : needsAttention
+                                        ? t('affiliate.pendingManual')
+                                        : t('affiliate.uidPending')}
+                                  </span>
+                                  {isPending && isManual && (
+                                    <span className="text-[9px] text-orange-400/60">{t('affiliate.manualHint')}</span>
+                                  )}
+                                  {isPending && !isManual && (
+                                    <span className="text-[9px] text-yellow-400/60">{t('affiliate.autoFailed')}</span>
+                                  )}
+                                </div>
                               </td>
                               <td className="py-2 px-3 text-right">
                                 <div className="flex gap-1 justify-end">
-                                  {!item.affiliate_verified && (
+                                  {isPending && (
                                     <button onClick={() => verifyAdminUid(item.connection_id, true)}
                                       title={t('affiliate.verifyUid')}
                                       className="px-2 py-0.5 text-[10px] bg-emerald-500/10 text-emerald-400 rounded hover:bg-emerald-500/20 transition-colors">
@@ -1295,7 +1325,8 @@ export default function Settings() {
                                 </div>
                               </td>
                             </tr>
-                          ))}
+                            )
+                          })}
                         </tbody>
                       </table>
                     </div>

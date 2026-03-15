@@ -6,9 +6,11 @@ BASE_URL = "https://open-api.bingx.com"
 # VST (Virtual Simulated Trading) demo mode domain
 TESTNET_URL = "https://open-api-vst.bingx.com"
 
-# WebSocket URLs
-WS_PUBLIC_URL = "wss://open-api-ws.bingx.com/market"
-WS_PRIVATE_URL = "wss://open-api-ws.bingx.com/market"
+# WebSocket URLs (Perpetual Swap)
+WS_PUBLIC_URL = "wss://open-api-swap.bingx.com/swap-market"
+WS_PRIVATE_URL = "wss://open-api-swap.bingx.com/swap-market"
+WS_PUBLIC_URL_VST = "wss://vst-open-api-ws.bingx.com/swap-market"
+WS_PRIVATE_URL_VST = "wss://vst-open-api-ws.bingx.com/swap-market"
 
 # API Endpoints (Perpetual Swap V2/V3)
 # All paths are relative to BASE_URL
@@ -58,6 +60,9 @@ ENDPOINTS = {
 
     # === Server ===
     "server_time": "/openApi/swap/v2/server/time",
+
+    # === ListenKey (WebSocket auth) ===
+    "listen_key": "/openApi/user/auth/userDataStream",
 }
 
 # BingX API success code

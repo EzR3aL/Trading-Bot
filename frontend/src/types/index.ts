@@ -275,6 +275,7 @@ export interface AdminUidEntry {
   affiliate_uid: string
   affiliate_verified: boolean
   submitted_at: string | null
+  verify_method: 'auto' | 'manual'
 }
 
 // Hyperliquid revenue info

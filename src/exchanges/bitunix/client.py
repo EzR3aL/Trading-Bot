@@ -809,6 +809,21 @@ class BitunixClient(ExchangeClient):
             return None
 
 
+    # ── Affiliate ──────────────────────────────────────────────────
+
+    async def check_affiliate_uid(self, uid: str) -> bool:
+        """Bitunix has no public affiliate/referral API.
+
+        UID verification must be done manually by an admin.
+        Always returns False — admin can approve via the admin panel.
+        """
+        logger.info(
+            "Bitunix has no affiliate API. UID %s requires manual admin verification.",
+            uid,
+        )
+        return False
+
+
 # ==================== Module-level helpers ====================
 
 

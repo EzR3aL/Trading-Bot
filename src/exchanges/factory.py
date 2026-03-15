@@ -153,10 +153,22 @@ def create_exchange_websocket(
             demo_mode=demo_mode,
             **kwargs,
         )
-    elif exchange in (ExchangeType.BITUNIX, ExchangeType.BINGX):
-        raise ValueError(
-            f"WebSocket not yet implemented for '{exchange_type}'. "
-            f"REST API is available."
+    elif exchange == ExchangeType.BITUNIX:
+        from src.exchanges.bitunix.websocket import BitunixWebSocket
+        return BitunixWebSocket(
+            api_key=api_key,
+            api_secret=api_secret,
+            passphrase=passphrase,
+            demo_mode=demo_mode,
+            **kwargs,
+        )
+    elif exchange == ExchangeType.BINGX:
+        from src.exchanges.bingx.websocket import BingXWebSocket
+        return BingXWebSocket(
+            api_key=api_key,
+            api_secret=api_secret,
+            demo_mode=demo_mode,
+            **kwargs,
         )
 
 
