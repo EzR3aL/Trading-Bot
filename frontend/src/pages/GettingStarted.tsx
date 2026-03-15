@@ -486,7 +486,7 @@ function SectionExchanges() {
                 { key: 'feeTracking', values: [true, true, true, true, true] },
                 { key: 'fundingFees', values: [true, true, true, true, true] },
                 { key: 'websocket', values: [true, true, true, true, true] },
-                { key: 'demo', values: [true, true, true, true, true] },
+                { key: 'demo', values: [true, false, true, false, true] },
               ].map((row, i) => (
                 <tr key={row.key} className={i % 2 === 0 ? 'bg-gray-800/30' : ''}>
                   <td className="py-2 pr-2 text-gray-300 font-medium text-xs whitespace-nowrap">{t(`guide.fm_${row.key}`)}</td>
