@@ -859,6 +859,32 @@ html.light .bg-\[\#0d1117\] {
   background-color: #f8fafc !important;
 }
 
+html.light .bg-\[\#0d1117\]\/95 {
+  background-color: rgba(248, 250, 252, 0.97) !important;
+}
+
+/* Tooltips */
+html.light .bg-\[\#141a2a\]\/95 {
+  background-color: rgba(255, 255, 255, 0.97) !important;
+  border-color: rgba(0, 0, 0, 0.1) !important;
+  color: #1e293b !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+html.light .bg-\[\#141a2a\] {
+  background-color: #ffffff !important;
+}
+
+/* Dropdowns */
+html.light .bg-\[\#1a1f2e\] {
+  background-color: #ffffff !important;
+}
+
+/* Error Boundary */
+html.light .bg-\[\#1a1a2e\] {
+  background-color: #ffffff !important;
+}
+
 /* ── Hover Text ─────────────────────────────────────────────── */
 
 html.light .hover\:text-white:hover {
