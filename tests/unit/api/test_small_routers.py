@@ -610,7 +610,7 @@ async def test_get_exchange_info_not_found(client):
     """Unknown exchange returns 404."""
     resp = await client.get("/api/exchanges/nonexistent/info")
     assert resp.status_code == 404
-    assert "not found" in resp.json()["detail"]
+    assert "nicht gefunden" in resp.json()["detail"] or "not found" in resp.json()["detail"]
 
 
 async def test_get_exchange_info_no_auth_required(client):

@@ -366,7 +366,7 @@ async def test_start_backtest_concurrent_limit(client, auth_headers, pending_run
         },
     )
     assert resp.status_code == 429
-    assert "concurrent" in resp.json()["detail"].lower()
+    assert "backtest" in resp.json()["detail"].lower() or "gleichzeitig" in resp.json()["detail"].lower()
 
 
 async def test_start_backtest_requires_auth(client):

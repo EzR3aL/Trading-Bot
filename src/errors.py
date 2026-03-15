@@ -47,10 +47,10 @@ ERR_STOP_BOT_BEFORE_PRESET = "Stoppe den Bot bevor du ein Preset anwendest"
 ERR_STOP_BOT_BEFORE_RESET = "Stoppe den Bot bevor du das Preset entfernst"
 ERR_MAX_BOTS_REACHED = "Maximal {max_bots} Bots pro Benutzer erlaubt"
 ERR_ORCHESTRATOR_NOT_INITIALIZED = "Bot-Orchestrator nicht initialisiert"
-ERR_WHATSAPP_NOT_CONFIGURED = "WhatsApp not configured"
-ERR_WHATSAPP_SEND_FAILED = "Failed to send WhatsApp message"
-ERR_PENDING_TRADE_NOT_FOUND = "Pending trade not found"
-ERR_TRADE_ALREADY_RESOLVED = "Trade is already resolved"
+ERR_WHATSAPP_NOT_CONFIGURED = "WhatsApp nicht konfiguriert"
+ERR_WHATSAPP_SEND_FAILED = "WhatsApp-Nachricht konnte nicht gesendet werden"
+ERR_PENDING_TRADE_NOT_FOUND = "Ausstehender Trade nicht gefunden"
+ERR_TRADE_ALREADY_RESOLVED = "Trade ist bereits abgeschlossen"
 
 # ── Bots / Affiliate Gate ────────────────────────────────────────────
 ERR_AFFILIATE_REQUIRED = "Registriere dich zuerst über unseren Affiliate-Link, trage dann deine UID unter Einstellungen → API Keys ein."
@@ -84,11 +84,11 @@ ERR_REVENUE_SUMMARY_FAILED = "Umsatzübersicht konnte nicht geladen werden. Sieh
 # ── Config / Affiliate UID ───────────────────────────────────────────
 ERR_AFFILIATE_UID_NOT_FOUND = "Affiliate-UID nicht gefunden"
 ERR_AFFILIATE_LINK_NOT_FOUND = "Affiliate-Link nicht gefunden"
-ERR_UID_EMPTY = "UID must not be empty"
+ERR_UID_EMPTY = "UID darf nicht leer sein"
 ERR_BITGET_UID_NUMERIC = "Bitget UID muss rein numerisch sein"
 ERR_WEEX_UID_ALPHANUMERIC = "Weex UID muss alphanumerisch sein"
-ERR_BITUNIX_UID_NUMERIC = "Bitunix UID must be numeric only"
-ERR_BINGX_UID_NUMERIC = "BingX UID must be numeric only"
+ERR_BITUNIX_UID_NUMERIC = "Bitunix UID muss rein numerisch sein"
+ERR_BINGX_UID_NUMERIC = "BingX UID muss rein numerisch sein"
 
 # ── Presets ──────────────────────────────────────────────────────────
 ERR_PRESET_NOT_FOUND = "Preset nicht gefunden"
@@ -104,6 +104,19 @@ ERR_BACKTEST_NOT_FOUND = "Backtest-Lauf nicht gefunden"
 
 # ── Exchanges ────────────────────────────────────────────────────────
 ERR_INVALID_EXCHANGE = "Ungültiger Exchange-Name"
+ERR_EXCHANGE_NOT_FOUND = "Exchange '{name}' nicht gefunden"
+ERR_NO_CONNECTION_FOR = "Keine Verbindung für {name} konfiguriert"
+ERR_NO_API_KEY_FOR = "Kein API-Key für {name} konfiguriert"
+
+# ── Validation ──────────────────────────────────────────────────────
+ERR_INVALID_ETH_ADDRESS = "{label} muss eine gültige Ethereum-Adresse sein (0x + 40 Hex-Zeichen)"
+ERR_INVALID_HEX_KEY = "{label} muss 64 Hex-Zeichen sein (mit oder ohne 0x-Prefix)"
+
+# ── Backtest Limits ─────────────────────────────────────────────────
+ERR_MAX_CONCURRENT_BACKTESTS = "Maximal {max} gleichzeitige Backtests erlaubt"
+
+# ── Strategy ────────────────────────────────────────────────────────
+ERR_STRATEGY_NOT_FOUND = "Strategie nicht gefunden: {name}"
 
 # ── Users ────────────────────────────────────────────────────────────
 ERR_USERNAME_EXISTS = "Benutzername existiert bereits"

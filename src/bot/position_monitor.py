@@ -1,5 +1,6 @@
 """Position monitoring logic for BotWorker (mixin)."""
 
+import asyncio
 import json
 from datetime import datetime, timezone
 
@@ -13,6 +14,7 @@ logger = get_logger(__name__)
 
 # Track failed native trailing stop attempts: {trade_id: last_attempt_time}
 _trailing_stop_backoff: dict[int, datetime] = {}
+_trailing_stop_lock = asyncio.Lock()
 _TRAILING_STOP_RETRY_MINUTES = 10
 
 
@@ -83,11 +85,12 @@ class PositionMonitorMixin:
 
             # Auto-place native trailing stop for existing positions (with backoff)
             if not trade.native_trailing_stop and self._strategy and hasattr(self._strategy, '_p'):
-                last_attempt = _trailing_stop_backoff.get(trade.id)
-                should_retry = (
-                    last_attempt is None
-                    or (datetime.now(timezone.utc) - last_attempt).total_seconds() > _TRAILING_STOP_RETRY_MINUTES * 60
-                )
+                async with _trailing_stop_lock:
+                    last_attempt = _trailing_stop_backoff.get(trade.id)
+                    should_retry = (
+                        last_attempt is None
+                        or (datetime.now(timezone.utc) - last_attempt).total_seconds() > _TRAILING_STOP_RETRY_MINUTES * 60
+                    )
                 if should_retry:
                     await self._try_place_native_trailing_stop(trade, client, position, current_price, session)
 
@@ -242,7 +245,8 @@ class PositionMonitorMixin:
             if result is not None:
                 trade.native_trailing_stop = True
                 await session.commit()
-                _trailing_stop_backoff.pop(trade.id, None)
+                async with _trailing_stop_lock:
+                    _trailing_stop_backoff.pop(trade.id, None)
                 logger.info(
                     "%s Native trailing stop placed for existing %s %s position: "
                     "callback=%.2f%% trigger=$%.2f",
@@ -254,7 +258,8 @@ class PositionMonitorMixin:
                     log_prefix, trade.symbol,
                 )
         except Exception as e:
-            _trailing_stop_backoff[trade.id] = datetime.now(timezone.utc)
+            async with _trailing_stop_lock:
+                _trailing_stop_backoff[trade.id] = datetime.now(timezone.utc)
             logger.warning(
                 "%s Failed to place native trailing stop for %s (software backup active, retry in %dm): %s",
                 log_prefix, trade.symbol, _TRAILING_STOP_RETRY_MINUTES, e,

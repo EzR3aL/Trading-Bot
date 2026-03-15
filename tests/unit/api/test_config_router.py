@@ -601,7 +601,7 @@ class TestExchangeConnections:
             headers=user_headers,
         )
         assert resp.status_code == 400
-        assert "Ethereum address" in resp.json()["detail"]
+        assert "Ethereum" in resp.json()["detail"]
 
     async def test_upsert_exchange_connection_hl_invalid_key(self, client, user_headers, regular_user):
         body = {
@@ -614,7 +614,7 @@ class TestExchangeConnections:
             headers=user_headers,
         )
         assert resp.status_code == 400
-        assert "hex characters" in resp.json()["detail"]
+        assert "Hex" in resp.json()["detail"]
 
     async def test_upsert_exchange_connection_invalid_exchange(self, client, user_headers, regular_user):
         body = {"api_key": "key", "api_secret": "secret"}

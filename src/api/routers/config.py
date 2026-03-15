@@ -45,6 +45,10 @@ from src.errors import (
     ERR_REFERRAL_CHECK_FAILED,
     ERR_REFERRAL_NOT_FOUND,
     ERR_REVENUE_SUMMARY_FAILED,
+    ERR_INVALID_ETH_ADDRESS,
+    ERR_INVALID_HEX_KEY,
+    ERR_NO_CONNECTION_FOR,
+    ERR_NO_API_KEY_FOR,
 )
 from src.models.database import ExchangeConnection, LLMConnection, TradeRecord, User, UserConfig
 from src.models.session import get_db
@@ -198,7 +202,7 @@ async def upsert_exchange_connection(
             if addr_field and not _HEX_ADDR.match(addr_field):
                 raise HTTPException(
                     status_code=400,
-                    detail=f"{label} must be a valid Ethereum address (0x + 40 hex characters).",
+                    detail=ERR_INVALID_ETH_ADDRESS.format(label=label),
                 )
         for key_field, label in [
             (data.api_secret, "Private key"),
@@ -207,7 +211,7 @@ async def upsert_exchange_connection(
             if key_field and not _HEX_KEY.match(key_field):
                 raise HTTPException(
                     status_code=400,
-                    detail=f"{label} must be 64 hex characters (with or without 0x prefix).",
+                    detail=ERR_INVALID_HEX_KEY.format(label=label),
                 )
 
     result = await db.execute(
@@ -269,7 +273,7 @@ async def delete_exchange_connection(
     )
     conn = result.scalar_one_or_none()
     if not conn:
-        raise HTTPException(status_code=404, detail=f"No connection for {exchange_type}")
+        raise HTTPException(status_code=404, detail=ERR_NO_CONNECTION_FOR.format(name=exchange_type))
 
     conn_id = conn.id
     await db.delete(conn)
@@ -672,7 +676,7 @@ async def delete_llm_connection(
     )
     conn = result.scalar_one_or_none()
     if not conn:
-        raise HTTPException(status_code=404, detail=f"No connection for {provider_type}")
+        raise HTTPException(status_code=404, detail=ERR_NO_CONNECTION_FOR.format(name=provider_type))
 
     conn_id = conn.id
     await db.delete(conn)

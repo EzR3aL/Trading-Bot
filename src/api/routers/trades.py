@@ -28,11 +28,16 @@ async def _compute_trailing_stop(
     trade: TradeRecord,
     strategy_type: Optional[str],
     strategy_params_json: Optional[str],
+    klines_cache: Optional[dict] = None,
 ) -> dict:
     """Compute live trailing stop fields for an open trade.
 
     Returns a dict with keys matching TradeResponse trailing stop fields.
     Only computes for edge_indicator strategy with trailing_stop_enabled.
+
+    Args:
+        klines_cache: Optional pre-fetched klines keyed by symbol.
+            When provided, avoids per-trade Binance API calls.
     """
     if trade.status != "open" or strategy_type != "edge_indicator":
         return {}
@@ -52,18 +57,21 @@ async def _compute_trailing_stop(
     if highest_price is None:
         return {"trailing_stop_active": False, "can_close_at_loss": True}
 
-    # Fetch klines for ATR calculation
+    # Fetch klines for ATR calculation (use cache if available)
     atr_period = params.get("atr_period", 14)
     interval = params.get("kline_interval", "1h")
-    try:
-        fetcher = MarketDataFetcher()
-        klines = await fetcher.get_binance_klines(
-            trade.symbol, interval, atr_period + 15,
-        )
-        await fetcher.close()
-    except Exception as exc:
-        logger.debug("Trailing stop kline fetch failed for %s: %s", trade.symbol, exc)
-        return {"trailing_stop_active": False}
+    if klines_cache is not None and trade.symbol in klines_cache:
+        klines = klines_cache[trade.symbol]
+    else:
+        try:
+            fetcher = MarketDataFetcher()
+            klines = await fetcher.get_binance_klines(
+                trade.symbol, interval, atr_period + 15,
+            )
+            await fetcher.close()
+        except Exception as exc:
+            logger.debug("Trailing stop kline fetch failed for %s: %s", trade.symbol, exc)
+            return {"trailing_stop_active": False}
 
     if not klines:
         return {"trailing_stop_active": False}
@@ -187,13 +195,28 @@ async def list_trades(
     result = await db.execute(query)
     rows = result.all()
 
+    # Pre-fetch klines for all unique symbols with open trades (avoids N+1 API calls)
+    klines_cache: dict = {}
+    open_symbols = {t.symbol for t, _, _, strat_type, _ in rows if t.status == "open" and strat_type == "edge_indicator"}
+    if open_symbols:
+        fetcher = MarketDataFetcher()
+        try:
+            for sym in open_symbols:
+                try:
+                    klines = await fetcher.get_binance_klines(sym, "1h", 14 + 15)
+                    klines_cache[sym] = klines
+                except Exception as exc:
+                    logger.debug("Batch kline fetch failed for %s: %s", sym, exc)
+        finally:
+            await fetcher.close()
+
     # Build responses and enrich open trades with trailing stop info
     trades_out: list[TradeResponse] = []
     for t, bot_name_val, bot_exchange_val, strat_type, strat_params in rows:
         ts_info: dict = {}
         if t.status == "open":
             try:
-                ts_info = await _compute_trailing_stop(t, strat_type, strat_params)
+                ts_info = await _compute_trailing_stop(t, strat_type, strat_params, klines_cache)
             except Exception as exc:
                 logger.debug("Trailing stop enrichment failed for trade %s: %s", t.id, exc)
 

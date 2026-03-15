@@ -26,8 +26,10 @@ from src.errors import (
     ERR_END_BEFORE_START,
     ERR_END_IN_FUTURE,
     ERR_INVALID_DATE_FORMAT,
+    ERR_MAX_CONCURRENT_BACKTESTS,
     ERR_MAX_DAYS_EXCEEDED,
     ERR_START_TOO_EARLY,
+    ERR_STRATEGY_NOT_FOUND,
 )
 from src.utils.logger import get_logger
 
@@ -84,8 +86,8 @@ async def start_backtest(
     # Validate strategy exists
     try:
         StrategyRegistry.get(body.strategy_type)
-    except KeyError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    except KeyError:
+        raise HTTPException(status_code=400, detail=ERR_STRATEGY_NOT_FOUND.format(name=body.strategy_type))
 
     # Check concurrent limit
     running_count = await db.execute(
@@ -97,7 +99,7 @@ async def start_backtest(
     if running_count.scalar() >= MAX_CONCURRENT_BACKTESTS:
         raise HTTPException(
             status_code=429,
-            detail=f"Max {MAX_CONCURRENT_BACKTESTS} concurrent backtests allowed",
+            detail=ERR_MAX_CONCURRENT_BACKTESTS.format(max=MAX_CONCURRENT_BACKTESTS),
         )
 
     # Parse dates

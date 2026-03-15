@@ -32,7 +32,7 @@ from src.api.schemas.bots import (
     SymbolConflictResponse,
 )
 from src.auth.dependencies import get_current_user
-from src.errors import ERR_BOT_NOT_FOUND, ERR_MAX_BOTS_REACHED, ERR_ORCHESTRATOR_NOT_INITIALIZED, ERR_STOP_BOT_BEFORE_EDIT
+from src.errors import ERR_BOT_NOT_FOUND, ERR_MAX_BOTS_REACHED, ERR_ORCHESTRATOR_NOT_INITIALIZED, ERR_STOP_BOT_BEFORE_EDIT, ERR_STRATEGY_NOT_FOUND
 from src.models.database import BotConfig, ConfigPreset, ExchangeConnection, TradeRecord, User
 from src.models.session import get_db
 from src.strategy import StrategyRegistry  # imports __init__.py → registers all strategies
@@ -449,8 +449,8 @@ async def create_bot(
     # Validate strategy exists
     try:
         StrategyRegistry.get(body.strategy_type)
-    except KeyError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    except KeyError:
+        raise HTTPException(status_code=400, detail=ERR_STRATEGY_NOT_FOUND.format(name=body.strategy_type))
 
     # Check bot limit
     count_result = await db.execute(

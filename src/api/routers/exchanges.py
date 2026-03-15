@@ -5,7 +5,7 @@ import re
 from fastapi import APIRouter, HTTPException, Request
 
 from src.api.rate_limit import limiter
-from src.errors import ERR_INVALID_EXCHANGE
+from src.errors import ERR_EXCHANGE_NOT_FOUND, ERR_INVALID_EXCHANGE
 from src.api.schemas.exchange import ExchangeInfo, ExchangeListResponse
 from src.exchanges.factory import get_exchange_info, get_supported_exchanges
 from src.exchanges.symbol_fetcher import get_exchange_symbols
@@ -42,7 +42,7 @@ async def get_exchange_detail(request: Request, exchange_name: str):
     try:
         info = get_exchange_info(exchange_name)
     except ValueError:
-        raise HTTPException(status_code=404, detail=f"Exchange '{exchange_name}' not found")
+        raise HTTPException(status_code=404, detail=ERR_EXCHANGE_NOT_FOUND.format(name=exchange_name))
 
     return ExchangeInfo(
         name=info["name"],
@@ -63,7 +63,7 @@ async def get_symbols(request: Request, exchange_name: str):
     exchange_name = exchange_name.lower()
     supported = get_supported_exchanges()
     if exchange_name not in supported:
-        raise HTTPException(status_code=404, detail=f"Exchange '{exchange_name}' not found")
+        raise HTTPException(status_code=404, detail=ERR_EXCHANGE_NOT_FOUND.format(name=exchange_name))
 
     symbols = await get_exchange_symbols(exchange_name)
     return {"exchange": exchange_name, "symbols": symbols, "count": len(symbols)}
