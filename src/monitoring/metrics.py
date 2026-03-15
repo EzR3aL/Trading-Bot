@@ -60,3 +60,35 @@ PROCESS_MEMORY_BYTES = Gauge(
 DISK_USAGE_PERCENT = Gauge(
     "disk_usage_percent", "Disk usage percentage for data directory"
 )
+
+# Database connection pool metrics
+DB_POOL_SIZE = Gauge(
+    "db_pool_size", "Total database connection pool size"
+)
+DB_POOL_CHECKED_OUT = Gauge(
+    "db_pool_checked_out", "Number of connections currently checked out from pool"
+)
+
+# Circuit breaker metrics (1 = open, 0 = closed, 0.5 = half_open)
+CIRCUIT_BREAKER_STATE = Gauge(
+    "circuit_breaker_state",
+    "Circuit breaker state (0=closed, 0.5=half_open, 1=open)",
+    ["service"],
+)
+
+# Backup metrics
+BACKUP_LAST_SUCCESS_TIMESTAMP = Gauge(
+    "backup_last_success_timestamp",
+    "Unix timestamp of last successful backup",
+)
+BACKUP_STATUS = Gauge(
+    "backup_status",
+    "Last backup status (1=success, 0=failure)",
+)
+
+# Risk management metrics
+TRADING_HALTED = Gauge(
+    "trading_halted",
+    "Whether trading is halted due to daily loss limit (1=halted, 0=active)",
+    ["bot_id"],
+)

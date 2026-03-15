@@ -5,6 +5,7 @@ Supports SQLite (default) and PostgreSQL (via DATABASE_URL env var).
 PostgreSQL uses connection pooling optimized for 10k+ concurrent users.
 """
 
+import asyncio
 import os
 from contextlib import asynccontextmanager
 
@@ -33,6 +34,7 @@ def _build_engine_kwargs() -> dict:
         kwargs["max_overflow"] = int(os.getenv("DB_MAX_OVERFLOW", "30"))
         kwargs["pool_pre_ping"] = True
         kwargs["pool_recycle"] = int(os.getenv("DB_POOL_RECYCLE", "1800"))
+        kwargs["pool_timeout"] = int(os.getenv("DB_POOL_TIMEOUT", "10"))
     return kwargs
 
 
@@ -269,16 +271,30 @@ async def close_db() -> None:
     await engine.dispose()
 
 
+SESSION_ACQUIRE_TIMEOUT = int(os.getenv("DB_SESSION_TIMEOUT", "10"))
+
+
 @asynccontextmanager
 async def get_session():
     """Provide an async session with automatic commit/rollback."""
-    async with async_session_factory() as session:
-        try:
-            yield session
-            await session.commit()
-        except Exception:
-            await session.rollback()
-            raise
+    try:
+        session = await asyncio.wait_for(
+            async_session_factory().__aenter__(),
+            timeout=SESSION_ACQUIRE_TIMEOUT,
+        )
+    except asyncio.TimeoutError:
+        raise TimeoutError(
+            f"Could not acquire database session within {SESSION_ACQUIRE_TIMEOUT}s "
+            "(connection pool may be exhausted)"
+        )
+    try:
+        yield session
+        await session.commit()
+    except Exception:
+        await session.rollback()
+        raise
+    finally:
+        await session.__aexit__(None, None, None)
 
 
 async def get_db() -> AsyncSession:

@@ -129,3 +129,43 @@ groups:
         annotations:
           summary: "Trade execution failures detected"
           description: "Trade failures occurring at {{ $value }} per second for exchange {{ $labels.exchange }}."
+
+      # Database connection pool usage above 80%
+      - alert: DatabasePoolExhaustion
+        expr: (db_pool_checked_out / db_pool_size) * 100 > 80
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Database connection pool usage above 80%"
+          description: "{{ $value | printf \"%.0f\" }}% of database pool connections are in use. Risk of connection starvation."
+
+      # Exchange API circuit breaker open
+      - alert: ExchangeCircuitBreakerOpen
+        expr: circuit_breaker_state{service=~".*"} == 1
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Circuit breaker open for {{ $labels.service }}"
+          description: "Exchange API circuit breaker for '{{ $labels.service }}' has been open for more than 1 minute. Requests are being rejected."
+
+      # Backup job failed (no successful backup in 25 hours)
+      - alert: BackupJobFailed
+        expr: backup_status == 0 or (time() - backup_last_success_timestamp) > 90000
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Backup job failed or overdue"
+          description: "Last successful backup was {{ $value | humanizeDuration }} ago or the last backup attempt failed."
+
+      # Daily loss limit triggered — trading halted
+      - alert: DailyLossLimitTriggered
+        expr: trading_halted == 1
+        for: 0m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Daily loss limit triggered for bot {{ $labels.bot_id }}"
+          description: "Trading has been halted for bot {{ $labels.bot_id }} due to daily loss limit being exceeded. Manual review required."
