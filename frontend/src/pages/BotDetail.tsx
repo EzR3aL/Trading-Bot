@@ -17,6 +17,8 @@ import { ExchangeIcon } from '../components/ui/ExchangeLogo'
 import PnlCell from '../components/ui/PnlCell'
 import type { LlmConnection } from '../types'
 import { formatDate, formatDateTime, formatTime } from '../utils/dateUtils'
+import MobileTradeCard from '../components/ui/MobileTradeCard'
+import useIsMobile from '../hooks/useIsMobile'
 
 const STRATEGY_DISPLAY: Record<string, string> = {
   llm_signal: 'KI-Companion',
@@ -134,6 +136,7 @@ export default function BotDetail() {
   const navigate = useNavigate()
   const { t } = useTranslation()
   const d = (key: string) => t(`botDetail.${key}`)
+  const isMobile = useIsMobile()
   const demoFilter = useFilterStore((s) => s.demoFilter)
 
   const [config, setConfig] = useState<BotConfig | null>(null)
@@ -366,79 +369,86 @@ export default function BotDetail() {
           <h2 className="text-white font-semibold mb-4">{d('recentTrades')} ({stats.recent_trades.length})</h2>
           {stats.recent_trades.length === 0 ? (
             <p className="text-gray-500 text-sm py-8 text-center">{d('noTrades')}</p>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="table-premium mobile-cards">
-                <thead>
-                  <tr>
-                    <th className="text-left">{t('trades.date')}</th>
-                    <th className="text-center hidden lg:table-cell">{t('trades.exchange')}</th>
-                    <th className="text-left">{t('trades.symbol')}</th>
-                    <th className="text-center">{t('trades.side')}</th>
-                    <th className="text-right hidden xl:table-cell">{t('trades.entryPrice')}</th>
-                    <th className="text-right">{t('trades.pnl')}</th>
-                    <th className="text-center hidden xl:table-cell">{t('trades.trailingStop')}</th>
-                    <th className="text-center hidden 2xl:table-cell">{t('trades.mode')}</th>
-                    <th className="text-center">{t('trades.status')}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {stats.recent_trades.map(trade => (
-                    <tr key={trade.id}>
-                      <td data-label={t('trades.date')} className="text-gray-300 cursor-default" title={formatTime(trade.entry_time)}>
-                        {formatDate(trade.entry_time)}
-                      </td>
-                      <td data-label={t('trades.exchange')} className="text-center hidden lg:table-cell">
-                        <span className="inline-flex justify-center">
-                          <ExchangeIcon exchange={config.exchange_type} size={18} />
-                        </span>
-                      </td>
-                      <td data-label={t('trades.symbol')} className="text-white font-medium">{trade.symbol}</td>
-                      <td data-label={t('trades.side')} className="text-center">
-                        <span className={trade.side === 'long' ? 'text-profit' : 'text-loss'}>
-                          {trade.side === 'long' ? '+' : '-'} {trade.side.toUpperCase()}
-                        </span>
-                      </td>
-                      <td data-label={t('trades.entryPrice')} className="text-right text-gray-300 hidden xl:table-cell">
-                        ${trade.entry_price.toLocaleString()}
-                      </td>
-                      <td data-label={t('trades.pnl')} className="text-right">
-                        <PnlCell pnl={trade.pnl} fees={trade.fees || 0} fundingPaid={trade.funding_paid || 0} status={trade.status} className={trade.pnl >= 0 ? 'pnl-positive' : 'pnl-negative'} />
-                      </td>
-                      <td data-label={t('trades.trailingStop')} className="text-center hidden xl:table-cell">
-                        {trade.status === 'open' && trade.trailing_stop_active && trade.trailing_stop_price != null ? (
-                          <span className="inline-flex items-center justify-center gap-1 text-emerald-400">
-                            ${trade.trailing_stop_price.toLocaleString()} ({trade.trailing_stop_distance_pct?.toFixed(2)}%)
-                            {trade.can_close_at_loss === false && (
-                              <span title={t('trades.trailingStopProtecting')}>
-                                <ShieldCheck size={14} className="text-emerald-400" />
-                              </span>
-                            )}
-                          </span>
-                        ) : (
-                          <span className="text-gray-600">--</span>
-                        )}
-                      </td>
-                      <td data-label={t('trades.mode')} className="text-center hidden 2xl:table-cell">
-                        <span className={trade.demo_mode ? 'badge-demo' : 'badge-live'}>
-                          {trade.demo_mode ? t('common.demo') : t('common.live')}
-                        </span>
-                      </td>
-                      <td data-label={t('trades.status')} className="text-center">
-                        <span className={
-                          trade.status === 'open' ? 'badge-open' :
-                          trade.status === 'closed' ? 'badge-neutral' :
-                          'badge-demo'
-                        }>
-                          {t(`trades.${trade.status}`)}
-                        </span>
-                      </td>
+          ) : isMobile ? (
+              <div className="space-y-1.5">
+                {stats.recent_trades.map(trade => (
+                  <MobileTradeCard key={trade.id} trade={{ ...trade, bot_exchange: config.exchange_type, entry_time: trade.entry_time || '' }} />
+                ))}
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="table-premium">
+                  <thead>
+                    <tr>
+                      <th className="text-left">{t('trades.date')}</th>
+                      <th className="text-center hidden lg:table-cell">{t('trades.exchange')}</th>
+                      <th className="text-left">{t('trades.symbol')}</th>
+                      <th className="text-center">{t('trades.side')}</th>
+                      <th className="text-right hidden xl:table-cell">{t('trades.entryPrice')}</th>
+                      <th className="text-right">{t('trades.pnl')}</th>
+                      <th className="text-center hidden xl:table-cell">{t('trades.trailingStop')}</th>
+                      <th className="text-center hidden 2xl:table-cell">{t('trades.mode')}</th>
+                      <th className="text-center">{t('trades.status')}</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+                  </thead>
+                  <tbody>
+                    {stats.recent_trades.map(trade => (
+                      <tr key={trade.id}>
+                        <td className="text-gray-300 cursor-default" title={formatTime(trade.entry_time)}>
+                          {formatDate(trade.entry_time)}
+                        </td>
+                        <td className="text-center hidden lg:table-cell">
+                          <span className="inline-flex justify-center">
+                            <ExchangeIcon exchange={config.exchange_type} size={18} />
+                          </span>
+                        </td>
+                        <td className="text-white font-medium">{trade.symbol}</td>
+                        <td className="text-center">
+                          <span className={trade.side === 'long' ? 'text-profit' : 'text-loss'}>
+                            {trade.side === 'long' ? '+' : '-'} {trade.side.toUpperCase()}
+                          </span>
+                        </td>
+                        <td className="text-right text-gray-300 hidden xl:table-cell">
+                          ${trade.entry_price.toLocaleString()}
+                        </td>
+                        <td className="text-right">
+                          <PnlCell pnl={trade.pnl} fees={trade.fees || 0} fundingPaid={trade.funding_paid || 0} status={trade.status} className={trade.pnl >= 0 ? 'pnl-positive' : 'pnl-negative'} />
+                        </td>
+                        <td className="text-center hidden xl:table-cell">
+                          {trade.status === 'open' && trade.trailing_stop_active && trade.trailing_stop_price != null ? (
+                            <span className="inline-flex items-center justify-center gap-1 text-emerald-400">
+                              ${trade.trailing_stop_price.toLocaleString()} ({trade.trailing_stop_distance_pct?.toFixed(2)}%)
+                              {trade.can_close_at_loss === false && (
+                                <span title={t('trades.trailingStopProtecting')}>
+                                  <ShieldCheck size={14} className="text-emerald-400" />
+                                </span>
+                              )}
+                            </span>
+                          ) : (
+                            <span className="text-gray-600">--</span>
+                          )}
+                        </td>
+                        <td className="text-center hidden 2xl:table-cell">
+                          <span className={trade.demo_mode ? 'badge-demo' : 'badge-live'}>
+                            {trade.demo_mode ? t('common.demo') : t('common.live')}
+                          </span>
+                        </td>
+                        <td className="text-center">
+                          <span className={
+                            trade.status === 'open' ? 'badge-open' :
+                            trade.status === 'closed' ? 'badge-neutral' :
+                            'badge-demo'
+                          }>
+                            {t(`trades.${trade.status}`)}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )
+          }
         </div>
 
         {/* Config Card */}

@@ -41,6 +41,8 @@ import {
 } from 'lucide-react'
 import GuidedTour, { TourHelpButton, type TourStep } from '../components/ui/GuidedTour'
 import { formatDate, formatDateTime, formatTime } from '../utils/dateUtils'
+import MobileTradeCard from '../components/ui/MobileTradeCard'
+import useIsMobile from '../hooks/useIsMobile'
 
 const STRATEGY_DISPLAY: Record<string, string> = { llm_signal: 'KI-Companion', sentiment_surfer: 'Sentiment Surfer', liquidation_hunter: 'Liquidation Hunter', degen: 'Degen', edge_indicator: 'Edge Indicator', contrarian_pulse: 'Contrarian Pulse' }
 const AI_STRATEGIES = new Set(['llm_signal', 'degen'])
@@ -396,6 +398,7 @@ function BotTradeHistoryModal({ bot, onClose, t }: { bot: BotStatus; onClose: ()
   const latestCardRef = useRef<HTMLDivElement>(null)
   const copyCardRef = useRef<HTMLDivElement>(null)
   const theme = useThemeStore((s) => s.theme)
+  const isMobile = useIsMobile()
 
   useEffect(() => {
     const load = async () => {
@@ -671,98 +674,106 @@ function BotTradeHistoryModal({ bot, onClose, t }: { bot: BotStatus; onClose: ()
               <div className="px-6 pt-3 pb-2">
                 <div className="text-xs text-gray-400 uppercase tracking-wider font-semibold">{t('bots.tradeHistory')}</div>
               </div>
-              <div className="overflow-x-auto">
-              <table className="w-full mobile-cards">
-                <thead>
-                  <tr className="border-t border-b border-white/5 bg-white/[0.02]">
-                    <th className="text-left px-3 py-2.5 text-xs text-gray-400 uppercase font-semibold tracking-wider">{t('trades.date')}</th>
-                    <th className="text-center px-3 py-2.5 text-xs text-gray-400 uppercase font-semibold tracking-wider">{t('trades.exchange')}</th>
-                    <th className="text-left px-3 py-2.5 text-xs text-gray-400 uppercase font-semibold tracking-wider">{t('trades.symbol')}</th>
-                    <th className="text-center px-3 py-2.5 text-xs text-gray-400 uppercase font-semibold tracking-wider">{t('trades.side')}</th>
-                    <th className="text-right px-3 py-2.5 text-xs text-gray-400 uppercase font-semibold tracking-wider">{t('trades.entryPrice')}</th>
-                    <th className="text-right px-3 py-2.5 text-xs text-gray-400 uppercase font-semibold tracking-wider">{t('trades.pnl')}</th>
-                    <th className="text-center px-3 py-2.5 text-xs text-gray-400 uppercase font-semibold tracking-wider">{t('trades.trailingStop')}</th>
-                    <th className="text-center px-3 py-2.5 text-xs text-gray-400 uppercase font-semibold tracking-wider">{t('trades.mode')}</th>
-                    <th className="text-center px-3 py-2.5 text-xs text-gray-400 uppercase font-semibold tracking-wider">{t('trades.status')}</th>
-                    <th className="text-center px-3 py-2.5 text-xs text-gray-400 uppercase font-semibold tracking-wider">{t('bots.confidence')}</th>
-                    <th className="text-center px-3 py-2.5 text-xs text-gray-400 uppercase font-semibold tracking-wider">{t('bots.details')}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {stats.recent_trades.map((trade) => (
-                    <tr key={trade.id} className="border-b border-white/5 hover:bg-white/[0.02] transition-colors">
-                      <td data-label={t('trades.date')} className="px-3 py-2.5 text-sm text-gray-300" title={formatTime(trade.entry_time)}>
-                        {formatDate(trade.entry_time)}
-                      </td>
-                      <td data-label={t('trades.exchange')} className="px-3 py-2.5 text-center">
-                        <span className="inline-flex justify-center">
-                          <ExchangeIcon exchange={bot.exchange_type} size={18} />
-                        </span>
-                      </td>
-                      <td data-label={t('trades.symbol')} className="px-3 py-2.5 text-sm text-white font-semibold">{trade.symbol}</td>
-                      <td data-label={t('trades.side')} className="px-3 py-2.5 text-center">
-                        <span className={`text-sm ${trade.side === 'long' ? 'text-profit' : 'text-loss'}`}>
-                          {trade.side === 'long' ? '+' : '-'} {trade.side.toUpperCase()}
-                        </span>
-                      </td>
-                      <td data-label={t('trades.entryPrice')} className="px-3 py-2.5 text-right text-sm text-gray-300">
-                        ${trade.entry_price.toLocaleString()}
-                      </td>
-                      <td data-label={t('trades.pnl')} className="px-3 py-2.5 text-right">
-                        <PnlCell
-                          pnl={trade.pnl}
-                          fees={trade.fees ?? 0}
-                          fundingPaid={trade.funding_paid ?? 0}
-                          status={trade.status}
-                          className={`text-sm font-semibold font-mono ${
-                            trade.status === 'open' ? 'text-gray-500' :
-                            trade.pnl >= 0 ? 'text-profit' : 'text-loss'
-                          }`}
-                        />
-                      </td>
-                      <td data-label={t('trades.trailingStop')} className="px-3 py-2.5 text-center">
-                        {trade.status === 'open' && trade.trailing_stop_active && trade.trailing_stop_price != null ? (
-                          <span className="inline-flex items-center justify-center gap-1 text-emerald-400 text-sm">
-                            ${trade.trailing_stop_price.toLocaleString()} ({trade.trailing_stop_distance_pct?.toFixed(2)}%)
-                            {trade.can_close_at_loss === false && (
-                              <span title={t('trades.trailingStopProtecting')}>
-                                <ShieldCheck size={14} className="text-emerald-400" />
-                              </span>
-                            )}
-                          </span>
-                        ) : (
-                          <span className="text-gray-600">--</span>
-                        )}
-                      </td>
-                      <td data-label={t('trades.mode')} className="px-3 py-2.5 text-center">
-                        <span className={trade.demo_mode ? 'badge-demo' : 'badge-live'}>
-                          {trade.demo_mode ? t('common.demo') : t('common.live')}
-                        </span>
-                      </td>
-                      <td data-label={t('trades.status')} className="px-3 py-2.5 text-center">
-                        <span className={
-                          trade.status === 'open' ? 'badge-open' :
-                          trade.status === 'closed' ? 'badge-neutral' :
-                          'badge-demo'
-                        }>
-                          {t(`trades.${trade.status}`)}
-                        </span>
-                      </td>
-                      <td data-label={t('bots.confidence')} className={`px-3 py-2.5 text-center text-sm font-medium ${confidenceColor(trade.confidence)}`}>{trade.confidence}%</td>
-                      <td data-label={t('bots.details')} className="px-3 py-2.5 text-center">
-                        <button
-                          onClick={() => setSelectedTrade(trade)}
-                          className="p-1.5 text-gray-400 hover:text-white transition-colors rounded-lg hover:bg-white/5"
-                          aria-label={t('bots.details')}
-                        >
-                          <FileText size={16} />
-                        </button>
-                      </td>
-                    </tr>
+              {isMobile ? (
+                <div className="px-6 space-y-1.5">
+                  {stats.recent_trades.map(trade => (
+                    <MobileTradeCard key={trade.id} trade={{ ...trade, bot_exchange: bot.exchange_type, entry_time: trade.entry_time || '' }} />
                   ))}
-                </tbody>
-              </table>
-              </div>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-t border-b border-white/5 bg-white/[0.02]">
+                      <th className="text-left px-3 py-2.5 text-xs text-gray-400 uppercase font-semibold tracking-wider">{t('trades.date')}</th>
+                      <th className="text-center px-3 py-2.5 text-xs text-gray-400 uppercase font-semibold tracking-wider">{t('trades.exchange')}</th>
+                      <th className="text-left px-3 py-2.5 text-xs text-gray-400 uppercase font-semibold tracking-wider">{t('trades.symbol')}</th>
+                      <th className="text-center px-3 py-2.5 text-xs text-gray-400 uppercase font-semibold tracking-wider">{t('trades.side')}</th>
+                      <th className="text-right px-3 py-2.5 text-xs text-gray-400 uppercase font-semibold tracking-wider">{t('trades.entryPrice')}</th>
+                      <th className="text-right px-3 py-2.5 text-xs text-gray-400 uppercase font-semibold tracking-wider">{t('trades.pnl')}</th>
+                      <th className="text-center px-3 py-2.5 text-xs text-gray-400 uppercase font-semibold tracking-wider">{t('trades.trailingStop')}</th>
+                      <th className="text-center px-3 py-2.5 text-xs text-gray-400 uppercase font-semibold tracking-wider">{t('trades.mode')}</th>
+                      <th className="text-center px-3 py-2.5 text-xs text-gray-400 uppercase font-semibold tracking-wider">{t('trades.status')}</th>
+                      <th className="text-center px-3 py-2.5 text-xs text-gray-400 uppercase font-semibold tracking-wider">{t('bots.confidence')}</th>
+                      <th className="text-center px-3 py-2.5 text-xs text-gray-400 uppercase font-semibold tracking-wider">{t('bots.details')}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {stats.recent_trades.map((trade) => (
+                      <tr key={trade.id} className="border-b border-white/5 hover:bg-white/[0.02] transition-colors">
+                        <td className="px-3 py-2.5 text-sm text-gray-300" title={formatTime(trade.entry_time)}>
+                          {formatDate(trade.entry_time)}
+                        </td>
+                        <td className="px-3 py-2.5 text-center">
+                          <span className="inline-flex justify-center">
+                            <ExchangeIcon exchange={bot.exchange_type} size={18} />
+                          </span>
+                        </td>
+                        <td className="px-3 py-2.5 text-sm text-white font-semibold">{trade.symbol}</td>
+                        <td className="px-3 py-2.5 text-center">
+                          <span className={`text-sm ${trade.side === 'long' ? 'text-profit' : 'text-loss'}`}>
+                            {trade.side === 'long' ? '+' : '-'} {trade.side.toUpperCase()}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2.5 text-right text-sm text-gray-300">
+                          ${trade.entry_price.toLocaleString()}
+                        </td>
+                        <td className="px-3 py-2.5 text-right">
+                          <PnlCell
+                            pnl={trade.pnl}
+                            fees={trade.fees ?? 0}
+                            fundingPaid={trade.funding_paid ?? 0}
+                            status={trade.status}
+                            className={`text-sm font-semibold font-mono ${
+                              trade.status === 'open' ? 'text-gray-500' :
+                              trade.pnl >= 0 ? 'text-profit' : 'text-loss'
+                            }`}
+                          />
+                        </td>
+                        <td className="px-3 py-2.5 text-center">
+                          {trade.status === 'open' && trade.trailing_stop_active && trade.trailing_stop_price != null ? (
+                            <span className="inline-flex items-center justify-center gap-1 text-emerald-400 text-sm">
+                              ${trade.trailing_stop_price.toLocaleString()} ({trade.trailing_stop_distance_pct?.toFixed(2)}%)
+                              {trade.can_close_at_loss === false && (
+                                <span title={t('trades.trailingStopProtecting')}>
+                                  <ShieldCheck size={14} className="text-emerald-400" />
+                                </span>
+                              )}
+                            </span>
+                          ) : (
+                            <span className="text-gray-600">--</span>
+                          )}
+                        </td>
+                        <td className="px-3 py-2.5 text-center">
+                          <span className={trade.demo_mode ? 'badge-demo' : 'badge-live'}>
+                            {trade.demo_mode ? t('common.demo') : t('common.live')}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2.5 text-center">
+                          <span className={
+                            trade.status === 'open' ? 'badge-open' :
+                            trade.status === 'closed' ? 'badge-neutral' :
+                            'badge-demo'
+                          }>
+                            {t(`trades.${trade.status}`)}
+                          </span>
+                        </td>
+                        <td className={`px-3 py-2.5 text-center text-sm font-medium ${confidenceColor(trade.confidence)}`}>{trade.confidence}%</td>
+                        <td className="px-3 py-2.5 text-center">
+                          <button
+                            onClick={() => setSelectedTrade(trade)}
+                            className="p-1.5 text-gray-400 hover:text-white transition-colors rounded-lg hover:bg-white/5"
+                            aria-label={t('bots.details')}
+                          >
+                            <FileText size={16} />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                </div>
+              )}
             </>
           )}
         </div>

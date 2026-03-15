@@ -13,9 +13,12 @@ import Pagination from '../components/ui/Pagination'
 import DatePicker from '../components/ui/DatePicker'
 import FilterDropdown from '../components/ui/FilterDropdown'
 import ExitReasonBadge from '../components/ui/ExitReasonBadge'
+import MobileTradeCard from '../components/ui/MobileTradeCard'
+import useIsMobile from '../hooks/useIsMobile'
 
 export default function Trades() {
   const { t } = useTranslation()
+  const isMobile = useIsMobile()
   const { demoFilter } = useFilterStore()
   const [trades, setTrades] = useState<Trade[]>([])
   const [total, setTotal] = useState(0)
@@ -192,8 +195,19 @@ export default function Trades() {
       {/* Table */}
       {!loading && (
         <div className="glass-card rounded-xl overflow-hidden min-w-0">
-          <div className="overflow-x-auto sm:overflow-x-auto max-sm:!overflow-x-visible">
-            <table className="table-premium mobile-cards w-full">
+          {isMobile ? (
+            trades.length === 0 ? (
+              <div className="p-8 text-center text-gray-500">
+                {t('dashboard.noTrades')}
+              </div>
+            ) : (
+              <div className="space-y-1.5">
+                {trades.map(trade => <MobileTradeCard key={trade.id} trade={trade} />)}
+              </div>
+            )
+          ) : (
+          <div className="overflow-x-auto">
+            <table className="table-premium w-full">
               <thead>
                 <tr>
                   <th className="text-left hidden 2xl:table-cell">#</th>
@@ -224,37 +238,37 @@ export default function Trades() {
                         onClick={() => setExpandedId(expandedId === trade.id ? null : trade.id)}
                         className="cursor-pointer"
                       >
-                        <td data-label="ID" className="text-gray-500 text-xs hidden 2xl:table-cell">{trade.id}</td>
-                        <td data-label={t('trades.date')} className="text-gray-300">
+                        <td className="text-gray-500 text-xs hidden 2xl:table-cell">{trade.id}</td>
+                        <td className="text-gray-300">
                           <span className="inline-flex items-center">
                             <ChevronRight size={14} className={`expand-chevron ${expandedId === trade.id ? 'open' : ''}`} />
                             <span title={formatTime(trade.entry_time)}>{formatDate(trade.entry_time)}</span>
                           </span>
                         </td>
-                        <td data-label={t('trades.bot')} className="hidden xl:table-cell">
+                        <td className="hidden xl:table-cell">
                           {trade.bot_name ? (
                             <span className="text-white font-medium">{trade.bot_name}</span>
                           ) : (
                             <span className="text-gray-600">--</span>
                           )}
                         </td>
-                        <td data-label={t('trades.exchange')} className="text-center hidden lg:table-cell">
+                        <td className="text-center hidden lg:table-cell">
                           <span className="inline-flex justify-center">
                             <ExchangeIcon exchange={trade.bot_exchange || trade.exchange} size={18} />
                           </span>
                         </td>
-                        <td data-label={t('trades.symbol')} className="text-white font-medium">{trade.symbol}</td>
-                        <td data-label={t('trades.side')} className="text-center">
+                        <td className="text-white font-medium">{trade.symbol}</td>
+                        <td className="text-center">
                           <span className={trade.side === 'long' ? 'text-profit' : 'text-loss'}>
                             {trade.side === 'long' ? '+' : '-'} {trade.side.toUpperCase()}
                           </span>
                         </td>
-                        <td data-label={t('trades.size')} className="text-right text-gray-300 hidden 2xl:table-cell">{Number(trade.size).toFixed(4)}</td>
-                        <td data-label={t('trades.entryPrice')} className="text-right text-gray-300 hidden xl:table-cell">${trade.entry_price.toLocaleString()}</td>
-                        <td data-label={t('trades.exitPrice')} className="text-right text-gray-300 hidden 2xl:table-cell">
+                        <td className="text-right text-gray-300 hidden 2xl:table-cell">{Number(trade.size).toFixed(4)}</td>
+                        <td className="text-right text-gray-300 hidden xl:table-cell">${trade.entry_price.toLocaleString()}</td>
+                        <td className="text-right text-gray-300 hidden 2xl:table-cell">
                           {trade.exit_price ? `$${trade.exit_price.toLocaleString()}` : '--'}
                         </td>
-                        <td data-label={t('trades.pnl')} className="text-right">
+                        <td className="text-right">
                           <PnlCell
                             pnl={trade.pnl}
                             fees={trade.fees}
@@ -263,12 +277,12 @@ export default function Trades() {
                             className={trade.pnl && trade.pnl >= 0 ? 'pnl-positive' : 'pnl-negative'}
                           />
                         </td>
-                        <td data-label={t('trades.mode')} className="text-center hidden 2xl:table-cell">
+                        <td className="text-center hidden 2xl:table-cell">
                           <span className={trade.demo_mode ? 'badge-demo' : 'badge-live'}>
                             {trade.demo_mode ? t('common.demo') : t('common.live')}
                           </span>
                         </td>
-                        <td data-label={t('trades.status')} className="text-center">
+                        <td className="text-center">
                           <span className={
                             trade.status === 'open' ? 'badge-open' :
                             trade.status === 'closed' ? 'badge-neutral' :
@@ -338,6 +352,7 @@ export default function Trades() {
               </tbody>
             </table>
           </div>
+          )}
         </div>
       )}
 
