@@ -239,7 +239,7 @@ export default function Backtest() {
 
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-x-5 gap-y-4">
           {/* Strategy */}
-          <div className="relative z-40">
+          <div className="relative z-50">
             <label className="text-xs text-gray-400 mb-1.5 block font-medium">{t('backtest.strategy')}</label>
             <FilterDropdown
               value={strategyType}
@@ -251,7 +251,7 @@ export default function Backtest() {
           </div>
 
           {/* Symbol */}
-          <div className="relative z-40">
+          <div className="relative z-50">
             <label className="text-xs text-gray-400 mb-1.5 block font-medium">{t('backtest.symbol')}</label>
             <FilterDropdown
               value={symbol}
@@ -263,7 +263,7 @@ export default function Backtest() {
           </div>
 
           {/* Timeframe */}
-          <div className="relative z-40">
+          <div className="relative z-50">
             <label className="text-xs text-gray-400 mb-1.5 block font-medium">{t('backtest.timeframe')}</label>
             <FilterDropdown
               value={timeframe}
@@ -691,7 +691,7 @@ export default function Backtest() {
           <p className="text-gray-500 text-sm py-6 text-center">{t('backtest.noHistory')}</p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="table-premium">
+            <table className="table-premium min-w-[600px]">
               <thead>
                 <tr>
                   <th className="text-left">{t('backtest.strategy')}</th>

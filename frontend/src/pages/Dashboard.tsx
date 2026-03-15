@@ -52,9 +52,9 @@ function StatCard({ label, value, numericValue, color, sub, isPositive }: {
   label: string; value: string; numericValue?: number; color?: string; sub?: string; isPositive?: boolean | null
 }) {
   return (
-    <div className="glass-card rounded-xl p-5 group hover:border-white/10 transition-all duration-300 text-center">
-      <div className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-2">{label}</div>
-      <div className={`text-2xl font-bold mt-1 count-up flex items-center justify-center gap-1.5 ${color || 'text-white'}`}>
+    <div className="glass-card rounded-xl p-3 sm:p-5 group hover:border-white/10 transition-all duration-300 text-center">
+      <div className="text-[10px] sm:text-xs font-medium text-gray-400 uppercase tracking-wider mb-2">{label}</div>
+      <div className={`text-lg sm:text-2xl font-bold mt-1 count-up flex items-center justify-center gap-1.5 ${color || 'text-white'}`}>
         {numericValue !== undefined ? (
           <AnimatedNumber value={numericValue} prefix="$" />
         ) : (
@@ -63,7 +63,7 @@ function StatCard({ label, value, numericValue, color, sub, isPositive }: {
         {isPositive === true && <ArrowUpRight size={18} className="text-profit" />}
         {isPositive === false && <ArrowDownRight size={18} className="text-loss" />}
       </div>
-      {sub && <div className="text-xs text-gray-500 mt-1.5">{sub}</div>}
+      {sub && <div className="text-[10px] sm:text-xs text-gray-500 mt-1.5 truncate">{sub}</div>}
     </div>
   )
 }
@@ -121,8 +121,8 @@ export default function Dashboard() {
       )}
 
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-white tracking-tight">{t('dashboard.title')}</h1>
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-6">
+        <h1 className="text-xl sm:text-2xl font-bold text-white tracking-tight">{t('dashboard.title')}</h1>
         <div className="flex items-center gap-2">
         <TourHelpButton tourId="dashboard" />
         <div className="flex items-center gap-1.5 bg-white/5 rounded-xl p-0.5 border border-white/5" data-tour="dash-period">
@@ -131,7 +131,7 @@ export default function Dashboard() {
               key={p}
               onClick={() => setPeriod(p)}
               aria-label={t(PERIOD_LABELS[p])}
-              className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all duration-200 ${
+              className={`px-2 sm:px-3 py-1.5 text-xs font-medium rounded-lg transition-all duration-200 ${
                 period === p
                   ? 'bg-gradient-to-r from-primary-600 to-primary-500 text-white shadow-glow-sm'
                   : 'text-gray-400 hover:text-white hover:bg-white/5'
@@ -193,12 +193,12 @@ export default function Dashboard() {
       {/* Revenue Section (Builder Fees) */}
       {dailyStats.some(d => (d.builder_fees || 0) > 0) && (
         <div className="glass-card rounded-xl p-5 mb-6">
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 mb-4">
             <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
               {t('dashboard.revenueTitle')}
             </h3>
             {stats && (stats.total_builder_fees || 0) > 0 && (
-              <div className="flex items-center gap-4 text-xs">
+              <div className="flex flex-wrap items-center gap-2 sm:gap-4 text-xs">
                 <span className="text-gray-400">
                   {t('dashboard.totalBuilderFees')}: <span className="text-emerald-400 font-medium">${stats.total_builder_fees.toFixed(4)}</span>
                 </span>

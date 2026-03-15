@@ -109,7 +109,7 @@ export default function Trades() {
   }
 
   return (
-    <div className="animate-in">
+    <div className="animate-in min-w-0">
       <h1 className="text-2xl font-bold text-white mb-6 tracking-tight">{t('trades.title')}</h1>
 
       {error && (
@@ -191,9 +191,9 @@ export default function Trades() {
 
       {/* Table */}
       {!loading && (
-        <div className="glass-card rounded-xl overflow-hidden">
+        <div className="glass-card rounded-xl overflow-hidden min-w-0">
           <div className="overflow-x-auto">
-            <table className="table-premium">
+            <table className="table-premium w-full">
               <thead>
                 <tr>
                   <th className="text-left hidden 2xl:table-cell">#</th>

@@ -993,7 +993,7 @@ export default function Bots() {
   return (
     <div className="animate-in">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
         <h1 className="text-2xl font-bold text-white tracking-tight">{t('bots.title')}</h1>
         <div className="flex gap-2">
           {runningCount > 1 && (
@@ -1054,9 +1054,9 @@ export default function Bots() {
                 {...(bot === bots[0] ? { 'data-tour': 'bot-card' } : {})}
               >
                 {/* Header row */}
-                <div className="flex items-start justify-between mb-3">
-                  <div>
-                    <Link to={`/bots/${bot.bot_config_id}`} className="text-white font-semibold text-lg hover:text-primary-400 transition-colors">{bot.name}</Link>
+                <div className="flex items-start justify-between gap-2 mb-3">
+                  <div className="min-w-0 flex-1">
+                    <Link to={`/bots/${bot.bot_config_id}`} className="text-white font-semibold text-lg hover:text-primary-400 transition-colors truncate block">{bot.name}</Link>
                     <div className="flex items-center gap-2 mt-1.5">
                       <span className="badge-neutral text-xs inline-flex items-center gap-1">
                         <ExchangeIcon exchange={bot.exchange_type} size={16} />
@@ -1083,7 +1083,7 @@ export default function Bots() {
                       )}
                     </div>
                   </div>
-                  <div className="text-right">
+                  <div className="text-right shrink-0">
                     <div className="flex items-center justify-end gap-1.5">
                       {bot.status === 'running' && (
                         <span className="relative flex h-2.5 w-2.5">
@@ -1378,7 +1378,7 @@ export default function Bots() {
                       onClick={() => handleStop(bot.bot_config_id)}
                       disabled={actionLoading === bot.bot_config_id}
                       aria-label={`${t('bots.stop')} ${bot.name}`}
-                      className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 text-sm bg-red-500/10 text-red-400 rounded-xl border border-red-500/10 hover:bg-red-500/20 disabled:opacity-50 transition-all duration-200"
+                      className="w-full sm:w-auto sm:flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 text-sm bg-red-500/10 text-red-400 rounded-xl border border-red-500/10 hover:bg-red-500/20 disabled:opacity-50 transition-all duration-200"
                     >
                       <Square size={16} />
                       {t('bots.stop')}
@@ -1388,7 +1388,7 @@ export default function Bots() {
                       onClick={() => handleStart(bot.bot_config_id)}
                       disabled={actionLoading === bot.bot_config_id}
                       aria-label={`${t('bots.start')} ${bot.name}`}
-                      className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 text-sm bg-emerald-500/10 text-emerald-400 rounded-xl border border-emerald-500/10 hover:bg-emerald-500/20 disabled:opacity-50 transition-all duration-200"
+                      className="w-full sm:w-auto sm:flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 text-sm bg-emerald-500/10 text-emerald-400 rounded-xl border border-emerald-500/10 hover:bg-emerald-500/20 disabled:opacity-50 transition-all duration-200"
                     >
                       {actionLoading === bot.bot_config_id ? (
                         <RefreshCw size={16} className="animate-spin" />

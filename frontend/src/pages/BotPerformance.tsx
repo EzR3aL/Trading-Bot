@@ -291,12 +291,12 @@ function SmallMultipleCard({ bot, color, yDomain, chartGridColor, chartTickColor
       style={isSelected ? { boxShadow: `0 0 24px ${color}12` } : {}}
     >
       {/* Header */}
-      <div className="flex items-center justify-between mb-1">
-        <div className="flex items-center gap-2">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 mb-1">
+        <div className="flex items-center gap-2 min-w-0">
           <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />
           <span className="text-white text-sm font-medium truncate">{bot.name}</span>
           <span className="text-[10px] text-gray-400 truncate">{strategyLabel(bot.strategy_type)}</span>
-          <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-medium ${
+          <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-medium flex-shrink-0 ${
             bot.mode === 'live' ? 'badge-live' : 'badge-demo'
           }`}>
             {bot.mode.toUpperCase()}
@@ -567,7 +567,7 @@ export default function BotPerformance() {
   return (
     <div className="animate-in">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
         <h1 className="text-2xl font-bold text-white tracking-tight">{t('performance.title')}</h1>
         <div className="flex items-center gap-3">
           {/* View Toggle */}

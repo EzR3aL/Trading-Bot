@@ -108,7 +108,7 @@ export default function PnlChart({ data }: Props) {
     <div className="relative">
       <button
         onClick={() => setShowCosts(!showCosts)}
-        className={`absolute -top-9 right-0 z-10 flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium transition-all duration-200 border ${
+        className={`absolute -top-9 right-0 z-10 flex items-center gap-1 sm:gap-1.5 px-1.5 sm:px-2.5 py-1 rounded-lg text-[10px] sm:text-xs font-medium transition-all duration-200 border ${
           showCosts
             ? 'bg-white/5 border-white/10 text-gray-300 hover:bg-white/10'
             : 'bg-white/[0.02] border-white/5 text-gray-500 hover:text-gray-400'

@@ -74,7 +74,7 @@ export default function TaxReport() {
 
   return (
     <div className="animate-in">
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
         <h1 className="text-2xl font-bold text-white tracking-tight">{t('tax.title')}</h1>
         <div className="flex gap-3">
           <FilterDropdown
@@ -87,10 +87,11 @@ export default function TaxReport() {
             onClick={downloadCsv}
             disabled={downloading}
             aria-label={t('tax.downloadCsv')}
-            className="btn-gradient flex items-center gap-2 disabled:opacity-50"
+            className="btn-gradient flex items-center gap-2 disabled:opacity-50 whitespace-nowrap"
           >
             {downloading ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />}
-            {t('tax.downloadCsv')}
+            <span className="hidden sm:inline">{t('tax.downloadCsv')}</span>
+            <span className="sm:hidden">CSV</span>
           </button>
         </div>
       </div>
@@ -120,24 +121,24 @@ export default function TaxReport() {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
             <div className="glass-card rounded-xl p-5">
               <div className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-2">{t('dashboard.totalTrades')}</div>
-              <div className="text-2xl font-bold text-white">{data.total_trades}</div>
+              <div className="text-lg sm:text-2xl font-bold text-white truncate">{data.total_trades}</div>
             </div>
             <div className="glass-card rounded-xl p-5">
               <div className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-2">{t('tax.totalPnl')}</div>
-              <div className={`text-2xl font-bold flex items-center gap-1 ${data.total_pnl >= 0 ? 'text-profit' : 'text-loss'}`}>
+              <div className={`text-lg sm:text-2xl font-bold flex items-center gap-1 truncate ${data.total_pnl >= 0 ? 'text-profit' : 'text-loss'}`}>
                 {formatPnl(data.total_pnl)}
-                {data.total_pnl >= 0 ? <ArrowUpRight size={18} /> : <ArrowDownRight size={18} />}
+                {data.total_pnl >= 0 ? <ArrowUpRight size={18} className="shrink-0" /> : <ArrowDownRight size={18} className="shrink-0" />}
               </div>
             </div>
             <div className="glass-card rounded-xl p-5">
               <div className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-2">{t('tax.totalFees')}</div>
-              <div className="text-2xl font-bold text-white">${data.total_fees.toFixed(2)}</div>
+              <div className="text-lg sm:text-2xl font-bold text-white truncate">${data.total_fees.toFixed(2)}</div>
             </div>
             <div className="glass-card rounded-xl p-5">
               <div className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-2">{t('tax.netPnl')}</div>
-              <div className={`text-2xl font-bold flex items-center gap-1 ${data.net_pnl >= 0 ? 'text-profit' : 'text-loss'}`}>
+              <div className={`text-lg sm:text-2xl font-bold flex items-center gap-1 truncate ${data.net_pnl >= 0 ? 'text-profit' : 'text-loss'}`}>
                 {formatPnl(data.net_pnl)}
-                {data.net_pnl >= 0 ? <ArrowUpRight size={18} /> : <ArrowDownRight size={18} />}
+                {data.net_pnl >= 0 ? <ArrowUpRight size={18} className="shrink-0" /> : <ArrowDownRight size={18} className="shrink-0" />}
               </div>
             </div>
           </div>
@@ -148,7 +149,7 @@ export default function TaxReport() {
               <h2 className="text-base font-semibold text-white">{t('tax.monthlyBreakdown')}</h2>
             </div>
             <div className="overflow-x-auto">
-              <table className="table-premium">
+              <table className="table-premium min-w-[500px]">
                 <thead>
                   <tr>
                     <th className="text-left">{t('tax.month')}</th>

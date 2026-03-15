@@ -434,6 +434,106 @@ html.light .num-input-wrap .num-arrow-up {
 }
 
 /* ═══════════════════════════════════════════════════════════════ */
+/*  MOBILE OPTIMIZATIONS (max-width: 640px)                       */
+/* ═══════════════════════════════════════════════════════════════ */
+
+@media (max-width: 640px) {
+  /* Reduce page padding */
+  .page-content, main > div > div {
+    padding-left: 1rem !important;
+    padding-right: 1rem !important;
+  }
+
+  /* Page headers: stack title + actions vertically */
+  .page-content > .flex.justify-between,
+  .page-content > .flex.items-center.justify-between,
+  main .flex.justify-between.items-center {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 0.75rem !important;
+  }
+
+  /* Tables: smaller text on mobile, let overflow-x-auto wrapper handle scroll */
+  .table-premium {
+    font-size: 0.75rem;
+    min-width: 500px;
+  }
+  .table-premium thead th {
+    padding: 0.5rem 0.5rem;
+    font-size: 0.625rem;
+  }
+  .table-premium tbody td {
+    padding: 0.5rem 0.5rem;
+  }
+
+  /* Expanded details: 2-column grid on mobile */
+  .table-expand-content {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    font-size: 0.75rem;
+    padding: 0.5rem 0.75rem;
+  }
+
+  /* Stat cards: ensure 2-column grid doesn't overflow */
+  .grid-cols-2 {
+    gap: 0.5rem !important;
+  }
+  .grid-cols-3, .grid-cols-4 {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 0.5rem !important;
+  }
+
+  /* Font sizes: slightly smaller on mobile */
+  h1, .text-3xl, .text-2xl {
+    font-size: 1.5rem !important;
+    line-height: 2rem !important;
+  }
+
+  /* Buttons: full-width on very small screens */
+  @media (max-width: 380px) {
+    .btn-gradient, .pill-btn {
+      width: 100%;
+      text-align: center;
+    }
+  }
+
+  /* Glass cards: reduce padding */
+  .glass-card {
+    padding: 0.75rem !important;
+  }
+
+  /* Chart containers: ensure they don't overflow */
+  .recharts-wrapper {
+    max-width: 100% !important;
+  }
+
+  /* Chart header: stack title and toggles */
+  .recharts-wrapper + div,
+  .glass-card > .flex.justify-between.items-center {
+    flex-wrap: wrap !important;
+    gap: 0.5rem !important;
+  }
+
+  /* Dropdown menus: constrain width and position */
+  [class*="absolute"][class*="z-"] {
+    max-width: calc(100vw - 2rem) !important;
+    overflow-x: hidden;
+  }
+
+  /* Filter row: wrap on mobile */
+  .flex.gap-2.flex-wrap,
+  .flex.gap-3.flex-wrap,
+  .flex.items-center.gap-2,
+  .flex.items-center.gap-3 {
+    flex-wrap: wrap !important;
+  }
+
+  /* Filter selects: wider on mobile */
+  .filter-select {
+    min-width: 120px;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════ */
 /*  LIGHT THEME OVERRIDES                                         */
 /*  Applied when <html class="light"> is set                      */
 /* ═══════════════════════════════════════════════════════════════ */

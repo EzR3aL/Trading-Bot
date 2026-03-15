@@ -523,11 +523,11 @@ function StatCard({ icon, label, value, color, sub }: {
 }) {
   return (
     <div className="glass-card rounded-xl p-4 border border-white/10">
-      <div className="flex items-center gap-2 text-gray-400 text-xs mb-1">
+      <div className="flex items-center gap-2 text-gray-400 text-[10px] sm:text-xs mb-1">
         {icon} {label}
       </div>
       <div className={`text-xl font-bold ${color}`}>{value}</div>
-      {sub && <div className="text-xs text-gray-500 mt-0.5">{sub}</div>}
+      {sub && <div className="text-[10px] sm:text-xs text-gray-500 mt-0.5">{sub}</div>}
     </div>
   )
 }

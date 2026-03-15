@@ -639,12 +639,12 @@ export default function Settings() {
       )}
 
       {/* Tabs */}
-      <div className="flex gap-1 mb-6 bg-gray-900 p-1 rounded-lg w-fit" data-tour="settings-tabs">
+      <div className="flex gap-1 mb-6 bg-gray-900 p-1 rounded-lg w-fit overflow-x-auto max-w-full" data-tour="settings-tabs">
         {TABS.map((tab) => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
-            className={`px-4 py-2 text-sm rounded ${
+            className={`px-2 sm:px-4 py-2 text-xs sm:text-sm rounded whitespace-nowrap ${
               activeTab === tab
                 ? 'bg-primary-600 text-white'
                 : 'text-gray-400 hover:text-white'

@@ -191,7 +191,7 @@ export default function Portfolio() {
   /* ── Render ─────────────────────────────────────────────── */
 
   return (
-    <div className="animate-in">
+    <div className="animate-in min-w-0">
       {/* Error */}
       {error && (
         <div role="alert" className="mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-sm">
@@ -443,8 +443,8 @@ export default function Portfolio() {
       </div>
 
       {/* Positions Table */}
-      <div className="glass-card rounded-2xl overflow-hidden">
-        <div className="p-5 border-b border-white/5 flex items-center justify-between">
+      <div className="glass-card rounded-2xl overflow-hidden min-w-0">
+        <div className="p-5 border-b border-white/5 flex flex-wrap items-center justify-between gap-2">
           <h2 className="text-base font-semibold text-white flex items-center gap-2">
             <TrendingUp size={16} className="text-primary-400" />
             {t('portfolio.positions')}
@@ -458,7 +458,7 @@ export default function Portfolio() {
           <div className="p-8 text-center text-gray-500">{t('portfolio.noPositions')}</div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="table-premium">
+            <table className="table-premium w-full">
               <thead>
                 <tr>
                   <th className="text-left">{t('portfolio.exchange')}</th>
