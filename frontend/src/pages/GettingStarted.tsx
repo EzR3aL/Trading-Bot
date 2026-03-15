@@ -18,7 +18,6 @@ import {
   BarChart3,
   ArrowRightCircle,
   TrendingUp,
-  Brain,
   Activity,
   Target,
   AlertTriangle,
@@ -261,12 +260,9 @@ function SectionStrategies() {
   const { t } = useTranslation()
 
   const strategies = [
-    { name: 'KI-Companion', icon: <Brain size={18} className="text-violet-400" />, desc: t('guide.stratKi'), tf: t('guide.stratKiTf'), type: t('guide.stratTypeKi') },
+    { name: 'Edge Indicator', icon: <Activity size={18} className="text-green-400" />, desc: t('guide.stratEdge'), tf: t('guide.stratEdgeTf'), type: t('guide.stratTypeKline') },
     { name: 'Sentiment Surfer', icon: <TrendingUp size={18} className="text-cyan-400" />, desc: t('guide.stratSentiment'), tf: t('guide.stratSentimentTf'), type: t('guide.stratTypeSentiment') },
     { name: 'Liquidation Hunter', icon: <Target size={18} className="text-red-400" />, desc: t('guide.stratLiquidation'), tf: t('guide.stratLiquidationTf'), type: t('guide.stratTypeLiq') },
-    { name: 'Degen', icon: <Zap size={18} className="text-amber-400" />, desc: t('guide.stratDegen'), tf: t('guide.stratDegenTf'), type: t('guide.stratTypeKi') },
-    { name: 'Contrarian Pulse', icon: <Target size={18} className="text-orange-400" />, desc: t('guide.stratContrarianPulse'), tf: t('guide.stratContrarianPulseTf'), type: t('guide.stratTypeAlgo') },
-    { name: 'Edge Indicator', icon: <Activity size={18} className="text-green-400" />, desc: t('guide.stratEdge'), tf: t('guide.stratEdgeTf'), type: t('guide.stratTypeKline') },
   ]
 
   return (
@@ -461,20 +457,22 @@ function SectionExchanges() {
       </div>
 
       {/* Feature Matrix */}
-      <div className="border border-white/10 bg-white/[0.03] rounded-xl p-5">
+      <div className="border border-white/10 bg-white/[0.03] rounded-xl p-4 sm:p-5">
         <div className="flex items-center gap-2 mb-1">
           <Activity size={20} className="text-emerald-400" />
           <h3 className="text-lg font-semibold text-white">{t('guide.featureMatrixTitle')}</h3>
         </div>
         <p className="text-gray-400 text-sm mb-3">{t('guide.featureMatrixSubtitle')}</p>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+        <div className="overflow-x-auto -mx-4 sm:mx-0 px-4 sm:px-0">
+          <table className="w-full text-sm min-w-[480px]">
             <thead>
               <tr className="border-b border-gray-700">
-                <th className="text-left py-2 px-2 text-gray-400 font-medium">{t('guide.featureMatrixFeature')}</th>
+                <th className="text-left py-2.5 pr-2 text-gray-400 font-medium text-xs">{t('guide.featureMatrixFeature')}</th>
                 {['bitget', 'weex', 'bingx', 'bitunix', 'hyperliquid'].map(ex => (
-                  <th key={ex} className="text-center py-2 px-1.5">
-                    <ExchangeIcon exchange={ex} size={18} />
+                  <th key={ex} className="py-2.5 w-[60px] sm:w-[72px]">
+                    <div className="flex items-center justify-center">
+                      <ExchangeIcon exchange={ex} size={20} />
+                    </div>
                   </th>
                 ))}
               </tr>
@@ -491,12 +489,14 @@ function SectionExchanges() {
                 { key: 'demo', values: [true, true, true, true, true] },
               ].map((row, i) => (
                 <tr key={row.key} className={i % 2 === 0 ? 'bg-gray-800/30' : ''}>
-                  <td className="py-2 px-2 text-gray-300 font-medium text-xs">{t(`guide.fm_${row.key}`)}</td>
+                  <td className="py-2 pr-2 text-gray-300 font-medium text-xs whitespace-nowrap">{t(`guide.fm_${row.key}`)}</td>
                   {row.values.map((v, j) => (
-                    <td key={j} className="py-2 px-1.5 text-center">
-                      {v
-                        ? <span className="text-emerald-400 text-sm">&#10003;</span>
-                        : <span className="text-gray-600 text-sm">&#10005;</span>}
+                    <td key={j} className="py-2">
+                      <div className="flex items-center justify-center">
+                        {v
+                          ? <span className="text-emerald-400 text-base leading-none">&#10003;</span>
+                          : <span className="text-gray-600 text-base leading-none">&#10005;</span>}
+                      </div>
                     </td>
                   ))}
                 </tr>
@@ -504,12 +504,14 @@ function SectionExchanges() {
             </tbody>
           </table>
         </div>
-        <div className="mt-3 space-y-1.5">
-          <p className="text-[11px] text-gray-500 flex items-center gap-1.5">
-            <span className="text-emerald-400">&#10003;</span> {t('guide.fm_noteTrailingNative')}
+        <div className="mt-4 space-y-2 border-t border-white/[0.06] pt-3">
+          <p className="text-xs text-gray-300 flex items-start gap-2">
+            <span className="text-emerald-400 text-sm font-bold mt-px shrink-0">&#10003;</span>
+            <span><span className="text-emerald-400 font-semibold">Nativer Trailing Stop:</span> {t('guide.fm_noteTrailingNative')}</span>
           </p>
-          <p className="text-[11px] text-gray-500 flex items-center gap-1.5">
-            <span className="text-emerald-400">&#10003;</span> {t('guide.fm_noteTrailingSoftware')}
+          <p className="text-xs text-gray-300 flex items-start gap-2">
+            <span className="text-yellow-400 text-sm font-bold mt-px shrink-0">&#10003;</span>
+            <span><span className="text-yellow-400 font-semibold">Software-Fallback:</span> {t('guide.fm_noteTrailingSoftware')}</span>
           </p>
         </div>
       </div>
