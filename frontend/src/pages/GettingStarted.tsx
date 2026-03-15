@@ -54,56 +54,57 @@ function PrerequisiteBanner() {
   ]
 
   return (
-    <div className="border border-amber-500/30 bg-gradient-to-r from-amber-500/10 to-amber-600/5 rounded-2xl p-5 mb-6">
-      <div className="flex items-start gap-3">
-        <div className="flex-shrink-0 w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-500/30 flex items-center justify-center">
-          <AlertTriangle size={20} className="text-amber-400" />
+    <div className="border border-amber-500/30 bg-gradient-to-r from-amber-500/10 to-amber-600/5 rounded-2xl p-3 sm:p-5 mb-6">
+      <div className="flex items-start gap-2 sm:gap-3">
+        <div className="flex-shrink-0 w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-amber-500/20 border border-amber-500/30 flex items-center justify-center">
+          <AlertTriangle size={16} className="text-amber-400 sm:hidden" />
+          <AlertTriangle size={20} className="text-amber-400 hidden sm:block" />
         </div>
         <div className="flex-1">
-          <h2 className="text-lg font-bold text-amber-300 mb-1">{t('guide.prereqTitle')}</h2>
-          <p className="text-base text-gray-300 mb-3">{t('guide.prereqDesc')}</p>
+          <h2 className="text-base sm:text-lg font-bold text-amber-300 mb-1">{t('guide.prereqTitle')}</h2>
+          <p className="text-sm sm:text-base text-gray-300 mb-2 sm:mb-3">{t('guide.prereqDesc')}</p>
 
-          <div className="space-y-2">
+          <div className="space-y-1.5 sm:space-y-2">
             <div className="flex items-start gap-2">
-              <div className="flex-shrink-0 w-6 h-6 rounded-full bg-amber-500/20 border border-amber-500/30 flex items-center justify-center text-xs font-bold text-amber-400 mt-0.5">1</div>
+              <div className="flex-shrink-0 w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-amber-500/20 border border-amber-500/30 flex items-center justify-center text-[10px] sm:text-xs font-bold text-amber-400 mt-0.5">1</div>
               <div>
-                <p className="text-base text-gray-200 font-medium">{t('guide.prereqStep1')}</p>
-                <div className="flex flex-wrap gap-2 mt-1.5">
+                <p className="text-sm sm:text-base text-gray-200 font-medium">{t('guide.prereqStep1')}</p>
+                <div className="flex flex-wrap gap-1.5 sm:gap-2 mt-1 sm:mt-1.5">
                   {exchanges.map((ex) => {
                     const url = affiliateUrls[ex.key]
                     return url ? (
                       <a key={ex.key} href={url} target="_blank" rel="noopener noreferrer"
-                        className="inline-flex items-center gap-2 px-3 py-1.5 bg-white/5 border border-white/10 rounded-lg text-sm text-gray-300 hover:bg-emerald-500/10 hover:border-emerald-500/30 hover:text-emerald-300 transition-colors cursor-pointer">
-                        {ex.icon} <span>{ex.name}</span> <ExternalLink size={10} />
+                        className="inline-flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-1 sm:py-1.5 bg-white/5 border border-white/10 rounded-lg text-xs sm:text-sm text-gray-300 hover:bg-emerald-500/10 hover:border-emerald-500/30 hover:text-emerald-300 transition-colors cursor-pointer">
+                        {ex.icon} <span className="hidden sm:inline">{ex.name}</span> <ExternalLink size={10} />
                       </a>
                     ) : (
-                      <span key={ex.key} className="inline-flex items-center gap-2 px-3 py-1.5 bg-white/5 border border-white/10 rounded-lg text-sm text-gray-500">
-                        {ex.icon} <span>{ex.name}</span>
+                      <span key={ex.key} className="inline-flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-1 sm:py-1.5 bg-white/5 border border-white/10 rounded-lg text-xs sm:text-sm text-gray-500">
+                        {ex.icon} <span className="hidden sm:inline">{ex.name}</span>
                       </span>
                     )
                   })}
                 </div>
-                <p className="text-sm text-gray-500 mt-1">{t('guide.prereqAffiliateHint')}</p>
+                <p className="text-xs sm:text-sm text-gray-500 mt-1">{t('guide.prereqAffiliateHint')}</p>
               </div>
             </div>
             <div className="flex items-start gap-2">
-              <div className="flex-shrink-0 w-6 h-6 rounded-full bg-amber-500/20 border border-amber-500/30 flex items-center justify-center text-xs font-bold text-amber-400 mt-0.5">2</div>
+              <div className="flex-shrink-0 w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-amber-500/20 border border-amber-500/30 flex items-center justify-center text-[10px] sm:text-xs font-bold text-amber-400 mt-0.5">2</div>
               <div>
-                <p className="text-base text-gray-200 font-medium">{t('guide.prereqStep2')}</p>
-                <p className="text-sm text-gray-400 mt-0.5">{t('guide.prereqStep2Hint')}</p>
+                <p className="text-sm sm:text-base text-gray-200 font-medium">{t('guide.prereqStep2')}</p>
+                <p className="text-xs sm:text-sm text-gray-400 mt-0.5">{t('guide.prereqStep2Hint')}</p>
               </div>
             </div>
             <div className="flex items-start gap-2">
-              <div className="flex-shrink-0 w-6 h-6 rounded-full bg-amber-500/20 border border-amber-500/30 flex items-center justify-center text-xs font-bold text-amber-400 mt-0.5">3</div>
+              <div className="flex-shrink-0 w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-amber-500/20 border border-amber-500/30 flex items-center justify-center text-[10px] sm:text-xs font-bold text-amber-400 mt-0.5">3</div>
               <div>
-                <p className="text-base text-gray-200 font-medium">{t('guide.prereqStep3')}</p>
-                <p className="text-sm text-gray-400 mt-0.5">{t('guide.prereqStep3Hint')}</p>
+                <p className="text-sm sm:text-base text-gray-200 font-medium">{t('guide.prereqStep3')}</p>
+                <p className="text-xs sm:text-sm text-gray-400 mt-0.5">{t('guide.prereqStep3Hint')}</p>
               </div>
             </div>
           </div>
 
           <Link to="/settings"
-            className="inline-flex items-center gap-1.5 mt-3 px-4 py-2 text-sm font-medium bg-amber-500/20 text-amber-300 rounded-lg hover:bg-amber-500/30 border border-amber-500/20 transition-colors">
+            className="inline-flex items-center gap-1.5 mt-2 sm:mt-3 px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm font-medium bg-amber-500/20 text-amber-300 rounded-lg hover:bg-amber-500/30 border border-amber-500/20 transition-colors">
             <UserCheck size={14} /> {t('guide.prereqGoToSettings')} <ArrowRight size={12} />
           </Link>
         </div>

@@ -907,7 +907,7 @@ export default function BotPerformance() {
               {/* Recent Trades */}
               <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">{t('performance.recentTrades')}</h3>
               <div className="overflow-x-auto rounded-xl border border-white/5">
-                <table className="table-premium">
+                <table className="table-premium mobile-cards">
                   <thead>
                     <tr>
                       <th className="text-left">{t('trades.date')}</th>
@@ -928,24 +928,24 @@ export default function BotPerformance() {
                       const botExchange = compareData.find(b => b.bot_id === selectedBot)?.exchange_type || ''
                       return botDetail.recent_trades.map((trade) => (
                         <tr key={trade.id}>
-                          <td className="text-gray-300 cursor-default" title={formatTime(trade.entry_time)}>
+                          <td data-label={t('trades.date')} className="text-gray-300 cursor-default" title={formatTime(trade.entry_time)}>
                             {formatDate(trade.entry_time)}
                           </td>
-                          <td className="text-center hidden lg:table-cell">
+                          <td data-label={t('trades.exchange')} className="text-center hidden lg:table-cell">
                             <span className="inline-flex justify-center">
                               <ExchangeIcon exchange={botExchange} size={18} />
                             </span>
                           </td>
-                          <td className="text-white font-medium">{trade.symbol}</td>
-                          <td className="text-center">
+                          <td data-label={t('trades.symbol')} className="text-white font-medium">{trade.symbol}</td>
+                          <td data-label={t('trades.side')} className="text-center">
                             <span className={trade.side === 'long' ? 'text-profit' : 'text-loss'}>
                               {trade.side === 'long' ? '+' : '-'} {trade.side.toUpperCase()}
                             </span>
                           </td>
-                          <td className="text-right text-gray-300 hidden xl:table-cell">
+                          <td data-label={t('trades.entryPrice')} className="text-right text-gray-300 hidden xl:table-cell">
                             ${trade.entry_price.toLocaleString()}
                           </td>
-                          <td className="text-right">
+                          <td data-label={t('trades.pnl')} className="text-right">
                             <PnlCell
                               pnl={trade.pnl}
                               fees={trade.fees ?? 0}
@@ -954,12 +954,12 @@ export default function BotPerformance() {
                               className={trade.pnl && trade.pnl >= 0 ? 'pnl-positive' : 'pnl-negative'}
                             />
                           </td>
-                          <td className="text-center hidden 2xl:table-cell">
+                          <td data-label={t('trades.mode')} className="text-center hidden 2xl:table-cell">
                             <span className={trade.demo_mode ? 'badge-demo' : 'badge-live'}>
                               {trade.demo_mode ? t('common.demo') : t('common.live')}
                             </span>
                           </td>
-                          <td className="text-center">
+                          <td data-label={t('trades.status')} className="text-center">
                             <span className={
                               trade.status === 'open' ? 'badge-open' :
                               trade.status === 'closed' ? 'badge-neutral' :
@@ -968,11 +968,11 @@ export default function BotPerformance() {
                               {t(`trades.${trade.status}`)}
                             </span>
                           </td>
-                          <td className={`text-center text-sm font-medium hidden xl:table-cell ${confidenceColor(trade.confidence)}`}>{trade.confidence}%</td>
-                          <td className="text-sm text-gray-400 max-w-[280px] truncate hidden 2xl:table-cell" title={trade.reason}>
+                          <td data-label={t('bots.confidence')} className={`text-center text-sm font-medium hidden xl:table-cell ${confidenceColor(trade.confidence)}`}>{trade.confidence}%</td>
+                          <td data-label={t('bots.reasoning')} className="text-sm text-gray-400 max-w-[280px] truncate hidden 2xl:table-cell" title={trade.reason}>
                             {trade.reason || '--'}
                           </td>
-                          <td className="text-center">
+                          <td data-label={t('bots.details')} className="text-center">
                             <button
                               onClick={() => setSelectedTrade(trade)}
                               className="p-1.5 text-gray-400 hover:text-white transition-colors rounded-lg hover:bg-white/5"

@@ -237,9 +237,9 @@ export default function Backtest() {
       <div className="glass-card rounded-xl p-6 border border-white/10 overflow-visible !backdrop-blur-none">
         <h2 className="text-white font-semibold mb-5">{t('backtest.configuration')}</h2>
 
-        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-x-5 gap-y-4">
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-x-5 gap-y-4 overflow-visible">
           {/* Strategy */}
-          <div className="relative z-50">
+          <div className="relative z-[60] pb-1">
             <label className="text-xs text-gray-400 mb-1.5 block font-medium">{t('backtest.strategy')}</label>
             <FilterDropdown
               value={strategyType}
@@ -251,7 +251,7 @@ export default function Backtest() {
           </div>
 
           {/* Symbol */}
-          <div className="relative z-50">
+          <div className="relative z-[55] pb-1">
             <label className="text-xs text-gray-400 mb-1.5 block font-medium">{t('backtest.symbol')}</label>
             <FilterDropdown
               value={symbol}
@@ -263,7 +263,7 @@ export default function Backtest() {
           </div>
 
           {/* Timeframe */}
-          <div className="relative z-50">
+          <div className="relative z-50 pb-1">
             <label className="text-xs text-gray-400 mb-1.5 block font-medium">{t('backtest.timeframe')}</label>
             <FilterDropdown
               value={timeframe}

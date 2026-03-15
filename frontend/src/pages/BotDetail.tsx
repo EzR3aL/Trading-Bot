@@ -368,7 +368,7 @@ export default function BotDetail() {
             <p className="text-gray-500 text-sm py-8 text-center">{d('noTrades')}</p>
           ) : (
             <div className="overflow-x-auto">
-              <table className="table-premium">
+              <table className="table-premium mobile-cards">
                 <thead>
                   <tr>
                     <th className="text-left">{t('trades.date')}</th>
@@ -385,27 +385,27 @@ export default function BotDetail() {
                 <tbody>
                   {stats.recent_trades.map(trade => (
                     <tr key={trade.id}>
-                      <td className="text-gray-300 cursor-default" title={formatTime(trade.entry_time)}>
+                      <td data-label={t('trades.date')} className="text-gray-300 cursor-default" title={formatTime(trade.entry_time)}>
                         {formatDate(trade.entry_time)}
                       </td>
-                      <td className="text-center hidden lg:table-cell">
+                      <td data-label={t('trades.exchange')} className="text-center hidden lg:table-cell">
                         <span className="inline-flex justify-center">
                           <ExchangeIcon exchange={config.exchange_type} size={18} />
                         </span>
                       </td>
-                      <td className="text-white font-medium">{trade.symbol}</td>
-                      <td className="text-center">
+                      <td data-label={t('trades.symbol')} className="text-white font-medium">{trade.symbol}</td>
+                      <td data-label={t('trades.side')} className="text-center">
                         <span className={trade.side === 'long' ? 'text-profit' : 'text-loss'}>
                           {trade.side === 'long' ? '+' : '-'} {trade.side.toUpperCase()}
                         </span>
                       </td>
-                      <td className="text-right text-gray-300 hidden xl:table-cell">
+                      <td data-label={t('trades.entryPrice')} className="text-right text-gray-300 hidden xl:table-cell">
                         ${trade.entry_price.toLocaleString()}
                       </td>
-                      <td className="text-right">
+                      <td data-label={t('trades.pnl')} className="text-right">
                         <PnlCell pnl={trade.pnl} fees={trade.fees || 0} fundingPaid={trade.funding_paid || 0} status={trade.status} className={trade.pnl >= 0 ? 'pnl-positive' : 'pnl-negative'} />
                       </td>
-                      <td className="text-center hidden xl:table-cell">
+                      <td data-label={t('trades.trailingStop')} className="text-center hidden xl:table-cell">
                         {trade.status === 'open' && trade.trailing_stop_active && trade.trailing_stop_price != null ? (
                           <span className="inline-flex items-center justify-center gap-1 text-emerald-400">
                             ${trade.trailing_stop_price.toLocaleString()} ({trade.trailing_stop_distance_pct?.toFixed(2)}%)
@@ -419,12 +419,12 @@ export default function BotDetail() {
                           <span className="text-gray-600">--</span>
                         )}
                       </td>
-                      <td className="text-center hidden 2xl:table-cell">
+                      <td data-label={t('trades.mode')} className="text-center hidden 2xl:table-cell">
                         <span className={trade.demo_mode ? 'badge-demo' : 'badge-live'}>
                           {trade.demo_mode ? t('common.demo') : t('common.live')}
                         </span>
                       </td>
-                      <td className="text-center">
+                      <td data-label={t('trades.status')} className="text-center">
                         <span className={
                           trade.status === 'open' ? 'badge-open' :
                           trade.status === 'closed' ? 'badge-neutral' :

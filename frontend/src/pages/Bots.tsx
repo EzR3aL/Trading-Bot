@@ -672,7 +672,7 @@ function BotTradeHistoryModal({ bot, onClose, t }: { bot: BotStatus; onClose: ()
                 <div className="text-xs text-gray-400 uppercase tracking-wider font-semibold">{t('bots.tradeHistory')}</div>
               </div>
               <div className="overflow-x-auto">
-              <table className="w-full">
+              <table className="w-full mobile-cards">
                 <thead>
                   <tr className="border-t border-b border-white/5 bg-white/[0.02]">
                     <th className="text-left px-3 py-2.5 text-xs text-gray-400 uppercase font-semibold tracking-wider">{t('trades.date')}</th>
@@ -691,24 +691,24 @@ function BotTradeHistoryModal({ bot, onClose, t }: { bot: BotStatus; onClose: ()
                 <tbody>
                   {stats.recent_trades.map((trade) => (
                     <tr key={trade.id} className="border-b border-white/5 hover:bg-white/[0.02] transition-colors">
-                      <td className="px-3 py-2.5 text-sm text-gray-300" title={formatTime(trade.entry_time)}>
+                      <td data-label={t('trades.date')} className="px-3 py-2.5 text-sm text-gray-300" title={formatTime(trade.entry_time)}>
                         {formatDate(trade.entry_time)}
                       </td>
-                      <td className="px-3 py-2.5 text-center">
+                      <td data-label={t('trades.exchange')} className="px-3 py-2.5 text-center">
                         <span className="inline-flex justify-center">
                           <ExchangeIcon exchange={bot.exchange_type} size={18} />
                         </span>
                       </td>
-                      <td className="px-3 py-2.5 text-sm text-white font-semibold">{trade.symbol}</td>
-                      <td className="px-3 py-2.5 text-center">
+                      <td data-label={t('trades.symbol')} className="px-3 py-2.5 text-sm text-white font-semibold">{trade.symbol}</td>
+                      <td data-label={t('trades.side')} className="px-3 py-2.5 text-center">
                         <span className={`text-sm ${trade.side === 'long' ? 'text-profit' : 'text-loss'}`}>
                           {trade.side === 'long' ? '+' : '-'} {trade.side.toUpperCase()}
                         </span>
                       </td>
-                      <td className="px-3 py-2.5 text-right text-sm text-gray-300">
+                      <td data-label={t('trades.entryPrice')} className="px-3 py-2.5 text-right text-sm text-gray-300">
                         ${trade.entry_price.toLocaleString()}
                       </td>
-                      <td className="px-3 py-2.5 text-right">
+                      <td data-label={t('trades.pnl')} className="px-3 py-2.5 text-right">
                         <PnlCell
                           pnl={trade.pnl}
                           fees={trade.fees ?? 0}
@@ -720,7 +720,7 @@ function BotTradeHistoryModal({ bot, onClose, t }: { bot: BotStatus; onClose: ()
                           }`}
                         />
                       </td>
-                      <td className="px-3 py-2.5 text-center">
+                      <td data-label={t('trades.trailingStop')} className="px-3 py-2.5 text-center">
                         {trade.status === 'open' && trade.trailing_stop_active && trade.trailing_stop_price != null ? (
                           <span className="inline-flex items-center justify-center gap-1 text-emerald-400 text-sm">
                             ${trade.trailing_stop_price.toLocaleString()} ({trade.trailing_stop_distance_pct?.toFixed(2)}%)
@@ -734,12 +734,12 @@ function BotTradeHistoryModal({ bot, onClose, t }: { bot: BotStatus; onClose: ()
                           <span className="text-gray-600">--</span>
                         )}
                       </td>
-                      <td className="px-3 py-2.5 text-center">
+                      <td data-label={t('trades.mode')} className="px-3 py-2.5 text-center">
                         <span className={trade.demo_mode ? 'badge-demo' : 'badge-live'}>
                           {trade.demo_mode ? t('common.demo') : t('common.live')}
                         </span>
                       </td>
-                      <td className="px-3 py-2.5 text-center">
+                      <td data-label={t('trades.status')} className="px-3 py-2.5 text-center">
                         <span className={
                           trade.status === 'open' ? 'badge-open' :
                           trade.status === 'closed' ? 'badge-neutral' :
@@ -748,8 +748,8 @@ function BotTradeHistoryModal({ bot, onClose, t }: { bot: BotStatus; onClose: ()
                           {t(`trades.${trade.status}`)}
                         </span>
                       </td>
-                      <td className={`px-3 py-2.5 text-center text-sm font-medium ${confidenceColor(trade.confidence)}`}>{trade.confidence}%</td>
-                      <td className="px-3 py-2.5 text-center">
+                      <td data-label={t('bots.confidence')} className={`px-3 py-2.5 text-center text-sm font-medium ${confidenceColor(trade.confidence)}`}>{trade.confidence}%</td>
+                      <td data-label={t('bots.details')} className="px-3 py-2.5 text-center">
                         <button
                           onClick={() => setSelectedTrade(trade)}
                           className="p-1.5 text-gray-400 hover:text-white transition-colors rounded-lg hover:bg-white/5"

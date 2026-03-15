@@ -232,8 +232,8 @@ function DashboardRecentTrades({ trades }: { trades: Trade[] }) {
           {t('dashboard.recentTrades')}
         </h2>
       </div>
-      <div className="overflow-x-auto">
-        <table className="table-premium">
+      <div className="overflow-x-auto sm:overflow-x-auto max-sm:!overflow-x-visible">
+        <table className="table-premium mobile-cards">
           <thead>
             <tr>
               <th className="text-left">{t('trades.date')}</th>
@@ -261,34 +261,34 @@ function DashboardRecentTrades({ trades }: { trades: Trade[] }) {
                     onClick={() => setExpandedId(expandedId === trade.id ? null : trade.id)}
                     className="cursor-pointer"
                   >
-                    <td className="text-gray-300">
+                    <td data-label={t('trades.date')} className="text-gray-300">
                       <span className="inline-flex items-center">
                         <ChevronRight size={14} className={`expand-chevron ${expandedId === trade.id ? 'open' : ''}`} />
                         <span title={formatTime(trade.entry_time)}>{formatDate(trade.entry_time)}</span>
                       </span>
                     </td>
-                    <td className="hidden xl:table-cell">
+                    <td data-label={t('trades.bot')} className="hidden xl:table-cell">
                       {trade.bot_name ? (
                         <span className="text-white font-medium text-xs">{trade.bot_name}</span>
                       ) : (
                         <span className="text-gray-600">--</span>
                       )}
                     </td>
-                    <td className="text-center hidden lg:table-cell">
+                    <td data-label={t('trades.exchange')} className="text-center hidden lg:table-cell">
                       <span className="inline-flex justify-center">
                         <ExchangeIcon exchange={trade.bot_exchange || trade.exchange} size={18} />
                       </span>
                     </td>
-                    <td className="text-white font-medium">{trade.symbol}</td>
-                    <td className="text-center">
+                    <td data-label={t('trades.symbol')} className="text-white font-medium">{trade.symbol}</td>
+                    <td data-label={t('trades.side')} className="text-center">
                       <span className={trade.side === 'long' ? 'text-profit' : 'text-loss'}>
                         {trade.side === 'long' ? '+' : '-'} {trade.side.toUpperCase()}
                       </span>
                     </td>
-                    <td className="text-right text-gray-300 hidden xl:table-cell">
+                    <td data-label={t('trades.entryPrice')} className="text-right text-gray-300 hidden xl:table-cell">
                       ${trade.entry_price.toLocaleString()}
                     </td>
-                    <td className="text-right">
+                    <td data-label={t('trades.pnl')} className="text-right">
                       <PnlCell
                         pnl={trade.pnl}
                         fees={trade.fees}
@@ -297,12 +297,12 @@ function DashboardRecentTrades({ trades }: { trades: Trade[] }) {
                         className={trade.pnl && trade.pnl >= 0 ? 'pnl-positive' : 'pnl-negative'}
                       />
                     </td>
-                    <td className="text-center hidden 2xl:table-cell">
+                    <td data-label={t('trades.mode')} className="text-center hidden 2xl:table-cell">
                       <span className={trade.demo_mode ? 'badge-demo' : 'badge-live'}>
                         {trade.demo_mode ? t('common.demo') : t('common.live')}
                       </span>
                     </td>
-                    <td className="text-center">
+                    <td data-label={t('trades.status')} className="text-center">
                       <span className={
                         trade.status === 'open' ? 'badge-open' :
                         trade.status === 'closed' ? 'badge-neutral' :

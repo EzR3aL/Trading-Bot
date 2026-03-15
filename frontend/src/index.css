@@ -531,6 +531,95 @@ html.light .num-input-wrap .num-arrow-up {
   .filter-select {
     min-width: 120px;
   }
+
+  /* ── Mobile Trade Cards (replaces tables on mobile) ────────── */
+  /* On mobile, hide the table header and convert rows to cards */
+
+  .mobile-cards thead {
+    display: none !important;
+  }
+
+  .mobile-cards tbody {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .mobile-cards tbody tr {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.25rem 0.75rem;
+    padding: 0.75rem !important;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 0.75rem;
+    background: rgba(255, 255, 255, 0.02);
+    width: 100% !important;
+    min-width: 0 !important;
+  }
+
+  .mobile-cards tbody td {
+    display: flex;
+    flex-direction: column;
+    padding: 0.125rem 0 !important;
+    border: none !important;
+    font-size: 0.75rem;
+    min-width: 0 !important;
+    width: auto !important;
+  }
+
+  .mobile-cards tbody td::before {
+    content: attr(data-label);
+    font-size: 0.625rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #64748b;
+    margin-bottom: 0.125rem;
+  }
+
+  /* First cell spans full width (usually date+symbol) */
+  .mobile-cards tbody td:first-child {
+    grid-column: 1 / -1;
+    flex-direction: row;
+    align-items: center;
+    gap: 0.5rem;
+    font-weight: 600;
+    font-size: 0.875rem;
+  }
+
+  /* Remove min-width from tables inside mobile-cards wrapper */
+  .mobile-cards table,
+  .mobile-cards .table-premium {
+    min-width: 0 !important;
+  }
+
+  /* Show hidden cells in mobile card mode (they have data-labels for card display) */
+  .mobile-cards tbody td.hidden,
+  .mobile-cards tbody td[class*="hidden"] {
+    display: flex !important;
+  }
+
+  /* Expand row: full-width card with clean grid layout */
+  .mobile-cards tbody tr.table-expand-row {
+    display: block !important;
+    padding: 0 !important;
+    border: none !important;
+    background: transparent !important;
+    border-radius: 0 !important;
+    margin-top: -0.5rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .mobile-cards tbody tr.table-expand-row > td {
+    display: block !important;
+    grid-column: 1 / -1;
+  }
+
+  .mobile-cards tbody tr.table-expand-row .table-expand-content {
+    grid-template-columns: 1fr 1fr !important;
+    border-radius: 0 0 0.75rem 0.75rem;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-top: none;
+  }
 }
 
 /* ═══════════════════════════════════════════════════════════════ */
