@@ -438,10 +438,36 @@ html.light .num-input-wrap .num-arrow-up {
 /* ═══════════════════════════════════════════════════════════════ */
 
 @media (max-width: 640px) {
-  /* Reduce page padding */
-  .page-content, main > div > div {
-    padding-left: 1rem !important;
-    padding-right: 1rem !important;
+  /* ── Consistent full-width cards on mobile ─────────────── */
+  /* Main content area: minimal padding so cards stretch edge-to-edge */
+  #main-content {
+    padding-left: 0.75rem !important;
+    padding-right: 0.75rem !important;
+  }
+
+  /* All glass-cards and chart containers: uniform width */
+  .glass-card,
+  .glass-card.rounded-2xl,
+  .glass-card.rounded-xl {
+    border-radius: 0.75rem !important;
+    padding: 0.75rem !important;
+  }
+
+  /* Cards with explicit p-5 or p-6: normalize to p-3 on mobile */
+  .glass-card[class*="p-5"],
+  .glass-card[class*="p-6"] {
+    padding: 0.75rem !important;
+  }
+
+  /* Stat card grids: tighter gap */
+  .grid.grid-cols-2,
+  .grid.grid-cols-4 {
+    gap: 0.5rem !important;
+  }
+
+  /* Animate-in wrappers: no extra spacing */
+  .animate-in {
+    padding: 0 !important;
   }
 
   /* Page headers: stack title + actions vertically */

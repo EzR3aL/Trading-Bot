@@ -108,7 +108,10 @@ export default function MobilePositionCard({ pos }: { pos: Position }) {
           )}
           <div>
             <span className="text-gray-500 block text-[9px] uppercase tracking-wider">Exchange</span>
-            <span className="text-gray-300 capitalize">{pos.exchange}</span>
+            <span className="text-gray-300 inline-flex items-center gap-1">
+              <ExchangeIcon exchange={pos.exchange} size={14} />
+              <span className="capitalize">{pos.exchange}</span>
+            </span>
           </div>
         </div>
       )}

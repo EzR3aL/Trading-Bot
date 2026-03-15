@@ -101,7 +101,10 @@ export default function MobileTradeCard({ trade, extraDetails }: MobileTradeCard
           )}
           <div>
             <span className="text-gray-500 block text-[9px] uppercase tracking-wider">Exchange</span>
-            <span className="text-gray-300 capitalize">{exchange}</span>
+            <span className="text-gray-300 inline-flex items-center gap-1">
+              <ExchangeIcon exchange={exchange} size={14} />
+              <span className="capitalize">{exchange}</span>
+            </span>
           </div>
           <div>
             <span className="text-gray-500 block text-[9px] uppercase tracking-wider">{t('trades.entryPrice')}</span>
