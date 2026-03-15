@@ -449,9 +449,6 @@ export default function Portfolio() {
             <TrendingUp size={16} className="text-primary-400" />
             {t('portfolio.positions')}
           </h2>
-          {positions.length > 0 && (
-            <span className="text-xs text-gray-400">{positions.length} open</span>
-          )}
         </div>
         {loadingExchange ? (
           <div className="p-8 flex items-center justify-center">
