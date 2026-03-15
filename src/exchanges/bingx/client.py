@@ -843,10 +843,12 @@ class BingXClient(ExchangeClient):
                 "/openApi/agent/v1/account/inviteRelationCheck",
                 params={"uid": str(uid)},
             )
-            # Endpoint returns relationship data if the UID is an invitee.
-            # Empty/null result or error means no relationship.
-            if isinstance(result, dict) and result:
-                return True
+            # Endpoint returns relationship data with uid field if the UID is an invitee.
+            # API error responses or empty data mean no relationship.
+            if isinstance(result, dict):
+                # Must contain actual user data (uid field), not just a status wrapper
+                if result.get("uid") or result.get("inviteUid"):
+                    return True
             if isinstance(result, list) and len(result) > 0:
                 return True
             return False

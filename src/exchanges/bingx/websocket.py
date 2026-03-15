@@ -230,9 +230,9 @@ class BingXWebSocket(ExchangeWebSocket):
             await asyncio.sleep(25)
             try:
                 if self._ws_public:
-                    await self._ws_public.send("Pong")
+                    await self._ws_public.send("Ping")
                 if self._ws_private:
-                    await self._ws_private.send("Pong")
+                    await self._ws_private.send("Ping")
             except Exception as e:
                 logger.debug("BingX heartbeat failed: %s", e)
 

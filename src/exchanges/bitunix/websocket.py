@@ -88,7 +88,9 @@ class BitunixWebSocket(ExchangeWebSocket):
         await self._ws_private.send(json.dumps(auth_msg))
         response = await asyncio.wait_for(self._ws_private.recv(), timeout=10.0)
         data = json.loads(response)
-        if data.get("op") == "login" and data.get("code") in (0, "0", None):
+        op = data.get("op", "")
+        code = data.get("code")
+        if op == "login" and code in (0, "0"):
             self._authenticated = True
             logger.info("Bitunix WebSocket authenticated")
         else:
