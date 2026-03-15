@@ -5,7 +5,6 @@ All metrics are defined here so they can be imported
 from a single place across the application.
 """
 
-import os
 
 from prometheus_client import Counter, Gauge, Histogram, Info
 

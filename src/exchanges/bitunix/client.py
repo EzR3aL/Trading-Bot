@@ -472,7 +472,6 @@ class BitunixClient(ExchangeClient):
             data = data[0] if data else {}
 
         last_price = float(data.get("lastPrice", 0) or data.get("last", 0))
-        mark_price = float(data.get("markPrice", 0) or 0)
 
         # Bitunix tickers do not include bid/ask; use last price as fallback
         return Ticker(

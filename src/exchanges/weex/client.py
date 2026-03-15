@@ -28,8 +28,6 @@ from src.exchanges.weex.constants import (
     ENDPOINTS,
     MARGIN_CROSS,
     MARGIN_ISOLATED,
-    ORDER_TYPE_CLOSE_LONG,
-    ORDER_TYPE_CLOSE_SHORT,
     ORDER_TYPE_OPEN_LONG,
     ORDER_TYPE_OPEN_SHORT,
     SUCCESS_CODE,

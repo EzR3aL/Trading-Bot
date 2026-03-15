@@ -20,7 +20,6 @@ Covers:
 """
 
 import asyncio
-import json
 import os
 import sys
 import tempfile
@@ -509,7 +508,7 @@ class TestWeexCircuitBreaker:
     @pytest.mark.asyncio
     async def test_weex_request_without_circuit_breaker(self):
         """use_circuit_breaker=False skips the breaker."""
-        from src.exchanges.weex.client import WeexClient, WeexClientError
+        from src.exchanges.weex.client import WeexClient
 
         client = WeexClient(
             api_key="test", api_secret="test",
@@ -956,17 +955,7 @@ class TestHTTPSRedirectMiddleware:
         """HTTP requests with X-Forwarded-Proto: http get 301 in production."""
         from src.api.main_app import HTTPSRedirectMiddleware
 
-        middleware = HTTPSRedirectMiddleware(app=MagicMock())
-        scope = {
-            "type": "http",
-            "method": "GET",
-            "path": "/api/health",
-            "headers": [(b"x-forwarded-proto", b"http"), (b"host", b"example.com")],
-            "query_string": b"",
-            "root_path": "",
-            "scheme": "http",
-            "server": ("example.com", 80),
-        }
+        HTTPSRedirectMiddleware(app=MagicMock())
         request = MagicMock()
         request.headers = {"x-forwarded-proto": "http"}
         request.url = "http://example.com/api/health"
@@ -1086,7 +1075,7 @@ class TestTradeFailureNotification:
         mock_ws = MagicMock()
         mock_ws.broadcast_to_user = AsyncMock()
 
-        with patch("src.bot.trade_executor.asyncio.create_task") as mock_task:
+        with patch("src.bot.trade_executor.asyncio.create_task"):
             with patch("src.api.websocket.manager.ws_manager", mock_ws):
                 await mixin._notify_trade_failure(signal, "LIVE", "Connection timeout")
 

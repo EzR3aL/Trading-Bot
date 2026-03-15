@@ -348,7 +348,6 @@ async def test_serve_spa_blocks_path_traversal():
     """Path traversal attempt (../../etc/passwd) returns index.html, not the target file."""
     import tempfile
 
-    from src.api.main_app import create_app
 
     # Create a temporary frontend directory with an index.html
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -362,7 +361,6 @@ async def test_serve_spa_blocks_path_traversal():
             mock_path_cls.side_effect = lambda p: Path(tmpdir) if p == "static/frontend" else Path(p)
 
         # Instead, use a direct test of the serve_spa logic
-        from fastapi.responses import FileResponse
 
         test_frontend = frontend_dir
         full_path = "../../etc/passwd"

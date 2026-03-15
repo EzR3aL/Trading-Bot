@@ -11,13 +11,10 @@ Covers all changes from 2026-02-23 to 2026-02-25:
 6. BaseStrategy should_exit() default
 """
 
-import asyncio
 import json
 import pytest
 from datetime import datetime, timezone
-from unittest.mock import AsyncMock, MagicMock, patch
-from dataclasses import dataclass
-from typing import Optional
+from unittest.mock import AsyncMock, MagicMock
 
 import sys
 from pathlib import Path
@@ -602,9 +599,8 @@ class TestClosePositionVerification:
         mock_client.get_position = AsyncMock(return_value=mock_position)
 
         # Simulate the verification logic from bots_lifecycle.py
-        order = None
         try:
-            order = await mock_client.close_position("BTCUSDT", "long", margin_mode="cross")
+            await mock_client.close_position("BTCUSDT", "long", margin_mode="cross")
         except Exception:
             pass
 
@@ -627,9 +623,8 @@ class TestClosePositionVerification:
         mock_client.close_position = AsyncMock(side_effect=Exception("no position"))
         mock_client.get_position = AsyncMock(return_value=None)
 
-        order = None
         try:
-            order = await mock_client.close_position("BTCUSDT", "long", margin_mode="cross")
+            await mock_client.close_position("BTCUSDT", "long", margin_mode="cross")
         except Exception:
             pass
 

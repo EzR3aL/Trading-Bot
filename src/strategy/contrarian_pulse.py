@@ -473,7 +473,7 @@ class ContrarianPulseStrategy(BaseStrategy):
             rsi_earlier_low = min(recent_rsi[:mid])
 
             if price_current_low < price_earlier_low and rsi_current_low > rsi_earlier_low:
-                return f"bullish: price lower low but RSI higher low"
+                return "bullish: price lower low but RSI higher low"
 
         else:  # SHORT
             # Bearish divergence: price higher high, RSI lower high
@@ -483,7 +483,7 @@ class ContrarianPulseStrategy(BaseStrategy):
             rsi_earlier_high = max(recent_rsi[:mid])
 
             if price_current_high > price_earlier_high and rsi_current_high < rsi_earlier_high:
-                return f"bearish: price higher high but RSI lower high"
+                return "bearish: price higher high but RSI lower high"
 
         return None
 

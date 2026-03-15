@@ -370,7 +370,7 @@ async def get_balance_overview(
                 logger.warning("Balance overview fetch failed for %s/%s: %s", ex_type, mode, e)
                 results.append(ExchangeBalancePreview(
                     exchange_type=ex_type, mode=mode, has_connection=True,
-                    error=f"fetch_failed",
+                    error="fetch_failed",
                 ))
                 return
 

@@ -1,7 +1,6 @@
 """Config change audit trail endpoints."""
 
 import json
-from datetime import datetime
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Query

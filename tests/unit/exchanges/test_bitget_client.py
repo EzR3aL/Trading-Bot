@@ -940,7 +940,7 @@ class TestSetLeverage:
         with patch.object(
             client, "_request",
             new_callable=AsyncMock,
-            side_effect=BitgetClientError("Already set"),
+            side_effect=BitgetClientError("Leverage not changed, same as current"),
         ):
             result = await client.set_leverage("BTCUSDT", 10)
 

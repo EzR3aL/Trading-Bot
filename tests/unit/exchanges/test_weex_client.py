@@ -14,7 +14,7 @@ import aiohttp
 import pytest
 
 from src.exchanges.weex.client import WeexClient, WeexClientError
-from src.exchanges.weex.constants import BASE_URL, ENDPOINTS, SUCCESS_CODE
+from src.exchanges.weex.constants import BASE_URL, SUCCESS_CODE
 from src.exchanges.types import Balance, FundingRateInfo, Order, Position, Ticker
 
 

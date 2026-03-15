@@ -48,7 +48,6 @@ from src.errors import (
     ERR_INVALID_ETH_ADDRESS,
     ERR_INVALID_HEX_KEY,
     ERR_NO_CONNECTION_FOR,
-    ERR_NO_API_KEY_FOR,
 )
 from src.models.database import ExchangeConnection, LLMConnection, TradeRecord, User, UserConfig
 from src.models.session import get_db

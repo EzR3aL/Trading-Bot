@@ -1,6 +1,5 @@
 """Tests for the portfolio API router."""
 
-import time
 
 import pytest
 

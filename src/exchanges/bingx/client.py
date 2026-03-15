@@ -25,6 +25,7 @@ from src.exchanges.bingx.constants import (
     ENDPOINTS,
     ERROR_CODES,
     MARGIN_CROSSED,
+    MARGIN_ISOLATED,
     ORDER_TYPE_MARKET,
     ORDER_TYPE_TRAILING_STOP_MARKET,
     POSITION_LONG,

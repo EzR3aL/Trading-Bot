@@ -58,8 +58,7 @@ async def collect_bot_metrics(app) -> None:
                 # Windows fallback
                 try:
                     import ctypes
-                    kernel32 = ctypes.windll.kernel32  # type: ignore[attr-defined]
-                    # Not reliable on Windows — skip silently
+                    ctypes.windll.kernel32  # type: ignore[attr-defined]  # noqa: B018
                 except Exception:
                     pass
 

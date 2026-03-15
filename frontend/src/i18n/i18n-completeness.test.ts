@@ -102,12 +102,10 @@ describe('guide strategy overview keys', () => {
   const stratKeys = [
     'stratTitle', 'stratSubtitle',
     'stratColName', 'stratColType', 'stratColDesc', 'stratColTf',
-    'stratKi', 'stratKiTf',
     'stratSentiment', 'stratSentimentTf',
     'stratLiquidation', 'stratLiquidationTf',
-    'stratDegen', 'stratDegenTf',
     'stratEdge', 'stratEdgeTf',
-    'stratTypeKi', 'stratTypeSentiment', 'stratTypeLiq', 'stratTypeKline',
+    'stratTypeSentiment', 'stratTypeLiq', 'stratTypeKline',
   ];
 
   it('de and en both have strategy overview keys', () => {

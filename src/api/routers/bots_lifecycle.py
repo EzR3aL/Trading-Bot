@@ -325,9 +325,8 @@ async def close_position(
     )
 
     # Close position on exchange
-    order = None
     try:
-        order = await asyncio.wait_for(
+        await asyncio.wait_for(
             client.close_position(symbol, trade.side, margin_mode=getattr(config, "margin_mode", "cross")),
             timeout=15.0,
         )

@@ -20,8 +20,6 @@ from src.api.schemas.auth import (
     LoginRequest,
     LoginResponse,
     RefreshRequest,
-    SessionListResponse,
-    SessionResponse,
     TokenResponse,
     TwoFactorDisableRequest,
     TwoFactorSetupResponse,
@@ -51,7 +49,6 @@ from src.errors import (
     ERR_CURRENT_PASSWORD_WRONG,
     ERR_INVALID_CREDENTIALS,
     ERR_INVALID_REFRESH_TOKEN,
-    ERR_SESSION_NOT_FOUND,
     ERR_TOKEN_REVOKED,
     ERR_USER_NOT_FOUND_OR_INACTIVE,
 )
