@@ -130,11 +130,23 @@ class HyperliquidClient(ExchangeClient):
         is_agent_wallet = self.wallet_address.lower() != self._wallet.address.lower()
 
         # Initialize SDK Exchange (handles EIP-712 signing)
-        raw_exchange = HLExchange(
-            wallet=self._wallet,
-            base_url=self.base_url,
-            account_address=self.wallet_address if is_agent_wallet else None,
-        )
+        # Pass empty spot_meta to avoid SDK crash when Hyperliquid adds new
+        # spot tokens that cause IndexError in info.py token parsing.
+        # We only trade perps, so spot metadata is not needed.
+        try:
+            raw_exchange = HLExchange(
+                wallet=self._wallet,
+                base_url=self.base_url,
+                account_address=self.wallet_address if is_agent_wallet else None,
+            )
+        except (IndexError, KeyError):
+            # Fallback: skip spot meta entirely
+            raw_exchange = HLExchange(
+                wallet=self._wallet,
+                base_url=self.base_url,
+                account_address=self.wallet_address if is_agent_wallet else None,
+                spot_meta={"tokens": [], "universe": []},
+            )
 
         # Wrap in SafeExchange to block fund-moving operations
         self._exchange = SafeExchange(raw_exchange)
