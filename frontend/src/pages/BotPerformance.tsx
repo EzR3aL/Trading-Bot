@@ -18,7 +18,7 @@ import MobileTradeCard from '../components/ui/MobileTradeCard'
 import useIsMobile from '../hooks/useIsMobile'
 import { Eye, EyeOff, ArrowUpRight, ArrowDownRight, Trophy, Target, LayoutGrid, BarChart3, Bot, FileText, X, Copy, ShieldCheck } from 'lucide-react'
 import type { LlmConnection } from '../types'
-import { formatDate, formatDateTime, formatChartDate, formatTime } from '../utils/dateUtils'
+import { formatDate, formatDateTime, formatChartDate, formatTime, formatChartCurrency } from '../utils/dateUtils'
 
 /* ── Strategy Labels ─────────────────────────────────────── */
 
@@ -359,7 +359,7 @@ function SmallMultipleCard({ bot, color, yDomain, chartGridColor, chartTickColor
           </defs>
           <CartesianGrid strokeDasharray="3 3" stroke={chartGridColor} vertical={false} />
           <XAxis dataKey="date" tick={{ fill: chartTickColor, fontSize: 9 }} tickLine={false} interval="preserveStartEnd" />
-          <YAxis domain={yDomain} tick={{ fill: chartTickColor, fontSize: 9 }} tickLine={false} tickFormatter={(v) => `$${v}`} />
+          <YAxis domain={yDomain} width={45} tick={{ fill: chartTickColor, fontSize: 9 }} tickLine={false} tickFormatter={formatChartCurrency} />
           <ReferenceLine y={0} stroke={chartTickColor} strokeDasharray="2 2" strokeOpacity={0.5} />
           <Tooltip
             contentStyle={{
@@ -877,8 +877,8 @@ export default function BotPerformance() {
                     <ResponsiveContainer width="100%" height={250}>
                       <ComposedChart data={botChartData} margin={{ top: 5, right: 10, left: 10, bottom: 5 }}>
                         <CartesianGrid strokeDasharray="3 3" stroke={chartGridColor} vertical={false} />
-                        <XAxis dataKey="date" tick={{ fill: chartTickColor, fontSize: 11 }} tickLine={false} />
-                        <YAxis tick={{ fill: chartTickColor, fontSize: 11 }} tickLine={false} tickFormatter={(v) => `$${v}`} />
+                        <XAxis dataKey="date" tick={{ fill: chartTickColor, fontSize: 10 }} tickLine={false} />
+                        <YAxis width={45} tick={{ fill: chartTickColor, fontSize: 10 }} tickLine={false} tickFormatter={formatChartCurrency} />
                         <Tooltip content={<BotPnlTooltip t={t} />} />
                         <ReferenceLine y={0} stroke={refColor} strokeDasharray="3 3" />
                         <Bar dataKey="dailyPnl" name={t('dashboard.dailyPnl')} stackId="pnl" maxBarSize={40}>

@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
+import { formatChartCurrency } from '../utils/dateUtils'
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer,
@@ -565,12 +566,13 @@ export default function Backtest() {
                   <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
                   <XAxis
                     dataKey="timestamp"
-                    tick={{ fill: '#6b7280', fontSize: 11 }}
+                    tick={{ fill: '#6b7280', fontSize: 10 }}
                     tickFormatter={v => v?.slice(5, 10) || v}
                   />
                   <YAxis
-                    tick={{ fill: '#6b7280', fontSize: 11 }}
-                    tickFormatter={v => `$${Number(v).toLocaleString()}`}
+                    width={45}
+                    tick={{ fill: '#6b7280', fontSize: 10 }}
+                    tickFormatter={formatChartCurrency}
                   />
                   <Tooltip
                     contentStyle={{ backgroundColor: '#1f2937', border: '1px solid #374151', borderRadius: '8px' }}

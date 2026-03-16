@@ -8,7 +8,7 @@ import i18n from '../../i18n/config'
 import { useThemeStore } from '../../stores/themeStore'
 import type { DailyStats } from '../../types'
 import { Eye, EyeOff } from 'lucide-react'
-import { formatChartDate } from '../../utils/dateUtils'
+import { formatChartDate, formatChartCurrency } from '../../utils/dateUtils'
 
 const PNL_POS = '#22c55e'
 const PNL_NEG = '#ef4444'
@@ -120,8 +120,8 @@ export default function PnlChart({ data }: Props) {
       <ResponsiveContainer width="100%" height={250}>
         <ComposedChart data={chartData} margin={{ top: 5, right: 10, left: 10, bottom: 5 }}>
           <CartesianGrid strokeDasharray="3 3" stroke={gridColor} vertical={false} />
-          <XAxis dataKey="date" tick={{ fill: tickColor, fontSize: 11 }} tickLine={false} />
-          <YAxis tick={{ fill: tickColor, fontSize: 11 }} tickLine={false} tickFormatter={(v) => `$${v}`} />
+          <XAxis dataKey="date" tick={{ fill: tickColor, fontSize: 10 }} tickLine={false} />
+          <YAxis width={45} tick={{ fill: tickColor, fontSize: 10 }} tickLine={false} tickFormatter={formatChartCurrency} />
           <Tooltip content={<PnlTooltip />} />
           <ReferenceLine y={0} stroke={refColor} strokeDasharray="3 3" />
           <Bar

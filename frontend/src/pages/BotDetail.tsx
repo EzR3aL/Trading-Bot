@@ -16,7 +16,7 @@ import { useFilterStore } from '../stores/filterStore'
 import { ExchangeIcon } from '../components/ui/ExchangeLogo'
 import PnlCell from '../components/ui/PnlCell'
 import type { LlmConnection } from '../types'
-import { formatDate, formatDateTime, formatTime } from '../utils/dateUtils'
+import { formatDate, formatDateTime, formatTime, formatChartCurrency } from '../utils/dateUtils'
 import MobileTradeCard from '../components/ui/MobileTradeCard'
 import useIsMobile from '../hooks/useIsMobile'
 
@@ -349,8 +349,8 @@ export default function BotDetail() {
                 </linearGradient>
               </defs>
               <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
-              <XAxis dataKey="date" tick={{ fill: '#6b7280', fontSize: 11 }} tickFormatter={v => v?.slice(5)} />
-              <YAxis tick={{ fill: '#6b7280', fontSize: 11 }} tickFormatter={v => `$${v}`} />
+              <XAxis dataKey="date" tick={{ fill: '#6b7280', fontSize: 10 }} tickFormatter={v => v?.slice(5)} />
+              <YAxis width={45} tick={{ fill: '#6b7280', fontSize: 10 }} tickFormatter={formatChartCurrency} />
               <Tooltip
                 contentStyle={{ backgroundColor: 'rgba(20, 26, 42, 0.95)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', backdropFilter: 'blur(24px)' }}
                 labelStyle={{ color: '#9ca3af' }}

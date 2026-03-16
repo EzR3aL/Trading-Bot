@@ -72,14 +72,14 @@ export default function MobileTradeCard({ trade, extraDetails }: MobileTradeCard
           )}
         </div>
         <div className="flex items-center gap-1.5 shrink-0">
-          <span className="text-[10px] text-gray-500 tabular-nums">{formatDate(trade.entry_time)}</span>
-          <ChevronDown size={12} className={`text-gray-500 transition-transform ${open ? 'rotate-180' : ''}`} />
+          <span className="text-[10px] text-gray-400 tabular-nums">{formatDate(trade.entry_time)}</span>
+          <ChevronDown size={12} className={`text-gray-400 transition-transform ${open ? 'rotate-180' : ''}`} />
         </div>
       </div>
 
       {/* ── Sub Row: Size + PnL ── */}
       <div className="flex items-center justify-between px-3 pb-2 text-[11px]">
-        <span className="text-gray-500">
+        <span className="text-gray-400">
           {trade.size != null && `${trade.size} ${trade.symbol.replace('USDT', '')}`}
         </span>
         {trade.status === 'closed' && trade.pnl != null ? (

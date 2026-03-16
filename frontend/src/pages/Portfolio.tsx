@@ -1,4 +1,5 @@
 import { Fragment, useState, useEffect, useMemo } from 'react'
+import { formatChartCurrency } from '../utils/dateUtils'
 import { useTranslation } from 'react-i18next'
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -216,7 +217,7 @@ export default function Portfolio() {
             <button
               key={p}
               onClick={() => setPeriod(p)}
-              className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all duration-200 ${
+              className={`min-w-[4rem] sm:min-w-[4.5rem] px-2 sm:px-3 py-1.5 text-xs font-medium rounded-lg text-center transition-all duration-200 ${
                 period === p
                   ? 'bg-gradient-to-r from-primary-600 to-primary-500 text-white shadow-glow-sm'
                   : 'text-gray-400 hover:text-white hover:bg-white/5'
@@ -232,18 +233,18 @@ export default function Portfolio() {
       <div className="glass-card rounded-2xl p-6 mb-6">
         <div className="grid grid-cols-1 md:grid-cols-5 gap-6">
           {/* Total Balance */}
-          <div className="md:col-span-2">
+          <div className="md:col-span-2 text-center md:text-left">
             <div className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-1">
               {t('portfolio.totalBalance')}
             </div>
-            <div className="text-3xl font-bold text-white flex items-center gap-3">
+            <div className="text-3xl font-bold text-white flex items-center justify-center md:justify-start gap-3">
               ${totalBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               {loadingExchange && (
                 <div className="w-4 h-4 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
               )}
             </div>
             {summary && (
-              <div className={`flex items-center gap-1 mt-1 text-sm ${summary.total_pnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+              <div className={`flex items-center justify-center md:justify-start gap-1 mt-1 text-sm ${summary.total_pnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
                 {summary.total_pnl >= 0 ? <ArrowUpRight size={16} /> : <ArrowDownRight size={16} />}
                 <span>${Math.abs(summary.total_pnl).toFixed(2)} PnL</span>
               </div>
@@ -355,16 +356,17 @@ export default function Portfolio() {
                 <XAxis
                   dataKey="date"
                   stroke="rgba(255,255,255,0.3)"
-                  tick={{ fill: 'rgba(255,255,255,0.4)', fontSize: 11 }}
+                  tick={{ fill: 'rgba(255,255,255,0.5)', fontSize: 10 }}
                   tickLine={false}
                   axisLine={false}
                 />
                 <YAxis
+                  width={45}
                   stroke="rgba(255,255,255,0.3)"
-                  tick={{ fill: 'rgba(255,255,255,0.4)', fontSize: 11 }}
+                  tick={{ fill: 'rgba(255,255,255,0.5)', fontSize: 10 }}
                   tickLine={false}
                   axisLine={false}
-                  tickFormatter={(v: number) => `$${v}`}
+                  tickFormatter={formatChartCurrency}
                 />
                 <Tooltip content={<ChartTooltip />} />
                 {chartData.exchanges.map((ex) => (
@@ -460,7 +462,7 @@ export default function Portfolio() {
         ) : sortedPositions.length === 0 ? (
           <div className="p-8 text-center text-gray-500">{t('portfolio.noPositions')}</div>
         ) : isMobile ? (
-          <div className="px-3 pb-3 space-y-1.5">
+          <div className="px-1.5 pb-1.5 pt-1.5 space-y-1.5">
             {sortedPositions.map((pos, idx) => (
               <MobilePositionCard key={`${pos.exchange}-${pos.symbol}-${idx}`} pos={pos} />
             ))}

@@ -83,6 +83,18 @@ export function formatDatePickerDisplay(isoDateString: string): string {
 }
 
 /**
+ * Compact currency formatter for chart Y-axis labels.
+ * $1200 → "$1.2K", $-600 → "-$600", $45 → "$45"
+ */
+export function formatChartCurrency(value: number): string {
+  const abs = Math.abs(value)
+  const sign = value < 0 ? '-' : ''
+  if (abs >= 1_000_000) return `${sign}$${(abs / 1_000_000).toFixed(1)}M`
+  if (abs >= 1_000) return `${sign}$${(abs / 1_000).toFixed(abs % 1_000 === 0 ? 0 : 1)}K`
+  return `${sign}$${abs}`
+}
+
+/**
  * Localized month names based on browser locale.
  */
 export function getLocalizedMonths(): string[] {

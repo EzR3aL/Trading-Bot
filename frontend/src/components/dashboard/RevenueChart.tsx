@@ -3,7 +3,7 @@ import {
   Tooltip, ResponsiveContainer, Legend,
 } from 'recharts'
 import { useTranslation } from 'react-i18next'
-import { formatChartDate } from '../../utils/dateUtils'
+import { formatChartDate, formatChartCurrency } from '../../utils/dateUtils'
 import { useThemeStore } from '../../stores/themeStore'
 import type { DailyStats } from '../../types'
 import ChartTooltip from './ChartTooltip'
@@ -37,8 +37,8 @@ export default function RevenueChart({ data }: Props) {
     <ResponsiveContainer width="100%" height={200}>
       <BarChart data={chartData} margin={{ top: 5, right: 10, left: 10, bottom: 5 }}>
         <CartesianGrid strokeDasharray="3 3" stroke={gridColor} />
-        <XAxis dataKey="date" tick={{ fill: tickColor, fontSize: 11 }} tickLine={false} />
-        <YAxis tick={{ fill: tickColor, fontSize: 11 }} tickLine={false} tickFormatter={(v) => `$${v}`} />
+        <XAxis dataKey="date" tick={{ fill: tickColor, fontSize: 10 }} tickLine={false} />
+        <YAxis width={45} tick={{ fill: tickColor, fontSize: 10 }} tickLine={false} tickFormatter={formatChartCurrency} />
         <Tooltip content={<ChartTooltip />} />
         <Legend
           wrapperStyle={{ fontSize: '12px', color: '#9ca3af' }}

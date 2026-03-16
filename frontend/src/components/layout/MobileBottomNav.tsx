@@ -28,11 +28,11 @@ const primaryItems: { path: string; key: string; icon: LucideIcon }[] = [
   { path: '/', key: 'dashboard', icon: LayoutDashboard },
   { path: '/portfolio', key: 'portfolio', icon: Briefcase },
   { path: '/bots', key: 'myBots', icon: Bot },
-  { path: '/trades', key: 'trades', icon: ArrowLeftRight },
+  { path: '/performance', key: 'performance', icon: TrendingUp },
 ]
 
 const moreItems: { path: string; key: string; icon: LucideIcon }[] = [
-  { path: '/performance', key: 'performance', icon: TrendingUp },
+  { path: '/trades', key: 'trades', icon: ArrowLeftRight },
   { path: '/backtest', key: 'backtest', icon: FlaskConical },
   { path: '/presets', key: 'presets', icon: Layers },
   { path: '/settings', key: 'settings', icon: Settings },
@@ -197,7 +197,7 @@ export default function MobileBottomNav() {
 
       {/* Bottom navigation bar */}
       <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-[58] bg-[#0a0e17]/95 backdrop-blur-xl border-t border-white/10">
-        <div className="flex items-center justify-around px-2">
+        <div className="flex items-stretch">
           {primaryItems.map((item) => {
             const Icon = item.icon
             const isActive = location.pathname === item.path
@@ -205,7 +205,7 @@ export default function MobileBottomNav() {
               <Link
                 key={item.path}
                 to={item.path}
-                className={`flex flex-col items-center gap-0.5 py-2.5 px-3 min-w-0 transition-colors duration-200 ${
+                className={`flex-1 flex flex-col items-center gap-0.5 py-2.5 min-w-0 transition-colors duration-200 ${
                   isActive ? 'text-primary-400' : 'text-gray-500 active:text-gray-300'
                 }`}
               >
@@ -219,7 +219,7 @@ export default function MobileBottomNav() {
           {/* More button */}
           <button
             onClick={() => setSheetOpen(!sheetOpen)}
-            className={`flex flex-col items-center gap-0.5 py-2.5 px-3 min-w-0 transition-colors duration-200 ${
+            className={`flex-1 flex flex-col items-center gap-0.5 py-2.5 min-w-0 transition-colors duration-200 ${
               isMoreActive || sheetOpen ? 'text-primary-400' : 'text-gray-500 active:text-gray-300'
             }`}
           >

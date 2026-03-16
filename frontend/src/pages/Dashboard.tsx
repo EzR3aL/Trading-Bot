@@ -65,7 +65,7 @@ function StatCard({ label, value, numericValue, color, sub, isPositive }: {
         {isPositive === true && <ArrowUpRight size={18} className="text-profit" />}
         {isPositive === false && <ArrowDownRight size={18} className="text-loss" />}
       </div>
-      {sub && <div className="text-[10px] sm:text-xs text-gray-500 mt-1.5 truncate">{sub}</div>}
+      {sub && <div className="text-[10px] sm:text-xs text-gray-400 mt-1.5 truncate">{sub}</div>}
     </div>
   )
 }
@@ -237,7 +237,7 @@ function DashboardRecentTrades({ trades }: { trades: Trade[] }) {
       </div>
       {/* Mobile: Card layout */}
       {isMobile ? (
-        <div className="px-2 pb-2 pt-2 space-y-1.5">
+        <div className="px-1.5 pb-1.5 pt-1.5 space-y-1.5">
           {trades.length === 0 ? (
             <p className="py-8 text-center text-gray-500 text-sm">{t('dashboard.noTrades')}</p>
           ) : (
