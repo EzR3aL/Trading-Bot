@@ -500,41 +500,33 @@ function BotTradeHistoryModal({ bot, onClose, t }: { bot: BotStatus; onClose: ()
             </div>
           ) : (
             <>
-              {/* Summary Stats Bar */}
-              <div className="grid grid-cols-2 md:grid-cols-5 gap-px bg-white/5">
-                <div className="bg-[#0b0f19] px-5 py-3 text-center">
-                  <div className="text-xs text-gray-400 uppercase tracking-wider mb-0.5">{t('bots.totalPnl')}</div>
-                  <div className={`text-lg font-bold font-mono ${stats.summary.total_pnl >= 0 ? 'text-profit' : 'text-loss'}`}>
-                    <PnlCell
-                      pnl={stats.summary.total_pnl}
-                      fees={stats.summary.total_fees}
-                      fundingPaid={stats.summary.total_funding ?? 0}
-                      className={`text-lg font-bold font-mono ${stats.summary.total_pnl >= 0 ? 'text-profit' : 'text-loss'}`}
-                    />
+              {/* Summary Stats */}
+              <div className="grid grid-cols-2 gap-2 p-4">
+                <div className="glass-card rounded-xl p-3 text-center border border-white/5">
+                  <div className="text-[10px] text-gray-400 uppercase tracking-wider mb-1">{t('bots.totalPnl')}</div>
+                  <PnlCell
+                    pnl={stats.summary.total_pnl}
+                    fees={stats.summary.total_fees}
+                    fundingPaid={stats.summary.total_funding ?? 0}
+                    className={`text-lg font-bold font-mono ${stats.summary.total_pnl >= 0 ? 'text-profit' : 'text-loss'}`}
+                  />
+                </div>
+                <div className="glass-card rounded-xl p-3 text-center border border-white/5">
+                  <div className="text-[10px] text-gray-400 uppercase tracking-wider mb-1">{t('bots.winRate')}</div>
+                  <div className={`text-lg font-bold ${stats.summary.win_rate >= 60 ? 'text-profit' : stats.summary.win_rate >= 40 ? 'text-yellow-400' : 'text-loss'}`}>
+                    {stats.summary.win_rate}%
                   </div>
+                  <div className="text-[10px] text-gray-500 mt-0.5">{stats.summary.wins}W / {stats.summary.losses}L</div>
                 </div>
-                <div className="bg-[#0b0f19] px-5 py-3 text-center">
-                  <div className="text-xs text-gray-400 uppercase tracking-wider mb-0.5">{t('bots.winRate')}</div>
-                  <div className={`text-lg font-bold ${stats.summary.win_rate >= 60 ? 'text-profit' : stats.summary.win_rate >= 40 ? 'text-yellow-400' : 'text-loss'}`}>{stats.summary.win_rate}%</div>
-                </div>
-                <div className="bg-[#0b0f19] px-5 py-3 text-center">
-                  <div className="text-xs text-gray-400 uppercase tracking-wider mb-0.5">{t('bots.trades')}</div>
-                  <div className="text-lg font-bold text-white">
-                    {stats.summary.total_trades}
-                    <span className="text-xs font-normal text-gray-500 ml-1">
-                      ({stats.summary.wins}W / {stats.summary.losses}L)
-                    </span>
-                  </div>
-                </div>
-                <div className="bg-[#0b0f19] px-5 py-3 text-center">
-                  <div className="text-xs text-gray-400 uppercase tracking-wider mb-0.5 flex items-center justify-center gap-1">
-                    <ArrowUpRight size={12} className="text-profit" /> {t('bots.bestTrade')}
+                <div className="glass-card rounded-xl p-3 text-center border border-white/5">
+                  <div className="text-[10px] text-gray-400 uppercase tracking-wider mb-1 flex items-center justify-center gap-1">
+                    <ArrowUpRight size={11} className="text-profit" /> {t('bots.bestTrade')}
                   </div>
                   <div className="text-lg font-bold text-profit font-mono">{formatPnl(stats.summary.best_trade)}</div>
                 </div>
-                <div className="bg-[#0b0f19] px-5 py-3 text-center">
-                  <div className="text-xs text-gray-400 uppercase tracking-wider mb-0.5 flex items-center justify-center gap-1">
-                    <ArrowDownRight size={12} className="text-loss" /> {t('bots.worstTrade')}
+                <div className="glass-card rounded-xl p-3 text-center border border-white/5">
+                  <div className="text-[10px] text-gray-400 uppercase tracking-wider mb-1 flex items-center justify-center gap-1">
+                    <ArrowDownRight size={11} className="text-loss" /> {t('bots.worstTrade')}
                   </div>
                   <div className="text-lg font-bold text-loss font-mono">{formatPnl(stats.summary.worst_trade)}</div>
                 </div>
