@@ -1,7 +1,9 @@
-import { useState } from 'react'
-import { ChevronDown, ShieldCheck } from 'lucide-react'
+import { memo } from 'react'
+import { ShieldCheck } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { ExchangeIcon } from './ExchangeLogo'
+import MobileCollapsibleCard from './MobileCollapsibleCard'
+import { DetailGrid } from './DetailGrid'
 
 interface Position {
   exchange: string
@@ -24,106 +26,84 @@ interface Position {
   stop_loss?: number | null
 }
 
-export default function MobilePositionCard({ pos }: { pos: Position }) {
-  const [open, setOpen] = useState(false)
+function MobilePositionCardInner({ pos }: { pos: Position }) {
   const { t } = useTranslation()
   const isLong = pos.side.toLowerCase() === 'long'
   const isPnlPositive = pos.unrealized_pnl >= 0
 
-  return (
-    <div
-      className="border border-white/[0.06] rounded-lg bg-white/[0.02] overflow-hidden"
-      onClick={() => setOpen(!open)}
-    >
-      {/* Header: Symbol + Side | PnL + Chevron */}
-      <div className="flex items-center justify-between px-3 py-2 cursor-pointer">
-        <div className="flex items-center gap-1.5 min-w-0">
-          <ExchangeIcon exchange={pos.exchange} size={14} />
-          <span className="text-white font-semibold text-[13px] truncate">{pos.symbol}</span>
-          <span className={`text-[10px] font-medium px-1 py-px rounded ${
-            isLong ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400'
-          }`}>
-            {pos.side.toUpperCase()}
-          </span>
-          {pos.demo_mode && (
-            <span className="text-[8px] font-medium px-1 py-px rounded bg-amber-500/10 text-amber-400">DEMO</span>
-          )}
-          {pos.trailing_stop_active && (
-            <ShieldCheck size={10} className="text-emerald-400" />
-          )}
-        </div>
-        <div className="flex items-center gap-1.5 shrink-0">
-          <span className={`text-[13px] font-semibold tabular-nums ${isPnlPositive ? 'text-emerald-400' : 'text-red-400'}`}>
-            {isPnlPositive ? '+' : ''}${pos.unrealized_pnl.toFixed(2)}
-          </span>
-          <ChevronDown size={12} className={`text-gray-400 transition-transform ${open ? 'rotate-180' : ''}`} />
-        </div>
-      </div>
+  const header = (
+    <>
+      <ExchangeIcon exchange={pos.exchange} size={14} />
+      <span className="text-white font-semibold text-[13px] truncate">{pos.symbol}</span>
+      <span className={`text-[10px] font-medium px-1 py-px rounded ${
+        isLong ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400'
+      }`}>
+        {pos.side.toUpperCase()}
+      </span>
+      {pos.demo_mode && (
+        <span className="text-[8px] font-medium px-1 py-px rounded bg-amber-500/10 text-amber-400">DEMO</span>
+      )}
+      {pos.trailing_stop_active && (
+        <ShieldCheck size={10} className="text-emerald-400" />
+      )}
+    </>
+  )
 
-      {/* Sub Row: Size with label */}
-      <div className="flex items-center justify-between px-3 pb-2 text-[11px] text-gray-400">
-        <span>
-          <span className="text-gray-500 text-[9px] uppercase tracking-wider mr-1">{t('portfolio.size')}</span>
-          {pos.size.toFixed(4)} {pos.symbol.replace('USDT', '')}
+  const summary = (
+    <>
+      <span>
+        <span className="text-gray-500 text-[9px] uppercase tracking-wider mr-1">{t('portfolio.size')}</span>
+        {pos.size.toFixed(4)} {pos.symbol.replace('USDT', '')}
+      </span>
+      <div className="shrink-0 flex items-center gap-1.5 ml-auto">
+        <span className={`text-[13px] font-semibold tabular-nums ${isPnlPositive ? 'text-emerald-400' : 'text-red-400'}`}>
+          {isPnlPositive ? '+' : ''}${pos.unrealized_pnl.toFixed(2)}
         </span>
       </div>
+    </>
+  )
 
-      {/* Expandable Details */}
-      {open && (
-        <div className="border-t border-white/[0.04] px-3 py-2 grid grid-cols-2 gap-x-4 gap-y-1.5 text-[11px]">
-          <div>
-            <span className="text-gray-400 block text-[9px] uppercase tracking-wider">{t('portfolio.entryPrice')}</span>
-            <span className="text-gray-200 tabular-nums">${pos.entry_price.toLocaleString()}</span>
-          </div>
-          <div>
-            <span className="text-gray-400 block text-[9px] uppercase tracking-wider">{t('portfolio.currentPrice')}</span>
-            <span className="text-gray-200 tabular-nums">${pos.current_price.toLocaleString()}</span>
-          </div>
-          <div>
-            <span className="text-gray-400 block text-[9px] uppercase tracking-wider">{t('portfolio.leverage')}</span>
-            <span className="text-gray-200">{pos.leverage}x</span>
-          </div>
-          <div>
-            <span className="text-gray-400 block text-[9px] uppercase tracking-wider">{t('portfolio.size')}</span>
-            <span className="text-gray-200 tabular-nums">{pos.size.toFixed(4)}</span>
-          </div>
-          {pos.margin != null && pos.margin > 0 && (
-            <div>
-              <span className="text-gray-400 block text-[9px] uppercase tracking-wider">{t('portfolio.margin', 'Margin')}</span>
-              <span className="text-gray-200 tabular-nums">${pos.margin.toFixed(2)}</span>
-            </div>
+  const details = [
+    { label: t('portfolio.entryPrice'), value: <span className="tabular-nums">${pos.entry_price.toLocaleString()}</span> },
+    { label: t('portfolio.currentPrice'), value: <span className="tabular-nums">${pos.current_price.toLocaleString()}</span> },
+    { label: t('portfolio.leverage'), value: `${pos.leverage}x` },
+    { label: t('portfolio.size'), value: <span className="tabular-nums">{pos.size.toFixed(4)}</span> },
+    { label: t('portfolio.margin', 'Margin'), value: <span className="tabular-nums">${pos.margin?.toFixed(2)}</span>, hidden: !pos.margin || pos.margin <= 0 },
+    {
+      label: t('bots.trailingStop'),
+      value: (
+        <span className="text-emerald-400 tabular-nums inline-flex items-center gap-1">
+          ${pos.trailing_stop_price?.toLocaleString()}
+          {pos.trailing_stop_distance_pct != null && (
+            <span className="text-gray-400">({pos.trailing_stop_distance_pct.toFixed(2)}%)</span>
           )}
-          {pos.trailing_stop_active && pos.trailing_stop_price != null && (
-            <div>
-              <span className="text-gray-400 block text-[9px] uppercase tracking-wider">{t('bots.trailingStop')}</span>
-              <span className="text-emerald-400 tabular-nums inline-flex items-center gap-1">
-                ${pos.trailing_stop_price.toLocaleString()}
-                {pos.trailing_stop_distance_pct != null && (
-                  <span className="text-gray-400">({pos.trailing_stop_distance_pct.toFixed(2)}%)</span>
-                )}
-                {pos.can_close_at_loss === false && (
-                  <span title={t('bots.trailingStopProtecting')}>
-                    <ShieldCheck size={12} className="text-emerald-400" />
-                  </span>
-                )}
-              </span>
-            </div>
-          )}
-          {pos.bot_name && (
-            <div>
-              <span className="text-gray-400 block text-[9px] uppercase tracking-wider">Bot</span>
-              <span className="text-gray-200">{pos.bot_name}</span>
-            </div>
-          )}
-          <div>
-            <span className="text-gray-400 block text-[9px] uppercase tracking-wider">Exchange</span>
-            <span className="text-gray-200 inline-flex items-center gap-1">
-              <ExchangeIcon exchange={pos.exchange} size={14} />
-              <span className="capitalize">{pos.exchange}</span>
+          {pos.can_close_at_loss === false && (
+            <span title={t('bots.trailingStopProtecting')}>
+              <ShieldCheck size={12} className="text-emerald-400" />
             </span>
-          </div>
-        </div>
-      )}
-    </div>
+          )}
+        </span>
+      ),
+      hidden: !pos.trailing_stop_active || pos.trailing_stop_price == null,
+    },
+    { label: 'Bot', value: pos.bot_name ?? '', hidden: !pos.bot_name },
+    {
+      label: 'Exchange',
+      value: (
+        <span className="inline-flex items-center gap-1">
+          <ExchangeIcon exchange={pos.exchange} size={14} />
+          <span className="capitalize">{pos.exchange}</span>
+        </span>
+      ),
+    },
+  ]
+
+  return (
+    <MobileCollapsibleCard header={header} summary={summary}>
+      <DetailGrid items={details} />
+    </MobileCollapsibleCard>
   )
 }
+
+const MobilePositionCard = memo(MobilePositionCardInner)
+export default MobilePositionCard

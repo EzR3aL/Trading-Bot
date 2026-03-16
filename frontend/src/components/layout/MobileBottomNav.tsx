@@ -70,11 +70,15 @@ export default function MobileBottomNav() {
         <div
           className="lg:hidden fixed inset-0 z-[59] bg-black/60 backdrop-blur-sm"
           onClick={() => setSheetOpen(false)}
+          aria-hidden="true"
         />
       )}
 
       {/* Bottom sheet */}
       <div
+        role="dialog"
+        aria-modal={sheetOpen}
+        aria-label={t('nav.more', { defaultValue: 'More' })}
         className={`lg:hidden fixed bottom-0 left-0 right-0 z-[60] bg-[#0f1420] border-t border-white/10 rounded-t-2xl transition-transform duration-300 ease-out ${
           sheetOpen ? 'translate-y-0' : 'translate-y-full'
         }`}
@@ -196,7 +200,7 @@ export default function MobileBottomNav() {
       </div>
 
       {/* Bottom navigation bar */}
-      <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-[58] bg-[#0a0e17]/95 backdrop-blur-xl border-t border-white/10">
+      <nav aria-label="Main navigation" className="lg:hidden fixed bottom-0 left-0 right-0 z-[58] bg-[#0a0e17]/95 backdrop-blur-xl border-t border-white/10">
         <div className="flex items-stretch">
           {primaryItems.map((item) => {
             const Icon = item.icon
