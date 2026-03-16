@@ -95,7 +95,7 @@ export default function Dashboard() {
         const [statsRes, dailyRes, tradesRes] = await Promise.all([
           api.get(`/statistics?days=${period}${demoParam}`),
           api.get(`/statistics/daily?days=${period}${demoParam}`),
-          api.get(`/trades?per_page=10${demoParam}`),
+          api.get(`/trades?per_page=10&status=closed${demoParam}`),
         ])
         setStats(statsRes.data)
         setDailyStats(dailyRes.data.days)
