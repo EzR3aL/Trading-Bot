@@ -139,8 +139,8 @@ function BuilderFeeApprovalInner({ onApproved, onClose }: BuilderFeeApprovalProp
         throw new Error(`Hyperliquid: ${hlBody.response || 'Unknown error'}`)
       }
 
-      // Small delay for propagation before backend verification
-      await new Promise(resolve => setTimeout(resolve, 1500))
+      // Delay for on-chain propagation before backend verification
+      await new Promise(resolve => setTimeout(resolve, 3000))
 
       // Confirm with our backend — pass signing wallet so it checks the right address
       await api.post('/config/hyperliquid/confirm-builder-approval', {

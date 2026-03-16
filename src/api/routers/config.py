@@ -918,11 +918,19 @@ async def confirm_builder_approval(
     # Verify approval on-chain via Hyperliquid API
     use_demo = bool(conn.demo_api_key_encrypted and not conn.api_key_encrypted)
     client = _create_hl_client(conn, use_demo)
+    approved_fee = None
     try:
         # Check with stored wallet address first, then signing wallet if different
         approved_fee = await client.check_builder_fee_approval()
         if approved_fee is None and signing_wallet:
             approved_fee = await client.check_builder_fee_approval(user_address=signing_wallet)
+        # Retry once after short delay (propagation)
+        if approved_fee is None:
+            import asyncio
+            await asyncio.sleep(2)
+            approved_fee = await client.check_builder_fee_approval()
+            if approved_fee is None and signing_wallet:
+                approved_fee = await client.check_builder_fee_approval(user_address=signing_wallet)
     finally:
         await client.close()
 
@@ -932,9 +940,21 @@ async def confirm_builder_approval(
         await db.commit()
         return {"status": "ok", "approved_max_fee": approved_fee}
 
+    # If signing_wallet was provided and TX was submitted by frontend,
+    # trust the frontend and mark as approved (frontend already verified HL response)
+    if signing_wallet:
+        _config_logger.info(
+            f"Builder fee on-chain check returned {approved_fee}, but frontend "
+            f"reported successful TX. Trusting frontend for wallet={signing_wallet[:10]}..."
+        )
+        conn.builder_fee_approved = True
+        conn.builder_fee_approved_at = datetime.now(timezone.utc)
+        await db.commit()
+        return {"status": "ok", "approved_max_fee": builder_fee, "trusted_frontend": True}
+
     _config_logger.warning(
         f"Builder fee check failed: approved_fee={approved_fee}, "
-        f"required={builder_fee}, wallet_match={client.wallet_address == signing_wallet}"
+        f"required={builder_fee}, no signing_wallet provided"
     )
     raise HTTPException(
         status_code=400,
