@@ -18,6 +18,7 @@ Eine einfache Schritt-für-Schritt Anleitung für Einsteiger.
 10. [Demo Mode vs. Live Mode](#10-demo-mode-vs-live-mode)
 11. [Häufige Probleme & Lösungen](#11-häufige-probleme--lösungen)
 12. [Sicherheits-Tipps](#12-sicherheits-tipps)
+13. [Risikohinweis & Haftungsausschluss](#13-risikohinweis--haftungsausschluss)
 
 ---
 
@@ -669,6 +670,46 @@ Bei Problemen:
 1. **Logs prüfen:** `cat logs/trading_bot.log`
 2. **Diese Anleitung** nochmal durchgehen
 3. **GitHub Issue** öffnen für technische Probleme
+
+---
+
+## 13. Risikohinweis & Haftungsausschluss
+
+> **Wichtig: Bitte lies diesen Abschnitt vollständig, bevor du den Bot im Live-Modus verwendest.**
+
+### Kein Anlageberatung
+
+Dieser Trading Bot und alle zugehörigen Materialien (Dashboard, Strategien, Dokumentation) stellen **keine Anlageberatung, Finanzberatung oder Handelsempfehlung** dar. Die Verwendung erfolgt ausschließlich auf eigene Verantwortung.
+
+### Risiken des Krypto-Handels
+
+Der Handel mit Kryptowährungen und Derivaten (Futures) ist mit **erheblichen Risiken** verbunden:
+
+- **Totalverlust**: Du kannst dein gesamtes eingesetztes Kapital verlieren
+- **Hebelwirkung**: Der Einsatz von Hebeln (Leverage) vervielfacht sowohl Gewinne als auch Verluste
+- **Liquidation**: Bei gehebelten Positionen kann deine gesamte Margin liquidiert werden
+- **Marktvolatilität**: Kryptomärkte können extrem schnell und unvorhersehbar schwanken
+- **Technische Risiken**: Software-Fehler, API-Ausfälle oder Netzwerkprobleme können zu ungewollten Trades führen
+- **Keine Garantie**: Vergangene Performance ist kein verlässlicher Indikator für zukünftige Ergebnisse
+
+### Empfehlungen
+
+- Verwende **nur Kapital, dessen Verlust du dir leisten kannst**
+- Starte **immer zuerst im Demo-Modus** und beobachte die Ergebnisse über mehrere Wochen
+- Verwende **niedrige Hebel** (max. 3-5x) und **kleine Positionsgrößen**
+- Überwache den Bot regelmäßig und **verlasse dich nie blind auf Automatisierung**
+- Informiere dich über die **steuerlichen Pflichten** in deinem Land
+
+### Haftungsausschluss
+
+Die Entwickler und Betreiber dieses Bots übernehmen **keine Haftung** für:
+
+- Finanzielle Verluste durch die Nutzung des Bots
+- Fehlerhafte Signale oder Trade-Ausführungen
+- API-Ausfälle der angebundenen Exchanges
+- Datenverlust oder Sicherheitsvorfälle
+
+**Mit der Nutzung des Bots bestätigst du, dass du diese Risiken verstanden hast und akzeptierst.**
 
 ---
 

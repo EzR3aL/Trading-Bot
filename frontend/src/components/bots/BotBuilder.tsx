@@ -135,6 +135,7 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [validationErrors, setValidationErrors] = useState<string[]>([])
+  const [riskAccepted, setRiskAccepted] = useState(false)
 
   // Data sources catalog
   const [dataSources, setDataSources] = useState<DataSource[]>([])
@@ -1952,6 +1953,24 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
                 </div>
               </div>
             )}
+
+            {/* Risk Disclaimer */}
+            <div className="mt-6 p-4 bg-amber-500/5 border border-amber-500/20 rounded-xl">
+              <div className="flex items-center gap-2 mb-2">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5 text-amber-400 shrink-0"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
+                <h4 className="text-amber-400 font-semibold text-sm">{b.riskDisclaimerTitle}</h4>
+              </div>
+              <p className="text-gray-400 text-xs leading-relaxed mb-3">{b.riskDisclaimer}</p>
+              <label className="flex items-start gap-2.5 cursor-pointer group">
+                <input
+                  type="checkbox"
+                  checked={riskAccepted}
+                  onChange={(e) => setRiskAccepted(e.target.checked)}
+                  className="mt-0.5 w-4 h-4 rounded border-amber-500/30 bg-white/5 text-amber-500 focus:ring-amber-500/30 shrink-0"
+                />
+                <span className="text-xs text-gray-300 group-hover:text-white transition-colors leading-relaxed">{b.riskAccept}</span>
+              </label>
+            </div>
           </div>
         )}
       </div>
@@ -1985,7 +2004,7 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
             <>
               <button
                 onClick={() => handleSave(false)}
-                disabled={saving}
+                disabled={saving || (!isEdit && !riskAccepted)}
                 className="flex items-center gap-1 px-4 py-2 text-sm bg-gray-700 text-white rounded font-medium hover:bg-gray-600 disabled:opacity-50 transition-colors"
               >
                 <Check size={16} />
@@ -1994,7 +2013,7 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
               {!isEdit && (
                 <button
                   onClick={() => handleSave(true)}
-                  disabled={saving}
+                  disabled={saving || !riskAccepted}
                   className="flex items-center gap-1 px-4 py-2 text-sm bg-green-700 text-white rounded font-medium hover:bg-green-600 disabled:opacity-50 transition-colors"
                 >
                   <Play size={16} />

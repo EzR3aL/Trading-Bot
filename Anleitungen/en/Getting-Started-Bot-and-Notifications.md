@@ -18,6 +18,7 @@ A simple step-by-step guide for beginners.
 10. [Demo Mode vs. Live Mode](#10-demo-mode-vs-live-mode)
 11. [Common Issues & Solutions](#11-common-issues--solutions)
 12. [Security Tips](#12-security-tips)
+13. [Risk Disclaimer](#13-risk-disclaimer)
 
 ---
 
@@ -669,6 +670,46 @@ If you encounter problems:
 1. **Check logs:** `cat logs/trading_bot.log`
 2. **Review this guide** again
 3. **Open a GitHub issue** for technical problems
+
+---
+
+## 13. Risk Disclaimer
+
+> **Important: Please read this section in full before using the bot in live mode.**
+
+### Not Investment Advice
+
+This trading bot and all associated materials (dashboard, strategies, documentation) do **not constitute investment advice, financial advice, or trading recommendations**. Use is entirely at your own risk and responsibility.
+
+### Risks of Crypto Trading
+
+Trading cryptocurrencies and derivatives (futures) involves **substantial risks**:
+
+- **Total loss**: You can lose your entire invested capital
+- **Leverage**: Using leverage multiplies both gains and losses
+- **Liquidation**: Leveraged positions can be fully liquidated
+- **Market volatility**: Crypto markets can swing extremely fast and unpredictably
+- **Technical risks**: Software bugs, API outages, or network issues may cause unintended trades
+- **No guarantees**: Past performance is not a reliable indicator of future results
+
+### Recommendations
+
+- Only use **capital you can afford to lose**
+- Always **start in demo mode** and observe results over several weeks
+- Use **low leverage** (max 3-5x) and **small position sizes**
+- Monitor the bot regularly and **never rely blindly on automation**
+- Inform yourself about **tax obligations** in your jurisdiction
+
+### Liability Disclaimer
+
+The developers and operators of this bot assume **no liability** for:
+
+- Financial losses resulting from the use of the bot
+- Faulty signals or trade executions
+- API outages of connected exchanges
+- Data loss or security incidents
+
+**By using this bot, you confirm that you understand and accept these risks.**
 
 ---
 
