@@ -853,7 +853,9 @@ async def get_builder_config(
         return {"builder_configured": False}
 
     builder_fee = hl_cfg["builder_fee"] or DEFAULT_BUILDER_FEE
-    max_fee_rate = str(builder_fee)
+    # maxFeeRate for Hyperliquid API: percentage string like "0.10%"
+    # builder_fee is in basis points (e.g. 10 = 0.1%)
+    max_fee_rate = f"{builder_fee / 100:.2f}%"
 
     # Check if user has HL connection and approval status
     result = await db.execute(
