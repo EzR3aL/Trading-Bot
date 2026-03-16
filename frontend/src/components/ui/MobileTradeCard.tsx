@@ -50,24 +50,21 @@ export default function MobileTradeCard({ trade, extraDetails }: MobileTradeCard
       className="border border-white/[0.06] rounded-lg bg-white/[0.02] overflow-hidden"
       onClick={() => setOpen(!open)}
     >
-      {/* Row 1: Symbol + Badges + Chevron */}
-      <div className="flex items-center justify-between px-3 pt-2 pb-1 cursor-pointer">
-        <div className="flex items-center gap-1.5 min-w-0">
-          <ExchangeIcon exchange={exchange} size={14} />
-          <span className="text-white font-semibold text-[13px] truncate">{trade.symbol}</span>
-          <span className={`text-[10px] font-medium px-1 py-px rounded ${
-            isLong ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400'
-          }`}>
-            {isLong ? 'LONG' : 'SHORT'}
-          </span>
-          {trade.demo_mode && (
-            <span className="text-[8px] font-medium px-1 py-px rounded bg-amber-500/10 text-amber-400">DEMO</span>
-          )}
-        </div>
-        <ChevronDown size={12} className={`text-gray-400 transition-transform shrink-0 ${open ? 'rotate-180' : ''}`} />
+      {/* Row 1: Symbol + Badges */}
+      <div className="flex items-center gap-1.5 px-3 pt-2 pb-1 cursor-pointer">
+        <ExchangeIcon exchange={exchange} size={14} />
+        <span className="text-white font-semibold text-[13px] truncate">{trade.symbol}</span>
+        <span className={`text-[10px] font-medium px-1 py-px rounded ${
+          isLong ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400'
+        }`}>
+          {isLong ? 'LONG' : 'SHORT'}
+        </span>
+        {trade.demo_mode && (
+          <span className="text-[8px] font-medium px-1 py-px rounded bg-amber-500/10 text-amber-400">DEMO</span>
+        )}
       </div>
 
-      {/* Row 2: Date + Size | PnL right */}
+      {/* Row 2: Date + Size | PnL + Chevron right */}
       <div className="flex items-center justify-between px-3 pb-2 text-[11px] gap-2">
         <div className="flex items-center gap-3 text-gray-400 min-w-0">
           <span className="truncate">
@@ -81,7 +78,7 @@ export default function MobileTradeCard({ trade, extraDetails }: MobileTradeCard
             </span>
           )}
         </div>
-        <div className="shrink-0 text-right">
+        <div className="shrink-0 flex items-center gap-1.5">
           {trade.status === 'closed' && trade.pnl != null ? (
             <span>
               <span className="text-gray-500 text-[9px] uppercase tracking-wider mr-1">PnL</span>
@@ -96,6 +93,7 @@ export default function MobileTradeCard({ trade, extraDetails }: MobileTradeCard
               {t(`trades.${trade.status}`)}
             </span>
           )}
+          <ChevronDown size={12} className={`text-gray-400 transition-transform ${open ? 'rotate-180' : ''}`} />
         </div>
       </div>
 
