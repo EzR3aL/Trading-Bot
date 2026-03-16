@@ -50,7 +50,7 @@ export default function MobileTradeCard({ trade, extraDetails }: MobileTradeCard
       className="border border-white/[0.06] rounded-lg bg-white/[0.02] overflow-hidden"
       onClick={() => setOpen(!open)}
     >
-      {/* Row 1: Symbol + Badges | PnL */}
+      {/* Row 1: Symbol + Badges + Chevron */}
       <div className="flex items-center justify-between px-3 pt-2 pb-1 cursor-pointer">
         <div className="flex items-center gap-1.5 min-w-0">
           <ExchangeIcon exchange={exchange} size={14} />
@@ -64,10 +64,30 @@ export default function MobileTradeCard({ trade, extraDetails }: MobileTradeCard
             <span className="text-[8px] font-medium px-1 py-px rounded bg-amber-500/10 text-amber-400">DEMO</span>
           )}
         </div>
-        <div className="flex items-center gap-1.5 shrink-0">
+        <ChevronDown size={12} className={`text-gray-400 transition-transform shrink-0 ${open ? 'rotate-180' : ''}`} />
+      </div>
+
+      {/* Row 2: Date + Size | PnL right */}
+      <div className="flex items-center justify-between px-3 pb-2 text-[11px] gap-2">
+        <div className="flex items-center gap-3 text-gray-400 min-w-0">
+          <span className="truncate">
+            <span className="text-gray-500 text-[9px] uppercase tracking-wider mr-1">{t('trades.date')}</span>
+            <span className="tabular-nums">{formatDateTime(trade.exit_time || trade.entry_time)}</span>
+          </span>
+          {trade.size != null && (
+            <span className="shrink-0">
+              <span className="text-gray-500 text-[9px] uppercase tracking-wider mr-1">{t('portfolio.size')}</span>
+              <span className="tabular-nums">{trade.size.toFixed(4)}</span>
+            </span>
+          )}
+        </div>
+        <div className="shrink-0 text-right">
           {trade.status === 'closed' && trade.pnl != null ? (
-            <span className={`text-[13px] font-semibold tabular-nums ${isPnlPositive ? 'text-emerald-400' : 'text-red-400'}`}>
-              {formatPnl(trade.pnl)}
+            <span>
+              <span className="text-gray-500 text-[9px] uppercase tracking-wider mr-1">PnL</span>
+              <span className={`text-[12px] font-semibold tabular-nums ${isPnlPositive ? 'text-emerald-400' : 'text-red-400'}`}>
+                {formatPnl(trade.pnl)}
+              </span>
             </span>
           ) : (
             <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${
@@ -76,22 +96,7 @@ export default function MobileTradeCard({ trade, extraDetails }: MobileTradeCard
               {t(`trades.${trade.status}`)}
             </span>
           )}
-          <ChevronDown size={12} className={`text-gray-400 transition-transform ${open ? 'rotate-180' : ''}`} />
         </div>
-      </div>
-
-      {/* Row 2: Date + Size with labels */}
-      <div className="flex items-center justify-between px-3 pb-2 text-[11px] text-gray-400 gap-3">
-        <span>
-          <span className="text-gray-500 text-[9px] uppercase tracking-wider mr-1">{t('trades.date')}</span>
-          <span className="tabular-nums">{formatDateTime(trade.exit_time || trade.entry_time)}</span>
-        </span>
-        {trade.size != null && (
-          <span className="shrink-0">
-            <span className="text-gray-500 text-[9px] uppercase tracking-wider mr-1">{t('portfolio.size')}</span>
-            <span className="tabular-nums">{trade.size.toFixed(4)}</span>
-          </span>
-        )}
       </div>
 
       {/* Expandable Details */}
