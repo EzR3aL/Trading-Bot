@@ -93,6 +93,7 @@
     "trailingStopProtecting": "Gewinn abgesichert",
     "trailingDistance": "Abstand",
     "exitTime": "Exit-Zeit",
+    "leverage": "Hebel",
     "exitReason": "Exit-Grund",
     "exitReasons": {
       "TRAILING_STOP": "Trailing Stop",

@@ -133,7 +133,7 @@ export default function Dashboard() {
               key={p}
               onClick={() => setPeriod(p)}
               aria-label={t(PERIOD_LABELS[p])}
-              className={`px-2 sm:px-3 py-1.5 text-xs font-medium rounded-lg transition-all duration-200 ${
+              className={`min-w-[4rem] sm:min-w-[4.5rem] px-2 sm:px-3 py-1.5 text-xs font-medium rounded-lg text-center transition-all duration-200 ${
                 period === p
                   ? 'bg-gradient-to-r from-primary-600 to-primary-500 text-white shadow-glow-sm'
                   : 'text-gray-400 hover:text-white hover:bg-white/5'

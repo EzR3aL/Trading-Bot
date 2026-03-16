@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { ChevronDown } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { ExchangeIcon } from './ExchangeLogo'
+import ExitReasonBadge from './ExitReasonBadge'
 
 interface MobileTradeCardProps {
   trade: {
@@ -99,36 +100,36 @@ export default function MobileTradeCard({ trade, extraDetails }: MobileTradeCard
         <div className="border-t border-white/[0.04] px-3 py-2 grid grid-cols-2 gap-x-4 gap-y-1.5 text-[11px]">
           {trade.bot_name && (
             <div>
-              <span className="text-gray-500 block text-[9px] uppercase tracking-wider">Bot</span>
-              <span className="text-gray-300">{trade.bot_name}</span>
+              <span className="text-gray-400 block text-[9px] uppercase tracking-wider">Bot</span>
+              <span className="text-gray-200">{trade.bot_name}</span>
             </div>
           )}
           <div>
-            <span className="text-gray-500 block text-[9px] uppercase tracking-wider">Exchange</span>
-            <span className="text-gray-300 inline-flex items-center gap-1">
+            <span className="text-gray-400 block text-[9px] uppercase tracking-wider">Exchange</span>
+            <span className="text-gray-200 inline-flex items-center gap-1">
               <ExchangeIcon exchange={exchange} size={14} />
               <span className="capitalize">{exchange}</span>
             </span>
           </div>
           <div>
-            <span className="text-gray-500 block text-[9px] uppercase tracking-wider">{t('trades.entryPrice')}</span>
-            <span className="text-gray-300 tabular-nums">${trade.entry_price.toLocaleString()}</span>
+            <span className="text-gray-400 block text-[9px] uppercase tracking-wider">{t('trades.entryPrice')}</span>
+            <span className="text-gray-200 tabular-nums">${trade.entry_price.toLocaleString()}</span>
           </div>
           {trade.exit_price != null && (
             <div>
-              <span className="text-gray-500 block text-[9px] uppercase tracking-wider">{t('trades.exitPrice')}</span>
-              <span className="text-gray-300 tabular-nums">${trade.exit_price.toLocaleString()}</span>
+              <span className="text-gray-400 block text-[9px] uppercase tracking-wider">{t('trades.exitPrice')}</span>
+              <span className="text-gray-200 tabular-nums">${trade.exit_price.toLocaleString()}</span>
             </div>
           )}
           {trade.leverage != null && (
             <div>
-              <span className="text-gray-500 block text-[9px] uppercase tracking-wider">{t('trades.leverage')}</span>
-              <span className="text-gray-300">{trade.leverage}x</span>
+              <span className="text-gray-400 block text-[9px] uppercase tracking-wider">{t('trades.leverage')}</span>
+              <span className="text-gray-200">{trade.leverage}x</span>
             </div>
           )}
           {trade.pnl_percent != null && (
             <div>
-              <span className="text-gray-500 block text-[9px] uppercase tracking-wider">PnL %</span>
+              <span className="text-gray-400 block text-[9px] uppercase tracking-wider">PnL %</span>
               <span className={`tabular-nums ${trade.pnl_percent >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
                 {trade.pnl_percent >= 0 ? '+' : ''}{trade.pnl_percent.toFixed(2)}%
               </span>
@@ -136,26 +137,26 @@ export default function MobileTradeCard({ trade, extraDetails }: MobileTradeCard
           )}
           {(trade.fees != null && trade.fees > 0) && (
             <div>
-              <span className="text-gray-500 block text-[9px] uppercase tracking-wider">{t('trades.fees')}</span>
-              <span className="text-gray-300 tabular-nums">${trade.fees.toFixed(2)}</span>
+              <span className="text-gray-400 block text-[9px] uppercase tracking-wider">{t('trades.fees')}</span>
+              <span className="text-gray-200 tabular-nums">${trade.fees.toFixed(2)}</span>
             </div>
           )}
           {trade.confidence != null && trade.confidence > 0 && (
             <div>
-              <span className="text-gray-500 block text-[9px] uppercase tracking-wider">{t('bots.confidence')}</span>
-              <span className="text-gray-300">{trade.confidence}%</span>
+              <span className="text-gray-400 block text-[9px] uppercase tracking-wider">{t('bots.confidence')}</span>
+              <span className="text-gray-200">{trade.confidence}%</span>
             </div>
           )}
           {trade.exit_reason && (
             <div className="col-span-2">
-              <span className="text-gray-500 block text-[9px] uppercase tracking-wider">Exit</span>
-              <span className="text-gray-300">{trade.exit_reason}</span>
+              <span className="text-gray-400 block text-[9px] uppercase tracking-wider">{t('trades.exitReason')}</span>
+              <ExitReasonBadge reason={trade.exit_reason} compact />
             </div>
           )}
           {extraDetails?.map((d, i) => (
             <div key={i}>
-              <span className="text-gray-500 block text-[9px] uppercase tracking-wider">{d.label}</span>
-              <span className="text-gray-300">{d.value}</span>
+              <span className="text-gray-400 block text-[9px] uppercase tracking-wider">{d.label}</span>
+              <span className="text-gray-200">{d.value}</span>
             </div>
           ))}
         </div>

@@ -93,6 +93,7 @@
     "trailingStopProtecting": "Protecting profit",
     "trailingDistance": "Distance",
     "exitTime": "Exit Time",
+    "leverage": "Leverage",
     "exitReason": "Exit Reason",
     "exitReasons": {
       "TRAILING_STOP": "Trailing Stop",
