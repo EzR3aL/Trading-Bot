@@ -790,6 +790,7 @@ function BotTradeHistoryModal({ bot, onClose, t }: { bot: BotStatus; onClose: ()
 export default function Bots() {
   const { t } = useTranslation()
   const { demoFilter } = useFilterStore()
+  const isMobile = useIsMobile()
   const { addToast } = useToastStore()
 
   const handleStartError = (err: unknown) => {
@@ -807,6 +808,7 @@ export default function Bots() {
   const [loading, setLoading] = useState(true)
   const [showBuilder, setShowBuilder] = useState(false)
   const [editBotId, setEditBotId] = useState<number | null>(null)
+  const [expandedBotId, setExpandedBotId] = useState<number | null>(null)
   const [actionLoading, setActionLoading] = useState<number | null>(null)
   const [error, setError] = useState('')
   const [historyBot, setHistoryBot] = useState<BotStatus | null>(null)
@@ -1006,12 +1008,12 @@ export default function Bots() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
         <h1 className="text-2xl font-bold text-white tracking-tight">{t('bots.title')}</h1>
-        <div className="flex gap-2">
+        <div className="flex items-center gap-2">
           {runningCount > 1 && (
             <button
               onClick={handleStopAll}
               aria-label={t('bots.stopAll')}
-              className="px-4 py-2 text-sm bg-red-500/10 text-red-400 rounded-xl border border-red-500/10 hover:bg-red-500/20 transition-all duration-200 font-medium"
+              className="px-3 py-2 text-sm bg-red-500/10 text-red-400 rounded-xl border border-red-500/10 hover:bg-red-500/20 transition-all duration-200 font-medium"
             >
               {t('bots.stopAll')} ({runningCount})
             </button>
@@ -1019,10 +1021,10 @@ export default function Bots() {
           <button
             onClick={() => setShowBuilder(true)}
             aria-label={t('bots.newBot')}
-            className="btn-gradient flex items-center gap-2"
+            className="px-3 py-2 text-sm btn-gradient flex items-center gap-1.5 rounded-xl font-medium"
             data-tour="new-bot"
           >
-            <Plus size={18} />
+            <Plus size={16} />
             {t('bots.newBot')}
           </button>
           <TourHelpButton tourId="bots-page" />
@@ -1055,20 +1057,32 @@ export default function Bots() {
 
       {/* Bot Grid */}
       {!loading && bots.length > 0 && (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+        <div className={isMobile ? 'space-y-2' : 'grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4'}>
           {bots.map((bot) => {
             const style = getStatusStyle(bot.status)
+            const isBotExpanded = !isMobile || expandedBotId === bot.bot_config_id
             return (
               <div
                 key={bot.bot_config_id}
-                className={`glass-card rounded-xl p-5 border transition-all duration-300 ${style.card}`}
+                className={`glass-card rounded-xl ${isMobile ? 'p-3' : 'p-5'} border transition-all duration-300 ${style.card}`}
                 {...(bot === bots[0] ? { 'data-tour': 'bot-card' } : {})}
               >
                 {/* Header row */}
-                <div className="flex items-start justify-between gap-2 mb-3">
+                <div
+                  className={`flex items-start justify-between gap-2 ${isBotExpanded ? 'mb-3' : ''} ${isMobile ? 'cursor-pointer' : ''}`}
+                  onClick={isMobile ? () => setExpandedBotId(expandedBotId === bot.bot_config_id ? null : bot.bot_config_id) : undefined}
+                >
                   <div className="min-w-0 flex-1">
-                    <Link to={`/bots/${bot.bot_config_id}`} className="text-white font-semibold text-lg hover:text-primary-400 transition-colors truncate block">{bot.name}</Link>
-                    <div className="flex items-center gap-2 mt-1.5">
+                    <div className="flex items-center gap-2">
+                      <Link to={`/bots/${bot.bot_config_id}`} onClick={(e) => isMobile && e.stopPropagation()} className={`text-white font-semibold ${isMobile ? 'text-[13px]' : 'text-lg'} hover:text-primary-400 transition-colors truncate block`}>{bot.name}</Link>
+                      {isMobile && bot.status === 'running' && (
+                        <span className="relative flex h-2 w-2 shrink-0">
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                          <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2 mt-1">
                       <span className="badge-neutral text-xs inline-flex items-center gap-1">
                         <ExchangeIcon exchange={bot.exchange_type} size={16} />
                       </span>
@@ -1094,18 +1108,19 @@ export default function Bots() {
                       )}
                     </div>
                   </div>
-                  <div className="text-right shrink-0">
-                    <div className="flex items-center justify-end gap-1.5">
-                      {bot.status === 'running' && (
-                        <span className="relative flex h-2.5 w-2.5">
-                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                          <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+                  <div className="text-right shrink-0 flex items-center gap-1.5">
+                    <div>
+                      <div className="flex items-center justify-end gap-1.5">
+                        {!isMobile && bot.status === 'running' && (
+                          <span className="relative flex h-2.5 w-2.5">
+                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+                          </span>
+                        )}
+                        <span className={`text-sm font-medium ${style.text}`}>
+                          {isMobile ? '' : t(`bots.${bot.status}`)}
                         </span>
-                      )}
-                      <span className={`text-sm font-medium ${style.text}`}>
-                        {t(`bots.${bot.status}`)}
-                      </span>
-                    </div>
+                      </div>
                     {bot.llm_provider && (
                       <div className="mt-1 text-xs text-gray-500 leading-tight">
                         <span>{providerNameMap[bot.llm_provider] || bot.llm_provider}</span>
@@ -1114,8 +1129,16 @@ export default function Bots() {
                         )}
                       </div>
                     )}
+                    </div>
+                    {isMobile && (
+                      <ChevronDown size={14} className={`text-gray-400 transition-transform ${isBotExpanded ? 'rotate-180' : ''}`} />
+                    )}
                   </div>
                 </div>
+
+                {/* Collapsible content on mobile */}
+                {isBotExpanded && (
+                <>
 
                 {/* Pairs */}
                 <div className="flex flex-wrap gap-1.5 mb-3">
@@ -1460,6 +1483,8 @@ export default function Bots() {
                     )}
                   </div>
                 </div>
+                </>
+                )}
               </div>
             )
           })}
