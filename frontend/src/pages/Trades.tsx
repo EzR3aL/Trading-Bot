@@ -201,7 +201,7 @@ export default function Trades() {
                 {t('dashboard.noTrades')}
               </div>
             ) : (
-              <div className="space-y-1.5">
+              <div className="px-2 py-2 space-y-1.5">
                 {trades.map(trade => <MobileTradeCard key={trade.id} trade={trade} />)}
               </div>
             )

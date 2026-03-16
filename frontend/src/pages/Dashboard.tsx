@@ -230,14 +230,14 @@ function DashboardRecentTrades({ trades }: { trades: Trade[] }) {
 
   return (
     <div className="glass-card rounded-xl overflow-hidden" data-tour="dash-trades">
-      <div className="p-5 border-b border-white/5">
+      <div className="px-4 sm:px-5 pt-4 sm:pt-5 pb-3 sm:pb-0 sm:border-b sm:border-white/5 sm:mb-0">
         <h2 className="text-base font-semibold text-white">
           {t('dashboard.recentTrades')}
         </h2>
       </div>
       {/* Mobile: Card layout */}
       {isMobile ? (
-        <div className="px-3 pb-3 space-y-1.5">
+        <div className="px-2 pb-2 pt-2 space-y-1.5">
           {trades.length === 0 ? (
             <p className="py-8 text-center text-gray-500 text-sm">{t('dashboard.noTrades')}</p>
           ) : (
