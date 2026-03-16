@@ -317,18 +317,18 @@ html.light .num-input-wrap .num-arrow-up {
 }
 
 .table-expand-content {
-  @apply px-4 py-3 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-x-6 gap-y-2.5 text-sm;
-  background: rgba(255, 255, 255, 0.015);
-  border-top: 1px solid rgba(255, 255, 255, 0.04);
+  @apply px-6 py-4 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-x-8 gap-y-3 text-sm;
+  background: rgba(255, 255, 255, 0.02);
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
   animation: expandFadeIn 0.15s ease-out;
 }
 
 .table-expand-content dt {
-  @apply text-gray-500 text-xs uppercase tracking-wider;
+  @apply text-gray-400 text-xs uppercase tracking-wider font-medium;
 }
 
 .table-expand-content dd {
-  @apply text-gray-300 mt-0.5;
+  @apply text-gray-200 mt-0.5;
 }
 
 @keyframes expandFadeIn {
