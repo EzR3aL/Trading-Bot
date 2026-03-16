@@ -553,9 +553,17 @@ html.light .num-input-wrap .num-arrow-up {
     flex-wrap: wrap !important;
   }
 
-  /* Filter selects: wider on mobile */
+  /* Filter selects: compact on mobile */
   .filter-select {
-    min-width: 120px;
+    min-width: 0;
+    height: 2rem;
+    font-size: 0.75rem;
+    padding-left: 0.625rem;
+    padding-right: 0.625rem;
+  }
+  .filter-reset {
+    height: 2rem;
+    font-size: 0.675rem;
   }
 
   /* ── Mobile Trade Cards (replaces tables on mobile) ────────── */

@@ -122,7 +122,7 @@ export default function Trades() {
       )}
 
       {/* Filters */}
-      <div className="flex flex-wrap items-center gap-2.5 mb-5">
+      <div className="grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-2 sm:gap-2.5 mb-5">
         <FilterDropdown
           value={statusFilter}
           onChange={(v) => { setStatusFilter(v); setPage(1) }}
