@@ -231,7 +231,7 @@ export default function Portfolio() {
 
       {/* Summary Hero */}
       <div className="glass-card rounded-2xl p-6 mb-6">
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-6 items-center">
           {/* Total Balance */}
           <div className="md:col-span-2 text-center md:text-left">
             <div className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-1">
