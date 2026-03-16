@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { formatChartCurrency } from '../utils/dateUtils'
+import useIsMobile from '../hooks/useIsMobile'
+import { ChevronDown } from 'lucide-react'
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer,
@@ -77,6 +79,8 @@ export default function Backtest() {
   const [activeRun, setActiveRun] = useState<BacktestRun | null>(null)
   const [history, setHistory] = useState<BacktestHistoryItem[]>([])
   const [loadingHistory, setLoadingHistory] = useState(true)
+  const [expandedRunId, setExpandedRunId] = useState<number | null>(null)
+  const isMobile = useIsMobile()
   const [showCelebration, setShowCelebration] = useState(false)
   const pollRef = useRef<ReturnType<typeof setInterval>>()
   const celebratedRunsRef = useRef<Set<number>>(new Set())
@@ -691,6 +695,80 @@ export default function Backtest() {
           </div>
         ) : history.length === 0 ? (
           <p className="text-gray-500 text-sm py-6 text-center">{t('backtest.noHistory')}</p>
+        ) : isMobile ? (
+          <div className="px-1 pb-2 space-y-1.5">
+            {history.map(run => {
+              const isExpanded = expandedRunId === run.id
+              const returnPct = run.total_return_percent
+              const returnColor = returnPct !== null ? (returnPct >= 0 ? 'text-emerald-400' : 'text-red-400') : 'text-gray-500'
+              return (
+                <div key={run.id} className="border border-white/[0.06] rounded-lg bg-white/[0.02] overflow-hidden">
+                  {/* Row 1: Strategy + Symbol */}
+                  <div
+                    className="flex items-center gap-1.5 px-3 pt-2 pb-1 cursor-pointer"
+                    onClick={() => setExpandedRunId(isExpanded ? null : run.id)}
+                  >
+                    <span className="text-white font-semibold text-[13px]">{strategyLabel(run.strategy_type)}</span>
+                    <span className="text-[10px] font-medium px-1 py-px rounded bg-white/5 text-gray-300">{run.symbol}</span>
+                    <StatusBadge status={run.status} />
+                  </div>
+                  {/* Row 2: Return + Chevron */}
+                  <div
+                    className="flex items-center justify-between px-3 pb-2 text-[11px] cursor-pointer"
+                    onClick={() => setExpandedRunId(isExpanded ? null : run.id)}
+                  >
+                    <span>
+                      <span className="text-gray-500 text-[9px] uppercase tracking-wider mr-1">{t('backtest.totalReturn')}</span>
+                      <span className={`font-semibold tabular-nums ${returnColor}`}>
+                        {returnPct !== null ? `${returnPct >= 0 ? '+' : ''}${returnPct.toFixed(2)}%` : '--'}
+                      </span>
+                    </span>
+                    <ChevronDown size={12} className={`text-gray-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+                  </div>
+                  {/* Expandable */}
+                  {isExpanded && (
+                    <div className="border-t border-white/[0.04] px-3 py-2 grid grid-cols-2 gap-x-4 gap-y-1.5 text-[11px]">
+                      {run.win_rate !== null && (
+                        <div>
+                          <span className="text-gray-400 block text-[9px] uppercase tracking-wider">{t('backtest.winRate')}</span>
+                          <span className={`text-gray-200 ${run.win_rate >= 60 ? 'text-emerald-400' : run.win_rate >= 40 ? 'text-yellow-400' : 'text-red-400'}`}>{run.win_rate.toFixed(1)}%</span>
+                        </div>
+                      )}
+                      {run.total_trades != null && (
+                        <div>
+                          <span className="text-gray-400 block text-[9px] uppercase tracking-wider">{t('backtest.totalTrades')}</span>
+                          <span className="text-gray-200">{run.total_trades}</span>
+                        </div>
+                      )}
+                      <div>
+                        <span className="text-gray-400 block text-[9px] uppercase tracking-wider">{t('backtest.startDate')}</span>
+                        <span className="text-gray-200 tabular-nums">{formatDateEU(run.start_date)}</span>
+                      </div>
+                      <div>
+                        <span className="text-gray-400 block text-[9px] uppercase tracking-wider">{t('backtest.endDate')}</span>
+                        <span className="text-gray-200 tabular-nums">{formatDateEU(run.end_date)}</span>
+                      </div>
+                      <div className="col-span-2 flex gap-2 pt-1">
+                        <button
+                          onClick={() => handleLoadRun(run.id)}
+                          className="flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 text-xs bg-primary-500/10 text-primary-400 rounded-lg border border-primary-500/20"
+                        >
+                          <BarChart3 size={13} />
+                          {t('backtest.viewResults', 'Ergebnisse')}
+                        </button>
+                        <button
+                          onClick={() => handleDelete(run.id)}
+                          className="px-2 py-1.5 text-xs bg-red-500/10 text-red-400 rounded-lg border border-red-500/20"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="table-premium min-w-[600px]">
