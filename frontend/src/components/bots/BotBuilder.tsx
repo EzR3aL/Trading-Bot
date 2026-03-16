@@ -7,6 +7,7 @@ import { ArrowLeft, ArrowRight, Check, Play, Brain, TrendingUp, BarChart3, Dolla
 import ExchangeLogo from '../ui/ExchangeLogo'
 import FilterDropdown from '../ui/FilterDropdown'
 import NumInput from '../ui/NumInput'
+import useHaptic from '../../hooks/useHaptic'
 
 interface Strategy {
   name: string
@@ -128,6 +129,7 @@ const POPULAR_BASES = ['BTC', 'ETH', 'SOL', 'XRP', 'DOGE', 'AVAX']
 
 export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps) {
   const { t } = useTranslation()
+  const haptic = useHaptic()
   const { addToast } = useToastStore()
   const isEdit = botId !== null && botId !== undefined
   const [step, setStep] = useState(0)
@@ -550,6 +552,7 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
       if (andStart) {
         await api.post(`/bots/${newId}/start`)
       }
+      haptic.success()
       onDone()
     } catch (err) {
       setError(getApiErrorMessage(err, t('common.saveFailed')))

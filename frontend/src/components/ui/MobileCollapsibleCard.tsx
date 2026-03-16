@@ -35,7 +35,7 @@ export default function MobileCollapsibleCard({
   const toggle = onToggle ?? (() => setInternalOpen(!internalOpen))
 
   return (
-    <div className={`border border-white/[0.06] rounded-lg bg-white/[0.02] overflow-hidden ${className}`}>
+    <div className={`border border-gray-200/50 dark:border-white/[0.06] rounded-lg bg-white dark:bg-white/[0.02] overflow-hidden ${className}`}>
       {/* Header — always visible, clickable */}
       <div className="cursor-pointer" onClick={toggle}>
         <div className="flex items-center justify-between px-3 pt-2 pb-1">
@@ -49,7 +49,7 @@ export default function MobileCollapsibleCard({
         {/* Summary row — always visible */}
         {summary && (
           <div className="flex items-center justify-between px-3 pb-2 text-[11px] gap-2">
-            <div className="flex items-center gap-3 text-gray-400 min-w-0 flex-1">
+            <div className="flex items-center gap-3 text-gray-600 dark:text-gray-400 min-w-0 flex-1">
               {summary}
             </div>
             <ChevronDown size={12} className={`text-gray-400 shrink-0 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
@@ -58,7 +58,7 @@ export default function MobileCollapsibleCard({
       </div>
       {/* Expandable details */}
       {isOpen && (
-        <div className="border-t border-white/[0.04] px-3 py-2">
+        <div className="border-t border-gray-200/50 dark:border-white/[0.04] px-3 py-2">
           {children}
         </div>
       )}

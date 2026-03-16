@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useState } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import api from '../api/client'
 import { useToastStore } from '../stores/toastStore'
@@ -15,6 +15,8 @@ import FilterDropdown from '../components/ui/FilterDropdown'
 import ExitReasonBadge from '../components/ui/ExitReasonBadge'
 import MobileTradeCard from '../components/ui/MobileTradeCard'
 import useIsMobile from '../hooks/useIsMobile'
+import usePullToRefresh from '../hooks/usePullToRefresh'
+import PullToRefreshIndicator from '../components/ui/PullToRefreshIndicator'
 
 export default function Trades() {
   const { t } = useTranslation()
@@ -69,25 +71,29 @@ export default function Trades() {
     setPage(1)
   }, [demoFilter])
 
+  const fetchTrades = useCallback(async () => {
+    const params = new URLSearchParams({ page: String(page), per_page: String(perPage) })
+    if (statusFilter) params.set('status', statusFilter)
+    if (symbolFilter) params.set('symbol', symbolFilter)
+    if (exchangeFilter) params.set('exchange', exchangeFilter)
+    if (botFilter) params.set('bot_name', botFilter)
+    if (dateFrom) params.set('date_from', dateFrom)
+    if (dateTo) params.set('date_to', dateTo)
+    if (demoFilter === 'demo') params.set('demo_mode', 'true')
+    else if (demoFilter === 'live') params.set('demo_mode', 'false')
+
+    const res = await api.get(`/trades?${params}`)
+    setTrades(res.data.trades)
+    setTotal(res.data.total)
+  }, [page, perPage, statusFilter, symbolFilter, exchangeFilter, botFilter, dateFrom, dateTo, demoFilter])
+
   useEffect(() => {
     if (!synced) return
     const load = async () => {
       setLoading(true)
       setError('')
-      const params = new URLSearchParams({ page: String(page), per_page: String(perPage) })
-      if (statusFilter) params.set('status', statusFilter)
-      if (symbolFilter) params.set('symbol', symbolFilter)
-      if (exchangeFilter) params.set('exchange', exchangeFilter)
-      if (botFilter) params.set('bot_name', botFilter)
-      if (dateFrom) params.set('date_from', dateFrom)
-      if (dateTo) params.set('date_to', dateTo)
-      if (demoFilter === 'demo') params.set('demo_mode', 'true')
-      else if (demoFilter === 'live') params.set('demo_mode', 'false')
-
       try {
-        const res = await api.get(`/trades?${params}`)
-        setTrades(res.data.trades)
-        setTotal(res.data.total)
+        await fetchTrades()
       } catch {
         setError(t('common.error'))
       } finally {
@@ -95,7 +101,20 @@ export default function Trades() {
       }
     }
     load()
-  }, [synced, page, statusFilter, symbolFilter, exchangeFilter, botFilter, dateFrom, dateTo, demoFilter])
+  }, [synced, fetchTrades, t])
+
+  const refreshData = useCallback(async () => {
+    try {
+      await fetchTrades()
+    } catch {
+      setError(t('common.error'))
+    }
+  }, [fetchTrades, t])
+
+  const { containerRef, refreshing, pullDistance } = usePullToRefresh({
+    onRefresh: refreshData,
+    disabled: !isMobile,
+  })
 
   const totalPages = Math.ceil(total / perPage)
 
@@ -112,7 +131,8 @@ export default function Trades() {
   }
 
   return (
-    <div className="animate-in min-w-0">
+    <div ref={containerRef} style={{ overscrollBehavior: 'contain' }} className="animate-in min-w-0">
+      <PullToRefreshIndicator pullDistance={pullDistance} refreshing={refreshing} />
       <h1 className="text-2xl font-bold text-white mb-6 tracking-tight">{t('trades.title')}</h1>
 
       {error && (

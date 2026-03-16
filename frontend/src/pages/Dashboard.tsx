@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useState, useRef } from 'react'
+import { Fragment, useEffect, useState, useRef, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import api from '../api/client'
 import { useFilterStore } from '../stores/filterStore'
@@ -14,6 +14,8 @@ import GuidedTour, { TourHelpButton, type TourStep } from '../components/ui/Guid
 import { formatDate, formatTime } from '../utils/dateUtils'
 import MobileTradeCard from '../components/ui/MobileTradeCard'
 import useIsMobile from '../hooks/useIsMobile'
+import usePullToRefresh from '../hooks/usePullToRefresh'
+import PullToRefreshIndicator from '../components/ui/PullToRefreshIndicator'
 
 /* ── Animated Number ─────────────────────────────────────── */
 
@@ -77,6 +79,7 @@ const PERIOD_LABELS: Record<number, string> = { 7: 'dashboard.days7', 14: 'dashb
 export default function Dashboard() {
   const { t } = useTranslation()
   const { demoFilter } = useFilterStore()
+  const isMobile = useIsMobile()
   const [stats, setStats] = useState<Statistics | null>(null)
   const [dailyStats, setDailyStats] = useState<DailyStats[]>([])
   const [recentTrades, setRecentTrades] = useState<Trade[]>([])
@@ -84,22 +87,26 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
+  const fetchData = useCallback(async () => {
+    await api.post('/trades/sync').catch((err) => { console.error('Failed to sync trades:', err) })
+
+    const demoParam = demoFilter === 'demo' ? '&demo_mode=true' : demoFilter === 'live' ? '&demo_mode=false' : ''
+    const [statsRes, dailyRes, tradesRes] = await Promise.all([
+      api.get(`/statistics?days=${period}${demoParam}`),
+      api.get(`/statistics/daily?days=${period}${demoParam}`),
+      api.get(`/trades?per_page=10&status=closed${demoParam}`),
+    ])
+    setStats(statsRes.data)
+    setDailyStats(dailyRes.data.days)
+    setRecentTrades(tradesRes.data.trades)
+  }, [period, demoFilter])
+
   useEffect(() => {
     const load = async () => {
       setLoading(true)
       setError('')
       try {
-        await api.post('/trades/sync').catch((err) => { console.error('Failed to sync trades:', err) })
-
-        const demoParam = demoFilter === 'demo' ? '&demo_mode=true' : demoFilter === 'live' ? '&demo_mode=false' : ''
-        const [statsRes, dailyRes, tradesRes] = await Promise.all([
-          api.get(`/statistics?days=${period}${demoParam}`),
-          api.get(`/statistics/daily?days=${period}${demoParam}`),
-          api.get(`/trades?per_page=10&status=closed${demoParam}`),
-        ])
-        setStats(statsRes.data)
-        setDailyStats(dailyRes.data.days)
-        setRecentTrades(tradesRes.data.trades)
+        await fetchData()
       } catch {
         setError(t('common.error'))
       } finally {
@@ -107,14 +114,28 @@ export default function Dashboard() {
       }
     }
     load()
-  }, [period, demoFilter, t])
+  }, [fetchData, t])
+
+  const refreshData = useCallback(async () => {
+    try {
+      await fetchData()
+    } catch {
+      setError(t('common.error'))
+    }
+  }, [fetchData, t])
+
+  const { containerRef, refreshing, pullDistance } = usePullToRefresh({
+    onRefresh: refreshData,
+    disabled: !isMobile,
+  })
 
   if (loading) {
     return <DashboardSkeleton />
   }
 
   return (
-    <div className="animate-in">
+    <div ref={containerRef} style={{ overscrollBehavior: 'contain' }} className="animate-in">
+      <PullToRefreshIndicator pullDistance={pullDistance} refreshing={refreshing} />
       {/* Error */}
       {error && (
         <div role="alert" className="mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-sm">

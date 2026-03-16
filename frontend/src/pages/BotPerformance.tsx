@@ -16,6 +16,7 @@ import { ExchangeIcon } from '../components/ui/ExchangeLogo'
 import ExitReasonBadge from '../components/ui/ExitReasonBadge'
 import MobileTradeCard from '../components/ui/MobileTradeCard'
 import useIsMobile from '../hooks/useIsMobile'
+import useSwipeToClose from '../hooks/useSwipeToClose'
 import { Eye, EyeOff, ArrowUpRight, ArrowDownRight, Trophy, Target, LayoutGrid, BarChart3, Bot, FileText, X, Copy, ShieldCheck } from 'lucide-react'
 import type { LlmConnection } from '../types'
 import { formatDate, formatDateTime, formatChartDate, formatTime, formatChartCurrency } from '../utils/dateUtils'
@@ -484,6 +485,7 @@ export default function BotPerformance() {
   const [copied, setCopied] = useState(false)
   const [latestCopied, setLatestCopied] = useState(false)
   const tradeCardRef = useRef<HTMLDivElement>(null)
+  const swipeTradeModal = useSwipeToClose({ onClose: () => setSelectedTrade(null), enabled: isMobile && selectedTrade !== null })
   const latestCardRef = useRef<HTMLDivElement>(null)
   const [llmConnections, setLlmConnections] = useState<LlmConnection[]>([])
   const [affiliateLinks, setAffiliateLinks] = useState<{ exchange_type: string; affiliate_url: string; label: string | null }[]>([])
@@ -1025,9 +1027,16 @@ export default function BotPerformance() {
       {selectedTrade && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 backdrop-blur-md" onClick={() => setSelectedTrade(null)}>
           <div
+            ref={swipeTradeModal.ref}
+            style={swipeTradeModal.style}
             className="bg-[#0f1420] rounded-2xl max-w-lg w-full mx-4 border border-white/10 shadow-2xl overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
+            {isMobile && (
+              <div className="flex justify-center pt-2 pb-1 lg:hidden">
+                <div className="w-10 h-1 rounded-full bg-white/20" />
+              </div>
+            )}
             {/* Modal Header with Copy Button */}
             <div className="flex items-center justify-between px-7 pt-7 pb-0">
               <div className="flex items-center gap-3">

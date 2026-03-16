@@ -48,7 +48,7 @@ function MobileTradeCardInner({ trade, extraDetails }: MobileTradeCardProps) {
   const header = (
     <>
       <ExchangeIcon exchange={exchange} size={14} />
-      <span className="text-white font-semibold text-[13px] truncate">{trade.symbol}</span>
+      <span className="text-gray-900 dark:text-white font-semibold text-[13px] truncate">{trade.symbol}</span>
       <span className={`text-[10px] font-medium px-1 py-px rounded ${
         isLong ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400'
       }`}>

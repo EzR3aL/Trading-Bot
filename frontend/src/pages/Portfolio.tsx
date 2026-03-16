@@ -1,4 +1,4 @@
-import { Fragment, useState, useEffect, useMemo } from 'react'
+import { Fragment, useState, useEffect, useMemo, useCallback } from 'react'
 import { formatChartCurrency } from '../utils/dateUtils'
 import { useTranslation } from 'react-i18next'
 import {
@@ -17,6 +17,8 @@ import type {
 } from '../types'
 import MobilePositionCard from '../components/ui/MobilePositionCard'
 import useIsMobile from '../hooks/useIsMobile'
+import usePullToRefresh from '../hooks/usePullToRefresh'
+import PullToRefreshIndicator from '../components/ui/PullToRefreshIndicator'
 
 /* ── Constants ────────────────────────────────────────────── */
 
@@ -76,18 +78,31 @@ export default function Portfolio() {
 
   /* ── Data Fetching ──────────────────────────────────────── */
 
+  const fetchFastData = useCallback(async () => {
+    const [sumRes, dailyRes] = await Promise.all([
+      api.get(`/portfolio/summary?days=${period}`),
+      api.get(`/portfolio/daily?days=${period}`),
+    ])
+    setSummary(sumRes.data)
+    setDailyData(dailyRes.data.daily || dailyRes.data || [])
+  }, [period])
+
+  const fetchExchangeData = useCallback(async () => {
+    const [posRes, allocRes] = await Promise.all([
+      api.get('/portfolio/positions'),
+      api.get('/portfolio/allocation'),
+    ])
+    setPositions(posRes.data.positions || posRes.data || [])
+    setAllocation(allocRes.data.allocations || allocRes.data || [])
+  }, [])
+
   // Phase 1: Fast DB queries (summary + daily) -- renders page instantly
   useEffect(() => {
     const loadFast = async () => {
       setLoading(true)
       setError('')
       try {
-        const [sumRes, dailyRes] = await Promise.all([
-          api.get(`/portfolio/summary?days=${period}`),
-          api.get(`/portfolio/daily?days=${period}`),
-        ])
-        setSummary(sumRes.data)
-        setDailyData(dailyRes.data.daily || dailyRes.data || [])
+        await fetchFastData()
       } catch {
         setError(t('common.error'))
       } finally {
@@ -95,19 +110,14 @@ export default function Portfolio() {
       }
     }
     loadFast()
-  }, [period, t])
+  }, [fetchFastData, t])
 
   // Phase 2: Slow exchange API calls (positions + allocation) -- loads in background
   useEffect(() => {
     const loadExchange = async () => {
       setLoadingExchange(true)
       try {
-        const [posRes, allocRes] = await Promise.all([
-          api.get('/portfolio/positions'),
-          api.get('/portfolio/allocation'),
-        ])
-        setPositions(posRes.data.positions || posRes.data || [])
-        setAllocation(allocRes.data.allocations || allocRes.data || [])
+        await fetchExchangeData()
       } catch {
         // Exchange data is optional -- don't block the page
       } finally {
@@ -115,7 +125,20 @@ export default function Portfolio() {
       }
     }
     loadExchange()
-  }, [t])
+  }, [fetchExchangeData])
+
+  const refreshData = useCallback(async () => {
+    try {
+      await Promise.all([fetchFastData(), fetchExchangeData()])
+    } catch {
+      setError(t('common.error'))
+    }
+  }, [fetchFastData, fetchExchangeData, t])
+
+  const { containerRef, refreshing, pullDistance } = usePullToRefresh({
+    onRefresh: refreshData,
+    disabled: !isMobile,
+  })
 
   /* ── Derived Data ───────────────────────────────────────── */
 
@@ -195,7 +218,8 @@ export default function Portfolio() {
   /* ── Render ─────────────────────────────────────────────── */
 
   return (
-    <div className="animate-in min-w-0">
+    <div ref={containerRef} style={{ overscrollBehavior: 'contain' }} className="animate-in min-w-0">
+      <PullToRefreshIndicator pullDistance={pullDistance} refreshing={refreshing} />
       {/* Error */}
       {error && (
         <div role="alert" className="mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-sm">

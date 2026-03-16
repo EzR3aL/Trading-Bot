@@ -42,6 +42,10 @@ import GuidedTour, { TourHelpButton, type TourStep } from '../components/ui/Guid
 import { formatDate, formatDateTime, formatTime } from '../utils/dateUtils'
 import MobileTradeCard from '../components/ui/MobileTradeCard'
 import useIsMobile from '../hooks/useIsMobile'
+import useHaptic from '../hooks/useHaptic'
+import useSwipeToClose from '../hooks/useSwipeToClose'
+import usePullToRefresh from '../hooks/usePullToRefresh'
+import PullToRefreshIndicator from '../components/ui/PullToRefreshIndicator'
 
 const STRATEGY_DISPLAY: Record<string, string> = { llm_signal: 'KI-Companion', sentiment_surfer: 'Sentiment Surfer', liquidation_hunter: 'Liquidation Hunter', degen: 'Degen', edge_indicator: 'Edge Indicator', contrarian_pulse: 'Contrarian Pulse' }
 const AI_STRATEGIES = new Set(['llm_signal', 'degen'])
@@ -194,6 +198,8 @@ function TradeDetailModal({ trade, onClose, t, affiliateLink }: { trade: BotTrad
   const copyRef = useRef<HTMLDivElement>(null)
   const theme = useThemeStore((s) => s.theme)
   const [copied, setCopied] = useState(false)
+  const isMobile = useIsMobile()
+  const swipe = useSwipeToClose({ onClose, enabled: isMobile })
 
   const handleCopyImage = async () => {
     if (!copyRef.current) return
@@ -212,10 +218,17 @@ function TradeDetailModal({ trade, onClose, t, affiliateLink }: { trade: BotTrad
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 backdrop-blur-md" onClick={onClose} role="dialog" aria-modal="true" onKeyDown={(e) => { if (e.key === 'Escape') onClose() }}>
       <div
+        ref={swipe.ref}
+        style={swipe.style}
         className="bg-[#0f1420] rounded-2xl p-7 max-w-lg w-full mx-4 border border-white/10 shadow-2xl"
         onClick={(e) => e.stopPropagation()}
         aria-label={t('bots.tradeDetail')}
       >
+        {isMobile && (
+          <div className="flex justify-center pt-2 pb-1 lg:hidden">
+            <div className="w-10 h-1 rounded-full bg-white/20" />
+          </div>
+        )}
         {/* Header */}
         <div className="flex items-center justify-between mb-5">
           <div className="flex items-center gap-3">
@@ -389,6 +402,7 @@ function BotTradeHistoryModal({ bot, onClose, t }: { bot: BotStatus; onClose: ()
   const copyCardRef = useRef<HTMLDivElement>(null)
   const theme = useThemeStore((s) => s.theme)
   const isMobile = useIsMobile()
+  const swipe = useSwipeToClose({ onClose, enabled: isMobile })
 
   useEffect(() => {
     const load = async () => {
@@ -431,10 +445,17 @@ function BotTradeHistoryModal({ bot, onClose, t }: { bot: BotStatus; onClose: ()
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-md" onClick={onClose} role="dialog" aria-modal="true" onKeyDown={(e) => { if (e.key === 'Escape') onClose() }}>
       <div
+        ref={swipe.ref}
+        style={swipe.style}
         className="bg-[#0b0f19] rounded-2xl max-w-5xl w-full mx-2 sm:mx-4 my-2 sm:my-3 max-h-[95vh] flex flex-col border border-white/10 shadow-2xl overflow-hidden"
         onClick={(e) => e.stopPropagation()}
         aria-label={t('bots.tradeHistory')}
       >
+        {isMobile && (
+          <div className="flex justify-center pt-2 pb-1 lg:hidden">
+            <div className="w-10 h-1 rounded-full bg-white/20" />
+          </div>
+        )}
         {/* Modal Header */}
         <div className="flex items-center justify-between px-6 py-3.5 border-b border-white/5 shrink-0">
           <div className="flex items-center gap-3">
@@ -736,6 +757,7 @@ export default function Bots() {
   const { t } = useTranslation()
   const { demoFilter } = useFilterStore()
   const isMobile = useIsMobile()
+  const haptic = useHaptic()
   const { addToast } = useToastStore()
 
   const handleStartError = (err: unknown) => {
@@ -759,6 +781,7 @@ export default function Bots() {
   const [historyBot, setHistoryBot] = useState<BotStatus | null>(null)
   const [builderFeeModalBotId, setBuilderFeeModalBotId] = useState<number | null>(null)
   const [llmConnections, setLlmConnections] = useState<LlmConnection[]>([])
+  const swipeBuilderFee = useSwipeToClose({ onClose: () => setBuilderFeeModalBotId(null), enabled: isMobile && builderFeeModalBotId !== null })
 
   const [moreMenuOpen, setMoreMenuOpen] = useState<number | null>(null)
   const [closePositionOpen, setClosePositionOpen] = useState<number | null>(null)
@@ -805,8 +828,14 @@ export default function Bots() {
     api.get('/config/llm-connections').then(res => setLlmConnections(res.data.connections || [])).catch((err) => { console.error('Failed to load LLM connections:', err); useToastStore.getState().addToast('error', t('common.loadError', 'Failed to load data')) })
   }, [])
 
+  const { containerRef, refreshing, pullDistance } = usePullToRefresh({
+    onRefresh: fetchBots,
+    disabled: !isMobile,
+  })
+
 
   const handleStart = async (id: number) => {
+    haptic.medium()
     // Check if HL bot needs builder fee approval or referral first
     const bot = bots.find(b => b.bot_config_id === id)
     if (bot?.exchange_type === 'hyperliquid' && (bot?.builder_fee_approved === false || bot?.referral_verified === false)) {
@@ -844,6 +873,7 @@ export default function Bots() {
   }
 
   const handleStop = async (id: number) => {
+    haptic.heavy()
     setActionLoading(id)
     try {
       await api.post(`/bots/${id}/stop`)
@@ -856,6 +886,7 @@ export default function Bots() {
   }
 
   const handleDelete = async (id: number, name: string) => {
+    haptic.error()
     if (!confirm(`${t('bots.confirmDelete')} (${name})`)) return
     try {
       await api.delete(`/bots/${id}`)
@@ -867,6 +898,7 @@ export default function Bots() {
   }
 
   const handleDuplicate = async (id: number) => {
+    haptic.light()
     try {
       await api.post(`/bots/${id}/duplicate`)
       await fetchBots()
@@ -877,6 +909,7 @@ export default function Bots() {
   }
 
   const handleClosePosition = async (botId: number, symbol: string) => {
+    haptic.heavy()
     if (!confirm(t('bots.closePositionConfirm', { symbol }))) return
     setActionLoading(botId)
     try {
@@ -920,7 +953,8 @@ export default function Bots() {
   const getStatusStyle = (status: string) => STATUS_STYLES[status] || STATUS_STYLES.idle
 
   return (
-    <div className="animate-in">
+    <div ref={containerRef} style={{ overscrollBehavior: 'contain' }} className="animate-in">
+      <PullToRefreshIndicator pullDistance={pullDistance} refreshing={refreshing} />
       {/* Header */}
       <div className="flex items-center justify-between gap-3 mb-6">
         <h1 className="text-xl sm:text-2xl font-bold text-white tracking-tight">{t('bots.title')}</h1>
@@ -1356,7 +1390,12 @@ export default function Bots() {
       {/* Builder Fee Approval Modal */}
       {builderFeeModalBotId !== null && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-md" onClick={() => setBuilderFeeModalBotId(null)}>
-          <div className="max-w-lg w-full mx-4" onClick={(e) => e.stopPropagation()}>
+          <div ref={swipeBuilderFee.ref} style={swipeBuilderFee.style} className="max-w-lg w-full mx-4" onClick={(e) => e.stopPropagation()}>
+            {isMobile && (
+              <div className="flex justify-center pt-2 pb-1 lg:hidden">
+                <div className="w-10 h-1 rounded-full bg-white/20" />
+              </div>
+            )}
             <BuilderFeeApproval
               onApproved={handleBuilderFeeApproved}
               onClose={() => setBuilderFeeModalBotId(null)}

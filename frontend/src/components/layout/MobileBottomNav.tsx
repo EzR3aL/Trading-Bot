@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import useSwipeToClose from '../../hooks/useSwipeToClose'
 import { Link, useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '../../stores/authStore'
@@ -45,6 +46,7 @@ export default function MobileBottomNav() {
   const { demoFilter, setDemoFilter } = useFilterStore()
   const { theme, toggleTheme } = useThemeStore()
   const [sheetOpen, setSheetOpen] = useState(false)
+  const swipeSheet = useSwipeToClose({ onClose: () => setSheetOpen(false), enabled: sheetOpen })
 
   const filterOptions: { value: DemoFilter; labelKey: string }[] = [
     { value: 'all', labelKey: 'common.all' },
@@ -74,6 +76,8 @@ export default function MobileBottomNav() {
 
       {/* Bottom sheet */}
       <div
+        ref={swipeSheet.ref}
+        style={sheetOpen ? swipeSheet.style : undefined}
         role="dialog"
         aria-modal={sheetOpen}
         aria-label={t('nav.more', { defaultValue: 'More' })}
