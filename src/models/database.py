@@ -1,7 +1,7 @@
 """
 SQLAlchemy ORM Models for the Trading Bot.
 
-Defines all database tables: users, user_configs, config_presets,
+Defines all database tables: users, user_configs,
 trades, funding_payments, bot_instances, exchanges.
 """
 
@@ -54,7 +54,6 @@ class User(Base):
     # deletes from wiping trade history and other important child records.
     # Soft deletes (is_deleted + deleted_at) are used instead.
     configs = relationship("UserConfig", back_populates="user", cascade="all")
-    presets = relationship("ConfigPreset", back_populates="user", cascade="all")
     trades = relationship("TradeRecord", back_populates="user", cascade="all")
     funding_payments = relationship("FundingPayment", back_populates="user", cascade="all")
     bot_instances = relationship("BotInstance", back_populates="user", cascade="all")
@@ -120,33 +119,6 @@ class UserConfig(Base):
 
     # Relationships
     user = relationship("User", back_populates="configs")
-
-
-class ConfigPreset(Base):
-    __tablename__ = "config_presets"
-
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
-    name = Column(String(100), nullable=False)
-    description = Column(Text, nullable=True)
-    exchange_type = Column(String(50), nullable=False, default="any")  # any | bitget | weex | hyperliquid | bitunix | bingx
-    is_active = Column(Boolean, default=False)
-
-    # Trading Config (JSON stored as text)
-    trading_config = Column(Text, nullable=True)  # JSON: {max_trades, leverage, position_size, ...}
-
-    # Strategy Config (JSON stored as text)
-    strategy_config = Column(Text, nullable=True)  # JSON: {fear_greed_thresholds, funding_rate, ...}
-
-    # Trading Pairs (JSON stored as text)
-    trading_pairs = Column(Text, nullable=True)  # JSON: ["BTCUSDT", "ETHUSDT"]
-
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
-
-    # Relationships
-    user = relationship("User", back_populates="presets")
-    bot_instances = relationship("BotInstance", back_populates="active_preset")
 
 
 class TradeRecord(Base):
@@ -229,7 +201,6 @@ class BotInstance(Base):
     exchange_type = Column(String(50), nullable=False, default="bitget")
     is_running = Column(Boolean, default=False)
     demo_mode = Column(Boolean, default=True)
-    active_preset_id = Column(Integer, ForeignKey("config_presets.id", ondelete="SET NULL"), nullable=True)
     started_at = Column(DateTime(timezone=True), nullable=True)
     stopped_at = Column(DateTime(timezone=True), nullable=True)
     error_message = Column(Text, nullable=True)
@@ -239,7 +210,6 @@ class BotInstance(Base):
 
     # Relationships
     user = relationship("User", back_populates="bot_instances")
-    active_preset = relationship("ConfigPreset", back_populates="bot_instances")
 
 
 class ExchangeConnection(Base):
@@ -370,9 +340,6 @@ class BotConfig(Base):
     whatsapp_access_token = Column(Text, nullable=True)      # Encrypted (Meta Graph API token)
     whatsapp_recipient = Column(Text, nullable=True)         # Encrypted (recipient phone number)
 
-    # Active preset (FK to config_presets, tracks which preset was last applied)
-    active_preset_id = Column(Integer, ForeignKey("config_presets.id", ondelete="SET NULL"), nullable=True)
-
     # State
     is_enabled = Column(Boolean, default=False)
 
@@ -382,7 +349,6 @@ class BotConfig(Base):
     # Relationships
     user = relationship("User", back_populates="bot_configs")
     trades = relationship("TradeRecord", back_populates="bot_config", foreign_keys="TradeRecord.bot_config_id")
-    active_preset = relationship("ConfigPreset", foreign_keys=[active_preset_id])
 
 
 class Exchange(Base):
@@ -531,12 +497,12 @@ class NotificationLog(Base):
 
 
 class ConfigChangeLog(Base):
-    """Audit trail for configuration changes (bot configs, presets, exchange connections)."""
+    """Audit trail for configuration changes (bot configs, exchange connections)."""
     __tablename__ = "config_change_logs"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
-    entity_type = Column(String(50), nullable=False, index=True)  # bot_config | preset | exchange_connection | llm_connection
+    entity_type = Column(String(50), nullable=False, index=True)  # bot_config | exchange_connection | llm_connection
     entity_id = Column(Integer, nullable=False)
     action = Column(String(20), nullable=False)  # create | update | delete
     changes = Column(Text, nullable=True)  # JSON: {"field": {"old": x, "new": y}}

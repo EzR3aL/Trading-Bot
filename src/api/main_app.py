@@ -36,7 +36,6 @@ from src.api.routers import (  # noqa: E402
     metrics,
     notifications,
     portfolio,
-    presets,
     statistics,
     status,
     tax_report,
@@ -338,7 +337,6 @@ def create_app() -> FastAPI:
     app.include_router(statistics.router)
     app.include_router(funding.router)
     app.include_router(config.router)
-    app.include_router(presets.router)
     app.include_router(exchanges.router)
     app.include_router(bots.router)
     app.include_router(tax_report.router)

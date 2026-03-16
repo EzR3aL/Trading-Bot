@@ -9,6 +9,23 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [4.1.0] - 2026-03-16
+
+### Entfernt
+- **Presets-Feature komplett entfernt**: Preset-Seite, API-Endpunkte, DB-Model, Preset-Anwendung auf Bots. Bot-Duplizierung deckt den gleichen Use Case ab
+- DB-Migration `011_remove_presets.py` entfernt `config_presets` Tabelle und FK-Spalten
+- Preset-bezogene Tests, Anleitungen (DE+EN) und i18n-Keys entfernt
+
+### Hinzugefuegt
+- **Bitget Futures Warnung**: Hinweis im Bot Builder und in den Anleitungen, dass Bitget Futures fuer neue deutsche Kunden voraussichtlich bis 2027 nicht verfuegbar sind (bestehende Konten nicht betroffen)
+
+### Geaendert
+- **Strategien-Dokumentation aktualisiert**: Nur noch 3 verfuegbare Strategien (Edge Indicator, Liquidation Hunter, Sentiment Surfer) hervorgehoben. Versteckte Strategien (Contrarian Pulse, LLM Signal, Degen) als "derzeit nicht verfuegbar" gekennzeichnet
+- LLM-Provider-Doku mit Admin-only Hinweis versehen
+- Backtest-Ergebnisse und Strategie-Dokumentation mit Verfuegbarkeitshinweisen ergaenzt
+
+---
+
 ## [4.0.5] - 2026-03-13
 
 ### Sicherheit (Security Hardening)

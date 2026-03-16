@@ -14,8 +14,6 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
-
 from src.api.schemas.bots import (
     BotBudgetInfo,
     BotBudgetListResponse,
@@ -33,7 +31,7 @@ from src.api.schemas.bots import (
 )
 from src.auth.dependencies import get_current_user
 from src.errors import ERR_BOT_NOT_FOUND, ERR_MAX_BOTS_REACHED, ERR_ORCHESTRATOR_NOT_INITIALIZED, ERR_STOP_BOT_BEFORE_EDIT, ERR_STRATEGY_NOT_FOUND
-from src.models.database import BotConfig, ConfigPreset, ExchangeConnection, TradeRecord, User
+from src.models.database import BotConfig, ExchangeConnection, TradeRecord, User
 from src.models.session import get_db
 from src.strategy import StrategyRegistry  # imports __init__.py → registers all strategies
 from src.api.rate_limit import limiter
@@ -95,8 +93,6 @@ def _config_to_response(config: BotConfig) -> BotConfigResponse:
             and config.whatsapp_access_token
             and config.whatsapp_recipient
         ),
-        active_preset_id=config.active_preset_id,
-        active_preset_name=getattr(config.active_preset, "name", None) if config.active_preset_id else None,
         created_at=config.created_at.isoformat() if config.created_at else None,
         updated_at=config.updated_at.isoformat() if config.updated_at else None,
     )
@@ -533,14 +529,6 @@ async def list_bots(
     orchestrator=Depends(get_orchestrator),
 ):
     """List all bots for the current user with runtime status."""
-    # Preload preset names for active presets
-    preset_names: dict[int, str] = {}
-    preset_result = await db.execute(
-        select(ConfigPreset.id, ConfigPreset.name).where(ConfigPreset.user_id == user.id)
-    )
-    for pid, pname in preset_result.all():
-        preset_names[pid] = pname
-
     # Preload HL gate status (builder fee + referral)
     hl_approved = False
     hl_referral_verified = False
@@ -827,8 +815,6 @@ async def list_bots(
                 and config.whatsapp_access_token
                 and config.whatsapp_recipient
             ),
-            active_preset_id=config.active_preset_id,
-            active_preset_name=preset_names.get(config.active_preset_id) if config.active_preset_id else None,
             builder_fee_approved=hl_approved if config.exchange_type == "hyperliquid" else None,
             referral_verified=hl_referral_verified if config.exchange_type == "hyperliquid" else None,
             affiliate_uid=affiliate_data.get(config.exchange_type, {}).get("uid") if config.exchange_type in CEX_EXCHANGES else None,
@@ -1058,7 +1044,6 @@ async def get_bot(
     """Get a specific bot configuration."""
     result = await db.execute(
         select(BotConfig).where(BotConfig.id == bot_id, BotConfig.user_id == user.id)
-        .options(selectinload(BotConfig.active_preset))
     )
     config = result.scalar_one_or_none()
     if not config:
@@ -1270,8 +1255,6 @@ router.include_router(statistics_router)
 from src.api.routers.bots_lifecycle import (  # noqa: E402, F401
     _enforce_affiliate_gate,
     _enforce_hl_gates,
-    apply_preset_to_bot,
-    reset_preset,
     restart_bot,
     start_bot,
     stop_all_bots,

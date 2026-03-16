@@ -43,8 +43,6 @@ ERR_POSITION_VERIFY_FAILED = "Position {symbol}: Status konnte nach dem Schliess
 ERR_TELEGRAM_NOT_CONFIGURED = "Telegram nicht konfiguriert"
 ERR_TELEGRAM_SEND_FAILED = "Telegram-Nachricht konnte nicht gesendet werden"
 ERR_STOP_BOT_BEFORE_EDIT = "Stoppe den Bot bevor du die Konfiguration bearbeitest"
-ERR_STOP_BOT_BEFORE_PRESET = "Stoppe den Bot bevor du ein Preset anwendest"
-ERR_STOP_BOT_BEFORE_RESET = "Stoppe den Bot bevor du das Preset entfernst"
 ERR_MAX_BOTS_REACHED = "Maximal {max_bots} Bots pro Benutzer erlaubt"
 ERR_ORCHESTRATOR_NOT_INITIALIZED = "Bot-Orchestrator nicht initialisiert"
 ERR_WHATSAPP_NOT_CONFIGURED = "WhatsApp nicht konfiguriert"
@@ -89,10 +87,6 @@ ERR_BITGET_UID_NUMERIC = "Bitget UID muss rein numerisch sein"
 ERR_WEEX_UID_ALPHANUMERIC = "Weex UID muss alphanumerisch sein"
 ERR_BITUNIX_UID_NUMERIC = "Bitunix UID muss rein numerisch sein"
 ERR_BINGX_UID_NUMERIC = "BingX UID muss rein numerisch sein"
-
-# ── Presets ──────────────────────────────────────────────────────────
-ERR_PRESET_NOT_FOUND = "Preset nicht gefunden"
-ERR_PRESET_ACTIVE_CANNOT_DELETE = "Aktives Preset kann nicht gelöscht werden. Zuerst deaktivieren."
 
 # ── Backtest ─────────────────────────────────────────────────────────
 ERR_INVALID_DATE_FORMAT = "Ungültiges Datumsformat. Verwende YYYY-MM-DD"

@@ -128,7 +128,7 @@ async def app(test_engine, mock_orchestrator):
     from slowapi import _rate_limit_exceeded_handler
     from slowapi.errors import RateLimitExceeded
     from src.api.routers.auth import limiter
-    from src.api.routers import auth, bots, config, presets, status, users
+    from src.api.routers import auth, bots, config, status, users
     from src.models.session import get_db
 
     limiter.enabled = False
@@ -141,7 +141,6 @@ async def app(test_engine, mock_orchestrator):
     test_app.include_router(auth.router)
     test_app.include_router(status.router)
     test_app.include_router(config.router)
-    test_app.include_router(presets.router)
     test_app.include_router(bots.router)
     test_app.include_router(users.router)
 

@@ -7,7 +7,6 @@ import { useThemeStore } from '../../stores/themeStore'
 import {
   LayoutDashboard,
   ArrowLeftRight,
-  Layers,
   Settings,
   Bot,
   FileText,
@@ -34,7 +33,6 @@ const primaryItems: { path: string; key: string; icon: LucideIcon }[] = [
 const moreItems: { path: string; key: string; icon: LucideIcon }[] = [
   { path: '/trades', key: 'trades', icon: ArrowLeftRight },
   { path: '/backtest', key: 'backtest', icon: FlaskConical },
-  { path: '/presets', key: 'presets', icon: Layers },
   { path: '/settings', key: 'settings', icon: Settings },
   { path: '/tax-report', key: 'taxReport', icon: FileText },
   { path: '/guide', key: 'guide', icon: BookOpen },

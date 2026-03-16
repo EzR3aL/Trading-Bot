@@ -90,6 +90,8 @@ You should see something like `Python 3.11.x`.
 
 ## 3. Bitget Account & API Setup
 
+> **Important notice for new German customers:** Bitget has restricted access to Futures trading for new customers from Germany, expected to last until approximately 2027. Existing accounts with previously activated Futures trading are not affected. If you don't have access to Futures, you can alternatively use **Weex**, **Hyperliquid**, **Bitunix**, or **BingX** as your exchange — the bot supports all five exchanges.
+
 ### Step 3.1: Create a Bitget Account
 
 1. Go to [www.bitget.com](https://www.bitget.com)

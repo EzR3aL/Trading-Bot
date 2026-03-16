@@ -1,5 +1,7 @@
 # Backtest Results BTC (BTCUSDT)
 
+> **Note:** These backtest results cover all implemented strategies. Currently only Edge Indicator, Liquidation Hunter, and Sentiment Surfer are available in the Bot Builder.
+
 **Date:** February 21, 2026
 **Asset:** BTCUSDT (Binance Futures)
 **Initial Capital:** $10,000 per backtest

@@ -140,7 +140,6 @@ async def app(test_engine, mock_orchestrator):
         exchanges,
         funding,
         portfolio,
-        presets,
         statistics,
         status,
         tax_report,
@@ -165,7 +164,6 @@ async def app(test_engine, mock_orchestrator):
     test_app.include_router(statistics.router)
     test_app.include_router(funding.router)
     test_app.include_router(config.router)
-    test_app.include_router(presets.router)
     test_app.include_router(exchanges.router)
     test_app.include_router(bots.router)
     test_app.include_router(tax_report.router)

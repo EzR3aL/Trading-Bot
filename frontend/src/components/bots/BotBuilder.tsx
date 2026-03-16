@@ -1,6 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { Trans, useTranslation } from 'react-i18next'
-import { Link } from 'react-router-dom'
 import api from '../../api/client'
 import { getApiErrorMessage } from '../../utils/api-error'
 import { useToastStore } from '../../stores/toastStore'
@@ -40,15 +39,6 @@ interface DataSource {
   provider: string
   free: boolean
   default: boolean
-}
-
-interface Preset {
-  id: number
-  name: string
-  exchange_type: string
-  trading_config: Record<string, any>
-  strategy_config: Record<string, any>
-  trading_pairs: string[]
 }
 
 interface BalancePreview {
@@ -202,10 +192,6 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
   // Notification accordion: which service is currently expanded
   const [openNotif, setOpenNotif] = useState<string | null>(null)
 
-  // Presets
-  const [presets, setPresets] = useState<Preset[]>([])
-  const [selectedPresetId, setSelectedPresetId] = useState<number | null>(null)
-
   // Whether current strategy uses market data
   const usesData = DATA_STRATEGIES.includes(strategyType)
   // Fixed strategies have predetermined sources — no manual selection needed
@@ -229,45 +215,6 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
     }
     return groups
   }, [dataSources])
-
-  // Load presets
-  useEffect(() => {
-    if (!isEdit) {
-      api.get('/presets').then(res => {
-        setPresets(res.data || [])
-      }).catch((err) => { console.error('Failed to load presets:', err); addToast('error', t('common.loadError', 'Failed to load data')) })
-    }
-  }, [isEdit])
-
-  const applyPreset = (presetId: number) => {
-    const preset = presets.find(p => p.id === presetId)
-    if (!preset) return
-    setSelectedPresetId(presetId)
-    const tc = preset.trading_config || {}
-    if (tc.max_trades_per_day) setMaxTrades(tc.max_trades_per_day)
-    if (tc.daily_loss_limit_percent) setDailyLossLimit(tc.daily_loss_limit_percent)
-    // Apply strategy params — preserve data_sources
-    if (preset.strategy_config && Object.keys(preset.strategy_config).length > 0) {
-      setStrategyParams(prev => {
-        const { data_sources, ...rest } = prev
-        return { ...rest, ...preset.strategy_config, ...(data_sources ? { data_sources } : {}) }
-      })
-    }
-    // Apply trading pairs (convert based on current exchange)
-    if (preset.trading_pairs && preset.trading_pairs.length > 0) {
-      const converted = preset.trading_pairs.map(p => {
-        const base = p.replace(/[-](USDT|USDC)$/i, '').replace(/(USDT|USDC)$/i, '')
-        if (isHyperliquid) return base
-        if (isBingx) return `${base}-USDT`
-        return base + 'USDT'
-      })
-      setTradingPairs(converted)
-    }
-    // Apply per-asset config from preset
-    if (tc.per_asset_config && typeof tc.per_asset_config === 'object') {
-      setPerAssetConfig(tc.per_asset_config)
-    }
-  }
 
   // Load strategies
   useEffect(() => {
@@ -705,32 +652,6 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
               />
             </div>
 
-            {/* Preset selection */}
-            {!isEdit && (
-              <div className="pt-2 border-t border-white/5">
-                <label className="block text-sm text-gray-400 mb-1">{t('bots.builder.loadFromPreset')}</label>
-                {presets.length > 0 ? (
-                  <>
-                    <FilterDropdown
-                      value={String(selectedPresetId ?? '')}
-                      onChange={val => { const id = parseInt(val); if (id) applyPreset(id) }}
-                      options={[
-                        { value: '', label: t('bots.builder.selectPreset') },
-                        ...presets.map(p => ({ value: String(p.id), label: `${p.name}${p.exchange_type !== 'any' ? ` (${p.exchange_type})` : ''}` }))
-                      ]}
-                      ariaLabel="Preset"
-                    />
-                    {selectedPresetId && (
-                      <p className="text-xs text-green-400 mt-1">{t('bots.builder.presetLoaded')}</p>
-                    )}
-                  </>
-                ) : (
-                  <div className="text-sm text-gray-500">
-                    {t('bots.builder.noPresets')} — <Link to="/presets" className="text-primary-400 hover:text-primary-300">{t('bots.builder.createPreset')}</Link>
-                  </div>
-                )}
-              </div>
-            )}
           </div>
         )}
 
@@ -1215,6 +1136,15 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
                   )
                 })}
               </div>
+              {exchangeType === 'bitget' && (
+                <div className="flex items-start gap-2 p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl text-amber-300 text-xs">
+                  <AlertTriangle size={16} className="shrink-0 mt-0.5" />
+                  <div>
+                    <span className="font-semibold">{t('bots.builder.bitgetWarningTitle', 'Hinweis fuer deutsche Neukunden:')}</span>{' '}
+                    {t('bots.builder.bitgetWarningText', 'Bitget Futures sind fuer neue deutsche Kunden voraussichtlich bis 2027 nicht verfuegbar. Bestehende Konten mit aktiviertem Futures-Trading sind nicht betroffen.')}
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Mode + Margin Mode */}

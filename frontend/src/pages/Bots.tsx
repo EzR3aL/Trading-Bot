@@ -32,7 +32,6 @@ import {
   ArrowDownRight,
   Copy,
   ChevronDown,
-  Layers,
   Bot,
   MoreVertical,
   XCircle,
@@ -77,18 +76,9 @@ interface BotStatus {
   llm_avg_tokens_per_call?: number | null
   schedule_type?: string | null
   schedule_config?: { interval_minutes?: number; hours?: number[] } | null
-  active_preset_id?: number | null
-  active_preset_name?: string | null
   risk_profile?: string | null
   builder_fee_approved?: boolean | null
   referral_verified?: boolean | null
-}
-
-
-interface Preset {
-  id: number
-  name: string
-  exchange_type: string
 }
 
 interface BotTrade {
@@ -767,8 +757,6 @@ export default function Bots() {
   const [actionLoading, setActionLoading] = useState<number | null>(null)
   const [error, setError] = useState('')
   const [historyBot, setHistoryBot] = useState<BotStatus | null>(null)
-  const [presets, setPresets] = useState<Preset[]>([])
-  const [presetDropdownOpen, setPresetDropdownOpen] = useState<number | null>(null)
   const [builderFeeModalBotId, setBuilderFeeModalBotId] = useState<number | null>(null)
   const [llmConnections, setLlmConnections] = useState<LlmConnection[]>([])
 
@@ -814,7 +802,6 @@ export default function Bots() {
   }, [fetchBots])
 
   useEffect(() => {
-    api.get('/presets').then(res => setPresets(res.data)).catch((err) => { console.error('Failed to load presets:', err); useToastStore.getState().addToast('error', t('common.loadError', 'Failed to load data')) })
     api.get('/config/llm-connections').then(res => setLlmConnections(res.data.connections || [])).catch((err) => { console.error('Failed to load LLM connections:', err); useToastStore.getState().addToast('error', t('common.loadError', 'Failed to load data')) })
   }, [])
 
@@ -887,32 +874,6 @@ export default function Bots() {
     } catch (err) {
       addToast('error', getApiErrorMessage(err, t('bots.failedDuplicate')))
     }
-  }
-
-  const handleApplyPreset = async (botId: number, presetId: number) => {
-    setPresetDropdownOpen(null)
-    setActionLoading(botId)
-    try {
-      await api.post(`/bots/${botId}/apply-preset/${presetId}`)
-      await fetchBots()
-      addToast('success', t('bots.presetApplied'))
-    } catch (err) {
-      addToast('error', getApiErrorMessage(err, t('bots.presetSwitchFailed')))
-    }
-    setActionLoading(null)
-  }
-
-  const handleResetPreset = async (botId: number) => {
-    setPresetDropdownOpen(null)
-    setActionLoading(botId)
-    try {
-      await api.post(`/bots/${botId}/reset-preset`)
-      await fetchBots()
-      addToast('success', t('bots.presetReset', 'Preset removed – default restored'))
-    } catch (err) {
-      addToast('error', getApiErrorMessage(err, t('bots.presetSwitchFailed')))
-    }
-    setActionLoading(null)
   }
 
   const handleClosePosition = async (botId: number, symbol: string) => {
@@ -1102,64 +1063,6 @@ export default function Bots() {
                     </span>
                   ))}
                 </div>
-
-                {/* Preset Selector */}
-                {presets.length > 0 && (
-                  <div className="relative mb-3">
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        if (bot.status === 'running') {
-                          addToast('info', t('bots.stopBotFirst'))
-                          return
-                        }
-                        setPresetDropdownOpen(presetDropdownOpen === bot.bot_config_id ? null : bot.bot_config_id)
-                      }}
-                      className={`w-full flex items-center justify-between gap-2 px-3 py-2 text-sm rounded-lg border transition-all ${
-                        bot.active_preset_name
-                          ? 'bg-primary-500/10 border-primary-500/20 text-primary-400'
-                          : 'bg-white/[0.03] border-white/5 text-gray-400'
-                      } ${bot.status === 'running' ? 'opacity-50 cursor-not-allowed' : 'hover:bg-white/[0.06] hover:border-white/10'}`}
-                    >
-                      <span className="flex items-center gap-1.5 truncate">
-                        <Layers size={14} />
-                        {bot.active_preset_name || t('bots.noPreset')}
-                      </span>
-                      <ChevronDown size={14} className={`transition-transform ${presetDropdownOpen === bot.bot_config_id ? 'rotate-180' : ''}`} />
-                    </button>
-                    {presetDropdownOpen === bot.bot_config_id && (
-                      <>
-                        <div className="fixed inset-0 z-10" onClick={() => setPresetDropdownOpen(null)} />
-                        <div className="absolute z-20 mt-1 w-full bg-[#1a1f2e] border border-white/10 rounded-lg shadow-xl overflow-hidden">
-                          {bot.active_preset_id && (
-                            <button
-                              onClick={() => handleResetPreset(bot.bot_config_id)}
-                              className="w-full text-left px-3 py-2 text-sm transition-colors text-gray-300 hover:bg-white/5 border-b border-white/5"
-                            >
-                              <span className="font-medium">{t('bots.defaultPreset', 'Standard (Bot-Konfiguration)')}</span>
-                            </button>
-                          )}
-                          {presets.map(preset => (
-                            <button
-                              key={preset.id}
-                              onClick={() => handleApplyPreset(bot.bot_config_id, preset.id)}
-                              className={`w-full text-left px-3 py-2 text-sm transition-colors ${
-                                preset.id === bot.active_preset_id
-                                  ? 'bg-primary-500/15 text-primary-400'
-                                  : 'text-gray-300 hover:bg-white/5'
-                              }`}
-                            >
-                              <span className="font-medium">{preset.name}</span>
-                              {preset.exchange_type !== 'any' && (
-                                <span className="ml-1.5 text-gray-500">({preset.exchange_type})</span>
-                              )}
-                            </button>
-                          ))}
-                        </div>
-                      </>
-                    )}
-                  </div>
-                )}
 
                 {/* Stats row */}
                 <div className="grid grid-cols-3 gap-1 sm:gap-2 mb-3 text-center" {...(bot === bots[0] ? { 'data-tour': 'bot-stats' } : {})}>

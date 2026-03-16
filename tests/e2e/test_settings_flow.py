@@ -49,10 +49,3 @@ async def test_settings_page_loads(authenticated_page, base_url):
     assert "Settings" in content or "Einstellungen" in content
 
 
-@pytest.mark.asyncio
-async def test_preset_page_loads(authenticated_page, base_url):
-    """Presets page should load."""
-    await authenticated_page.goto(f"{base_url}/presets")
-    await authenticated_page.wait_for_timeout(1000)
-    content = await authenticated_page.content()
-    assert "Preset" in content or "preset" in content

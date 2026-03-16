@@ -90,6 +90,8 @@ Du solltest etwas wie `Python 3.11.x` sehen.
 
 ## 3. Bitget Account & API einrichten
 
+> **Wichtiger Hinweis fuer deutsche Neukunden:** Bitget hat den Zugang zu Futures-Trading fuer neue Kunden aus Deutschland voraussichtlich bis 2027 eingeschraenkt. Bestehende Konten mit bereits aktiviertem Futures-Trading sind davon nicht betroffen. Falls du keinen Zugang zu Futures hast, kannst du alternativ **Weex**, **Hyperliquid**, **Bitunix** oder **BingX** als Exchange verwenden — der Bot unterstuetzt alle fuenf Boersen.
+
 ### Schritt 3.1: Bitget Account erstellen
 
 1. Gehe zu [www.bitget.com](https://www.bitget.com)

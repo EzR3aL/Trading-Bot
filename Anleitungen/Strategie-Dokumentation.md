@@ -1,5 +1,7 @@
 # Trading-Strategien — Vollstaendige Dokumentation
 
+> **Hinweis:** Diese technische Dokumentation beschreibt alle implementierten Strategien. Derzeit sind im Bot Builder nur **Edge Indicator**, **Liquidation Hunter** und **Sentiment Surfer** verfuegbar. Die Strategien Contrarian Pulse, LLM Signal und Degen sind temporaer deaktiviert.
+
 Dieses Dokument erklaert fuer jede Strategie im Detail, **wie der Bot tatsaechlich tradet** — die zugrundeliegende Logik, die Datenquellen, die Entscheidungsregeln und die Konfidenz-Berechnung. Benutzer-Einstellungen wie Stop Loss, Take Profit, Leverage usw. werden hier nicht behandelt, da diese unabhaengig von der Strategie konfiguriert werden.
 
 ---

@@ -30,7 +30,6 @@ from src.models.database import (
     AffiliateLink,
     Base,
     BotConfig,
-    ConfigPreset,
     ExchangeConnection,
     TradeRecord,
     User,
@@ -51,7 +50,6 @@ from src.api.routers.bots import (  # noqa: E402
     _config_to_response,
     _enforce_affiliate_gate,
     _enforce_hl_gates,
-    apply_preset_to_bot,
     compare_bots_performance,
     create_bot,
     delete_bot,
@@ -257,31 +255,6 @@ async def bitget_bot_regular(factory, regular_user):
         await session.commit()
         await session.refresh(config)
         return config
-
-
-@pytest_asyncio.fixture
-async def sample_preset(factory, admin_user):
-    async with factory() as session:
-        preset = ConfigPreset(
-            user_id=admin_user.id,
-            name="Aggressive Preset",
-            description="High leverage aggressive settings",
-            exchange_type="any",
-            trading_config=json.dumps({
-                "leverage": 10,
-                "position_size_percent": 15.0,
-                "max_trades_per_day": 5,
-                "take_profit_percent": 6.0,
-                "stop_loss_percent": 2.0,
-                "daily_loss_limit_percent": 10.0,
-            }),
-            strategy_config=json.dumps({"threshold": 0.8}),
-            trading_pairs=json.dumps(["BTCUSDT", "ETHUSDT", "SOLUSDT"]),
-        )
-        session.add(preset)
-        await session.commit()
-        await session.refresh(preset)
-        return preset
 
 
 # ---------------------------------------------------------------------------
@@ -864,23 +837,6 @@ class TestListBots:
         assert bg is not None
         assert bg.affiliate_uid == "BG123456"
         assert bg.affiliate_verified is True
-
-    async def test_list_bots_with_preset_name(self, factory, admin_user, sample_preset, mock_orchestrator):
-        """Preset name lookup (lines 217-221, 433)."""
-        async with factory() as session:
-            session.add(BotConfig(
-                user_id=admin_user.id, name="Preset Bot", strategy_type="test_strategy",
-                exchange_type="bitget", mode="demo", trading_pairs=json.dumps(["BTCUSDT"]),
-                active_preset_id=sample_preset.id, is_enabled=False,
-            ))
-            await session.commit()
-
-        async with factory() as session:
-            result = await list_bots(demo_mode=None, user=admin_user, db=session, orchestrator=mock_orchestrator)
-        preset_bot = next((b for b in result.bots if b.name == "Preset Bot"), None)
-        assert preset_bot is not None
-        assert preset_bot.active_preset_id == sample_preset.id
-        assert preset_bot.active_preset_name == "Aggressive Preset"
 
 
 # ---------------------------------------------------------------------------
@@ -1490,172 +1446,6 @@ class TestTelegram:
                 with pytest.raises(HTTPException) as exc_info:
                     await send_test_telegram(request=mock_request, bot_id=config.id, user=admin_user, session=session)
                 assert exc_info.value.status_code == 502
-
-
-# ---------------------------------------------------------------------------
-# APPLY PRESET — lines 828-906
-# ---------------------------------------------------------------------------
-
-
-class TestApplyPreset:
-
-    async def test_apply_preset_success(self, factory, admin_user, sample_bot, sample_preset, mock_orchestrator, mock_request):
-        """Apply preset updates bot config (lines 828-906)."""
-        async with factory() as session:
-            result = await apply_preset_to_bot(
-                request=mock_request, bot_id=sample_bot.id, preset_id=sample_preset.id,
-                user=admin_user, db=session, orchestrator=mock_orchestrator,
-            )
-            await session.commit()
-
-        assert result.leverage == 10
-        assert result.position_size_percent == 15.0
-        assert result.max_trades_per_day == 5
-        assert result.take_profit_percent == 6.0
-        assert result.stop_loss_percent == 2.0
-        assert result.daily_loss_limit_percent == 10.0
-        assert result.active_preset_id == sample_preset.id
-        # Bitget keeps USDT suffix
-        for pair in result.trading_pairs:
-            assert pair.endswith("USDT")
-
-    async def test_apply_preset_bot_not_found(self, factory, admin_user, sample_preset, mock_orchestrator, mock_request):
-        """Apply preset to nonexistent bot (lines 839-841)."""
-        from fastapi import HTTPException
-
-        async with factory() as session:
-            with pytest.raises(HTTPException) as exc_info:
-                await apply_preset_to_bot(
-                    request=mock_request, bot_id=99999, preset_id=sample_preset.id,
-                    user=admin_user, db=session, orchestrator=mock_orchestrator,
-                )
-            assert exc_info.value.status_code == 404
-
-    async def test_apply_preset_bot_running(self, factory, admin_user, sample_bot, sample_preset, mock_orchestrator, mock_request):
-        """Apply preset to running bot returns 400 (lines 844-846)."""
-        from fastapi import HTTPException
-
-        mock_orchestrator.is_running.return_value = True
-        async with factory() as session:
-            with pytest.raises(HTTPException) as exc_info:
-                await apply_preset_to_bot(
-                    request=mock_request, bot_id=sample_bot.id, preset_id=sample_preset.id,
-                    user=admin_user, db=session, orchestrator=mock_orchestrator,
-                )
-            assert exc_info.value.status_code == 400
-        mock_orchestrator.is_running.return_value = False
-
-    async def test_apply_preset_not_found(self, factory, admin_user, sample_bot, mock_orchestrator, mock_request):
-        """Nonexistent preset returns 404 (lines 852-854)."""
-        from fastapi import HTTPException
-
-        async with factory() as session:
-            with pytest.raises(HTTPException) as exc_info:
-                await apply_preset_to_bot(
-                    request=mock_request, bot_id=sample_bot.id, preset_id=99999,
-                    user=admin_user, db=session, orchestrator=mock_orchestrator,
-                )
-            assert exc_info.value.status_code == 404
-
-    async def test_apply_preset_hl_strips_usdt(self, factory, admin_user, mock_orchestrator, mock_request):
-        """HL bot strips USDT suffix from preset pairs (lines 885-887)."""
-        async with factory() as session:
-            hl_bot = BotConfig(
-                user_id=admin_user.id, name="HL Preset Bot",
-                strategy_type="test_strategy", exchange_type="hyperliquid",
-                mode="demo", trading_pairs=json.dumps(["BTC"]), is_enabled=False,
-            )
-            session.add(hl_bot)
-            preset = ConfigPreset(
-                user_id=admin_user.id, name="HL Preset", exchange_type="any",
-                trading_config=json.dumps({"leverage": 5}),
-                strategy_config=json.dumps({"param": "val"}),
-                trading_pairs=json.dumps(["BTCUSDT", "ETHUSDT", "SOL"]),
-            )
-            session.add(preset)
-            await session.commit()
-            await session.refresh(hl_bot)
-            await session.refresh(preset)
-
-        async with factory() as session:
-            result = await apply_preset_to_bot(
-                request=mock_request, bot_id=hl_bot.id, preset_id=preset.id,
-                user=admin_user, db=session, orchestrator=mock_orchestrator,
-            )
-            await session.commit()
-
-        assert "BTC" in result.trading_pairs
-        assert "ETH" in result.trading_pairs
-        assert "SOL" in result.trading_pairs
-        assert "BTCUSDT" not in result.trading_pairs
-        assert "ETHUSDT" not in result.trading_pairs
-
-    async def test_apply_preset_cex_adds_usdt(self, factory, admin_user, mock_orchestrator, mock_request):
-        """CEX bot adds USDT suffix to preset pairs (lines 889-891)."""
-        async with factory() as session:
-            cex_bot = BotConfig(
-                user_id=admin_user.id, name="CEX Preset Bot",
-                strategy_type="test_strategy", exchange_type="bitget",
-                mode="demo", trading_pairs=json.dumps(["BTCUSDT"]), is_enabled=False,
-            )
-            session.add(cex_bot)
-            preset = ConfigPreset(
-                user_id=admin_user.id, name="CEX Preset", exchange_type="any",
-                trading_config=json.dumps({"leverage": 3}),
-                trading_pairs=json.dumps(["BTC", "ETH", "SOLUSDT"]),
-            )
-            session.add(preset)
-            await session.commit()
-            await session.refresh(cex_bot)
-            await session.refresh(preset)
-
-        async with factory() as session:
-            result = await apply_preset_to_bot(
-                request=mock_request, bot_id=cex_bot.id, preset_id=preset.id,
-                user=admin_user, db=session, orchestrator=mock_orchestrator,
-            )
-            await session.commit()
-
-        assert "BTCUSDT" in result.trading_pairs
-        assert "ETHUSDT" in result.trading_pairs
-        assert "SOLUSDT" in result.trading_pairs
-
-    async def test_apply_preset_merges_strategy_preserves_data_sources(self, factory, admin_user, mock_orchestrator, mock_request):
-        """Strategy config merges, data_sources preserved (lines 872-880)."""
-        async with factory() as session:
-            bot = BotConfig(
-                user_id=admin_user.id, name="Merge Bot",
-                strategy_type="test_strategy", exchange_type="bitget",
-                mode="demo", trading_pairs=json.dumps(["BTCUSDT"]),
-                strategy_params=json.dumps({
-                    "threshold": 0.5,
-                    "data_sources": ["fear_greed", "funding_rate"],
-                }),
-                is_enabled=False,
-            )
-            session.add(bot)
-            preset = ConfigPreset(
-                user_id=admin_user.id, name="Merge Preset", exchange_type="any",
-                strategy_config=json.dumps({
-                    "threshold": 0.9, "window": 20,
-                    "data_sources": ["should_be_overridden"],
-                }),
-            )
-            session.add(preset)
-            await session.commit()
-            await session.refresh(bot)
-            await session.refresh(preset)
-
-        async with factory() as session:
-            result = await apply_preset_to_bot(
-                request=mock_request, bot_id=bot.id, preset_id=preset.id,
-                user=admin_user, db=session, orchestrator=mock_orchestrator,
-            )
-            await session.commit()
-
-        assert result.strategy_params["threshold"] == 0.9
-        assert result.strategy_params["window"] == 20
-        assert result.strategy_params["data_sources"] == ["fear_greed", "funding_rate"]
 
 
 # ---------------------------------------------------------------------------

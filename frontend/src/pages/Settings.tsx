@@ -1019,7 +1019,7 @@ export default function Settings() {
                             {api_key_configured && (
                               <button onClick={() => deleteLlmKey(provider_type)} disabled={saving}
                                 className="px-3 py-1.5 text-xs bg-red-500/10 text-red-400 border border-red-500/20 rounded-lg hover:bg-red-500/20 disabled:opacity-50 transition-colors">
-                                {t('presets.delete')}
+                                {t('common.delete', 'Delete')}
                               </button>
                             )}
                           </div>
@@ -1180,7 +1180,7 @@ export default function Settings() {
                                 disabled={saving}
                                 className="px-3 py-1.5 text-xs bg-red-500/10 text-red-400 border border-red-500/20 rounded-lg hover:bg-red-500/20 disabled:opacity-50 transition-colors"
                               >
-                                {t('presets.delete')}
+                                {t('common.delete', 'Delete')}
                               </button>
                             )}
                           </div>

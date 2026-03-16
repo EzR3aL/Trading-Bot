@@ -81,17 +81,6 @@ export interface DailyStats {
   losses: number
 }
 
-export interface Preset {
-  id: number
-  name: string
-  description: string | null
-  exchange_type: string
-  is_active: boolean
-  trading_config: Record<string, any> | null
-  strategy_config: Record<string, any> | null
-  trading_pairs: string[] | null
-}
-
 export interface TradingConfig {
   max_trades_per_day: number
   daily_loss_limit_percent: number

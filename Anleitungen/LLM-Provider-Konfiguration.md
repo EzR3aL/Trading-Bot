@@ -2,6 +2,8 @@
 
 Anleitung zur Einrichtung und Konfiguration der unterstuetzten LLM-Provider fuer die KI-Strategien (LLM Signal und Degen).
 
+> **Hinweis:** Die LLM-Strategien (LLM Signal und Degen) sind derzeit nur fuer Admin-Nutzer verfuegbar. Diese Anleitung ist relevant, falls ein Admin dir Zugang freischaltet.
+
 ---
 
 ## Inhaltsverzeichnis
@@ -225,6 +227,8 @@ Beim Erstellen eines Bots mit der Strategie **LLM Signal** oder **Degen**:
 # LLM Provider Configuration (English)
 
 Guide for setting up and configuring supported LLM providers for AI strategies (LLM Signal and Degen).
+
+> **Note:** LLM strategies (LLM Signal and Degen) are currently only available to admin users. This guide is relevant if an admin grants you access.
 
 ---
 

@@ -222,8 +222,6 @@ class BotConfigResponse(BaseModel):
     discord_webhook_configured: bool = False
     telegram_configured: bool = False
     whatsapp_configured: bool = False
-    active_preset_id: Optional[int] = None
-    active_preset_name: Optional[str] = None
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
 
@@ -253,8 +251,6 @@ class BotRuntimeStatus(BaseModel):
     discord_webhook_configured: bool = False
     telegram_configured: bool = False
     whatsapp_configured: bool = False
-    active_preset_id: Optional[int] = None
-    active_preset_name: Optional[str] = None
 
     # Crash recovery: count of orphaned trades from previous crashes
     orphaned_trades: int = 0

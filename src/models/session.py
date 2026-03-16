@@ -84,8 +84,6 @@ async def _run_sqlite_migrations(conn) -> None:
         # Per-bot Telegram notifications
         "ALTER TABLE bot_configs ADD COLUMN telegram_bot_token TEXT",
         "ALTER TABLE bot_configs ADD COLUMN telegram_chat_id VARCHAR(50)",
-        # Active preset tracking
-        "ALTER TABLE bot_configs ADD COLUMN active_preset_id INTEGER REFERENCES config_presets(id) ON DELETE SET NULL",
         # Builder fee approval tracking
         "ALTER TABLE exchange_connections ADD COLUMN builder_fee_approved BOOLEAN NOT NULL DEFAULT 0",
         "ALTER TABLE exchange_connections ADD COLUMN builder_fee_approved_at DATETIME",
@@ -169,7 +167,6 @@ async def _run_sqlite_migrations(conn) -> None:
                     discord_webhook_url TEXT,
                     telegram_bot_token TEXT,
                     telegram_chat_id VARCHAR(50),
-                    active_preset_id INTEGER REFERENCES config_presets(id) ON DELETE SET NULL,
                     is_enabled BOOLEAN DEFAULT 0,
                     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                     updated_at DATETIME
@@ -182,7 +179,7 @@ async def _run_sqlite_migrations(conn) -> None:
                 'daily_loss_limit_percent', 'per_asset_config', 'strategy_params',
                 'schedule_type', 'schedule_config', 'rotation_enabled',
                 'rotation_interval_minutes', 'rotation_start_time', 'discord_webhook_url',
-                'telegram_bot_token', 'telegram_chat_id', 'active_preset_id',
+                'telegram_bot_token', 'telegram_chat_id',
                 'is_enabled', 'created_at', 'updated_at',
             }
             old_cols = [c for c in col_names if c in allowed_cols]

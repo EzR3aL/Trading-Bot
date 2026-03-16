@@ -9,7 +9,6 @@ import { useWebSocket } from '../../hooks/useWebSocket'
 import {
   LayoutDashboard,
   ArrowLeftRight,
-  Layers,
   Settings,
   Bot,
   FileText,
@@ -34,7 +33,6 @@ const navItems: { path: string; key: string; icon: LucideIcon }[] = [
   { path: '/performance', key: 'performance', icon: TrendingUp },
   { path: '/backtest', key: 'backtest', icon: FlaskConical },
   { path: '/trades', key: 'trades', icon: ArrowLeftRight },
-  { path: '/presets', key: 'presets', icon: Layers },
   { path: '/settings', key: 'settings', icon: Settings },
   { path: '/tax-report', key: 'taxReport', icon: FileText },
   { path: '/guide', key: 'guide', icon: BookOpen },

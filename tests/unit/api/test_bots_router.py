@@ -2,7 +2,7 @@
 Unit tests for the bots router (src/api/routers/bots.py).
 
 Tests endpoint functions directly with mocked database sessions and
-dependencies. Covers CRUD, lifecycle, preset application, statistics,
+dependencies. Covers CRUD, lifecycle, statistics,
 comparison, helper functions, and edge cases.
 """
 
@@ -33,7 +33,6 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from src.models.database import (  # noqa: E402
     Base,
     BotConfig,
-    ConfigPreset,
     TradeRecord,
     User,
 )
@@ -44,7 +43,6 @@ from src.errors import (  # noqa: E402
     ERR_BOT_NOT_RUNNING,
     ERR_MAX_BOTS_REACHED,
     ERR_STOP_BOT_BEFORE_EDIT,
-    ERR_STOP_BOT_BEFORE_PRESET,
     ERR_TELEGRAM_NOT_CONFIGURED,
 )
 
@@ -151,7 +149,7 @@ async def app(test_engine, mock_orchestrator):
     from slowapi import _rate_limit_exceeded_handler
     from slowapi.errors import RateLimitExceeded
     from src.api.routers.auth import limiter
-    from src.api.routers import auth, bots, config, presets, status
+    from src.api.routers import auth, bots, config, status
     from src.models.session import get_db
 
     limiter.enabled = False
@@ -164,7 +162,6 @@ async def app(test_engine, mock_orchestrator):
     test_app.include_router(auth.router)
     test_app.include_router(status.router)
     test_app.include_router(config.router)
-    test_app.include_router(presets.router)
     test_app.include_router(bots.router)
 
     test_app.dependency_overrides[get_db] = override_get_db
@@ -327,34 +324,6 @@ async def sample_bot_with_trades(test_engine, test_user, sample_bot) -> BotConfi
     return sample_bot
 
 
-@pytest_asyncio.fixture
-async def sample_preset(test_engine, test_user) -> ConfigPreset:
-    factory = async_sessionmaker(
-        test_engine, class_=AsyncSession, expire_on_commit=False
-    )
-    async with factory() as session:
-        preset = ConfigPreset(
-            user_id=test_user.id,
-            name="Aggressive Preset",
-            description="High leverage aggressive settings",
-            exchange_type="any",
-            trading_config=json.dumps({
-                "leverage": 10,
-                "position_size_percent": 15.0,
-                "max_trades_per_day": 5,
-                "take_profit_percent": 6.0,
-                "stop_loss_percent": 2.0,
-                "daily_loss_limit_percent": 10.0,
-            }),
-            strategy_config=json.dumps({"threshold": 0.8}),
-            trading_pairs=json.dumps(["BTCUSDT", "ETHUSDT", "SOLUSDT"]),
-        )
-        session.add(preset)
-        await session.commit()
-        await session.refresh(preset)
-        return preset
-
-
 # ---------------------------------------------------------------------------
 # Helper: _config_to_response
 # ---------------------------------------------------------------------------
@@ -392,8 +361,6 @@ class TestConfigToResponse:
         config.discord_webhook_url = None
         config.telegram_bot_token = None
         config.telegram_chat_id = None
-        config.active_preset_id = None
-        config.active_preset = None
         config.created_at = datetime(2025, 1, 1)
         config.updated_at = datetime(2025, 1, 2)
 
@@ -434,8 +401,6 @@ class TestConfigToResponse:
         config.discord_webhook_url = None
         config.telegram_bot_token = None
         config.telegram_chat_id = None
-        config.active_preset_id = None
-        config.active_preset = None
         config.created_at = None
         config.updated_at = None
 
@@ -474,10 +439,6 @@ class TestConfigToResponse:
         config.discord_webhook_url = "encrypted_webhook"
         config.telegram_bot_token = "encrypted_token"
         config.telegram_chat_id = "12345"
-        config.active_preset_id = 1
-        mock_preset = MagicMock()
-        mock_preset.name = "Preset A"
-        config.active_preset = mock_preset
         config.created_at = datetime(2025, 3, 1)
         config.updated_at = datetime(2025, 3, 2)
 
@@ -518,8 +479,6 @@ class TestConfigToResponse:
         config.discord_webhook_url = None
         config.telegram_bot_token = None
         config.telegram_chat_id = None
-        config.active_preset_id = None
-        config.active_preset = None
         config.created_at = None
         config.updated_at = None
 
@@ -1301,62 +1260,6 @@ class TestComparePerformance:
         )
         assert resp.status_code == 200
         assert resp.json()["days"] == 7
-
-
-# ---------------------------------------------------------------------------
-# APPLY PRESET
-# ---------------------------------------------------------------------------
-
-
-class TestApplyPreset:
-
-    async def test_apply_preset_success(self, client, auth_headers, sample_bot, sample_preset):
-        resp = await client.post(
-            f"/api/bots/{sample_bot.id}/apply-preset/{sample_preset.id}",
-            headers=auth_headers,
-        )
-        assert resp.status_code == 200
-        data = resp.json()
-        assert data["leverage"] == 10
-        assert data["position_size_percent"] == 15.0
-        assert data["active_preset_id"] == sample_preset.id
-
-    async def test_apply_preset_bot_not_found(self, client, auth_headers, test_user, sample_preset):
-        resp = await client.post(
-            f"/api/bots/99999/apply-preset/{sample_preset.id}",
-            headers=auth_headers,
-        )
-        assert resp.status_code == 404
-
-    async def test_apply_preset_preset_not_found(self, client, auth_headers, sample_bot):
-        resp = await client.post(
-            f"/api/bots/{sample_bot.id}/apply-preset/99999",
-            headers=auth_headers,
-        )
-        assert resp.status_code == 404
-
-    async def test_apply_preset_bot_running(self, client, auth_headers, sample_bot, sample_preset, mock_orchestrator):
-        mock_orchestrator.is_running.return_value = True
-        resp = await client.post(
-            f"/api/bots/{sample_bot.id}/apply-preset/{sample_preset.id}",
-            headers=auth_headers,
-        )
-        assert resp.status_code == 400
-        assert ERR_STOP_BOT_BEFORE_PRESET in resp.json()["detail"]
-        mock_orchestrator.is_running.return_value = False
-
-    async def test_apply_preset_updates_trading_pairs(
-        self, client, auth_headers, sample_bot, sample_preset
-    ):
-        resp = await client.post(
-            f"/api/bots/{sample_bot.id}/apply-preset/{sample_preset.id}",
-            headers=auth_headers,
-        )
-        assert resp.status_code == 200
-        data = resp.json()
-        # Bitget expects USDT suffix
-        for pair in data["trading_pairs"]:
-            assert pair.endswith("USDT")
 
 
 # ---------------------------------------------------------------------------

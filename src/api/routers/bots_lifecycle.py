@@ -1,4 +1,4 @@
-"""Bot lifecycle endpoints: start, stop, restart, close positions, test notifications, apply presets."""
+"""Bot lifecycle endpoints: start, stop, restart, close positions, test notifications."""
 
 import asyncio
 import json
@@ -7,11 +7,9 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 
 from src.api.rate_limit import limiter
-from src.api.routers.bots import _check_symbol_conflicts, _config_to_response, get_orchestrator
-from src.api.schemas.bots import BotConfigResponse
+from src.api.routers.bots import _check_symbol_conflicts, get_orchestrator
 from src.auth.dependencies import get_current_user
 from src.errors import (
     ERR_AFFILIATE_PENDING,
@@ -26,9 +24,6 @@ from src.errors import (
     ERR_NO_OPEN_TRADE,
     ERR_POSITION_CLOSE_FAILED,
     ERR_POSITION_VERIFY_FAILED,
-    ERR_PRESET_NOT_FOUND,
-    ERR_STOP_BOT_BEFORE_PRESET,
-    ERR_STOP_BOT_BEFORE_RESET,
     ERR_SYMBOL_CONFLICT,
     ERR_PENDING_TRADE_NOT_FOUND,
     ERR_TELEGRAM_NOT_CONFIGURED,
@@ -38,7 +33,7 @@ from src.errors import (
     ERR_WHATSAPP_SEND_FAILED,
 )
 from src.exceptions import BotError
-from src.models.database import AffiliateLink, BotConfig, ConfigPreset, ExchangeConnection, TradeRecord, User
+from src.models.database import AffiliateLink, BotConfig, ExchangeConnection, TradeRecord, User
 from src.models.enums import CEX_EXCHANGES
 from src.models.session import get_db
 from src.utils.logger import get_logger
@@ -457,125 +452,6 @@ async def test_whatsapp(
     if not success:
         raise HTTPException(status_code=502, detail=ERR_WHATSAPP_SEND_FAILED)
     return {"status": "ok", "message": "Test message sent"}
-
-
-# ─── Preset Application ──────────────────────────────────────
-
-@lifecycle_router.post("/{bot_id}/apply-preset/{preset_id}", response_model=BotConfigResponse)
-@limiter.limit("10/minute")
-async def apply_preset_to_bot(
-    request: Request,
-    bot_id: int,
-    preset_id: int,
-    user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-    orchestrator=Depends(get_orchestrator),
-):
-    """Apply a preset to an existing bot. Bot must be stopped."""
-    result = await db.execute(
-        select(BotConfig).where(BotConfig.id == bot_id, BotConfig.user_id == user.id)
-    )
-    config = result.scalar_one_or_none()
-    if not config:
-        raise HTTPException(status_code=404, detail=ERR_BOT_NOT_FOUND)
-
-    # Check if running
-    if orchestrator.is_running(bot_id):
-        raise HTTPException(status_code=400, detail=ERR_STOP_BOT_BEFORE_PRESET)
-
-    # Load preset
-    preset_result = await db.execute(
-        select(ConfigPreset).where(ConfigPreset.id == preset_id, ConfigPreset.user_id == user.id)
-    )
-    preset = preset_result.scalar_one_or_none()
-    if not preset:
-        raise HTTPException(status_code=404, detail=ERR_PRESET_NOT_FOUND)
-
-    # Apply trading config from preset
-    if preset.trading_config:
-        trading = json.loads(preset.trading_config)
-        if "leverage" in trading:
-            config.leverage = trading["leverage"]
-        if "position_size_percent" in trading:
-            config.position_size_percent = trading["position_size_percent"]
-        if "max_trades_per_day" in trading:
-            config.max_trades_per_day = trading["max_trades_per_day"]
-        if "take_profit_percent" in trading:
-            config.take_profit_percent = trading["take_profit_percent"]
-        if "stop_loss_percent" in trading:
-            config.stop_loss_percent = trading["stop_loss_percent"]
-        if "daily_loss_limit_percent" in trading:
-            config.daily_loss_limit_percent = trading["daily_loss_limit_percent"]
-
-    # Apply strategy config from preset (merge, preserve data_sources)
-    if preset.strategy_config:
-        existing = json.loads(config.strategy_params) if config.strategy_params else {}
-        preset_params = json.loads(preset.strategy_config) if isinstance(preset.strategy_config, str) else preset.strategy_config
-        preserved_data_sources = existing.get("data_sources")
-        existing.update(preset_params)
-        if preserved_data_sources is not None:
-            existing["data_sources"] = preserved_data_sources
-        config.strategy_params = json.dumps(existing)
-
-    # Apply trading pairs (convert if needed for exchange compatibility)
-    if preset.trading_pairs:
-        pairs = json.loads(preset.trading_pairs)
-        if config.exchange_type == "hyperliquid":
-            # Strip USDT suffix for Hyperliquid
-            pairs = [p.replace("USDT", "") if p.endswith("USDT") else p for p in pairs]
-        else:
-            # Add USDT suffix for CEX exchanges if missing
-            pairs = [p if p.endswith("USDT") else f"{p}USDT" for p in pairs]
-        config.trading_pairs = json.dumps(pairs)
-
-    # Track which preset is active
-    config.active_preset_id = preset_id
-
-    await db.flush()
-
-    # Re-fetch with preset relationship loaded
-    refreshed = await db.execute(
-        select(BotConfig).where(BotConfig.id == bot_id)
-        .options(selectinload(BotConfig.active_preset))
-    )
-    config = refreshed.scalar_one()
-
-    logger.info(f"Preset '{preset.name}' applied to bot {config.name} (id={bot_id})")
-    return _config_to_response(config)
-
-
-@lifecycle_router.post("/{bot_id}/reset-preset", response_model=BotConfigResponse)
-@limiter.limit("10/minute")
-async def reset_preset(
-    request: Request,
-    bot_id: int,
-    user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-    orchestrator=Depends(get_orchestrator),
-):
-    """Remove the active preset from a bot (reverts to user-configured defaults)."""
-    result = await db.execute(
-        select(BotConfig).where(BotConfig.id == bot_id, BotConfig.user_id == user.id)
-    )
-    config = result.scalar_one_or_none()
-    if not config:
-        raise HTTPException(status_code=404, detail=ERR_BOT_NOT_FOUND)
-
-    if orchestrator.is_running(bot_id):
-        raise HTTPException(status_code=400, detail=ERR_STOP_BOT_BEFORE_RESET)
-
-    config.active_preset_id = None
-
-    await db.flush()
-
-    refreshed = await db.execute(
-        select(BotConfig).where(BotConfig.id == bot_id)
-        .options(selectinload(BotConfig.active_preset))
-    )
-    config = refreshed.scalar_one()
-
-    logger.info(f"Preset removed from bot {config.name} (id={bot_id})")
-    return _config_to_response(config)
 
 
 # ─── Pending Trades (Crash Recovery) ─────────────────────────

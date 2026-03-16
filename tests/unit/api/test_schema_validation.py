@@ -17,7 +17,6 @@ from src.api.schemas.config import (
     ExchangeConfigUpdate,
     LLMConnectionUpdate,
 )
-from src.api.schemas.preset import PresetCreate, PresetUpdate
 from src.api.schemas.auth import LoginRequest, RefreshRequest
 from src.api.schemas.affiliate import AffiliateLinkUpdate
 
@@ -323,40 +322,6 @@ class TestConfigSchemas:
     def test_llm_connection_key_required(self):
         with pytest.raises(ValidationError, match="api_key"):
             LLMConnectionUpdate(api_key="")
-
-
-# ---------------------------------------------------------------------------
-# PresetCreate / PresetUpdate
-# ---------------------------------------------------------------------------
-
-
-class TestPresetSchemas:
-
-    def test_name_too_short(self):
-        with pytest.raises(ValidationError, match="name"):
-            PresetCreate(name="")
-
-    def test_name_too_long(self):
-        with pytest.raises(ValidationError, match="name"):
-            PresetCreate(name="X" * 101)
-
-    def test_exchange_type_invalid(self):
-        with pytest.raises(ValidationError, match="exchange_type"):
-            PresetCreate(name="P", exchange_type="binance")
-
-    def test_exchange_type_valid(self):
-        for ex in ("any", "bitget", "weex", "hyperliquid"):
-            p = PresetCreate(name="P", exchange_type=ex)
-            assert p.exchange_type == ex
-
-    def test_defaults(self):
-        p = PresetCreate(name="My Preset")
-        assert p.exchange_type == "any"
-        assert p.trading_pairs == ["BTCUSDT", "ETHUSDT"]
-
-    def test_update_name_too_short(self):
-        with pytest.raises(ValidationError, match="name"):
-            PresetUpdate(name="")
 
 
 # ---------------------------------------------------------------------------
