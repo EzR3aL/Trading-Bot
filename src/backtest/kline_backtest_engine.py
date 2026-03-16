@@ -50,6 +50,8 @@ class KlineTrade:
     fees: float = 0.0
     net_pnl: float = 0.0
     bars_held: int = 0
+    trailing_stop_price: float = 0.0
+    trailing_atr_distance: float = 0.0
 
     def to_dict(self) -> Dict:
         return {
@@ -226,6 +228,27 @@ class KlineBacktestEngine:
                         exit_price = open_trade.stop_loss
                         result = KlineTradeResult.STOP_LOSS
 
+                # Trailing stop simulation (ATR-based)
+                if not exited and hasattr(open_trade, 'trailing_stop_price'):
+                    if open_trade.direction == "long":
+                        # Move trailing stop up as price rises
+                        new_trail = bar_high - open_trade.trailing_atr_distance
+                        if new_trail > open_trade.trailing_stop_price:
+                            open_trade.trailing_stop_price = new_trail
+                        # Check if trailing stop hit
+                        if bar_low <= open_trade.trailing_stop_price:
+                            exited = True
+                            exit_price = open_trade.trailing_stop_price
+                            result = KlineTradeResult.STOP_LOSS
+                    else:  # short
+                        new_trail = bar_low + open_trade.trailing_atr_distance
+                        if new_trail < open_trade.trailing_stop_price:
+                            open_trade.trailing_stop_price = new_trail
+                        if bar_high >= open_trade.trailing_stop_price:
+                            exited = True
+                            exit_price = open_trade.trailing_stop_price
+                            result = KlineTradeResult.STOP_LOSS
+
                 # Time exit
                 if not exited and open_trade.bars_held >= self.config.max_bars_in_trade:
                     exited = True
@@ -250,13 +273,25 @@ class KlineBacktestEngine:
             window = klines[bar_idx - lookback:bar_idx]
             signal = self._generate_signal_sync(strategy, window)
 
+            # Use strategy's own min_confidence (defaults to 65) instead of engine's 40
+            strategy_min_conf = getattr(strategy, '_p', {}).get('min_confidence', self.config.min_confidence)
+            # Check chop filter: skip trade if market is choppy (ADX below threshold)
+            is_choppy = getattr(signal, 'metrics_snapshot', {}).get('is_choppy', False) if signal else False
+
             if (signal and signal.direction in (SignalDirection.LONG, SignalDirection.SHORT)
-                    and signal.confidence >= self.config.min_confidence and signal.entry_price > 0):
+                    and signal.confidence >= strategy_min_conf
+                    and not is_choppy
+                    and signal.entry_price > 0):
                 # Open new trade
                 trade_counter += 1
                 pos_value = capital * (self.config.position_size_percent / 100)
 
                 direction = "long" if signal.direction == SignalDirection.LONG else "short"
+
+                # Calculate ATR for trailing stop (14-period ATR from window)
+                atr_period = getattr(strategy, '_p', {}).get('atr_period', 14)
+                trail_atr_mult = getattr(strategy, '_p', {}).get('trailing_trail_atr', 2.5)
+                atr_val = self._calculate_atr(window, atr_period)
 
                 open_trade = KlineTrade(
                     id=trade_counter,
@@ -270,6 +305,14 @@ class KlineBacktestEngine:
                     position_value=pos_value,
                     leverage=self.config.leverage,
                 )
+                # Set trailing stop from ATR
+                if atr_val > 0:
+                    open_trade.trailing_atr_distance = atr_val * trail_atr_mult
+                    if direction == "long":
+                        open_trade.trailing_stop_price = signal.entry_price - open_trade.trailing_atr_distance
+                    else:
+                        open_trade.trailing_stop_price = signal.entry_price + open_trade.trailing_atr_distance
+
                 trades.append(open_trade)
 
             equity_curve.append(capital)
@@ -312,6 +355,11 @@ class KlineBacktestEngine:
         confidence = strategy._calculate_confidence(adx_data, momentum, ribbon)
         take_profit, stop_loss = strategy._calculate_targets(direction, current_price, klines_window)
 
+        # Check chop filter (ADX below threshold = choppy market)
+        adx_threshold = strategy._p.get("adx_chop_threshold", 18.0)
+        adx_value = adx_data.get("adx", 0) if adx_data else 0
+        is_choppy = strategy._p.get("use_adx_filter", True) and adx_value < adx_threshold
+
         return TradeSignal(
             direction=direction,
             confidence=confidence,
@@ -320,9 +368,28 @@ class KlineBacktestEngine:
             target_price=take_profit,
             stop_loss=stop_loss,
             reason=reason,
-            metrics_snapshot={},
+            metrics_snapshot={"is_choppy": is_choppy, "adx": adx_value},
             timestamp=datetime.now(),
         )
+
+    @staticmethod
+    def _calculate_atr(klines: List[List], period: int = 14) -> float:
+        """Calculate Average True Range from klines for trailing stop."""
+        if len(klines) < period + 1:
+            return 0.0
+        trs = []
+        for i in range(1, len(klines)):
+            try:
+                high = float(klines[i][2])
+                low = float(klines[i][3])
+                prev_close = float(klines[i - 1][4])
+                tr = max(high - low, abs(high - prev_close), abs(low - prev_close))
+                trs.append(tr)
+            except (IndexError, ValueError, TypeError):
+                continue
+        if len(trs) < period:
+            return 0.0
+        return sum(trs[-period:]) / period
 
     def _close_trade(
         self, trade: KlineTrade, bar_idx: int, exit_price: float,
@@ -340,7 +407,8 @@ class KlineBacktestEngine:
 
         trade.pnl_percent = price_pnl_pct * 100 * trade.leverage
         trade.pnl = trade.position_value * price_pnl_pct * trade.leverage
-        trade.fees = trade.position_value * (self.config.trading_fee_percent / 100) * 2
+        # Fees on leveraged notional (not just margin)
+        trade.fees = trade.position_value * trade.leverage * (self.config.trading_fee_percent / 100) * 2
         trade.net_pnl = trade.pnl - trade.fees
 
         return capital + trade.net_pnl

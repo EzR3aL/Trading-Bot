@@ -471,13 +471,9 @@ class EdgeIndicatorStrategy(BaseStrategy):
         elif trend_ok and regime == -1 and not ribbon["bull_trend"]:
             return SignalDirection.SHORT, " | ".join(reasons)
         else:
-            if regime == 1:
-                return SignalDirection.LONG, " | ".join(reasons)
-            elif regime == -1:
-                return SignalDirection.SHORT, " | ".join(reasons)
-            if ribbon.get("ema_fast_above"):
-                return SignalDirection.LONG, " | ".join(reasons)
-            return SignalDirection.SHORT, " | ".join(reasons)
+            # No clear setup — return NEUTRAL instead of forcing a direction
+            reasons.append("NO CLEAR SETUP")
+            return SignalDirection.NEUTRAL, " | ".join(reasons)
 
     def _calculate_targets(
         self, direction: SignalDirection, current_price: float,
