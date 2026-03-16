@@ -3,7 +3,8 @@ import { useTranslation } from 'react-i18next'
 import api from '../api/client'
 import { useFilterStore } from '../stores/filterStore'
 import { SkeletonCard, SkeletonTable } from '../components/ui/Skeleton'
-import { Download, ArrowUpRight, ArrowDownRight, Loader2 } from 'lucide-react'
+import { Download, ArrowUpRight, ArrowDownRight, Loader2, ChevronDown } from 'lucide-react'
+import useIsMobile from '../hooks/useIsMobile'
 import FilterDropdown from '../components/ui/FilterDropdown'
 import { USER_TIMEZONE } from '../utils/dateUtils'
 
@@ -28,6 +29,8 @@ export default function TaxReport() {
   const currentYear = new Date().getFullYear()
   const [year, setYear] = useState(currentYear)
   const [data, setData] = useState<TaxData | null>(null)
+  const isMobile = useIsMobile()
+  const [expandedMonth, setExpandedMonth] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
@@ -145,41 +148,89 @@ export default function TaxReport() {
 
           {/* Monthly breakdown */}
           <div className="glass-card rounded-xl overflow-hidden">
-            <div className="p-5 border-b border-white/5">
+            <div className="px-4 sm:px-5 pt-4 sm:pt-5 pb-3 sm:pb-0 sm:border-b sm:border-white/5">
               <h2 className="text-base font-semibold text-white">{t('tax.monthlyBreakdown')}</h2>
             </div>
-            <div className="overflow-x-auto">
-              <table className="table-premium min-w-[500px]">
-                <thead>
-                  <tr>
-                    <th className="text-left">{t('tax.month')}</th>
-                    <th className="text-right">{t('tax.trades')}</th>
-                    <th className="text-right">{t('tax.pnl')}</th>
-                    <th className="text-right">{t('tax.fees')}</th>
-                    <th className="text-right">{t('tax.net')}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {data.months.map((m) => (
-                    <tr key={m.month}>
-                      <td className="text-white font-medium">{m.month}</td>
-                      <td className="text-right text-gray-300">{m.trades}</td>
-                      <td className="text-right">
-                        <span className={m.pnl >= 0 ? 'pnl-positive' : 'pnl-negative'}>
-                          {formatPnl(m.pnl)}
-                        </span>
-                      </td>
-                      <td className="text-right text-gray-300">${m.fees.toFixed(2)}</td>
-                      <td className="text-right">
-                        <span className={m.pnl - m.fees >= 0 ? 'pnl-positive' : 'pnl-negative'}>
-                          {formatPnl(m.pnl - m.fees)}
-                        </span>
-                      </td>
+            {isMobile ? (
+              <div className="px-1 pb-2 pt-1 space-y-1.5">
+                {data.months.map((m) => {
+                  const isExp = expandedMonth === m.month
+                  const net = m.pnl - m.fees
+                  return (
+                    <div key={m.month} className="border border-white/[0.06] rounded-lg bg-white/[0.02] overflow-hidden">
+                      <div
+                        className="flex items-center justify-between px-3 py-2 cursor-pointer"
+                        onClick={() => setExpandedMonth(isExp ? null : m.month)}
+                      >
+                        <div className="flex items-center gap-2">
+                          <span className="text-white font-semibold text-[13px]">{m.month}</span>
+                          <span className="text-gray-400 text-[11px]">{m.trades} Trades</span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <span className={`text-[12px] font-semibold tabular-nums ${net >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                            {formatPnl(net)}
+                          </span>
+                          <ChevronDown size={12} className={`text-gray-400 transition-transform ${isExp ? 'rotate-180' : ''}`} />
+                        </div>
+                      </div>
+                      {isExp && (
+                        <div className="border-t border-white/[0.04] px-3 py-2 grid grid-cols-2 gap-x-4 gap-y-1.5 text-[11px]">
+                          <div>
+                            <span className="text-gray-400 block text-[9px] uppercase tracking-wider">{t('tax.pnl')}</span>
+                            <span className={`tabular-nums ${m.pnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>{formatPnl(m.pnl)}</span>
+                          </div>
+                          <div>
+                            <span className="text-gray-400 block text-[9px] uppercase tracking-wider">{t('tax.fees')}</span>
+                            <span className="text-gray-200 tabular-nums">${m.fees.toFixed(2)}</span>
+                          </div>
+                          <div>
+                            <span className="text-gray-400 block text-[9px] uppercase tracking-wider">{t('tax.net')}</span>
+                            <span className={`tabular-nums font-semibold ${net >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>{formatPnl(net)}</span>
+                          </div>
+                          <div>
+                            <span className="text-gray-400 block text-[9px] uppercase tracking-wider">{t('tax.trades')}</span>
+                            <span className="text-gray-200">{m.trades}</span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="table-premium min-w-[500px]">
+                  <thead>
+                    <tr>
+                      <th className="text-left">{t('tax.month')}</th>
+                      <th className="text-right">{t('tax.trades')}</th>
+                      <th className="text-right">{t('tax.pnl')}</th>
+                      <th className="text-right">{t('tax.fees')}</th>
+                      <th className="text-right">{t('tax.net')}</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {data.months.map((m) => (
+                      <tr key={m.month}>
+                        <td className="text-white font-medium">{m.month}</td>
+                        <td className="text-right text-gray-300">{m.trades}</td>
+                        <td className="text-right">
+                          <span className={m.pnl >= 0 ? 'pnl-positive' : 'pnl-negative'}>
+                            {formatPnl(m.pnl)}
+                          </span>
+                        </td>
+                        <td className="text-right text-gray-300">${m.fees.toFixed(2)}</td>
+                        <td className="text-right">
+                          <span className={m.pnl - m.fees >= 0 ? 'pnl-positive' : 'pnl-negative'}>
+                            {formatPnl(m.pnl - m.fees)}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         </>
       )}
