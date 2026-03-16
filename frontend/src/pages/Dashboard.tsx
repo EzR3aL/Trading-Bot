@@ -237,7 +237,7 @@ function DashboardRecentTrades({ trades }: { trades: Trade[] }) {
       </div>
       {/* Mobile: Card layout */}
       {isMobile ? (
-        <div className="px-1.5 pb-1.5 pt-1.5 space-y-1.5">
+        <div className="px-1 pb-1 pt-1 space-y-1.5">
           {trades.length === 0 ? (
             <p className="py-8 text-center text-gray-500 text-sm">{t('dashboard.noTrades')}</p>
           ) : (

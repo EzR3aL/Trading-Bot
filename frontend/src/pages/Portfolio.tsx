@@ -462,7 +462,7 @@ export default function Portfolio() {
         ) : sortedPositions.length === 0 ? (
           <div className="p-8 text-center text-gray-500">{t('portfolio.noPositions')}</div>
         ) : isMobile ? (
-          <div className="px-1.5 pb-1.5 pt-1.5 space-y-1.5">
+          <div className="px-1 pb-1 pt-1 space-y-1.5">
             {sortedPositions.map((pos, idx) => (
               <MobilePositionCard key={`${pos.exchange}-${pos.symbol}-${idx}`} pos={pos} />
             ))}
