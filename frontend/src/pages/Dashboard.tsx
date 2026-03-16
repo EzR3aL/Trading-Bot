@@ -230,7 +230,7 @@ function DashboardRecentTrades({ trades }: { trades: Trade[] }) {
 
   return (
     <div className="glass-card rounded-xl overflow-hidden" data-tour="dash-trades">
-      <div className="px-4 sm:px-5 pt-4 sm:pt-5 pb-3 sm:pb-0 sm:border-b sm:border-white/5 sm:mb-0">
+      <div className="px-4 sm:px-5 pt-4 sm:pt-5 pb-3 sm:pb-4 sm:border-b sm:border-white/5">
         <h2 className="text-base font-semibold text-white">
           {t('dashboard.recentTrades')}
         </h2>
