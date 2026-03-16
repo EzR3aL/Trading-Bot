@@ -441,7 +441,7 @@ function BotTradeHistoryModal({ bot, onClose, t }: { bot: BotStatus; onClose: ()
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-md" onClick={onClose} role="dialog" aria-modal="true" onKeyDown={(e) => { if (e.key === 'Escape') onClose() }}>
       <div
-        className="bg-[#0b0f19] rounded-2xl max-w-5xl w-full mx-4 my-3 max-h-[96vh] flex flex-col border border-white/10 shadow-2xl overflow-hidden"
+        className="bg-[#0b0f19] rounded-2xl max-w-5xl w-full mx-2 sm:mx-4 my-2 sm:my-3 max-h-[95vh] flex flex-col border border-white/10 shadow-2xl overflow-hidden"
         onClick={(e) => e.stopPropagation()}
         aria-label={t('bots.tradeHistory')}
       >
@@ -667,7 +667,7 @@ function BotTradeHistoryModal({ bot, onClose, t }: { bot: BotStatus; onClose: ()
                 <div className="text-xs text-gray-400 uppercase tracking-wider font-semibold">{t('bots.tradeHistory')}</div>
               </div>
               {isMobile ? (
-                <div className="px-6 space-y-1.5">
+                <div className="px-3 pb-6 space-y-1.5">
                   {stats.recent_trades.map(trade => (
                     <MobileTradeCard key={trade.id} trade={{ ...trade, bot_exchange: bot.exchange_type, entry_time: trade.entry_time || '' }} />
                   ))}
