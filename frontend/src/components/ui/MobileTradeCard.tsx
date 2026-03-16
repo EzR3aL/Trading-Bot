@@ -3,6 +3,7 @@ import { ChevronDown } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { ExchangeIcon } from './ExchangeLogo'
 import ExitReasonBadge from './ExitReasonBadge'
+import { formatDateTime } from '../../utils/dateUtils'
 
 interface MobileTradeCardProps {
   trade: {
@@ -27,15 +28,7 @@ interface MobileTradeCardProps {
     size?: number
     exit_reason?: string | null
   }
-  /** Extra detail rows beyond the default set */
   extraDetails?: { label: string; value: string | React.ReactNode }[]
-}
-
-function formatDate(iso: string): string {
-  try {
-    const d = new Date(iso)
-    return d.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' })
-  } catch { return iso }
 }
 
 function formatPnl(v: number | null | undefined): string {
@@ -57,8 +50,8 @@ export default function MobileTradeCard({ trade, extraDetails }: MobileTradeCard
       className="border border-white/[0.06] rounded-lg bg-white/[0.02] overflow-hidden"
       onClick={() => setOpen(!open)}
     >
-      {/* ── Header: Symbol + Direction | Date + PnL ── */}
-      <div className="flex items-center justify-between px-3 py-2 cursor-pointer">
+      {/* Row 1: Symbol + Badges | PnL */}
+      <div className="flex items-center justify-between px-3 pt-2 pb-1 cursor-pointer">
         <div className="flex items-center gap-1.5 min-w-0">
           <ExchangeIcon exchange={exchange} size={14} />
           <span className="text-white font-semibold text-[13px] truncate">{trade.symbol}</span>
@@ -72,30 +65,36 @@ export default function MobileTradeCard({ trade, extraDetails }: MobileTradeCard
           )}
         </div>
         <div className="flex items-center gap-1.5 shrink-0">
-          <span className="text-[10px] text-gray-400 tabular-nums">{formatDate(trade.entry_time)}</span>
+          {trade.status === 'closed' && trade.pnl != null ? (
+            <span className={`text-[13px] font-semibold tabular-nums ${isPnlPositive ? 'text-emerald-400' : 'text-red-400'}`}>
+              {formatPnl(trade.pnl)}
+            </span>
+          ) : (
+            <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${
+              trade.status === 'open' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-gray-500/10 text-gray-400'
+            }`}>
+              {t(`trades.${trade.status}`)}
+            </span>
+          )}
           <ChevronDown size={12} className={`text-gray-400 transition-transform ${open ? 'rotate-180' : ''}`} />
         </div>
       </div>
 
-      {/* ── Sub Row: Size + PnL ── */}
-      <div className="flex items-center justify-between px-3 pb-2 text-[11px]">
-        <span className="text-gray-400">
-          {trade.size != null && `${trade.size} ${trade.symbol.replace('USDT', '')}`}
+      {/* Row 2: Date + Size with labels */}
+      <div className="flex items-center justify-between px-3 pb-2 text-[11px] text-gray-400 gap-3">
+        <span>
+          <span className="text-gray-500 text-[9px] uppercase tracking-wider mr-1">{t('trades.date')}</span>
+          <span className="tabular-nums">{formatDateTime(trade.exit_time || trade.entry_time)}</span>
         </span>
-        {trade.status === 'closed' && trade.pnl != null ? (
-          <span className={`font-semibold tabular-nums ${isPnlPositive ? 'text-emerald-400' : 'text-red-400'}`}>
-            {formatPnl(trade.pnl)}
-          </span>
-        ) : (
-          <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${
-            trade.status === 'open' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-gray-500/10 text-gray-400'
-          }`}>
-            {t(`trades.${trade.status}`)}
+        {trade.size != null && (
+          <span className="shrink-0">
+            <span className="text-gray-500 text-[9px] uppercase tracking-wider mr-1">{t('portfolio.size')}</span>
+            <span className="tabular-nums">{trade.size.toFixed(4)}</span>
           </span>
         )}
       </div>
 
-      {/* ── Expandable Details ── */}
+      {/* Expandable Details */}
       {open && (
         <div className="border-t border-white/[0.04] px-3 py-2 grid grid-cols-2 gap-x-4 gap-y-1.5 text-[11px]">
           {trade.bot_name && (
