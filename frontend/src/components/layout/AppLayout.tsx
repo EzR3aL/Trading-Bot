@@ -241,7 +241,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       </aside>
 
       {/* Main content */}
-      <main id="main-content" role="main" className="lg:ml-60 px-4 sm:px-6 py-6 pt-20 lg:pt-6 pb-20 lg:pb-6 min-h-screen overflow-x-hidden">
+      <main id="main-content" role="main" className="lg:ml-60 px-2 sm:px-6 py-6 pt-20 lg:pt-6 pb-20 lg:pb-6 min-h-screen overflow-x-hidden">
         {children}
       </main>
     </div>

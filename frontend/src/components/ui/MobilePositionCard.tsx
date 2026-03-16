@@ -19,6 +19,7 @@ interface Position {
   trailing_stop_distance_pct?: number | null
   can_close_at_loss?: boolean | null
   bot_name?: string | null
+  demo_mode?: boolean
   take_profit?: number | null
   stop_loss?: number | null
 }
@@ -44,6 +45,9 @@ export default function MobilePositionCard({ pos }: { pos: Position }) {
           }`}>
             {pos.side.toUpperCase()}
           </span>
+          {pos.demo_mode && (
+            <span className="text-[8px] font-medium px-1 py-px rounded bg-amber-500/10 text-amber-400">DEMO</span>
+          )}
           {pos.trailing_stop_active && (
             <ShieldCheck size={10} className="text-emerald-400" />
           )}

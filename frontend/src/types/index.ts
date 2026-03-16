@@ -330,6 +330,7 @@ export interface PortfolioPosition {
   leverage: number
   margin: number
   bot_name?: string
+  demo_mode?: boolean
   trailing_stop_active?: boolean
   trailing_stop_price?: number
   trailing_stop_distance_pct?: number

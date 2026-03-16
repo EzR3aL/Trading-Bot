@@ -36,6 +36,7 @@ class PortfolioPosition(BaseModel):
     leverage: int
     margin: float = 0
     bot_name: Optional[str] = None
+    demo_mode: bool = False
     trailing_stop_active: bool = False
     trailing_stop_price: Optional[float] = None
     trailing_stop_distance_pct: Optional[float] = None
