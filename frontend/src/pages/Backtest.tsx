@@ -29,7 +29,7 @@ const STRATEGY_DISPLAY: Record<string, string> = {
   contrarian_pulse: 'Contrarian Pulse',
 }
 
-const TRADING_PAIRS = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'XRPUSDT', 'DOGEUSDT', 'AVAXUSDT']
+const FALLBACK_PAIRS = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'XRPUSDT', 'DOGEUSDT', 'AVAXUSDT', 'ADAUSDT', 'LINKUSDT', 'DOTUSDT', 'MATICUSDT']
 
 const TIMEFRAMES = [
   { value: '1m', label: '1m' },
@@ -75,6 +75,11 @@ export default function Backtest() {
   const [timeframeMaxDays, setTimeframeMaxDays] = useState<Record<string, number>>(DEFAULT_TIMEFRAME_MAX_DAYS)
   const [dateError, setDateError] = useState('')
 
+  // Dynamic symbols
+  const [allSymbols, setAllSymbols] = useState<string[]>(FALLBACK_PAIRS)
+  const [symbolsLoading, setSymbolsLoading] = useState(false)
+  const [symbolSearch, setSymbolSearch] = useState('')
+
   // Results state
   const [activeRun, setActiveRun] = useState<BacktestRun | null>(null)
   const [history, setHistory] = useState<BacktestHistoryItem[]>([])
@@ -85,7 +90,7 @@ export default function Backtest() {
   const pollRef = useRef<ReturnType<typeof setInterval>>()
   const celebratedRunsRef = useRef<Set<number>>(new Set())
 
-  // Fetch strategies and date limits on mount
+  // Fetch strategies, date limits, and symbols on mount
   useEffect(() => {
     api.get('/backtest/strategies').then(res => {
       setStrategies(res.data.strategies || [])
@@ -98,6 +103,15 @@ export default function Backtest() {
         setTimeframeMaxDays(res.data.timeframe_max_days)
       }
     }).catch((err) => { console.error('Failed to load date limits:', err); useToastStore.getState().addToast('error', t('common.loadError', 'Failed to load data')) })
+
+    // Load exchange symbols (default: bitget)
+    setSymbolsLoading(true)
+    api.get('/exchanges/bitget/symbols').then(res => {
+      const symbols = res.data.symbols || []
+      if (symbols.length > 0) setAllSymbols(symbols)
+    }).catch(() => {
+      // Fallback already set
+    }).finally(() => setSymbolsLoading(false))
   }, [])
 
   // Fetch history on mount
@@ -223,7 +237,10 @@ export default function Backtest() {
     ...strategies.map(s => ({ value: s.name, label: strategyLabel(s.name) })),
   ]
 
-  const symbolOptions = TRADING_PAIRS.map(p => ({ value: p, label: p }))
+  const filteredSymbols = symbolSearch
+    ? allSymbols.filter(s => s.toLowerCase().includes(symbolSearch.toLowerCase()))
+    : allSymbols
+  const symbolOptions = filteredSymbols.slice(0, 50).map(p => ({ value: p, label: p }))
 
   const timeframeOptions = TIMEFRAMES.map(tf => ({ value: tf.value, label: tf.label }))
 
@@ -257,10 +274,21 @@ export default function Backtest() {
 
           {/* Symbol */}
           <div className="relative z-[55] pb-1">
-            <label className="text-xs text-gray-400 mb-1.5 block font-medium">{t('backtest.symbol')}</label>
+            <label className="text-xs text-gray-400 mb-1.5 block font-medium">
+              {t('backtest.symbol')}
+              {symbolsLoading && <span className="ml-1 text-gray-600">...</span>}
+              <span className="ml-1 text-gray-600 font-normal">({allSymbols.length})</span>
+            </label>
+            <input
+              type="text"
+              value={symbolSearch}
+              onChange={(e) => setSymbolSearch(e.target.value.toUpperCase())}
+              placeholder={t('backtest.symbolSearch', 'Symbol suchen...')}
+              className="filter-select w-full mb-1"
+            />
             <FilterDropdown
               value={symbol}
-              onChange={setSymbol}
+              onChange={(v) => { setSymbol(v); setSymbolSearch('') }}
               ariaLabel={t('backtest.symbol')}
               options={symbolOptions}
             />
