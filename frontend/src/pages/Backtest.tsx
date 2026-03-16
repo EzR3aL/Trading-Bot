@@ -31,6 +31,21 @@ const STRATEGY_DISPLAY: Record<string, string> = {
 
 const FALLBACK_PAIRS = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'XRPUSDT', 'DOGEUSDT', 'AVAXUSDT', 'ADAUSDT', 'LINKUSDT', 'DOTUSDT', 'MATICUSDT']
 
+// Strategy-specific configuration hints
+const STRATEGY_CONFIG: Record<string, {
+  hasRiskProfile?: boolean
+  recommendedTimeframe: string
+  recommendedDays: number
+  tipsKey: string
+}> = {
+  edge_indicator: { hasRiskProfile: true, recommendedTimeframe: '1h', recommendedDays: 90, tipsKey: 'backtest.tips.edge' },
+  contrarian_pulse: { recommendedTimeframe: '1h', recommendedDays: 60, tipsKey: 'backtest.tips.contrarian' },
+  liquidation_hunter: { hasRiskProfile: true, recommendedTimeframe: '1h', recommendedDays: 60, tipsKey: 'backtest.tips.liquidation' },
+  sentiment_surfer: { recommendedTimeframe: '1h', recommendedDays: 60, tipsKey: 'backtest.tips.sentiment' },
+  degen: { recommendedTimeframe: '1h', recommendedDays: 30, tipsKey: 'backtest.tips.degen' },
+  llm_signal: { recommendedTimeframe: '1h', recommendedDays: 30, tipsKey: 'backtest.tips.llm' },
+}
+
 const TIMEFRAMES = [
   { value: '1m', label: '1m' },
   { value: '5m', label: '5m' },
@@ -71,6 +86,9 @@ export default function Backtest() {
   const [endDate, setEndDate] = useState('')
   const [initialCapital, setInitialCapital] = useState(10000)
   const [customPrompt, setCustomPrompt] = useState('')
+  const [riskProfile, setRiskProfile] = useState('standard')
+  const [leverage, setLeverage] = useState(3)
+  const [positionSizePct, setPositionSizePct] = useState(10)
   const [submitting, setSubmitting] = useState(false)
   const [timeframeMaxDays, setTimeframeMaxDays] = useState<Record<string, number>>(DEFAULT_TIMEFRAME_MAX_DAYS)
   const [dateError, setDateError] = useState('')
@@ -194,6 +212,14 @@ export default function Backtest() {
     setSubmitting(true)
     try {
       const params: Record<string, any> = {}
+      // Strategy params
+      const cfg = STRATEGY_CONFIG[strategyType]
+      if (cfg?.hasRiskProfile) {
+        params.risk_profile = riskProfile
+      }
+      params.leverage = leverage
+      params.position_size_percent = positionSizePct
+      params.kline_interval = timeframe
       if (strategyType === 'llm_signal' && customPrompt.trim()) {
         params.custom_prompt = customPrompt.trim()
       }
@@ -204,7 +230,7 @@ export default function Backtest() {
         start_date: startDate,
         end_date: endDate,
         initial_capital: initialCapital,
-        strategy_params: Object.keys(params).length > 0 ? params : undefined,
+        strategy_params: params,
       })
       const runRes = await api.get(`/backtest/${res.data.run_id}`)
       setActiveRun(runRes.data)
@@ -352,7 +378,62 @@ export default function Backtest() {
             />
             <p className="text-[11px] text-gray-500 mt-1">{t('backtest.capitalDesc')}</p>
           </div>
+
+          {/* Risk Profile (only for strategies that support it) */}
+          {STRATEGY_CONFIG[strategyType]?.hasRiskProfile && (
+            <div>
+              <label className="text-xs text-gray-400 mb-1.5 block font-medium">{t('backtest.riskProfile')}</label>
+              <FilterDropdown
+                value={riskProfile}
+                onChange={setRiskProfile}
+                ariaLabel={t('backtest.riskProfile')}
+                options={[
+                  { value: 'conservative', label: t('backtest.riskConservative') },
+                  { value: 'standard', label: t('backtest.riskStandard') },
+                  { value: 'aggressive', label: t('backtest.riskAggressive') },
+                ]}
+              />
+              <p className="text-[11px] text-gray-500 mt-1">{t('backtest.riskProfileDesc')}</p>
+            </div>
+          )}
+
+          {/* Leverage */}
+          <div>
+            <label className="text-xs text-gray-400 mb-1.5 block font-medium">{t('backtest.leverage')}</label>
+            <NumInput
+              value={leverage}
+              onChange={e => setLeverage(Math.min(20, Math.max(1, Number(e.target.value))))}
+              className="input-dark w-full"
+              min={1}
+              max={20}
+            />
+            <p className="text-[11px] text-gray-500 mt-1">{t('backtest.leverageDesc')}</p>
+          </div>
+
+          {/* Position Size % */}
+          <div>
+            <label className="text-xs text-gray-400 mb-1.5 block font-medium">{t('backtest.positionSize')}</label>
+            <NumInput
+              value={positionSizePct}
+              onChange={e => setPositionSizePct(Math.min(100, Math.max(1, Number(e.target.value))))}
+              className="input-dark w-full"
+              min={1}
+              max={100}
+            />
+            <p className="text-[11px] text-gray-500 mt-1">{t('backtest.positionSizeDesc')}</p>
+          </div>
         </div>
+
+        {/* Strategy-specific Tips */}
+        {strategyType && STRATEGY_CONFIG[strategyType] && (
+          <div className="mt-4 p-3 bg-primary-500/5 border border-primary-500/10 rounded-xl">
+            <div className="flex items-center gap-2 mb-1.5">
+              <Info size={14} className="text-primary-400 shrink-0" />
+              <span className="text-xs font-semibold text-primary-400">{t('backtest.strategyTips')}</span>
+            </div>
+            <p className="text-[11px] text-gray-400 leading-relaxed">{t(STRATEGY_CONFIG[strategyType].tipsKey)}</p>
+          </div>
+        )}
 
         {/* KI-Companion Custom Prompt */}
         {strategyType === 'llm_signal' && (
