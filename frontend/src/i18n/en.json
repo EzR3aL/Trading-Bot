@@ -11,7 +11,8 @@
     "backtest": "Backtest Lab",
     "portfolio": "Portfolio",
     "admin": "Admin",
-    "logout": "Logout"
+    "logout": "Logout",
+    "more": "More"
   },
   "login": {
     "title": "Login",

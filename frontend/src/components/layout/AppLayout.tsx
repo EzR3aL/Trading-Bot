@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useMemo } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '../../stores/authStore'
@@ -18,8 +18,6 @@ import {
   TrendingUp,
   FlaskConical,
   Briefcase,
-  Menu,
-  X,
   Sun,
   Moon,
   WifiOff,
@@ -27,6 +25,7 @@ import {
 } from 'lucide-react'
 import { useThemeStore } from '../../stores/themeStore'
 import OfflineIndicator from '../ui/OfflineIndicator'
+import MobileBottomNav from './MobileBottomNav'
 
 const navItems: { path: string; key: string; icon: LucideIcon }[] = [
   { path: '/', key: 'dashboard', icon: LayoutDashboard },
@@ -47,7 +46,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const { user, logout } = useAuthStore()
   const { demoFilter, setDemoFilter } = useFilterStore()
   const { theme, toggleTheme } = useThemeStore()
-  const [mobileOpen, setMobileOpen] = useState(false)
   const { pushEvent, updateBotStatus } = useRealtimeStore()
   const { addToast } = useToastStore()
 
@@ -92,13 +90,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     localStorage.setItem('language', next)
   }
 
-  const closeMobile = () => setMobileOpen(false)
-
   const sidebarContent = (
     <>
       {/* Logo */}
       <div className="px-5 py-5 border-b border-white/5">
-        <div className="flex items-center gap-3">
+        <Link to="/" className="flex items-center gap-3 active:scale-95 transition-transform duration-150">
           <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary-500 to-primary-700 flex items-center justify-center shadow-glow-sm">
             <TrendingUp size={16} className="text-white" />
           </div>
@@ -106,7 +102,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             <h1 className="text-base font-bold text-white tracking-tight">Trading Bot</h1>
             <p className="text-[10px] text-gray-500 font-medium">v2.0</p>
           </div>
-        </div>
+        </Link>
       </div>
 
       {/* Navigation */}
@@ -118,8 +114,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             <Link
               key={item.path}
               to={item.path}
-              onClick={closeMobile}
-              aria-label={t(`nav.${item.key}`)}
+                           aria-label={t(`nav.${item.key}`)}
               className={`flex items-center gap-3 px-3 py-2.5 text-sm rounded-xl transition-all duration-200 ${
                 isActive
                   ? 'nav-item-active text-white font-medium'
@@ -134,8 +129,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         {user?.role === 'admin' && (
           <Link
             to="/admin/users"
-            onClick={closeMobile}
-            aria-label={t('nav.admin')}
+                       aria-label={t('nav.admin')}
             className={`flex items-center gap-3 px-3 py-2.5 text-sm rounded-xl transition-all duration-200 ${
               location.pathname === '/admin/users'
                 ? 'nav-item-active text-white font-medium'
@@ -228,39 +222,18 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           {t('ws.reconnecting', { defaultValue: 'Reconnecting...' })}
         </div>
       )}
-      {/* Mobile hamburger */}
-      <div className="lg:hidden fixed top-0 left-0 right-0 z-40 bg-[#0a0e17]/90 backdrop-blur-xl border-b border-white/5 px-4 py-3 flex items-center justify-between">
-        <div className="flex items-center gap-2">
+      {/* Mobile top bar (logo only) */}
+      <div className="lg:hidden fixed top-0 left-0 right-0 z-40 bg-[#0a0e17]/90 backdrop-blur-xl border-b border-white/5 px-4 py-3 flex items-center">
+        <Link to="/" className="flex items-center gap-2 active:scale-95 transition-transform duration-150">
           <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-primary-500 to-primary-700 flex items-center justify-center">
             <TrendingUp size={14} className="text-white" />
           </div>
           <span className="text-white font-bold text-sm">Trading Bot</span>
-        </div>
-        <button
-          onClick={() => setMobileOpen(!mobileOpen)}
-          aria-label={mobileOpen ? 'Close menu' : 'Open menu'}
-          className="p-2 text-gray-400 hover:text-white transition-colors"
-        >
-          {mobileOpen ? <X size={20} /> : <Menu size={20} />}
-        </button>
+        </Link>
       </div>
 
-      {/* Mobile overlay */}
-      {mobileOpen && (
-        <div
-          className="lg:hidden fixed inset-0 z-40 bg-black/60 backdrop-blur-sm overlay-fade"
-          onClick={closeMobile}
-        />
-      )}
-
-      {/* Mobile sidebar */}
-      <aside
-        className={`lg:hidden fixed top-0 left-0 h-full w-64 z-50 bg-gradient-sidebar flex flex-col border-r border-white/5 transition-transform duration-300 ${
-          mobileOpen ? 'translate-x-0' : '-translate-x-full'
-        }`}
-      >
-        {sidebarContent}
-      </aside>
+      {/* Mobile bottom navigation */}
+      <MobileBottomNav />
 
       {/* Desktop sidebar */}
       <aside className="hidden lg:flex fixed top-0 left-0 h-full w-60 bg-gradient-sidebar border-r border-white/5 flex-col z-30">
@@ -268,7 +241,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       </aside>
 
       {/* Main content */}
-      <main id="main-content" role="main" className="lg:ml-60 px-4 sm:px-6 py-6 pt-20 lg:pt-6 min-h-screen overflow-x-hidden">
+      <main id="main-content" role="main" className="lg:ml-60 px-4 sm:px-6 py-6 pt-20 lg:pt-6 pb-20 lg:pb-6 min-h-screen overflow-x-hidden">
         {children}
       </main>
     </div>
