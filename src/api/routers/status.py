@@ -1,5 +1,6 @@
 """Health check and status endpoints."""
 
+import subprocess
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Request
@@ -9,6 +10,14 @@ from sqlalchemy import text
 from src.api.rate_limit import limiter
 from src.models.session import get_session
 from src.utils.logger import get_logger
+
+# Resolve git commit hash at import time (once, not per request)
+try:
+    _GIT_COMMIT = subprocess.check_output(
+        ["git", "rev-parse", "--short", "HEAD"], stderr=subprocess.DEVNULL, text=True,
+    ).strip()
+except Exception:
+    _GIT_COMMIT = "unknown"
 
 logger = get_logger(__name__)
 
@@ -57,8 +66,14 @@ async def health_check(request: Request):
 
 @router.get("/api/status")
 async def get_status():
-    """Get overall system status (no version info for security)."""
+    """Get overall system status."""
     return {
         "status": "running",
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
+
+
+@router.get("/api/version")
+async def get_version():
+    """Return build version for deploy verification."""
+    return {"commit": _GIT_COMMIT}

@@ -13,7 +13,7 @@ from src.utils.logger import get_logger
 _jwt_logger = get_logger(__name__)
 
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 240  # 4 hours — reduces refresh frequency on mobile
+ACCESS_TOKEN_EXPIRE_MINUTES = 60  # 1 hour — balance between security and UX
 REFRESH_TOKEN_EXPIRE_DAYS = 30
 
 REFRESH_COOKIE_NAME = "refresh_token"

@@ -87,10 +87,15 @@ export function formatDatePickerDisplay(isoDateString: string): string {
  * $1200 → "$1.2K", $-600 → "-$600", $45 → "$45"
  */
 export function formatChartCurrency(value: number): string {
+  if (!Number.isFinite(value)) return '$0'
   const abs = Math.abs(value)
   const sign = value < 0 ? '-' : ''
   if (abs >= 1_000_000) return `${sign}$${(abs / 1_000_000).toFixed(1)}M`
-  if (abs >= 1_000) return `${sign}$${(abs / 1_000).toFixed(abs % 1_000 === 0 ? 0 : 1)}K`
+  if (abs >= 10_000) return `${sign}$${Math.round(abs / 1_000)}K`
+  if (abs >= 1_000) {
+    const k = (abs / 1_000).toFixed(1)
+    return `${sign}$${k.endsWith('.0') ? k.slice(0, -2) : k}K`
+  }
   return `${sign}$${abs}`
 }
 
