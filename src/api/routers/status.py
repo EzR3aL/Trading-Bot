@@ -1,5 +1,6 @@
 """Health check and status endpoints."""
 
+import os
 import subprocess
 from datetime import datetime, timezone
 
@@ -11,13 +12,17 @@ from src.api.rate_limit import limiter
 from src.models.session import get_session
 from src.utils.logger import get_logger
 
-# Resolve git commit hash at import time (once, not per request)
-try:
-    _GIT_COMMIT = subprocess.check_output(
-        ["git", "rev-parse", "--short", "HEAD"], stderr=subprocess.DEVNULL, text=True,
-    ).strip()
-except Exception:
-    _GIT_COMMIT = "unknown"
+# Resolve build version at import time (once, not per request)
+# In Docker: read from BUILD_COMMIT env var (set during build)
+# Fallback: try git, then "unknown"
+_GIT_COMMIT = os.environ.get("BUILD_COMMIT", "").strip()
+if not _GIT_COMMIT:
+    try:
+        _GIT_COMMIT = subprocess.check_output(
+            ["git", "rev-parse", "--short", "HEAD"], stderr=subprocess.DEVNULL, text=True,
+        ).strip()
+    except Exception:
+        _GIT_COMMIT = "unknown"
 
 logger = get_logger(__name__)
 

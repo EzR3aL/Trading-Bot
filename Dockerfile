@@ -38,6 +38,10 @@ ENV PATH="/opt/venv/bin:$PATH"
 # Create non-root user
 RUN useradd --create-home --shell /bin/bash botuser
 
+# Build version (passed via --build-arg or defaults to "unknown")
+ARG BUILD_COMMIT=unknown
+ENV BUILD_COMMIT=${BUILD_COMMIT}
+
 # Copy application code
 COPY --chown=botuser:botuser . .
 
