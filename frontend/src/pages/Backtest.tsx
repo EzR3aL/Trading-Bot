@@ -88,7 +88,6 @@ export default function Backtest() {
   const [customPrompt, setCustomPrompt] = useState('')
   const [riskProfile, setRiskProfile] = useState('standard')
   const [leverage, setLeverage] = useState(3)
-  const [positionSizePct, setPositionSizePct] = useState(10)
   const [submitting, setSubmitting] = useState(false)
   const [timeframeMaxDays, setTimeframeMaxDays] = useState<Record<string, number>>(DEFAULT_TIMEFRAME_MAX_DAYS)
   const [dateError, setDateError] = useState('')
@@ -218,7 +217,6 @@ export default function Backtest() {
         params.risk_profile = riskProfile
       }
       params.leverage = leverage
-      params.position_size_percent = positionSizePct
       params.kline_interval = timeframe
       if (strategyType === 'llm_signal' && customPrompt.trim()) {
         params.custom_prompt = customPrompt.trim()
@@ -410,18 +408,6 @@ export default function Backtest() {
             <p className="text-[11px] text-gray-500 mt-1">{t('backtest.leverageDesc')}</p>
           </div>
 
-          {/* Position Size % */}
-          <div>
-            <label className="text-xs text-gray-400 mb-1.5 block font-medium">{t('backtest.positionSize')}</label>
-            <NumInput
-              value={positionSizePct}
-              onChange={e => setPositionSizePct(Math.min(100, Math.max(1, Number(e.target.value))))}
-              className="input-dark w-full"
-              min={1}
-              max={100}
-            />
-            <p className="text-[11px] text-gray-500 mt-1">{t('backtest.positionSizeDesc')}</p>
-          </div>
         </div>
 
         {/* Strategy-specific Tips */}
