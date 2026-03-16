@@ -1089,22 +1089,21 @@ export default function Bots() {
                       <span className={bot.mode === 'demo' ? 'badge-demo text-xs' : bot.mode === 'live' ? 'badge-live text-xs' : 'badge-open text-xs'}>
                         {bot.mode.toUpperCase()}
                       </span>
-                      <span className="text-xs text-gray-500">{strategyLabel(bot.strategy_type)}</span>
-                      {AI_STRATEGIES.has(bot.strategy_type) && (
-                        <Bot size={15} className="text-emerald-400" />
-                      )}
-                      {bot.risk_profile && (
-                        <>
-                          <span className="text-gray-700">·</span>
-                          <span className={`inline-flex items-center gap-0.5 text-xs ${
+                      <span className="text-xs text-gray-500 inline-flex items-center gap-1">
+                        {strategyLabel(bot.strategy_type)}
+                        {bot.risk_profile && (
+                          <span className={`inline-flex items-center gap-0.5 ${
                             bot.risk_profile === 'aggressive' ? 'text-red-400' :
                             bot.risk_profile === 'conservative' ? 'text-blue-400' :
                             'text-gray-500'
                           }`}>
-                            <Shield size={11} />
+                            · <Shield size={10} />
                             {t(`bots.builder.paramOption_risk_profile_${bot.risk_profile}`)}
                           </span>
-                        </>
+                        )}
+                      </span>
+                      {AI_STRATEGIES.has(bot.strategy_type) && (
+                        <Bot size={15} className="text-emerald-400" />
                       )}
                     </div>
                   </div>
