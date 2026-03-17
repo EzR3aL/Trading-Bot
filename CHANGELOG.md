@@ -9,6 +9,27 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [4.1.1] - 2026-03-17
+
+### Behoben
+- **Builder Fee Berechnung**: Fee-Rate war 10x zu hoch (0.10% statt 0.01% bei Konfiguration HL_BUILDER_FEE=10). Korrigiert auf korrekte tenths-of-basis-point Berechnung
+- **Referral-Code Matching**: Referral-Verifizierung prueft jetzt ob der User den konfigurierten Affiliate-Link genutzt hat (nicht irgendeinen beliebigen Referral)
+- **Wallet-Wechsel Reset**: Bei Aenderung der Hyperliquid Wallet-Adresse werden builder_fee_approved und referral_verified automatisch zurueckgesetzt
+- **Trust-Frontend Fallback entfernt**: Builder Fee Approval vertraut nicht mehr blind dem Frontend, sondern verifiziert immer on-chain mit Retry
+
+### Geaendert
+- **Builder Fee Approval Flow**: Neuer 4-Schritt-Wizard (Affiliate Link → Wallet verbinden → Builder Fee signieren → Fertig). Referral-Verifizierung ist jetzt direkt in den Bot-Start-Flow integriert statt nur auf der Settings-Seite
+- Referral-Gate prueft im BotWorker ebenfalls gegen den konfigurierten Referral-Code
+- **Portfolio Pie-Chart**: Hover/Klick zeigt Exchange-Name + Funds in der Mitte statt haesslicher Randmarkierung. Ohne Auswahl wird Gesamtbetrag angezeigt
+- **Performance-Seite**: Trailing-Stop-Sektion entfernt — offene Positionen gehoeren ins Portfolio, Performance zeigt nur realisierte Ergebnisse
+- **Steuerbericht**: Header "Monatliche Aufschluesselung" optisch ueberarbeitet (Desktop + Mobil) — konsistent mit dem Rest der App
+
+### Aktualisierte Dokumentation
+- Anleitung "Hyperliquid Builder Fee genehmigen" komplett ueberarbeitet: 5-Schritt-Prozess mit Affiliate Link, Wallet-Wechsel-Hinweis, Rabby Wallet Empfehlung (DE + EN)
+- Neue i18n-Keys fuer Referral-Flow (DE + EN)
+
+---
+
 ## [4.1.0] - 2026-03-16
 
 ### Entfernt

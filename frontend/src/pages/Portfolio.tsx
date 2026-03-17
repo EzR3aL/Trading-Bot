@@ -3,7 +3,7 @@ import { formatChartCurrency } from '../utils/dateUtils'
 import { useTranslation } from 'react-i18next'
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
-  ResponsiveContainer, PieChart, Pie, Cell, Legend,
+  ResponsiveContainer, PieChart, Pie, Cell, Legend, Sector,
 } from 'recharts'
 import {
   Briefcase, ArrowUpRight, ArrowDownRight, TrendingUp,
@@ -181,6 +181,34 @@ export default function Portfolio() {
     name: a.exchange,
     value: a.balance,
   }))
+
+  const [activePieIndex, setActivePieIndex] = useState<number | undefined>(undefined)
+
+  // Custom active shape: slightly enlarged segment, no outline
+  const renderActiveShape = (props: any) => {
+    const { cx, cy, innerRadius, outerRadius, startAngle, endAngle, fill, payload, value } = props
+    return (
+      <g>
+        {/* Highlighted segment — slightly bigger */}
+        <Sector
+          cx={cx} cy={cy}
+          innerRadius={innerRadius - 3}
+          outerRadius={outerRadius + 6}
+          startAngle={startAngle}
+          endAngle={endAngle}
+          fill={fill}
+          opacity={1}
+        />
+        {/* Center label: exchange name + funds */}
+        <text x={cx} y={cy - 10} textAnchor="middle" fill="#fff" fontSize={14} fontWeight={600}>
+          {payload.name.charAt(0).toUpperCase() + payload.name.slice(1)}
+        </text>
+        <text x={cx} y={cy + 12} textAnchor="middle" fill="rgba(255,255,255,0.7)" fontSize={13}>
+          ${value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+        </text>
+      </g>
+    )
+  }
 
   // Merge exchange cards: DB trades + live balances (so all exchanges appear)
   // Merge exchange cards: DB trades + live balances (so all exchanges appear)
@@ -436,27 +464,31 @@ export default function Portfolio() {
                   dataKey="value"
                   nameKey="name"
                   stroke="none"
+                  activeIndex={activePieIndex}
+                  activeShape={renderActiveShape}
+                  onMouseEnter={(_, index) => setActivePieIndex(index)}
+                  onMouseLeave={() => setActivePieIndex(undefined)}
+                  onClick={(_, index) => setActivePieIndex(prev => prev === index ? undefined : index)}
+                  style={{ cursor: 'pointer', outline: 'none' }}
                 >
                   {pieData.map((entry, idx) => (
                     <Cell
                       key={idx}
                       fill={exchangeColor(entry.name)}
+                      style={{ outline: 'none' }}
                     />
                   ))}
                 </Pie>
-                <Tooltip
-                  formatter={(value: number, name: string) => [
-                    `$${value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
-                    name.charAt(0).toUpperCase() + name.slice(1),
-                  ]}
-                  contentStyle={{
-                    background: 'rgba(13,17,23,0.95)',
-                    border: '1px solid rgba(255,255,255,0.1)',
-                    borderRadius: '8px',
-                    fontSize: '12px',
-                  }}
-                  itemStyle={{ color: 'rgba(255,255,255,0.8)' }}
-                />
+                {activePieIndex === undefined && (
+                  <text x="50%" y="42%" textAnchor="middle" fill="rgba(255,255,255,0.5)" fontSize={12}>
+                    {t('portfolio.total', 'Gesamt')}
+                  </text>
+                )}
+                {activePieIndex === undefined && (
+                  <text x="50%" y="50%" textAnchor="middle" fill="#fff" fontSize={14} fontWeight={600}>
+                    ${totalBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </text>
+                )}
                 <Legend
                   verticalAlign="bottom"
                   iconType="circle"

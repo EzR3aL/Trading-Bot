@@ -746,11 +746,17 @@
     "required": "One-time activation required before starting Hyperliquid bots.",
     "signFailed": "Confirmation failed. Please try again.",
     "affiliateHint": "Don't have a Hyperliquid account yet? Sign up with our link:",
+    "referralRequired": "Before you can use Hyperliquid, register via our affiliate link:",
+    "referralHint": "After you have registered, click \"Verify\".",
+    "verifyReferral": "Verify",
+    "referralConfirmed": "Affiliate link verified",
+    "referralFailed": "Referral verification failed. Did you use the affiliate link?",
     "loadError": "Failed to load configuration.",
     "notConfigured": "Hyperliquid is not configured on this server."
   },
   "common": {
     "loading": "Loading...",
+    "verifying": "Verifying...",
     "error": "Something went wrong. Please try again.",
     "errorShort": "Error",
     "success": "Success",

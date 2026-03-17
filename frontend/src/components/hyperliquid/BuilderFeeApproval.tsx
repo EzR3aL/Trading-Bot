@@ -6,7 +6,7 @@ import { RainbowKitProvider, ConnectButton, darkTheme } from '@rainbow-me/rainbo
 import { useAccount, useWalletClient, useChainId } from 'wagmi'
 import '@rainbow-me/rainbowkit/styles.css'
 import { walletConfig } from '../../config/wallet'
-import { CheckCircle, AlertTriangle, Wallet, Loader2, ExternalLink, X } from 'lucide-react'
+import { CheckCircle, AlertTriangle, Wallet, Loader2, ExternalLink, X, Link2 } from 'lucide-react'
 import api from '../../api/client'
 
 const queryClient = new QueryClient()
@@ -21,12 +21,18 @@ interface BuilderConfig {
   builder_fee_approved: boolean
   needs_approval: boolean
   referral_code: string
+  referral_required: boolean
+  referral_verified: boolean
+  needs_referral: boolean
 }
 
 interface BuilderFeeApprovalProps {
   onApproved: () => void
   onClose?: () => void
 }
+
+// Steps: 1=Referral, 2=Connect Wallet, 3=Sign Builder Fee, 4=Done
+const TOTAL_STEPS = 4
 
 function BuilderFeeApprovalInner({ onApproved, onClose }: BuilderFeeApprovalProps) {
   const { t } = useTranslation()
@@ -40,16 +46,27 @@ function BuilderFeeApprovalInner({ onApproved, onClose }: BuilderFeeApprovalProp
   const [processing, setProcessing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [confirmed, setConfirmed] = useState(false)
+  const [referralVerified, setReferralVerified] = useState(false)
+  const [verifyingReferral, setVerifyingReferral] = useState(false)
 
   useEffect(() => {
     const fetchConfig = async () => {
       try {
         const res = await api.get('/config/hyperliquid/builder-config')
         setConfig(res.data)
-        if (res.data.builder_fee_approved) {
+        const cfg = res.data as BuilderConfig
+
+        // Determine starting step based on current state
+        if (cfg.builder_fee_approved) {
           setConfirmed(true)
-          setStep(3)
+          setReferralVerified(true)
+          setStep(TOTAL_STEPS)
+        } else if (!cfg.referral_code || cfg.referral_verified) {
+          // No referral required or already verified — skip to wallet
+          setReferralVerified(true)
+          setStep(2)
         }
+        // else: step 1 (referral)
       } catch {
         setError(t('builderFee.loadError'))
       } finally {
@@ -59,11 +76,27 @@ function BuilderFeeApprovalInner({ onApproved, onClose }: BuilderFeeApprovalProp
     fetchConfig()
   }, [])
 
+  // Auto-advance from wallet step when connected
   useEffect(() => {
-    if (isConnected && step === 1) {
-      setStep(2)
+    if (isConnected && step === 2) {
+      setStep(3)
     }
   }, [isConnected, step])
+
+  const handleVerifyReferral = async () => {
+    setError(null)
+    setVerifyingReferral(true)
+    try {
+      await api.post('/config/hyperliquid/verify-referral')
+      setReferralVerified(true)
+      setStep(2)
+    } catch (err: unknown) {
+      const e = err as { response?: { data?: { detail?: string } } }
+      setError(e.response?.data?.detail || t('builderFee.referralFailed', 'Referral-Verifizierung fehlgeschlagen. Hast du den Affiliate Link genutzt?'))
+    } finally {
+      setVerifyingReferral(false)
+    }
+  }
 
   const handleSignAndSubmit = async () => {
     if (!config || !walletClient || !address) return
@@ -72,12 +105,8 @@ function BuilderFeeApprovalInner({ onApproved, onClose }: BuilderFeeApprovalProp
 
     try {
       const nonce = Date.now()
-      // Use wallet's connected chainId as signatureChainId
-      // SDK comment: "signatureChainId can be any chain" — hyperliquidChain determines the env
       const signatureChainIdHex = '0x' + chainId.toString(16)
 
-      // Sign via standard walletClient.signTypedData (no raw RPC needed)
-      // Domain chainId matches wallet's network so viem validation passes
       const signature = await walletClient.signTypedData({
         account: walletClient.account!,
         domain: {
@@ -103,12 +132,10 @@ function BuilderFeeApprovalInner({ onApproved, onClose }: BuilderFeeApprovalProp
         },
       })
 
-      // Parse signature into r, s, v components
       const r = signature.slice(0, 66)
       const s = '0x' + signature.slice(66, 130)
       const v = parseInt(signature.slice(130, 132), 16)
 
-      // Action for POST body (signatureChainId must match the signing domain chainId)
       const action = {
         type: 'approveBuilderFee',
         hyperliquidChain: 'Mainnet',
@@ -118,7 +145,6 @@ function BuilderFeeApprovalInner({ onApproved, onClose }: BuilderFeeApprovalProp
         signatureChainId: signatureChainIdHex,
       }
 
-      // POST to Hyperliquid Exchange API
       const hlResponse = await fetch('https://api.hyperliquid.xyz/exchange', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -130,7 +156,6 @@ function BuilderFeeApprovalInner({ onApproved, onClose }: BuilderFeeApprovalProp
         }),
       })
 
-      // Check both HTTP status and response body for errors
       const hlBody = await hlResponse.json().catch(() => null)
       if (!hlResponse.ok) {
         throw new Error(`Hyperliquid: ${JSON.stringify(hlBody) || hlResponse.statusText}`)
@@ -139,16 +164,15 @@ function BuilderFeeApprovalInner({ onApproved, onClose }: BuilderFeeApprovalProp
         throw new Error(`Hyperliquid: ${hlBody.response || 'Unknown error'}`)
       }
 
-      // Delay for on-chain propagation before backend verification
+      // Delay for on-chain propagation
       await new Promise(resolve => setTimeout(resolve, 3000))
 
-      // Confirm with our backend — pass signing wallet so it checks the right address
       await api.post('/config/hyperliquid/confirm-builder-approval', {
         wallet_address: address,
       })
 
       setConfirmed(true)
-      setStep(3)
+      setStep(TOTAL_STEPS)
       setTimeout(() => onApproved(), 1500)
     } catch (err: unknown) {
       const e = err as { code?: number; message?: string; response?: { data?: { detail?: string } } }
@@ -203,6 +227,11 @@ function BuilderFeeApprovalInner({ onApproved, onClose }: BuilderFeeApprovalProp
     )
   }
 
+  // Determine visible steps based on whether referral is required
+  const hasReferralStep = !!config.referral_code
+  const displaySteps = hasReferralStep ? TOTAL_STEPS : TOTAL_STEPS - 1
+  const displayStep = hasReferralStep ? step : Math.max(1, step - 1)
+
   return (
     <div className="bg-white/[0.03] rounded-xl border border-white/10 p-6 max-w-md w-full mx-auto text-center">
       {/* Header */}
@@ -220,36 +249,69 @@ function BuilderFeeApprovalInner({ onApproved, onClose }: BuilderFeeApprovalProp
 
       {/* Progress steps */}
       <div className="flex items-center mb-6 px-6">
-        {[1, 2, 3].map((s) => (
-          <div key={s} className={`flex items-center ${s < 3 ? 'flex-1' : ''}`}>
+        {Array.from({ length: displaySteps }, (_, i) => i + 1).map((s) => (
+          <div key={s} className={`flex items-center ${s < displaySteps ? 'flex-1' : ''}`}>
             <div className={`w-7 h-7 rounded-full grid place-items-center text-[13px] font-semibold leading-none shrink-0 transition-colors ${
-              step >= s ? 'bg-emerald-500 text-white' : 'bg-gray-700 text-gray-400'
+              displayStep >= s ? 'bg-emerald-500 text-white' : 'bg-gray-700 text-gray-400'
             }`}>
-              {step > s ? <CheckCircle className="w-3.5 h-3.5" /> : s}
+              {displayStep > s ? <CheckCircle className="w-3.5 h-3.5" /> : s}
             </div>
-            {s < 3 && <div className={`flex-1 h-px mx-3 transition-colors ${step > s ? 'bg-emerald-500' : 'bg-gray-600'}`} />}
+            {s < displaySteps && <div className={`flex-1 h-px mx-3 transition-colors ${displayStep > s ? 'bg-emerald-500' : 'bg-gray-600'}`} />}
           </div>
         ))}
       </div>
 
-      {/* Affiliate link */}
-      {config.referral_code && step < 3 && (
-        <div className="bg-emerald-950/40 border border-emerald-700/30 rounded-lg px-4 py-3 mb-5">
-          <p className="text-emerald-300/90 text-[13px] leading-snug mb-2">{t('builderFee.affiliateHint')}</p>
-          <a
-            href={`https://app.hyperliquid.xyz/join/${config.referral_code}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-emerald-900/40 border border-emerald-700/30 text-emerald-400 hover:text-emerald-300 hover:bg-emerald-900/60 text-xs font-mono transition-colors"
+      {/* Step 1: Affiliate Link (only if referral required) */}
+      {step === 1 && hasReferralStep && (
+        <div className="space-y-4">
+          <div className="bg-emerald-950/40 border border-emerald-700/30 rounded-lg px-4 py-4">
+            <Link2 className="w-8 h-8 text-emerald-400 mx-auto mb-3" />
+            <p className="text-emerald-300/90 text-sm leading-snug mb-3">
+              {t('builderFee.referralRequired', 'Bevor du Hyperliquid nutzen kannst, registriere dich ueber unseren Affiliate Link:')}
+            </p>
+            <a
+              href={`https://app.hyperliquid.xyz/join/${config.referral_code}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md bg-emerald-900/40 border border-emerald-700/30 text-emerald-400 hover:text-emerald-300 hover:bg-emerald-900/60 text-xs font-mono transition-colors"
+            >
+              app.hyperliquid.xyz/join/{config.referral_code} <ExternalLink className="w-3 h-3 shrink-0" />
+            </a>
+          </div>
+
+          <p className="text-gray-400 text-xs">
+            {t('builderFee.referralHint', 'Nachdem du dich registriert hast, klicke auf "Verifizieren".')}
+          </p>
+
+          <button
+            onClick={handleVerifyReferral}
+            disabled={verifyingReferral}
+            className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
           >
-            app.hyperliquid.xyz/join/{config.referral_code} <ExternalLink className="w-3 h-3 shrink-0" />
-          </a>
+            {verifyingReferral ? (
+              <><Loader2 className="w-4 h-4 animate-spin" /> {t('common.verifying', 'Verifiziere...')}</>
+            ) : (
+              <><CheckCircle className="w-4 h-4" /> {t('builderFee.verifyReferral', 'Verifizieren')}</>
+            )}
+          </button>
+
+          {error && (
+            <div className="bg-red-900/30 border border-red-700/50 rounded-lg p-3 text-sm text-red-300 text-left">
+              {error}
+            </div>
+          )}
         </div>
       )}
 
-      {/* Step 1: Connect Wallet */}
-      {step === 1 && (
+      {/* Step 2: Connect Wallet */}
+      {step === 2 && (
         <div className="space-y-5">
+          {referralVerified && hasReferralStep && (
+            <div className="flex items-center gap-2 bg-emerald-950/30 border border-emerald-700/20 rounded-lg px-3 py-2 text-xs text-emerald-400">
+              <CheckCircle className="w-4 h-4 shrink-0" />
+              {t('builderFee.referralConfirmed', 'Affiliate Link verifiziert')}
+            </div>
+          )}
           <p className="text-gray-300 text-sm leading-relaxed">{t('builderFee.description')}</p>
           <div className="flex justify-center">
             <ConnectButton />
@@ -257,8 +319,8 @@ function BuilderFeeApprovalInner({ onApproved, onClose }: BuilderFeeApprovalProp
         </div>
       )}
 
-      {/* Step 2: Sign */}
-      {step === 2 && (
+      {/* Step 3: Sign Builder Fee */}
+      {step === 3 && (
         <div className="space-y-4">
           {/* Connected wallet info */}
           <div className="flex items-center justify-between bg-white/[0.03] border border-white/10 rounded-xl p-3">
@@ -279,7 +341,6 @@ function BuilderFeeApprovalInner({ onApproved, onClose }: BuilderFeeApprovalProp
 
           <p className="text-gray-400 text-sm leading-relaxed">{t('builderFee.signHint')}</p>
 
-          {/* Sign button */}
           <button
             onClick={handleSignAndSubmit}
             disabled={processing}
@@ -292,7 +353,6 @@ function BuilderFeeApprovalInner({ onApproved, onClose }: BuilderFeeApprovalProp
             )}
           </button>
 
-          {/* Error */}
           {error && (
             <div className="bg-red-900/30 border border-red-700/50 rounded-lg p-3 text-sm text-red-300 text-left">
               {error}
@@ -301,8 +361,8 @@ function BuilderFeeApprovalInner({ onApproved, onClose }: BuilderFeeApprovalProp
         </div>
       )}
 
-      {/* Step 3: Confirmed */}
-      {step === 3 && confirmed && (
+      {/* Step 4: Confirmed */}
+      {step === TOTAL_STEPS && confirmed && (
         <div className="space-y-3 py-2">
           <CheckCircle className="w-12 h-12 text-green-400 mx-auto" />
           <p className="text-green-400 font-semibold">{t('builderFee.approved')}</p>

@@ -148,8 +148,8 @@ export default function TaxReport() {
 
           {/* Monthly breakdown */}
           <div className="glass-card rounded-xl overflow-hidden">
-            <div className="px-4 sm:px-5 pt-4 sm:pt-5 pb-3 sm:pb-0 sm:border-b sm:border-white/5">
-              <h2 className="text-base font-semibold text-white">{t('tax.monthlyBreakdown')}</h2>
+            <div className="px-4 sm:px-5 py-4 sm:py-4 border-b border-white/[0.06]">
+              <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">{t('tax.monthlyBreakdown')}</h2>
             </div>
             {isMobile ? (
               <div className="px-1 pb-2 pt-1 space-y-1.5">

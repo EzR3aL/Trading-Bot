@@ -547,9 +547,9 @@ class HyperliquidClient(ExchangeClient):
             return False
 
         fee = max_fee_rate or self._builder["f"]
-        # Hyperliquid API expects maxFeeRate as percentage string like "0.01%"
-        # Our internal fee is in basis points per 10000 (e.g. 10 = 0.1%)
-        fee_pct = f"{fee / 100:.2f}%"
+        # Hyperliquid API expects maxFeeRate as percentage string
+        # Internal fee is in tenths of basis points (e.g. 10 = 1bp = 0.01%)
+        fee_pct = f"{fee / 1000:.3f}%"
         try:
             self._exchange.approve_builder_fee(
                 builder=self._builder["b"],

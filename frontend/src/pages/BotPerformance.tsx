@@ -735,37 +735,6 @@ export default function BotPerformance() {
                 />
               </div>
 
-              {/* Open Trade with Trailing Stop */}
-              {(() => {
-                const openTrade = botDetail.recent_trades.find(tr => tr.status === 'open' && tr.trailing_stop_active && tr.trailing_stop_price != null)
-                if (!openTrade) return null
-                return (
-                  <div className="mb-4 bg-emerald-500/5 rounded-xl p-4 border border-emerald-500/10">
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center gap-2">
-                        <ShieldCheck size={16} className="text-emerald-400" />
-                        <span className="text-xs text-emerald-400 uppercase tracking-wider font-semibold">{t('trades.trailingStop')}</span>
-                      </div>
-                      <span className="badge-open">{openTrade.symbol}</span>
-                    </div>
-                    <div className="grid grid-cols-3 gap-4">
-                      <div>
-                        <div className="text-xs text-gray-400 mb-0.5">{t('trades.trailingStop')}</div>
-                        <div className="text-lg font-bold text-emerald-400">${openTrade.trailing_stop_price!.toLocaleString()}</div>
-                      </div>
-                      <div>
-                        <div className="text-xs text-gray-400 mb-0.5">{t('bots.entryPrice')}</div>
-                        <div className="text-lg font-bold text-white">${openTrade.entry_price.toLocaleString()}</div>
-                      </div>
-                      <div>
-                        <div className="text-xs text-gray-400 mb-0.5">{t('bots.trailingDistance', 'Distance')}</div>
-                        <div className="text-lg font-bold text-emerald-400">{openTrade.trailing_stop_distance_pct?.toFixed(2)}%</div>
-                      </div>
-                    </div>
-                  </div>
-                )
-              })()}
-
               {/* Latest Trade Card */}
               {(() => {
                 const latestClosed = botDetail.recent_trades.find(tr => tr.status === 'closed')

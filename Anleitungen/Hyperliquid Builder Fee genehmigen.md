@@ -1,14 +1,27 @@
-# Hyperliquid Builder Fee genehmigen
+# Hyperliquid: Affiliate Link & Builder Fee genehmigen
+
+## Uebersicht
+
+Bevor du einen Hyperliquid Bot starten kannst, sind **zwei einmalige Schritte** noetig:
+
+1. **Affiliate Link nutzen** — Registriere dich ueber unseren Referral-Link bei Hyperliquid
+2. **Builder Fee genehmigen** — Signiere eine Genehmigung fuer eine kleine Trade-Gebuehr
+
+Beide Schritte sind **einmalig pro Wallet**. Solange du die gleiche Wallet nutzt, musst du sie nicht wiederholen. Wenn du deine Wallet aenderst, werden beide Schritte erneut erforderlich.
+
+---
+
+## Was ist der Affiliate Link?
+
+Der Affiliate Link ist ein Referral-Link, ueber den du dich bei Hyperliquid registrierst. Dadurch erhaeltst du als neuer User einen **4% Rabatt auf Handelsgebuehren** (fuer die ersten $25M Volumen).
+
+**Wichtig:** Ohne Registrierung ueber unseren Affiliate Link kannst du keinen Hyperliquid Bot starten. Die Verifizierung erfolgt automatisch ueber die Hyperliquid API.
 
 ## Was ist die Builder Fee?
 
-Die Builder Fee ist eine kleine zusaetzliche Gebuehr (0.01%) auf jeden Trade, der ueber
-unsere Bots auf Hyperliquid ausgefuehrt wird. Diese Gebuehr geht zu 100% an den
-Bot-Betreiber und ist **zusaetzlich** zur normalen Hyperliquid-Handelsgebuehr.
+Die Builder Fee ist eine kleine zusaetzliche Gebuehr (0.01%) auf jeden Trade, der ueber unsere Bots auf Hyperliquid ausgefuehrt wird. Diese Gebuehr geht zu 100% an den Bot-Betreiber und ist **zusaetzlich** zur normalen Hyperliquid-Handelsgebuehr.
 
-Du musst diese Gebuehr **einmalig** genehmigen, bevor du einen Hyperliquid Bot starten
-kannst. Es werden dabei **keine Funds bewegt oder abgezogen** — es handelt sich nur um
-eine Signatur (Genehmigung).
+Es werden dabei **keine Funds bewegt oder abgezogen** — es handelt sich nur um eine Signatur (Genehmigung).
 
 ---
 
@@ -27,16 +40,31 @@ eine Signatur (Genehmigung).
 ### 1. Bot erstellen oder starten
 
 Erstelle einen neuen Bot mit Hyperliquid als Exchange, oder klicke bei einem
-bestehenden Hyperliquid-Bot auf "Start".
+bestehenden Hyperliquid-Bot auf **"Start"**.
 
-Wenn die Builder Fee noch nicht genehmigt ist, oeffnet sich automatisch das
-**Builder Fee Approval Fenster**.
+Es oeffnet sich automatisch das **Genehmigungs-Fenster** mit dem mehrstufigen Prozess.
 
-### 2. Wallet verbinden
+### 2. Affiliate Link nutzen (Schritt 1 im Fenster)
 
-Klicke auf **"Connect Wallet"** — es oeffnet sich ein Auswahlfenster mit
-allen unterstuetzten Wallets:
+Du siehst unseren Affiliate Link:
+```
+https://app.hyperliquid.xyz/join/DEINCODE
+```
 
+- Klicke auf den Link — er oeffnet sich in einem neuen Tab
+- Registriere dich oder melde dich bei Hyperliquid an
+- Kehre zum Bot-Dashboard zurueck
+- Klicke auf **"Verifizieren"**
+
+Die Verifizierung prueft automatisch ueber die Hyperliquid API, ob du dich ueber unseren Link registriert hast.
+
+> **Hinweis:** Wenn du bereits ueber unseren Link registriert bist, wird dieser Schritt automatisch uebersprungen.
+
+### 3. Wallet verbinden (Schritt 2)
+
+Klicke auf **"Connect Wallet"** — es oeffnet sich ein Auswahlfenster:
+
+- **Rabby Wallet** (empfohlen — beste UX fuer DeFi)
 - **MetaMask** (Browser-Extension)
 - **WalletConnect** (QR-Code fuer Mobile Wallets wie Trust, Rainbow, etc.)
 - **Coinbase Wallet**
@@ -46,11 +74,10 @@ Waehle deine Wallet aus und bestaetige die Verbindung.
 
 > **Wichtig:** Verbinde die gleiche Wallet-Adresse, die du als Hyperliquid
 > Main Wallet in den Exchange-Einstellungen hinterlegt hast!
-> Falls die Adressen nicht uebereinstimmen, wird eine Warnung angezeigt.
 
-### 3. Builder Fee signieren
+### 4. Builder Fee signieren (Schritt 3)
 
-Nach der Wallet-Verbindung siehst du die Details der Builder Fee:
+Nach der Wallet-Verbindung siehst du die Details:
 - **Fee**: 0.01% (1 Basispunkt) pro Trade
 - **Builder-Adresse**: Die Adresse des Bot-Betreibers
 
@@ -60,17 +87,26 @@ keine Transaktionen ausgefuehrt und keine Funds bewegt.
 
 Bestaetige die Signatur in deiner Wallet.
 
-### 4. Bestaetigung
+### 5. Fertig! (Schritt 4)
 
-Nach erfolgreicher Signatur wird die Genehmigung automatisch bei Hyperliquid
-ueberprueft und in deinem Account gespeichert. Du siehst einen gruenen Haken
-mit der Meldung **"Builder Fee genehmigt!"**.
+Nach erfolgreicher Signatur siehst du einen gruenen Haken mit **"Builder Fee genehmigt!"**.
+Der Bot wird anschliessend **automatisch gestartet**.
 
-Der Bot wird anschliessend automatisch gestartet.
+---
+
+## Wallet aendern
+
+Wenn du deine Hyperliquid Wallet-Adresse in den Exchange-Einstellungen aenderst, werden beide Genehmigungen (Affiliate + Builder Fee) **automatisch zurueckgesetzt**. Beim naechsten Bot-Start musst du den Prozess fuer die neue Wallet erneut durchlaufen.
 
 ---
 
 ## Haeufige Probleme
+
+### "Referral-Verifizierung fehlgeschlagen"
+Du hast dich nicht ueber unseren Affiliate Link registriert, oder die Registrierung
+wurde ueber einen anderen Referral-Code vorgenommen.
+- Oeffne den Affiliate Link und registriere dich erneut
+- Klicke dann auf "Verifizieren"
 
 ### "Connected wallet does not match..."
 Du hast eine andere Wallet verbunden als deine Hyperliquid Main Wallet.
@@ -81,14 +117,13 @@ Die Signatur wurde in der Wallet abgelehnt. Versuche es erneut und bestaetige
 die Signatur-Anfrage.
 
 ### "Verification failed"
-Die Signatur wurde zwar erstellt, konnte aber nicht bei Hyperliquid verifiziert
-werden. Moegliche Ursachen:
+Die Signatur konnte nicht bei Hyperliquid verifiziert werden. Moegliche Ursachen:
 - Falsche Wallet-Adresse
 - Netzwerkprobleme
 Warte einen Moment und versuche es erneut.
 
 ### Keine Wallet installiert?
-Ohne Browser-Wallet kannst du trotzdem mobile Wallets nutzen:
+Ohne Browser-Wallet kannst du mobile Wallets nutzen:
 Waehle **WalletConnect** und scanne den QR-Code mit deiner Mobile Wallet App
 (Trust Wallet, Rainbow, MetaMask Mobile, etc.).
 
@@ -96,4 +131,4 @@ Waehle **WalletConnect** und scanne den QR-Code mit deiner Mobile Wallet App
 1. Gehe zu [metamask.io](https://metamask.io/download/)
 2. Installiere die Browser-Extension
 3. Importiere deine Hyperliquid Wallet mit dem Private Key oder Seed Phrase
-4. Kehre zum Bot-Dashboard zurueck und starte den Genehmigungsprozess erneut
+4. Kehre zum Bot-Dashboard zurueck und starte den Prozess erneut

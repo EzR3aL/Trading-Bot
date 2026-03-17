@@ -18,10 +18,18 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    op.add_column(
-        "bot_configs",
-        sa.Column("margin_mode", sa.String(10), nullable=False, server_default="cross"),
+    conn = op.get_bind()
+    result = conn.execute(
+        sa.text(
+            "SELECT 1 FROM information_schema.columns "
+            "WHERE table_name='bot_configs' AND column_name='margin_mode'"
+        )
     )
+    if not result.fetchone():
+        op.add_column(
+            "bot_configs",
+            sa.Column("margin_mode", sa.String(10), nullable=False, server_default="cross"),
+        )
 
 
 def downgrade() -> None:

@@ -54,6 +54,30 @@ class HyperliquidGatesMixin:
                 referred_by = info.get("referredBy") or info.get("referred_by")
 
             if referred_by:
+                # Verify referrer matches our configured code
+                referrer_code = None
+                if isinstance(referred_by, dict):
+                    referrer_code = referred_by.get("code") or referred_by.get("referralCode")
+                elif isinstance(referred_by, str):
+                    referrer_code = referred_by
+
+                builder_address = hl_cfg.get("builder_address", "")
+                if referrer_code and referral_code:
+                    code_match = str(referrer_code).lower() == str(referral_code).lower()
+                    addr_match = (
+                        builder_address
+                        and str(referrer_code).lower() == str(builder_address).lower()
+                    )
+                    if not code_match and not addr_match:
+                        self.error_message = (
+                            f"Dein Account wurde ueber einen anderen Referral-Code registriert. "
+                            f"Bitte nutze unseren Link: "
+                            f"https://app.hyperliquid.xyz/join/{referral_code}"
+                        )
+                        self.status = "error"
+                        logger.warning(f"{log_prefix} Wrong referrer: {referrer_code}")
+                        return False
+
                 # Save to DB so API-level checks work
                 if conn:
                     conn.referral_verified = True

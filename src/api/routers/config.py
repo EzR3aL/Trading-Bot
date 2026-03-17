@@ -226,6 +226,29 @@ async def upsert_exchange_connection(
         conn = ExchangeConnection(user_id=user.id, exchange_type=exchange_type)
         db.add(conn)
 
+    # For Hyperliquid: detect wallet change and reset approval flags.
+    # The API key IS the wallet address, so if it changes, approvals are invalid.
+    if exchange_type == "hyperliquid" and not is_new:
+        from src.utils.encryption import decrypt_value
+        wallet_changed = False
+        if data.api_key and conn.api_key_encrypted:
+            old_key = decrypt_value(conn.api_key_encrypted)
+            if old_key.lower() != data.api_key.lower():
+                wallet_changed = True
+        if data.demo_api_key and conn.demo_api_key_encrypted:
+            old_demo = decrypt_value(conn.demo_api_key_encrypted)
+            if old_demo.lower() != data.demo_api_key.lower():
+                wallet_changed = True
+        if wallet_changed:
+            conn.builder_fee_approved = False
+            conn.builder_fee_approved_at = None
+            conn.referral_verified = False
+            conn.referral_verified_at = None
+            _config_logger.info(
+                f"Hyperliquid wallet changed for user {user.id} — "
+                f"reset builder_fee_approved and referral_verified"
+            )
+
     if data.api_key:
         conn.api_key_encrypted = encrypt_value(data.api_key)
     if data.api_secret:
@@ -853,9 +876,9 @@ async def get_builder_config(
         return {"builder_configured": False}
 
     builder_fee = hl_cfg["builder_fee"] or DEFAULT_BUILDER_FEE
-    # maxFeeRate for Hyperliquid API: percentage string like "0.10%"
-    # builder_fee is in basis points (e.g. 10 = 0.1%)
-    max_fee_rate = f"{builder_fee / 100:.2f}%"
+    # maxFeeRate for Hyperliquid API: percentage string
+    # builder_fee is in tenths of basis points (e.g. 10 = 1bp = 0.01%)
+    max_fee_rate = f"{builder_fee / 1000:.3f}%"
 
     # Check if user has HL connection and approval status
     result = await db.execute(
@@ -940,17 +963,19 @@ async def confirm_builder_approval(
         await db.commit()
         return {"status": "ok", "approved_max_fee": approved_fee}
 
-    # If signing_wallet was provided and TX was submitted by frontend,
-    # trust the frontend and mark as approved (frontend already verified HL response)
+    # Final retry with longer delay for on-chain propagation
     if signing_wallet:
-        _config_logger.info(
-            f"Builder fee on-chain check returned {approved_fee}, but frontend "
-            f"reported successful TX. Trusting frontend for wallet={signing_wallet[:10]}..."
-        )
-        conn.builder_fee_approved = True
-        conn.builder_fee_approved_at = datetime.now(timezone.utc)
-        await db.commit()
-        return {"status": "ok", "approved_max_fee": builder_fee, "trusted_frontend": True}
+        import asyncio
+        await asyncio.sleep(5)
+        try:
+            approved_fee = await client.check_builder_fee_approval(user_address=signing_wallet)
+        except Exception:
+            pass
+        if approved_fee is not None and approved_fee >= builder_fee:
+            conn.builder_fee_approved = True
+            conn.builder_fee_approved_at = datetime.now(timezone.utc)
+            await db.commit()
+            return {"status": "ok", "approved_max_fee": approved_fee}
 
     _config_logger.warning(
         f"Builder fee check failed: approved_fee={approved_fee}, "
@@ -1000,16 +1025,44 @@ async def verify_referral(
     if referral_info:
         referred_by = referral_info.get("referredBy") or referral_info.get("referred_by")
 
-    if referred_by:
-        conn.referral_verified = True
-        conn.referral_verified_at = datetime.now(timezone.utc)
-        await db.commit()
-        return {"verified": True, "referred_by": referred_by}
+    if not referred_by:
+        raise HTTPException(
+            status_code=400,
+            detail=ERR_REFERRAL_NOT_FOUND.format(referral_code=referral_code),
+        )
 
-    raise HTTPException(
-        status_code=400,
-        detail=ERR_REFERRAL_NOT_FOUND.format(referral_code=referral_code),
-    )
+    # Verify the referrer matches our configured referral code.
+    # referred_by can be a dict {"referrer": "0x...", "code": "MYCODE"} or a string.
+    referrer_code = None
+    if isinstance(referred_by, dict):
+        referrer_code = referred_by.get("code") or referred_by.get("referralCode")
+    elif isinstance(referred_by, str):
+        # Some API versions return just the address or code as string
+        referrer_code = referred_by
+
+    # Match against configured referral code (case-insensitive)
+    if referrer_code and referral_code:
+        # Accept if referrer code matches OR if referrer address matches builder address
+        builder_address = hl_cfg.get("builder_address", "")
+        code_match = str(referrer_code).lower() == str(referral_code).lower()
+        addr_match = (
+            builder_address
+            and str(referrer_code).lower() == str(builder_address).lower()
+        )
+        if not code_match and not addr_match:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"Dein Account wurde ueber einen anderen Referral-Code registriert. "
+                    f"Bitte nutze unseren Link: "
+                    f"https://app.hyperliquid.xyz/join/{referral_code}"
+                ),
+            )
+
+    conn.referral_verified = True
+    conn.referral_verified_at = datetime.now(timezone.utc)
+    await db.commit()
+    return {"verified": True, "referred_by": referred_by}
 
 
 @router.get("/hyperliquid/referral-status")
