@@ -24,6 +24,9 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 - **Performance-Seite**: Trailing-Stop-Sektion entfernt — offene Positionen gehoeren ins Portfolio, Performance zeigt nur realisierte Ergebnisse
 - **Steuerbericht**: Header "Monatliche Aufschluesselung" optisch ueberarbeitet (Desktop + Mobil) — konsistent mit dem Rest der App
 
+### Rebranding
+- **"Trading Bot" → "Edge Bots by Trading Department"**: Neuer Name und Logo in Sidebar, Mobile Header, Login-Seite, PWA Manifest, Browser-Tab, WalletConnect und Service Worker
+
 ### Aktualisierte Dokumentation
 - Anleitung "Hyperliquid Builder Fee genehmigen" komplett ueberarbeitet: 5-Schritt-Prozess mit Affiliate Link, Wallet-Wechsel-Hinweis, Rabby Wallet Empfehlung (DE + EN)
 - Neue i18n-Keys fuer Referral-Flow (DE + EN)

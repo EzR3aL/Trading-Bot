@@ -25,6 +25,7 @@ import {
 import { useThemeStore } from '../../stores/themeStore'
 import OfflineIndicator from '../ui/OfflineIndicator'
 import MobileBottomNav from './MobileBottomNav'
+import EdgeBotsLogo from '../ui/EdgeBotsLogo'
 
 const navItems: { path: string; key: string; icon: LucideIcon }[] = [
   { path: '/', key: 'dashboard', icon: LayoutDashboard },
@@ -93,12 +94,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       {/* Logo */}
       <div className="px-5 py-5 border-b border-white/5">
         <Link to="/" className="flex items-center gap-3 active:scale-95 transition-transform duration-150">
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary-500 to-primary-700 flex items-center justify-center shadow-glow-sm">
-            <TrendingUp size={16} className="text-white" />
-          </div>
+          <EdgeBotsLogo size={34} />
           <div>
-            <h1 className="text-base font-bold text-white tracking-tight">Trading Bot</h1>
-            <p className="text-[10px] text-gray-500 font-medium">v2.0</p>
+            <h1 className="text-base font-bold text-white tracking-tight">Edge Bots</h1>
+            <p className="text-[10px] text-gray-500 font-medium">by Trading Department</p>
           </div>
         </Link>
       </div>
@@ -223,10 +222,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       {/* Mobile top bar (logo only) */}
       <div className="lg:hidden fixed top-0 left-0 right-0 z-40 bg-[#0a0e17]/90 backdrop-blur-xl border-b border-white/5 px-4 py-3 flex items-center">
         <Link to="/" className="flex items-center gap-2 active:scale-95 transition-transform duration-150">
-          <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-primary-500 to-primary-700 flex items-center justify-center">
-            <TrendingUp size={14} className="text-white" />
-          </div>
-          <span className="text-white font-bold text-sm">Trading Bot</span>
+          <EdgeBotsLogo size={28} />
+          <span className="text-white font-bold text-sm">Edge Bots</span>
         </Link>
       </div>
 

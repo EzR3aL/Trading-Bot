@@ -1,7 +1,7 @@
 {
-  "name": "Trading Bot",
-  "short_name": "TradingBot",
-  "description": "Trading Bot Dashboard",
+  "name": "Edge Bots by Trading Department",
+  "short_name": "Edge Bots",
+  "description": "Edge Bots — Automated Crypto Trading",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

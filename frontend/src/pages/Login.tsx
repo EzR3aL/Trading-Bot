@@ -2,7 +2,8 @@ import { useState, useRef, useEffect, FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '../stores/authStore'
-import { TrendingUp, Loader2, ArrowLeft, ShieldCheck } from 'lucide-react'
+import { Loader2, ArrowLeft, ShieldCheck } from 'lucide-react'
+import EdgeBotsLogo from '../components/ui/EdgeBotsLogo'
 
 export default function Login() {
   const { t } = useTranslation()
@@ -87,17 +88,17 @@ export default function Login() {
         <div className="glass-card rounded-2xl p-8 shadow-2xl">
           {/* Logo */}
           <div className="flex justify-center mb-6">
-            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-primary-500 to-primary-700 flex items-center justify-center shadow-glow">
-              {is2faStep ? (
+            {is2faStep ? (
+              <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-primary-500 to-primary-700 flex items-center justify-center shadow-glow">
                 <ShieldCheck size={28} className="text-white" />
-              ) : (
-                <TrendingUp size={28} className="text-white" />
-              )}
-            </div>
+              </div>
+            ) : (
+              <EdgeBotsLogo size={56} />
+            )}
           </div>
 
           <h1 className="text-2xl font-bold text-white mb-1 text-center tracking-tight">
-            {is2faStep ? t('login.2fa.title') : 'Trading Bot'}
+            {is2faStep ? t('login.2fa.title') : 'Edge Bots'}
           </h1>
           <h2 className="text-sm text-gray-400 mb-8 text-center">
             {is2faStep ? t('login.2fa.codeLabel') : t('login.title')}
