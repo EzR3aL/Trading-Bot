@@ -824,16 +824,18 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
                               const currentValue = strategyParams[key] ?? ''
                               const isValid = depOptions.some(opt => opt.value === currentValue)
                               const displayValue = isValid ? String(currentValue) : (depOptions[0]?.value ?? '')
+                              const depLabel = t(`bots.builder.paramLabel_${key}`, '') || d.label
+                              const depDesc = t(`bots.builder.paramDesc_${key}`, '') || d.description
                               return (
                                 <div key={key}>
-                                  <label className="block text-xs text-gray-300 mb-1">{d.label}</label>
+                                  <label className="block text-xs text-gray-300 mb-1">{depLabel}</label>
                                   <FilterDropdown
                                     value={displayValue}
                                     onChange={val => setStrategyParams(prev => ({ ...prev, [key]: val }))}
                                     options={depOptions}
-                                    ariaLabel={d.label}
+                                    ariaLabel={depLabel}
                                   />
-                                  {d.description && <p className="text-[10px] text-gray-400 mt-1">{d.description}</p>}
+                                  {depDesc && <p className="text-[10px] text-gray-400 mt-1">{depDesc}</p>}
                                 </div>
                               )
                             }
@@ -844,10 +846,12 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
 
                       {textareaEntries.map(([key, def]) => {
                         const d = def as ParamDef
+                        const taLabel = t(`bots.builder.paramLabel_${key}`, '') || d.label
+                        const taDesc = t(`bots.builder.paramDesc_${key}`, '') || d.description
                         return (
                           <div key={key}>
-                            <label className="block text-xs text-gray-300 mb-1">{d.label}</label>
-                            {d.description && <p className="text-[10px] text-gray-400 mb-1.5">{d.description}</p>}
+                            <label className="block text-xs text-gray-300 mb-1">{taLabel}</label>
+                            {taDesc && <p className="text-[10px] text-gray-400 mb-1.5">{taDesc}</p>}
                             <textarea
                               value={strategyParams[key] ?? ''}
                               onChange={e => setStrategyParams(prev => ({ ...prev, [key]: e.target.value }))}
@@ -910,10 +914,11 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
                               const td = tDef as ParamDef
                               const tVal = Number(strategyParams[tKey] ?? td.default)
                               const pct = rangePercent(tVal, td.min ?? 0, td.max ?? 1)
+                              const tempLabel = t(`bots.builder.paramLabel_${tKey}`, '') || td.label
                               return (
                                 <div className="relative overflow-hidden rounded-lg bg-gradient-to-r from-gray-800/40 to-gray-800/20 px-3 py-2 max-w-md">
                                   <div className="flex items-center justify-between mb-1.5">
-                                    <span className="text-[10px] font-medium text-gray-400 uppercase tracking-wider">{td.label}</span>
+                                    <span className="text-[10px] font-medium text-gray-400 uppercase tracking-wider">{tempLabel}</span>
                                     <span className="text-xs font-mono font-semibold text-amber-400">{tVal.toFixed(1)}</span>
                                   </div>
                                   <div className="relative h-1.5 rounded-full bg-gray-900/60 overflow-hidden">
@@ -925,7 +930,7 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
                                   <input
                                     type="range" min={td.min} max={td.max} step={0.1} value={tVal}
                                     onChange={e => setStrategyParams(prev => ({ ...prev, [tKey]: parseFloat(e.target.value) }))}
-                                    aria-label={td.label}
+                                    aria-label={tempLabel}
                                     className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                                   />
                                   <div className="flex justify-between mt-1">
@@ -942,11 +947,13 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
                                 {boolEntries.map(([key, def]) => {
                                   const d = def as ParamDef
                                   const isOn = strategyParams[key] ?? d.default
+                                  const boolLabel = t(`bots.builder.paramLabel_${key}`, '') || d.label
+                                  const boolDesc = t(`bots.builder.paramDesc_${key}`, '') || d.description
                                   return (
                                     <button
                                       key={key} type="button"
                                       onClick={() => setStrategyParams(prev => ({ ...prev, [key]: !isOn }))}
-                                      title={d.description}
+                                      title={boolDesc}
                                       className={`inline-flex items-center gap-1.5 pl-2 pr-2.5 py-1.5 rounded-full text-[11px] font-medium transition-all ${
                                         isOn
                                           ? 'bg-emerald-500/15 text-emerald-400 ring-1 ring-emerald-500/25'
@@ -954,7 +961,7 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
                                       }`}
                                     >
                                       <span className={`w-1.5 h-1.5 rounded-full ${isOn ? 'bg-emerald-400' : 'bg-gray-600'}`} />
-                                      {d.label}
+                                      {boolLabel}
                                     </button>
                                   )
                                 })}
@@ -967,13 +974,15 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
                                 {numericEntries.map(([key, def]) => {
                                   const d = def as ParamDef
                                   const val = Number(strategyParams[key] ?? d.default)
+                                  const numLabel = t(`bots.builder.paramLabel_${key}`, '') || d.label
+                                  const numDesc = t(`bots.builder.paramDesc_${key}`, '') || d.description
 
                                   return (
                                     <div
                                       key={key}
                                       className="rounded-md bg-gray-800/30 px-2.5 py-2 border border-white/[0.04] hover:border-white/[0.08] transition-colors"
                                     >
-                                      <label className="block text-xs text-gray-400 mb-1 truncate">{d.label}</label>
+                                      <label className="block text-xs text-gray-400 mb-1 truncate">{numLabel}</label>
                                       <NumInput
                                         value={val}
                                         onChange={e => setStrategyParams(prev => ({ ...prev, [key]: parseFloat(e.target.value) || 0 }))}
@@ -982,7 +991,7 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
                                         step={d.type === 'float' ? 0.0001 : 1}
                                         className="filter-select text-sm !w-full text-gray-200"
                                       />
-                                      {d.description && <p className="text-[10px] text-gray-400 mt-1 leading-tight">{d.description}</p>}
+                                      {numDesc && <p className="text-[10px] text-gray-400 mt-1 leading-tight">{numDesc}</p>}
                                     </div>
                                   )
                                 })}
@@ -1141,7 +1150,7 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
                 })}
               </div>
               {exchangeType === 'bitget' && (
-                <div className="flex items-start gap-2 p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl text-amber-300 text-xs">
+                <div className="flex items-start gap-2 p-3 mt-3 bg-amber-500/10 border border-amber-500/20 rounded-xl text-amber-300 text-xs w-fit">
                   <AlertTriangle size={16} className="shrink-0 mt-0.5" />
                   <div>
                     <span className="font-semibold">{t('bots.builder.bitgetWarningTitle', 'Hinweis fuer deutsche Neukunden:')}</span>{' '}
@@ -1193,7 +1202,10 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
                     )
                   })}
                 </div>
-                <p className="text-xs text-gray-400 mt-1.5">{t('bots.builder.marginModeHint')}</p>
+                <div className="text-xs text-gray-400 mt-1.5 space-y-0.5">
+                  <p>{t('bots.builder.marginModeHintCross')}</p>
+                  <p>{t('bots.builder.marginModeHintIsolated')}</p>
+                </div>
               </div>
             </div>
 
@@ -1289,7 +1301,7 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
 
             {/* Symbol conflict warning */}
             {symbolConflicts.length > 0 && (
-              <div className="p-3 bg-amber-900/30 border border-amber-800 rounded-xl space-y-1.5">
+              <div className="p-3 bg-amber-900/30 border border-amber-800 rounded-xl space-y-1.5 w-fit">
                 <div className="flex items-center gap-2 text-amber-400 font-medium text-sm">
                   <AlertTriangle size={16} />
                   {t('bots.builder.symbolConflictTitle')}
@@ -1533,7 +1545,7 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
                   const pairsWithoutTpSl = tradingPairs.filter(p => !perAssetConfig[p]?.tp && !perAssetConfig[p]?.sl)
                   if (pairsWithoutTpSl.length > 0 && pairsWithoutTpSl.length === pairsWithoutSl.length) {
                     return (
-                      <div className="mt-2 flex items-start gap-2 p-2.5 bg-amber-900/20 border border-amber-800/50 rounded-lg">
+                      <div className="mt-2 flex items-start gap-2 p-2.5 bg-amber-900/20 border border-amber-800/50 rounded-lg w-fit">
                         <AlertTriangle size={14} className="text-amber-400 mt-0.5 flex-shrink-0" />
                         <p className="text-xs text-amber-400">{t('bots.builder.noTpSlWarning')}</p>
                       </div>
@@ -1541,7 +1553,7 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
                   }
                   if (pairsWithoutSl.length > 0) {
                     return (
-                      <div className="mt-2 flex items-start gap-2 p-2.5 bg-yellow-900/20 border border-yellow-800/50 rounded-lg">
+                      <div className="mt-2 flex items-start gap-2 p-2.5 bg-yellow-900/20 border border-yellow-800/50 rounded-lg w-fit">
                         <AlertTriangle size={14} className="text-yellow-400 mt-0.5 flex-shrink-0" />
                         <p className="text-xs text-yellow-400">{t('bots.builder.noSlWarning')}</p>
                       </div>

@@ -874,16 +874,6 @@ class EdgeIndicatorStrategy(BaseStrategy):
                 "description": "Kerzen-Zeitrahmen für die Indikator-Berechnung. Tipp: Analyse-Takt (Zeitplan) sollte nicht deutlich kürzer sein als das Kline Intervall.",
                 "default": "1h", "options": ["15m", "30m", "1h", "4h"],
             },
-            "take_profit_percent": {
-                "type": "float", "label": "Take Profit %",
-                "description": "Optional: Take-Profit in % vom Einstiegspreis. Leer = kein TP (Strategie-Exit).",
-                "min": 0.5, "max": 20.0,
-            },
-            "stop_loss_percent": {
-                "type": "float", "label": "Stop Loss %",
-                "description": "Optional: Stop-Loss in % vom Einstiegspreis. Leer = kein SL (Strategie-Exit).",
-                "min": 0.5, "max": 10.0,
-            },
         }
 
     async def close(self):

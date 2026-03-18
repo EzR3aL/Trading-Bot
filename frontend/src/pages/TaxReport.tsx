@@ -24,7 +24,7 @@ function formatPnl(value: number): string {
 }
 
 export default function TaxReport() {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const { demoFilter } = useFilterStore()
   const currentYear = new Date().getFullYear()
   const [year, setYear] = useState(currentYear)
@@ -57,13 +57,15 @@ export default function TaxReport() {
     setDownloading(true)
     try {
       const demoParam = demoFilter === 'demo' ? '&demo_mode=true' : demoFilter === 'live' ? '&demo_mode=false' : ''
-      const res = await api.get(`/tax-report/csv?year=${year}${demoParam}&tz=${encodeURIComponent(USER_TIMEZONE)}`, {
+      const lang = i18n.language?.startsWith('de') ? 'de' : 'en'
+      const res = await api.get(`/tax-report/csv?year=${year}${demoParam}&tz=${encodeURIComponent(USER_TIMEZONE)}&lang=${lang}`, {
         responseType: 'blob',
       })
       const url = window.URL.createObjectURL(new Blob([res.data], { type: 'text/csv; charset=utf-8' }))
       const link = document.createElement('a')
       link.href = url
-      link.download = `steuerreport_${year}.csv`
+      const filePrefix = lang === 'de' ? 'steuerreport' : 'tax_report'
+      link.download = `${filePrefix}_${year}.csv`
       document.body.appendChild(link)
       link.click()
       link.remove()
