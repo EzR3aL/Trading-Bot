@@ -39,6 +39,7 @@ from src.models.enums import CEX_EXCHANGES, EXCHANGE_NAMES, EXCHANGE_PATTERN
 from src.utils.encryption import encrypt_value
 from src.utils.json_helpers import parse_json_field
 from src.utils.logger import get_logger
+from src.exchanges.symbol_fetcher import get_exchange_symbols
 
 logger = get_logger(__name__)
 
@@ -447,6 +448,16 @@ async def create_bot(
         StrategyRegistry.get(body.strategy_type)
     except KeyError:
         raise HTTPException(status_code=400, detail=ERR_STRATEGY_NOT_FOUND.format(name=body.strategy_type))
+
+    # Validate trading pairs exist on exchange
+    available = await get_exchange_symbols(body.exchange_type)
+    if available:
+        invalid = [p for p in body.trading_pairs if p not in available]
+        if invalid:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Symbol(s) not available on {body.exchange_type}: {', '.join(invalid)}",
+            )
 
     # Check bot limit
     count_result = await db.execute(
@@ -1079,6 +1090,18 @@ async def update_bot(
             StrategyRegistry.get(body.strategy_type)
         except KeyError as e:
             raise HTTPException(status_code=400, detail=str(e))
+
+    # Validate trading pairs exist on exchange (if pairs or exchange changed)
+    if body.trading_pairs is not None:
+        exchange = body.exchange_type or config.exchange_type
+        available = await get_exchange_symbols(exchange)
+        if available:
+            invalid = [p for p in body.trading_pairs if p not in available]
+            if invalid:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Symbol(s) not available on {exchange}: {', '.join(invalid)}",
+                )
 
     # Snapshot old values for audit trail (only fields being updated)
     update_data = body.model_dump(exclude_unset=True)
