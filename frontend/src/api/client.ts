@@ -14,6 +14,9 @@ let refreshSubscribers: ((token: string) => void)[] = []
 let refreshRetryCount = 0
 const MAX_REFRESH_RETRIES = 3
 
+// Proactive refresh: refresh token 5 minutes before expiry
+let proactiveRefreshTimer: ReturnType<typeof setTimeout> | null = null
+
 function subscribeTokenRefresh(cb: (token: string) => void) {
   refreshSubscribers.push(cb)
 }
@@ -35,6 +38,7 @@ function handleSessionExpiry() {
   sessionExpiring = true
 
   localStorage.removeItem('access_token')
+  clearProactiveRefresh()
 
   // Show a brief message before redirect — use existing element or create one
   let msg = document.getElementById('session-expiry-msg')
@@ -55,6 +59,59 @@ function handleSessionExpiry() {
     sessionExpiring = false
     window.location.href = '/login'
   }, 1500)
+}
+
+/** Schedule a proactive token refresh 5 minutes before expiry. */
+function scheduleProactiveRefresh() {
+  clearProactiveRefresh()
+  const token = localStorage.getItem('access_token')
+  if (!token) return
+
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1]))
+    const expiresAt = payload.exp * 1000 // ms
+    const refreshAt = expiresAt - 5 * 60 * 1000 // 5 min before expiry
+    const delay = refreshAt - Date.now()
+
+    if (delay > 0) {
+      proactiveRefreshTimer = setTimeout(() => doRefresh(), delay)
+    }
+  } catch {
+    // Invalid token — reactive refresh will handle it
+  }
+}
+
+function clearProactiveRefresh() {
+  if (proactiveRefreshTimer) {
+    clearTimeout(proactiveRefreshTimer)
+    proactiveRefreshTimer = null
+  }
+}
+
+/** Perform a token refresh (used by both proactive and reactive paths). */
+async function doRefresh(): Promise<string | null> {
+  if (isRefreshing) return null
+  isRefreshing = true
+
+  try {
+    const res = await axios.post('/api/auth/refresh', undefined, {
+      withCredentials: true,
+    })
+    const { access_token } = res.data
+    localStorage.setItem('access_token', access_token)
+
+    refreshRetryCount = 0
+    isRefreshing = false
+
+    onTokenRefreshed(access_token)
+    scheduleProactiveRefresh()
+
+    return access_token
+  } catch {
+    isRefreshing = false
+    onRefreshFailed()
+    return null
+  }
 }
 
 // Request interceptor: attach JWT
@@ -92,35 +149,30 @@ api.interceptors.response.use(
         return Promise.reject(error)
       }
 
-      isRefreshing = true
       refreshRetryCount++
 
-      try {
-        const res = await axios.post('/api/auth/refresh', {}, {
-          withCredentials: true,
-        })
-        const { access_token } = res.data
-        localStorage.setItem('access_token', access_token)
-
-        // Reset retry count on success
-        refreshRetryCount = 0
-        isRefreshing = false
-
-        // Notify all queued requests
-        onTokenRefreshed(access_token)
-
-        originalRequest.headers.Authorization = `Bearer ${access_token}`
+      const newToken = await doRefresh()
+      if (newToken) {
+        originalRequest.headers.Authorization = `Bearer ${newToken}`
         return api(originalRequest)
-      } catch {
-        isRefreshing = false
-        onRefreshFailed()
-        handleSessionExpiry()
-        return Promise.reject(error)
       }
+
+      handleSessionExpiry()
+      return Promise.reject(error)
     }
 
     return Promise.reject(error)
   }
 )
+
+// Start proactive refresh on load (if token exists)
+scheduleProactiveRefresh()
+
+// Re-schedule when tab becomes visible (user returns after sleep/idle)
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && localStorage.getItem('access_token')) {
+    scheduleProactiveRefresh()
+  }
+})
 
 export default api

@@ -16,11 +16,11 @@ class TokenResponse(BaseModel):
     access_token: str
     refresh_token: str | None = None
     token_type: str = "bearer"
-    expires_in: int = 1800  # 30 minutes
+    expires_in: int = 86400  # 24 hours
 
 
 class RefreshRequest(BaseModel):
-    refresh_token: str
+    refresh_token: str | None = None
 
 
 class ChangePasswordRequest(BaseModel):
@@ -61,7 +61,7 @@ class LoginResponse(BaseModel):
     access_token: str | None = None
     refresh_token: str | None = None
     token_type: str = "bearer"
-    expires_in: int = 1800
+    expires_in: int = 86400
     requires_2fa: bool = False
     temp_token: str | None = None
 
