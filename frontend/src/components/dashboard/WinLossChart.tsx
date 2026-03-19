@@ -40,6 +40,7 @@ export default function WinLossChart({ wins, losses, winRate }: Props) {
             outerRadius={90}
             dataKey="value"
             strokeWidth={0}
+            style={{ outline: 'none' }}
           >
             <Cell fill={COLORS.wins} />
             <Cell fill={COLORS.losses} />
@@ -52,6 +53,8 @@ export default function WinLossChart({ wins, losses, winRate }: Props) {
               color: theme === 'light' ? '#334155' : '#e5e7eb',
               fontSize: '13px',
             }}
+            itemStyle={{ color: theme === 'light' ? '#334155' : '#e5e7eb' }}
+            labelStyle={{ color: theme === 'light' ? '#334155' : '#e5e7eb' }}
             formatter={(value: number, name: string) => [`${value} trades`, name]}
           />
         </PieChart>
