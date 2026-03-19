@@ -16,6 +16,8 @@ import type {
   PortfolioDaily, PortfolioAllocation,
 } from '../types'
 import MobilePositionCard from '../components/ui/MobilePositionCard'
+import SizeValue from '../components/ui/SizeValue'
+import { useSizeUnitStore } from '../stores/sizeUnitStore'
 import useIsMobile from '../hooks/useIsMobile'
 import usePullToRefresh from '../hooks/usePullToRefresh'
 import PullToRefreshIndicator from '../components/ui/PullToRefreshIndicator'
@@ -71,6 +73,8 @@ export default function Portfolio() {
   const [loadingExchange, setLoadingExchange] = useState(true)
   const [error, setError] = useState('')
   const isMobile = useIsMobile()
+  const { toggle: toggleSizeUnit } = useSizeUnitStore()
+  const sizeUnit = useSizeUnitStore((s) => s.unit)
 
   // Sorting state for positions
   const [sortAsc, setSortAsc] = useState(false)
@@ -531,7 +535,15 @@ export default function Portfolio() {
                   <th className="text-left">{t('portfolio.exchange')}</th>
                   <th className="text-left">{t('portfolio.symbol')}</th>
                   <th className="text-center">{t('portfolio.side')}</th>
-                  <th className="text-right hidden xl:table-cell">{t('portfolio.size')}</th>
+                  <th className="text-right hidden xl:table-cell">
+                    <button
+                      onClick={() => toggleSizeUnit()}
+                      className="inline-flex items-center gap-1 hover:text-white transition-colors ml-auto"
+                      title={sizeUnit === 'token' ? 'Show USDT value' : 'Show token size'}
+                    >
+                      {t('portfolio.size')} <span className="text-[10px] text-gray-500">{sizeUnit === 'usdt' ? '$' : '#'}</span>
+                    </button>
+                  </th>
                   <th className="text-right hidden lg:table-cell">{t('portfolio.entryPrice')}</th>
                   <th className="text-right hidden lg:table-cell">{t('portfolio.currentPrice')}</th>
                   <th className="text-right">
@@ -572,7 +584,7 @@ export default function Portfolio() {
                         </span>
                       </td>
                       <td className="text-right text-gray-300 text-sm font-mono hidden xl:table-cell">
-                        {pos.size.toFixed(4)}
+                        <SizeValue size={pos.size} price={pos.current_price || pos.entry_price} symbol={pos.symbol} />
                       </td>
                       <td className="text-right text-gray-300 text-sm font-mono hidden lg:table-cell">
                         ${pos.entry_price.toLocaleString()}
@@ -608,7 +620,9 @@ export default function Portfolio() {
                           <dl className="table-expand-content">
                             <div className="xl:hidden">
                               <dt>{t('portfolio.size')}</dt>
-                              <dd>{pos.size.toFixed(4)}</dd>
+                              <dd>
+                                <SizeValue size={pos.size} price={pos.current_price || pos.entry_price} symbol={pos.symbol} />
+                              </dd>
                             </div>
                             <div className="lg:hidden">
                               <dt>{t('portfolio.entryPrice')}</dt>

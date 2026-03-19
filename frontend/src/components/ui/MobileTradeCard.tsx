@@ -5,6 +5,7 @@ import ExitReasonBadge from './ExitReasonBadge'
 import MobileCollapsibleCard from './MobileCollapsibleCard'
 import { DetailGrid } from './DetailGrid'
 import { formatDateTime } from '../../utils/dateUtils'
+import SizeValue from './SizeValue'
 
 interface MobileTradeCardProps {
   trade: {
@@ -67,9 +68,9 @@ function MobileTradeCardInner({ trade, extraDetails }: MobileTradeCardProps) {
         <span className="tabular-nums">{formatDateTime(trade.exit_time || trade.entry_time)}</span>
       </span>
       {trade.size != null && (
-        <span className="shrink-0">
-          <span className="text-gray-500 text-[9px] uppercase tracking-wider mr-1">{t('portfolio.size')}</span>
-          <span className="tabular-nums">{trade.size.toFixed(4)}</span>
+        <span className="shrink-0 inline-flex items-center gap-1">
+          <span className="text-gray-500 text-[9px] uppercase tracking-wider">{t('portfolio.size')}</span>
+          <SizeValue size={trade.size} price={trade.entry_price} symbol={trade.symbol} compact />
         </span>
       )}
       <div className="shrink-0 flex items-center gap-1.5 ml-auto">

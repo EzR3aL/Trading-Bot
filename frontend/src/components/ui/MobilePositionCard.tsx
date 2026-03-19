@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { ExchangeIcon } from './ExchangeLogo'
 import MobileCollapsibleCard from './MobileCollapsibleCard'
 import { DetailGrid } from './DetailGrid'
+import SizeValue from './SizeValue'
 
 interface Position {
   exchange: string
@@ -51,9 +52,9 @@ function MobilePositionCardInner({ pos }: { pos: Position }) {
 
   const summary = (
     <>
-      <span>
-        <span className="text-gray-500 text-[9px] uppercase tracking-wider mr-1">{t('portfolio.size')}</span>
-        {pos.size.toFixed(4)} {pos.symbol.replace('USDT', '')}
+      <span className="inline-flex items-center gap-1">
+        <span className="text-gray-500 text-[9px] uppercase tracking-wider">{t('portfolio.size')}</span>
+        <SizeValue size={pos.size} price={pos.current_price || pos.entry_price} symbol={pos.symbol} />
       </span>
       <div className="shrink-0 flex items-center gap-1.5 ml-auto">
         <span className={`text-[13px] font-semibold tabular-nums ${isPnlPositive ? 'text-emerald-400' : 'text-red-400'}`}>
@@ -67,7 +68,7 @@ function MobilePositionCardInner({ pos }: { pos: Position }) {
     { label: t('portfolio.entryPrice'), value: <span className="tabular-nums">${pos.entry_price.toLocaleString()}</span> },
     { label: t('portfolio.currentPrice'), value: <span className="tabular-nums">${pos.current_price.toLocaleString()}</span> },
     { label: t('portfolio.leverage'), value: `${pos.leverage}x` },
-    { label: t('portfolio.size'), value: <span className="tabular-nums">{pos.size.toFixed(4)}</span> },
+    { label: t('portfolio.size'), value: <SizeValue size={pos.size} price={pos.current_price || pos.entry_price} symbol={pos.symbol} /> },
     { label: t('portfolio.margin', 'Margin'), value: <span className="tabular-nums">${pos.margin?.toFixed(2)}</span>, hidden: !pos.margin || pos.margin <= 0 },
     {
       label: t('bots.trailingStop'),

@@ -14,6 +14,8 @@ import DatePicker from '../components/ui/DatePicker'
 import FilterDropdown from '../components/ui/FilterDropdown'
 import ExitReasonBadge from '../components/ui/ExitReasonBadge'
 import MobileTradeCard from '../components/ui/MobileTradeCard'
+import SizeValue from '../components/ui/SizeValue'
+import { useSizeUnitStore } from '../stores/sizeUnitStore'
 import useIsMobile from '../hooks/useIsMobile'
 import usePullToRefresh from '../hooks/usePullToRefresh'
 import PullToRefreshIndicator from '../components/ui/PullToRefreshIndicator'
@@ -21,6 +23,8 @@ import PullToRefreshIndicator from '../components/ui/PullToRefreshIndicator'
 export default function Trades() {
   const { t } = useTranslation()
   const isMobile = useIsMobile()
+  const { toggle: toggleSizeUnit } = useSizeUnitStore()
+  const sizeUnit = useSizeUnitStore((s) => s.unit)
   const { demoFilter } = useFilterStore()
   const [trades, setTrades] = useState<Trade[]>([])
   const [total, setTotal] = useState(0)
@@ -236,7 +240,15 @@ export default function Trades() {
                   <th className="text-center hidden lg:table-cell">{t('trades.exchange')}</th>
                   <th className="text-left">{t('trades.symbol')}</th>
                   <th className="text-center">{t('trades.side')}</th>
-                  <th className="text-right hidden 2xl:table-cell">{t('trades.size')}</th>
+                  <th className="text-right hidden 2xl:table-cell">
+                    <button
+                      onClick={() => toggleSizeUnit()}
+                      className="inline-flex items-center gap-1 hover:text-white transition-colors ml-auto"
+                      title={sizeUnit === 'token' ? 'Show USDT value' : 'Show token size'}
+                    >
+                      {t('trades.size')} <span className="text-[10px] text-gray-500">{sizeUnit === 'usdt' ? '$' : '#'}</span>
+                    </button>
+                  </th>
                   <th className="text-right hidden xl:table-cell">{t('trades.entryPrice')}</th>
                   <th className="text-right hidden 2xl:table-cell">{t('trades.exitPrice')}</th>
                   <th className="text-right">{t('trades.pnl')}</th>
@@ -283,7 +295,9 @@ export default function Trades() {
                             {trade.side === 'long' ? '+' : '-'} {trade.side.toUpperCase()}
                           </span>
                         </td>
-                        <td className="text-right text-gray-300 hidden 2xl:table-cell">{Number(trade.size).toFixed(4)}</td>
+                        <td className="text-right text-gray-300 hidden 2xl:table-cell">
+                          <SizeValue size={Number(trade.size)} price={trade.entry_price} symbol={trade.symbol} />
+                        </td>
                         <td className="text-right text-gray-300 hidden xl:table-cell">${trade.entry_price.toLocaleString()}</td>
                         <td className="text-right text-gray-300 hidden 2xl:table-cell">
                           {trade.exit_price ? `$${trade.exit_price.toLocaleString()}` : '--'}
@@ -330,7 +344,9 @@ export default function Trades() {
                               </div>
                               <div className="2xl:hidden">
                                 <dt>{t('trades.size')}</dt>
-                                <dd>{Number(trade.size).toFixed(4)}</dd>
+                                <dd>
+                                  <SizeValue size={Number(trade.size)} price={trade.entry_price} symbol={trade.symbol} />
+                                </dd>
                               </div>
                               <div className="xl:hidden">
                                 <dt>{t('trades.entryPrice')}</dt>
