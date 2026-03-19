@@ -278,6 +278,23 @@ class BotWorker(
                     if not referral_ok:  # pragma: no cover — HL-specific gate
                         return False
 
+            # Validate trading pairs exist on exchange
+            try:
+                from src.exchanges.symbol_fetcher import get_exchange_symbols
+                available = await get_exchange_symbols(self._config.exchange_type)
+                if available:
+                    invalid = [p for p in self._trading_pairs if p not in available]
+                    if invalid:
+                        self.error_message = (
+                            f"Symbol(s) not available on {self._config.exchange_type}: "
+                            f"{', '.join(invalid)}"
+                        )
+                        logger.error(f"[Bot:{self.bot_config_id}] {self.error_message}")
+                        self.status = BotStatus.ERROR
+                        return False
+            except Exception as e:
+                logger.warning(f"[Bot:{self.bot_config_id}] Symbol validation skipped: {e}")
+
             # Initialize daily session with balance
             try:
                 balance = await self._client.get_account_balance()

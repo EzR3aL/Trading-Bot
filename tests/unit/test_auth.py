@@ -646,11 +646,54 @@ class TestRefreshEndpointLogic:
 
         mock_request = _make_starlette_request()
 
-        result = await refresh_endpoint(request=mock_request, body=body, db=mock_db)
+        mock_resp = MagicMock()
+        result = await refresh_endpoint(request=mock_request, response=mock_resp, body=body, refresh_token_cookie=None, db=mock_db)
 
         assert result.access_token is not None
-        assert result.refresh_token is not None
         assert result.token_type == "bearer"
+        # Refresh token is set as httpOnly cookie, not in response body
+        mock_resp.set_cookie.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_refresh_with_cookie_and_no_body_succeeds(self):
+        """Regression: no body must work when httpOnly cookie carries refresh token."""
+        from src.api.routers.auth import refresh_token as refresh_endpoint
+
+        user = _make_mock_user(user_id=5, role="user", is_active=True, token_version=1)
+        cookie_token = create_refresh_token({"sub": "5", "role": "user", "tv": 1})
+
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = user
+
+        mock_db = AsyncMock()
+        mock_db.execute = AsyncMock(return_value=mock_result)
+
+        mock_request = _make_starlette_request()
+        mock_response = MagicMock()
+
+        result = await refresh_endpoint(
+            request=mock_request, response=mock_response,
+            body=None, refresh_token_cookie=cookie_token, db=mock_db,
+        )
+
+        assert result.access_token is not None
+        assert result.token_type == "bearer"
+
+    @pytest.mark.asyncio
+    async def test_refresh_with_no_cookie_and_no_body_returns_401(self):
+        """No cookie and no body should return 401, not 422."""
+        from src.api.routers.auth import refresh_token as refresh_endpoint
+
+        mock_db = AsyncMock()
+        mock_request = _make_starlette_request()
+        mock_response = MagicMock()
+
+        with pytest.raises(HTTPException) as exc_info:
+            await refresh_endpoint(
+                request=mock_request, response=mock_response,
+                body=None, refresh_token_cookie=None, db=mock_db,
+            )
+        assert exc_info.value.status_code == 401
 
     @pytest.mark.asyncio
     async def test_refresh_with_access_token_returns_401(self):
@@ -665,7 +708,7 @@ class TestRefreshEndpointLogic:
         mock_request = _make_starlette_request()
 
         with pytest.raises(HTTPException) as exc_info:
-            await refresh_endpoint(request=mock_request, body=body, db=mock_db)
+            await refresh_endpoint(request=mock_request, response=MagicMock(), body=body, refresh_token_cookie=None, db=mock_db)
         assert exc_info.value.status_code == 401
         assert ERR_INVALID_REFRESH_TOKEN in exc_info.value.detail
 
@@ -681,7 +724,7 @@ class TestRefreshEndpointLogic:
         mock_request = _make_starlette_request()
 
         with pytest.raises(HTTPException) as exc_info:
-            await refresh_endpoint(request=mock_request, body=body, db=mock_db)
+            await refresh_endpoint(request=mock_request, response=MagicMock(), body=body, refresh_token_cookie=None, db=mock_db)
         assert exc_info.value.status_code == 401
 
     @pytest.mark.asyncio
@@ -703,7 +746,7 @@ class TestRefreshEndpointLogic:
         mock_request = _make_starlette_request()
 
         with pytest.raises(HTTPException) as exc_info:
-            await refresh_endpoint(request=mock_request, body=body, db=mock_db)
+            await refresh_endpoint(request=mock_request, response=MagicMock(), body=body, refresh_token_cookie=None, db=mock_db)
         assert exc_info.value.status_code == 401
         assert ERR_USER_NOT_FOUND_OR_INACTIVE in exc_info.value.detail
 
@@ -725,7 +768,7 @@ class TestRefreshEndpointLogic:
         mock_request = _make_starlette_request()
 
         with pytest.raises(HTTPException) as exc_info:
-            await refresh_endpoint(request=mock_request, body=body, db=mock_db)
+            await refresh_endpoint(request=mock_request, response=MagicMock(), body=body, refresh_token_cookie=None, db=mock_db)
         assert exc_info.value.status_code == 401
 
     @pytest.mark.asyncio
@@ -748,7 +791,7 @@ class TestRefreshEndpointLogic:
         mock_request = _make_starlette_request()
 
         with pytest.raises(HTTPException) as exc_info:
-            await refresh_endpoint(request=mock_request, body=body, db=mock_db)
+            await refresh_endpoint(request=mock_request, response=MagicMock(), body=body, refresh_token_cookie=None, db=mock_db)
         assert exc_info.value.status_code == 401
         assert ERR_TOKEN_REVOKED in exc_info.value.detail
 
@@ -770,9 +813,10 @@ class TestRefreshEndpointLogic:
 
         mock_request = _make_starlette_request()
 
-        result = await refresh_endpoint(request=mock_request, body=body, db=mock_db)
+        mock_resp = MagicMock()
+        result = await refresh_endpoint(request=mock_request, response=mock_resp, body=body, refresh_token_cookie=None, db=mock_db)
         assert result.access_token is not None
-        assert result.refresh_token is not None
+        mock_resp.set_cookie.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_refresh_new_tokens_contain_updated_user_data(self):
@@ -792,7 +836,8 @@ class TestRefreshEndpointLogic:
 
         mock_request = _make_starlette_request()
 
-        result = await refresh_endpoint(request=mock_request, body=body, db=mock_db)
+        mock_resp = MagicMock()
+        result = await refresh_endpoint(request=mock_request, response=mock_resp, body=body, refresh_token_cookie=None, db=mock_db)
 
         # Verify new access token has correct data (tv stays the same —
         # token_version is only bumped for security events, not routine refreshes)
@@ -802,8 +847,11 @@ class TestRefreshEndpointLogic:
         assert access_payload["tv"] == 7  # unchanged: no rotation on refresh
         assert access_payload["type"] == "access"
 
-        # Verify new refresh token has correct data (tv unchanged)
-        refresh_payload = decode_token(result.refresh_token)
+        # Verify new refresh token set as httpOnly cookie
+        mock_resp.set_cookie.assert_called_once()
+        cookie_call = mock_resp.set_cookie.call_args
+        refresh_cookie_value = cookie_call.kwargs.get("value") or cookie_call[1].get("value", "")
+        refresh_payload = decode_token(refresh_cookie_value)
         assert refresh_payload["sub"] == "10"
         assert refresh_payload["tv"] == 7  # unchanged: no rotation on refresh
         assert refresh_payload["type"] == "refresh"

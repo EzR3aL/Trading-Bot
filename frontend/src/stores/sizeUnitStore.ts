@@ -32,6 +32,7 @@ export function formatSize(
   unit: SizeUnit,
   symbol: string,
 ): string {
+  if (size <= 0) return '—'
   if (unit === 'usdt' && price > 0) {
     const usdt = size * price
     if (usdt >= 1_000_000) return `$${(usdt / 1_000_000).toFixed(2)}M`

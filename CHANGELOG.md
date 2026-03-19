@@ -9,6 +9,16 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [4.2.1] - 2026-03-19
+
+### Behoben
+- **Access Token Lifetime**: Von 24h auf 4h reduziert — besserer Kompromiss zwischen Security (kurze Token bei XSS-Leak) und UX (proaktiver Refresh erneuert automatisch)
+- **Refresh-Endpoint Tests**: 8 bestehende Tests auf neues `response`-Parameter-Pattern migriert, 2 neue Regressionstests fuer Cookie-only-Refresh und fehlenden-Token-Fall hinzugefuegt
+- **formatSize Edge-Case**: Gibt jetzt "—" zurueck bei size <= 0 statt "$0" oder "0.0000 BTC"
+- **Symbol-Validierung beim Bot-Start**: Trading Pairs werden jetzt auch in `bot_worker.initialize()` gegen die Exchange geprueft — verhindert Fehler wenn Symbole nach Bot-Erstellung delistet werden
+
+---
+
 ## [4.2.0] - 2026-03-19
 
 ### Hinzugefuegt

@@ -343,9 +343,14 @@ class TestAuthSchemas:
         with pytest.raises(ValidationError, match="username"):
             LoginRequest(username="A" * 51, password="test")
 
-    def test_refresh_token_required(self):
-        with pytest.raises(ValidationError, match="refresh_token"):
-            RefreshRequest()
+    def test_refresh_token_optional(self):
+        """Regression: empty body must not cause 422 — cookie is preferred."""
+        r = RefreshRequest()
+        assert r.refresh_token is None
+
+    def test_refresh_token_accepts_value(self):
+        r = RefreshRequest(refresh_token="some-token")
+        assert r.refresh_token == "some-token"
 
     def test_valid_login(self):
         r = LoginRequest(username="user", password="pass")

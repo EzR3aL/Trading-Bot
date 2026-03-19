@@ -13,7 +13,7 @@ from src.utils.logger import get_logger
 _jwt_logger = get_logger(__name__)
 
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 1440  # 24 hours — proactive refresh handles renewal
+ACCESS_TOKEN_EXPIRE_MINUTES = 240  # 4 hours — proactive refresh renews before expiry
 REFRESH_TOKEN_EXPIRE_DAYS = 30
 
 REFRESH_COOKIE_NAME = "refresh_token"
