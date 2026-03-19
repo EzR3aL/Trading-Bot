@@ -49,7 +49,7 @@ export default function MobileCollapsibleCard({
         {/* Summary row — always visible */}
         {summary && (
           <div className="flex items-center justify-between px-3 pb-2 text-[11px] gap-2">
-            <div className="flex items-center gap-3 text-gray-600 dark:text-gray-400 min-w-0 flex-1">
+            <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400 min-w-0 flex-1">
               {summary}
             </div>
             <ChevronDown size={12} className={`text-gray-400 shrink-0 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />

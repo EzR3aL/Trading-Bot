@@ -52,15 +52,10 @@ function MobilePositionCardInner({ pos }: { pos: Position }) {
 
   const summary = (
     <>
-      <span className="inline-flex items-center gap-1">
-        <span className="text-gray-500 text-[9px] uppercase tracking-wider">{t('portfolio.size')}</span>
-        <SizeValue size={pos.size} price={pos.current_price || pos.entry_price} symbol={pos.symbol} />
+      <SizeValue size={pos.size} price={pos.current_price || pos.entry_price} symbol={pos.symbol} />
+      <span className={`text-[13px] font-semibold tabular-nums shrink-0 ml-auto ${isPnlPositive ? 'text-emerald-400' : 'text-red-400'}`}>
+        {isPnlPositive ? '+' : ''}${pos.unrealized_pnl.toFixed(2)}
       </span>
-      <div className="shrink-0 flex items-center gap-1.5 ml-auto">
-        <span className={`text-[13px] font-semibold tabular-nums ${isPnlPositive ? 'text-emerald-400' : 'text-red-400'}`}>
-          {isPnlPositive ? '+' : ''}${pos.unrealized_pnl.toFixed(2)}
-        </span>
-      </div>
     </>
   )
 

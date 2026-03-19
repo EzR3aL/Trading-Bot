@@ -63,23 +63,14 @@ function MobileTradeCardInner({ trade, extraDetails }: MobileTradeCardProps) {
 
   const summary = (
     <>
-      <span className="truncate">
-        <span className="text-gray-500 text-[9px] uppercase tracking-wider mr-1">{t('trades.date')}</span>
-        <span className="tabular-nums">{formatDateTime(trade.exit_time || trade.entry_time)}</span>
-      </span>
+      <span className="tabular-nums truncate">{formatDateTime(trade.exit_time || trade.entry_time)}</span>
       {trade.size != null && (
-        <span className="shrink-0 inline-flex items-center gap-1">
-          <span className="text-gray-500 text-[9px] uppercase tracking-wider">{t('portfolio.size')}</span>
-          <SizeValue size={trade.size} price={trade.entry_price} symbol={trade.symbol} compact />
-        </span>
+        <SizeValue size={trade.size} price={trade.entry_price} symbol={trade.symbol} compact />
       )}
-      <div className="shrink-0 flex items-center gap-1.5 ml-auto">
+      <div className="shrink-0 ml-auto">
         {trade.status === 'closed' && trade.pnl != null ? (
-          <span>
-            <span className="text-gray-500 text-[9px] uppercase tracking-wider mr-1">PnL</span>
-            <span className={`text-[12px] font-semibold tabular-nums ${isPnlPositive ? 'text-emerald-400' : 'text-red-400'}`}>
-              {formatPnl(trade.pnl)}
-            </span>
+          <span className={`text-[12px] font-semibold tabular-nums ${isPnlPositive ? 'text-emerald-400' : 'text-red-400'}`}>
+            {formatPnl(trade.pnl)}
           </span>
         ) : (
           <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${
