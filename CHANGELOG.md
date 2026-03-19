@@ -9,6 +9,28 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [4.2.0] - 2026-03-19
+
+### Hinzugefuegt
+- **Size Toggle**: Klick auf Size-Wert in Trade/Position-Karten wechselt global zwischen Token-Size (z.B. "13.0600 ETH") und USDT-Wert (z.B. "$28.5k"). Persistiert in localStorage. Betrifft MobilePositionCard, MobileTradeCard, Portfolio-Tabelle und Trades-Tabelle
+- **Symbol-Validierung**: Bei Bot-Erstellung und -Update werden Trading Pairs gegen die Exchange-API validiert. Ungueltige Symbole (z.B. SPXUSDT auf Bitget) werden mit klarer Fehlermeldung abgelehnt
+- **Proaktiver Token-Refresh**: Access Token wird 5 Minuten vor Ablauf automatisch im Hintergrund erneuert. Bei Tab-Wechsel (visibilitychange) wird ebenfalls geprueft und refreshed
+
+### Behoben
+- **Session-Expiry (kritisch)**: Refresh-Token-Mechanismus war seit Einfuehrung defekt — Frontend sendete leeren Body `{}` an `/api/auth/refresh`, was Pydantic mit 422 ablehnte. Der httpOnly Cookie wurde nie gelesen. User mussten sich nach 60 Minuten neu einloggen. Fix: RefreshRequest.refresh_token optional gemacht, Frontend sendet keinen Body mehr
+- **Pie Chart Focus-Rahmen**: Kein weisser Rahmen mehr beim Klicken auf Donut-Charts (Portfolio + Dashboard). CSS-Regel entfernt Focus-Outline auf allen Recharts SVG-Elementen
+- **Pie Chart Tooltip**: Tooltip-Text im Dark Mode war schwarz/unlesbar. Fix: itemStyle und labelStyle mit korrekter Farbe fuer Dark Mode
+- **Mobile Card Layout**: PnL und Aufklapp-Button waren nicht mehr in einer Zeile. Fix: Ueberfluessige Labels (DATE, SIZE, PnL) aus Summary-Zeile entfernt, Gap reduziert — alle Elemente passen jetzt in eine Zeile
+
+### Geaendert
+- **Access Token Laufzeit**: Von 1 Stunde auf 24 Stunden erhoeht. Proaktiver Refresh erneuert automatisch, Refresh-Token (30 Tage) dient als Sicherheitsnetz
+- **Sentiment Surfer Schedule**: Von market_sessions (4x taeglich) auf interval (alle 60 Minuten) umgestellt — Bot analysiert jetzt regelmaessig
+
+### Analyse
+- **TradFi/HIP-3 Recherche** (Issue #113): Hyperliquid TradFi-Perps und HIP-3 evaluiert. Ergebnis: Nicht priorisieren — Edge Indicator ist nicht fuer TradFi optimiert (Gaps, geringe Liquiditaet, Isolated Margin only). Builder-Fee und Referral funktionieren aber auf HIP-3
+
+---
+
 ## [4.1.1] - 2026-03-17
 
 ### Behoben
