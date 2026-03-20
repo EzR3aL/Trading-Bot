@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
 import api from '../api/client'
 import { useToastStore } from '../stores/toastStore'
+import { useAuthStore } from '../stores/authStore'
 import {
   KeyRound,
   Layers,
@@ -33,6 +34,7 @@ import GuidedTour, { TourHelpButton, type TourStep } from '../components/ui/Guid
 
 function PrerequisiteBanner() {
   const { t } = useTranslation()
+  const isAdmin = useAuthStore((s) => s.user?.role === 'admin')
   const [affiliateUrls, setAffiliateUrls] = useState<Record<string, string>>({})
 
   useEffect(() => {
@@ -44,6 +46,9 @@ function PrerequisiteBanner() {
       setAffiliateUrls(urls)
     }).catch((err) => { console.error('Failed to load affiliate links:', err); useToastStore.getState().addToast('error', t('common.loadError', 'Failed to load data')) })
   }, [])
+
+  // Admins bypass affiliate requirements
+  if (isAdmin) return null
 
   const exchanges = [
     { key: 'bitget', name: 'Bitget', icon: <ExchangeIcon exchange="bitget" size={22} /> },

@@ -45,6 +45,7 @@ import useIsMobile from '../hooks/useIsMobile'
 import useHaptic from '../hooks/useHaptic'
 import useSwipeToClose from '../hooks/useSwipeToClose'
 import usePullToRefresh from '../hooks/usePullToRefresh'
+import { useAuthStore } from '../stores/authStore'
 import PullToRefreshIndicator from '../components/ui/PullToRefreshIndicator'
 
 const STRATEGY_DISPLAY: Record<string, string> = { llm_signal: 'KI-Companion', sentiment_surfer: 'Sentiment Surfer', liquidation_hunter: 'Liquidation Hunter', degen: 'Degen', edge_indicator: 'Edge Indicator', contrarian_pulse: 'Contrarian Pulse' }
@@ -759,6 +760,7 @@ export default function Bots() {
   const isMobile = useIsMobile()
   const haptic = useHaptic()
   const { addToast } = useToastStore()
+  const isAdmin = useAuthStore((s) => s.user?.role === 'admin')
 
   const handleStartError = (err: unknown) => {
     const detail = (err as any)?.response?.data?.detail
@@ -836,9 +838,9 @@ export default function Bots() {
 
   const handleStart = async (id: number) => {
     haptic.medium()
-    // Check if HL bot needs builder fee approval or referral first
+    // Check if HL bot needs builder fee approval or referral first (admins bypass)
     const bot = bots.find(b => b.bot_config_id === id)
-    if (bot?.exchange_type === 'hyperliquid' && (bot?.builder_fee_approved === false || bot?.referral_verified === false)) {
+    if (!isAdmin && bot?.exchange_type === 'hyperliquid' && (bot?.builder_fee_approved === false || bot?.referral_verified === false)) {
       setBuilderFeeModalBotId(id)
       return
     }

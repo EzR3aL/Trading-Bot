@@ -540,33 +540,41 @@ async def list_bots(
     orchestrator=Depends(get_orchestrator),
 ):
     """List all bots for the current user with runtime status."""
+    # Admins bypass all affiliate/referral gates
+    is_admin = user.role == "admin"
+
     # Preload HL gate status (builder fee + referral)
     hl_approved = False
     hl_referral_verified = False
-    hl_conn_result = await db.execute(
-        select(ExchangeConnection).where(
-            ExchangeConnection.user_id == user.id,
-            ExchangeConnection.exchange_type == "hyperliquid",
+    if is_admin:
+        hl_approved = True
+        hl_referral_verified = True
+    else:
+        hl_conn_result = await db.execute(
+            select(ExchangeConnection).where(
+                ExchangeConnection.user_id == user.id,
+                ExchangeConnection.exchange_type == "hyperliquid",
+            )
         )
-    )
-    hl_conn = hl_conn_result.scalar_one_or_none()
-    if hl_conn:
-        hl_approved = getattr(hl_conn, "builder_fee_approved", False)
-        hl_referral_verified = getattr(hl_conn, "referral_verified", False)
+        hl_conn = hl_conn_result.scalar_one_or_none()
+        if hl_conn:
+            hl_approved = getattr(hl_conn, "builder_fee_approved", False)
+            hl_referral_verified = getattr(hl_conn, "referral_verified", False)
 
     # Preload affiliate UID status (CEX exchanges) — single query
     affiliate_data: dict[str, dict] = {}
-    aff_result = await db.execute(
-        select(ExchangeConnection).where(
-            ExchangeConnection.user_id == user.id,
-            ExchangeConnection.exchange_type.in_(CEX_EXCHANGES),
+    if not is_admin:
+        aff_result = await db.execute(
+            select(ExchangeConnection).where(
+                ExchangeConnection.user_id == user.id,
+                ExchangeConnection.exchange_type.in_(CEX_EXCHANGES),
+            )
         )
-    )
-    for aff_conn in aff_result.scalars().all():
-        affiliate_data[aff_conn.exchange_type] = {
-            "uid": getattr(aff_conn, "affiliate_uid", None),
-            "verified": getattr(aff_conn, "affiliate_verified", False),
-        }
+        for aff_conn in aff_result.scalars().all():
+            affiliate_data[aff_conn.exchange_type] = {
+                "uid": getattr(aff_conn, "affiliate_uid", None),
+                "verified": getattr(aff_conn, "affiliate_verified", False),
+            }
 
     # Filter bots by mode when demo_mode is set
     bot_query = select(BotConfig).where(BotConfig.user_id == user.id)
@@ -829,7 +837,7 @@ async def list_bots(
             builder_fee_approved=hl_approved if config.exchange_type == "hyperliquid" else None,
             referral_verified=hl_referral_verified if config.exchange_type == "hyperliquid" else None,
             affiliate_uid=affiliate_data.get(config.exchange_type, {}).get("uid") if config.exchange_type in CEX_EXCHANGES else None,
-            affiliate_verified=affiliate_data.get(config.exchange_type, {}).get("verified") if config.exchange_type in CEX_EXCHANGES else None,
+            affiliate_verified=(True if is_admin else affiliate_data.get(config.exchange_type, {}).get("verified")) if config.exchange_type in CEX_EXCHANGES else None,
             **llm_data,
         ))
 

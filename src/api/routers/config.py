@@ -891,9 +891,11 @@ async def get_builder_config(
 
     referral_code = hl_cfg["referral_code"]
 
+    # Admins bypass all affiliate/referral gates
+    is_admin = user.role == "admin"
     referral_required = bool(referral_code)
-    referral_verified = getattr(conn, "referral_verified", False) if conn else False
-    builder_fee_approved = getattr(conn, "builder_fee_approved", False) if conn else False
+    referral_verified = True if is_admin else (getattr(conn, "referral_verified", False) if conn else False)
+    builder_fee_approved = True if is_admin else (getattr(conn, "builder_fee_approved", False) if conn else False)
 
     return {
         "builder_configured": True,
@@ -904,11 +906,11 @@ async def get_builder_config(
         "testnet_chain_id": 421614,
         "has_hl_connection": conn is not None,
         "builder_fee_approved": builder_fee_approved,
-        "needs_approval": conn is not None and not builder_fee_approved,
+        "needs_approval": False if is_admin else (conn is not None and not builder_fee_approved),
         "referral_code": referral_code,
         "referral_required": referral_required,
         "referral_verified": referral_verified,
-        "needs_referral": referral_required and not referral_verified,
+        "needs_referral": False if is_admin else (referral_required and not referral_verified),
     }
 
 
