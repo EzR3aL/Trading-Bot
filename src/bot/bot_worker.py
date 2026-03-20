@@ -268,15 +268,24 @@ class BotWorker(
                     bot_config_id=self.bot_config_id,
                 )
 
-            # ── Hyperliquid pre-start checks ──────────────────────────
+            # ── Hyperliquid pre-start checks (admins bypass) ─────────
             if self._config.exchange_type == "hyperliquid":
+                from sqlalchemy import select as sa_select
+                from src.models.database import User as UserModel
                 async with get_session() as hl_session:
-                    builder_ok = await self._check_builder_approval(self._client, hl_session)
-                    if not builder_ok:
-                        return False
-                    referral_ok = await self._check_referral_gate(self._client, hl_session)
-                    if not referral_ok:  # pragma: no cover — HL-specific gate
-                        return False
+                    user_result = await hl_session.execute(
+                        sa_select(UserModel).where(UserModel.id == self._config.user_id)
+                    )
+                    user_obj = user_result.scalar_one_or_none()
+                    is_admin = user_obj and user_obj.role == "admin"
+
+                    if not is_admin:
+                        builder_ok = await self._check_builder_approval(self._client, hl_session)
+                        if not builder_ok:
+                            return False
+                        referral_ok = await self._check_referral_gate(self._client, hl_session)
+                        if not referral_ok:  # pragma: no cover — HL-specific gate
+                            return False
 
             # Validate trading pairs exist on exchange
             try:
