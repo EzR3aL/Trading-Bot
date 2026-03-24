@@ -215,6 +215,8 @@ class HyperliquidClient(ExchangeClient):
     async def get_account_balance(self) -> Balance:
         address = self.wallet_address or self._wallet.address
         data = await self._cb_call(self._info.user_state, address)
+        if not isinstance(data, dict):
+            data = {}
         margin = data.get("marginSummary", {})
         perp_total = float(margin.get("accountValue", 0))
         perp_available = float(data.get("withdrawable", margin.get("totalRawUsd", 0)))
