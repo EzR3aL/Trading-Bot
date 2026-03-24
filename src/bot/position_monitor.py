@@ -22,6 +22,11 @@ _TRAILING_STOP_RETRY_MINUTES = 10
 _POSITION_GONE_THRESHOLD = 3
 _POSITION_GONE_DELAY_S = 2.0
 
+# Track API glitch frequency per symbol: {bot_id:symbol: count}
+_glitch_counter: dict[str, int] = {}
+_GLITCH_WARN_THRESHOLD = 3  # warn after N glitches in a row
+_GLITCH_ALERT_THRESHOLD = 10  # send notification after N glitches
+
 
 class PositionMonitorMixin:
     """Mixin providing position monitoring methods for BotWorker."""
@@ -293,22 +298,53 @@ class PositionMonitorMixin:
         otherwise cause a live position to be prematurely marked as closed.
         """
         log_prefix = f"[Bot:{self.bot_config_id}]"
+        glitch_key = f"{self.bot_config_id}:{trade.symbol}"
+
         for attempt in range(1, _POSITION_GONE_THRESHOLD):
             await asyncio.sleep(_POSITION_GONE_DELAY_S)
             try:
                 pos = await client.get_position(trade.symbol)
                 if pos:
+                    # Track glitch frequency
+                    _glitch_counter[glitch_key] = _glitch_counter.get(glitch_key, 0) + 1
+                    count = _glitch_counter[glitch_key]
+
                     logger.info(
-                        "%s Position %s reappeared on attempt %d/%d — API glitch, "
+                        "%s Position %s reappeared on attempt %d/%d — API glitch #%d, "
                         "skipping closure",
-                        log_prefix, trade.symbol, attempt, _POSITION_GONE_THRESHOLD,
+                        log_prefix, trade.symbol, attempt, _POSITION_GONE_THRESHOLD, count,
                     )
+
+                    if count == _GLITCH_WARN_THRESHOLD:
+                        logger.warning(
+                            "%s Repeated API glitches for %s (%d occurrences) — "
+                            "exchange API may be unstable",
+                            log_prefix, trade.symbol, count,
+                        )
+                    if count >= _GLITCH_ALERT_THRESHOLD and count % _GLITCH_ALERT_THRESHOLD == 0:
+                        logger.error(
+                            "%s CRITICAL: %d API glitches for %s — "
+                            "position monitoring unreliable, manual check recommended",
+                            log_prefix, count, trade.symbol,
+                        )
+                        await self._send_notification(
+                            lambda n, s=trade.symbol, c=count: n.send_risk_alert(
+                                alert_type="API_GLITCH",
+                                message=f"{s}: {c} API-Glitches erkannt — Position wird weiter ueberwacht, "
+                                        f"aber die Exchange-API ist instabil. Bitte manuell pruefen.",
+                            ),
+                            event_type="risk_alert",
+                            summary=f"API_GLITCH: {trade.symbol} ({count}x)",
+                        )
                     return False
             except Exception as e:
                 logger.warning(
                     "%s Retry %d/%d for %s failed: %s",
                     log_prefix, attempt, _POSITION_GONE_THRESHOLD, trade.symbol, e,
                 )
+
+        # Position genuinely closed — reset glitch counter
+        _glitch_counter.pop(glitch_key, None)
         logger.info(
             "%s Position %s confirmed closed after %d checks",
             log_prefix, trade.symbol, _POSITION_GONE_THRESHOLD,
