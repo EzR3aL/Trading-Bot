@@ -1844,3 +1844,42 @@ class TestAPIEndpoints:
 
     def test_fred_url(self):
         assert "stlouisfed.org" in MarketDataFetcher.FRED_URL
+
+
+class TestToBinanceSymbol:
+    """Test _to_binance_symbol normalizes all exchange formats to Binance."""
+
+    def test_bitget_passthrough(self):
+        from src.data.market_data import _to_binance_symbol
+        assert _to_binance_symbol("BTCUSDT") == "BTCUSDT"
+        assert _to_binance_symbol("ETHUSDT") == "ETHUSDT"
+        assert _to_binance_symbol("SOLUSDT") == "SOLUSDT"
+
+    def test_hyperliquid_bare_coin(self):
+        from src.data.market_data import _to_binance_symbol
+        assert _to_binance_symbol("BTC") == "BTCUSDT"
+        assert _to_binance_symbol("ETH") == "ETHUSDT"
+        assert _to_binance_symbol("SOL") == "SOLUSDT"
+        assert _to_binance_symbol("DOGE") == "DOGEUSDT"
+        assert _to_binance_symbol("XRP") == "XRPUSDT"
+
+    def test_bingx_dash_format(self):
+        from src.data.market_data import _to_binance_symbol
+        assert _to_binance_symbol("BTC-USDT") == "BTCUSDT"
+        assert _to_binance_symbol("ETH-USDT") == "ETHUSDT"
+        assert _to_binance_symbol("SOL-USDT") == "SOLUSDT"
+
+    def test_usdc_pair(self):
+        from src.data.market_data import _to_binance_symbol
+        assert _to_binance_symbol("BTCUSDC") == "BTCUSDT"
+
+    def test_case_insensitive(self):
+        from src.data.market_data import _to_binance_symbol
+        assert _to_binance_symbol("btcusdt") == "BTCUSDT"
+        assert _to_binance_symbol("btc") == "BTCUSDT"
+        assert _to_binance_symbol("Eth") == "ETHUSDT"
+
+    def test_meme_coins_with_prefix(self):
+        from src.data.market_data import _to_binance_symbol
+        assert _to_binance_symbol("1000PEPEUSDT") == "1000PEPEUSDT"
+        assert _to_binance_symbol("1000PEPE") == "1000PEPEUSDT"

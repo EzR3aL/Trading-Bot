@@ -13,6 +13,7 @@ Fetches:
 """
 
 import asyncio
+import re
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -29,6 +30,25 @@ from src.utils.circuit_breaker import (
 )
 
 logger = get_logger(__name__)
+
+# Regex to strip quote suffixes for symbol normalization
+_QUOTE_SUFFIXES_RE = re.compile(r"[-_/]?(USDT|USDC|USD|PERP|BUSD)$", re.IGNORECASE)
+
+
+def _to_binance_symbol(symbol: str) -> str:
+    """Normalize any exchange symbol format to Binance Futures format (e.g. BTCUSDT).
+
+    Handles: "BTC" → "BTCUSDT", "BTC-USDT" → "BTCUSDT",
+             "BTCUSDT" → "BTCUSDT" (no-op).
+    """
+    s = symbol.upper().strip()
+    # Already in Binance format (ends with USDT without separator)
+    if s.endswith("USDT") and not any(sep in s for sep in ("-", "_", "/")):
+        return s
+    # Strip any quote suffix + separator, then append USDT
+    base = _QUOTE_SUFFIXES_RE.sub("", s)
+    return f"{base}USDT"
+
 
 # Circuit breakers for external APIs
 _binance_breaker = circuit_registry.get("binance_api", fail_threshold=5, reset_timeout=60)
@@ -284,7 +304,7 @@ class MarketDataFetcher:
         try:
             url = f"{self.BINANCE_FUTURES_URL}/futures/data/globalLongShortAccountRatio"
             params = {
-                "symbol": symbol,
+                "symbol": _to_binance_symbol(symbol),
                 "period": "1h",  # 5m, 15m, 30m, 1h, 2h, 4h, 6h, 12h, 1d
                 "limit": 1,
             }
@@ -322,7 +342,7 @@ class MarketDataFetcher:
         try:
             url = f"{self.BINANCE_FUTURES_URL}/futures/data/topLongShortPositionRatio"
             params = {
-                "symbol": symbol,
+                "symbol": _to_binance_symbol(symbol),
                 "period": "1h",
                 "limit": 1,
             }
@@ -361,7 +381,7 @@ class MarketDataFetcher:
         """
         try:
             url = f"{self.BINANCE_FUTURES_URL}/fapi/v1/premiumIndex"
-            params = {"symbol": symbol}
+            params = {"symbol": _to_binance_symbol(symbol)}
 
             async def _fetch():
                 return await self._get_with_retry(url, params)
@@ -392,7 +412,7 @@ class MarketDataFetcher:
         """
         try:
             url = f"{self.BINANCE_FUTURES_URL}/fapi/v1/premiumIndex"
-            params = {"symbol": symbol}
+            params = {"symbol": _to_binance_symbol(symbol)}
 
             data = await self._get(url, params)
 
@@ -420,7 +440,7 @@ class MarketDataFetcher:
         """
         try:
             url = f"{self.BINANCE_FUTURES_URL}/fapi/v1/ticker/24hr"
-            params = {"symbol": symbol}
+            params = {"symbol": _to_binance_symbol(symbol)}
 
             async def _fetch():
                 return await self._get_with_retry(url, params)
@@ -469,7 +489,7 @@ class MarketDataFetcher:
         """
         try:
             url = f"{self.BINANCE_FUTURES_URL}/fapi/v1/openInterest"
-            params = {"symbol": symbol}
+            params = {"symbol": _to_binance_symbol(symbol)}
 
             async def _fetch():
                 return await self._get_with_retry(url, params)
@@ -505,7 +525,7 @@ class MarketDataFetcher:
         try:
             url = f"{self.BINANCE_FUTURES_URL}/futures/data/openInterestHist"
             params = {
-                "symbol": symbol,
+                "symbol": _to_binance_symbol(symbol),
                 "period": period,
                 "limit": limit,
             }
@@ -541,7 +561,7 @@ class MarketDataFetcher:
         try:
             url = f"{self.BINANCE_FUTURES_URL}/fapi/v1/forceOrders"
             params = {
-                "symbol": symbol,
+                "symbol": _to_binance_symbol(symbol),
                 "limit": limit,
             }
 
@@ -567,7 +587,7 @@ class MarketDataFetcher:
         """
         try:
             url = f"{self.BINANCE_FUTURES_URL}/fapi/v1/depth"
-            params = {"symbol": symbol, "limit": limit}
+            params = {"symbol": _to_binance_symbol(symbol), "limit": limit}
 
             async def _fetch():
                 return await self._get(url, params)
@@ -786,7 +806,7 @@ class MarketDataFetcher:
         try:
             url = f"{self.BINANCE_FUTURES_URL}/fapi/v1/klines"
             params = {
-                "symbol": symbol,
+                "symbol": _to_binance_symbol(symbol),
                 "interval": "1h",
                 "limit": period,
             }
@@ -823,7 +843,7 @@ class MarketDataFetcher:
         try:
             url = f"{self.BINANCE_FUTURES_URL}/fapi/v1/klines"
             params = {
-                "symbol": symbol,
+                "symbol": _to_binance_symbol(symbol),
                 "interval": "1h",
                 "limit": 24,
             }
@@ -921,8 +941,9 @@ class MarketDataFetcher:
             List of kline arrays, or empty list on failure.
         """
         try:
+            binance_sym = _to_binance_symbol(symbol)
             url = f"{self.BINANCE_FUTURES_URL}/fapi/v1/klines"
-            params = {"symbol": symbol, "interval": interval, "limit": limit}
+            params = {"symbol": binance_sym, "interval": interval, "limit": limit}
 
             async def _fetch():
                 return await self._get_with_retry(url, params)
@@ -1653,7 +1674,7 @@ class MarketDataFetcher:
         """
         try:
             url = f"{self.BINANCE_FUTURES_URL}/fapi/v1/klines"
-            params = {"symbol": symbol, "interval": interval, "limit": limit}
+            params = {"symbol": _to_binance_symbol(symbol), "interval": interval, "limit": limit}
 
             async def _fetch():
                 return await self._get_with_retry(url, params)
