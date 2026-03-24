@@ -17,6 +17,11 @@ _trailing_stop_backoff: dict[int, datetime] = {}
 _trailing_stop_lock = asyncio.Lock()
 _TRAILING_STOP_RETRY_MINUTES = 10
 
+# Consecutive "position gone" confirmations before marking as closed.
+# Prevents false closures from transient API glitches.
+_POSITION_GONE_THRESHOLD = 3
+_POSITION_GONE_DELAY_S = 2.0
+
 
 class PositionMonitorMixin:
     """Mixin providing position monitoring methods for BotWorker."""
@@ -55,12 +60,14 @@ class PositionMonitorMixin:
         try:
             position = await client.get_position(trade.symbol)
 
-            if not position:
-                await self._handle_closed_position(trade, client, session)
-                return
-
-            if hasattr(position, 'side') and position.side != trade.side:
-                await self._handle_closed_position(trade, client, session)
+            if not position or (hasattr(position, 'side') and position.side != trade.side):
+                # Position appears gone — confirm with retries to avoid
+                # false closures from transient API glitches.
+                confirmed = await self._confirm_position_closed(
+                    trade, client,
+                )
+                if confirmed:
+                    await self._handle_closed_position(trade, client, session)
                 return
 
             # Update highest price tracking for trailing stop
@@ -264,6 +271,38 @@ class PositionMonitorMixin:
                 "%s Failed to place native trailing stop for %s (software backup active, retry in %dm): %s",
                 log_prefix, trade.symbol, _TRAILING_STOP_RETRY_MINUTES, e,
             )
+
+    async def _confirm_position_closed(
+        self, trade: TradeRecord, client: ExchangeClient,
+    ) -> bool:
+        """Re-check the exchange multiple times before confirming a position is gone.
+
+        Returns True only if the position is absent on all retry attempts.
+        This guards against transient API errors / empty responses that would
+        otherwise cause a live position to be prematurely marked as closed.
+        """
+        log_prefix = f"[Bot:{self.bot_config_id}]"
+        for attempt in range(1, _POSITION_GONE_THRESHOLD):
+            await asyncio.sleep(_POSITION_GONE_DELAY_S)
+            try:
+                pos = await client.get_position(trade.symbol)
+                if pos and (not hasattr(pos, 'side') or pos.side == trade.side):
+                    logger.info(
+                        "%s Position %s reappeared on attempt %d/%d — API glitch, "
+                        "skipping closure",
+                        log_prefix, trade.symbol, attempt, _POSITION_GONE_THRESHOLD,
+                    )
+                    return False
+            except Exception as e:
+                logger.warning(
+                    "%s Retry %d/%d for %s failed: %s",
+                    log_prefix, attempt, _POSITION_GONE_THRESHOLD, trade.symbol, e,
+                )
+        logger.info(
+            "%s Position %s confirmed closed after %d checks",
+            log_prefix, trade.symbol, _POSITION_GONE_THRESHOLD,
+        )
+        return True
 
     async def _handle_closed_position(self, trade: TradeRecord, client: ExchangeClient, session):
         """Handle a position that was closed externally (TP/SL/manual)."""

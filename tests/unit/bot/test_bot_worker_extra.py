@@ -1167,7 +1167,7 @@ class TestMonitorAndCheckPosition:
         worker._handle_closed_position.assert_not_awaited()
 
     async def test_check_position_position_closed_on_exchange(self):
-        """When position is None, handle as closed."""
+        """When position is None and confirmed closed, handle as closed."""
         worker = BotWorker(bot_config_id=1)
         mock_client = AsyncMock()
         mock_client.get_position.return_value = None
@@ -1177,13 +1177,33 @@ class TestMonitorAndCheckPosition:
         session = AsyncMock()
 
         worker._handle_closed_position = AsyncMock()
+        worker._confirm_position_closed = AsyncMock(return_value=True)
 
         await worker._check_position(trade, session)
 
+        worker._confirm_position_closed.assert_awaited_once()
         worker._handle_closed_position.assert_awaited_once_with(trade, mock_client, session)
 
+    async def test_check_position_position_gone_then_reappears(self):
+        """When position is None but reappears on retry, do NOT close."""
+        worker = BotWorker(bot_config_id=1)
+        mock_client = AsyncMock()
+        mock_client.get_position.return_value = None
+        worker._demo_client = mock_client
+
+        trade = _make_mock_trade(demo_mode=True)
+        session = AsyncMock()
+
+        worker._handle_closed_position = AsyncMock()
+        worker._confirm_position_closed = AsyncMock(return_value=False)
+
+        await worker._check_position(trade, session)
+
+        worker._confirm_position_closed.assert_awaited_once()
+        worker._handle_closed_position.assert_not_awaited()
+
     async def test_check_position_side_mismatch(self):
-        """When position side doesn't match trade side, treat as closed."""
+        """When position side doesn't match trade side and confirmed, treat as closed."""
         worker = BotWorker(bot_config_id=1)
         mock_client = AsyncMock()
         position = MagicMock()
@@ -1195,6 +1215,7 @@ class TestMonitorAndCheckPosition:
         session = AsyncMock()
 
         worker._handle_closed_position = AsyncMock()
+        worker._confirm_position_closed = AsyncMock(return_value=True)
 
         await worker._check_position(trade, session)
 
@@ -1224,11 +1245,57 @@ class TestMonitorAndCheckPosition:
         trade = _make_mock_trade(demo_mode=False)
         session = AsyncMock()
         worker._handle_closed_position = AsyncMock()
+        worker._confirm_position_closed = AsyncMock(return_value=True)
 
         await worker._check_position(trade, session)
 
         mock_live.get_position.assert_awaited_once()
         worker._handle_closed_position.assert_awaited_once()
+
+
+class TestConfirmPositionClosed:
+    """Tests for _confirm_position_closed retry logic."""
+
+    @pytest.fixture(autouse=True)
+    def _patch_delay(self, monkeypatch):
+        """Remove sleep delay for fast tests."""
+        import src.bot.position_monitor as pm
+        monkeypatch.setattr(pm, "_POSITION_GONE_DELAY_S", 0.0)
+
+    async def test_stays_gone_returns_true(self):
+        """Position gone on all retries → confirmed closed."""
+        worker = BotWorker(bot_config_id=1)
+        mock_client = AsyncMock()
+        mock_client.get_position.return_value = None
+
+        trade = _make_mock_trade(demo_mode=True)
+        result = await worker._confirm_position_closed(trade, mock_client)
+
+        assert result is True
+
+    async def test_reappears_on_retry_returns_false(self):
+        """Position reappears on retry → not closed (API glitch)."""
+        worker = BotWorker(bot_config_id=1)
+        mock_client = AsyncMock()
+        position = MagicMock()
+        position.side = "long"
+        mock_client.get_position.return_value = position
+
+        trade = _make_mock_trade(demo_mode=True, side="long")
+        result = await worker._confirm_position_closed(trade, mock_client)
+
+        assert result is False
+
+    async def test_retry_error_still_confirms(self):
+        """If retries raise exceptions, still confirm (conservative)."""
+        worker = BotWorker(bot_config_id=1)
+        mock_client = AsyncMock()
+        mock_client.get_position.side_effect = Exception("timeout")
+
+        trade = _make_mock_trade(demo_mode=True)
+        result = await worker._confirm_position_closed(trade, mock_client)
+
+        assert result is True
 
 
 # ---------------------------------------------------------------------------
