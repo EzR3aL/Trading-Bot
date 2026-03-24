@@ -387,7 +387,7 @@ class WeexClient(ExchangeClient):
     async def get_close_fill_price(self, symbol: str) -> Optional[float]:
         """Get fill price of the most recent close order from Weex orders-history."""
         try:
-            weex_symbol = self._to_weex_symbol(symbol) if hasattr(self, '_to_weex_symbol') else symbol
+            weex_symbol = self._to_api_symbol(symbol)
             data = await self._request("GET", ENDPOINTS["orders_history"], params={
                 "symbol": weex_symbol,
                 "pageSize": "20",

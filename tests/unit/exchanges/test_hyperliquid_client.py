@@ -254,7 +254,7 @@ class TestClose:
 
 class TestGetAccountBalance:
     async def test_returns_balance_from_user_state(self):
-        """Should parse marginSummary and withdrawable from user_state."""
+        """Should parse marginSummary, withdrawable, and sum unrealizedPnl from positions."""
         client = _make_client()
         client._info.user_state.return_value = {
             "marginSummary": {
@@ -263,6 +263,10 @@ class TestGetAccountBalance:
                 "totalNtlPos": "1500.0",
             },
             "withdrawable": "8000.0",
+            "assetPositions": [
+                {"position": {"unrealizedPnl": "300.0"}},
+                {"position": {"unrealizedPnl": "-50.0"}},
+            ],
         }
 
         balance = await client.get_account_balance()
@@ -270,7 +274,7 @@ class TestGetAccountBalance:
         assert isinstance(balance, Balance)
         assert balance.total == 10000.0
         assert balance.available == 8000.0
-        assert balance.unrealized_pnl == 1500.0
+        assert balance.unrealized_pnl == 250.0  # 300 + (-50)
         assert balance.currency == "USDC"
 
     async def test_falls_back_to_spot_when_perp_total_is_zero(self):

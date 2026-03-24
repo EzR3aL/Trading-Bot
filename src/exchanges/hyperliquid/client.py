@@ -233,10 +233,16 @@ class HyperliquidClient(ExchangeClient):
             except Exception as e:
                 logger.debug("Spot USDC balance fetch failed: %s", e)
 
+        # Sum unrealized PnL from individual positions (totalNtlPos is notional, not PnL)
+        total_upnl = 0.0
+        for pos in data.get("assetPositions", []):
+            pd = pos.get("position", {})
+            total_upnl += float(pd.get("unrealizedPnl", 0))
+
         return Balance(
             total=perp_total + spot_usdc,
             available=perp_available + spot_usdc,
-            unrealized_pnl=float(margin.get("totalNtlPos", 0)),
+            unrealized_pnl=total_upnl,
             currency="USDC",
         )
 
@@ -273,7 +279,7 @@ class HyperliquidClient(ExchangeClient):
 
     async def get_open_positions(self) -> List[Position]:
         address = self.wallet_address or self._wallet.address
-        data = self._info.user_state(address)
+        data = await self._cb_call(self._info.user_state, address)
         positions = []
         for pos in data.get("assetPositions", []):
             pd = pos.get("position", {})
