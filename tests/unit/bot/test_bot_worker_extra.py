@@ -1202,24 +1202,28 @@ class TestMonitorAndCheckPosition:
         worker._confirm_position_closed.assert_awaited_once()
         worker._handle_closed_position.assert_not_awaited()
 
-    async def test_check_position_side_mismatch(self):
-        """When position side doesn't match trade side and confirmed, treat as closed."""
+    async def test_check_position_side_mismatch_neutral_corrected(self):
+        """When trade side is 'neutral', auto-correct to exchange side."""
         worker = BotWorker(bot_config_id=1)
         mock_client = AsyncMock()
         position = MagicMock()
         position.side = "short"
         mock_client.get_position.return_value = position
+        mock_client.get_ticker.return_value = MagicMock(last_price=100.0)
         worker._demo_client = mock_client
+        worker._strategy = None
 
-        trade = _make_mock_trade(demo_mode=True, side="long")
+        trade = _make_mock_trade(demo_mode=True, side="neutral")
+        trade.highest_price = None
         session = AsyncMock()
 
         worker._handle_closed_position = AsyncMock()
-        worker._confirm_position_closed = AsyncMock(return_value=True)
 
         await worker._check_position(trade, session)
 
-        worker._handle_closed_position.assert_awaited_once()
+        # Should NOT close — instead correct the side
+        worker._handle_closed_position.assert_not_awaited()
+        assert trade.side == "short"
 
     async def test_check_position_exchange_error(self):
         """Exchange error during position check is caught."""

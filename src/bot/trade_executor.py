@@ -120,8 +120,13 @@ class TradeExecutorMixin:
                 )
                 return
 
+            # Reject NEUTRAL signals — no clear direction to trade
+            if signal.direction.value == "neutral":
+                logger.info(f"{log_prefix} [{mode_str}] Skipping NEUTRAL signal for {signal.symbol}")
+                return
+
             # Record pending trade BEFORE placing the order (crash recovery)
-            side = "long" if signal.direction.value == "long" else "short"
+            side = signal.direction.value  # "long" or "short"
             try:
                 order_params = json.dumps({
                     "symbol": str(signal.symbol),
@@ -248,7 +253,7 @@ class TradeExecutorMixin:
                     bot_config_id=self.bot_config_id,
                     exchange=self._config.exchange_type,
                     symbol=signal.symbol,
-                    side=signal.direction.value,
+                    side=side,
                     size=position_size,
                     entry_price=fill_price,
                     take_profit=signal.target_price,

@@ -60,7 +60,7 @@ class PositionMonitorMixin:
         try:
             position = await client.get_position(trade.symbol)
 
-            if not position or (hasattr(position, 'side') and position.side != trade.side):
+            if not position:
                 # Position appears gone — confirm with retries to avoid
                 # false closures from transient API glitches.
                 confirmed = await self._confirm_position_closed(
@@ -69,6 +69,17 @@ class PositionMonitorMixin:
                 if confirmed:
                     await self._handle_closed_position(trade, client, session)
                 return
+
+            # Fix stale side: if trade has wrong side (e.g. "neutral"), adopt
+            # the actual exchange side so future checks match correctly.
+            if hasattr(position, 'side') and trade.side != position.side:
+                if trade.side not in ("long", "short"):
+                    logger.info(
+                        "[Bot:%s] Correcting trade #%s side: %s -> %s",
+                        self.bot_config_id, trade.id, trade.side, position.side,
+                    )
+                    trade.side = position.side
+                    await session.commit()
 
             # Update highest price tracking for trailing stop
             current_price = None
@@ -286,7 +297,7 @@ class PositionMonitorMixin:
             await asyncio.sleep(_POSITION_GONE_DELAY_S)
             try:
                 pos = await client.get_position(trade.symbol)
-                if pos and (not hasattr(pos, 'side') or pos.side == trade.side):
+                if pos:
                     logger.info(
                         "%s Position %s reappeared on attempt %d/%d — API glitch, "
                         "skipping closure",
