@@ -484,23 +484,28 @@ function SectionExchanges() {
               </tr>
             </thead>
             <tbody>
-              {[
+              {/* values order: bitget, weex, bingx, bitunix, hyperliquid */}
+              {/* true = ✓, false = ✗, 'partial' = ~ */}
+              {([
                 { key: 'trading', values: [true, true, true, true, true] },
                 { key: 'tpsl', values: [true, true, true, true, true] },
                 { key: 'trailingNative', values: [true, false, true, false, false] },
                 { key: 'trailingSoftware', values: [true, true, true, true, true] },
                 { key: 'feeTracking', values: [true, true, true, true, true] },
-                { key: 'fundingFees', values: [true, true, true, true, true] },
+                { key: 'fundingFees', values: [true, true, true, 'partial', true] },
+                { key: 'marginModes', values: [true, true, true, 'partial', true] },
                 { key: 'websocket', values: [true, true, true, true, true] },
-                { key: 'demo', values: [true, false, true, false, true] },
-              ].map((row, i) => (
+                { key: 'demo', values: [true, true, true, 'partial', true] },
+              ] as { key: string; values: (boolean | string)[] }[]).map((row, i) => (
                 <tr key={row.key} className={i % 2 === 0 ? 'bg-gray-800/30' : ''}>
                   <td className="py-2 pr-2 text-gray-300 font-medium text-xs whitespace-nowrap">{t(`guide.fm_${row.key}`)}</td>
                   {row.values.map((v, j) => (
                     <td key={j} className="py-2">
                       <div className="flex items-center justify-center">
-                        {v
+                        {v === true
                           ? <span className="text-emerald-400 text-base leading-none">&#10003;</span>
+                          : v === 'partial'
+                          ? <span className="text-yellow-400 text-base leading-none">~</span>
                           : <span className="text-gray-600 text-base leading-none">&#10005;</span>}
                       </div>
                     </td>
@@ -513,11 +518,25 @@ function SectionExchanges() {
         <div className="mt-4 space-y-2 border-t border-white/[0.06] pt-3">
           <p className="text-xs text-gray-300 flex items-start gap-2">
             <span className="text-emerald-400 text-sm font-bold mt-px shrink-0">&#10003;</span>
-            <span><span className="text-emerald-400 font-semibold">Nativer Trailing Stop:</span> {t('guide.fm_noteTrailingNative')}</span>
+            <span>{t('guide.fm_legendFull')}</span>
+          </p>
+          <p className="text-xs text-gray-300 flex items-start gap-2">
+            <span className="text-yellow-400 text-sm font-bold mt-px shrink-0">~</span>
+            <span>{t('guide.fm_legendPartial')}</span>
+          </p>
+          <p className="text-xs text-gray-300 flex items-start gap-2">
+            <span className="text-gray-600 text-sm font-bold mt-px shrink-0">&#10005;</span>
+            <span>{t('guide.fm_legendNone')}</span>
+          </p>
+        </div>
+        <div className="mt-3 space-y-2 border-t border-white/[0.06] pt-3">
+          <p className="text-xs text-gray-300 flex items-start gap-2">
+            <span className="text-emerald-400 text-sm font-bold mt-px shrink-0">&#10003;</span>
+            <span><span className="text-emerald-400 font-semibold">{t('guide.fm_trailingNative')}:</span> {t('guide.fm_noteTrailingNative')}</span>
           </p>
           <p className="text-xs text-gray-300 flex items-start gap-2">
             <span className="text-yellow-400 text-sm font-bold mt-px shrink-0">&#10003;</span>
-            <span><span className="text-yellow-400 font-semibold">Software-Fallback:</span> {t('guide.fm_noteTrailingSoftware')}</span>
+            <span><span className="text-yellow-400 font-semibold">{t('guide.fm_trailingSoftware')}:</span> {t('guide.fm_noteTrailingSoftware')}</span>
           </p>
         </div>
       </div>
