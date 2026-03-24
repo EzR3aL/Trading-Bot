@@ -52,7 +52,7 @@ export default function PnlCell({ pnl, fees, fundingPaid, status = 'closed', cla
     <>
       <span
         ref={ref}
-        className={`cursor-default ${className ?? pnlColor}`}
+        className={`cursor-default whitespace-nowrap ${className ?? pnlColor}`}
         onMouseEnter={handleEnter}
         onMouseLeave={handleLeave}
         onFocus={handleEnter}

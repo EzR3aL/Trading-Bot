@@ -592,7 +592,7 @@ export default function Portfolio() {
                       <td className="text-right text-gray-300 text-sm font-mono hidden lg:table-cell">
                         ${pos.current_price.toLocaleString()}
                       </td>
-                      <td className={`text-right text-sm font-medium font-mono ${
+                      <td className={`text-right text-sm font-medium font-mono whitespace-nowrap ${
                         pos.unrealized_pnl >= 0 ? 'text-emerald-400' : 'text-red-400'
                       }`}>
                         {pos.unrealized_pnl >= 0 ? '▲ +' : '▼ '}${Math.abs(pos.unrealized_pnl).toFixed(2)}
