@@ -586,12 +586,16 @@ class TestGetTicker:
 class TestGetFundingRate:
     async def test_returns_funding_rate_when_found(self):
         client = _make_client()
-        client._info.meta.return_value = {
-            "universe": [
-                {"name": "BTC", "funding": "0.0001"},
-                {"name": "ETH", "funding": "0.00005"},
-            ]
-        }
+        client._info.meta_and_asset_ctxs.return_value = [
+            {"universe": [
+                {"name": "BTC"},
+                {"name": "ETH"},
+            ]},
+            [
+                {"funding": "0.0001"},
+                {"funding": "0.00005"},
+            ],
+        ]
 
         rate = await client.get_funding_rate("BTCUSDT")
 
@@ -601,9 +605,10 @@ class TestGetFundingRate:
 
     async def test_returns_zero_rate_when_not_found(self):
         client = _make_client()
-        client._info.meta.return_value = {
-            "universe": [{"name": "BTC", "funding": "0.0001"}]
-        }
+        client._info.meta_and_asset_ctxs.return_value = [
+            {"universe": [{"name": "BTC"}]},
+            [{"funding": "0.0001"}],
+        ]
 
         rate = await client.get_funding_rate("SOLPERP")
 

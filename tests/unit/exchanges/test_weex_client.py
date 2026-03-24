@@ -521,14 +521,15 @@ class TestPlaceMarketOrder:
             take_profit=96000.0, stop_loss=93000.0,
         )
 
-        # Assert - the last POST should be the order placement
+        # Assert - the last POST should be the V3 order placement
         order_body = captured_bodies[-1]
-        assert order_body["symbol"] == "cmt_btcusdt"  # demo mode
-        assert order_body["type"] == "1"  # Open Long
-        assert order_body["match_price"] == "1"  # Market
-        assert order_body["size"] == "0.05"
-        assert order_body["presetTakeProfitPrice"] == "96000.0"
-        assert order_body["presetStopLossPrice"] == "93000.0"
+        assert order_body["symbol"] == "BTCUSDT"  # V3 uses plain symbol
+        assert order_body["side"] == "BUY"
+        assert order_body["positionSide"] == "LONG"
+        assert order_body["type"] == "MARKET"
+        assert order_body["quantity"] == "0.05"
+        assert order_body["tpTriggerPrice"] == "96000.0"
+        assert order_body["slTriggerPrice"] == "93000.0"
 
 
 # ---------------------------------------------------------------------------
@@ -897,9 +898,9 @@ class TestClosePosition:
         # Act
         await client.close_position("BTCUSDT", "long")
 
-        # Assert - flash-close sends only the symbol
+        # Assert - V3 flash-close sends plain symbol
         close_body = captured_bodies[-1]
-        assert close_body["symbol"] == "cmt_btcusdt"  # demo mode symbol
+        assert close_body["symbol"] == "BTCUSDT"  # V3 plain symbol
 
 
 # ---------------------------------------------------------------------------

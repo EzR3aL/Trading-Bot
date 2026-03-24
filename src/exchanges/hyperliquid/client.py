@@ -312,13 +312,28 @@ class HyperliquidClient(ExchangeClient):
 
     async def get_funding_rate(self, symbol: str) -> FundingRateInfo:
         coin = self._normalize_symbol(symbol)
-        meta = self._info.meta()
-        for asset_info in meta.get("universe", []):
-            if asset_info.get("name") == coin:
-                return FundingRateInfo(
-                    symbol=coin,
-                    current_rate=float(asset_info.get("funding", 0)),
-                )
+        # Use metaAndAssetCtxs for live funding rates (meta() only has static metadata)
+        try:
+            data = await self._cb_call(self._info.meta_and_asset_ctxs)
+            if isinstance(data, (list, tuple)) and len(data) >= 2:
+                meta_universe = data[0].get("universe", [])
+                asset_ctxs = data[1]
+                for info, ctx in zip(meta_universe, asset_ctxs):
+                    if info.get("name") == coin:
+                        return FundingRateInfo(
+                            symbol=coin,
+                            current_rate=float(ctx.get("funding", 0)),
+                        )
+        except Exception as e:
+            logger.debug("metaAndAssetCtxs failed, falling back to meta(): %s", e)
+            # Fallback to static meta
+            meta = self._info.meta()
+            for asset_info in meta.get("universe", []):
+                if asset_info.get("name") == coin:
+                    return FundingRateInfo(
+                        symbol=coin,
+                        current_rate=float(asset_info.get("funding", 0)),
+                    )
         return FundingRateInfo(symbol=coin, current_rate=0.0)
 
     # ── Trading Operations (EIP-712 signed via SDK) ─────────────────────────

@@ -1,10 +1,9 @@
 """
 Weex Exchange Client implementing ExchangeClient ABC.
 
-Weex API uses /capi/v2/ endpoints on api-contract.weex.com.
-Demo mode uses the same URL but different symbol names:
-  Live:  cmt_btcusdt   (BTC-USDT)
-  Demo:  cmt_btcsusdt  (BTC-SUSDT)
+Trading endpoints migrated to V3 (/capi/v3/) as of 2026-03-09.
+V3 uses plain symbols (BTCUSDT) and BUY/SELL + LONG/SHORT params.
+Account/position/leverage endpoints remain on V2 (cmt_btcusdt format).
 Auth: HMAC-SHA256 + Base64 (same algorithm as Bitget).
 """
 
@@ -28,8 +27,6 @@ from src.exchanges.weex.constants import (
     ENDPOINTS,
     MARGIN_CROSS,
     MARGIN_ISOLATED,
-    ORDER_TYPE_OPEN_LONG,
-    ORDER_TYPE_OPEN_SHORT,
     SUCCESS_CODE,
 )
 from src.utils.circuit_breaker import CircuitBreakerError, circuit_registry, with_retry
@@ -240,23 +237,24 @@ class WeexClient(ExchangeClient):
         margin_mode: str = "cross",
     ) -> Order:
         await self.set_leverage(symbol, leverage, margin_mode=margin_mode)
-        api_symbol = self._to_api_symbol(symbol)
-        margin = MARGIN_CROSS if margin_mode == "cross" else MARGIN_ISOLATED
-        order_type = ORDER_TYPE_OPEN_LONG if side == "long" else ORDER_TYPE_OPEN_SHORT
 
-        data = {
-            "symbol": api_symbol,
-            "client_oid": uuid.uuid4().hex[:32],
-            "size": str(size),
-            "type": order_type,
-            "order_type": "0",
-            "match_price": "1",
-            "marginMode": margin,
+        # V3 uses plain symbols (BTCUSDT) and BUY/SELL + LONG/SHORT
+        v3_symbol = symbol.upper().replace("-", "")
+        v3_side = "SELL" if side == "short" else "BUY"
+        v3_position_side = "SHORT" if side == "short" else "LONG"
+
+        data: Dict[str, Any] = {
+            "symbol": v3_symbol,
+            "newClientOrderId": uuid.uuid4().hex[:32],
+            "side": v3_side,
+            "positionSide": v3_position_side,
+            "type": "MARKET",
+            "quantity": str(size),
         }
         if take_profit is not None:
-            data["presetTakeProfitPrice"] = str(take_profit)
+            data["tpTriggerPrice"] = str(take_profit)
         if stop_loss is not None:
-            data["presetStopLossPrice"] = str(stop_loss)
+            data["slTriggerPrice"] = str(stop_loss)
 
         result = await self._request("POST", ENDPOINTS["place_order"], data=data)
         return Order(
@@ -276,19 +274,22 @@ class WeexClient(ExchangeClient):
             return False
 
     async def close_position(self, symbol: str, side: str, margin_mode: str = "cross") -> Optional[Order]:
-        """Close position using flash-close endpoint."""
+        """Close position using V3 flash-close endpoint."""
         pos = await self.get_position(symbol)
         if not pos:
             return None
-        api_symbol = self._to_api_symbol(symbol)
+        # V3 closePositions uses plain symbol
+        v3_symbol = symbol.upper().replace("-", "")
         result = await self._request("POST", ENDPOINTS["close_positions"], data={
-            "symbol": api_symbol,
+            "symbol": v3_symbol,
         })
         order_id = ""
-        if isinstance(result, dict):
+        if isinstance(result, list) and result:
+            first = result[0]
+            if isinstance(first, dict) and first.get("success"):
+                order_id = str(first.get("successOrderId", first.get("orderId", "")))
+        elif isinstance(result, dict):
             order_id = str(result.get("orderId", result.get("order_id", "")))
-        elif isinstance(result, list) and result:
-            order_id = str(result[0].get("orderId", result[0].get("order_id", "")))
         return Order(
             order_id=order_id, symbol=symbol, side=side,
             size=pos.size, price=0.0, status="filled", exchange="weex",
@@ -385,24 +386,27 @@ class WeexClient(ExchangeClient):
         return FundingRateInfo(symbol=symbol, current_rate=rate)
 
     async def get_close_fill_price(self, symbol: str) -> Optional[float]:
-        """Get fill price of the most recent close order from Weex orders-history."""
+        """Get fill price of the most recent close order from V3 order history."""
         try:
-            weex_symbol = self._to_api_symbol(symbol)
+            v3_symbol = symbol.upper().replace("-", "")
             data = await self._request("GET", ENDPOINTS["orders_history"], params={
-                "symbol": weex_symbol,
-                "pageSize": "20",
+                "symbol": v3_symbol,
+                "limit": "20",
             })
-            orders = data.get("entrustedList", data) if isinstance(data, dict) else data
-            if isinstance(orders, list):
-                for order in orders:
-                    trade_side = order.get("tradeSide", order.get("direction", ""))
-                    status = order.get("state", order.get("status", ""))
-                    # Weex close types: 3=close_long, 4=close_short
-                    is_close = "close" in str(trade_side).lower() or str(trade_side) in ("3", "4")
-                    if is_close and status in ("filled", "FILLED", "2"):
-                        price = order.get("priceAvg") or order.get("filledPrice") or order.get("avgPrice")
-                        if price and float(price) > 0:
-                            return float(price)
+            orders = data if isinstance(data, list) else data.get("list", []) if isinstance(data, dict) else []
+            for order in orders:
+                status = order.get("status", "")
+                pos_side = order.get("positionSide", "")
+                side = order.get("side", "")
+                # V3: a close is BUY+SHORT or SELL+LONG
+                is_close = (
+                    (side == "BUY" and pos_side == "SHORT")
+                    or (side == "SELL" and pos_side == "LONG")
+                )
+                if is_close and status in ("FILLED", "filled"):
+                    price = order.get("avgPrice") or order.get("price")
+                    if price and float(price) > 0:
+                        return float(price)
         except Exception as e:
             logger.warning(f"Failed to get close fill price for {symbol}: {e}")
         return None
@@ -473,9 +477,9 @@ class WeexClient(ExchangeClient):
         Uses POST /capi/v3/account/income with incomeType=position_funding.
         """
         try:
-            api_symbol = self._to_api_symbol(symbol)
+            v3_symbol = symbol.upper().replace("-", "")
             data = await self._request("POST", ENDPOINTS["account_income"], data={
-                "symbol": api_symbol,
+                "symbol": v3_symbol,
                 "incomeType": "position_funding",
                 "startTime": str(start_time_ms),
                 "endTime": str(end_time_ms),
@@ -508,7 +512,7 @@ class WeexClient(ExchangeClient):
         Weex uses /capi/v3/placeTpSlOrder with planType TAKE_PROFIT or STOP_LOSS.
         Each TP and SL must be placed as separate orders.
         """
-        api_symbol = self._to_api_symbol(symbol)
+        v3_symbol = symbol.upper().replace("-", "")
         position_side = "LONG" if side == "long" else "SHORT"
         order_ids = []
 
@@ -522,7 +526,7 @@ class WeexClient(ExchangeClient):
         if take_profit is not None:
             try:
                 result = await self._request("POST", ENDPOINTS["place_tpsl_order"], data={
-                    "symbol": api_symbol,
+                    "symbol": v3_symbol,
                     "clientAlgoId": uuid.uuid4().hex[:32],
                     "planType": "TAKE_PROFIT",
                     "triggerPrice": str(take_profit),
@@ -542,7 +546,7 @@ class WeexClient(ExchangeClient):
         if stop_loss is not None:
             try:
                 result = await self._request("POST", ENDPOINTS["place_tpsl_order"], data={
-                    "symbol": api_symbol,
+                    "symbol": v3_symbol,
                     "clientAlgoId": uuid.uuid4().hex[:32],
                     "planType": "STOP_LOSS",
                     "triggerPrice": str(stop_loss),
