@@ -281,10 +281,18 @@ class BingXClient(ExchangeClient):
         """
         data = await self._request("GET", ENDPOINTS["account_balance"])
 
-        # V3 balance response returns {"balance": {...}} or a dict directly
-        balance_data = data if isinstance(data, dict) else {}
-        if "balance" in balance_data:
-            balance_data = balance_data["balance"]
+        # V3 balance response can be:
+        # - a list of account objects: [{"asset": "VST", "equity": "100000", ...}]
+        # - a dict with "balance" key: {"balance": {...}}
+        # - a dict directly: {"equity": "...", ...}
+        if isinstance(data, list) and data:
+            balance_data = data[0]
+        elif isinstance(data, dict):
+            balance_data = data
+            if "balance" in balance_data:
+                balance_data = balance_data["balance"]
+        else:
+            balance_data = {}
 
         # BingX balance fields:
         # equity = total account equity
