@@ -9,6 +9,21 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [4.5.0] - 2026-03-25 — UI Overhaul
+
+### Entfernt
+- **BotDetail Config-Panel**: Konfigurationsanzeige (Strategie, Hebel, TP/SL etc.) entfernt — Infos sind ueber Bot-Edit erreichbar, Panel zeigte bei fehlenden Werten "null" an
+
+### Geaendert
+- **Stop-Button 2-Stufen-Sicherung**: Stop-Button erfordert jetzt 2 Klicks — erster Klick zeigt "Wirklich stoppen?" (3s Timeout), zweiter Klick stoppt den Bot. Gilt fuer Bots-Seite und BotDetail-Seite
+- **Dashboard: Open Positions statt Letzte Trades**: Dashboard-Hauptseite zeigt jetzt offene Positionen (aus Portfolio-API) statt geschlossene Trades — relevantere Live-Uebersicht
+- **Historie-Button sichtbarer**: Button in Bot-Cards jetzt mit Farbe (Primary), Border und Label-Text statt nur grauem Icon
+
+### Hinzugefuegt
+- **i18n Keys**: `bots.confirmStop` fuer DE ("Wirklich stoppen?") und EN ("Confirm Stop?")
+
+---
+
 ## [4.4.1] - 2026-03-25
 
 ### Behoben
