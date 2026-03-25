@@ -236,7 +236,7 @@ class WeexClient(ExchangeClient):
         take_profit: Optional[float] = None, stop_loss: Optional[float] = None,
         margin_mode: str = "cross",
     ) -> Order:
-        await self.set_leverage(symbol, leverage, margin_mode=margin_mode)
+        # Leverage is set by trade_executor before calling this method
 
         # V3 uses plain symbols (BTCUSDT) and BUY/SELL + LONG/SHORT
         v3_symbol = symbol.upper().replace("-", "")
@@ -249,7 +249,7 @@ class WeexClient(ExchangeClient):
             "side": v3_side,
             "positionSide": v3_position_side,
             "type": "MARKET",
-            "quantity": str(size),
+            "quantity": str(round(size, 4)),
         }
         if take_profit is not None:
             data["tpTriggerPrice"] = str(take_profit)
@@ -490,7 +490,7 @@ class WeexClient(ExchangeClient):
             for item in items:
                 amount = item.get("income", item.get("amount", "0"))
                 if amount:
-                    total_funding += abs(float(amount))
+                    total_funding += float(amount)
             return round(total_funding, 6)
         except Exception as e:
             logger.warning(f"Failed to get funding fees for {symbol}: {e}")
@@ -531,7 +531,7 @@ class WeexClient(ExchangeClient):
                     "planType": "TAKE_PROFIT",
                     "triggerPrice": str(take_profit),
                     "executePrice": "0",
-                    "quantity": str(size),
+                    "quantity": str(round(size, 4)),
                     "positionSide": position_side,
                     "triggerPriceType": "MARK_PRICE",
                 })
@@ -551,7 +551,7 @@ class WeexClient(ExchangeClient):
                     "planType": "STOP_LOSS",
                     "triggerPrice": str(stop_loss),
                     "executePrice": "0",
-                    "quantity": str(size),
+                    "quantity": str(round(size, 4)),
                     "positionSide": position_side,
                     "triggerPriceType": "MARK_PRICE",
                 })

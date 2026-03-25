@@ -419,10 +419,9 @@ class TestPlaceMarketOrder:
     async def test_place_long_market_order(self, client, mock_session):
         # Arrange
         client._session = mock_session
-        # set_leverage calls once, then place_order once
+        # Leverage is set by trade_executor, not internally
         call_count = 0
         responses = [
-            _make_api_response({}),  # set_leverage
             _make_api_response({"orderId": "ORD001"}),  # place order
         ]
 
@@ -453,7 +452,6 @@ class TestPlaceMarketOrder:
         # Arrange
         client._session = mock_session
         responses = [
-            _make_api_response({}),
             _make_api_response({"orderId": "ORD002"}),
         ]
         call_count = 0
@@ -795,8 +793,8 @@ class TestSetLeverage:
         # Act
         result = await client.set_leverage("BTCUSDT", 10)
 
-        # Assert - should still return True even on failure
-        assert result is True
+        # Assert - returns False on API error
+        assert result is False
 
 
 # ---------------------------------------------------------------------------
@@ -1088,11 +1086,11 @@ class TestCheckAffiliateUid:
         assert result is False
 
     async def test_returns_true_from_records_dict(self, client, mock_session):
-        # Arrange - data is a dict with "records" key
+        # Arrange - data is a dict with "channelUserInfoItemList" key
         client._session = mock_session
         mock_session.request = MagicMock(
             return_value=_make_api_response({
-                "records": [{"uid": "54321", "volume": "200"}]
+                "channelUserInfoItemList": [{"uid": "54321", "volume": "200"}]
             })
         )
 

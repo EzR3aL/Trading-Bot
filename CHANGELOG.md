@@ -45,6 +45,11 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 - **BingX Funding Rate predicted_rate**: `estimatedSettlePrice` (ein Preis) wurde faelschlicherweise als Funding-Rate gemappt. Fix: Feld auf `null` gesetzt
 - **Mobile Bot-Menue Bottom Sheet**: Dropdown-Menue wurde durch ein Bottom Sheet ersetzt — gleiche Slide-Up-Animation wie das "Mehr"-Menue, keine Positionierungsprobleme mehr
 - **i18n Portfolio Keys**: `portfolio.total` und `portfolio.margin` fehlten — englische Version zeigte "Gesamt" statt "Total" im Donut-Chart
+- **Bitunix margin_mode Parameter (kritisch)**: `set_leverage`, `place_market_order` und `close_position` fehlte der `margin_mode` Parameter — jeder Trade und jedes Schliessen crashte mit TypeError. Kein Bitunix-Bot konnte jemals traden
+- **Bitunix Quantity Precision**: Rohe Float-Werte als qty gesendet — jetzt auf 4 Dezimalstellen gerundet
+- **Weex doppeltes set_leverage**: `place_market_order` rief intern nochmal `set_leverage` auf — ueberfluessig und konnte margin_mode zuruecksetzen. Entfernt
+- **Weex Quantity Precision**: Rohe Float-Werte als quantity gesendet — jetzt auf 4 Dezimalstellen gerundet
+- **Weex Funding Fees abs()**: `get_funding_fees()` nutzte `abs()` — empfangene Funding-Zahlungen als Kosten gezaehlt
 
 ### Geaendert
 - **Hyperliquid Onboarding vereinfacht**: Affiliate-Verifizierung und Builder-Fee-Genehmigung sind jetzt direkt in den Exchange-Einstellungen integriert statt in einem separaten Wizard beim Bot-Start. Einmaliger Einrichtungsprozess — kein Wizard-Popup mehr beim Starten von HL-Bots

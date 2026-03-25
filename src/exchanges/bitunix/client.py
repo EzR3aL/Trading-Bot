@@ -284,6 +284,7 @@ class BitunixClient(ExchangeClient):
         leverage: int,
         take_profit: Optional[float] = None,
         stop_loss: Optional[float] = None,
+        margin_mode: str = "cross",
     ) -> Order:
         """
         Place a market order with optional TP/SL.
@@ -304,7 +305,7 @@ class BitunixClient(ExchangeClient):
 
         order_data: Dict[str, Any] = {
             "symbol": symbol,
-            "qty": str(size),
+            "qty": str(round(size, 4)),
             "side": order_side,
             "tradeSide": "OPEN",
             "orderType": "MARKET",
@@ -358,7 +359,7 @@ class BitunixClient(ExchangeClient):
         except BitunixClientError:
             return False
 
-    async def close_position(self, symbol: str, side: str) -> Optional[Order]:
+    async def close_position(self, symbol: str, side: str, margin_mode: str = "cross") -> Optional[Order]:
         """Close an open position for a symbol."""
         pos = await self.get_position(symbol)
         if not pos:
@@ -369,7 +370,7 @@ class BitunixClient(ExchangeClient):
 
         data: Dict[str, Any] = {
             "symbol": symbol,
-            "qty": str(pos.size),
+            "qty": str(round(pos.size, 4)),
             "side": close_side,
             "tradeSide": "CLOSE",
             "orderType": "MARKET",
@@ -446,7 +447,7 @@ class BitunixClient(ExchangeClient):
                 )
         return positions
 
-    async def set_leverage(self, symbol: str, leverage: int) -> bool:
+    async def set_leverage(self, symbol: str, leverage: int, margin_mode: str = "cross") -> bool:
         """Set leverage for a trading pair."""
         data = {
             "marginCoin": "USDT",
