@@ -1311,7 +1311,7 @@ export default function Bots() {
                     <TrendingUp size={16} />
                   </button>
                   {/* 3-dot menu for Edit, Duplicate, Delete */}
-                  <div className="relative" id={`more-btn-${bot.bot_config_id}`}>
+                  <div className="relative">
                     <button
                       onClick={(e) => { e.stopPropagation(); setMoreMenuOpen(moreMenuOpen === bot.bot_config_id ? null : bot.bot_config_id) }}
                       aria-label={t('bots.moreActions')}
@@ -1320,39 +1320,6 @@ export default function Bots() {
                     >
                       <MoreVertical size={18} />
                     </button>
-                    {moreMenuOpen === bot.bot_config_id && (() => {
-                      return (
-                      <>
-                        <div className="fixed inset-0" style={{ zIndex: 9998 }} onClick={() => setMoreMenuOpen(null)} />
-                        <div className="absolute right-0 bottom-full mb-2 w-44 bg-[#1a1f2e] border border-white/10 rounded-lg shadow-2xl" style={{ zIndex: 9999 }}>
-                          <button
-                            onClick={() => { setMoreMenuOpen(null); setEditBotId(bot.bot_config_id) }}
-                            disabled={bot.status === 'running'}
-                            className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-gray-300 hover:bg-white/5 disabled:opacity-30 transition-colors rounded-t-lg"
-                          >
-                            <Pencil size={14} />
-                            {t('bots.edit')}
-                          </button>
-                          <button
-                            onClick={() => { setMoreMenuOpen(null); handleDuplicate(bot.bot_config_id) }}
-                            className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-gray-300 hover:bg-white/5 transition-colors"
-                          >
-                            <Copy size={14} />
-                            {t('bots.duplicate')}
-                          </button>
-                          <div className="border-t border-white/5" />
-                          <button
-                            onClick={() => { setMoreMenuOpen(null); handleDelete(bot.bot_config_id, bot.name) }}
-                            disabled={bot.status === 'running'}
-                            className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-red-400 hover:bg-red-500/5 disabled:opacity-30 transition-colors rounded-b-lg"
-                          >
-                            <Trash2 size={14} />
-                            {t('bots.delete')}
-                          </button>
-                        </div>
-                      </>
-                      );
-                    })()}
                   </div>
                 </div>
                 </>
@@ -1368,7 +1335,44 @@ export default function Bots() {
         <BotTradeHistoryModal bot={historyBot} onClose={() => setHistoryBot(null)} t={t} />
       )}
 
-      {/* Builder Fee Approval moved to Settings page */}
+      {/* Mobile bottom sheet for 3-dot menu actions */}
+      {moreMenuOpen !== null && (() => {
+        const menuBot = bots.find(b => b.bot_config_id === moreMenuOpen);
+        if (!menuBot) return null;
+        return (
+          <>
+            <div className="fixed inset-0 bg-black/60 z-[9998] animate-in fade-in" onClick={() => setMoreMenuOpen(null)} />
+            <div className="fixed bottom-0 left-0 right-0 z-[9999] bg-[#1a1f2e] border-t border-white/10 rounded-t-2xl p-4 pb-8 animate-in slide-in-from-bottom">
+              <div className="w-10 h-1 bg-white/20 rounded-full mx-auto mb-4" />
+              <p className="text-white/50 text-xs mb-3 px-1">{menuBot.name}</p>
+              <button
+                onClick={() => { setMoreMenuOpen(null); setEditBotId(menuBot.bot_config_id) }}
+                disabled={menuBot.status === 'running'}
+                className="w-full flex items-center gap-3 px-4 py-3.5 text-base text-gray-200 hover:bg-white/5 active:bg-white/10 disabled:opacity-30 transition-colors rounded-xl"
+              >
+                <Pencil size={18} />
+                {t('bots.edit')}
+              </button>
+              <button
+                onClick={() => { setMoreMenuOpen(null); handleDuplicate(menuBot.bot_config_id) }}
+                className="w-full flex items-center gap-3 px-4 py-3.5 text-base text-gray-200 hover:bg-white/5 active:bg-white/10 transition-colors rounded-xl"
+              >
+                <Copy size={18} />
+                {t('bots.duplicate')}
+              </button>
+              <div className="border-t border-white/5 my-1" />
+              <button
+                onClick={() => { setMoreMenuOpen(null); handleDelete(menuBot.bot_config_id, menuBot.name) }}
+                disabled={menuBot.status === 'running'}
+                className="w-full flex items-center gap-3 px-4 py-3.5 text-base text-red-400 hover:bg-red-500/5 active:bg-red-500/10 disabled:opacity-30 transition-colors rounded-xl"
+              >
+                <Trash2 size={18} />
+                {t('bots.delete')}
+              </button>
+            </div>
+          </>
+        );
+      })()}
 
       {/* Guided Tour */}
       <GuidedTour
