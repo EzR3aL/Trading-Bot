@@ -942,7 +942,7 @@ export default function Bots() {
           <button
             onClick={() => setShowBuilder(true)}
             aria-label={t('bots.newBot')}
-            className="px-3 py-2 text-xs sm:text-sm btn-gradient flex items-center gap-1.5 rounded-xl font-medium"
+            className="px-3 py-2 text-xs sm:text-sm btn-gradient inline-flex items-center justify-center gap-1.5 rounded-xl font-medium whitespace-nowrap"
             data-tour="new-bot"
           >
             <Plus size={15} />
@@ -952,7 +952,7 @@ export default function Bots() {
             <button
               onClick={handleStopAll}
               aria-label={t('bots.stopAll')}
-              className="px-3 py-2 text-xs sm:text-sm bg-red-500/10 text-red-400 rounded-xl border border-red-500/10 hover:bg-red-500/20 transition-all duration-200 font-medium"
+              className="px-3 py-2 text-xs sm:text-sm bg-red-500/10 text-red-400 rounded-xl border border-red-500/10 hover:bg-red-500/20 transition-all duration-200 font-medium inline-flex items-center justify-center whitespace-nowrap"
             >
               {t('bots.stopAll')} ({runningCount})
             </button>
@@ -1335,44 +1335,59 @@ export default function Bots() {
         <BotTradeHistoryModal bot={historyBot} onClose={() => setHistoryBot(null)} t={t} />
       )}
 
-      {/* Mobile bottom sheet for 3-dot menu actions */}
-      {moreMenuOpen !== null && (() => {
-        const menuBot = bots.find(b => b.bot_config_id === moreMenuOpen);
-        if (!menuBot) return null;
-        return (
-          <>
-            <div className="fixed inset-0 bg-black/60 z-[9998] animate-in fade-in" onClick={() => setMoreMenuOpen(null)} />
-            <div className="fixed bottom-0 left-0 right-0 z-[9999] bg-[#1a1f2e] border-t border-white/10 rounded-t-2xl p-4 pb-8 animate-in slide-in-from-bottom">
-              <div className="w-10 h-1 bg-white/20 rounded-full mx-auto mb-4" />
-              <p className="text-white/50 text-xs mb-3 px-1">{menuBot.name}</p>
-              <button
-                onClick={() => { setMoreMenuOpen(null); setEditBotId(menuBot.bot_config_id) }}
-                disabled={menuBot.status === 'running'}
-                className="w-full flex items-center gap-3 px-4 py-3.5 text-base text-gray-200 hover:bg-white/5 active:bg-white/10 disabled:opacity-30 transition-colors rounded-xl"
-              >
-                <Pencil size={18} />
-                {t('bots.edit')}
-              </button>
-              <button
-                onClick={() => { setMoreMenuOpen(null); handleDuplicate(menuBot.bot_config_id) }}
-                className="w-full flex items-center gap-3 px-4 py-3.5 text-base text-gray-200 hover:bg-white/5 active:bg-white/10 transition-colors rounded-xl"
-              >
-                <Copy size={18} />
-                {t('bots.duplicate')}
-              </button>
-              <div className="border-t border-white/5 my-1" />
-              <button
-                onClick={() => { setMoreMenuOpen(null); handleDelete(menuBot.bot_config_id, menuBot.name) }}
-                disabled={menuBot.status === 'running'}
-                className="w-full flex items-center gap-3 px-4 py-3.5 text-base text-red-400 hover:bg-red-500/5 active:bg-red-500/10 disabled:opacity-30 transition-colors rounded-xl"
-              >
-                <Trash2 size={18} />
-                {t('bots.delete')}
-              </button>
-            </div>
-          </>
-        );
-      })()}
+      {/* Mobile bottom sheet overlay for 3-dot menu */}
+      {moreMenuOpen !== null && (
+        <div
+          className="fixed inset-0 z-[9998] bg-black/60 backdrop-blur-sm"
+          onClick={() => setMoreMenuOpen(null)}
+        />
+      )}
+
+      {/* Mobile bottom sheet menu (matches "Mehr" nav animation) */}
+      <div
+        className={`fixed bottom-0 left-0 right-0 z-[9999] bg-[#0f1420] border-t border-white/10 rounded-t-2xl transition-transform duration-300 ease-out ${
+          moreMenuOpen !== null ? 'translate-y-0' : 'translate-y-full'
+        }`}
+      >
+        {(() => {
+          const menuBot = moreMenuOpen !== null ? bots.find(b => b.bot_config_id === moreMenuOpen) : null;
+          if (!menuBot) return null;
+          return (
+            <>
+              <div className="flex justify-center pt-3 pb-1">
+                <div className="w-10 h-1 rounded-full bg-white/20" />
+              </div>
+              <p className="text-white/60 text-sm font-medium text-center pb-2">{menuBot.name}</p>
+              <div className="px-4 pb-8">
+                <button
+                  onClick={() => { setMoreMenuOpen(null); setEditBotId(menuBot.bot_config_id) }}
+                  disabled={menuBot.status === 'running'}
+                  className="w-full flex items-center gap-3 px-4 py-3.5 text-base text-gray-200 hover:bg-white/5 active:bg-white/10 disabled:opacity-30 transition-colors rounded-xl"
+                >
+                  <Pencil size={18} />
+                  {t('bots.edit')}
+                </button>
+                <button
+                  onClick={() => { setMoreMenuOpen(null); handleDuplicate(menuBot.bot_config_id) }}
+                  className="w-full flex items-center gap-3 px-4 py-3.5 text-base text-gray-200 hover:bg-white/5 active:bg-white/10 transition-colors rounded-xl"
+                >
+                  <Copy size={18} />
+                  {t('bots.duplicate')}
+                </button>
+                <div className="border-t border-white/5 my-1" />
+                <button
+                  onClick={() => { setMoreMenuOpen(null); handleDelete(menuBot.bot_config_id, menuBot.name) }}
+                  disabled={menuBot.status === 'running'}
+                  className="w-full flex items-center gap-3 px-4 py-3.5 text-base text-red-400 hover:bg-red-500/5 active:bg-red-500/10 disabled:opacity-30 transition-colors rounded-xl"
+                >
+                  <Trash2 size={18} />
+                  {t('bots.delete')}
+                </button>
+              </div>
+            </>
+          );
+        })()}
+      </div>
 
       {/* Guided Tour */}
       <GuidedTour
