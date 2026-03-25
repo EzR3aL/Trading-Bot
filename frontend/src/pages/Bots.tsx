@@ -1362,7 +1362,7 @@ export default function Bots() {
                         </div>
                       </>
                       );
-                    })()
+                    })()}
                   </div>
                 </div>
                 </>
