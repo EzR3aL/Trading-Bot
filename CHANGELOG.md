@@ -39,6 +39,7 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 - **BingX margin_mode Parameter (kritisch)**: `place_market_order()` und `close_position()` fehlte der `margin_mode` Parameter — jeder Aufruf haette einen TypeError ausgeloest. Fix: Parameter hinzugefuegt, doppelten `set_leverage`-Aufruf in `place_market_order` entfernt (wurde bereits vom Trade Executor gesetzt)
 - **BingX VST Demo-Modus (kritisch — Ludwig)**: BingX VST API unterstuetzt `set_leverage` und `set_margin_type` nicht (Error 109400). Der Trade Executor behandelte dies als Hard-Block — kein einziger Demo-Trade konnte ausgefuehrt werden. Fix: VST-spezifische Fehler werden erkannt und uebersprungen, Bot tradet mit Standard-Einstellungen
 - **BingX Quantity Precision**: Rohe Float-Werte (z.B. `0.03400000001`) wurden als Quantity an die BingX API gesendet — konnte zu Error 100400 fuehren. Fix: `_round_quantity()` rundet auf 4 Dezimalstellen
+- **HL Builder Fee fuer Admins**: Admin-Accounts uebersprungen jetzt die Builder Fee komplett — kein Approval noetig, kein Builder-Parameter in der Order. Verhindert "Builder fee has not been approved" Fehler fuer Admin-Wallets
 
 ### Geaendert
 - **Zeitzonen-Support im Bot Builder**: Uhrzeiten werden jetzt in der lokalen Zeitzone des Users angezeigt und eingegeben. Automatische Erkennung via Browser. Keine "(UTC)"-Anzeigen mehr — Konvertierung erfolgt automatisch im Hintergrund

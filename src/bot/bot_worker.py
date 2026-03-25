@@ -169,10 +169,18 @@ class BotWorker(
                 if self._config.exchange_type == "hyperliquid":
                     from src.utils.settings import get_hl_config
                     hl_cfg = await get_hl_config()
-                    extra_kwargs = {
-                        "builder_address": hl_cfg["builder_address"],
-                        "builder_fee": hl_cfg["builder_fee"],
-                    }
+                    # Admins skip builder fee — no approval needed
+                    from sqlalchemy import select as sa_select_early
+                    from src.models.database import User as UserModelEarly
+                    user_r = await session.execute(
+                        sa_select_early(UserModelEarly).where(UserModelEarly.id == self._config.user_id)
+                    )
+                    user_check = user_r.scalar_one_or_none()
+                    if user_check and user_check.role != "admin":
+                        extra_kwargs = {
+                            "builder_address": hl_cfg["builder_address"],
+                            "builder_fee": hl_cfg["builder_fee"],
+                        }
 
                 mode = self._config.mode
                 if mode in ("demo", "both"):
