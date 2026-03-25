@@ -235,9 +235,7 @@ Interactive API documentation is available at:
 | Trades | `/api/trades/` | Trade history with filtering and pagination |
 | Statistics | `/api/statistics/` | PnL, win rate, daily breakdown |
 | Config | `/api/config/` | Trading parameters, strategy, API keys, notifications |
-| Presets | `/api/presets/` | Save, load, duplicate configuration presets |
 | Portfolio | `/api/portfolio/` | Account balance and positions |
-| Backtest | `/api/backtest/` | Strategy backtesting |
 | Tax Report | `/api/tax-report/` | Yearly/monthly reports, CSV export |
 | Admin | `/api/users/` | User management (admin only) |
 | Metrics | `/api/metrics/` | Prometheus metrics endpoint |
