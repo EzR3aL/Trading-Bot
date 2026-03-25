@@ -9,6 +9,13 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [4.4.1] - 2026-03-25
+
+### Behoben
+- **Hyperliquid aktueller Preis in Portfolio**: `get_open_positions()` setzte `current_price=0.0` statt den tatsaechlichen Marktpreis abzufragen. Fix: Mid-Prices werden jetzt per Batch-API-Call (`all_mids`) geholt — ein einziger Request fuer alle offenen Positionen
+
+---
+
 ## [4.4.0] - 2026-03-25 — Full Audit Fixes
 
 ### Sicherheit

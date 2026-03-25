@@ -284,17 +284,27 @@ class HyperliquidClient(ExchangeClient):
     async def get_open_positions(self) -> List[Position]:
         address = self.wallet_address or self._wallet.address
         data = await self._cb_call(self._info.user_state, address)
+
+        # Fetch all mid-prices in a single API call
+        try:
+            all_mids = await self._cb_call(self._info.all_mids)
+        except Exception:
+            all_mids = {}
+
         positions = []
         for pos in data.get("assetPositions", []):
             pd = pos.get("position", {})
             szi = float(pd.get("szi", 0))
             if szi != 0:
+                coin = pd.get("coin", "")
+                entry_px = float(pd.get("entryPx", 0))
+                current_price = float(all_mids.get(coin, 0)) or entry_px
                 positions.append(Position(
-                    symbol=pd.get("coin", ""),
+                    symbol=coin,
                     side="long" if szi > 0 else "short",
                     size=abs(szi),
-                    entry_price=float(pd.get("entryPx", 0)),
-                    current_price=0.0,
+                    entry_price=entry_px,
+                    current_price=current_price,
                     unrealized_pnl=float(pd.get("unrealizedPnl", 0)),
                     leverage=int(float(pd.get("leverage", {}).get("value", 1))),
                     exchange="hyperliquid",
