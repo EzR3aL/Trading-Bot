@@ -338,15 +338,16 @@ class BingXClient(ExchangeClient):
         order_params = {
             "symbol": symbol,
             "side": order_side,
-            "positionSide": position_side,
             "type": ORDER_TYPE_MARKET,
             "quantity": str(rounded_size),
         }
+        # VST (demo) API uses one-way position mode — positionSide not supported
+        if not self.demo_mode:
+            order_params["positionSide"] = position_side
 
         # BingX supports TP/SL as part of the order placement
         if take_profit is not None:
             order_params["takeProfit"] = str(take_profit)
-            # Use mark price as trigger for TP
             order_params["takeProfitWorkingType"] = "MARK_PRICE"
         if stop_loss is not None:
             order_params["stopLoss"] = str(stop_loss)
@@ -412,10 +413,12 @@ class BingXClient(ExchangeClient):
         order_params = {
             "symbol": symbol,
             "side": close_side,
-            "positionSide": position_side,
             "type": ORDER_TYPE_MARKET,
             "quantity": str(self._round_quantity(pos.size)),
         }
+        # VST (demo) API uses one-way position mode
+        if not self.demo_mode:
+            order_params["positionSide"] = position_side
 
         result = await self._request("POST", ENDPOINTS["place_order"], data=order_params)
 
