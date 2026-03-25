@@ -200,14 +200,14 @@ html.light .num-input-wrap .num-arrow-up {
   /* Input styling */
   .input-dark {
     @apply w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white
-           placeholder-gray-500 transition-all duration-200
+           placeholder-gray-400 transition-all duration-200
            focus:border-emerald-500/50 focus:bg-white/[0.07] focus:outline-none focus:ring-1 focus:ring-emerald-500/30;
   }
 
   /* Filter controls – uniform height, centered text */
   .filter-select {
     @apply h-9 px-3.5 text-sm bg-white/5 border border-white/10 rounded-xl text-white
-           placeholder-gray-500 transition-all duration-200
+           placeholder-gray-400 transition-all duration-200
            focus:border-emerald-500/50 focus:bg-white/[0.07] focus:outline-none focus:ring-1 focus:ring-emerald-500/30;
   }
 
@@ -1235,4 +1235,20 @@ html.light .text-blue-400 {
 /* Primary accent text keeps color */
 html.light .text-primary-400 {
   color: #60a5fa;
+}
+
+/* Visible focus indicators for keyboard navigation (WCAG 2.4.7) */
+:focus-visible {
+  outline: 2px solid #10b981;
+  outline-offset: 2px;
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid #10b981;
+  outline-offset: 2px;
 }

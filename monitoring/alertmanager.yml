@@ -1,6 +1,6 @@
 # Alertmanager configuration for Trading Bot
 #
-# Configure a receiver below to enable alert delivery.
+# Configure receivers below to enable alert delivery.
 # Options: webhook (Discord/Slack/custom), email, PagerDuty, etc.
 #
 # Docs: https://prometheus.io/docs/alerting/latest/configuration/
@@ -24,13 +24,32 @@ route:
 receivers:
   - name: "default"
     webhook_configs:
-      # Point to your notification endpoint (Discord webhook, Slack, etc.)
-      # Uncomment and set the URL:
-      # - url: "https://discord.com/api/webhooks/YOUR_WEBHOOK_ID/YOUR_WEBHOOK_TOKEN"
+      # Internal: forward alerts to the app's webhook handler
       - url: "http://trading-bot:8000/api/webhooks/alertmanager"
         send_resolved: true
+      # External: Discord webhook for alerts even when the app is down
+      # Uncomment and set your Discord webhook URL:
+      # - url: "https://discord.com/api/webhooks/YOUR_WEBHOOK_ID/YOUR_WEBHOOK_TOKEN"
+      #   send_resolved: true
 
   - name: "critical"
     webhook_configs:
       - url: "http://trading-bot:8000/api/webhooks/alertmanager"
         send_resolved: true
+      # CRITICAL alerts should ALWAYS go to an external channel.
+      # Uncomment and configure at least ONE of these:
+      #
+      # Discord:
+      # - url: "https://discord.com/api/webhooks/YOUR_WEBHOOK_ID/YOUR_WEBHOOK_TOKEN"
+      #   send_resolved: true
+      #
+      # Telegram (via alertmanager-telegram-bot or webhook proxy):
+      # - url: "http://telegram-proxy:9087/alert"
+      #   send_resolved: true
+
+# To set up Discord webhook alerts:
+#   1. In your Discord server, go to Server Settings -> Integrations -> Webhooks
+#   2. Create a webhook in your alerts channel
+#   3. Copy the webhook URL
+#   4. Uncomment the Discord lines above and paste the URL
+#   5. Restart alertmanager: docker compose restart alertmanager

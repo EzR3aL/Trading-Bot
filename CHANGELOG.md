@@ -9,6 +9,38 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [4.4.0] - 2026-03-25 — Full Audit Fixes
+
+### Sicherheit
+- **npm Sicherheitsluecken behoben**: 8 HIGH-Severity Schwachstellen in Frontend-Abhaengigkeiten behoben (axios, rollup, undici, h3, flatted, socket.io-parser, hono) via `npm audit fix`
+- **Alertmanager externe Receiver**: Discord/Telegram Webhook-Templates fuer kritische Alerts hinzugefuegt — Benachrichtigung auch bei App-Ausfall moeglich
+- **Nginx Reverse Proxy Config**: `deploy/nginx.conf` ins Repo aufgenommen — reproduzierbare Disaster Recovery
+- **Off-Host Backup Script**: `deploy/backup-offhost.sh` fuer S3/DO-Spaces Backup mit Verschluesselung und Retention
+- **.env.example erweitert**: `BEHIND_PROXY` und `ENVIRONMENT` Produktions-Settings dokumentiert
+- **Error Messages bilingual**: `src/errors.py` enthaelt jetzt alle Fehlermeldungen auf Deutsch UND Englisch (_EN Varianten)
+
+### Behoben (Kritisch)
+- **Position Monitor Shared State** (C1): Module-Level `_trailing_stop_backoff`, `_trailing_stop_lock` und `_glitch_counter` waren globale Variablen die von ALLEN Bots geteilt wurden — Glitch-Counter kollidierten, Lock blockierte alle Bots. Jetzt per BotWorker-Instanz isoliert via `_init_monitor_state()`
+- **Trade Close Session-Sicherheit** (C2): `_close_and_record_trade()` laedt den TradeRecord jetzt in einer eigenen DB-Session statt das evtl. detachte Objekt des Callers zu modifizieren — verhindert stille Datenverluste bei PnL-Persistierung
+- **Trade Execution Atomizitaet** (C3): TradeRecord-Erstellung und PendingTrade-Aufloesung laufen jetzt in der GLEICHEN DB-Session — bei Crash zwischen Order und DB-Eintrag bleibt kein Ghost-State zurueck
+- **DB Session Retry bei Pool-Exhaustion** (M4): `get_session()` versucht jetzt bis zu 3x mit exponentiellem Backoff eine DB-Session zu acquirieren — verhindert Cascading Failures unter Last
+- **WebSocket Broadcast Tasks**: Fire-and-forget `asyncio.create_task()` Aufrufe haben jetzt `done_callback` — Tasks werden nicht mehr vom GC entfernt und Fehler werden nicht mehr verschluckt
+
+### Behoben (UX/Accessibility)
+- **Confirmation Modals statt window.confirm()**: Bot-Loeschen und Position-Schliessen nutzen jetzt styled ConfirmModal mit Varianten (danger/warning), ESC-Handler, Focus-Trap und Loading-State
+- **Loading-State fuer Start/Stop Buttons**: BotDetail Start/Stop Buttons zeigen Spinner und sind waehrend der Aktion deaktiviert — verhindert Doppelklicks
+- **Dashboard Trades Sync Debounce**: `/trades/sync` wird nur noch einmal pro Browser-Session aufgerufen statt bei jedem Dashboard-Load
+- **WCAG Kontrast**: `text-gray-500` Labels auf dunklen Hintergruenden durch `text-gray-400` ersetzt — erfuellt 4.5:1 Kontrastverhältnis
+- **Keyboard Navigation FilterDropdown**: Pfeiltasten, Home/End, Enter/Space und Escape unterstuetzt — visuelles Highlighting
+- **Focus-Visible Indikatoren**: Globale sichtbare Fokusrahmen (emerald) fuer alle interaktiven Elemente — WCAG 2.4.7
+- **Focus Trap Hook**: `useFocusTrap.ts` fuer modale Dialoge — Tastaturfokus bleibt im Container
+
+### Geaendert
+- **Strategy Display Konstante zentralisiert**: `STRATEGY_DISPLAY` aus 4 Dateien in `src/constants/strategies.ts` extrahiert
+- **Docker Compose Memory-Limits**: Prometheus (256M), Alertmanager (64M), Grafana (256M) begrenzt — verhindert OOM auf dem 2GB VPS
+
+---
+
 ## [4.3.0] - 2026-03-25
 
 ### Hinzugefuegt

@@ -21,19 +21,7 @@ import { Eye, EyeOff, ArrowUpRight, ArrowDownRight, Trophy, Target, LayoutGrid, 
 import type { LlmConnection } from '../types'
 import { formatDate, formatDateTime, formatChartDate, formatTime, formatChartCurrency } from '../utils/dateUtils'
 
-/* ── Strategy Labels ─────────────────────────────────────── */
-
-const STRATEGY_DISPLAY: Record<string, string> = {
-  llm_signal: 'KI-Companion',
-  sentiment_surfer: 'Sentiment Surfer',
-  liquidation_hunter: 'Liquidation Hunter',
-  degen: 'Degen',
-  edge_indicator: 'Edge Indicator',
-  contrarian_pulse: 'Contrarian Pulse',
-}
-function strategyLabel(name: string): string {
-  return STRATEGY_DISPLAY[name] || name.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
-}
+import { strategyLabel } from '../constants/strategies'
 
 /* ── Colors ──────────────────────────────────────────────── */
 

@@ -21,17 +21,7 @@ import { formatDate, formatDateTime, formatTime, formatChartCurrency } from '../
 import MobileTradeCard from '../components/ui/MobileTradeCard'
 import useIsMobile from '../hooks/useIsMobile'
 
-const STRATEGY_DISPLAY: Record<string, string> = {
-  llm_signal: 'KI-Companion',
-  sentiment_surfer: 'Sentiment Surfer',
-  liquidation_hunter: 'Liquidation Hunter',
-  degen: 'Degen',
-  edge_indicator: 'Edge Indicator',
-  contrarian_pulse: 'Contrarian Pulse',
-}
-function strategyLabel(name: string): string {
-  return STRATEGY_DISPLAY[name] || name.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
-}
+import { strategyLabel } from '../constants/strategies'
 
 interface BotConfig {
   id: number
@@ -204,22 +194,28 @@ export default function BotDetail() {
     return () => clearInterval(iv)
   }, [fetchData])
 
+  const [actionLoading, setActionLoading] = useState(false)
+
   const handleStart = async () => {
+    setActionLoading(true)
     try {
       await api.post(`/bots/${botId}/start`)
       await fetchData()
     } catch (err) {
       setError(getApiErrorMessage(err, t('bots.failedStart')))
     }
+    setActionLoading(false)
   }
 
   const handleStop = async () => {
+    setActionLoading(true)
     try {
       await api.post(`/bots/${botId}/stop`)
       await fetchData()
     } catch (err) {
       setError(getApiErrorMessage(err, t('bots.failedStop')))
     }
+    setActionLoading(false)
   }
 
   if (loading) {
@@ -284,7 +280,7 @@ export default function BotDetail() {
               {runtime?.llm_provider && (
                 <>
                   <span className="text-gray-600">·</span>
-                  <span className="text-gray-500">{providerNameMap[runtime.llm_provider] || runtime.llm_provider}</span>
+                  <span className="text-gray-400">{providerNameMap[runtime.llm_provider] || runtime.llm_provider}</span>
                   {runtime.llm_model && (
                     <span className="text-gray-300 font-medium">{modelNameMap[runtime.llm_model] || runtime.llm_model}</span>
                   )}
@@ -295,12 +291,12 @@ export default function BotDetail() {
 
           <div className="flex items-center gap-2">
             {statusKey === 'running' || statusKey === 'starting' ? (
-              <button onClick={handleStop} className="flex items-center gap-2 px-4 py-2 bg-red-900/30 text-red-400 border border-red-700 rounded-lg hover:bg-red-900/50 transition-colors">
-                <Square size={14} /> {t('bots.stop')}
+              <button onClick={handleStop} disabled={actionLoading} className={`flex items-center gap-2 px-4 py-2 bg-red-900/30 text-red-400 border border-red-700 rounded-lg hover:bg-red-900/50 transition-colors ${actionLoading ? 'opacity-60 cursor-not-allowed' : ''}`}>
+                {actionLoading ? <div className="w-4 h-4 border-2 border-red-400 border-t-transparent rounded-full animate-spin" /> : <Square size={14} />} {t('bots.stop')}
               </button>
             ) : (
-              <button onClick={handleStart} className="flex items-center gap-2 px-4 py-2 bg-emerald-900/30 text-emerald-400 border border-emerald-700 rounded-lg hover:bg-emerald-900/50 transition-colors">
-                <Play size={14} /> {t('bots.start')}
+              <button onClick={handleStart} disabled={actionLoading} className={`flex items-center gap-2 px-4 py-2 bg-emerald-900/30 text-emerald-400 border border-emerald-700 rounded-lg hover:bg-emerald-900/50 transition-colors ${actionLoading ? 'opacity-60 cursor-not-allowed' : ''}`}>
+                {actionLoading ? <div className="w-4 h-4 border-2 border-emerald-400 border-t-transparent rounded-full animate-spin" /> : <Play size={14} />} {t('bots.start')}
               </button>
             )}
           </div>
@@ -331,7 +327,7 @@ export default function BotDetail() {
                 <button
                   key={d_}
                   onClick={() => setDays(d_)}
-                  className={`px-2.5 py-1 text-xs rounded transition-colors ${days === d_ ? 'bg-primary-900/40 text-primary-400 border border-primary-700' : 'text-gray-500 hover:text-gray-300'}`}
+                  className={`px-2.5 py-1 text-xs rounded transition-colors ${days === d_ ? 'bg-primary-900/40 text-primary-400 border border-primary-700' : 'text-gray-400 hover:text-gray-300'}`}
                 >
                   {d_}d
                 </button>
@@ -366,7 +362,7 @@ export default function BotDetail() {
         <div className="lg:col-span-2 glass-card rounded-xl p-5 border border-white/10">
           <h2 className="text-white font-semibold mb-4">{d('recentTrades')} ({stats.recent_trades.length})</h2>
           {stats.recent_trades.length === 0 ? (
-            <p className="text-gray-500 text-sm py-8 text-center">{d('noTrades')}</p>
+            <p className="text-gray-400 text-sm py-8 text-center">{d('noTrades')}</p>
           ) : isMobile ? (
               <div className="space-y-1.5">
                 {stats.recent_trades.map(trade => (
@@ -535,7 +531,7 @@ function StatCard({ icon, label, value, color, sub }: {
         {icon} {label}
       </div>
       <div className={`text-xl font-bold ${color}`}>{value}</div>
-      {sub && <div className="text-[10px] sm:text-xs text-gray-500 mt-0.5">{sub}</div>}
+      {sub && <div className="text-[10px] sm:text-xs text-gray-400 mt-0.5">{sub}</div>}
     </div>
   )
 }

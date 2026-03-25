@@ -17,6 +17,27 @@ import json
 from datetime import datetime, timedelta, timezone
 from typing import Any, List, Optional
 
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.cron import CronTrigger
+from apscheduler.triggers.interval import IntervalTrigger
+
+from src.bot.hyperliquid_gates import HyperliquidGatesMixin
+from src.bot.notifications import NotificationsMixin
+from src.bot.pnl import calculate_pnl  # noqa: F401 — re-export for backward compat
+from src.bot.position_monitor import PositionMonitorMixin
+from src.bot.trade_closer import TradeCloserMixin
+from src.bot.trade_executor import TradeExecutorMixin
+from src.exchanges.base import ExchangeClient
+from src.exchanges.factory import create_exchange_client
+from src.models.database import BotConfig, ExchangeConnection, LLMConnection, TradeRecord
+from src.models.enums import BotStatus
+from src.models.session import get_session
+from src.risk.risk_manager import RiskManager
+from src.strategy import BaseStrategy, StrategyRegistry
+from src.utils.encryption import decrypt_value
+from src.utils.json_helpers import parse_json_field
+from src.utils.logger import get_logger
+
 
 def _safe_json_loads(value: Any, default: List = None) -> List:
     """Safely parse JSON, returning default on error."""
@@ -26,28 +47,6 @@ def _safe_json_loads(value: Any, default: List = None) -> List:
         return json.loads(value)
     except (json.JSONDecodeError, TypeError):
         return default
-
-from apscheduler.schedulers.asyncio import AsyncIOScheduler  # noqa: E402
-from apscheduler.triggers.cron import CronTrigger  # noqa: E402
-from apscheduler.triggers.interval import IntervalTrigger  # noqa: E402
-
-from src.bot.hyperliquid_gates import HyperliquidGatesMixin  # noqa: E402
-from src.bot.notifications import NotificationsMixin  # noqa: E402
-from src.bot.pnl import calculate_pnl  # noqa: F401, E402 — re-export for backward compat
-from src.bot.position_monitor import PositionMonitorMixin  # noqa: E402
-from src.bot.trade_closer import TradeCloserMixin  # noqa: E402
-from src.bot.trade_executor import TradeExecutorMixin  # noqa: E402
-
-from src.exchanges.base import ExchangeClient  # noqa: E402
-from src.exchanges.factory import create_exchange_client  # noqa: E402
-from src.models.database import BotConfig, ExchangeConnection, LLMConnection, TradeRecord  # noqa: E402
-from src.models.enums import BotStatus  # noqa: E402
-from src.models.session import get_session  # noqa: E402
-from src.risk.risk_manager import RiskManager  # noqa: E402
-from src.strategy import BaseStrategy, StrategyRegistry  # noqa: E402
-from src.utils.encryption import decrypt_value  # noqa: E402
-from src.utils.json_helpers import parse_json_field  # noqa: E402
-from src.utils.logger import get_logger  # noqa: E402
 
 logger = get_logger(__name__)
 
@@ -117,6 +116,9 @@ class BotWorker(
 
         # Risk alert deduplication (reset daily)
         self._risk_alerts_sent: set[str] = set()
+
+        # Initialize per-instance position monitor state
+        self._init_monitor_state()
 
     def _get_client(self, demo_mode: bool) -> Optional[ExchangeClient]:
         """Return the exchange client for the given mode."""

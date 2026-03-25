@@ -269,21 +269,44 @@ async def close_db() -> None:
 
 
 SESSION_ACQUIRE_TIMEOUT = int(os.getenv("DB_SESSION_TIMEOUT", "10"))
+_SESSION_MAX_RETRIES = int(os.getenv("DB_SESSION_RETRIES", "3"))
+_SESSION_RETRY_DELAY = float(os.getenv("DB_SESSION_RETRY_DELAY", "1.0"))
 
 
 @asynccontextmanager
 async def get_session():
-    """Provide an async session with automatic commit/rollback."""
-    try:
-        session = await asyncio.wait_for(
-            async_session_factory().__aenter__(),
-            timeout=SESSION_ACQUIRE_TIMEOUT,
-        )
-    except asyncio.TimeoutError:
-        raise TimeoutError(
-            f"Could not acquire database session within {SESSION_ACQUIRE_TIMEOUT}s "
-            "(connection pool may be exhausted)"
-        )
+    """Provide an async session with automatic commit/rollback.
+
+    Retries up to ``_SESSION_MAX_RETRIES`` times on pool-exhaustion
+    (TimeoutError) with exponential backoff so that transient spikes
+    don't cascade into unrecoverable failures.
+    """
+    from src.utils.logger import get_logger
+    _log = get_logger(__name__)
+
+    last_err: Exception | None = None
+    for attempt in range(1, _SESSION_MAX_RETRIES + 1):
+        try:
+            session = await asyncio.wait_for(
+                async_session_factory().__aenter__(),
+                timeout=SESSION_ACQUIRE_TIMEOUT,
+            )
+            break
+        except asyncio.TimeoutError:
+            last_err = TimeoutError(
+                f"Could not acquire database session within {SESSION_ACQUIRE_TIMEOUT}s "
+                "(connection pool may be exhausted)"
+            )
+            if attempt < _SESSION_MAX_RETRIES:
+                delay = _SESSION_RETRY_DELAY * (2 ** (attempt - 1))
+                _log.warning(
+                    "DB session acquire timeout (attempt %d/%d), retrying in %.1fs",
+                    attempt, _SESSION_MAX_RETRIES, delay,
+                )
+                await asyncio.sleep(delay)
+            else:
+                raise last_err
+
     try:
         yield session
         await session.commit()

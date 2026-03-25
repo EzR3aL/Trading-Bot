@@ -246,7 +246,7 @@ class TradeExecutorMixin:
                 except Exception as e:
                     logger.debug(f"{log_prefix} [{mode_str}] Could not fetch fill price: {e}")
 
-            # Record trade in database
+            # Record trade in database AND resolve pending trade atomically
             async with get_session() as session:
                 trade = TradeRecord(
                     user_id=self._config.user_id,
@@ -270,8 +270,17 @@ class TradeExecutorMixin:
                 )
                 session.add(trade)
 
-            # Mark pending trade as completed
-            await self._resolve_pending_trade(pending_trade_id, "completed")
+                # Resolve pending trade in the SAME session (atomic)
+                if pending_trade_id is not None:
+                    from sqlalchemy import select as sa_select
+                    pt_result = await session.execute(
+                        sa_select(PendingTrade).where(PendingTrade.id == pending_trade_id)
+                    )
+                    pending = pt_result.scalar_one_or_none()
+                    if pending:
+                        pending.status = "completed"
+                        pending.resolved_at = datetime.now(timezone.utc)
+                    pending_trade_id = None  # already resolved
 
             # Record in risk manager
             self._risk_manager.record_trade_entry(
@@ -324,10 +333,10 @@ class TradeExecutorMixin:
                 f"{tpsl_warning}{trailing_info}"
             )
 
-            # Broadcast via WebSocket
+            # Broadcast via WebSocket (keep reference to prevent GC)
             try:
                 from src.api.websocket.manager import ws_manager
-                asyncio.create_task(ws_manager.broadcast_to_user(
+                task = asyncio.create_task(ws_manager.broadcast_to_user(
                     self._config.user_id,
                     "trade_opened",
                     {
@@ -341,6 +350,7 @@ class TradeExecutorMixin:
                         "tpsl_failed": getattr(order, "tpsl_failed", False),
                     },
                 ))
+                task.add_done_callback(lambda t: t.exception() if not t.cancelled() and t.exception() else None)
             except Exception as e:
                 logger.debug("WS broadcast failed: %s", e)
 
@@ -428,7 +438,7 @@ class TradeExecutorMixin:
         """Notify user of trade execution failure via WebSocket and notifications."""
         try:
             from src.api.websocket.manager import ws_manager
-            asyncio.create_task(ws_manager.broadcast_to_user(
+            task = asyncio.create_task(ws_manager.broadcast_to_user(
                 self._config.user_id,
                 "trade_failed",
                 {
@@ -440,6 +450,7 @@ class TradeExecutorMixin:
                     "demo_mode": mode_str == "DEMO",
                 },
             ))
+            task.add_done_callback(lambda t: t.exception() if not t.cancelled() and t.exception() else None)
         except Exception:
             pass
 

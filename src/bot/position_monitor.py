@@ -12,24 +12,29 @@ from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
-# Track failed native trailing stop attempts: {trade_id: last_attempt_time}
-_trailing_stop_backoff: dict[int, datetime] = {}
-_trailing_stop_lock = asyncio.Lock()
+# Constants (safe to share — immutable)
 _TRAILING_STOP_RETRY_MINUTES = 10
-
-# Consecutive "position gone" confirmations before marking as closed.
-# Prevents false closures from transient API glitches.
 _POSITION_GONE_THRESHOLD = 3
 _POSITION_GONE_DELAY_S = 2.0
-
-# Track API glitch frequency per symbol: {bot_id:symbol: count}
-_glitch_counter: dict[str, int] = {}
 _GLITCH_WARN_THRESHOLD = 3  # warn after N glitches in a row
 _GLITCH_ALERT_THRESHOLD = 10  # send notification after N glitches
 
 
 class PositionMonitorMixin:
     """Mixin providing position monitoring methods for BotWorker."""
+
+    def _init_monitor_state(self) -> None:
+        """Initialize per-instance monitor state.
+
+        Must be called from BotWorker.__init__ so each bot has its own
+        trailing-stop backoff tracker, lock, and glitch counter instead
+        of sharing module-level globals across all bots.
+        """
+        # Track failed native trailing stop attempts: {trade_id: last_attempt_time}
+        self._trailing_stop_backoff: dict[int, datetime] = {}
+        self._trailing_stop_lock = asyncio.Lock()
+        # Track API glitch frequency per symbol: {symbol: count}
+        self._glitch_counter: dict[str, int] = {}
 
     async def _monitor_positions_safe(self):
         """Wrapper with error handling for position monitoring."""
@@ -108,8 +113,8 @@ class PositionMonitorMixin:
 
             # Auto-place native trailing stop for existing positions (with backoff)
             if not trade.native_trailing_stop and self._strategy and hasattr(self._strategy, '_p'):
-                async with _trailing_stop_lock:
-                    last_attempt = _trailing_stop_backoff.get(trade.id)
+                async with self._trailing_stop_lock:
+                    last_attempt = self._trailing_stop_backoff.get(trade.id)
                     should_retry = (
                         last_attempt is None
                         or (datetime.now(timezone.utc) - last_attempt).total_seconds() > _TRAILING_STOP_RETRY_MINUTES * 60
@@ -268,8 +273,8 @@ class PositionMonitorMixin:
             if result is not None:
                 trade.native_trailing_stop = True
                 await session.commit()
-                async with _trailing_stop_lock:
-                    _trailing_stop_backoff.pop(trade.id, None)
+                async with self._trailing_stop_lock:
+                    self._trailing_stop_backoff.pop(trade.id, None)
                 logger.info(
                     "%s Native trailing stop placed for existing %s %s position: "
                     "callback=%.2f%% trigger=$%.2f",
@@ -281,8 +286,8 @@ class PositionMonitorMixin:
                     log_prefix, trade.symbol,
                 )
         except Exception as e:
-            async with _trailing_stop_lock:
-                _trailing_stop_backoff[trade.id] = datetime.now(timezone.utc)
+            async with self._trailing_stop_lock:
+                self._trailing_stop_backoff[trade.id] = datetime.now(timezone.utc)
             logger.warning(
                 "%s Failed to place native trailing stop for %s (software backup active, retry in %dm): %s",
                 log_prefix, trade.symbol, _TRAILING_STOP_RETRY_MINUTES, e,
@@ -306,8 +311,8 @@ class PositionMonitorMixin:
                 pos = await client.get_position(trade.symbol)
                 if pos:
                     # Track glitch frequency
-                    _glitch_counter[glitch_key] = _glitch_counter.get(glitch_key, 0) + 1
-                    count = _glitch_counter[glitch_key]
+                    self._glitch_counter[glitch_key] = self._glitch_counter.get(glitch_key, 0) + 1
+                    count = self._glitch_counter[glitch_key]
 
                     logger.info(
                         "%s Position %s reappeared on attempt %d/%d — API glitch #%d, "
@@ -344,7 +349,7 @@ class PositionMonitorMixin:
                 )
 
         # Position genuinely closed — reset glitch counter
-        _glitch_counter.pop(glitch_key, None)
+        self._glitch_counter.pop(glitch_key, None)
         logger.info(
             "%s Position %s confirmed closed after %d checks",
             log_prefix, trade.symbol, _POSITION_GONE_THRESHOLD,

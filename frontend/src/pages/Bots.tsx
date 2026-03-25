@@ -15,6 +15,7 @@ import BotBuilder from '../components/bots/BotBuilder'
 import { SkeletonBotCard } from '../components/ui/Skeleton'
 import PnlCell from '../components/ui/PnlCell'
 import ExitReasonBadge from '../components/ui/ExitReasonBadge'
+import ConfirmModal from '../components/ui/ConfirmModal'
 import {
   Plus,
   Play,
@@ -49,9 +50,8 @@ import usePullToRefresh from '../hooks/usePullToRefresh'
 import { useAuthStore } from '../stores/authStore'
 import PullToRefreshIndicator from '../components/ui/PullToRefreshIndicator'
 
-const STRATEGY_DISPLAY: Record<string, string> = { llm_signal: 'KI-Companion', sentiment_surfer: 'Sentiment Surfer', liquidation_hunter: 'Liquidation Hunter', degen: 'Degen', edge_indicator: 'Edge Indicator', contrarian_pulse: 'Contrarian Pulse' }
+import { strategyLabel } from '../constants/strategies'
 const AI_STRATEGIES = new Set(['llm_signal', 'degen'])
-function strategyLabel(name: string) { return STRATEGY_DISPLAY[name] || name.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) }
 
 interface BotStatus {
   bot_config_id: number
@@ -781,6 +781,12 @@ export default function Bots() {
 
   const [moreMenuOpen, setMoreMenuOpen] = useState<number | null>(null)
   const [closePositionOpen, setClosePositionOpen] = useState<number | null>(null)
+  const [confirmModal, setConfirmModal] = useState<{
+    type: 'delete' | 'close-position'
+    id: number
+    name: string
+    symbol?: string
+  } | null>(null)
 
   // Build lookup: model_id → display name, provider_type → family_name
   const modelNameMap = useMemo(() => {
@@ -866,14 +872,19 @@ export default function Bots() {
 
   const handleDelete = async (id: number, name: string) => {
     haptic.error()
-    if (!confirm(`${t('bots.confirmDelete')} (${name})`)) return
+    setConfirmModal({ type: 'delete', id, name })
+  }
+
+  const confirmDelete = async () => {
+    if (!confirmModal) return
     try {
-      await api.delete(`/bots/${id}`)
+      await api.delete(`/bots/${confirmModal.id}`)
       await fetchBots()
-      addToast('success', t('bots.deleted', { name }))
+      addToast('success', t('bots.deleted', { name: confirmModal.name }))
     } catch (err) {
       addToast('error', getApiErrorMessage(err, t('bots.failedDelete')))
     }
+    setConfirmModal(null)
   }
 
   const handleDuplicate = async (id: number) => {
@@ -889,16 +900,21 @@ export default function Bots() {
 
   const handleClosePosition = async (botId: number, symbol: string) => {
     haptic.heavy()
-    if (!confirm(t('bots.closePositionConfirm', { symbol }))) return
-    setActionLoading(botId)
+    setConfirmModal({ type: 'close-position', id: botId, name: '', symbol })
+  }
+
+  const confirmClosePosition = async () => {
+    if (!confirmModal || confirmModal.type !== 'close-position') return
+    setActionLoading(confirmModal.id)
     try {
-      await api.post(`/bots/${botId}/close-position/${symbol}`)
+      await api.post(`/bots/${confirmModal.id}/close-position/${confirmModal.symbol}`)
       await fetchBots()
-      addToast('success', t('bots.positionClosed', { symbol }))
+      addToast('success', t('bots.positionClosed', { symbol: confirmModal.symbol }))
     } catch (err) {
       addToast('error', getApiErrorMessage(err, t('bots.failedClosePosition')))
     }
     setActionLoading(null)
+    setConfirmModal(null)
   }
 
   const handleStopAll = async () => {
@@ -1394,6 +1410,26 @@ export default function Bots() {
         tourId="bots-page"
         steps={botsTourSteps}
         autoStart={!loading && !showBuilder && !editBotId}
+      />
+
+      {/* Confirmation Modals */}
+      <ConfirmModal
+        open={confirmModal?.type === 'delete'}
+        title={t('bots.deleteBot', 'Delete Bot')}
+        message={t('bots.confirmDeleteMessage', `Are you sure you want to delete "${confirmModal?.name}"? This action cannot be undone.`)}
+        confirmLabel={t('common.delete', 'Delete')}
+        variant="danger"
+        onConfirm={confirmDelete}
+        onCancel={() => setConfirmModal(null)}
+      />
+      <ConfirmModal
+        open={confirmModal?.type === 'close-position'}
+        title={t('bots.closePosition', 'Close Position')}
+        message={t('bots.closePositionMessage', `Are you sure you want to close the ${confirmModal?.symbol} position? This will send a market order.`)}
+        confirmLabel={t('bots.closePosition', 'Close Position')}
+        variant="warning"
+        onConfirm={confirmClosePosition}
+        onCancel={() => setConfirmModal(null)}
       />
     </div>
   )

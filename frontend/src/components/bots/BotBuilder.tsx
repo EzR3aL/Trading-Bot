@@ -95,20 +95,9 @@ const FIXED_STRATEGY_SOURCES: Record<string, string[]> = {
   ],
 }
 
-const STRATEGY_DISPLAY_NAMES: Record<string, string> = {
-  llm_signal: 'KI-Companion',
-  sentiment_surfer: 'Sentiment Surfer',
-  liquidation_hunter: 'Liquidation Hunter',
-  degen: 'Degen',
-  edge_indicator: 'Edge Indicator',
-  contrarian_pulse: 'Contrarian Pulse',
-}
+import { strategyLabel as getStrategyDisplayName } from '../../constants/strategies'
 
 // Strategy descriptions are now sourced from i18n keys: bots.builder.strategyDesc_{name}
-
-function getStrategyDisplayName(name: string): string {
-  return STRATEGY_DISPLAY_NAMES[name] || name.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
-}
 
 const CATEGORY_ORDER = ['sentiment', 'futures', 'options', 'spot', 'technical', 'tradfi']
 const CATEGORY_ICONS: Record<string, typeof Brain> = {

@@ -88,7 +88,12 @@ export default function Dashboard() {
   const [error, setError] = useState('')
 
   const fetchData = useCallback(async () => {
-    await api.post('/trades/sync').catch((err) => { console.error('Failed to sync trades:', err) })
+    // Only sync once per session to avoid hammering the API
+    const syncKey = 'trades_synced'
+    if (!sessionStorage.getItem(syncKey)) {
+      await api.post('/trades/sync').catch(() => {})
+      sessionStorage.setItem(syncKey, '1')
+    }
 
     const demoParam = demoFilter === 'demo' ? '&demo_mode=true' : demoFilter === 'live' ? '&demo_mode=false' : ''
     const [statsRes, dailyRes, tradesRes] = await Promise.all([
