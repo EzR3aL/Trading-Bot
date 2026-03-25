@@ -40,6 +40,11 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 - **BingX VST Demo-Modus (kritisch — Ludwig)**: BingX VST API unterstuetzt `set_leverage` und `set_margin_type` nicht (Error 109400). Der Trade Executor behandelte dies als Hard-Block — kein einziger Demo-Trade konnte ausgefuehrt werden. Fix: VST-spezifische Fehler werden erkannt und uebersprungen, Bot tradet mit Standard-Einstellungen
 - **BingX Quantity Precision**: Rohe Float-Werte (z.B. `0.03400000001`) wurden als Quantity an die BingX API gesendet — konnte zu Error 100400 fuehren. Fix: `_round_quantity()` rundet auf 4 Dezimalstellen
 - **HL Builder Fee fuer Admins**: Admin-Accounts uebersprungen jetzt die Builder Fee komplett — kein Approval noetig, kein Builder-Parameter in der Order. Verhindert "Builder fee has not been approved" Fehler fuer Admin-Wallets
+- **BingX Content-Type Header (kritisch)**: Authentifizierte Requests sendeten `Content-Type: application/json` mit leerem Body — BingX VST API lehnte alle Orders mit Error 109400 ab. Live-API ignorierte den Header. Root Cause fuer Ludwigs Bot-Probleme
+- **BingX Trailing Stop Parameter**: `activationPrice`/`callbackRate` durch korrekte `price`/`priceRate` ersetzt. `priceRate` wird jetzt als Dezimalwert gesendet (1.5% → 0.015)
+- **BingX Funding Rate predicted_rate**: `estimatedSettlePrice` (ein Preis) wurde faelschlicherweise als Funding-Rate gemappt. Fix: Feld auf `null` gesetzt
+- **Mobile Bot-Menue Bottom Sheet**: Dropdown-Menue wurde durch ein Bottom Sheet ersetzt — gleiche Slide-Up-Animation wie das "Mehr"-Menue, keine Positionierungsprobleme mehr
+- **i18n Portfolio Keys**: `portfolio.total` und `portfolio.margin` fehlten — englische Version zeigte "Gesamt" statt "Total" im Donut-Chart
 
 ### Geaendert
 - **Hyperliquid Onboarding vereinfacht**: Affiliate-Verifizierung und Builder-Fee-Genehmigung sind jetzt direkt in den Exchange-Einstellungen integriert statt in einem separaten Wizard beim Bot-Start. Einmaliger Einrichtungsprozess — kein Wizard-Popup mehr beim Starten von HL-Bots
