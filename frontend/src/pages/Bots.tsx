@@ -11,7 +11,7 @@ import { useToastStore } from '../stores/toastStore'
 import { utcHourToLocal } from '../utils/timezone'
 import { ExchangeIcon } from '../components/ui/ExchangeLogo'
 import BotBuilder from '../components/bots/BotBuilder'
-import BuilderFeeApproval from '../components/hyperliquid/BuilderFeeApproval'
+// BuilderFeeApproval moved to Settings page — no longer needed as a modal here
 import { SkeletonBotCard } from '../components/ui/Skeleton'
 import PnlCell from '../components/ui/PnlCell'
 import ExitReasonBadge from '../components/ui/ExitReasonBadge'
@@ -777,9 +777,7 @@ export default function Bots() {
   const [actionLoading, setActionLoading] = useState<number | null>(null)
   const [error, setError] = useState('')
   const [historyBot, setHistoryBot] = useState<BotStatus | null>(null)
-  const [builderFeeModalBotId, setBuilderFeeModalBotId] = useState<number | null>(null)
   const [llmConnections, setLlmConnections] = useState<LlmConnection[]>([])
-  const swipeBuilderFee = useSwipeToClose({ onClose: () => setBuilderFeeModalBotId(null), enabled: isMobile && builderFeeModalBotId !== null })
 
   const [moreMenuOpen, setMoreMenuOpen] = useState<number | null>(null)
   const [closePositionOpen, setClosePositionOpen] = useState<number | null>(null)
@@ -835,9 +833,10 @@ export default function Bots() {
   const handleStart = async (id: number) => {
     haptic.medium()
     // Check if HL bot needs builder fee approval or referral first (admins bypass)
+    // Instead of a modal, redirect the user to Settings
     const bot = bots.find(b => b.bot_config_id === id)
     if (!isAdmin && bot?.exchange_type === 'hyperliquid' && (bot?.builder_fee_approved === false || bot?.referral_verified === false)) {
-      setBuilderFeeModalBotId(id)
+      addToast('warning', t('hlSetup.setupRequired'), 6000)
       return
     }
 
@@ -850,24 +849,6 @@ export default function Bots() {
       handleStartError(err)
     }
     setActionLoading(null)
-  }
-
-  const handleBuilderFeeApproved = async () => {
-    const botId = builderFeeModalBotId
-    setBuilderFeeModalBotId(null)
-    if (botId) {
-      await fetchBots()
-      // Auto-start bot after approval
-      setActionLoading(botId)
-      try {
-        await api.post(`/bots/${botId}/start`)
-        await fetchBots()
-        addToast('success', t('bots.start'))
-      } catch (err) {
-        handleStartError(err)
-      }
-      setActionLoading(null)
-    }
   }
 
   const handleStop = async (id: number) => {
@@ -1385,22 +1366,7 @@ export default function Bots() {
         <BotTradeHistoryModal bot={historyBot} onClose={() => setHistoryBot(null)} t={t} />
       )}
 
-      {/* Builder Fee Approval Modal */}
-      {builderFeeModalBotId !== null && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-md" onClick={() => setBuilderFeeModalBotId(null)}>
-          <div ref={swipeBuilderFee.ref} style={swipeBuilderFee.style} className="max-w-lg w-full mx-4" onClick={(e) => e.stopPropagation()}>
-            {isMobile && (
-              <div className="flex justify-center pt-2 pb-1 lg:hidden">
-                <div className="w-10 h-1 rounded-full bg-white/20" />
-              </div>
-            )}
-            <BuilderFeeApproval
-              onApproved={handleBuilderFeeApproved}
-              onClose={() => setBuilderFeeModalBotId(null)}
-            />
-          </div>
-        </div>
-      )}
+      {/* Builder Fee Approval moved to Settings page */}
 
       {/* Guided Tour */}
       <GuidedTour

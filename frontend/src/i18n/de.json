@@ -826,6 +826,19 @@
     "loadError": "Konfiguration konnte nicht geladen werden.",
     "notConfigured": "Hyperliquid ist auf diesem Server nicht konfiguriert."
   },
+  "hlSetup": {
+    "title": "Hyperliquid einrichten",
+    "ready": "Hyperliquid ist bereit! Du kannst jetzt Bots erstellen und starten.",
+    "walletConnected": "Wallet verbunden",
+    "affiliateVerified": "Affiliate verifiziert",
+    "builderFeeApproved": "Builder Fee genehmigt",
+    "affiliatePrompt": "Registriere dich über unseren Affiliate Link bei Hyperliquid:",
+    "affiliateCheck": "Bereits registriert? Jetzt prüfen",
+    "affiliateSuccess": "Affiliate erfolgreich verifiziert!",
+    "builderFeePrompt": "Genehmige die Builder Fee um Trading zu aktivieren:",
+    "setupRequired": "Bitte richte Hyperliquid zuerst in den Einstellungen ein.",
+    "pendingSteps": "{{count}} Schritt(e) ausstehend"
+  },
   "common": {
     "loading": "Laden...",
     "error": "Etwas ist schiefgelaufen. Bitte versuche es erneut.",

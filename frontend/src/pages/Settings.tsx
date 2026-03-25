@@ -10,6 +10,7 @@ import type { ConnectionsStatusResponse, ExchangeConnectionStatus, ExchangeInfo,
 import { ExchangeIcon } from '../components/ui/ExchangeLogo'
 import FilterDropdown from '../components/ui/FilterDropdown'
 import GuidedTour, { TourHelpButton, type TourStep } from '../components/ui/GuidedTour'
+import HyperliquidSetup from '../components/hyperliquid/HyperliquidSetup'
 
 const BASE_TABS = ['apiKeys'] as const
 const ADMIN_TABS = [...BASE_TABS, 'llmKeys', 'connections', 'affiliateLinks', 'hyperliquid'] as const
@@ -167,7 +168,8 @@ export default function Settings() {
 
   // Hyperliquid referral (user-facing)
   const [hlReferralInfo, setHlReferralInfo] = useState<{ referral_code?: string; referral_required?: boolean; referral_verified?: boolean; needs_referral?: boolean } | null>(null)
-  const [hlVerifying, setHlVerifying] = useState(false)
+  // Track whether to show inline HL setup after saving credentials
+  const [hlSetupVisible, setHlSetupVisible] = useState(false)
 
   // Hyperliquid revenue
   const [hlRevenue, setHlRevenue] = useState<HlRevenueInfo | null>(null)
@@ -274,6 +276,11 @@ export default function Settings() {
       setConnections(res.data.connections || [])
       updateForm(exchangeType, { apiKey: '', apiSecret: '', passphrase: '' })
       showMessage(t('settings.saved'))
+      // After saving HL credentials, show inline setup section
+      if (exchangeType === 'hyperliquid') {
+        setHlSetupVisible(true)
+        loadHlReferralInfo()
+      }
     } catch (err) { showMessage(getApiErrorMessage(err, t('common.saveFailed'))) }
     setSaving(false)
   }
@@ -470,20 +477,6 @@ export default function Settings() {
     } catch { /* ignore — no HL connection */ }
   }
 
-  const verifyHlReferral = async () => {
-    setHlVerifying(true)
-    try {
-      await api.post('/config/hyperliquid/verify-referral')
-      showMessage(t('affiliate.referralVerified'))
-      await loadHlReferralInfo()
-      const connRes = await api.get('/config/exchange-connections')
-      setConnections(connRes.data.connections || [])
-    } catch (err) {
-      showMessage(getApiErrorMessage(err, t('common.error')))
-    }
-    setHlVerifying(false)
-  }
-
   const loadAdminUids = async (page = adminUidPage, search = adminUidSearch, status = adminUidFilter) => {
     try {
       const res = await api.get('/config/admin/affiliate-uids', { params: { page, per_page: 15, search, status } })
@@ -505,10 +498,13 @@ export default function Settings() {
     }
   }
 
-  // Load HL referral info when HL accordion opens
+  // Load HL referral info when HL accordion opens + auto-show setup if credentials exist
   useEffect(() => {
-    if (openExchange === 'hyperliquid' && !hlReferralInfo) {
-      loadHlReferralInfo()
+    if (openExchange === 'hyperliquid') {
+      if (!hlReferralInfo) loadHlReferralInfo()
+      // Show setup section if HL credentials are already configured
+      const hlConn = getConn('hyperliquid')
+      if (hlConn?.api_keys_configured) setHlSetupVisible(true)
     }
   }, [openExchange])
 
@@ -790,42 +786,9 @@ export default function Settings() {
                           </>
                         )}
 
-                        {/* Hyperliquid: Referral verification (no UID) — hidden for admins */}
-                        {ex.name === 'hyperliquid' && hlReferralInfo?.referral_required && !isAdmin && (
-                          <div className="mt-4 pt-4 border-t border-white/[0.06]">
-                            <h4 className="text-sm font-medium text-white mb-2">{t('affiliate.referral')}</h4>
-                            <p className="text-gray-400 text-xs mb-3">{t('affiliate.referralHint')}</p>
-                            {hlReferralInfo.referral_code && (
-                              <div className="mb-3 p-3 bg-emerald-500/[0.05] border border-emerald-500/20 rounded-lg">
-                                <p className="text-gray-400 text-xs mb-1">{t('affiliate.referralRegisterVia')}</p>
-                                <a href={`https://app.hyperliquid.xyz/join/${hlReferralInfo.referral_code}`} target="_blank" rel="noopener noreferrer"
-                                   className="text-emerald-400 hover:text-emerald-300 break-all text-sm font-medium inline-flex items-center gap-1.5">
-                                  <ExternalLink size={12} />
-                                  https://app.hyperliquid.xyz/join/{hlReferralInfo.referral_code}
-                                </a>
-                              </div>
-                            )}
-                            <div className="flex items-center gap-3">
-                              {hlReferralInfo.referral_verified ? (
-                                <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400">
-                                  {t('affiliate.referralVerified')}
-                                </span>
-                              ) : (
-                                <>
-                                  <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-yellow-500/10 text-yellow-400">
-                                    {t('affiliate.referralNotVerified')}
-                                  </span>
-                                  <button
-                                    onClick={verifyHlReferral}
-                                    disabled={hlVerifying}
-                                    className="px-3 py-1.5 text-xs bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 transition-colors"
-                                  >
-                                    {hlVerifying ? t('common.loading') : t('affiliate.verifyReferral')}
-                                  </button>
-                                </>
-                              )}
-                            </div>
-                          </div>
+                        {/* Hyperliquid: Inline setup (affiliate + builder fee) — hidden for admins */}
+                        {ex.name === 'hyperliquid' && hlSetupVisible && !isAdmin && (
+                          <HyperliquidSetup onComplete={() => loadHlReferralInfo()} />
                         )}
 
                         {/* Bitget/Weex: Affiliate UID */}

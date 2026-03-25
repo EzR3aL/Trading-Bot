@@ -42,6 +42,7 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 - **HL Builder Fee fuer Admins**: Admin-Accounts uebersprungen jetzt die Builder Fee komplett — kein Approval noetig, kein Builder-Parameter in der Order. Verhindert "Builder fee has not been approved" Fehler fuer Admin-Wallets
 
 ### Geaendert
+- **Hyperliquid Onboarding vereinfacht**: Affiliate-Verifizierung und Builder-Fee-Genehmigung sind jetzt direkt in den Exchange-Einstellungen integriert statt in einem separaten Wizard beim Bot-Start. Einmaliger Einrichtungsprozess — kein Wizard-Popup mehr beim Starten von HL-Bots
 - **Zeitzonen-Support im Bot Builder**: Uhrzeiten werden jetzt in der lokalen Zeitzone des Users angezeigt und eingegeben. Automatische Erkennung via Browser. Keine "(UTC)"-Anzeigen mehr — Konvertierung erfolgt automatisch im Hintergrund
 
 ### Entfernt
