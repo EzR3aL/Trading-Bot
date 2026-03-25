@@ -1,18 +1,16 @@
-import { Fragment, useEffect, useState, useRef, useCallback } from 'react'
+import { useEffect, useState, useRef, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import api from '../api/client'
 import { useFilterStore } from '../stores/filterStore'
-import type { Statistics, Trade, DailyStats } from '../types'
+import type { Statistics, DailyStats, PortfolioPosition } from '../types'
 import PnlChart from '../components/dashboard/PnlChart'
 import WinLossChart from '../components/dashboard/WinLossChart'
 import RevenueChart from '../components/dashboard/RevenueChart'
 import { DashboardSkeleton } from '../components/ui/Skeleton'
-import PnlCell from '../components/ui/PnlCell'
-import { ArrowUpRight, ArrowDownRight, ChevronRight } from 'lucide-react'
+import { ArrowUpRight, ArrowDownRight } from 'lucide-react'
 import { ExchangeIcon } from '../components/ui/ExchangeLogo'
 import GuidedTour, { TourHelpButton, type TourStep } from '../components/ui/GuidedTour'
-import { formatDate, formatTime } from '../utils/dateUtils'
-import MobileTradeCard from '../components/ui/MobileTradeCard'
+import MobilePositionCard from '../components/ui/MobilePositionCard'
 import useIsMobile from '../hooks/useIsMobile'
 import usePullToRefresh from '../hooks/usePullToRefresh'
 import PullToRefreshIndicator from '../components/ui/PullToRefreshIndicator'
@@ -82,7 +80,8 @@ export default function Dashboard() {
   const isMobile = useIsMobile()
   const [stats, setStats] = useState<Statistics | null>(null)
   const [dailyStats, setDailyStats] = useState<DailyStats[]>([])
-  const [recentTrades, setRecentTrades] = useState<Trade[]>([])
+  const [positions, setPositions] = useState<PortfolioPosition[]>([])
+  const [loadingPositions, setLoadingPositions] = useState(true)
   const [period, setPeriod] = useState<number>(30)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -96,14 +95,17 @@ export default function Dashboard() {
     }
 
     const demoParam = demoFilter === 'demo' ? '&demo_mode=true' : demoFilter === 'live' ? '&demo_mode=false' : ''
-    const [statsRes, dailyRes, tradesRes] = await Promise.all([
+    const [statsRes, dailyRes] = await Promise.all([
       api.get(`/statistics?days=${period}${demoParam}`),
       api.get(`/statistics/daily?days=${period}${demoParam}`),
-      api.get(`/trades?per_page=10&status=closed${demoParam}`),
     ])
     setStats(statsRes.data)
     setDailyStats(dailyRes.data.days)
-    setRecentTrades(tradesRes.data.trades)
+    // Positions loaded separately (exchange API, slower)
+    api.get('/portfolio/positions').then(res => {
+      setPositions(res.data.positions || res.data || [])
+      setLoadingPositions(false)
+    }).catch(() => setLoadingPositions(false))
   }, [period, demoFilter])
 
   useEffect(() => {
@@ -241,7 +243,7 @@ export default function Dashboard() {
       )}
 
       {/* Recent trades */}
-      <DashboardRecentTrades trades={recentTrades} />
+      <DashboardOpenPositions positions={positions} loading={loadingPositions} />
 
       {/* Guided Tour */}
       <GuidedTour tourId="dashboard" steps={dashboardTourSteps} />
@@ -249,143 +251,79 @@ export default function Dashboard() {
   )
 }
 
-function DashboardRecentTrades({ trades }: { trades: Trade[] }) {
+function DashboardOpenPositions({ positions, loading }: { positions: PortfolioPosition[]; loading: boolean }) {
   const { t } = useTranslation()
-  const [expandedId, setExpandedId] = useState<number | null>(null)
   const isMobile = useIsMobile()
 
   return (
     <div className="glass-card rounded-xl overflow-hidden" data-tour="dash-trades">
       <div className="px-4 sm:px-5 pt-4 sm:pt-5 pb-3 sm:pb-4 sm:border-b sm:border-white/5">
         <h2 className="text-base font-semibold text-white">
-          {t('dashboard.recentTrades')}
+          {t('portfolio.positions')}
         </h2>
       </div>
-      {/* Mobile: Card layout */}
-      {isMobile ? (
+      {loading ? (
+        <div className="p-8 flex items-center justify-center">
+          <div className="w-6 h-6 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+        </div>
+      ) : positions.length === 0 ? (
+        <div className="p-8 text-center text-gray-500 text-sm">{t('portfolio.noPositions')}</div>
+      ) : isMobile ? (
         <div className="px-1 pb-1 pt-1 space-y-1.5">
-          {trades.length === 0 ? (
-            <p className="py-8 text-center text-gray-500 text-sm">{t('dashboard.noTrades')}</p>
-          ) : (
-            trades.map((trade) => <MobileTradeCard key={trade.id} trade={trade} />)
-          )}
+          {positions.map((pos, idx) => (
+            <MobilePositionCard key={`${pos.exchange}-${pos.symbol}-${idx}`} pos={pos} />
+          ))}
         </div>
       ) : (
-      /* Desktop: Table layout */
-      <div className="overflow-x-auto">
-        <table className="table-premium">
-          <thead>
-            <tr>
-              <th className="text-left">{t('trades.date')}</th>
-              <th className="text-left hidden xl:table-cell">{t('trades.bot')}</th>
-              <th className="text-center hidden lg:table-cell">{t('trades.exchange')}</th>
-              <th className="text-left">{t('trades.symbol')}</th>
-              <th className="text-center">{t('trades.side')}</th>
-              <th className="text-right hidden xl:table-cell">{t('trades.entryPrice')}</th>
-              <th className="text-right">{t('trades.pnl')}</th>
-              <th className="text-center hidden 2xl:table-cell">{t('trades.mode')}</th>
-              <th className="text-center">{t('trades.status')}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {trades.length === 0 ? (
+        <div className="overflow-x-auto">
+          <table className="table-premium w-full">
+            <thead>
               <tr>
-                <td colSpan={9} className="p-8 text-center text-gray-500">
-                  {t('dashboard.noTrades')}
-                </td>
+                <th className="text-left">{t('portfolio.exchange')}</th>
+                <th className="text-left">{t('portfolio.symbol')}</th>
+                <th className="text-center">{t('portfolio.side')}</th>
+                <th className="text-right hidden lg:table-cell">{t('portfolio.entryPrice')}</th>
+                <th className="text-right hidden lg:table-cell">{t('portfolio.currentPrice')}</th>
+                <th className="text-right">{t('portfolio.pnl')}</th>
+                <th className="text-center hidden xl:table-cell">{t('portfolio.leverage')}</th>
               </tr>
-            ) : (
-              trades.map((trade) => (
-                <Fragment key={trade.id}>
-                  <tr
-                    onClick={() => setExpandedId(expandedId === trade.id ? null : trade.id)}
-                    className="cursor-pointer"
-                  >
-                    <td className="text-gray-300">
-                      <span className="inline-flex items-center">
-                        <ChevronRight size={14} className={`expand-chevron ${expandedId === trade.id ? 'open' : ''}`} />
-                        <span title={formatTime(trade.entry_time)}>{formatDate(trade.entry_time)}</span>
-                      </span>
-                    </td>
-                    <td className="hidden xl:table-cell">
-                      {trade.bot_name ? (
-                        <span className="text-white font-medium text-xs">{trade.bot_name}</span>
-                      ) : (
-                        <span className="text-gray-600">--</span>
-                      )}
-                    </td>
-                    <td className="text-center hidden lg:table-cell">
-                      <span className="inline-flex justify-center">
-                        <ExchangeIcon exchange={trade.bot_exchange || trade.exchange} size={18} />
-                      </span>
-                    </td>
-                    <td className="text-white font-medium">{trade.symbol}</td>
-                    <td className="text-center">
-                      <span className={trade.side === 'long' ? 'text-profit' : 'text-loss'}>
-                        {trade.side === 'long' ? '+' : '-'} {trade.side.toUpperCase()}
-                      </span>
-                    </td>
-                    <td className="text-right text-gray-300 hidden xl:table-cell">
-                      ${trade.entry_price.toLocaleString()}
-                    </td>
-                    <td className="text-right">
-                      <PnlCell
-                        pnl={trade.pnl}
-                        fees={trade.fees}
-                        fundingPaid={trade.funding_paid}
-                        status={trade.status}
-                        className={trade.pnl && trade.pnl >= 0 ? 'pnl-positive' : 'pnl-negative'}
-                      />
-                    </td>
-                    <td className="text-center hidden 2xl:table-cell">
-                      <span className={trade.demo_mode ? 'badge-demo' : 'badge-live'}>
-                        {trade.demo_mode ? t('common.demo') : t('common.live')}
-                      </span>
-                    </td>
-                    <td className="text-center">
-                      <span className={
-                        trade.status === 'open' ? 'badge-open' :
-                        trade.status === 'closed' ? 'badge-neutral' :
-                        'badge-demo'
-                      }>
-                        {t(`trades.${trade.status}`)}
-                      </span>
-                    </td>
-                  </tr>
-                  {expandedId === trade.id && (
-                    <tr className="table-expand-row">
-                      <td colSpan={9} className="!p-0 !border-b-0">
-                        <dl className="table-expand-content">
-                          <div className="xl:hidden">
-                            <dt>{t('trades.bot')}</dt>
-                            <dd>{trade.bot_name || '--'}</dd>
-                          </div>
-                          <div className="lg:hidden">
-                            <dt>{t('trades.exchange')}</dt>
-                            <dd className="capitalize">{trade.bot_exchange || trade.exchange}</dd>
-                          </div>
-                          <div className="xl:hidden">
-                            <dt>{t('trades.entryPrice')}</dt>
-                            <dd>${trade.entry_price.toLocaleString()}</dd>
-                          </div>
-                          <div>
-                            <dt>{t('trades.exitPrice')}</dt>
-                            <dd>{trade.exit_price ? `$${trade.exit_price.toLocaleString()}` : '--'}</dd>
-                          </div>
-                          <div className="2xl:hidden">
-                            <dt>{t('trades.mode')}</dt>
-                            <dd>{trade.demo_mode ? t('common.demo') : t('common.live')}</dd>
-                          </div>
-                        </dl>
-                      </td>
-                    </tr>
-                  )}
-                </Fragment>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              {positions.map((pos, idx) => (
+                <tr key={`${pos.exchange}-${pos.symbol}-${idx}`}>
+                  <td>
+                    <span className="inline-flex items-center gap-2">
+                      <ExchangeIcon exchange={pos.exchange} size={16} />
+                      <span className="text-gray-300 capitalize text-sm hidden md:inline">{pos.exchange}</span>
+                    </span>
+                  </td>
+                  <td className="text-white font-medium text-sm">{pos.symbol}</td>
+                  <td className="text-center">
+                    <span className={`text-xs font-medium px-2 py-0.5 rounded ${
+                      pos.side.toLowerCase() === 'long'
+                        ? 'bg-emerald-500/10 text-emerald-400'
+                        : 'bg-red-500/10 text-red-400'
+                    }`}>
+                      {pos.side.toUpperCase()}
+                    </span>
+                  </td>
+                  <td className="text-right text-gray-300 text-sm font-mono hidden lg:table-cell">
+                    ${pos.entry_price.toLocaleString()}
+                  </td>
+                  <td className="text-right text-gray-300 text-sm font-mono hidden lg:table-cell">
+                    ${pos.current_price.toLocaleString()}
+                  </td>
+                  <td className={`text-right text-sm font-medium font-mono whitespace-nowrap ${
+                    pos.unrealized_pnl >= 0 ? 'text-emerald-400' : 'text-red-400'
+                  }`}>
+                    {pos.unrealized_pnl >= 0 ? '▲ +' : '▼ '}${Math.abs(pos.unrealized_pnl).toFixed(2)}
+                  </td>
+                  <td className="text-center text-gray-300 text-sm hidden xl:table-cell">{pos.leverage}x</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
     </div>
   )

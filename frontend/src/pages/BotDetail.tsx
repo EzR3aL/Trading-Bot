@@ -6,18 +6,17 @@ import {
   ResponsiveContainer, Bar,
 } from 'recharts'
 import {
-  ArrowLeft, Play, Square, Settings, TrendingUp, TrendingDown,
+  ArrowLeft, Play, Square, TrendingUp, TrendingDown,
   Activity, AlertCircle, CheckCircle, Bot, ShieldCheck,
 } from 'lucide-react'
 import api from '../api/client'
 import { getApiErrorMessage } from '../utils/api-error'
 import { useToastStore } from '../stores/toastStore'
-import { utcHourToLocal } from '../utils/timezone'
 import { useFilterStore } from '../stores/filterStore'
 import { ExchangeIcon } from '../components/ui/ExchangeLogo'
 import PnlCell from '../components/ui/PnlCell'
 import type { LlmConnection } from '../types'
-import { formatDate, formatDateTime, formatTime, formatChartCurrency } from '../utils/dateUtils'
+import { formatDate, formatTime, formatChartCurrency } from '../utils/dateUtils'
 import MobileTradeCard from '../components/ui/MobileTradeCard'
 import useIsMobile from '../hooks/useIsMobile'
 
@@ -195,6 +194,7 @@ export default function BotDetail() {
   }, [fetchData])
 
   const [actionLoading, setActionLoading] = useState(false)
+  const [confirmStop, setConfirmStop] = useState(false)
 
   const handleStart = async () => {
     setActionLoading(true)
@@ -207,7 +207,17 @@ export default function BotDetail() {
     setActionLoading(false)
   }
 
-  const handleStop = async () => {
+  const handleStopClick = () => {
+    if (!confirmStop) {
+      setConfirmStop(true)
+      setTimeout(() => setConfirmStop(false), 3000)
+      return
+    }
+    doStop()
+  }
+
+  const doStop = async () => {
+    setConfirmStop(false)
     setActionLoading(true)
     try {
       await api.post(`/bots/${botId}/stop`)
@@ -241,12 +251,6 @@ export default function BotDetail() {
   const statusKey = runtime?.status || 'idle'
   const style = STATUS_STYLES[statusKey] || STATUS_STYLES.idle
 
-  const formatSchedule = () => {
-    if (config.schedule_type === 'interval') return t('botDetail.scheduleInterval', { minutes: config.schedule_config?.interval_minutes || 60 })
-    // Convert UTC hours from API to local for display
-    if (config.schedule_type === 'custom_cron') return t('botDetail.scheduleCustom', { hours: (config.schedule_config?.hours || []).map((h: number) => utcHourToLocal(h)).join(', ') })
-    return config.schedule_type
-  }
 
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-6">
@@ -291,8 +295,8 @@ export default function BotDetail() {
 
           <div className="flex items-center gap-2">
             {statusKey === 'running' || statusKey === 'starting' ? (
-              <button onClick={handleStop} disabled={actionLoading} className={`flex items-center gap-2 px-4 py-2 bg-red-900/30 text-red-400 border border-red-700 rounded-lg hover:bg-red-900/50 transition-colors ${actionLoading ? 'opacity-60 cursor-not-allowed' : ''}`}>
-                {actionLoading ? <div className="w-4 h-4 border-2 border-red-400 border-t-transparent rounded-full animate-spin" /> : <Square size={14} />} {t('bots.stop')}
+              <button onClick={handleStopClick} disabled={actionLoading} className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${confirmStop ? 'bg-red-600 text-white border border-red-500 animate-pulse' : 'bg-red-900/30 text-red-400 border border-red-700 hover:bg-red-900/50'} ${actionLoading ? 'opacity-60 cursor-not-allowed' : ''}`}>
+                {actionLoading ? <div className="w-4 h-4 border-2 border-red-400 border-t-transparent rounded-full animate-spin" /> : <Square size={14} />} {confirmStop ? t('bots.confirmStop') : t('bots.stop')}
               </button>
             ) : (
               <button onClick={handleStart} disabled={actionLoading} className={`flex items-center gap-2 px-4 py-2 bg-emerald-900/30 text-emerald-400 border border-emerald-700 rounded-lg hover:bg-emerald-900/50 transition-colors ${actionLoading ? 'opacity-60 cursor-not-allowed' : ''}`}>
@@ -357,9 +361,9 @@ export default function BotDetail() {
         </div>
       )}
 
-      <div className="grid lg:grid-cols-3 gap-6">
+      <div className="grid gap-6">
         {/* Trades Table */}
-        <div className="lg:col-span-2 glass-card rounded-xl p-5 border border-white/10">
+        <div className="glass-card rounded-xl p-5 border border-white/10">
           <h2 className="text-white font-semibold mb-4">{d('recentTrades')} ({stats.recent_trades.length})</h2>
           {stats.recent_trades.length === 0 ? (
             <p className="text-gray-400 text-sm py-8 text-center">{d('noTrades')}</p>
@@ -445,74 +449,7 @@ export default function BotDetail() {
           }
         </div>
 
-        {/* Config Card */}
-        <div className="glass-card rounded-xl p-5 border border-white/10 space-y-4">
-          <h2 className="text-white font-semibold flex items-center gap-2">
-            <Settings size={16} className="text-gray-400" /> {d('config')}
-          </h2>
-          <ConfigRow label={d('strategy')} value={strategyLabel(config.strategy_type)} />
-          <ConfigRow label={d('pairs')} value={config.trading_pairs.join(', ')} />
-          <ConfigRow label={d('leverage')} value={`${config.leverage}x`} />
-          <ConfigRow label={d('positionSize')} value={`${config.position_size_percent}%`} />
-          <ConfigRow label={d('takeProfit')} value={`${config.take_profit_percent}%`} />
-          <ConfigRow label={d('stopLoss')} value={`${config.stop_loss_percent}%`} />
-          <ConfigRow label={d('dailyLoss')} value={`${config.daily_loss_limit_percent}%`} />
-          <ConfigRow label={d('maxTrades')} value={`${config.max_trades_per_day}`} />
-          <ConfigRow label={d('schedule')} value={formatSchedule()} />
-          <ConfigRow label={d('fees')} value={`$${s.total_fees.toFixed(2)}`} />
-          <ConfigRow label={d('funding')} value={`$${s.total_funding.toFixed(2)}`} />
-          {config.discord_webhook_configured && (
-            <ConfigRow label="Discord" value={`✓ ${d('discordConfigured')}`} />
-          )}
-          {config.telegram_configured && (
-            <ConfigRow label="Telegram" value={`✓ ${d('telegramConfigured')}`} />
-          )}
-          {config.whatsapp_configured && (
-            <ConfigRow label="WhatsApp" value={`✓ ${d('whatsappConfigured')}`} />
-          )}
-          {/* Notification test buttons */}
-          {(config.telegram_configured || config.whatsapp_configured) && (
-            <div className="flex gap-2 pt-2 border-t border-white/5">
-              {config.telegram_configured && (
-                <button
-                  onClick={async () => {
-                    try {
-                      await api.post(`/bots/${botId}/test-telegram`)
-                    } catch (err: any) {
-                      setError(err.response?.data?.detail || t('common.error'))
-                    }
-                  }}
-                  className="px-3 py-1.5 text-xs bg-blue-900/30 text-blue-400 border border-blue-700 rounded-lg hover:bg-blue-900/50 transition-colors"
-                >
-                  {d('testTelegram')}
-                </button>
-              )}
-              {config.whatsapp_configured && (
-                <button
-                  onClick={async () => {
-                    try {
-                      await api.post(`/bots/${botId}/test-whatsapp`)
-                    } catch (err: any) {
-                      setError(err.response?.data?.detail || t('common.error'))
-                    }
-                  }}
-                  className="px-3 py-1.5 text-xs bg-green-900/30 text-green-400 border border-green-700 rounded-lg hover:bg-green-900/50 transition-colors"
-                >
-                  {d('testWhatsapp')}
-                </button>
-              )}
-            </div>
-          )}
-          {config.created_at && (
-            <ConfigRow label={d('created')} value={formatDate(config.created_at)} />
-          )}
-          {runtime?.started_at && (
-            <ConfigRow label={d('started')} value={formatDateTime(runtime.started_at)} />
-          )}
-          {runtime?.last_analysis && (
-            <ConfigRow label={d('lastAnalysis')} value={formatDateTime(runtime.last_analysis)} />
-          )}
-        </div>
+        
       </div>
     </div>
   )
@@ -536,11 +473,4 @@ function StatCard({ icon, label, value, color, sub }: {
   )
 }
 
-function ConfigRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex justify-between items-center text-sm">
-      <span className="text-gray-400">{label}</span>
-      <span className="text-white font-mono text-right max-w-[60%] truncate">{value}</span>
-    </div>
-  )
-}
+

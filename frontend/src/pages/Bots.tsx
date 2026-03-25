@@ -775,6 +775,7 @@ export default function Bots() {
   const [editBotId, setEditBotId] = useState<number | null>(null)
   const [expandedBotId, setExpandedBotId] = useState<number | null>(null)
   const [actionLoading, setActionLoading] = useState<number | null>(null)
+  const [confirmStopId, setConfirmStopId] = useState<number | null>(null)
   const [error, setError] = useState('')
   const [historyBot, setHistoryBot] = useState<BotStatus | null>(null)
   const [llmConnections, setLlmConnections] = useState<LlmConnection[]>([])
@@ -857,8 +858,18 @@ export default function Bots() {
     setActionLoading(null)
   }
 
-  const handleStop = async (id: number) => {
-    haptic.heavy()
+  const handleStopClick = (id: number) => {
+    if (confirmStopId !== id) {
+      haptic.heavy()
+      setConfirmStopId(id)
+      setTimeout(() => setConfirmStopId((prev) => prev === id ? null : prev), 3000)
+      return
+    }
+    doStop(id)
+  }
+
+  const doStop = async (id: number) => {
+    setConfirmStopId(null)
     setActionLoading(id)
     try {
       await api.post(`/bots/${id}/stop`)
@@ -1295,13 +1306,13 @@ export default function Bots() {
                 <div className="flex flex-wrap items-center gap-2 pt-3 border-t border-white/5" {...(bot === bots[0] ? { 'data-tour': 'bot-actions' } : {})}>
                   {bot.status === 'running' ? (
                     <button
-                      onClick={() => handleStop(bot.bot_config_id)}
+                      onClick={() => handleStopClick(bot.bot_config_id)}
                       disabled={actionLoading === bot.bot_config_id}
                       aria-label={`${t('bots.stop')} ${bot.name}`}
-                      className="w-full sm:w-auto sm:flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 text-sm bg-red-500/10 text-red-400 rounded-xl border border-red-500/10 hover:bg-red-500/20 disabled:opacity-50 transition-all duration-200"
+                      className={`w-full sm:w-auto sm:flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 text-sm rounded-xl border disabled:opacity-50 transition-all duration-200 ${confirmStopId === bot.bot_config_id ? 'bg-red-600 text-white border-red-500 animate-pulse' : 'bg-red-500/10 text-red-400 border-red-500/10 hover:bg-red-500/20'}`}
                     >
                       <Square size={16} />
-                      {t('bots.stop')}
+                      {confirmStopId === bot.bot_config_id ? t('bots.confirmStop') : t('bots.stop')}
                     </button>
                   ) : (
                     <button
@@ -1321,10 +1332,11 @@ export default function Bots() {
                   <button
                     onClick={() => setHistoryBot(bot)}
                     aria-label={t('bots.showTrades')}
-                    className="p-2 text-gray-400 hover:text-primary-400 hover:bg-primary-500/10 transition-all duration-200 rounded-lg"
+                    className="flex items-center gap-1.5 px-3 py-2 text-sm text-primary-400 bg-primary-500/10 hover:bg-primary-500/20 border border-primary-500/20 transition-all duration-200 rounded-xl"
                     title={t('bots.tradeHistory')}
                   >
                     <TrendingUp size={16} />
+                    <span className="hidden sm:inline">{t('bots.tradeHistory')}</span>
                   </button>
                   {/* 3-dot menu for Edit, Duplicate, Delete */}
                   <div className="relative">
