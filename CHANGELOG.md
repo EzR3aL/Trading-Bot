@@ -20,6 +20,10 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 - **Dashboard: Open Positions statt Letzte Trades**: Dashboard-Hauptseite zeigt jetzt offene Positionen (aus Portfolio-API) statt geschlossene Trades — relevantere Live-Uebersicht
 - **Historie-Button sichtbarer**: Button in Bot-Cards jetzt mit Farbe (Primary), Border und Label-Text statt nur grauem Icon
 
+### Geaendert (UX)
+- **3-Punkte-Menue Desktop vs Mobil**: Desktop zeigt jetzt ein kompaktes Dropdown-Menue direkt am Button. Mobil bleibt das Bottom-Sheet wie gehabt
+- **Trade-Historie Modal groesser auf Desktop**: `lg:max-h-[90vh]` und mehr Margin — kein vertikales Scrollen mehr bei normaler Trade-Anzahl
+
 ### Hinzugefuegt
 - **i18n Keys**: `bots.confirmStop` fuer DE ("Wirklich stoppen?") und EN ("Confirm Stop?")
 

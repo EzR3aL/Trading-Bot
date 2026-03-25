@@ -443,7 +443,7 @@ function BotTradeHistoryModal({ bot, onClose, t }: { bot: BotStatus; onClose: ()
       <div
         ref={swipe.ref}
         style={swipe.style}
-        className="bg-[#0b0f19] rounded-2xl max-w-5xl w-full mx-2 sm:mx-4 my-2 sm:my-3 max-h-[95vh] flex flex-col border border-white/10 shadow-2xl overflow-hidden"
+        className="bg-[#0b0f19] rounded-2xl max-w-5xl w-full mx-2 sm:mx-4 my-2 sm:my-3 max-h-[95vh] lg:max-h-[90vh] lg:my-6 flex flex-col border border-white/10 shadow-2xl overflow-hidden"
         onClick={(e) => e.stopPropagation()}
         aria-label={t('bots.tradeHistory')}
       >
@@ -1347,6 +1347,32 @@ export default function Bots() {
                     >
                       <MoreVertical size={18} />
                     </button>
+                    {/* Desktop dropdown menu */}
+                    {!isMobile && moreMenuOpen === bot.bot_config_id && (
+                      <div className="absolute right-0 top-full mt-1 w-48 bg-[#141a2a] border border-white/10 rounded-xl shadow-2xl z-50 py-1 overflow-hidden">
+                        <button
+                          onClick={() => { setMoreMenuOpen(null); setEditBotId(bot.bot_config_id) }}
+                          disabled={bot.status === 'running'}
+                          className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-gray-200 hover:bg-white/5 disabled:opacity-30 transition-colors"
+                        >
+                          <Pencil size={15} /> {t('bots.edit')}
+                        </button>
+                        <button
+                          onClick={() => { setMoreMenuOpen(null); handleDuplicate(bot.bot_config_id) }}
+                          className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-gray-200 hover:bg-white/5 transition-colors"
+                        >
+                          <Copy size={15} /> {t('bots.duplicate')}
+                        </button>
+                        <div className="border-t border-white/5 my-0.5" />
+                        <button
+                          onClick={() => { setMoreMenuOpen(null); handleDelete(bot.bot_config_id, bot.name) }}
+                          disabled={bot.status === 'running'}
+                          className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-red-400 hover:bg-red-500/5 disabled:opacity-30 transition-colors"
+                        >
+                          <Trash2 size={15} /> {t('bots.delete')}
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </div>
                 </>
@@ -1363,14 +1389,22 @@ export default function Bots() {
       )}
 
       {/* Mobile bottom sheet overlay for 3-dot menu */}
-      {moreMenuOpen !== null && (
+      {isMobile && moreMenuOpen !== null && (
         <div
           className="fixed inset-0 z-[9998] bg-black/60 backdrop-blur-sm"
           onClick={() => setMoreMenuOpen(null)}
         />
       )}
+      {/* Desktop overlay (transparent click-catcher) */}
+      {!isMobile && moreMenuOpen !== null && (
+        <div
+          className="fixed inset-0 z-40"
+          onClick={() => setMoreMenuOpen(null)}
+        />
+      )}
 
       {/* Mobile bottom sheet menu (matches "Mehr" nav animation) */}
+      {isMobile && (
       <div
         className={`fixed bottom-0 left-0 right-0 z-[9999] bg-[#0f1420] border-t border-white/10 rounded-t-2xl transition-transform duration-300 ease-out ${
           moreMenuOpen !== null ? 'translate-y-0' : 'translate-y-full'
@@ -1415,6 +1449,7 @@ export default function Bots() {
           );
         })()}
       </div>
+      )}
 
       {/* Guided Tour */}
       <GuidedTour
