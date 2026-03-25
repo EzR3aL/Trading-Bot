@@ -1321,20 +1321,10 @@ export default function Bots() {
                       <MoreVertical size={18} />
                     </button>
                     {moreMenuOpen === bot.bot_config_id && (() => {
-                      // Position the dropdown near the button using fixed positioning
-                      // to avoid overflow clipping from parent containers
-                      const btnEl = document.getElementById(`more-btn-${bot.bot_config_id}`);
-                      const rect = btnEl?.getBoundingClientRect();
-                      const menuStyle: React.CSSProperties = rect ? {
-                        position: 'fixed',
-                        top: Math.max(8, rect.top - 140),
-                        right: Math.max(8, window.innerWidth - rect.right),
-                        zIndex: 9999,
-                      } : { position: 'fixed', top: '50%', right: 16, zIndex: 9999 };
                       return (
                       <>
                         <div className="fixed inset-0" style={{ zIndex: 9998 }} onClick={() => setMoreMenuOpen(null)} />
-                        <div style={menuStyle} className="w-44 bg-[#1a1f2e] border border-white/10 rounded-lg shadow-2xl">
+                        <div className="absolute right-0 bottom-full mb-2 w-44 bg-[#1a1f2e] border border-white/10 rounded-lg shadow-2xl" style={{ zIndex: 9999 }}>
                           <button
                             onClick={() => { setMoreMenuOpen(null); setEditBotId(bot.bot_config_id) }}
                             disabled={bot.status === 'running'}
