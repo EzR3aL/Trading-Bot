@@ -132,10 +132,12 @@ class BingXClient(ExchangeClient):
 
         BingX uses the X-BX-APIKEY header for authentication.
         The signature is sent as a query parameter, not a header.
+        Note: Do NOT set Content-Type for authenticated requests — all params
+        are sent as query string, not JSON body. VST API rejects requests
+        with Content-Type: application/json when the body is empty.
         """
         return {
             "X-BX-APIKEY": self.api_key,
-            "Content-Type": "application/json",
         }
 
     def _build_signed_params(self, params: Optional[Dict] = None) -> str:
