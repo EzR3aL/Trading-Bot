@@ -571,7 +571,7 @@ class BingXClient(ExchangeClient):
             symbol=symbol,
             current_rate=float(rate_data.get("lastFundingRate", 0)),
             next_funding_time=next_funding_time,
-            predicted_rate=_safe_float(rate_data.get("estimatedSettlePrice")),
+            predicted_rate=None,  # BingX estimatedSettlePrice is a price, not a rate
         )
 
     # ==================== Fee & Fill Methods ====================
@@ -718,9 +718,9 @@ class BingXClient(ExchangeClient):
             "side": close_side,
             "positionSide": position_side,
             "type": ORDER_TYPE_TRAILING_STOP_MARKET,
-            "quantity": str(size),
-            "activationPrice": str(trigger_price),
-            "callbackRate": str(callback_ratio),
+            "quantity": str(self._round_quantity(size)),
+            "price": str(trigger_price),
+            "priceRate": str(round(callback_ratio / 100, 4)),
         }
 
         result = await self._request("POST", ENDPOINTS["place_order"], data=order_params)
@@ -772,7 +772,7 @@ class BingXClient(ExchangeClient):
                     "side": close_side,
                     "positionSide": position_side,
                     "type": "TAKE_PROFIT_MARKET",
-                    "quantity": str(size),
+                    "quantity": str(self._round_quantity(size)),
                     "stopPrice": str(take_profit),
                     "workingType": "MARK_PRICE",
                 })
@@ -789,7 +789,7 @@ class BingXClient(ExchangeClient):
                     "side": close_side,
                     "positionSide": position_side,
                     "type": "STOP_MARKET",
-                    "quantity": str(size),
+                    "quantity": str(self._round_quantity(size)),
                     "stopPrice": str(stop_loss),
                     "workingType": "MARK_PRICE",
                 })
