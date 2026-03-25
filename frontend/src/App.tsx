@@ -12,7 +12,6 @@ const Dashboard = lazy(() => import('./pages/Dashboard'))
 const Trades = lazy(() => import('./pages/Trades'))
 const Settings = lazy(() => import('./pages/Settings'))
 const Bots = lazy(() => import('./pages/Bots'))
-const BotDetail = lazy(() => import('./pages/BotDetail'))
 const BotPerformance = lazy(() => import('./pages/BotPerformance'))
 const Portfolio = lazy(() => import('./pages/Portfolio'))
 const TaxReport = lazy(() => import('./pages/TaxReport'))
@@ -75,7 +74,6 @@ export default function App() {
                     <Route path="/trades" element={<Trades />} />
                     <Route path="/settings" element={<Settings />} />
                     <Route path="/bots" element={<Bots />} />
-                    <Route path="/bots/:botId" element={<BotDetail />} />
                     <Route path="/performance" element={<BotPerformance />} />
                     <Route path="/tax-report" element={<TaxReport />} />
                     <Route path="/guide" element={<GettingStarted />} />

@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Link } from 'react-router-dom'
 import { toBlob } from 'html-to-image'
 import api from '../api/client'
 import { getApiErrorMessage } from '../utils/api-error'
@@ -1030,7 +1029,7 @@ export default function Bots() {
                 >
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
-                      <Link to={`/bots/${bot.bot_config_id}`} onClick={(e) => isMobile && e.stopPropagation()} className={`text-white font-semibold ${isMobile ? 'text-[13px]' : 'text-lg'} hover:text-primary-400 transition-colors truncate block`}>{bot.name}</Link>
+                      <span className={`text-white font-semibold ${isMobile ? 'text-[13px]' : 'text-lg'} truncate block`}>{bot.name}</span>
                       {isMobile && bot.status === 'running' && (
                         <span className="relative flex h-2 w-2 shrink-0">
                           <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>

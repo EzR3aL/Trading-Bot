@@ -12,6 +12,7 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 ## [4.5.0] - 2026-03-25 — UI Overhaul
 
 ### Entfernt
+- **BotDetail-Seite komplett entfernt**: Die Unterseite die beim Klick auf einen Bot-Namen erschien wurde entfernt — alle Infos (Trades, Positionen, Config) sind bereits auf Dashboard, Portfolio und Bots-Seite verfuegbar. Bot-Name ist nicht mehr klickbar
 - **BotDetail Config-Panel**: Konfigurationsanzeige (Strategie, Hebel, TP/SL etc.) entfernt — Infos sind ueber Bot-Edit erreichbar, Panel zeigte bei fehlenden Werten "null" an
 
 ### Geaendert
