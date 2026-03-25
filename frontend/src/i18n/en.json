@@ -981,6 +981,8 @@
     "days30": "30 Days",
     "days90": "90 Days",
     "loadingPositions": "Loading positions...",
-    "exchangeCards": "Exchange Overview"
+    "exchangeCards": "Exchange Overview",
+    "total": "Total",
+    "margin": "Margin"
   }
 }
