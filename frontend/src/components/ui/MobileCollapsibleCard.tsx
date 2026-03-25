@@ -18,7 +18,7 @@ interface MobileCollapsibleCardProps {
 
 /**
  * Shared collapsible card for mobile views.
- * Used by: MobileTradeCard, MobilePositionCard, Bots, Backtest, TaxReport.
+ * Used by: MobileTradeCard, MobilePositionCard, Bots, TaxReport.
  *
  * Provides consistent styling: border, rounded corners, chevron, expand animation.
  */

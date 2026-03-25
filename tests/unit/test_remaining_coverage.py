@@ -2,7 +2,6 @@
 Tests targeting remaining uncovered lines across multiple modules.
 
 Covers edge cases in:
-- backtest/report.py (lines 171-175, 344)
 - models/session.py (lines 30-33) — SQLite pragma
 - utils/encryption.py (lines 57-58) — .env creation
 - exchanges/bitget/websocket.py (lines 156-157, 174, 179-180)
@@ -17,9 +16,7 @@ import asyncio
 import json
 import os
 import sys
-from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from enum import Enum
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -30,85 +27,6 @@ os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 import pytest
-
-
-# ─── backtest/report.py ─────────────────────────────────────────────
-
-
-class TestBacktestReport:
-
-    def test_trade_outcome_breakdown(self):
-        """Cover lines 171-175: trade breakdown by result (TP/SL/TE)."""
-        from src.backtest.report import BacktestReport, BacktestResult
-
-        class TradeResult(Enum):
-            take_profit = "take_profit"
-            stop_loss = "stop_loss"
-            time_exit = "time_exit"
-
-        @dataclass
-        class FakeTrade:
-            result: TradeResult
-
-        result = BacktestResult(
-            start_date="2024-01-01",
-            end_date="2024-03-01",
-            starting_capital=10000,
-            ending_capital=11000,
-            total_pnl=1000,
-            total_return_percent=10.0,
-            max_drawdown_percent=3.0,
-            total_trades=6,
-            winning_trades=4,
-            losing_trades=2,
-            win_rate=66.7,
-            average_win=400,
-            average_loss=-200,
-            profit_factor=2.0,
-            total_fees=50,
-            total_funding=20,
-            trades=[
-                FakeTrade(TradeResult.take_profit),
-                FakeTrade(TradeResult.take_profit),
-                FakeTrade(TradeResult.take_profit),
-                FakeTrade(TradeResult.stop_loss),
-                FakeTrade(TradeResult.stop_loss),
-                FakeTrade(TradeResult.time_exit),
-            ],
-        )
-        report = BacktestReport(result)
-        text = report.generate_console_report()
-        assert "TRADE OUTCOMES" in text
-        assert "Take Profit" in text
-        assert "Stop Loss" in text
-        assert "Time Exit" in text
-
-    def test_recommendations_with_good_stats(self):
-        """Verify recommendations are generated even with good stats."""
-        from src.backtest.report import BacktestReport, BacktestResult
-
-        result = BacktestResult(
-            start_date="2024-01-01",
-            end_date="2024-03-01",
-            starting_capital=10000,
-            ending_capital=12000,
-            total_pnl=2000,
-            total_return_percent=20.0,
-            max_drawdown_percent=2.0,
-            total_trades=20,
-            winning_trades=14,
-            losing_trades=6,
-            win_rate=70.0,
-            average_win=200,
-            average_loss=-50,
-            profit_factor=3.0,
-            total_fees=30,
-            total_funding=10,
-        )
-        report = BacktestReport(result)
-        recs = report._generate_recommendations()
-        # Win rate > 60% triggers the "Excellent win rate" recommendation
-        assert any("Excellent" in r or "win rate" in r.lower() for r in recs)
 
 
 # ─── models/session.py ──────────────────────────────────────────────
@@ -540,140 +458,6 @@ class TestEncryptionShortKey:
         finally:
             enc_mod._fernet = original_fernet
             os.environ["ENCRYPTION_KEY"] = "iDh4DatDZy2cb_esIAoNk_blWkQx3zDG14cj1lq8Rgo="
-
-
-# ─── backtest/engine.py signal edge cases ─────────────────────────
-
-
-class TestBacktestEngineEdgeCases:
-
-    def _make_data_point(self, **overrides):
-        """Create a HistoricalDataPoint with sensible defaults."""
-        from src.backtest.historical_data import HistoricalDataPoint
-
-        defaults = dict(
-            timestamp=datetime(2024, 1, 15, 12, 0),
-            date_str="2024-01-15",
-            fear_greed_index=50,
-            fear_greed_classification="Neutral",
-            long_short_ratio=1.0,
-            funding_rate_btc=0.0001,
-            funding_rate_eth=0.0001,
-            btc_price=42000,
-            eth_price=2200,
-            btc_open=42000,
-            eth_open=2200,
-            btc_high=42500,
-            btc_low=41500,
-            eth_high=2250,
-            eth_low=2150,
-            btc_24h_change=0.5,
-            eth_24h_change=0.3,
-            open_interest_btc=50000,
-            open_interest_change_24h=2.0,  # moderate: between 1 and 3
-            taker_buy_sell_ratio=1.0,
-            top_trader_long_short_ratio=1.0,  # neutral
-            stablecoin_flow_7d=0,
-        )
-        defaults.update(overrides)
-        return HistoricalDataPoint(**defaults)
-
-    def test_oi_moderate_return(self):
-        """Cover line 242: OI change between 1-3% returns moderate."""
-        from src.backtest.engine import BacktestEngine, TradeDirection
-
-        engine = BacktestEngine()
-        data = self._make_data_point(open_interest_change_24h=2.0, btc_24h_change=0.5)
-        adj, reason = engine._analyze_open_interest(data, TradeDirection.LONG)
-        assert adj == 0
-        assert "OI Moderate" in reason
-
-    def test_stablecoin_flow_unreachable_neutral(self):
-        """Cover line 351: stablecoin flow between -500M and 500M
-        triggers neutral on first check (line 332), but if flow is exactly
-        -500M it falls through all branches to line 351."""
-        from src.backtest.engine import BacktestEngine, TradeDirection
-
-        engine = BacktestEngine()
-        # flow = -500_000_000 exactly: abs(flow) == 500M, not < 500M,
-        # so first check on line 332 doesn't trigger.
-        # Then flow > 2B? No. flow > 500M? No. flow < -2B? No.
-        # flow < -500M? No (-500M is not < -500M). Falls to line 351.
-        data = self._make_data_point(stablecoin_flow_7d=-500_000_000)
-        adj, reason = engine._analyze_stablecoin_flows(data, TradeDirection.LONG)
-        assert adj == 0
-        assert "Stablecoin Flow" in reason
-
-    def test_top_traders_neutral_no_reason_appended(self):
-        """Cover line 486: top trader adj != 0 appends reason.
-        Also verify adj == 0 does NOT append."""
-        from src.backtest.engine import BacktestEngine, TradeDirection
-
-        engine = BacktestEngine()
-        # ratio=1.0 → neutral (adj=0), reason not appended
-        data = self._make_data_point(top_trader_long_short_ratio=1.0)
-        adj, reason = engine._analyze_top_traders(data, TradeDirection.LONG)
-        assert adj == 0
-
-        # ratio=2.0 → top traders long (adj=5 for LONG direction)
-        data2 = self._make_data_point(top_trader_long_short_ratio=2.0)
-        adj2, reason2 = engine._analyze_top_traders(data2, TradeDirection.LONG)
-        assert adj2 == 5
-        assert "TopTraders Long" in reason2
-
-    def test_generate_signal_appends_leverage_and_sentiment_reasons(self):
-        """Cover liquidation_hunter 3-step logic: crowded longs + sentiment
-        get their reasons appended to the signal reasons list."""
-        from src.backtest.engine import BacktestEngine
-
-        engine = BacktestEngine()
-        # Set up data with crowded longs and extreme greed
-        data = self._make_data_point(
-            long_short_ratio=2.5,  # crowded longs → SHORT signal
-            fear_greed_index=85,  # Extreme Greed → SHORT
-            btc_24h_change=2.0,
-        )
-        direction, confidence, reason = engine._generate_signal(data, "BTC")
-        # Reason should contain Crowded Longs and Extreme Greed entries
-        assert "Crowded Longs" in reason
-        assert "Extreme Greed" in reason
-
-    def test_backtest_run_can_trade_false_skips(self):
-        """Cover line 688: _can_trade returns False, loop continues."""
-        from src.backtest.engine import BacktestEngine, BacktestConfig
-
-        config = BacktestConfig(
-            starting_capital=10000,
-            max_trades_per_day=0,  # This forces _can_trade to return False immediately
-        )
-        engine = BacktestEngine(config)
-        data = self._make_data_point()
-        # run() takes only data_points; symbols are hardcoded as ["BTC", "ETH"]
-        result = engine.run([data, data])
-        # No trades should be opened
-        assert result.total_trades == 0
-
-    def test_backtest_run_low_confidence_skips(self):
-        """Cover line 704: confidence < low_confidence_min continues."""
-        from src.backtest.engine import BacktestEngine, BacktestConfig, TradeDirection
-
-        config = BacktestConfig(
-            starting_capital=10000,
-            low_confidence_min=90,  # High threshold
-        )
-        engine = BacktestEngine(config)
-        data = self._make_data_point()
-
-        # Force _generate_signal to always return low confidence
-        original_generate = engine._generate_signal
-
-        def low_confidence_signal(data_point, symbol, history=None):
-            return TradeDirection.LONG, 10, "Low confidence test"
-
-        engine._generate_signal = low_confidence_signal
-        result = engine.run([data, data])
-        assert result.total_trades == 0
-        engine._generate_signal = original_generate
 
 
 # ─── data/market_data.py edge cases ───────────────────────────────

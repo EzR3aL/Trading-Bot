@@ -159,7 +159,7 @@ async def _run_sqlite_migrations(conn) -> None:
                     daily_loss_limit_percent FLOAT,
                     per_asset_config TEXT,
                     strategy_params TEXT,
-                    schedule_type VARCHAR(20) NOT NULL DEFAULT 'market_sessions',
+                    schedule_type VARCHAR(20) NOT NULL DEFAULT 'interval',
                     schedule_config TEXT,
                     rotation_enabled BOOLEAN DEFAULT 0,
                     rotation_interval_minutes INTEGER,

@@ -8,7 +8,6 @@ Managed by the BotOrchestrator.
 Decomposed into focused mixins:
 - TradeExecutorMixin: trade execution logic
 - PositionMonitorMixin: position monitoring and close handling
-- RotationManagerMixin: trade rotation (auto-close and reopen)
 - HyperliquidGatesMixin: Hyperliquid-specific pre-start checks
 - NotificationsMixin: Discord and Telegram notification dispatch
 """
@@ -36,7 +35,6 @@ from src.bot.hyperliquid_gates import HyperliquidGatesMixin  # noqa: E402
 from src.bot.notifications import NotificationsMixin  # noqa: E402
 from src.bot.pnl import calculate_pnl  # noqa: F401, E402 — re-export for backward compat
 from src.bot.position_monitor import PositionMonitorMixin  # noqa: E402
-from src.bot.rotation_manager import RotationManagerMixin  # noqa: E402
 from src.bot.trade_closer import TradeCloserMixin  # noqa: E402
 from src.bot.trade_executor import TradeExecutorMixin  # noqa: E402
 
@@ -60,7 +58,6 @@ DEFAULT_MARKET_HOURS = [1, 8, 14, 21]
 class BotWorker(
     TradeExecutorMixin,
     PositionMonitorMixin,
-    RotationManagerMixin,
     TradeCloserMixin,
     HyperliquidGatesMixin,
     NotificationsMixin,
@@ -292,7 +289,8 @@ class BotWorker(
                 from src.exchanges.symbol_fetcher import get_exchange_symbols
                 available = await get_exchange_symbols(self._config.exchange_type)
                 if available:
-                    invalid = [p for p in self._trading_pairs if p not in available]
+                    pairs = _safe_json_loads(self._config.trading_pairs)
+                    invalid = [p for p in pairs if p not in available]
                     if invalid:
                         self.error_message = (
                             f"Symbol(s) not available on {self._config.exchange_type}: "
@@ -338,12 +336,7 @@ class BotWorker(
         if self._config.schedule_config:
             schedule_config = json.loads(self._config.schedule_config)
 
-        if schedule_type == "rotation_only":
-            # Rotation-only mode: no regular analysis schedule.
-            # The bot opens its first trade on start, then the rotation
-            # checker handles closing + re-opening on the configured interval.
-            logger.info(f"[Bot:{self.bot_config_id}] Rotation-only mode — no regular schedule")
-        elif schedule_type == "interval":
+        if schedule_type == "interval":
             minutes = schedule_config.get("interval_minutes", 60)
             self._scheduler.add_job(
                 self._analyze_and_trade_safe,
@@ -353,19 +346,8 @@ class BotWorker(
                 replace_existing=True,
                 max_instances=1,
             )
-        elif schedule_type == "custom_cron":
-            hours = schedule_config.get("hours", DEFAULT_MARKET_HOURS)
-            hour_str = ",".join(str(h) for h in hours)
-            self._scheduler.add_job(
-                self._analyze_and_trade_safe,
-                CronTrigger(hour=hour_str, minute=0),
-                id=f"bot_{self.bot_config_id}_analysis",
-                name=f"Bot {self.bot_config_id} Analysis",
-                replace_existing=True,
-                max_instances=1,
-            )
         else:
-            # Default: market_sessions
+            # custom_cron (fixed hours)
             hours = schedule_config.get("hours", DEFAULT_MARKET_HOURS)
             hour_str = ",".join(str(h) for h in hours)
             self._scheduler.add_job(
@@ -387,25 +369,6 @@ class BotWorker(
             max_instances=1,
         )
 
-        # Trade rotation (auto-close & reopen) — check every minute if enabled
-        # Automatically enabled for rotation_only schedule type
-        rotation_on = getattr(self._config, "rotation_enabled", False) or schedule_type == "rotation_only"
-        rotation_mins = getattr(self._config, "rotation_interval_minutes", None)
-        if rotation_on and rotation_mins:
-            self._scheduler.add_job(
-                self._check_rotation_safe,
-                IntervalTrigger(minutes=1),
-                id=f"bot_{self.bot_config_id}_rotation",
-                name=f"Bot {self.bot_config_id} Trade Rotation",
-                replace_existing=True,
-                max_instances=1,
-            )
-            start_time = getattr(self._config, "rotation_start_time", None) or "now"
-            logger.info(
-                f"[Bot:{self.bot_config_id}] Trade rotation enabled: "
-                f"every {rotation_mins}min (anchor: {start_time} UTC)"
-            )
-
         # Daily summary at 23:55 UTC
         self._scheduler.add_job(
             self._send_daily_summary,
@@ -426,12 +389,11 @@ class BotWorker(
         self.started_at = datetime.now(timezone.utc)
         self.error_message = None
 
-        # Run initial analysis — but respect schedule type.
-        # For cron-based schedules (market_sessions, custom_cron), only run
-        # if the current hour matches a configured session hour.
-        # For interval/rotation_only, always run immediately.
-        schedule_type = self._config.schedule_type or "market_sessions"
-        if schedule_type in ("interval", "rotation_only"):
+        # Run initial analysis — respect schedule type.
+        # For interval, always run immediately.
+        # For cron-based schedules (custom_cron), only run if current hour matches.
+        schedule_type = self._config.schedule_type or "interval"
+        if schedule_type == "interval":
             await self._analyze_and_trade_safe()
         else:
             schedule_config = {}
@@ -759,7 +721,7 @@ class BotWorker(
 
         Args:
             symbol: Trading pair to analyze
-            force: If True, skip the open-position check (used after rotation close)
+            force: If True, skip the open-position check
             asset_budget: Pre-calculated budget for this asset (None = use full balance)
         """
         async with self._get_symbol_lock(symbol):

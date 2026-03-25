@@ -1015,28 +1015,38 @@ class TestPlaceTriggerOrder:
 
 
 class TestGetTickSize:
-    def test_returns_tick_size_from_meta(self):
+    def test_returns_tick_size_from_meta_and_asset_ctxs(self):
         client = _make_client()
-        client._info.meta.return_value = {
-            "universe": [
+        client._info.meta_and_asset_ctxs.return_value = [
+            {"universe": [
                 {"name": "BTC", "szDecimals": 5},
                 {"name": "ETH", "szDecimals": 3},
-            ]
-        }
+            ]},
+            [
+                {"markPx": "70000.0"},  # BTC: 5 sig figs -> tick = 1.0
+                {"markPx": "2100.0"},   # ETH: 5 sig figs -> tick = 0.01
+            ],
+        ]
 
         tick = client._get_tick_size("BTC")
-        assert tick == 1e-5
+        assert tick == 1.0  # 10^(floor(log10(70000))-4) = 10^0 = 1.0
+
+        tick_eth = client._get_tick_size("ETH")
+        assert tick_eth == 0.1  # 10^(floor(log10(2100))-4) = 10^-1 = 0.1
 
     def test_returns_default_when_coin_not_found(self):
         client = _make_client()
-        client._info.meta.return_value = {"universe": [{"name": "BTC", "szDecimals": 5}]}
+        client._info.meta_and_asset_ctxs.return_value = [
+            {"universe": [{"name": "BTC", "szDecimals": 5}]},
+            [{"markPx": "70000.0"}],
+        ]
 
         tick = client._get_tick_size("UNKNOWN")
         assert tick == 0.01
 
     def test_returns_default_on_api_error(self):
         client = _make_client()
-        client._info.meta.side_effect = Exception("meta API down")
+        client._info.meta_and_asset_ctxs.side_effect = Exception("API down")
 
         tick = client._get_tick_size("BTC")
         assert tick == 0.01
@@ -1120,17 +1130,18 @@ class TestGetTradeTotalFees:
 
 
 class TestGetFundingFees:
-    async def test_returns_total_funding(self):
+    async def test_returns_net_funding(self):
+        """Net funding: positive delta = paid, negative = received."""
         client = _make_client()
         client._info.user_funding_history.return_value = [
-            {"coin": "BTC", "delta": "0.5"},
-            {"coin": "BTC", "delta": "-0.3"},
-            {"coin": "ETH", "delta": "0.1"},  # different coin
+            {"coin": "BTC", "delta": "0.5"},    # paid 0.5
+            {"coin": "BTC", "delta": "-0.3"},   # received 0.3
+            {"coin": "ETH", "delta": "0.1"},    # different coin, ignored
         ]
 
         funding = await client.get_funding_fees("BTCUSDT", 1000, 2000)
 
-        assert funding == 0.8
+        assert funding == 0.2  # net: 0.5 - 0.3 = 0.2 paid
 
     async def test_matches_on_asset_field_too(self):
         """Some responses use 'asset' instead of 'coin'."""

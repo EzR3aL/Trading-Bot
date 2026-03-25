@@ -88,14 +88,6 @@ ERR_WEEX_UID_ALPHANUMERIC = "Weex UID muss alphanumerisch sein"
 ERR_BITUNIX_UID_NUMERIC = "Bitunix UID muss rein numerisch sein"
 ERR_BINGX_UID_NUMERIC = "BingX UID muss rein numerisch sein"
 
-# ── Backtest ─────────────────────────────────────────────────────────
-ERR_INVALID_DATE_FORMAT = "Ungültiges Datumsformat. Verwende YYYY-MM-DD"
-ERR_END_BEFORE_START = "Enddatum muss nach dem Startdatum liegen"
-ERR_END_IN_FUTURE = "Enddatum darf nicht in der Zukunft liegen"
-ERR_START_TOO_EARLY = "Startdatum darf nicht vor dem {date} liegen (Beginn der Binance-Futures-Daten)"
-ERR_MAX_DAYS_EXCEEDED = "Maximal {max_days} Tage für {timeframe}-Zeitrahmen (angefragt: {actual_days} Tage)"
-ERR_BACKTEST_NOT_FOUND = "Backtest-Lauf nicht gefunden"
-
 # ── Exchanges ────────────────────────────────────────────────────────
 ERR_INVALID_EXCHANGE = "Ungültiger Exchange-Name"
 ERR_EXCHANGE_NOT_FOUND = "Exchange '{name}' nicht gefunden"
@@ -105,9 +97,6 @@ ERR_NO_API_KEY_FOR = "Kein API-Key für {name} konfiguriert"
 # ── Validation ──────────────────────────────────────────────────────
 ERR_INVALID_ETH_ADDRESS = "{label} muss eine gültige Ethereum-Adresse sein (0x + 40 Hex-Zeichen)"
 ERR_INVALID_HEX_KEY = "{label} muss 64 Hex-Zeichen sein (mit oder ohne 0x-Prefix)"
-
-# ── Backtest Limits ─────────────────────────────────────────────────
-ERR_MAX_CONCURRENT_BACKTESTS = "Maximal {max} gleichzeitige Backtests erlaubt"
 
 # ── Strategy ────────────────────────────────────────────────────────
 ERR_STRATEGY_NOT_FOUND = "Strategie nicht gefunden: {name}"

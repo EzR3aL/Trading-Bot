@@ -78,20 +78,9 @@ class BotConfigCreate(BaseModel):
     # Strategy-specific parameters
     strategy_params: Optional[Dict[str, Any]] = None
 
-    # Schedule
-    schedule_type: str = Field(default="market_sessions", pattern="^(market_sessions|interval|custom_cron|rotation_only)$")
+    # Schedule (only interval and fixed_time/custom_cron supported)
+    schedule_type: str = Field(default="interval", pattern="^(interval|custom_cron)$")
     schedule_config: Optional[Dict[str, Any]] = None
-
-    # Trade rotation: auto-close & reopen trades at fixed intervals
-    rotation_enabled: bool = Field(default=False, description="Enable automatic trade rotation")
-    rotation_interval_minutes: Optional[int] = Field(
-        default=None, ge=5, le=10080,
-        description="Close & reopen trades after this many minutes (5min to 7 days)",
-    )
-    rotation_start_time: Optional[str] = Field(
-        default=None, pattern=r"^\d{2}:\d{2}$",
-        description="UTC start time for rotation intervals (HH:MM format, e.g. '08:00')",
-    )
 
     # Per-bot Discord webhook (optional)
     discord_webhook_url: Optional[str] = Field(
@@ -127,8 +116,6 @@ class BotConfigCreate(BaseModel):
             sp = self.strategy_params or {}
             if not sp.get("llm_provider"):
                 raise ValueError("LLM strategy requires 'llm_provider' in strategy_params")
-        if self.rotation_enabled and not self.rotation_interval_minutes:
-            raise ValueError("rotation_interval_minutes is required when rotation_enabled is True")
         return self
 
 
@@ -151,17 +138,8 @@ class BotConfigUpdate(BaseModel):
 
     strategy_params: Optional[Dict[str, Any]] = None
 
-    schedule_type: Optional[str] = Field(None, pattern="^(market_sessions|interval|custom_cron|rotation_only)$")
+    schedule_type: Optional[str] = Field(None, pattern="^(interval|custom_cron)$")
     schedule_config: Optional[Dict[str, Any]] = None
-
-    rotation_enabled: Optional[bool] = Field(None, description="Enable automatic trade rotation")
-    rotation_interval_minutes: Optional[int] = Field(
-        None, ge=5, le=10080, description="Rotation interval in minutes (5min to 7 days)",
-    )
-    rotation_start_time: Optional[str] = Field(
-        None, pattern=r"^\d{2}:\d{2}$",
-        description="UTC start time for rotation intervals (HH:MM format)",
-    )
 
     # Per-bot Discord webhook (optional)
     discord_webhook_url: Optional[str] = Field(
@@ -215,9 +193,6 @@ class BotConfigResponse(BaseModel):
     strategy_params: Optional[Dict[str, Any]] = None
     schedule_type: str
     schedule_config: Optional[Dict[str, Any]] = None
-    rotation_enabled: bool = False
-    rotation_interval_minutes: Optional[int] = None
-    rotation_start_time: Optional[str] = None
     is_enabled: bool
     discord_webhook_configured: bool = False
     telegram_configured: bool = False

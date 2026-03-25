@@ -12,6 +12,7 @@ import {
 import api from '../api/client'
 import { getApiErrorMessage } from '../utils/api-error'
 import { useToastStore } from '../stores/toastStore'
+import { utcHourToLocal } from '../utils/timezone'
 import { useFilterStore } from '../stores/filterStore'
 import { ExchangeIcon } from '../components/ui/ExchangeLogo'
 import PnlCell from '../components/ui/PnlCell'
@@ -48,8 +49,6 @@ interface BotConfig {
   daily_loss_limit_percent: number
   schedule_type: string
   schedule_config: Record<string, any> | null
-  rotation_enabled: boolean
-  rotation_interval_minutes: number | null
   is_enabled: boolean
   discord_webhook_configured: boolean
   telegram_configured: boolean
@@ -247,10 +246,9 @@ export default function BotDetail() {
   const style = STATUS_STYLES[statusKey] || STATUS_STYLES.idle
 
   const formatSchedule = () => {
-    if (config.schedule_type === 'market_sessions') return d('scheduleMarketSessions')
     if (config.schedule_type === 'interval') return t('botDetail.scheduleInterval', { minutes: config.schedule_config?.interval_minutes || 60 })
-    if (config.schedule_type === 'rotation_only') return t('botDetail.scheduleRotation', { minutes: config.rotation_interval_minutes })
-    if (config.schedule_type === 'custom_cron') return t('botDetail.scheduleCustom', { hours: (config.schedule_config?.hours || []).join(', ') })
+    // Convert UTC hours from API to local for display
+    if (config.schedule_type === 'custom_cron') return t('botDetail.scheduleCustom', { hours: (config.schedule_config?.hours || []).map((h: number) => utcHourToLocal(h)).join(', ') })
     return config.schedule_type
   }
 

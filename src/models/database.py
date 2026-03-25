@@ -60,7 +60,6 @@ class User(Base):
     exchange_connections = relationship("ExchangeConnection", back_populates="user", cascade="all")
     llm_connections = relationship("LLMConnection", back_populates="user", cascade="all")
     bot_configs = relationship("BotConfig", back_populates="user", cascade="all")
-    backtest_runs = relationship("BacktestRun", back_populates="user", cascade="all")
     notification_logs = relationship("NotificationLog", back_populates="user", cascade="all")
     sessions = relationship("UserSession", back_populates="user", cascade="all")
 
@@ -284,9 +283,7 @@ class LLMConnection(Base):
 class BotConfig(Base):
     """Blueprint for a user-created bot.
 
-    Stores strategy, exchange, risk, schedule, and trade rotation settings.
-    The optional rotation feature (rotation_enabled + rotation_interval_minutes)
-    auto-closes open trades after a fixed duration and re-analyzes for a new trade.
+    Stores strategy, exchange, risk, and schedule settings.
     Data source selection is stored in strategy_params["data_sources"].
     """
     __tablename__ = "bot_configs"
@@ -320,13 +317,13 @@ class BotConfig(Base):
     strategy_params = Column(Text, nullable=True)  # JSON: strategy-specific thresholds
 
     # Schedule
-    schedule_type = Column(String(20), nullable=False, default="market_sessions")  # market_sessions | interval | custom_cron
+    schedule_type = Column(String(20), nullable=False, default="interval")  # interval | custom_cron
     schedule_config = Column(Text, nullable=True)  # JSON: {"hours": [1,8,14,21]} or {"interval_minutes": 60}
 
-    # Trade rotation (auto-close & reopen at fixed intervals)
+    # Legacy rotation columns (kept for DB compatibility, no longer used)
     rotation_enabled = Column(Boolean, default=False)
-    rotation_interval_minutes = Column(Integer, nullable=True)  # e.g. 60 = close & reopen every hour
-    rotation_start_time = Column(String(5), nullable=True)  # UTC start time "HH:MM" for rotation anchor
+    rotation_interval_minutes = Column(Integer, nullable=True)
+    rotation_start_time = Column(String(5), nullable=True)
 
     # Per-bot Discord webhook (encrypted, optional — overrides user-level)
     discord_webhook_url = Column(Text, nullable=True)
@@ -377,38 +374,6 @@ class AffiliateLink(Base):
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
-
-
-class BacktestRun(Base):
-    """Stores backtest runs and their results."""
-    __tablename__ = "backtest_runs"
-
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
-
-    # Configuration
-    strategy_type = Column(String(50), nullable=False)
-    symbol = Column(String(50), nullable=False, default="BTCUSDT")
-    timeframe = Column(String(10), nullable=False, default="1d")
-    start_date = Column(DateTime(timezone=True), nullable=False)
-    end_date = Column(DateTime(timezone=True), nullable=False)
-    initial_capital = Column(Float, nullable=False, default=10000.0)
-    strategy_params = Column(Text, nullable=True)  # JSON: custom_prompt, thresholds, etc.
-
-    # Status
-    status = Column(String(20), nullable=False, default="pending")  # pending|running|completed|failed
-    error_message = Column(Text, nullable=True)
-
-    # Results (stored as JSON in Text columns)
-    result_metrics = Column(Text, nullable=True)   # JSON: {win_rate, total_return, max_drawdown, ...}
-    equity_curve = Column(Text, nullable=True)      # JSON: [{timestamp, equity}, ...]
-    trades = Column(Text, nullable=True)            # JSON: [{entry_date, exit_date, ...}, ...]
-
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    completed_at = Column(DateTime(timezone=True), nullable=True)
-
-    # Relationships
-    user = relationship("User", back_populates="backtest_runs")
 
 
 class RiskStats(Base):

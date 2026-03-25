@@ -9,8 +9,10 @@ SECURITY: Only trading operations are allowed. No withdrawals, transfers, or
 fund-moving operations. The ALLOWED_METHODS whitelist enforces this.
 """
 
+import asyncio
 import os
 import re
+from functools import partial
 from typing import Any, Dict, List, Optional
 
 from eth_account import Account as EthAccount
@@ -202,9 +204,11 @@ class HyperliquidClient(ExchangeClient):
         pass  # SDK uses requests (sync), no session to close
 
     async def _cb_call(self, func, *args, **kwargs):
-        """Execute a function through the Hyperliquid circuit breaker."""
+        """Execute a sync SDK function through the circuit breaker without blocking the event loop."""
+        loop = asyncio.get_event_loop()
+
         async def _wrapper():
-            return func(*args, **kwargs)
+            return await loop.run_in_executor(None, partial(func, *args, **kwargs))
         try:
             return await _hl_breaker.call(_wrapper)
         except CircuitBreakerError as e:
@@ -300,7 +304,7 @@ class HyperliquidClient(ExchangeClient):
 
     async def get_ticker(self, symbol: str) -> Ticker:
         coin = self._normalize_symbol(symbol)
-        data = self._info.all_mids()
+        data = await self._cb_call(self._info.all_mids)
         price = float(data.get(coin, 0))
         return Ticker(
             symbol=coin,
@@ -361,6 +365,10 @@ class HyperliquidClient(ExchangeClient):
         coin = self._normalize_symbol(symbol)
         is_buy = side.lower() == "long"
 
+        # Round size to szDecimals to avoid 'float_to_wire causes rounding' error
+        sz_decimals = self._get_sz_decimals(coin)
+        size = round(size, sz_decimals)
+
         # Set leverage first
         await self.set_leverage(coin, leverage, margin_mode=margin_mode)
 
@@ -406,25 +414,49 @@ class HyperliquidClient(ExchangeClient):
             stop_loss=stop_loss,
         )
 
-    def _get_tick_size(self, coin: str) -> float:
-        """Get tick size for a coin from Hyperliquid meta endpoint."""
+    def _get_sz_decimals(self, coin: str) -> int:
+        """Get size decimal precision for a coin from Hyperliquid meta endpoint."""
         try:
             meta = self._info.meta()
             for asset_info in meta.get("universe", []):
                 if asset_info.get("name") == coin:
-                    # szDecimals controls size precision; price tick from exchange
-                    return 10 ** -int(asset_info.get("szDecimals", 0))
+                    return int(asset_info.get("szDecimals", 0))
+        except Exception as e:
+            logger.debug(f"Could not fetch szDecimals for {coin}: {e}")
+        return 2  # safe default
+
+    def _get_tick_size(self, coin: str) -> float:
+        """Get price tick size from Hyperliquid meta_and_asset_ctxs.
+
+        HL uses 5 significant figures for prices. We derive a tick size
+        from the current mark price to ensure TP/SL trigger prices are valid.
+        """
+        try:
+            ctx = self._info.meta_and_asset_ctxs()
+            if isinstance(ctx, list) and len(ctx) >= 2:
+                meta_universe = ctx[0].get("universe", [])
+                asset_ctxs = ctx[1]
+                for i, asset_info in enumerate(meta_universe):
+                    if asset_info.get("name") == coin and i < len(asset_ctxs):
+                        mark_px = float(asset_ctxs[i].get("markPx", 0))
+                        if mark_px > 0:
+                            # HL uses 5 significant figures for prices
+                            import math
+                            magnitude = math.floor(math.log10(mark_px))
+                            return 10 ** (magnitude - 4)  # 5 sig figs
         except Exception as e:
             logger.debug(f"Could not fetch tick size for {coin}: {e}")
         return 0.01  # safe default
 
     @staticmethod
     def _round_price(price: float, tick_size: float) -> float:
-        """Round price to the nearest tick size."""
+        """Round price to the nearest tick size (5 significant figures for HL)."""
         if tick_size <= 0:
             return price
-        # Determine decimal places from tick size
-        decimals = max(0, len(str(tick_size).rstrip('0').split('.')[-1])) if '.' in str(tick_size) else 0
+        import math
+        if tick_size >= 1:
+            return round(round(price / tick_size) * tick_size)
+        decimals = max(0, -int(math.floor(math.log10(tick_size))))
         return round(round(price / tick_size) * tick_size, decimals)
 
     async def _place_trigger_order(
@@ -506,8 +538,12 @@ class HyperliquidClient(ExchangeClient):
             logger.warning(f"Hyperliquid: no position found for {coin} to close")
             return None
 
+        # Round size to szDecimals to avoid 'float_to_wire causes rounding' error
+        sz_decimals = self._get_sz_decimals(coin)
+        close_size = round(pos.size, sz_decimals)
+
         logger.info(
-            f"Hyperliquid market_close: {coin} size={pos.size} "
+            f"Hyperliquid market_close: {coin} size={close_size} "
             f"wallet={self._wallet.address[:10]}..."
         )
 
@@ -515,7 +551,7 @@ class HyperliquidClient(ExchangeClient):
         result = await self._cb_call(
             self._exchange.market_close,
             coin=coin,
-            sz=pos.size,
+            sz=close_size,
             slippage=DEFAULT_SLIPPAGE,
             **builder_kwargs,
         )
@@ -530,7 +566,7 @@ class HyperliquidClient(ExchangeClient):
             order_id=str(order_id),
             symbol=coin,
             side=side,
-            size=pos.size,
+            size=close_size,
             price=fill_price,
             status="filled",
             exchange="hyperliquid",
@@ -759,10 +795,12 @@ class HyperliquidClient(ExchangeClient):
             logger.warning("Hyperliquid position TP/SL failed for %s: %s", coin, e)
             # Fallback to individual trigger orders
             try:
+                sz_decimals = self._get_sz_decimals(coin)
+                rounded_size = round(size, sz_decimals) if size else 0
                 if take_profit is not None:
-                    await self._place_trigger_order(coin, is_buy_close, size or 0, take_profit, "tp")
+                    await self._place_trigger_order(coin, is_buy_close, rounded_size, take_profit, "tp")
                 if stop_loss is not None:
-                    await self._place_trigger_order(coin, is_buy_close, size or 0, stop_loss, "sl")
+                    await self._place_trigger_order(coin, is_buy_close, rounded_size, stop_loss, "sl")
                 return "fallback"
             except Exception as e2:
                 logger.warning("Hyperliquid trigger fallback also failed: %s", e2)
@@ -799,7 +837,9 @@ class HyperliquidClient(ExchangeClient):
             if isinstance(history, list):
                 for entry in history:
                     if entry.get("coin") == coin or entry.get("asset") == coin:
-                        total_funding += abs(float(entry.get("delta", 0)))
+                        # delta is negative when funding is paid, positive when received
+                        # We track net funding cost (positive = paid, negative = received)
+                        total_funding += float(entry.get("delta", 0))
         except Exception as e:
             logger.warning(f"Failed to get funding fees for {symbol}: {e}")
         return round(total_funding, 6)
@@ -810,13 +850,15 @@ class HyperliquidClient(ExchangeClient):
         """Calculate builder fee earned for a round-trip trade.
 
         Both entry and exit orders carry the builder fee.
-        fee = (entry_value + exit_value) * (builder_fee_rate / 1_000_000)
+        Fee unit: f is in tenths of basis points.
+        f=10 → 10 * 0.001% = 0.01% → 0.0001
+        Divisor: 10 (tenths) * 10_000 (basis points) = 100_000
         """
         if not self._builder:
             return 0.0
         fee_rate = self._builder["f"]
         total_value = (entry_price * size) + (exit_price * size)
-        return round(total_value * (fee_rate / 1_000_000), 6)
+        return round(total_value * (fee_rate / 100_000), 6)
 
     @property
     def builder_config(self) -> Optional[dict]:

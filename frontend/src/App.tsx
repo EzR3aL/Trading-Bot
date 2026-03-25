@@ -14,7 +14,6 @@ const Settings = lazy(() => import('./pages/Settings'))
 const Bots = lazy(() => import('./pages/Bots'))
 const BotDetail = lazy(() => import('./pages/BotDetail'))
 const BotPerformance = lazy(() => import('./pages/BotPerformance'))
-const Backtest = lazy(() => import('./pages/Backtest'))
 const Portfolio = lazy(() => import('./pages/Portfolio'))
 const TaxReport = lazy(() => import('./pages/TaxReport'))
 const GettingStarted = lazy(() => import('./pages/GettingStarted'))
@@ -78,7 +77,6 @@ export default function App() {
                     <Route path="/bots" element={<Bots />} />
                     <Route path="/bots/:botId" element={<BotDetail />} />
                     <Route path="/performance" element={<BotPerformance />} />
-                    <Route path="/backtest" element={<Backtest />} />
                     <Route path="/tax-report" element={<TaxReport />} />
                     <Route path="/guide" element={<GettingStarted />} />
                     <Route

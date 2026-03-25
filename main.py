@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 DEPRECATED CLI entry point. The web UI uses BotOrchestrator + BotWorker (v3.0.0+).
-This file is kept for standalone CLI usage only (--test, --status, --backtest).
+This file is kept for standalone CLI usage only (--test, --status).
 
 Bitget Trading Bot - Main Entry Point
 
@@ -23,8 +23,6 @@ Usage:
     python main.py              # Run the bot
     python main.py --test       # Run a single analysis cycle (no trading)
     python main.py --status     # Show current bot status
-    python main.py --backtest   # Run backtest on historical data
-
 Requirements:
     - Python 3.10+
     - Bitget API credentials in .env file
@@ -99,88 +97,6 @@ async def show_status():
     return 0
 
 
-async def run_backtest(days: int = 180, capital: float = 10000.0):
-    """Run backtest on historical data."""
-    from src.backtest.historical_data import HistoricalDataFetcher
-    from src.backtest.engine import BacktestEngine, BacktestConfig
-    from src.backtest.report import BacktestReport
-    from src.backtest.mock_data import generate_mock_historical_data, get_mock_data_summary
-
-    print("\n" + "=" * 70)
-    print("BACKTESTING - Contrarian Liquidation Hunter Strategy")
-    print("=" * 70)
-    print(f"\nPeriod: Last {days} days")
-    print(f"Starting Capital: ${capital:,.2f}")
-    print(f"Leverage: {settings.trading.leverage}x")
-    print("\nFetching historical data...")
-
-    # Fetch historical data
-    fetcher = HistoricalDataFetcher()
-    try:
-        data_points = await fetcher.fetch_all_historical_data(days)
-
-        if not data_points:
-            print("Could not fetch live data. Using simulated historical data...")
-            data_points = generate_mock_historical_data(days)
-            summary = get_mock_data_summary(data_points)
-            print(f"\nSimulated Data Summary:")
-            print(f"  Period: {summary['period']}")
-            print(f"  BTC Range: ${summary['btc_min']:,.0f} - ${summary['btc_max']:,.0f}")
-            print(f"  Extreme Fear Days: {summary['extreme_fear_days']}")
-            print(f"  Extreme Greed Days: {summary['extreme_greed_days']}")
-            print(f"  Crowded Long Days: {summary['crowded_long_days']}")
-            print(f"  Crowded Short Days: {summary['crowded_short_days']}")
-
-        if not data_points:
-            print("ERROR: Could not fetch historical data")
-            return 1
-
-        print(f"Loaded {len(data_points)} data points")
-        print("\nRunning backtest simulation...")
-
-        # Configure backtest
-        config = BacktestConfig(
-            starting_capital=capital,
-            leverage=settings.trading.leverage,
-            take_profit_percent=settings.trading.take_profit_percent,
-            stop_loss_percent=settings.trading.stop_loss_percent,
-            max_trades_per_day=settings.trading.max_trades_per_day,
-            daily_loss_limit_percent=settings.trading.daily_loss_limit_percent,
-            position_size_percent=settings.trading.position_size_percent,
-            fear_greed_extreme_fear=settings.strategy.fear_greed_extreme_fear,
-            fear_greed_extreme_greed=settings.strategy.fear_greed_extreme_greed,
-            long_short_crowded_longs=settings.strategy.long_short_crowded_longs,
-            long_short_crowded_shorts=settings.strategy.long_short_crowded_shorts,
-            funding_rate_high=settings.strategy.funding_rate_high,
-            funding_rate_low=settings.strategy.funding_rate_low,
-            high_confidence_min=settings.strategy.high_confidence_min,
-            low_confidence_min=settings.strategy.low_confidence_min,
-            enable_profit_lock=True,
-            profit_lock_percent=75.0,
-            min_profit_floor=0.5,
-        )
-
-        # Run backtest
-        engine = BacktestEngine(config)
-        result = engine.run(data_points)
-
-        # Generate report
-        report = BacktestReport(result)
-        print(report.generate_console_report())
-
-        # Save results
-        report.save_json()
-        print(f"\nDetailed results saved to: data/backtest/results.json")
-
-        # Save data points for reference
-        fetcher.save_data_points(data_points)
-
-        return 0
-
-    finally:
-        await fetcher.close()
-
-
 async def create_admin(username: str, password: str):
     """Create an admin user."""
     from src.models.session import init_db, close_db, get_session
@@ -226,7 +142,6 @@ Examples:
   python main.py                         Run the trading bot
   python main.py --test                  Run analysis without trading
   python main.py --status                Show current status and statistics
-  python main.py --backtest              Run 6-month backtest with $10,000
   python main.py --dashboard             Start web dashboard at http://localhost:8080
   python main.py --dashboard --dashboard-port 3000
 
@@ -251,26 +166,6 @@ For more information, see the README.md file.
         choices=["DEBUG", "INFO", "WARNING", "ERROR"],
         default="INFO",
         help="Set logging level (default: INFO)",
-    )
-
-    parser.add_argument(
-        "--backtest",
-        action="store_true",
-        help="Run backtest on historical data",
-    )
-
-    parser.add_argument(
-        "--backtest-days",
-        type=int,
-        default=180,
-        help="Number of days for backtest (default: 180)",
-    )
-
-    parser.add_argument(
-        "--backtest-capital",
-        type=float,
-        default=10000.0,
-        help="Starting capital for backtest (default: 10000)",
     )
 
     parser.add_argument(
@@ -333,8 +228,6 @@ For more information, see the README.md file.
         print("The standalone --test mode has been removed.")
         print("Use the web UI (--dashboard) to manage and test bots.")
         return 1
-    elif args.backtest:
-        return asyncio.run(run_backtest(args.backtest_days, args.backtest_capital))
     elif args.dashboard:
         import uvicorn
         from src.api.main_app import app

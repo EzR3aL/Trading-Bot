@@ -8,6 +8,7 @@ import { useFilterStore } from '../stores/filterStore'
 import type { LlmConnection } from '../types'
 import { useThemeStore } from '../stores/themeStore'
 import { useToastStore } from '../stores/toastStore'
+import { utcHourToLocal } from '../utils/timezone'
 import { ExchangeIcon } from '../components/ui/ExchangeLogo'
 import BotBuilder from '../components/bots/BotBuilder'
 import BuilderFeeApproval from '../components/hyperliquid/BuilderFeeApproval'
@@ -178,16 +179,11 @@ function confidenceColor(value: number): string {
 /* ── Schedule Dots Helper ───────────────────────────────── */
 
 function getScheduleHoursUtc(scheduleType?: string | null, scheduleConfig?: { interval_minutes?: number; hours?: number[] } | null): number[] | null {
-  if (scheduleType === 'market_sessions') return [1, 8, 14, 21]
   if (scheduleType === 'custom_cron' && scheduleConfig?.hours) return [...scheduleConfig.hours].sort((a, b) => a - b)
   return null
 }
 
-function utcHourToLocal(utcHour: number): number {
-  const d = new Date()
-  d.setUTCHours(utcHour, 0, 0, 0)
-  return d.getHours()
-}
+// utcHourToLocal is now imported from utils/timezone
 
 function formatHourLocal(utcHour: number): string {
   return String(utcHourToLocal(utcHour)).padStart(2, '0')
@@ -1016,7 +1012,7 @@ export default function Bots() {
             return (
               <div
                 key={bot.bot_config_id}
-                className={`glass-card rounded-xl ${isMobile ? 'p-3' : 'p-5'} border transition-all duration-300 ${style.card}`}
+                className={`glass-card rounded-xl ${isMobile ? 'p-3' : 'p-5'} border transition-all duration-300 ${style.card} ${moreMenuOpen === bot.bot_config_id ? 'relative z-30' : ''}`}
                 {...(bot === bots[0] ? { 'data-tour': 'bot-card' } : {})}
               >
                 {/* Header row */}
@@ -1338,15 +1334,15 @@ export default function Bots() {
                     <button
                       onClick={() => setMoreMenuOpen(moreMenuOpen === bot.bot_config_id ? null : bot.bot_config_id)}
                       aria-label={t('bots.moreActions')}
-                      className="p-2 text-gray-400 hover:text-white transition-all duration-200 rounded-lg hover:bg-white/5"
+                      className="p-3 -m-1 text-gray-400 hover:text-white transition-all duration-200 rounded-lg hover:bg-white/5"
                       title={t('bots.moreActions')}
                     >
-                      <MoreVertical size={16} />
+                      <MoreVertical size={18} />
                     </button>
                     {moreMenuOpen === bot.bot_config_id && (
                       <>
-                        <div className="fixed inset-0 z-10" onClick={() => setMoreMenuOpen(null)} />
-                        <div className="absolute right-0 bottom-full mb-1 z-20 w-44 bg-[#1a1f2e] border border-white/10 rounded-lg shadow-xl overflow-hidden">
+                        <div className="fixed inset-0 z-40" onClick={() => setMoreMenuOpen(null)} />
+                        <div className="absolute right-0 bottom-full mb-1 z-50 w-44 bg-[#1a1f2e] border border-white/10 rounded-lg shadow-xl">
                           <button
                             onClick={() => { setMoreMenuOpen(null); setEditBotId(bot.bot_config_id) }}
                             disabled={bot.status === 'running'}

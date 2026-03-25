@@ -27,7 +27,6 @@ from src.api.routers import (  # noqa: E402
     admin_logs,
     affiliate,
     auth,
-    backtest,
     bots,
     config,
     config_audit,
@@ -142,9 +141,6 @@ async def lifespan(app: FastAPI):
     # Seed exchanges table
     await _seed_exchanges()
 
-    # Clean up stale backtest runs left in "pending"/"running" from previous crash
-    await _recover_stale_backtests()
-
     # Initialize multibot orchestrator
     from src.bot.orchestrator import BotOrchestrator
     orchestrator = BotOrchestrator()
@@ -192,26 +188,6 @@ async def lifespan(app: FastAPI):
 
     await close_db()
     logger.info("Application shut down")
-
-
-async def _recover_stale_backtests():
-    """Mark backtest runs stuck in 'pending'/'running' as failed after restart."""
-    from sqlalchemy import update
-
-    from src.models.database import BacktestRun
-    from src.models.session import get_session
-
-    try:
-        async with get_session() as session:
-            result = await session.execute(
-                update(BacktestRun)
-                .where(BacktestRun.status.in_(["pending", "running"]))
-                .values(status="failed", error_message="Server restarted during execution")
-            )
-            if result.rowcount:
-                logger.info("Recovered %d stale backtest run(s)", result.rowcount)
-    except Exception as e:
-        logger.warning("Failed to recover stale backtests: %s", e)
 
 
 async def _seed_exchanges():
@@ -341,7 +317,6 @@ def create_app() -> FastAPI:
     app.include_router(bots.router)
     app.include_router(tax_report.router)
     app.include_router(affiliate.router)
-    app.include_router(backtest.router)
     app.include_router(portfolio.router)
     app.include_router(websocket.router)
     app.include_router(notifications.router)

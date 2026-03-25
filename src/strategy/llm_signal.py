@@ -219,7 +219,7 @@ class LLMSignalStrategy(BaseStrategy):
             else SignalDirection.SHORT
         )
 
-        # Calculate TP/SL (None = no TP/SL, trades closed by rotation or manually)
+        # Calculate TP/SL (None = no TP/SL, trades closed by strategy signals or manually)
         target_price = None
         stop_loss = None
         if current_price > 0 and self.take_profit_percent is not None and self.stop_loss_percent is not None:

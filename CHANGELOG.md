@@ -9,6 +9,47 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [4.3.0] - 2026-03-25
+
+### Hinzugefuegt
+- **API Glitch Tracking & Alerting**: Position Monitor erkennt und meldet jetzt API-Stoerungen (z.B. wiederholte Timeouts, fehlerhafte Responses) mit automatischem Alerting
+- **Weex V3 API Migration**: Trading-Endpunkte auf Weex V3 API migriert — bessere Stabilitaet und Zukunftssicherheit
+- **Admin Bypass**: Admin-User umgehen alle Affiliate- und Referral-Gates (inkl. Bot-Worker-Level HL Gates) — vereinfacht Testing und Support
+- **Exchange Feature Matrix**: Aktualisiert mit korrekten Margin-Modi und Feature-Flags fuer alle 5 Exchanges
+- **Symbol-Validierung beim Bot-Start**: Trading Pairs werden auch in `bot_worker.initialize()` gegen die Exchange geprueft — verhindert Fehler wenn Symbole nach Bot-Erstellung delistet werden
+
+### Behoben
+- **Bot Builder Intervall-Feld**: Intervall-Eingabe zeigte automatisch "5" an und liess sich nicht leeren. Fix: Feld startet leer, Minimum wird erst bei Absenden validiert
+- **Mobile Bot-Menue**: 3-Punkte-Menue auf Bot-Karten war auf Mobilgeraeten nicht klickbar — Dropdown wurde von anderen Elementen verdeckt. Fix: Z-Index erhoeht (z-50), Touch-Target vergroessert (44px+), overflow-hidden entfernt, Karte wird bei offenem Menue angehoben
+- **HL Unrealized PnL**: Wird jetzt korrekt aus Positions-Daten gelesen statt separat abgefragt. Circuit Breaker hinzugefuegt + Weex Symbol-Referenz korrigiert
+- **HL Funding Rate**: Korrekte Berechnung nach Weex V3 Migration
+- **HL Balance Response**: Defensiver Type-Check verhindert Crashes bei unerwartetem Response-Format
+- **BingX Balance Response**: Wird jetzt korrekt als Liste geparst
+- **PNL Arrow Wrapping**: PNL-Pfeil und Wert bleiben jetzt in einer Zeile (kein Umbruch mehr)
+- **NEUTRAL Signals**: Werden jetzt abgelehnt statt weitergeleitet. Side-Mismatch im Position Monitor behoben
+- **Position Close Retry**: Bestaetigung vor dem Markieren von Positionen als geschlossen hinzugefuegt — verhindert vorzeitiges Schliessen
+- **Symbol-Normalisierung**: Alle Market-Data-API-Aufrufe normalisieren Symbole jetzt auf Binance-Format — konsistente Daten ueber alle Exchanges
+- **Hyperliquid float_to_wire Rounding (kritisch)**: Trade-Size wurde nicht auf `szDecimals` gerundet bevor sie an die HL SDK uebergeben wurde. Jedes Signal generierte den Fehler `float_to_wire causes rounding` — kein einziger Trade konnte ausgefuehrt werden. Fix: Size wird jetzt via `_get_sz_decimals()` auf die korrekte Dezimalstellenzahl gerundet (z.B. BTC=5, ETH=4, AAVE=2). Betrifft alle drei Pfade: Open, Close und TP/SL Fallback
+- **Hyperliquid close_position Rounding**: Auch `close_position()` und der TP/SL-Fallback-Pfad in `set_position_tpsl()` rundeten die Size nicht — haetten beim Schliessen den gleichen `float_to_wire`-Fehler ausgeloest
+- **Symbol-Validierung AttributeError**: `bot_worker.py` referenzierte `self._trading_pairs` (existiert nicht) — Symbol-Validierung wurde bei jedem Bot-Start uebersprungen. Fix: Nutzt jetzt `_safe_json_loads(self._config.trading_pairs)`
+- **Hyperliquid Event Loop Blocking**: Alle HL SDK-Aufrufe (sync `requests`) blockierten den gesamten Event Loop (100-500ms pro Call). Alle anderen Bots, WebSocket-Verbindungen und API-Handler waren waehrenddessen eingefroren. Fix: `_cb_call()` nutzt jetzt `run_in_executor()`, `get_ticker()` laeuft jetzt durch den Circuit Breaker
+- **Hyperliquid Price Tick Size**: `_get_tick_size()` las faelschlicherweise `szDecimals` (Size-Precision) statt der tatsaechlichen Preis-Precision. TP/SL Trigger-Preise konnten falsch gerundet sein. Fix: Nutzt jetzt `meta_and_asset_ctxs` mit 5 signifikanten Stellen (HL Standard)
+- **Builder Fee Revenue 10x zu niedrig**: `calculate_builder_fee()` dividierte durch 1.000.000 statt korrekt 100.000. Revenue-Dashboard zeigte 10x weniger Builder-Fee-Einnahmen als tatsaechlich verdient
+- **Funding Fee Richtung**: `get_funding_fees()` nutzte `abs()` — empfangene Funding-Zahlungen wurden als Kosten gezaehlt statt abgezogen. Fee-Tracking war immer zu hoch. Betrifft HL und BingX
+- **BingX margin_mode Parameter (kritisch)**: `place_market_order()` und `close_position()` fehlte der `margin_mode` Parameter — jeder Aufruf haette einen TypeError ausgeloest. Fix: Parameter hinzugefuegt, doppelten `set_leverage`-Aufruf in `place_market_order` entfernt (wurde bereits vom Trade Executor gesetzt)
+- **BingX VST Demo-Modus (kritisch — Ludwig)**: BingX VST API unterstuetzt `set_leverage` und `set_margin_type` nicht (Error 109400). Der Trade Executor behandelte dies als Hard-Block — kein einziger Demo-Trade konnte ausgefuehrt werden. Fix: VST-spezifische Fehler werden erkannt und uebersprungen, Bot tradet mit Standard-Einstellungen
+- **BingX Quantity Precision**: Rohe Float-Werte (z.B. `0.03400000001`) wurden als Quantity an die BingX API gesendet — konnte zu Error 100400 fuehren. Fix: `_round_quantity()` rundet auf 4 Dezimalstellen
+
+### Geaendert
+- **Zeitzonen-Support im Bot Builder**: Uhrzeiten werden jetzt in der lokalen Zeitzone des Users angezeigt und eingegeben. Automatische Erkennung via Browser. Keine "(UTC)"-Anzeigen mehr — Konvertierung erfolgt automatisch im Hintergrund
+
+### Entfernt
+- **Trade Rotation entfernt**: Schedule-Typ "Nur Trade-Rotation" aus Bot Builder und Backend entfernt. Eigenes Intervall deckt den gleichen Use Case ab
+- **Market Sessions entfernt**: Schedule-Typ "Markt-Sessions (1h, 8h, 14h, 21h UTC)" aus Bot Builder und Backend entfernt. Feste Uhrzeit (Eigene Uhrzeiten) deckt den gleichen Use Case ab
+- **Backtest-Modul komplett entfernt**: Frontend-Seite, Backend-Engine (8 Dateien), API-Endpunkte, Tests, Skripte und Anleitungen. Code bleibt in der Git-History erhalten. Entfernt ~13.750 Zeilen Code
+
+---
+
 ## [4.2.1] - 2026-03-19
 
 ### Behoben

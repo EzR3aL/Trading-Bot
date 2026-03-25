@@ -314,6 +314,7 @@ class BingXClient(ExchangeClient):
         leverage: int,
         take_profit: Optional[float] = None,
         stop_loss: Optional[float] = None,
+        margin_mode: str = "cross",
     ) -> Order:
         """
         Place a market order on BingX perpetual swap.
@@ -325,19 +326,21 @@ class BingXClient(ExchangeClient):
         Opening long: side=BUY, positionSide=LONG
         Opening short: side=SELL, positionSide=SHORT
         """
-        # Set leverage first
-        await self.set_leverage(symbol, leverage)
+        # Leverage is set by trade_executor before calling this method
 
         # Map normalized side to BingX order parameters
         order_side = SIDE_BUY if side == "long" else SIDE_SELL
         position_side = POSITION_LONG if side == "long" else POSITION_SHORT
+
+        # Round quantity to avoid float precision artifacts (e.g. 0.03400000001)
+        rounded_size = self._round_quantity(size)
 
         order_params = {
             "symbol": symbol,
             "side": order_side,
             "positionSide": position_side,
             "type": ORDER_TYPE_MARKET,
-            "quantity": str(size),
+            "quantity": str(rounded_size),
         }
 
         # BingX supports TP/SL as part of the order placement
@@ -389,7 +392,7 @@ class BingXClient(ExchangeClient):
             logger.warning(f"Failed to cancel order {order_id}: {e}")
             return False
 
-    async def close_position(self, symbol: str, side: str) -> Optional[Order]:
+    async def close_position(self, symbol: str, side: str, margin_mode: str = "cross") -> Optional[Order]:
         """
         Close an open position by placing an opposing market order.
 
@@ -411,7 +414,7 @@ class BingXClient(ExchangeClient):
             "side": close_side,
             "positionSide": position_side,
             "type": ORDER_TYPE_MARKET,
-            "quantity": str(pos.size),
+            "quantity": str(self._round_quantity(pos.size)),
         }
 
         result = await self._request("POST", ENDPOINTS["place_order"], data=order_params)
@@ -471,6 +474,9 @@ class BingXClient(ExchangeClient):
         BingX endpoints:
           POST /openApi/swap/v2/trade/marginType - set margin mode
           POST /openApi/swap/v2/trade/leverage - set leverage per side
+
+        Note: BingX VST (demo) API does not support these endpoints and returns
+        error 109400. In demo mode we log and proceed — trades use defaults.
         """
         # Set margin type first
         bingx_margin = MARGIN_CROSSED if margin_mode == "cross" else MARGIN_ISOLATED
@@ -482,7 +488,10 @@ class BingXClient(ExchangeClient):
         except BingXClientError as e:
             err_msg = str(e).lower()
             if "no need" not in err_msg and "same" not in err_msg:
-                logger.warning("set_margin_type failed for %s: %s", symbol, e)
+                if self.demo_mode and ("109400" in str(e) or "invalid param" in err_msg):
+                    logger.debug("VST does not support set_margin_type for %s (expected)", symbol)
+                else:
+                    logger.warning("set_margin_type failed for %s: %s", symbol, e)
 
         for pos_side in (POSITION_LONG, POSITION_SHORT):
             params = {
@@ -495,6 +504,9 @@ class BingXClient(ExchangeClient):
             except BingXClientError as e:
                 err_msg = str(e).lower()
                 if "same" in err_msg or "not changed" in err_msg:
+                    continue
+                if self.demo_mode and ("109400" in str(e) or "invalid param" in err_msg):
+                    logger.debug("VST does not support set_leverage for %s %s (expected)", symbol, pos_side)
                     continue
                 logger.warning("set_leverage failed for %s %s: %s", symbol, pos_side, e)
                 return False
@@ -797,7 +809,7 @@ class BingXClient(ExchangeClient):
         BingX endpoint: GET /openApi/swap/v2/user/income?incomeType=FUNDING_FEE
         Funding fees are charged periodically while holding a position.
 
-        Returns total absolute funding paid (always positive). Returns 0.0 on error.
+        Returns net funding cost (positive = paid, negative = received). Returns 0.0 on error.
         """
         try:
             params = {
@@ -819,7 +831,7 @@ class BingXClient(ExchangeClient):
             for item in income_list:
                 amount_str = item.get("income", "0") or item.get("amount", "0")
                 if amount_str:
-                    total_funding += abs(float(amount_str))
+                    total_funding += float(amount_str)
 
             return round(total_funding, 6)
         except Exception as e:
@@ -865,6 +877,15 @@ class BingXClient(ExchangeClient):
         except Exception as e:
             logger.warning(f"Affiliate UID check failed for {uid}: {e}")
             return False
+
+    @staticmethod
+    def _round_quantity(size: float) -> float:
+        """Round quantity to avoid float precision artifacts.
+
+        BingX requires quantities that match contract step sizes. We use 4
+        decimal places as a safe default for most perpetual contracts.
+        """
+        return round(size, 4)
 
     def _normalize_position(self, pos: Dict[str, Any]) -> Optional[Position]:
         """Convert a BingX position dict to a normalized Position object."""

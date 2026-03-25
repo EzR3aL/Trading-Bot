@@ -121,28 +121,9 @@ class TestBotConfigCreate:
             BotConfigCreate(name="B", strategy_type="d", exchange_type="bitget", schedule_type="every_5_min")
 
     def test_schedule_type_valid_values(self):
-        for st in ("market_sessions", "interval", "custom_cron", "rotation_only"):
+        for st in ("interval", "custom_cron"):
             bot = BotConfigCreate(name="B", strategy_type="d", exchange_type="bitget", schedule_type=st)
             assert bot.schedule_type == st
-
-    def test_rotation_interval_boundaries(self):
-        with pytest.raises(ValidationError):
-            BotConfigCreate(name="B", strategy_type="d", exchange_type="bitget", rotation_interval_minutes=4)
-        with pytest.raises(ValidationError):
-            BotConfigCreate(name="B", strategy_type="d", exchange_type="bitget", rotation_interval_minutes=10081)
-        bot = BotConfigCreate(name="B", strategy_type="d", exchange_type="bitget", rotation_interval_minutes=5)
-        assert bot.rotation_interval_minutes == 5
-        bot = BotConfigCreate(name="B", strategy_type="d", exchange_type="bitget", rotation_interval_minutes=10080)
-        assert bot.rotation_interval_minutes == 10080
-
-    def test_rotation_start_time_pattern(self):
-        bot = BotConfigCreate(name="B", strategy_type="d", exchange_type="bitget", rotation_start_time="08:00")
-        assert bot.rotation_start_time == "08:00"
-        # Pattern only validates HH:MM format (2 digits colon 2 digits)
-        with pytest.raises(ValidationError):
-            BotConfigCreate(name="B", strategy_type="d", exchange_type="bitget", rotation_start_time="8:00")
-        with pytest.raises(ValidationError):
-            BotConfigCreate(name="B", strategy_type="d", exchange_type="bitget", rotation_start_time="noon")
 
 
 # ---------------------------------------------------------------------------

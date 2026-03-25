@@ -1,13 +1,12 @@
 """
-Integration tests for four small API routers: users, backtest, statistics, affiliate.
+Integration tests for three small API routers: users, statistics, affiliate.
 
-All four routers are mounted in a single FastAPI app and tested together using
+All three routers are mounted in a single FastAPI app and tested together using
 an in-memory SQLite database. This file targets uncovered lines to increase
-coverage across all four routers.
+coverage across all three routers.
 
 Coverage targets:
   - users.py:      46% -> 90%+ (lines 16-99)
-  - backtest.py:   38% -> 90%+ (lines 33-257)
   - statistics.py: 71% -> 90%+ (lines 16-198)
   - affiliate.py:  58% -> 90%+ (lines 17-79)
 """
@@ -31,14 +30,11 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-from src.models.database import AffiliateLink, BacktestRun, Base, TradeRecord, User
+from src.models.database import AffiliateLink, Base, TradeRecord, User
 from src.auth.password import hash_password
 from src.auth.jwt_handler import create_access_token
 from src.errors import (
-    ERR_BACKTEST_NOT_FOUND,
     ERR_CANNOT_DELETE_SELF,
-    ERR_END_BEFORE_START,
-    ERR_INVALID_DATE_FORMAT,
     ERR_INVALID_EXCHANGE,
     ERR_USERNAME_EXISTS,
     ERR_USER_NOT_FOUND,
@@ -50,19 +46,6 @@ from src.errors import (
 # ===========================================================================
 
 
-def _register_test_strategy():
-    """Register a minimal test strategy so backtest endpoints work."""
-    from src.strategy.base import BaseStrategy, StrategyRegistry, TradeSignal
-
-    if "test_strategy" in StrategyRegistry._strategies:
-        return
-
-    class TestStrategy(BaseStrategy):
-        async def generate_signal(self, symbol: str) -> TradeSignal:
-            raise NotImplementedError
-
-        async def should_trade(self, signal) -> tuple:
-            return False, "Test"
 
         @classmethod
         def get_param_schema(cls) -> dict:
@@ -156,11 +139,10 @@ async def app(session_factory):
     from slowapi import _rate_limit_exceeded_handler
     from slowapi.errors import RateLimitExceeded
     from src.api.routers.auth import limiter
-    from src.api.routers import users, backtest, statistics, affiliate
+    from src.api.routers import users, statistics, affiliate
     from src.models.session import get_db
 
     limiter.enabled = False
-    _register_test_strategy()
 
     async def override_get_db():
         async with session_factory() as session:
@@ -175,7 +157,6 @@ async def app(session_factory):
     test_app.state.limiter = limiter
     test_app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
     test_app.include_router(users.router)
-    test_app.include_router(backtest.router)
     test_app.include_router(statistics.router)
     test_app.include_router(affiliate.router)
     test_app.dependency_overrides[get_db] = override_get_db
@@ -193,109 +174,6 @@ async def client(app):
 # ===========================================================================
 # Test data fixtures
 # ===========================================================================
-
-
-@pytest_asyncio.fixture
-async def backtest_run(session_factory, user):
-    """A completed backtest run belonging to the regular user."""
-    async with session_factory() as session:
-        run = BacktestRun(
-            user_id=user.id,
-            strategy_type="test_strategy",
-            symbol="BTCUSDT",
-            timeframe="1h",
-            start_date=datetime(2024, 1, 1),
-            end_date=datetime(2024, 3, 1),
-            initial_capital=10000.0,
-            status="completed",
-            result_metrics=json.dumps({
-                "total_return_percent": 15.2,
-                "win_rate": 55.0,
-                "max_drawdown_percent": 8.1,
-                "sharpe_ratio": 1.2,
-                "profit_factor": 1.6,
-                "total_trades": 20,
-                "winning_trades": 11,
-                "losing_trades": 9,
-                "average_win": 45.0,
-                "average_loss": -30.0,
-                "total_pnl": 1520.0,
-                "total_fees": 50.0,
-                "starting_capital": 10000.0,
-                "ending_capital": 11520.0,
-            }),
-            equity_curve=json.dumps([
-                {"timestamp": "2024-01-01", "equity": 10000},
-                {"timestamp": "2024-03-01", "equity": 11520},
-            ]),
-            trades=json.dumps([{
-                "entry_date": "2024-01-15",
-                "exit_date": "2024-01-16",
-                "direction": "long",
-                "entry_price": 42000,
-                "exit_price": 43000,
-                "position_value": 1000,
-                "pnl": 100,
-                "pnl_percent": 2.38,
-                "fees": 2.0,
-                "net_pnl": 98.0,
-                "result": "win",
-                "reason": "Signal detected",
-                "confidence": 80,
-            }]),
-            created_at=datetime.now(timezone.utc) - timedelta(hours=2),
-            completed_at=datetime(2024, 3, 1, 12, 0),
-        )
-        session.add(run)
-        await session.commit()
-        await session.refresh(run)
-        return run
-
-
-@pytest_asyncio.fixture
-async def pending_backtest_run(session_factory, user):
-    """A pending backtest run belonging to the regular user."""
-    async with session_factory() as session:
-        run = BacktestRun(
-            user_id=user.id,
-            strategy_type="test_strategy",
-            symbol="ETHUSDT",
-            timeframe="4h",
-            start_date=datetime(2024, 6, 1),
-            end_date=datetime(2024, 9, 1),
-            initial_capital=5000.0,
-            status="pending",
-            created_at=datetime.now(timezone.utc),
-        )
-        session.add(run)
-        await session.commit()
-        await session.refresh(run)
-        return run
-
-
-@pytest_asyncio.fixture
-async def three_pending_runs(session_factory, user):
-    """Insert 3 pending/running runs to trigger concurrent limit."""
-    runs = []
-    async with session_factory() as session:
-        for i in range(3):
-            run = BacktestRun(
-                user_id=user.id,
-                strategy_type="test_strategy",
-                symbol="BTCUSDT",
-                timeframe="1d",
-                start_date=datetime(2024, 1, 1),
-                end_date=datetime(2024, 6, 1),
-                initial_capital=10000.0,
-                status="pending" if i < 2 else "running",
-                created_at=datetime.now(timezone.utc),
-            )
-            session.add(run)
-            runs.append(run)
-        await session.commit()
-        for r in runs:
-            await session.refresh(r)
-    return runs
 
 
 @pytest_asyncio.fixture
@@ -713,304 +591,6 @@ async def test_users_delete_then_list_excludes(
     assert "regular" not in usernames
 
 
-# ===========================================================================
-# BACKTEST ROUTER TESTS
-# ===========================================================================
-
-
-# ---------------------------------------------------------------------------
-# GET /api/backtest/strategies
-# ---------------------------------------------------------------------------
-
-
-async def test_backtest_list_strategies(client, auth_headers, user):
-    """Lists available strategies including the registered test_strategy."""
-    resp = await client.get("/api/backtest/strategies", headers=auth_headers)
-    assert resp.status_code == 200
-    data = resp.json()
-    assert "strategies" in data
-    names = [s["name"] for s in data["strategies"]]
-    assert "test_strategy" in names
-
-
-async def test_backtest_list_strategies_requires_auth(client):
-    """Listing strategies without auth returns 401."""
-    resp = await client.get("/api/backtest/strategies")
-    assert resp.status_code == 401
-
-
-# ---------------------------------------------------------------------------
-# POST /api/backtest/run
-# ---------------------------------------------------------------------------
-
-
-async def test_backtest_start_success(client, auth_headers, user):
-    """Starting a backtest returns run_id and pending status."""
-    with patch("src.api.routers.backtest._execute_backtest"):
-        resp = await client.post(
-            "/api/backtest/run",
-            headers=auth_headers,
-            json={
-                "strategy_type": "test_strategy",
-                "symbol": "BTCUSDT",
-                "timeframe": "1d",
-                "start_date": "2024-01-01",
-                "end_date": "2024-06-01",
-                "initial_capital": 10000.0,
-            },
-        )
-    assert resp.status_code == 200
-    data = resp.json()
-    assert "run_id" in data
-    assert data["status"] == "pending"
-
-
-async def test_backtest_start_with_strategy_params(client, auth_headers, user):
-    """Starting a backtest with strategy_params succeeds."""
-    with patch("src.api.routers.backtest._execute_backtest"):
-        resp = await client.post(
-            "/api/backtest/run",
-            headers=auth_headers,
-            json={
-                "strategy_type": "test_strategy",
-                "start_date": "2024-01-01",
-                "end_date": "2024-06-01",
-                "strategy_params": {"test_param": 99},
-            },
-        )
-    assert resp.status_code == 200
-    assert resp.json()["status"] == "pending"
-
-
-async def test_backtest_start_invalid_strategy(client, auth_headers, user):
-    """Unknown strategy returns 400."""
-    resp = await client.post(
-        "/api/backtest/run",
-        headers=auth_headers,
-        json={
-            "strategy_type": "nonexistent_strategy",
-            "start_date": "2024-01-01",
-            "end_date": "2024-06-01",
-        },
-    )
-    assert resp.status_code == 400
-
-
-async def test_backtest_start_invalid_date_format(client, auth_headers, user):
-    """Invalid date format returns 400."""
-    resp = await client.post(
-        "/api/backtest/run",
-        headers=auth_headers,
-        json={
-            "strategy_type": "test_strategy",
-            "start_date": "not-a-date",
-            "end_date": "2024-06-01",
-        },
-    )
-    assert resp.status_code == 400
-    assert resp.json()["detail"] == ERR_INVALID_DATE_FORMAT
-
-
-async def test_backtest_start_end_before_start(client, auth_headers, user):
-    """end_date before start_date returns 400."""
-    resp = await client.post(
-        "/api/backtest/run",
-        headers=auth_headers,
-        json={
-            "strategy_type": "test_strategy",
-            "start_date": "2024-06-01",
-            "end_date": "2024-01-01",
-        },
-    )
-    assert resp.status_code == 400
-    assert resp.json()["detail"] == ERR_END_BEFORE_START
-
-
-async def test_backtest_start_same_dates(client, auth_headers, user):
-    """Same start and end date returns 400 (end must be after start)."""
-    resp = await client.post(
-        "/api/backtest/run",
-        headers=auth_headers,
-        json={
-            "strategy_type": "test_strategy",
-            "start_date": "2024-01-01",
-            "end_date": "2024-01-01",
-        },
-    )
-    assert resp.status_code == 400
-
-
-async def test_backtest_start_concurrent_limit(
-    client, auth_headers, three_pending_runs
-):
-    """Exceeding concurrent backtest limit returns 429."""
-    resp = await client.post(
-        "/api/backtest/run",
-        headers=auth_headers,
-        json={
-            "strategy_type": "test_strategy",
-            "start_date": "2024-01-01",
-            "end_date": "2024-06-01",
-        },
-    )
-    assert resp.status_code == 429
-    assert "backtest" in resp.json()["detail"].lower() or "gleichzeitig" in resp.json()["detail"].lower()
-
-
-async def test_backtest_start_requires_auth(client):
-    """Starting a backtest without auth returns 401."""
-    resp = await client.post(
-        "/api/backtest/run",
-        json={
-            "strategy_type": "test_strategy",
-            "start_date": "2024-01-01",
-            "end_date": "2024-06-01",
-        },
-    )
-    assert resp.status_code == 401
-
-
-# ---------------------------------------------------------------------------
-# GET /api/backtest/history
-# ---------------------------------------------------------------------------
-
-
-async def test_backtest_history(client, auth_headers, backtest_run):
-    """History returns user's backtest runs with metrics."""
-    resp = await client.get("/api/backtest/history", headers=auth_headers)
-    assert resp.status_code == 200
-    data = resp.json()
-    assert data["total"] >= 1
-    assert len(data["runs"]) >= 1
-    assert data["page"] == 1
-
-    run = data["runs"][0]
-    assert run["strategy_type"] == "test_strategy"
-    assert run["total_return_percent"] is not None
-    assert run["win_rate"] is not None
-    assert run["total_trades"] is not None
-
-
-async def test_backtest_history_pagination(client, auth_headers, backtest_run):
-    """History supports page and per_page params."""
-    resp = await client.get(
-        "/api/backtest/history",
-        headers=auth_headers,
-        params={"page": 1, "per_page": 1},
-    )
-    data = resp.json()
-    assert data["per_page"] == 1
-    assert len(data["runs"]) <= 1
-
-
-async def test_backtest_history_empty(client, auth_headers, user):
-    """History returns empty when no backtests exist."""
-    resp = await client.get("/api/backtest/history", headers=auth_headers)
-    data = resp.json()
-    assert data["total"] == 0
-    assert data["runs"] == []
-
-
-async def test_backtest_history_requires_auth(client):
-    """History without auth returns 401."""
-    resp = await client.get("/api/backtest/history")
-    assert resp.status_code == 401
-
-
-# ---------------------------------------------------------------------------
-# GET /api/backtest/{run_id}
-# ---------------------------------------------------------------------------
-
-
-async def test_backtest_get_run_completed(client, auth_headers, backtest_run):
-    """Get a completed backtest run with metrics, equity_curve, trades."""
-    resp = await client.get(
-        f"/api/backtest/{backtest_run.id}", headers=auth_headers
-    )
-    assert resp.status_code == 200
-    data = resp.json()
-    assert data["id"] == backtest_run.id
-    assert data["status"] == "completed"
-    assert data["metrics"] is not None
-    assert data["metrics"]["total_return_percent"] == 15.2
-    assert data["equity_curve"] is not None
-    assert len(data["equity_curve"]) == 2
-    assert data["trades"] is not None
-    assert len(data["trades"]) == 1
-    assert data["completed_at"] is not None
-
-
-async def test_backtest_get_run_pending(client, auth_headers, pending_backtest_run):
-    """Pending run has null metrics, equity_curve, and trades."""
-    resp = await client.get(
-        f"/api/backtest/{pending_backtest_run.id}", headers=auth_headers
-    )
-    assert resp.status_code == 200
-    data = resp.json()
-    assert data["status"] == "pending"
-    assert data["metrics"] is None
-    assert data["equity_curve"] is None
-    assert data["trades"] is None
-
-
-async def test_backtest_get_run_not_found(client, auth_headers, user):
-    """Getting a non-existent run returns 404."""
-    resp = await client.get("/api/backtest/99999", headers=auth_headers)
-    assert resp.status_code == 404
-    assert resp.json()["detail"] == ERR_BACKTEST_NOT_FOUND
-
-
-async def test_backtest_get_run_requires_auth(client, backtest_run):
-    """Getting a run without auth returns 401."""
-    resp = await client.get(f"/api/backtest/{backtest_run.id}")
-    assert resp.status_code == 401
-
-
-async def test_backtest_get_run_response_fields(client, auth_headers, backtest_run):
-    """Response includes all expected fields."""
-    resp = await client.get(
-        f"/api/backtest/{backtest_run.id}", headers=auth_headers
-    )
-    data = resp.json()
-    expected_fields = {
-        "id", "strategy_type", "symbol", "timeframe", "start_date", "end_date",
-        "initial_capital", "strategy_params", "status", "error_message",
-        "metrics", "equity_curve", "trades", "created_at", "completed_at",
-    }
-    assert expected_fields.issubset(set(data.keys()))
-
-
-# ---------------------------------------------------------------------------
-# DELETE /api/backtest/{run_id}
-# ---------------------------------------------------------------------------
-
-
-async def test_backtest_delete_success(client, auth_headers, backtest_run):
-    """Delete a backtest run succeeds and is confirmed gone."""
-    resp = await client.delete(
-        f"/api/backtest/{backtest_run.id}", headers=auth_headers
-    )
-    assert resp.status_code == 200
-    data = resp.json()
-    assert data["status"] == "ok"
-
-    # Verify it is actually deleted
-    resp2 = await client.get(
-        f"/api/backtest/{backtest_run.id}", headers=auth_headers
-    )
-    assert resp2.status_code == 404
-
-
-async def test_backtest_delete_not_found(client, auth_headers, user):
-    """Deleting a non-existent run returns 404."""
-    resp = await client.delete("/api/backtest/99999", headers=auth_headers)
-    assert resp.status_code == 404
-
-
-async def test_backtest_delete_requires_auth(client, backtest_run):
-    """Deleting without auth returns 401."""
-    resp = await client.delete(f"/api/backtest/{backtest_run.id}")
-    assert resp.status_code == 401
 
 
 # ===========================================================================
@@ -1487,11 +1067,6 @@ async def test_all_routers_reject_unauthenticated_requests(client):
         ("POST", "/api/users"),
         ("PUT", "/api/users/1"),
         ("DELETE", "/api/users/1"),
-        ("GET", "/api/backtest/strategies"),
-        ("POST", "/api/backtest/run"),
-        ("GET", "/api/backtest/history"),
-        ("GET", "/api/backtest/1"),
-        ("DELETE", "/api/backtest/1"),
         ("GET", "/api/statistics"),
         ("GET", "/api/statistics/daily"),
         ("GET", "/api/statistics/revenue"),
@@ -1550,10 +1125,8 @@ async def test_admin_only_endpoints_reject_regular_user(
 async def test_user_endpoints_accessible_by_regular_user(
     client, auth_headers, user
 ):
-    """Regular user can access non-admin endpoints (backtest, statistics)."""
+    """Regular user can access non-admin endpoints (statistics)."""
     user_endpoints = [
-        ("GET", "/api/backtest/strategies"),
-        ("GET", "/api/backtest/history"),
         ("GET", "/api/statistics"),
         ("GET", "/api/statistics/daily"),
         ("GET", "/api/statistics/revenue"),

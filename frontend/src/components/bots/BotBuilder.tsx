@@ -8,6 +8,7 @@ import ExchangeLogo from '../ui/ExchangeLogo'
 import FilterDropdown from '../ui/FilterDropdown'
 import NumInput from '../ui/NumInput'
 import useHaptic from '../../hooks/useHaptic'
+import { localHourToUtc, utcHourToLocal, formatTimezone } from '../../utils/timezone'
 
 interface Strategy {
   name: string
@@ -156,12 +157,9 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
   const [maxTrades, setMaxTrades] = useState<number | null>(null)
   const [dailyLossLimit, setDailyLossLimit] = useState<number | null>(null)
   const [perAssetConfig, setPerAssetConfig] = useState<Record<string, { position_usdt?: number; leverage?: number; tp?: number; sl?: number; max_trades?: number; loss_limit?: number }>>({})
-  const [scheduleType, setScheduleType] = useState('market_sessions')
-  const [intervalMinutes, setIntervalMinutes] = useState(60)
+  const [scheduleType, setScheduleType] = useState('interval')
+  const [intervalMinutes, setIntervalMinutes] = useState<number | ''>(60)
   const [customHours, setCustomHours] = useState<number[]>([])
-  const [rotationEnabled, setRotationEnabled] = useState(false)
-  const [rotationMinutes, setRotationMinutes] = useState(60)
-  const [rotationStartTime, setRotationStartTime] = useState('08:00')
   const [discordWebhookUrl, setDiscordWebhookUrl] = useState('')
   const [telegramBotToken, setTelegramBotToken] = useState('')
   const [telegramChatId, setTelegramChatId] = useState('')
@@ -266,11 +264,13 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
         setScheduleType(d.schedule_type)
         if (d.schedule_config) {
           if (d.schedule_config.interval_minutes) setIntervalMinutes(d.schedule_config.interval_minutes)
-          if (d.schedule_config.hours) setCustomHours(d.schedule_config.hours)
+          // Convert UTC hours from API to local hours for display
+          if (d.schedule_config.hours) setCustomHours(d.schedule_config.hours.map((h: number) => utcHourToLocal(h)))
         }
-        if (d.rotation_enabled) setRotationEnabled(true)
-        if (d.rotation_interval_minutes) setRotationMinutes(d.rotation_interval_minutes)
-        if (d.rotation_start_time) setRotationStartTime(d.rotation_start_time)
+        // Migrate legacy schedule types to supported ones
+        if (d.schedule_type === 'rotation_only' || d.schedule_type === 'market_sessions') {
+          setScheduleType('interval')
+        }
         // Restore selected data sources from strategy_params
         // Fixed strategies always use their predetermined sources
         if (FIXED_STRATEGY_SOURCES[d.strategy_type]) {
@@ -462,7 +462,7 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
     const kline = strategyParams.kline_interval as string | undefined
     if (!kline) return false
     const klineMin = klineToMinutes(kline)
-    if (scheduleType === 'interval') return intervalMinutes < klineMin
+    if (scheduleType === 'interval') return typeof intervalMinutes === 'number' && intervalMinutes < klineMin
     if (scheduleType === 'custom_cron' && customHours.length >= 2) {
       const sorted = [...customHours].sort((a, b) => a - b)
       let minGap = 1440
@@ -474,19 +474,15 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
   }, [scheduleType, intervalMinutes, customHours, strategyParams.kline_interval])
 
   const buildPayload = () => {
-    const isRotationOnly = scheduleType === 'rotation_only'
+    // Convert local hours to UTC before sending to the API
     const scheduleConfig = scheduleType === 'interval'
-      ? { interval_minutes: intervalMinutes }
-      : scheduleType === 'custom_cron'
-        ? { hours: customHours }
-        : { hours: [1, 8, 14, 21] }
+      ? { interval_minutes: intervalMinutes || 60 }
+      : { hours: customHours.map(h => localHourToUtc(h)) }
 
     // Include data_sources in strategy_params for data-using strategies
     const params = usesData
       ? { ...strategyParams, data_sources: selectedSources }
       : strategyParams
-
-    const effectiveRotation = rotationEnabled || isRotationOnly
 
     // Build per_asset_config (filter out empty entries)
     const filteredPerAsset: Record<string, Record<string, number>> = {}
@@ -514,10 +510,7 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
       per_asset_config: Object.keys(filteredPerAsset).length > 0 ? filteredPerAsset : undefined,
       strategy_params: params,
       schedule_type: scheduleType,
-      schedule_config: isRotationOnly ? null : scheduleConfig,
-      rotation_enabled: effectiveRotation,
-      rotation_interval_minutes: effectiveRotation ? rotationMinutes : null,
-      rotation_start_time: effectiveRotation ? rotationStartTime : null,
+      schedule_config: scheduleConfig,
       discord_webhook_url: discordWebhookUrl || undefined,
       telegram_bot_token: telegramBotToken || undefined,
       telegram_chat_id: telegramChatId || undefined,
@@ -568,8 +561,7 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
     if (stepKey === 'step3' && tradingPairs.length === 0) errors.push(t('bots.builder.errors.pairsRequired'))
     if (stepKey === 'step5') {
       if (scheduleType === 'custom_cron' && customHours.length === 0) errors.push(t('bots.builder.errors.hoursRequired'))
-      if (scheduleType === 'interval' && intervalMinutes < 5) errors.push(t('bots.builder.errors.intervalMinimum'))
-      if ((scheduleType === 'rotation_only' || rotationEnabled) && rotationMinutes < 5) errors.push(t('bots.builder.errors.rotationMinimum'))
+      if (scheduleType === 'interval' && (intervalMinutes === '' || intervalMinutes < 5)) errors.push(t('bots.builder.errors.intervalMinimum'))
     }
     return errors
   }
@@ -1731,22 +1723,18 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
 
             {scheduleView === 'grid' ? (
               <div className="grid grid-cols-2 gap-2">
-                {(['rotation_only', 'market_sessions', 'interval', 'custom_cron'] as const).map(st => {
+                {(['interval', 'custom_cron'] as const).map(st => {
                   const labelMap: Record<string, string> = {
-                    rotation_only: b.rotationOnly,
-                    market_sessions: b.marketSessions,
                     interval: b.interval,
                     custom_cron: b.customCron,
                   }
                   const descMap: Record<string, string> = {
-                    rotation_only: b.rotationOnlyDesc,
-                    market_sessions: '01, 08, 14, 21h UTC',
                     interval: b.intervalDesc,
                     custom_cron: b.customCronDesc,
                   }
                   const isSelected = scheduleType === st
                   return (
-                    <button key={st} onClick={() => { setScheduleType(st); if (st === 'rotation_only') setRotationEnabled(true) }}
+                    <button key={st} onClick={() => setScheduleType(st)}
                       className={`text-left p-3 rounded-xl border transition-all ${
                         isSelected
                           ? 'border-primary-500 bg-primary-500/10 ring-1 ring-primary-500/30'
@@ -1760,16 +1748,14 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
               </div>
             ) : (
               <div className="space-y-1">
-                {(['rotation_only', 'market_sessions', 'interval', 'custom_cron'] as const).map(st => {
+                {(['interval', 'custom_cron'] as const).map(st => {
                   const labelMap: Record<string, string> = {
-                    rotation_only: b.rotationOnly,
-                    market_sessions: b.marketSessions,
                     interval: b.interval,
                     custom_cron: b.customCron,
                   }
                   const isSelected = scheduleType === st
                   return (
-                    <button key={st} onClick={() => { setScheduleType(st); if (st === 'rotation_only') setRotationEnabled(true) }}
+                    <button key={st} onClick={() => setScheduleType(st)}
                       className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl border transition-all ${
                         isSelected
                           ? 'border-primary-500 bg-primary-500/10 ring-1 ring-primary-500/30'
@@ -1786,8 +1772,8 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
             {scheduleType === 'interval' && (
               <div className="mt-2">
                 <label className="block text-xs text-gray-300 mb-1.5">{b.intervalMinutes}</label>
-                <NumInput value={intervalMinutes} onChange={e => setIntervalMinutes(parseInt(e.target.value) || 5)} min={5} max={1440}
-                  className="filter-select w-36 text-sm tabular-nums" />
+                <NumInput value={intervalMinutes} onChange={e => { const v = e.target.value; setIntervalMinutes(v === '' ? '' : (parseInt(v) || '')) }} min={5} max={1440}
+                  className="filter-select w-36 text-sm tabular-nums" placeholder="5–1440" />
               </div>
             )}
 
@@ -1811,10 +1797,17 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
                 </div>
                 {customHours.length > 0 && (
                   <p className="text-xs text-gray-400 mt-1.5">
-                    {customHours.map(h => `${String(h).padStart(2, '0')}:00`).join(', ')} UTC
+                    {customHours.map(h => `${String(h).padStart(2, '0')}:00`).join(', ')}
                   </p>
                 )}
               </div>
+            )}
+
+            {/* Timezone hint */}
+            {(scheduleType === 'interval' || scheduleType === 'custom_cron') && (
+              <p className="text-xs text-zinc-500 mt-2">
+                {t('bots.builder.timezone_hint', { tz: formatTimezone() })}
+              </p>
             )}
 
             {/* Kline vs Schedule mismatch warning */}
@@ -1823,74 +1816,14 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
                 <AlertTriangle size={16} className="text-amber-400 shrink-0 mt-0.5" />
                 <div className="text-xs text-amber-300/90 leading-relaxed">
                   {t('bots.builder.scheduleKlineWarning', {
-                    schedule: scheduleType === 'interval' ? `${intervalMinutes}m` : t('bots.builder.customCron'),
+                    schedule: scheduleType === 'interval' ? `${intervalMinutes || '?'}m` : t('bots.builder.customCron'),
                     kline: strategyParams.kline_interval ?? '1h',
-                    defaultValue: `Your analysis interval (${scheduleType === 'interval' ? `${intervalMinutes}m` : 'custom'}) is shorter than the Kline interval (${strategyParams.kline_interval ?? '1h'}). The bot will analyze the same candle multiple times without new information. Recommended: analysis interval ≥ Kline interval.`
+                    defaultValue: `Your analysis interval (${scheduleType === 'interval' ? `${intervalMinutes || '?'}m` : 'custom'}) is shorter than the Kline interval (${strategyParams.kline_interval ?? '1h'}). The bot will analyze the same candle multiple times without new information. Recommended: analysis interval ≥ Kline interval.`
                   })}
                 </div>
               </div>
             )}
 
-            {/* Trade Rotation toggle */}
-            {scheduleType !== 'rotation_only' && (
-              <div className="mt-4 pt-4 border-t border-white/5">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <span className="text-sm text-gray-300">{b.tradeRotation}</span>
-                    <p className="text-xs text-gray-400 mt-0.5">{b.tradeRotationDesc}</p>
-                  </div>
-                  <button onClick={() => setRotationEnabled(!rotationEnabled)}
-                    className={`relative w-11 h-6 rounded-full transition-colors ${rotationEnabled ? 'bg-primary-600' : 'bg-gray-700'}`}>
-                    <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform ${rotationEnabled ? 'translate-x-5' : ''}`} />
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* Rotation settings */}
-            {(scheduleType === 'rotation_only' || rotationEnabled) && (
-              <div className="space-y-3 mt-3">
-                <div className="flex flex-wrap gap-1.5">
-                  {[
-                    { label: '5m', value: 5 }, { label: '15m', value: 15 },
-                    { label: '30m', value: 30 }, { label: '1h', value: 60 },
-                    { label: '4h', value: 240 }, { label: '8h', value: 480 },
-                    { label: '12h', value: 720 }, { label: '24h', value: 1440 },
-                  ].map(preset => (
-                    <button key={preset.value} onClick={() => setRotationMinutes(preset.value)}
-                      className={`px-3 py-1.5 text-xs rounded-lg border transition-all ${
-                        rotationMinutes === preset.value
-                          ? 'border-primary-500 bg-primary-500/15 text-primary-400 ring-1 ring-primary-500/30'
-                          : 'border-white/10 bg-white/[0.03] text-gray-500 hover:border-white/20 hover:bg-white/[0.06] hover:text-gray-300'
-                      }`}>
-                      {preset.label}
-                    </button>
-                  ))}
-                </div>
-
-                <div className="flex gap-4">
-                  <div>
-                    <label className="block text-xs text-gray-300 mb-1.5">{b.customMinutes}</label>
-                    <NumInput value={rotationMinutes}
-                      onChange={e => setRotationMinutes(Math.max(5, parseInt(e.target.value) || 5))}
-                      min={5} max={10080}
-                      className="filter-select w-36 text-sm tabular-nums" />
-                  </div>
-                  <div>
-                    <label className="block text-xs text-gray-300 mb-1.5">{b.rotationStartTime}</label>
-                    <FilterDropdown
-                      value={rotationStartTime}
-                      onChange={val => setRotationStartTime(val)}
-                      options={Array.from({ length: 24 }, (_, h) => {
-                        const t = `${String(h).padStart(2, '0')}:00`
-                        return { value: t, label: `${t} UTC` }
-                      })}
-                      ariaLabel="Start Time"
-                    />
-                  </div>
-                </div>
-              </div>
-            )}
           </div>
         )}
 
@@ -1915,17 +1848,10 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
                 <div><span className="text-gray-500">{b.dailyLossLimit}:</span> <span className="text-white ml-2">{dailyLossLimit}%</span></div>
               )}
               <div><span className="text-gray-500">{b.schedule}:</span> <span className="text-white ml-2">
-                {scheduleType === 'rotation_only' ? (b.rotationOnly) :
-                 scheduleType === 'interval' ? `Alle ${intervalMinutes} Min.` :
+                {scheduleType === 'interval' ? `Alle ${intervalMinutes || '–'} Min.` :
                  scheduleType === 'custom_cron' ? customHours.map(h => `${h}:00`).join(', ') :
-                 '01:00, 08:00, 14:00, 21:00 UTC'}
+                 scheduleType}
               </span></div>
-              {(rotationEnabled || scheduleType === 'rotation_only') && (
-                <div><span className="text-gray-500">{b.tradeRotation}:</span> <span className="text-white ml-2">
-                  {rotationMinutes >= 60 ? `${rotationMinutes / 60}h` : `${rotationMinutes}min`}
-                  {rotationStartTime ? ` (${b.rotationStartTime}: ${rotationStartTime} UTC)` : ''}
-                </span></div>
-              )}
             </div>
 
             {/* Symbol conflict warning (compact) */}
