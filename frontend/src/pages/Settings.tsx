@@ -6,14 +6,14 @@ import api from '../api/client'
 import { getApiErrorMessage } from '../utils/api-error'
 import { useAuthStore } from '../stores/authStore'
 import { useToastStore } from '../stores/toastStore'
-import type { ConnectionsStatusResponse, ExchangeConnectionStatus, ExchangeInfo, ServiceStatus, LlmConnection, AdminUidEntry, HlRevenueInfo } from '../types'
+import type { ConnectionsStatusResponse, ExchangeConnectionStatus, ExchangeInfo, ServiceStatus, AdminUidEntry, HlRevenueInfo } from '../types'
 import { ExchangeIcon } from '../components/ui/ExchangeLogo'
 import FilterDropdown from '../components/ui/FilterDropdown'
 import GuidedTour, { TourHelpButton, type TourStep } from '../components/ui/GuidedTour'
 import HyperliquidSetup from '../components/hyperliquid/HyperliquidSetup'
 
 const BASE_TABS = ['apiKeys'] as const
-const ADMIN_TABS = [...BASE_TABS, 'llmKeys', 'connections', 'affiliateLinks', 'hyperliquid'] as const
+const ADMIN_TABS = [...BASE_TABS, 'connections', 'affiliateLinks', 'hyperliquid'] as const
 
 /* ------------------------------------------------------------------ */
 /*  Inline Key Form (used inside accordion)                           */
@@ -154,13 +154,8 @@ export default function Settings() {
   // Per-exchange API key forms
   const [keyForms, setKeyForms] = useState<Record<string, ExchangeKeyForm>>({})
 
-  // LLM connections
-  const [llmConnections, setLlmConnections] = useState<LlmConnection[]>([])
-  const [llmKeyForms, setLlmKeyForms] = useState<Record<string, string>>({})
-
   // Accordion state
   const [openExchange, setOpenExchange] = useState<string | null>(null)
-  const [openLlm, setOpenLlm] = useState<string | null>(null)
 
   // Connections status
   const [connStatus, setConnStatus] = useState<ConnectionsStatusResponse | null>(null)
@@ -222,18 +217,14 @@ export default function Settings() {
       }
 
       // Fetch auth-required data independently so one failure doesn't block others
-      const [configRes, connRes, llmRes, affRes] = await Promise.allSettled([
+      const [configRes, connRes, affRes] = await Promise.allSettled([
         api.get('/config'),
         api.get('/config/exchange-connections'),
-        api.get('/config/llm-connections'),
         api.get('/affiliate-links'),
       ])
 
       if (connRes.status === 'fulfilled') {
         setConnections(connRes.value.data.connections || [])
-      }
-      if (llmRes.status === 'fulfilled') {
-        setLlmConnections(llmRes.value.data.connections || [])
       }
       if (affRes.status === 'fulfilled') {
         const affMap: Record<string, { affiliate_url: string; label: string | null; uid_required: boolean }> = {}
@@ -244,7 +235,7 @@ export default function Settings() {
       }
 
       // Show error only if all auth requests failed
-      const authResults = [configRes, connRes, llmRes, affRes]
+      const authResults = [configRes, connRes, affRes]
       if (authResults.every(r => r.status === 'rejected')) {
         setMessage(t('common.error'))
       }
@@ -306,42 +297,6 @@ export default function Settings() {
       const modeLabel = mode === 'demo' ? t('common.demo') : t('common.live')
       showMessage(t('settings.testConnectionResult', { mode: modeLabel, exchange: exchangeType, balance: res.data.balance }))
     } catch (err) { showMessage(getApiErrorMessage(err, t('settings.connectionFailed'))) }
-  }
-
-  const saveLlmKey = async (provider: string) => {
-    const key = llmKeyForms[provider]
-    if (!key) return
-    setSaving(true)
-    try {
-      await api.put(`/config/llm-connections/${provider}`, { api_key: key })
-      const res = await api.get('/config/llm-connections')
-      setLlmConnections(res.data.connections || [])
-      setLlmKeyForms(prev => ({ ...prev, [provider]: '' }))
-      showMessage(t('settings.saved'))
-    } catch (err) { showMessage(getApiErrorMessage(err, t('common.saveFailed'))) }
-    setSaving(false)
-  }
-
-  const testLlmKey = async (provider: string) => {
-    setSaving(true)
-    try {
-      const res = await api.post(`/config/llm-connections/${provider}/test`)
-      showMessage(`${t('settings.connectionSuccess')}: ${res.data.display_name}`)
-    } catch (err) {
-      showMessage(getApiErrorMessage(err, t('common.error')))
-    }
-    setSaving(false)
-  }
-
-  const deleteLlmKey = async (provider: string) => {
-    setSaving(true)
-    try {
-      await api.delete(`/config/llm-connections/${provider}`)
-      const res = await api.get('/config/llm-connections')
-      setLlmConnections(res.data.connections || [])
-      showMessage(t('settings.saved'))
-    } catch (err) { showMessage(getApiErrorMessage(err, t('common.saveFailed'))) }
-    setSaving(false)
   }
 
   const loadConnectionStatus = async () => {
@@ -846,153 +801,6 @@ export default function Settings() {
               })}
             </div>
 
-          </div>
-        )
-      })()}
-
-      {/* LLM Keys Tab — Accordion */}
-      {activeTab === 'llmKeys' && (() => {
-        const configuredLlm = llmConnections.filter(c => c.api_key_configured).length
-        const totalLlm = llmConnections.length
-        const llmPct = totalLlm > 0 ? Math.round((configuredLlm / totalLlm) * 100) : 0
-        const totalModels = llmConnections.reduce((sum, c) => sum + (c.models?.length || 0), 0)
-        return (
-          <div className="space-y-6">
-            {/* ── Summary Bar ── */}
-            <div className="border border-white/10 bg-white/[0.03] rounded-xl p-5">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <div className="flex items-center gap-4">
-                  <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
-                    configuredLlm > 0 ? 'bg-emerald-500/15' : 'bg-white/5'
-                  }`}>
-                    <Cpu size={22} className={configuredLlm > 0 ? 'text-emerald-400' : 'text-gray-600'} />
-                  </div>
-                  <div>
-                    <h3 className="text-white font-semibold text-lg leading-tight">
-                      {t('settings.llmKeys')}
-                    </h3>
-                    <p className="text-gray-500 text-sm mt-0.5">
-                      {configuredLlm}/{totalLlm} {t('settings.configured')}
-                      {totalModels > 0 && <> &middot; {totalModels} {t('settings.models')}</>}
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-24 h-2 bg-white/5 rounded-full overflow-hidden">
-                    <div
-                      className={`h-full rounded-full transition-all duration-500 ${
-                        configuredLlm > 0 ? 'bg-emerald-500' : 'bg-gray-600'
-                      }`}
-                      style={{ width: `${llmPct}%` }}
-                    />
-                  </div>
-                  <span className={`text-sm font-bold tabular-nums ${
-                    configuredLlm > 0 ? 'text-emerald-400' : 'text-gray-600'
-                  }`}>
-                    {llmPct}%
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {/* ── Provider Cards ── */}
-            <div>
-              <p className="text-xs text-gray-500 mb-3">{t('settings.llmKeysDescription')}</p>
-              <div className="space-y-3 max-w-2xl">
-                {llmConnections.map(({ provider_type, api_key_configured, display_name, free_tier, family_name, models }) => {
-                  const isOpen = openLlm === provider_type
-                  return (
-                    <div key={provider_type} className="border border-white/[0.08] bg-white/[0.02] rounded-xl overflow-hidden">
-                      {/* Accordion Header */}
-                      <button
-                        onClick={() => setOpenLlm(isOpen ? null : provider_type)}
-                        className="w-full flex items-center justify-between px-5 py-3.5 hover:bg-white/[0.04] transition-colors"
-                      >
-                        <div className="flex items-center gap-3">
-                          <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${
-                            api_key_configured ? 'bg-emerald-500/10' : 'bg-white/5'
-                          }`}>
-                            <Cpu size={16} className={api_key_configured ? 'text-emerald-400' : 'text-gray-500'} />
-                          </div>
-                          <div className="text-left">
-                            <div className="flex items-center gap-2">
-                              <h4 className="text-white text-sm font-medium">{family_name || display_name}</h4>
-                              {free_tier && (
-                                <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-400">{t('settings.free')}</span>
-                              )}
-                            </div>
-                            {models && models.length > 0 && (
-                              <span className="text-[10px] text-gray-600">{models.length} {t('settings.models')}</span>
-                            )}
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${
-                            api_key_configured ? 'bg-emerald-500/10 text-emerald-400' : 'bg-white/5 text-gray-500'
-                          }`}>
-                            {api_key_configured ? t('settings.configured') : t('settings.notConfigured')}
-                          </span>
-                          <ChevronDown size={14} className={`text-gray-500 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
-                        </div>
-                      </button>
-
-                      {/* Accordion Content */}
-                      {isOpen && (
-                        <div className="px-5 pb-5 pt-1 space-y-3 border-t border-white/[0.06]">
-                          {/* Available models */}
-                          {models && models.length > 0 && (
-                            <div>
-                              <span className="block text-xs text-gray-500 mb-1.5">{t('settings.availableModels')}</span>
-                              <div className="flex flex-wrap gap-1.5">
-                                {models.map((m: any) => (
-                                  <span
-                                    key={m.id}
-                                    className={`px-2 py-0.5 text-[10px] rounded border ${
-                                      m.default
-                                        ? 'bg-primary-900/30 text-primary-400 border-primary-800'
-                                        : 'bg-white/[0.03] text-gray-400 border-white/[0.08]'
-                                    }`}
-                                  >
-                                    {m.name}{m.default ? ` (${t('settings.defaultModel')})` : ''}
-                                  </span>
-                                ))}
-                              </div>
-                            </div>
-                          )}
-                          <div>
-                            <label htmlFor={`llm-key-${provider_type}`} className="block text-xs text-gray-500 mb-1">{t('settings.apiKey')}</label>
-                            <input
-                              id={`llm-key-${provider_type}`}
-                              type="password"
-                              value={llmKeyForms[provider_type] || ''}
-                              onChange={(e) => setLlmKeyForms(prev => ({ ...prev, [provider_type]: e.target.value }))}
-                              placeholder={api_key_configured ? '****configured****' : ''}
-                              className="filter-select w-full text-sm"
-                            />
-                          </div>
-                          <div className="flex gap-2">
-                            <button onClick={() => saveLlmKey(provider_type)} disabled={saving}
-                              className="px-3 py-1.5 text-xs bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 transition-colors">
-                              {t('settings.save')}
-                            </button>
-                            <button onClick={() => testLlmKey(provider_type)} disabled={!api_key_configured || saving}
-                              className="px-3 py-1.5 text-xs bg-white/5 border border-white/10 text-gray-300 rounded-lg hover:bg-white/10 disabled:opacity-50 transition-colors">
-                              {t('settings.testConnection')}
-                            </button>
-                            {api_key_configured && (
-                              <button onClick={() => deleteLlmKey(provider_type)} disabled={saving}
-                                className="px-3 py-1.5 text-xs bg-red-500/10 text-red-400 border border-red-500/20 rounded-lg hover:bg-red-500/20 disabled:opacity-50 transition-colors">
-                                {t('common.delete', 'Delete')}
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  )
-                })}
-              </div>
-            </div>
           </div>
         )
       })()}

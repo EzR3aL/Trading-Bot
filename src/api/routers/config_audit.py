@@ -33,7 +33,7 @@ class ConfigChangeListResponse(BaseModel):
 
 @router.get("", response_model=ConfigChangeListResponse)
 async def list_config_changes(
-    entity_type: Optional[str] = Query(None, pattern="^(bot_config|preset|exchange_connection|llm_connection)$"),
+    entity_type: Optional[str] = Query(None, pattern="^(bot_config|preset|exchange_connection)$"),
     entity_id: Optional[int] = Query(None),
     action: Optional[str] = Query(None, pattern="^(create|update|delete)$"),
     page: int = Query(1, ge=1),

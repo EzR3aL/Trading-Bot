@@ -29,7 +29,7 @@ from src.bot.trade_closer import TradeCloserMixin
 from src.bot.trade_executor import TradeExecutorMixin
 from src.exchanges.base import ExchangeClient
 from src.exchanges.factory import create_exchange_client
-from src.models.database import BotConfig, ExchangeConnection, LLMConnection, TradeRecord
+from src.models.database import BotConfig, ExchangeConnection, TradeRecord
 from src.models.enums import BotStatus
 from src.models.session import get_session
 from src.risk.risk_manager import RiskManager
@@ -226,22 +226,6 @@ class BotWorker(
                     strategy_params.setdefault("take_profit_percent", self._config.take_profit_percent)
                 if self._config.stop_loss_percent is not None:
                     strategy_params.setdefault("stop_loss_percent", self._config.stop_loss_percent)
-
-                # If LLM strategy, inject decrypted API key from user's LLMConnection
-                if self._config.strategy_type in ("llm_signal", "degen"):
-                    llm_provider = strategy_params.get("llm_provider", "groq")
-                    llm_conn_result = await session.execute(
-                        select(LLMConnection).where(
-                            LLMConnection.user_id == self._config.user_id,
-                            LLMConnection.provider_type == llm_provider,
-                        )
-                    )
-                    llm_conn = llm_conn_result.scalar_one_or_none()
-                    if not llm_conn:
-                        self.error_message = f"No API key configured for LLM provider: {llm_provider}. Go to Settings → LLM Keys."
-                        self.status = BotStatus.ERROR
-                        return False
-                    strategy_params["llm_api_key"] = decrypt_value(llm_conn.api_key_encrypted)
 
                 self._strategy = StrategyRegistry.create(
                     self._config.strategy_type,

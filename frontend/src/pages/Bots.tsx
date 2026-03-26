@@ -1,10 +1,9 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toBlob } from 'html-to-image'
 import api from '../api/client'
 import { getApiErrorMessage } from '../utils/api-error'
 import { useFilterStore } from '../stores/filterStore'
-import type { LlmConnection } from '../types'
 import { useThemeStore } from '../stores/themeStore'
 import { useToastStore } from '../stores/toastStore'
 import { utcHourToLocal } from '../utils/timezone'
@@ -33,7 +32,6 @@ import {
   ArrowDownRight,
   Copy,
   ChevronDown,
-  Bot,
   MoreVertical,
   XCircle,
   Shield,
@@ -50,7 +48,6 @@ import { useAuthStore } from '../stores/authStore'
 import PullToRefreshIndicator from '../components/ui/PullToRefreshIndicator'
 
 import { strategyLabel } from '../constants/strategies'
-const AI_STRATEGIES = new Set(['llm_signal', 'degen'])
 
 interface BotStatus {
   bot_config_id: number
@@ -70,15 +67,6 @@ interface BotStatus {
   total_fees: number
   total_funding: number
   open_trades: number
-  llm_provider?: string | null
-  llm_model?: string | null
-  llm_last_direction?: string | null
-  llm_last_confidence?: number | null
-  llm_last_reasoning?: string | null
-  llm_accuracy?: number | null
-  llm_total_predictions?: number | null
-  llm_total_tokens_used?: number | null
-  llm_avg_tokens_per_call?: number | null
   schedule_type?: string | null
   schedule_config?: { interval_minutes?: number; hours?: number[] } | null
   risk_profile?: string | null
@@ -462,9 +450,6 @@ function BotTradeHistoryModal({ bot, onClose, t }: { bot: BotStatus; onClose: ()
               <h2 className="text-lg font-bold text-white">{bot.name}</h2>
               <div className="flex items-center gap-2 mt-0.5">
                 <span className="text-xs text-gray-500">{strategyLabel(bot.strategy_type)}</span>
-                {AI_STRATEGIES.has(bot.strategy_type) && (
-                  <Bot size={13} className="text-emerald-400" />
-                )}
                 {bot.risk_profile && (
                   <>
                     <span className="text-gray-700">·</span>
@@ -777,8 +762,6 @@ export default function Bots() {
   const [confirmStopId, setConfirmStopId] = useState<number | null>(null)
   const [error, setError] = useState('')
   const [historyBot, setHistoryBot] = useState<BotStatus | null>(null)
-  const [llmConnections, setLlmConnections] = useState<LlmConnection[]>([])
-
   const [moreMenuOpen, setMoreMenuOpen] = useState<number | null>(null)
   const [closePositionOpen, setClosePositionOpen] = useState<number | null>(null)
   const [confirmModal, setConfirmModal] = useState<{
@@ -787,25 +770,6 @@ export default function Bots() {
     name: string
     symbol?: string
   } | null>(null)
-
-  // Build lookup: model_id → display name, provider_type → family_name
-  const modelNameMap = useMemo(() => {
-    const map: Record<string, string> = {}
-    for (const conn of llmConnections) {
-      for (const m of conn.models || []) {
-        map[m.id] = m.name
-      }
-    }
-    return map
-  }, [llmConnections])
-
-  const providerNameMap = useMemo(() => {
-    const map: Record<string, string> = {}
-    for (const conn of llmConnections) {
-      map[conn.provider_type] = conn.family_name || conn.display_name
-    }
-    return map
-  }, [llmConnections])
 
   const fetchBots = useCallback(async () => {
     try {
@@ -825,10 +789,6 @@ export default function Bots() {
     const interval = setInterval(fetchBots, 5000)
     return () => clearInterval(interval)
   }, [fetchBots])
-
-  useEffect(() => {
-    api.get('/config/llm-connections').then(res => setLlmConnections(res.data.connections || [])).catch((err) => { console.error('Failed to load LLM connections:', err); useToastStore.getState().addToast('error', t('common.loadError', 'Failed to load data')) })
-  }, [])
 
   const { containerRef, refreshing, pullDistance } = usePullToRefresh({
     onRefresh: fetchBots,
@@ -1057,9 +1017,6 @@ export default function Bots() {
                           </span>
                         )}
                       </span>
-                      {AI_STRATEGIES.has(bot.strategy_type) && (
-                        <Bot size={15} className="text-emerald-400" />
-                      )}
                     </div>
                   </div>
                   <div className="text-right shrink-0 flex items-center gap-1.5">
@@ -1075,14 +1032,6 @@ export default function Bots() {
                           {isMobile ? '' : t(`bots.${bot.status}`)}
                         </span>
                       </div>
-                    {bot.llm_provider && (
-                      <div className="mt-1 text-xs text-gray-500 leading-tight">
-                        <span>{providerNameMap[bot.llm_provider] || bot.llm_provider}</span>
-                        {bot.llm_model && (
-                          <div className="text-gray-400 font-medium">{modelNameMap[bot.llm_model] || bot.llm_model}</div>
-                        )}
-                      </div>
-                    )}
                     </div>
                     {isMobile && (
                       <ChevronDown size={14} className={`text-gray-400 transition-transform ${isBotExpanded ? 'rotate-180' : ''}`} />
@@ -1129,73 +1078,6 @@ export default function Bots() {
                   </div>
                 </div>
 
-
-                {/* LLM Metrics */}
-                {AI_STRATEGIES.has(bot.strategy_type) && (
-                  <div className="mb-3 pt-3 border-t border-white/5 space-y-2.5">
-                    <div className="flex items-center gap-2 text-sm">
-                      <span className="text-gray-500">{t('bots.llmLastSignal')}</span>
-                      {bot.llm_last_direction && (
-                        <span className={`font-semibold ${bot.llm_last_direction === 'LONG' ? 'text-profit' : 'text-loss'}`}>
-                          {bot.llm_last_direction === 'LONG' ? '+' : '-'} {bot.llm_last_direction}
-                        </span>
-                      )}
-                    </div>
-
-                    {bot.llm_last_confidence != null && (
-                      <div>
-                        <div className="flex items-center justify-between text-sm mb-1">
-                          <span className="text-gray-500">{t('bots.confidence')}</span>
-                          <span className={`font-medium ${confidenceColor(bot.llm_last_confidence)}`}>{bot.llm_last_confidence}%</span>
-                        </div>
-                        <div className="w-full bg-white/5 rounded-full h-2">
-                          <div
-                            className={`h-2 rounded-full transition-all ${
-                              bot.llm_last_confidence >= 75 ? 'bg-emerald-500' :
-                              bot.llm_last_confidence >= 50 ? 'bg-amber-500' : 'bg-red-500'
-                            }`}
-                            style={{ width: `${bot.llm_last_confidence}%` }}
-                          />
-                        </div>
-                      </div>
-                    )}
-
-                    <div className="text-sm">
-                      <span className="text-gray-500">{t('bots.accuracy')}: </span>
-                      <span className="text-white font-medium">
-                        {bot.llm_accuracy != null ? `${bot.llm_accuracy.toFixed(1)}%` : 'N/A'}
-                      </span>
-                    </div>
-
-                    {(bot.llm_total_tokens_used != null || bot.llm_avg_tokens_per_call != null) && (
-                      <div className="flex gap-4 text-xs">
-                        <div>
-                          <span className="text-gray-500">{t('bots.totalTokens')}: </span>
-                          <span className="text-white font-medium">
-                            {bot.llm_total_tokens_used != null ? bot.llm_total_tokens_used.toLocaleString() : 'N/A'}
-                          </span>
-                        </div>
-                        <div>
-                          <span className="text-gray-500">{t('bots.avgTokensPerCall')}: </span>
-                          <span className="text-white font-medium">
-                            {bot.llm_avg_tokens_per_call != null ? bot.llm_avg_tokens_per_call.toLocaleString() : 'N/A'}
-                          </span>
-                        </div>
-                      </div>
-                    )}
-
-                    {bot.llm_last_reasoning && (
-                      <details className="text-xs">
-                        <summary className="text-gray-400 cursor-pointer hover:text-gray-300 transition-colors">
-                          {t('bots.viewReasoning')}
-                        </summary>
-                        <p className="text-gray-500 mt-1 italic leading-relaxed p-2 bg-white/5 rounded-lg mt-1.5">
-                          &ldquo;{bot.llm_last_reasoning}&rdquo;
-                        </p>
-                      </details>
-                    )}
-                  </div>
-                )}
 
                 {/* Error message */}
                 {bot.error_message && (

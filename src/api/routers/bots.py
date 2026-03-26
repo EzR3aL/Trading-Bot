@@ -12,7 +12,7 @@ import time as _time
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from sqlalchemy import case, func, select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from src.api.schemas.bots import (
     BotBudgetInfo,
@@ -582,7 +582,6 @@ async def list_bots(
     configs = result.scalars().all()
 
     bot_ids = [c.id for c in configs]
-    llm_bot_ids = [c.id for c in configs if c.strategy_type == "llm_signal"]
 
     # ── Batch queries (replace N+1 per-bot queries) ──────────────
 
@@ -590,9 +589,6 @@ async def list_bots(
     trade_stats: dict[int, tuple] = {}
     open_counts: dict[int, int] = {}
     orphaned_counts: dict[int, int] = {}
-    closed_stats: dict[int, tuple] = {}
-    last_trades: dict[int, TradeRecord] = {}
-    bot_snapshots: dict[int, list[str]] = {}
 
     if bot_ids:
         # Batch 1: Trade stats per bot
@@ -643,57 +639,6 @@ async def list_bots(
         )
         orphaned_counts = dict(orphaned_result.all())
 
-    if llm_bot_ids:
-        # Batch 3: Closed trade stats for LLM accuracy
-        closed_filters = [
-            TradeRecord.bot_config_id.in_(llm_bot_ids),
-            TradeRecord.status == "closed",
-        ]
-        if demo_mode is not None:
-            closed_filters.append(TradeRecord.demo_mode == demo_mode)
-
-        closed_result = await db.execute(
-            select(
-                TradeRecord.bot_config_id,
-                func.count(TradeRecord.id),
-                func.sum(case((TradeRecord.pnl > 0, 1), else_=0)),
-            ).where(*closed_filters)
-            .group_by(TradeRecord.bot_config_id)
-        )
-        for bid, total, wins in closed_result.all():
-            closed_stats[bid] = (total, wins)
-
-        # Batch 4: Last trade per LLM bot (max id per bot → single query)
-        last_trade_filters = [TradeRecord.bot_config_id.in_(llm_bot_ids)]
-        if demo_mode is not None:
-            last_trade_filters.append(TradeRecord.demo_mode == demo_mode)
-
-        max_id_subq = (
-            select(func.max(TradeRecord.id).label("max_id"))
-            .where(*last_trade_filters)
-            .group_by(TradeRecord.bot_config_id)
-            .subquery()
-        )
-        last_trades_result = await db.execute(
-            select(TradeRecord).where(TradeRecord.id.in_(select(max_id_subq.c.max_id)))
-        )
-        last_trades = {t.bot_config_id: t for t in last_trades_result.scalars().all()}
-
-        # Batch 5: Metrics snapshots for token aggregation
-        snapshot_filters = [
-            TradeRecord.bot_config_id.in_(llm_bot_ids),
-            TradeRecord.metrics_snapshot.isnot(None),
-        ]
-        if demo_mode is not None:
-            snapshot_filters.append(TradeRecord.demo_mode == demo_mode)
-
-        snapshots_result = await db.execute(
-            select(TradeRecord.bot_config_id, TradeRecord.metrics_snapshot)
-            .where(*snapshot_filters)
-        )
-        for bid, snapshot_json in snapshots_result.all():
-            bot_snapshots.setdefault(bid, []).append(snapshot_json)
-
     # ── Build response from preloaded data ───────────────────────
 
     bots = []
@@ -707,79 +652,6 @@ async def list_bots(
         )
         open_trades = open_counts.get(config.id, 0)
         orphaned_trade_count = orphaned_counts.get(config.id, 0)
-
-        # LLM-specific metrics
-        llm_data = {}
-        if config.strategy_type == "llm_signal":
-            last_trade = last_trades.get(config.id)
-
-            if last_trade:
-                llm_data["llm_last_direction"] = last_trade.side.upper() if last_trade.side else None
-                llm_data["llm_last_confidence"] = last_trade.confidence
-                if last_trade.metrics_snapshot:
-                    try:
-                        metrics = json.loads(last_trade.metrics_snapshot)
-                        llm_data["llm_last_reasoning"] = metrics.get("llm_reasoning", "")[:200]
-                        llm_data["llm_provider"] = metrics.get("llm_provider")
-                        llm_data["llm_model"] = metrics.get("llm_model")
-                    except (json.JSONDecodeError, TypeError) as e:
-                        logger.warning(f"Failed to parse metrics_snapshot for trade #{last_trade.id}: {e}")
-
-            # Accuracy from batched closed stats
-            closed_total, winners = closed_stats.get(config.id, (0, 0))
-            if closed_total and closed_total > 0:
-                llm_data["llm_accuracy"] = round(
-                    (float(winners or 0) / closed_total) * 100, 1
-                )
-            llm_data["llm_total_predictions"] = total_trades
-
-            # Token aggregation from batched snapshots
-            snapshots = bot_snapshots.get(config.id, [])
-            if snapshots:
-                total_tokens = 0
-                token_count = 0
-                for snapshot_json in snapshots:
-                    try:
-                        snapshot = json.loads(snapshot_json)
-                        tokens = snapshot.get("llm_tokens_used", 0)
-                        if tokens and tokens > 0:
-                            total_tokens += tokens
-                            token_count += 1
-                    except (json.JSONDecodeError, TypeError):
-                        pass
-                if token_count > 0:
-                    llm_data["llm_total_tokens_used"] = total_tokens
-                    llm_data["llm_avg_tokens_per_call"] = round(
-                        total_tokens / token_count, 1
-                    )
-
-            # Get provider/model from strategy_params as fallback
-            if (not llm_data.get("llm_provider") or not llm_data.get("llm_model")) and config.strategy_params:
-                try:
-                    sp = json.loads(config.strategy_params)
-                    if not llm_data.get("llm_provider"):
-                        llm_data["llm_provider"] = sp.get("llm_provider")
-                    if not llm_data.get("llm_model"):
-                        llm_data["llm_model"] = sp.get("llm_model")
-                except (json.JSONDecodeError, TypeError) as e:
-                    logger.warning(f"Failed to parse strategy_params for bot {config.id}: {e}")
-
-            # Fallback for legacy bots: detect provider from last trade reason text
-            if not llm_data.get("llm_provider") and last_trade and last_trade.reason:
-                reason = last_trade.reason
-                if reason.startswith("["):
-                    bracket_end = reason.find("]")
-                    if bracket_end > 0:
-                        model_tag = reason[1:bracket_end]
-                        from src.ai.providers import MODEL_CATALOG
-                        for ptype, cat in MODEL_CATALOG.items():
-                            if cat["family_name"] in model_tag:
-                                llm_data["llm_provider"] = ptype
-                                for m in cat["models"]:
-                                    if m["name"] in model_tag:
-                                        llm_data["llm_model"] = m["id"]
-                                        break
-                                break
 
         # Parse schedule_config for card display
         _sched_config = None
@@ -832,7 +704,6 @@ async def list_bots(
             referral_verified=hl_referral_verified if config.exchange_type == "hyperliquid" else None,
             affiliate_uid=affiliate_data.get(config.exchange_type, {}).get("uid") if config.exchange_type in CEX_EXCHANGES else None,
             affiliate_verified=(True if is_admin else affiliate_data.get(config.exchange_type, {}).get("verified")) if config.exchange_type in CEX_EXCHANGES else None,
-            **llm_data,
         ))
 
     return BotListResponse(bots=bots)

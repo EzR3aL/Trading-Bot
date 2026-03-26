@@ -155,22 +155,6 @@ export interface ConnectionsStatusResponse {
   }>
 }
 
-// LLM connection types
-export interface LlmModel {
-  id: string
-  name: string
-  default?: boolean
-}
-
-export interface LlmConnection {
-  provider_type: string
-  api_key_configured: boolean
-  display_name: string
-  free_tier: boolean
-  family_name?: string
-  models?: LlmModel[]
-}
-
 // Admin UID entry
 export interface AdminUidEntry {
   connection_id: number

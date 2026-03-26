@@ -17,8 +17,8 @@ import ExitReasonBadge from '../components/ui/ExitReasonBadge'
 import MobileTradeCard from '../components/ui/MobileTradeCard'
 import useIsMobile from '../hooks/useIsMobile'
 import useSwipeToClose from '../hooks/useSwipeToClose'
-import { Eye, EyeOff, ArrowUpRight, ArrowDownRight, Trophy, Target, LayoutGrid, BarChart3, Bot, FileText, X, Copy, ShieldCheck } from 'lucide-react'
-import type { LlmConnection } from '../types'
+import { Eye, EyeOff, ArrowUpRight, ArrowDownRight, Trophy, Target, LayoutGrid, BarChart3, FileText, X, Copy, ShieldCheck } from 'lucide-react'
+
 import { formatDate, formatDateTime, formatChartDate, formatTime, formatChartCurrency } from '../utils/dateUtils'
 
 import { strategyLabel } from '../constants/strategies'
@@ -52,8 +52,7 @@ interface BotCompareData {
   wins: number
   last_direction: string | null
   last_confidence: number | null
-  llm_provider?: string | null
-  llm_model?: string | null
+
   series: { date: string; cumulative_pnl: number }[]
 }
 
@@ -138,7 +137,7 @@ function Sparkline({ data, color, width = 80, height = 32 }: {
 
 /* ── Bot Card ────────────────────────────────────────────── */
 
-function BotCard({ bot, color, isSelected, isHovered, onClick, onMouseEnter, onMouseLeave, index, modelNameMap, providerNameMap }: {
+function BotCard({ bot, color, isSelected, isHovered, onClick, onMouseEnter, onMouseLeave, index }: {
   bot: BotCompareData
   color: string
   isSelected: boolean
@@ -147,8 +146,6 @@ function BotCard({ bot, color, isSelected, isHovered, onClick, onMouseEnter, onM
   onMouseEnter: () => void
   onMouseLeave: () => void
   index: number
-  modelNameMap: Record<string, string>
-  providerNameMap: Record<string, string>
 }) {
   const { t } = useTranslation()
   const sparkData = bot.series.map(s => s.cumulative_pnl)
@@ -191,20 +188,6 @@ function BotCard({ bot, color, isSelected, isHovered, onClick, onMouseEnter, onM
           {bot.mode.toUpperCase()}
         </span>
       </div>
-
-      {/* LLM Provider + Model */}
-      {['llm_signal', 'degen'].includes(bot.strategy_type) && bot.llm_provider && (
-        <div className="flex items-center gap-1.5 mb-2 ml-4 text-[10px] text-gray-400">
-          <Bot size={11} className="text-emerald-400" />
-          <span>{providerNameMap[bot.llm_provider] || bot.llm_provider}</span>
-          {bot.llm_model && (
-            <>
-              <span className="text-gray-600">·</span>
-              <span className="text-gray-400">{modelNameMap[bot.llm_model] || bot.llm_model}</span>
-            </>
-          )}
-        </div>
-      )}
 
       {/* PnL + Arrow */}
       <div className="flex items-center gap-1.5 mb-1">
@@ -251,7 +234,7 @@ function BotCard({ bot, color, isSelected, isHovered, onClick, onMouseEnter, onM
 
 /* ── Small Multiple Card ─────────────────────────────────── */
 
-function SmallMultipleCard({ bot, color, yDomain, chartGridColor, chartTickColor, isSelected, onClick, modelNameMap, providerNameMap }: {
+function SmallMultipleCard({ bot, color, yDomain, chartGridColor, chartTickColor, isSelected, onClick }: {
   bot: BotCompareData
   color: string
   yDomain: [number, number]
@@ -259,8 +242,6 @@ function SmallMultipleCard({ bot, color, yDomain, chartGridColor, chartTickColor
   chartTickColor: string
   isSelected: boolean
   onClick: () => void
-  modelNameMap: Record<string, string>
-  providerNameMap: Record<string, string>
 }) {
   const { t } = useTranslation()
   const isPositive = bot.total_pnl >= 0
@@ -298,20 +279,6 @@ function SmallMultipleCard({ bot, color, yDomain, chartGridColor, chartTickColor
           {isPositive ? <ArrowUpRight size={13} /> : <ArrowDownRight size={13} />}
         </div>
       </div>
-
-      {/* LLM Provider + Model */}
-      {['llm_signal', 'degen'].includes(bot.strategy_type) && bot.llm_provider && (
-        <div className="flex items-center gap-1.5 mb-1 ml-4 text-[10px] text-gray-400">
-          <Bot size={11} className="text-emerald-400" />
-          <span>{providerNameMap[bot.llm_provider] || bot.llm_provider}</span>
-          {bot.llm_model && (
-            <>
-              <span className="text-gray-600">·</span>
-              <span className="text-gray-400">{modelNameMap[bot.llm_model] || bot.llm_model}</span>
-            </>
-          )}
-        </div>
-      )}
 
       {/* Stats row */}
       <div className="flex items-center gap-4 text-[10px] text-gray-400 mb-3">
@@ -475,22 +442,7 @@ export default function BotPerformance() {
   const tradeCardRef = useRef<HTMLDivElement>(null)
   const swipeTradeModal = useSwipeToClose({ onClose: () => setSelectedTrade(null), enabled: isMobile && selectedTrade !== null })
   const latestCardRef = useRef<HTMLDivElement>(null)
-  const [llmConnections, setLlmConnections] = useState<LlmConnection[]>([])
   const [affiliateLinks, setAffiliateLinks] = useState<{ exchange_type: string; affiliate_url: string; label: string | null }[]>([])
-
-  const modelNameMap = useMemo(() => {
-    const map: Record<string, string> = {}
-    for (const conn of llmConnections) {
-      for (const m of conn.models || []) map[m.id] = m.name
-    }
-    return map
-  }, [llmConnections])
-
-  const providerNameMap = useMemo(() => {
-    const map: Record<string, string> = {}
-    for (const conn of llmConnections) map[conn.provider_type] = conn.family_name || conn.display_name
-    return map
-  }, [llmConnections])
 
   const loadCompareData = useCallback(async () => {
     const dp = demoFilter === 'demo' ? '&demo_mode=true' : demoFilter === 'live' ? '&demo_mode=false' : ''
@@ -518,7 +470,6 @@ export default function BotPerformance() {
 
   useEffect(() => {
     loadCompareData()
-    api.get('/config/llm-connections').then(res => setLlmConnections(res.data.connections || [])).catch((err) => { console.error('Failed to load LLM connections:', err); useToastStore.getState().addToast('error', t('common.loadError', 'Failed to load data')) })
     api.get('/affiliate-links').then(res => setAffiliateLinks(res.data)).catch((err) => { console.error('Failed to load affiliate links:', err); useToastStore.getState().addToast('error', t('common.loadError', 'Failed to load data')) })
   }, [loadCompareData])
 
@@ -641,8 +592,6 @@ export default function BotPerformance() {
                       onMouseEnter={() => setHoveredBot(bot.bot_id)}
                       onMouseLeave={() => setHoveredBot(null)}
                       index={i}
-                      modelNameMap={modelNameMap}
-                      providerNameMap={providerNameMap}
                     />
                   ))}
                 </div>
@@ -662,8 +611,6 @@ export default function BotPerformance() {
                   chartTickColor={chartTickColor}
                   isSelected={selectedBot === bot.bot_id}
                   onClick={() => handleCardClick(bot.bot_id)}
-                  modelNameMap={modelNameMap}
-                  providerNameMap={providerNameMap}
                 />
               ))}
             </div>

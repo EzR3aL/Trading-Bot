@@ -281,34 +281,6 @@ async def compare_bots_performance(
 
         last_trade = last_trade_by_bot.get(config.id)
 
-        # Extract LLM provider/model from strategy_params
-        llm_provider = None
-        llm_model = None
-        if config.strategy_type == "llm_signal":
-            if config.strategy_params:
-                try:
-                    sp = json.loads(config.strategy_params)
-                    llm_provider = sp.get("llm_provider")
-                    llm_model = sp.get("llm_model")
-                except (json.JSONDecodeError, TypeError):
-                    pass
-            # Fallback for legacy bots: detect provider from last trade reason
-            if not llm_provider and last_trade and last_trade.reason:
-                reason = last_trade.reason
-                if reason.startswith("["):
-                    bracket_end = reason.find("]")
-                    if bracket_end > 0:
-                        model_tag = reason[1:bracket_end]
-                        from src.ai.providers import MODEL_CATALOG
-                        for ptype, cat in MODEL_CATALOG.items():
-                            if cat["family_name"] in model_tag:
-                                llm_provider = ptype
-                                for m in cat["models"]:
-                                    if m["name"] in model_tag:
-                                        llm_model = m["id"]
-                                        break
-                                break
-
         bots_data.append({
             "bot_id": config.id,
             "name": config.name,
@@ -323,8 +295,6 @@ async def compare_bots_performance(
             "wins": wins,
             "last_direction": last_trade.side.upper() if last_trade and last_trade.side else None,
             "last_confidence": last_trade.confidence if last_trade else None,
-            "llm_provider": llm_provider,
-            "llm_model": llm_model,
             "series": series,
         })
 

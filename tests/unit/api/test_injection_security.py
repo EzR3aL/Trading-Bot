@@ -135,7 +135,7 @@ class TestSQLInjection:
             async with factory() as session:
                 body = BotConfigCreate(
                     name=payload[:100],
-                    strategy_type="degen",
+                    strategy_type="edge_indicator",
                     exchange_type="bitget",
                 )
                 result = await create_bot(
@@ -149,7 +149,7 @@ class TestSQLInjection:
         async with factory() as session:
             body = BotConfigCreate(
                 name="SafeBot",
-                strategy_type="degen",
+                strategy_type="edge_indicator",
                 exchange_type="bitget",
             )
             result = await create_bot(
@@ -173,7 +173,7 @@ class TestSQLInjection:
             async with factory() as session:
                 body = BotConfigCreate(
                     name=payload[:100],
-                    strategy_type="degen",
+                    strategy_type="edge_indicator",
                     exchange_type="bitget",
                 )
                 await create_bot(
@@ -206,7 +206,7 @@ class TestXSSPrevention:
             async with factory() as session:
                 body = BotConfigCreate(
                     name=payload[:100],
-                    strategy_type="degen",
+                    strategy_type="edge_indicator",
                     exchange_type="bitget",
                 )
                 result = await create_bot(
@@ -221,7 +221,7 @@ class TestXSSPrevention:
         async with factory() as session:
             body = BotConfigCreate(
                 name="XSS Params Bot",
-                strategy_type="degen",
+                strategy_type="edge_indicator",
                 exchange_type="bitget",
                 strategy_params={"key": "<script>alert(1)</script>"},
             )
@@ -300,7 +300,7 @@ class TestOversizedInputs:
         with pytest.raises(ValidationError):
             BotConfigCreate(
                 name="Many Pairs Bot",
-                strategy_type="degen",
+                strategy_type="edge_indicator",
                 exchange_type="bitget",
                 trading_pairs=pairs,
             )
@@ -311,7 +311,7 @@ class TestOversizedInputs:
         async with factory() as session:
             body = BotConfigCreate(
                 name="Many Pairs Bot",
-                strategy_type="degen",
+                strategy_type="edge_indicator",
                 exchange_type="bitget",
                 trading_pairs=pairs,
             )
@@ -327,7 +327,7 @@ class TestOversizedInputs:
         async with factory() as session:
             body = BotConfigCreate(
                 name="Large Params Bot",
-                strategy_type="degen",
+                strategy_type="edge_indicator",
                 exchange_type="bitget",
                 strategy_params=params,
             )
@@ -358,7 +358,7 @@ class TestUnicodeInputs:
             async with factory() as session:
                 body = BotConfigCreate(
                     name=name[:100],
-                    strategy_type="degen",
+                    strategy_type="edge_indicator",
                     exchange_type="bitget",
                 )
                 result = await create_bot(

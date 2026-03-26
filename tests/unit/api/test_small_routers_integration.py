@@ -45,16 +45,25 @@ from src.errors import (
 # Helpers
 # ===========================================================================
 
+from src.strategy import BaseStrategy, StrategyRegistry, SignalDirection, TradeSignal
 
 
-        @classmethod
-        def get_param_schema(cls) -> dict:
-            return {"test_param": {"type": "int", "label": "Test", "default": 42}}
+class TestStrategy(BaseStrategy):
+    name = "test_strategy"
 
-        @classmethod
-        def get_description(cls) -> str:
-            return "Test strategy for integration tests"
+    async def generate_signal(self, symbol: str, **kwargs) -> TradeSignal:
+        return TradeSignal(direction=SignalDirection.HOLD, confidence=0)
 
+    @classmethod
+    def get_param_schema(cls) -> dict:
+        return {"test_param": {"type": "int", "label": "Test", "default": 42}}
+
+    @classmethod
+    def get_description(cls) -> str:
+        return "Test strategy for integration tests"
+
+
+if "test_strategy" not in StrategyRegistry._strategies:
     StrategyRegistry.register("test_strategy", TestStrategy)
 
 

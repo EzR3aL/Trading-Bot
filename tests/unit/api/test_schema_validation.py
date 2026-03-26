@@ -15,7 +15,6 @@ from src.api.schemas.config import (
     StrategyConfigUpdate,
     ApiKeysUpdate,
     ExchangeConfigUpdate,
-    LLMConnectionUpdate,
 )
 from src.api.schemas.auth import LoginRequest, RefreshRequest
 from src.api.schemas.affiliate import AffiliateLinkUpdate
@@ -29,7 +28,7 @@ from src.api.schemas.affiliate import AffiliateLinkUpdate
 class TestBotConfigCreate:
 
     def test_valid_minimal(self):
-        bot = BotConfigCreate(name="Test", strategy_type="degen", exchange_type="bitget")
+        bot = BotConfigCreate(name="Test", strategy_type="edge_indicator", exchange_type="bitget")
         assert bot.name == "Test"
         assert bot.mode == "demo"
         assert bot.trading_pairs == ["BTCUSDT"]
@@ -37,11 +36,11 @@ class TestBotConfigCreate:
 
     def test_name_too_short(self):
         with pytest.raises(ValidationError, match="name"):
-            BotConfigCreate(name="", strategy_type="degen", exchange_type="bitget")
+            BotConfigCreate(name="", strategy_type="edge_indicator", exchange_type="bitget")
 
     def test_name_too_long(self):
         with pytest.raises(ValidationError, match="name"):
-            BotConfigCreate(name="A" * 101, strategy_type="degen", exchange_type="bitget")
+            BotConfigCreate(name="A" * 101, strategy_type="edge_indicator", exchange_type="bitget")
 
     def test_strategy_type_required(self):
         with pytest.raises(ValidationError, match="strategy_type"):
@@ -53,20 +52,20 @@ class TestBotConfigCreate:
 
     def test_exchange_type_invalid(self):
         with pytest.raises(ValidationError, match="exchange_type"):
-            BotConfigCreate(name="Bot", strategy_type="degen", exchange_type="binance")
+            BotConfigCreate(name="Bot", strategy_type="edge_indicator", exchange_type="binance")
 
     def test_exchange_type_valid_values(self):
         for exch in ("bitget", "weex", "hyperliquid"):
-            bot = BotConfigCreate(name="Bot", strategy_type="degen", exchange_type=exch)
+            bot = BotConfigCreate(name="Bot", strategy_type="edge_indicator", exchange_type=exch)
             assert bot.exchange_type == exch
 
     def test_mode_invalid(self):
         with pytest.raises(ValidationError, match="mode"):
-            BotConfigCreate(name="Bot", strategy_type="degen", exchange_type="bitget", mode="paper")
+            BotConfigCreate(name="Bot", strategy_type="edge_indicator", exchange_type="bitget", mode="paper")
 
     def test_mode_valid_values(self):
         for m in ("demo", "live", "both"):
-            bot = BotConfigCreate(name="Bot", strategy_type="degen", exchange_type="bitget", mode=m)
+            bot = BotConfigCreate(name="Bot", strategy_type="edge_indicator", exchange_type="bitget", mode=m)
             assert bot.mode == m
 
     def test_leverage_too_low(self):
@@ -299,10 +298,6 @@ class TestConfigSchemas:
     def test_exchange_config_pattern(self):
         with pytest.raises(ValidationError, match="exchange_type"):
             ExchangeConfigUpdate(exchange_type="coinbase")
-
-    def test_llm_connection_key_required(self):
-        with pytest.raises(ValidationError, match="api_key"):
-            LLMConnectionUpdate(api_key="")
 
 
 # ---------------------------------------------------------------------------

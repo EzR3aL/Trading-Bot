@@ -3,7 +3,7 @@ import { Trans, useTranslation } from 'react-i18next'
 import api from '../../api/client'
 import { getApiErrorMessage } from '../../utils/api-error'
 import { useToastStore } from '../../stores/toastStore'
-import { ArrowLeft, ArrowRight, Check, Play, Brain, TrendingUp, BarChart3, DollarSign, Activity, Building, LayoutGrid, List, Bot, Info, Zap, Clock, AlertTriangle, Wallet, ChevronDown, Search, X, Loader2 } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Check, Play, Brain, TrendingUp, BarChart3, DollarSign, Activity, Building, LayoutGrid, List, Info, Zap, Clock, AlertTriangle, Wallet, ChevronDown, Search, X, Loader2 } from 'lucide-react'
 import ExchangeLogo from '../ui/ExchangeLogo'
 import FilterDropdown from '../ui/FilterDropdown'
 import NumInput from '../ui/NumInput'
@@ -70,7 +70,7 @@ interface BotBuilderProps {
 }
 
 // Strategies that use market data and should show the data sources step
-const DATA_STRATEGIES = ['sentiment_surfer', 'liquidation_hunter', 'edge_indicator', 'llm_signal', 'degen', 'contrarian_pulse']
+const DATA_STRATEGIES = ['sentiment_surfer', 'liquidation_hunter', 'edge_indicator', 'contrarian_pulse']
 
 // Fixed data sources per strategy (used after selection to show which sources are used)
 const FIXED_STRATEGY_SOURCES: Record<string, string[]> = {
@@ -82,12 +82,6 @@ const FIXED_STRATEGY_SOURCES: Record<string, string[]> = {
   ],
   edge_indicator: [
     'spot_price', 'vwap', 'supertrend', 'spot_volume', 'volatility',
-  ],
-  // Hidden strategies — kept for existing bots that still use them
-  degen: [
-    'spot_price', 'fear_greed', 'news_sentiment', 'funding_rate', 'open_interest',
-    'long_short_ratio', 'order_book', 'liquidations', 'supertrend', 'vwap',
-    'oiwap', 'spot_volume', 'volatility', 'coingecko_market',
   ],
   contrarian_pulse: [
     'fear_greed', 'spot_price', 'spot_volume', 'cvd', 'long_short_ratio',
@@ -187,7 +181,7 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
   // Fixed strategies have predetermined sources — no manual selection needed
   const hasFixedSources = !!FIXED_STRATEGY_SOURCES[strategyType]
 
-  // Dynamic steps: insert data sources step only for LLM strategy (manual selection)
+  // Dynamic steps: insert data sources step for strategies without fixed sources
   // step3 = Exchange & Assets (merged), step4 = Notifications, step5 = Schedule, step6 = Review
   const steps = useMemo(() => {
     if (usesData && !hasFixedSources) {
@@ -331,27 +325,13 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
       })
       setStrategyParams(defaults)
     }
-    // Auto-set fixed data sources for non-LLM strategies
+    // Auto-set fixed data sources for strategies that have them
     if (FIXED_STRATEGY_SOURCES[name]) {
       setSelectedSources(FIXED_STRATEGY_SOURCES[name])
     } else {
       setSelectedSources([])
     }
   }
-
-  // Auto-select first model when provider family changes
-  useEffect(() => {
-    if (!selectedStrategy) return
-    const modelDef = selectedStrategy.param_schema['llm_model'] as ParamDef | undefined
-    if (!modelDef?.options_map) return
-
-    const family = strategyParams.llm_provider as string
-    const models = modelDef.options_map[family] || []
-    const currentModel = strategyParams.llm_model
-    if (!models.some((m: ParamOption) => m.value === currentModel)) {
-      setStrategyParams(prev => ({ ...prev, llm_model: models[0]?.value ?? '' }))
-    }
-  }, [strategyParams.llm_provider, selectedStrategy])
 
   // Convert trading pairs when exchange type changes and new symbols are loaded
   useEffect(() => {
@@ -682,7 +662,6 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
                       >
                         <div className={`flex items-center gap-1.5 text-sm font-medium ${isSelected ? 'text-primary-400' : 'text-white'}`}>
                           {getStrategyDisplayName(s.name)}
-                          {['llm_signal', 'degen'].includes(s.name) && <Bot size={14} className="text-emerald-400" />}
                         </div>
                         <div className="text-xs text-gray-400 mt-1 line-clamp-2">
                           {t(`bots.builder.strategyDesc_${s.name}`, { defaultValue: s.description })}
@@ -710,7 +689,6 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
                           <span className={`text-sm font-medium ${isSelected ? 'text-primary-400' : 'text-white'}`}>
                             {getStrategyDisplayName(s.name)}
                           </span>
-                          {['llm_signal', 'degen'].includes(s.name) && <Bot size={14} className="text-emerald-400" />}
                         </div>
                         <p className="text-xs text-gray-400 leading-relaxed">
                           {t(`bots.builder.strategyDesc_${s.name}`, { defaultValue: s.description })}
@@ -721,13 +699,6 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
                 </div>
               )}
             </div>
-
-            {/* LLM info banner */}
-            {(strategyType === 'llm_signal' || strategyType === 'degen') && (
-              <div className="bg-blue-900/20 border border-blue-800 rounded-lg p-3">
-                <p className="text-xs text-blue-300">{b.llmNote}</p>
-              </div>
-            )}
 
             {/* Strategy Recommendations from Backtest */}
             {strategyType && strategyType === 'edge_indicator' && STRATEGY_RECOMMENDATIONS[strategyType] && (
@@ -759,7 +730,7 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
 
               return (
                 <div>
-                  {/* Always visible: LLM provider/model selects + custom prompt textarea */}
+                  {/* Always visible: select dropdowns + textarea params */}
                   {hasAlwaysVisible && (
                     <div className="space-y-3">
                       {selectEntries.length > 0 && (

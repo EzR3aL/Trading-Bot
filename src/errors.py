@@ -118,8 +118,6 @@ ERR_CONNECTION_FAILED = "Verbindung fehlgeschlagen. Prüfe deine Zugangsdaten un
 ERR_CONNECTION_FAILED_EN = "Connection failed. Check your credentials and try again."
 ERR_CONNECTION_TEST_FAILED = "Verbindungstest fehlgeschlagen"
 ERR_CONNECTION_TEST_FAILED_EN = "Connection test failed"
-ERR_LLM_CONNECTION_FAILED = "Verbindung fehlgeschlagen. Prüfe deinen API-Key und versuche es erneut."
-ERR_LLM_CONNECTION_FAILED_EN = "Connection failed. Check your API key and try again."
 
 # ── Config / Hyperliquid Admin ───────────────────────────────────────
 ERR_INVALID_BUILDER_ADDRESS = "Builder-Adresse muss eine gültige Ethereum-Adresse sein (0x + 40 Hex-Zeichen)"

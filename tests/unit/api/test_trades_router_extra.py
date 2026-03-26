@@ -84,7 +84,7 @@ async def bot_config(session_factory, user):
             user_id=user.id,
             name="TestBot",
             exchange_type="bitget",
-            strategy_type="llm_signal",
+            strategy_type="edge_indicator",
         )
         session.add(bc)
         await session.commit()
