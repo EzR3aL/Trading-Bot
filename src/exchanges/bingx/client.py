@@ -106,6 +106,35 @@ class BingXClient(ExchangeClient):
     def exchange_name(self) -> str:
         return "bingx"
 
+    @staticmethod
+    def _is_close_fill(fill: dict) -> bool:
+        """Detect if a fill represents a position close.
+
+        Handles both dual-side mode (positionSide=LONG/SHORT) and
+        one-way mode (VST demo) where positionSide may be empty or BOTH.
+        In one-way mode, BingX uses reduceOnly or the fill's profit field
+        to indicate a close.
+        """
+        pos_side = fill.get("positionSide", "").upper()
+        fill_side = fill.get("side", "").upper()
+
+        # Dual-side mode: explicit positionSide
+        if pos_side in ("LONG", "SHORT"):
+            return (
+                (fill_side == "SELL" and pos_side == "LONG") or
+                (fill_side == "BUY" and pos_side == "SHORT")
+            )
+
+        # One-way / VST mode: check reduceOnly flag or profit field
+        if str(fill.get("reduceOnly", "")).lower() == "true":
+            return True
+        # A non-zero profit/realizedPnl means the fill closed a position
+        profit = fill.get("profit") or fill.get("realizedPnl") or fill.get("realisedPnl")
+        if profit and float(profit) != 0:
+            return True
+
+        return False
+
     @property
     def supports_demo(self) -> bool:
         return True
@@ -630,15 +659,7 @@ class BingXClient(ExchangeClient):
                 fills = data if isinstance(data, list) else data.get("fills", []) if isinstance(data, dict) else []
                 if isinstance(fills, list):
                     for fill in fills:
-                        # Look for the most recent close fill
-                        pos_side_str = fill.get("positionSide", "")
-                        fill_side = fill.get("side", "")
-                        # A close is: SELL on LONG or BUY on SHORT
-                        is_close = (
-                            (fill_side == "SELL" and pos_side_str == "LONG") or
-                            (fill_side == "BUY" and pos_side_str == "SHORT")
-                        )
-                        if is_close:
+                        if self._is_close_fill(fill):
                             fee_str = fill.get("commission") or fill.get("fee")
                             if fee_str:
                                 total_fees += abs(float(fee_str))
@@ -674,22 +695,22 @@ class BingXClient(ExchangeClient):
         return None
 
     async def get_close_fill_price(self, symbol: str) -> Optional[float]:
-        """Get fill price of the most recent close order from BingX fills."""
+        """Get fill price of the most recent close order from BingX fills.
+
+        Returns the fill price, or None if not found.
+        Also stores the close order ID on self._last_close_order_id for fee lookup.
+        """
+        self._last_close_order_id = None
         try:
             params = {"symbol": symbol, "limit": "20"}
             data = await self._request("GET", ENDPOINTS["all_fill_orders"], params=params)
             fills = data if isinstance(data, list) else data.get("fills", []) if isinstance(data, dict) else []
             if isinstance(fills, list):
                 for fill in fills:
-                    pos_side = fill.get("positionSide", "")
-                    fill_side = fill.get("side", "")
-                    is_close = (
-                        (fill_side == "SELL" and pos_side == "LONG") or
-                        (fill_side == "BUY" and pos_side == "SHORT")
-                    )
-                    if is_close:
+                    if self._is_close_fill(fill):
                         price = fill.get("price") or fill.get("avgPrice")
                         if price and float(price) > 0:
+                            self._last_close_order_id = str(fill.get("orderId", ""))
                             return float(price)
         except Exception as e:
             logger.warning(f"Failed to get close fill price for {symbol}: {e}")

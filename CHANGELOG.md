@@ -9,6 +9,14 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [4.6.1] - 2026-03-26
+
+### Behoben
+- **BingX Fee-Tracking (kritisch)**: Fees wurden als $0 gemeldet weil (1) `close_order_id` nie auf dem TradeRecord gespeichert wurde und (2) der Fallback ueber Fill-History nur Dual-Side-Mode (`positionSide=LONG/SHORT`) erkannte — BingX VST (Demo) nutzt One-Way-Mode. Fix: Close-Order-ID wird jetzt beim Strategy-Exit und bei externen Closes persistiert, und die Close-Fill-Erkennung unterstuetzt auch `reduceOnly` und `profit`-Felder
+- **Close-Order-ID bei Strategy-Exit**: `close_position()` gab bereits eine `order_id` zurueck, aber der Position Monitor speicherte sie nicht auf dem Trade. Betrifft alle Exchanges
+
+---
+
 ## [4.6.0] - 2026-03-26 — LLM-Integration entfernt
 
 ### Entfernt

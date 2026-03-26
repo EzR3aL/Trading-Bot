@@ -179,6 +179,10 @@ class PositionMonitorMixin:
                             )
                             return
 
+                        # Persist close order ID for fee lookup
+                        if close_order and close_order.order_id:
+                            trade.close_order_id = close_order.order_id
+
                         ticker = await client.get_ticker(trade.symbol)
                         exit_price = ticker.last_price if ticker else trade.entry_price
 
@@ -370,6 +374,10 @@ class PositionMonitorMixin:
                         "%s Actual close fill price for %s: $%.2f",
                         log_prefix, trade.symbol, exit_price,
                     )
+                # Persist close_order_id if the exchange client discovered it
+                close_oid = getattr(client, "_last_close_order_id", None)
+                if close_oid and not trade.close_order_id:
+                    trade.close_order_id = close_oid
             except Exception:
                 pass
             # Fallback to current ticker if fill price unavailable
