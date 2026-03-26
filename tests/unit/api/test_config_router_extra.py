@@ -2,8 +2,8 @@
 Integration tests for the config router (src/api/routers/config.py).
 
 Uses real FastAPI app with in-memory SQLite, real auth/encryption, and
-targeted mocks only for external services (exchange clients, aiohttp, LLM
-providers, settings helpers). This ensures actual router code is exercised.
+targeted mocks only for external services (exchange clients, aiohttp,
+settings helpers). This ensures actual router code is exercised.
 """
 
 import json
@@ -28,7 +28,6 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from src.models.database import (
     Base,
     ExchangeConnection,
-    LLMConnection,
     SystemSetting,
     TradeRecord,
     User,
@@ -40,7 +39,6 @@ from src.errors import (
     ERR_BUILDER_FEE_NOT_FOUND,
     ERR_CONNECTION_FAILED,
     ERR_INVALID_BUILDER_ADDRESS,
-    ERR_LLM_CONNECTION_FAILED,
     ERR_NO_API_KEYS,
     ERR_NO_DEMO_API_KEYS,
     ERR_NO_LIVE_API_KEYS,
@@ -829,192 +827,6 @@ class TestGetConnectionsStatus:
         assert "timestamp" in data
         assert "services" in data
         assert "circuit_breakers" in data
-
-
-# ===========================================================================
-# 10. GET /api/config/llm-connections
-# ===========================================================================
-
-
-class TestGetLLMConnections:
-
-    @pytest.mark.asyncio
-    async def test_get_llm_connections_empty(self, client, auth_headers):
-        resp = await client.get("/api/config/llm-connections", headers=auth_headers)
-        assert resp.status_code == 200
-        data = resp.json()
-        assert "connections" in data
-        # All providers listed but none configured
-        for conn in data["connections"]:
-            assert conn["api_key_configured"] is False
-
-    @pytest.mark.asyncio
-    async def test_get_llm_connections_with_saved(
-        self, client, auth_headers, session_factory, user
-    ):
-        async with session_factory() as session:
-            session.add(LLMConnection(
-                user_id=user.id, provider_type="groq",
-                api_key_encrypted=encrypt_value("gsk_testkey"),
-            ))
-            await session.commit()
-
-        resp = await client.get("/api/config/llm-connections", headers=auth_headers)
-        assert resp.status_code == 200
-        conns = resp.json()["connections"]
-        groq_conn = next(c for c in conns if c["provider_type"] == "groq")
-        assert groq_conn["api_key_configured"] is True
-
-
-# ===========================================================================
-# 11. PUT /api/config/llm-connections/{provider_type}
-# ===========================================================================
-
-
-class TestUpsertLLMConnection:
-
-    @pytest.mark.asyncio
-    async def test_create_llm_connection(self, client, auth_headers):
-        resp = await client.put(
-            "/api/config/llm-connections/groq",
-            json={"api_key": "gsk_test123"},
-            headers=auth_headers,
-        )
-        assert resp.status_code == 200
-        assert resp.json()["status"] == "ok"
-
-    @pytest.mark.asyncio
-    async def test_update_existing_llm_connection(
-        self, client, auth_headers, session_factory, user
-    ):
-        async with session_factory() as session:
-            session.add(LLMConnection(
-                user_id=user.id, provider_type="groq",
-                api_key_encrypted=encrypt_value("oldkey"),
-            ))
-            await session.commit()
-
-        resp = await client.put(
-            "/api/config/llm-connections/groq",
-            json={"api_key": "newkey123"},
-            headers=auth_headers,
-        )
-        assert resp.status_code == 200
-
-
-# ===========================================================================
-# 12. DELETE /api/config/llm-connections/{provider_type}
-# ===========================================================================
-
-
-class TestDeleteLLMConnection:
-
-    @pytest.mark.asyncio
-    async def test_delete_existing(self, client, auth_headers, session_factory, user):
-        async with session_factory() as session:
-            session.add(LLMConnection(
-                user_id=user.id, provider_type="groq",
-                api_key_encrypted=encrypt_value("key"),
-            ))
-            await session.commit()
-
-        resp = await client.delete(
-            "/api/config/llm-connections/groq", headers=auth_headers
-        )
-        assert resp.status_code == 200
-
-    @pytest.mark.asyncio
-    async def test_delete_nonexistent_returns_404(self, client, auth_headers):
-        resp = await client.delete(
-            "/api/config/llm-connections/groq", headers=auth_headers
-        )
-        assert resp.status_code == 404
-
-
-# ===========================================================================
-# 13. POST /api/config/llm-connections/{provider_type}/test
-# ===========================================================================
-
-
-class TestTestLLMConnection:
-
-    @pytest.mark.asyncio
-    async def test_no_connection_returns_400(self, client, auth_headers):
-        resp = await client.post(
-            "/api/config/llm-connections/groq/test", headers=auth_headers
-        )
-        assert resp.status_code == 400
-
-    @pytest.mark.asyncio
-    @patch("src.ai.providers.get_provider_class")
-    async def test_successful_connection(
-        self, mock_get_provider, client, auth_headers, session_factory, user
-    ):
-        mock_provider_cls = MagicMock()
-        mock_provider_instance = AsyncMock()
-        mock_provider_instance.test_connection = AsyncMock(return_value=True)
-        mock_provider_cls.return_value = mock_provider_instance
-        mock_provider_cls.get_model_name = MagicMock(return_value="llama-3.3-70b")
-        mock_provider_cls.get_display_name = MagicMock(return_value="Groq")
-        mock_get_provider.return_value = mock_provider_cls
-
-        async with session_factory() as session:
-            session.add(LLMConnection(
-                user_id=user.id, provider_type="groq",
-                api_key_encrypted=encrypt_value("gsk_test"),
-            ))
-            await session.commit()
-
-        resp = await client.post(
-            "/api/config/llm-connections/groq/test", headers=auth_headers
-        )
-        assert resp.status_code == 200
-        data = resp.json()
-        assert data["status"] == "ok"
-        assert data["provider"] == "groq"
-
-    @pytest.mark.asyncio
-    @patch("src.ai.providers.get_provider_class")
-    async def test_connection_test_returns_false(
-        self, mock_get_provider, client, auth_headers, session_factory, user
-    ):
-        mock_provider_cls = MagicMock()
-        mock_provider_instance = AsyncMock()
-        mock_provider_instance.test_connection = AsyncMock(return_value=False)
-        mock_provider_cls.return_value = mock_provider_instance
-        mock_get_provider.return_value = mock_provider_cls
-
-        async with session_factory() as session:
-            session.add(LLMConnection(
-                user_id=user.id, provider_type="groq",
-                api_key_encrypted=encrypt_value("badkey"),
-            ))
-            await session.commit()
-
-        resp = await client.post(
-            "/api/config/llm-connections/groq/test", headers=auth_headers
-        )
-        assert resp.status_code == 400
-
-    @pytest.mark.asyncio
-    @patch("src.ai.providers.get_provider_class")
-    async def test_connection_raises_exception(
-        self, mock_get_provider, client, auth_headers, session_factory, user
-    ):
-        mock_get_provider.side_effect = Exception("Provider init failed")
-
-        async with session_factory() as session:
-            session.add(LLMConnection(
-                user_id=user.id, provider_type="groq",
-                api_key_encrypted=encrypt_value("key"),
-            ))
-            await session.commit()
-
-        resp = await client.post(
-            "/api/config/llm-connections/groq/test", headers=auth_headers
-        )
-        assert resp.status_code == 400
-        assert resp.json()["detail"] == ERR_LLM_CONNECTION_FAILED
 
 
 # ===========================================================================
@@ -2107,16 +1919,6 @@ class TestEdgeCases:
         """Invalid exchange type in path returns 422."""
         resp = await client.put(
             "/api/config/exchange-connections/invalid_exchange",
-            json={"api_key": "test"},
-            headers=auth_headers,
-        )
-        assert resp.status_code == 422
-
-    @pytest.mark.asyncio
-    async def test_invalid_llm_provider_path(self, client, auth_headers):
-        """Invalid LLM provider in path returns 422."""
-        resp = await client.put(
-            "/api/config/llm-connections/invalid_provider",
             json={"api_key": "test"},
             headers=auth_headers,
         )

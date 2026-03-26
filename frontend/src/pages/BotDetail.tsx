@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import {
@@ -7,15 +7,13 @@ import {
 } from 'recharts'
 import {
   ArrowLeft, Play, Square, TrendingUp, TrendingDown,
-  Activity, AlertCircle, CheckCircle, Bot, ShieldCheck,
+  Activity, AlertCircle, CheckCircle, ShieldCheck,
 } from 'lucide-react'
 import api from '../api/client'
 import { getApiErrorMessage } from '../utils/api-error'
-import { useToastStore } from '../stores/toastStore'
 import { useFilterStore } from '../stores/filterStore'
 import { ExchangeIcon } from '../components/ui/ExchangeLogo'
 import PnlCell from '../components/ui/PnlCell'
-import type { LlmConnection } from '../types'
 import { formatDate, formatTime, formatChartCurrency } from '../utils/dateUtils'
 import MobileTradeCard from '../components/ui/MobileTradeCard'
 import useIsMobile from '../hooks/useIsMobile'
@@ -107,8 +105,6 @@ interface RuntimeStatus {
   started_at: string | null
   last_analysis: string | null
   trades_today: number
-  llm_provider?: string | null
-  llm_model?: string | null
 }
 
 const STATUS_STYLES: Record<string, { dot: string; badge: string; i18nKey: string }> = {
@@ -133,22 +129,6 @@ export default function BotDetail() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [days, setDays] = useState(30)
-  const [llmConnections, setLlmConnections] = useState<LlmConnection[]>([])
-
-  const modelNameMap = useMemo(() => {
-    const map: Record<string, string> = {}
-    for (const conn of llmConnections) {
-      for (const m of conn.models || []) map[m.id] = m.name
-    }
-    return map
-  }, [llmConnections])
-
-  const providerNameMap = useMemo(() => {
-    const map: Record<string, string> = {}
-    for (const conn of llmConnections) map[conn.provider_type] = conn.family_name || conn.display_name
-    return map
-  }, [llmConnections])
-
   const fetchData = useCallback(async () => {
     if (!botId) return
     try {
@@ -169,8 +149,6 @@ export default function BotDetail() {
           started_at: match.started_at,
           last_analysis: match.last_analysis,
           trades_today: match.trades_today,
-          llm_provider: match.llm_provider,
-          llm_model: match.llm_model,
         })
       }
       setError('')
@@ -182,10 +160,6 @@ export default function BotDetail() {
   }, [botId, days, demoFilter])
 
   useEffect(() => { fetchData() }, [fetchData])
-
-  useEffect(() => {
-    api.get('/config/llm-connections').then(res => setLlmConnections(res.data.connections || [])).catch((err) => { console.error('Failed to load LLM connections:', err); useToastStore.getState().addToast('error', t('common.loadError', 'Failed to load data')) })
-  }, [])
 
   // Auto-refresh every 10s
   useEffect(() => {
@@ -278,18 +252,6 @@ export default function BotDetail() {
               </span>
               <span className="text-gray-600">·</span>
               <span>{strategyLabel(config.strategy_type)}</span>
-              {['llm_signal', 'degen'].includes(config.strategy_type) && (
-                <Bot size={15} className="text-emerald-400" />
-              )}
-              {runtime?.llm_provider && (
-                <>
-                  <span className="text-gray-600">·</span>
-                  <span className="text-gray-400">{providerNameMap[runtime.llm_provider] || runtime.llm_provider}</span>
-                  {runtime.llm_model && (
-                    <span className="text-gray-300 font-medium">{modelNameMap[runtime.llm_model] || runtime.llm_model}</span>
-                  )}
-                </>
-              )}
             </div>
           </div>
 

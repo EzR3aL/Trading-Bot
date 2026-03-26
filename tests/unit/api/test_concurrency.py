@@ -118,7 +118,7 @@ class TestConcurrentCreation:
             async with factory() as session:
                 body = BotConfigCreate(
                     name=f"Concurrent Bot {i}",
-                    strategy_type="degen",
+                    strategy_type="edge_indicator",
                     exchange_type="bitget",
                 )
                 result = await create_bot(
@@ -141,7 +141,7 @@ class TestConcurrentCreation:
             async with factory() as session:
                 body = BotConfigCreate(
                     name=f"Unique ID Bot {i}",
-                    strategy_type="degen",
+                    strategy_type="edge_indicator",
                     exchange_type="bitget",
                 )
                 result = await create_bot(
@@ -169,7 +169,7 @@ class TestConcurrentUpdates:
         async with factory() as session:
             body = BotConfigCreate(
                 name="Update Target",
-                strategy_type="degen",
+                strategy_type="edge_indicator",
                 exchange_type="bitget",
             )
             bot = await create_bot(
@@ -201,7 +201,7 @@ class TestConcurrentUpdates:
         async with factory() as session:
             body = BotConfigCreate(
                 name="Multi-Field Bot",
-                strategy_type="degen",
+                strategy_type="edge_indicator",
                 exchange_type="bitget",
                 leverage=5,
             )
@@ -255,7 +255,7 @@ class TestConcurrentLifecycle:
         async with factory() as session:
             config = BotConfig(
                 user_id=admin_user.id, name="Lifecycle Bot",
-                strategy_type="degen", exchange_type="bitget",
+                strategy_type="edge_indicator", exchange_type="bitget",
                 mode="demo", trading_pairs=json.dumps(["BTCUSDT"]),
                 is_enabled=False,
             )
@@ -288,7 +288,7 @@ class TestConcurrentLifecycle:
             for i in range(3):
                 config = BotConfig(
                     user_id=admin_user.id, name=f"LifeBot {i}",
-                    strategy_type="degen", exchange_type="bitget",
+                    strategy_type="edge_indicator", exchange_type="bitget",
                     mode="demo", trading_pairs=json.dumps(["BTCUSDT"]),
                     is_enabled=False,
                 )
@@ -342,7 +342,7 @@ class TestConcurrentDuplicate:
         async with factory() as session:
             config = BotConfig(
                 user_id=admin_user.id, name="Original Bot",
-                strategy_type="degen", exchange_type="bitget",
+                strategy_type="edge_indicator", exchange_type="bitget",
                 mode="demo", trading_pairs=json.dumps(["BTCUSDT"]),
                 is_enabled=False,
             )
@@ -382,7 +382,7 @@ class TestConcurrentDelete:
             for i in range(3):
                 config = BotConfig(
                     user_id=admin_user.id, name=f"DeleteMe {i}",
-                    strategy_type="degen", exchange_type="bitget",
+                    strategy_type="edge_indicator", exchange_type="bitget",
                     mode="demo", trading_pairs=json.dumps(["BTCUSDT"]),
                     is_enabled=False,
                 )
@@ -425,7 +425,7 @@ class TestSessionIsolation:
         async with factory() as session:
             body = BotConfigCreate(
                 name="Isolation Bot",
-                strategy_type="degen",
+                strategy_type="edge_indicator",
                 exchange_type="bitget",
             )
             result = await create_bot(
@@ -448,7 +448,7 @@ class TestSessionIsolation:
         async with factory() as s1:
             config = BotConfig(
                 user_id=admin_user.id, name="Uncommitted Bot",
-                strategy_type="degen", exchange_type="bitget",
+                strategy_type="edge_indicator", exchange_type="bitget",
                 mode="demo", trading_pairs=json.dumps(["BTCUSDT"]),
                 is_enabled=False,
             )

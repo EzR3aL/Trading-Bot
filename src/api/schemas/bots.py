@@ -6,7 +6,7 @@ from typing import Any, Dict, List, Optional
 
 from urllib.parse import urlparse
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, field_validator
 
 from src.models.enums import EXCHANGE_PATTERN
 
@@ -110,13 +110,6 @@ class BotConfigCreate(BaseModel):
                 raise ValueError(f"Field exceeds maximum size of {_MAX_JSON_FIELD_BYTES} bytes when serialized to JSON")
         return v
 
-    @model_validator(mode="after")
-    def validate_strategy_requirements(self):
-        if self.strategy_type == "llm_signal":
-            sp = self.strategy_params or {}
-            if not sp.get("llm_provider"):
-                raise ValueError("LLM strategy requires 'llm_provider' in strategy_params")
-        return self
 
 
 class BotConfigUpdate(BaseModel):
@@ -245,16 +238,6 @@ class BotRuntimeStatus(BaseModel):
     schedule_type: Optional[str] = None
     schedule_config: Optional[Dict[str, Any]] = None
 
-    # LLM-specific metrics (only populated for llm_signal strategy)
-    llm_provider: Optional[str] = None
-    llm_model: Optional[str] = None
-    llm_last_direction: Optional[str] = None  # "LONG" | "SHORT"
-    llm_last_confidence: Optional[int] = None  # 0-100
-    llm_last_reasoning: Optional[str] = None
-    llm_accuracy: Optional[float] = None  # Win rate %
-    llm_total_predictions: Optional[int] = None
-    llm_total_tokens_used: Optional[int] = None
-    llm_avg_tokens_per_call: Optional[float] = None
 
 
 class BotListResponse(BaseModel):

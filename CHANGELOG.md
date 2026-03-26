@@ -9,6 +9,25 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [4.6.0] - 2026-03-26 — LLM-Integration entfernt
+
+### Entfernt
+- **LLM-Provider komplett entfernt**: 7 Provider (Groq, Gemini, OpenAI, Anthropic, DeepSeek, Mistral, xAI, Perplexity) aus `src/ai/` geloescht. Code archiviert unter Git-Tag `llm-archive-v4.5`
+- **LLM-Strategien entfernt**: `llm_signal` (KI-Companion) und `degen` (Arena-Strategie) aus Strategy-Registry entfernt. Kein Bot nutzte diese Strategien
+- **LLM-API-Endpunkte entfernt**: `/config/llm-connections` CRUD und Test-Endpunkte entfernt
+- **LLM-Datenbank-Modell entfernt**: `LLMConnection` Tabelle wird nicht mehr von der App referenziert
+- **Settings LLM-Keys Tab entfernt**: Der gesamte "LLM-Schluessel"-Tab in den Einstellungen entfernt
+- **Bot Builder LLM-Optionen entfernt**: Provider/Modell-Auswahl, Custom Prompt und Temperature-Slider entfernt
+- **LLM-Metriken entfernt**: Provider, Modell, Konfidenz, Tokens, Reasoning-Anzeige aus Bot-Karten und Statistiken entfernt
+- **LLM-Tests entfernt**: ~600 Zeilen Provider- und Strategy-Tests, `tests/unit/ai/` komplett geloescht
+
+### Hinweis
+- Bestehende `llm_connections`-Tabelle in der Datenbank bleibt erhalten (war leer, 0 Eintraege)
+- Historische Trade-Records mit LLM-Metriken in `metrics_snapshot` bleiben unberuehrt
+- Verbleibende Strategien: Edge Indicator, Contrarian Pulse, Liquidation Hunter, Sentiment Surfer
+
+---
+
 ## [4.5.0] - 2026-03-25 — UI Overhaul
 
 ### Entfernt

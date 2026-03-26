@@ -489,8 +489,6 @@ Community marketplace with 32,000+ agent skills using the open SKILL.md format. 
 | Edge Indicator | `edge_indicator.py` | EMA + MACD + ADX + ATR (Risikoprofile) |
 | Contrarian Pulse | `contrarian_pulse.py` | Fear/Greed + Funding Rate |
 | Liquidation Hunter | `liquidation_hunter.py` | Liquidations-Kaskaden |
-| LLM Signal | `llm_signal.py` | KI-Analyse (7 LLM-Provider) |
-| Degen | `degen.py` | Aggressiv, hohe Konfidenz |
 | Sentiment Surfer | `sentiment_surfer.py` | Sentiment-basiert |
 
 ### Exchanges (5 Adapter in `src/exchanges/`)

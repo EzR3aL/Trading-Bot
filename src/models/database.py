@@ -58,7 +58,6 @@ class User(Base):
     funding_payments = relationship("FundingPayment", back_populates="user", cascade="all")
     bot_instances = relationship("BotInstance", back_populates="user", cascade="all")
     exchange_connections = relationship("ExchangeConnection", back_populates="user", cascade="all")
-    llm_connections = relationship("LLMConnection", back_populates="user", cascade="all")
     bot_configs = relationship("BotConfig", back_populates="user", cascade="all")
     notification_logs = relationship("NotificationLog", back_populates="user", cascade="all")
     sessions = relationship("UserSession", back_populates="user", cascade="all")
@@ -261,25 +260,6 @@ class SystemSetting(Base):
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
 
-class LLMConnection(Base):
-    """Per-LLM-provider API credentials for a user."""
-    __tablename__ = "llm_connections"
-    __table_args__ = (
-        UniqueConstraint("user_id", "provider_type", name="uq_user_llm_provider"),
-    )
-
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
-    provider_type = Column(String(50), nullable=False)  # groq|gemini|openai|anthropic|mistral|xai|perplexity
-    api_key_encrypted = Column(Text, nullable=False)
-
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
-
-    # Relationships
-    user = relationship("User", back_populates="llm_connections")
-
-
 class BotConfig(Base):
     """Blueprint for a user-created bot.
 
@@ -467,7 +447,7 @@ class ConfigChangeLog(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
-    entity_type = Column(String(50), nullable=False, index=True)  # bot_config | exchange_connection | llm_connection
+    entity_type = Column(String(50), nullable=False, index=True)  # bot_config | exchange_connection
     entity_id = Column(Integer, nullable=False)
     action = Column(String(20), nullable=False)  # create | update | delete
     changes = Column(Text, nullable=True)  # JSON: {"field": {"old": x, "new": y}}

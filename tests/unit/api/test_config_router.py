@@ -2,7 +2,7 @@
 Unit tests for the config router (src/api/routers/config.py).
 
 Tests endpoint functions directly with mocked database sessions and
-dependencies. Covers user config CRUD, exchange connections, LLM connections,
+dependencies. Covers user config CRUD, exchange connections,
 Hyperliquid builder/referral, affiliate UID management, and admin endpoints.
 """
 
@@ -31,7 +31,6 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from src.models.database import (  # noqa: E402
     Base,
     ExchangeConnection,
-    LLMConnection,
     User,
 )
 from src.auth.password import hash_password  # noqa: E402
@@ -245,25 +244,6 @@ async def exchange_conn_hl(test_engine, regular_user) -> ExchangeConnection:
             exchange_type="hyperliquid",
             api_key_encrypted=encrypt_value("0x" + "a" * 40),
             api_secret_encrypted=encrypt_value("b" * 64),
-        )
-        session.add(conn)
-        await session.commit()
-        await session.refresh(conn)
-        return conn
-
-
-@pytest_asyncio.fixture
-async def llm_conn_groq(test_engine, regular_user) -> LLMConnection:
-    factory = async_sessionmaker(
-        test_engine, class_=AsyncSession, expire_on_commit=False
-    )
-    from src.utils.encryption import encrypt_value
-
-    async with factory() as session:
-        conn = LLMConnection(
-            user_id=regular_user.id,
-            provider_type="groq",
-            api_key_encrypted=encrypt_value("gsk_test_key"),
         )
         session.add(conn)
         await session.commit()
@@ -755,148 +735,6 @@ class TestExchangeConnectionTest:
     async def test_test_connection_invalid_exchange(self, client, user_headers, regular_user):
         resp = await client.post(
             "/api/config/exchange-connections/invalid/test",
-            headers=user_headers,
-        )
-        assert resp.status_code == 422
-
-
-# ---------------------------------------------------------------------------
-# LLM Connection CRUD
-# ---------------------------------------------------------------------------
-
-
-class TestLLMConnections:
-
-    async def test_get_llm_connections(self, client, user_headers, regular_user):
-        resp = await client.get(
-            "/api/config/llm-connections", headers=user_headers
-        )
-        assert resp.status_code == 200
-        data = resp.json()
-        assert "connections" in data
-        assert isinstance(data["connections"], list)
-        # Should include all providers from LLM_PROVIDERS_INFO
-        assert len(data["connections"]) > 0
-
-    async def test_get_llm_connections_shows_configured(self, client, user_headers, regular_user, llm_conn_groq):
-        resp = await client.get(
-            "/api/config/llm-connections", headers=user_headers
-        )
-        assert resp.status_code == 200
-        conns = resp.json()["connections"]
-        groq_conn = next((c for c in conns if c["provider_type"] == "groq"), None)
-        assert groq_conn is not None
-        assert groq_conn["api_key_configured"] is True
-
-    async def test_upsert_llm_connection(self, client, user_headers, regular_user):
-        body = {"api_key": "gsk_test_key_123"}
-        resp = await client.put(
-            "/api/config/llm-connections/groq",
-            json=body,
-            headers=user_headers,
-        )
-        assert resp.status_code == 200
-        assert resp.json()["status"] == "ok"
-
-    async def test_upsert_llm_connection_openai(self, client, user_headers, regular_user):
-        body = {"api_key": "sk-test-key"}
-        resp = await client.put(
-            "/api/config/llm-connections/openai",
-            json=body,
-            headers=user_headers,
-        )
-        assert resp.status_code == 200
-
-    async def test_upsert_llm_connection_invalid_provider(self, client, user_headers, regular_user):
-        body = {"api_key": "test-key"}
-        resp = await client.put(
-            "/api/config/llm-connections/invalid_provider",
-            json=body,
-            headers=user_headers,
-        )
-        assert resp.status_code == 422
-
-    async def test_upsert_llm_connection_updates_existing(self, client, user_headers, regular_user, llm_conn_groq):
-        body = {"api_key": "updated-groq-key"}
-        resp = await client.put(
-            "/api/config/llm-connections/groq",
-            json=body,
-            headers=user_headers,
-        )
-        assert resp.status_code == 200
-
-    async def test_delete_llm_connection(self, client, user_headers, regular_user, llm_conn_groq):
-        resp = await client.delete(
-            "/api/config/llm-connections/groq",
-            headers=user_headers,
-        )
-        assert resp.status_code == 200
-        assert resp.json()["status"] == "ok"
-
-    async def test_delete_llm_connection_not_found(self, client, user_headers, regular_user):
-        resp = await client.delete(
-            "/api/config/llm-connections/groq",
-            headers=user_headers,
-        )
-        assert resp.status_code == 404
-
-    async def test_delete_llm_connection_invalid_provider(self, client, user_headers, regular_user):
-        resp = await client.delete(
-            "/api/config/llm-connections/invalid",
-            headers=user_headers,
-        )
-        assert resp.status_code == 422
-
-    async def test_get_llm_connections_requires_auth(self, client):
-        resp = await client.get("/api/config/llm-connections")
-        assert resp.status_code == 401
-
-    async def test_upsert_llm_connection_empty_key(self, client, user_headers, regular_user):
-        body = {"api_key": ""}
-        resp = await client.put(
-            "/api/config/llm-connections/groq",
-            json=body,
-            headers=user_headers,
-        )
-        assert resp.status_code == 422
-
-    async def test_upsert_llm_anthropic(self, client, user_headers, regular_user):
-        body = {"api_key": "sk-ant-test-key"}
-        resp = await client.put(
-            "/api/config/llm-connections/anthropic",
-            json=body,
-            headers=user_headers,
-        )
-        assert resp.status_code == 200
-
-    async def test_upsert_llm_deepseek(self, client, user_headers, regular_user):
-        body = {"api_key": "ds-test-key"}
-        resp = await client.put(
-            "/api/config/llm-connections/deepseek",
-            json=body,
-            headers=user_headers,
-        )
-        assert resp.status_code == 200
-
-
-# ---------------------------------------------------------------------------
-# Test LLM Connection
-# ---------------------------------------------------------------------------
-
-
-class TestLLMConnectionTest:
-
-    async def test_test_llm_connection_no_key(self, client, user_headers, regular_user):
-        resp = await client.post(
-            "/api/config/llm-connections/groq/test",
-            headers=user_headers,
-        )
-        assert resp.status_code == 400
-        assert "No API key configured" in resp.json()["detail"]
-
-    async def test_test_llm_connection_invalid_provider(self, client, user_headers, regular_user):
-        resp = await client.post(
-            "/api/config/llm-connections/invalid/test",
             headers=user_headers,
         )
         assert resp.status_code == 422
