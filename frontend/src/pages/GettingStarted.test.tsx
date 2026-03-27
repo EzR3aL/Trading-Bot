@@ -148,7 +148,6 @@ describe('GettingStarted', () => {
       expect(screen.getByText('guide.riskTitle')).toBeInTheDocument()
       expect(screen.getByText('guide.riskConservative')).toBeInTheDocument()
       expect(screen.getByText('guide.riskModerate')).toBeInTheDocument()
-      expect(screen.getByText('guide.riskAggressive')).toBeInTheDocument()
     })
   })
 

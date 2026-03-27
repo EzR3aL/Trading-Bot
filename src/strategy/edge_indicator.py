@@ -86,17 +86,6 @@ RISK_PROFILES = {
         "momentum_smooth_period": 7,
         "kline_interval": "4h",
     },
-    "aggressive": {
-        "ema_fast_period": 5,
-        "ema_slow_period": 13,
-        "adx_chop_threshold": 15.0,
-        "momentum_bull_threshold": 0.25,
-        "momentum_bear_threshold": -0.25,
-        "trailing_trail_atr": 2.0,
-        "trailing_breakeven_atr": 1.0,
-        "momentum_smooth_period": 3,
-        "kline_interval": "15m",
-    },
 }
 
 
@@ -827,7 +816,7 @@ class EdgeIndicatorStrategy(BaseStrategy):
                 "label": "Risikoprofil",
                 "description": "Konservativ = weniger Trades, weite Stops, 4h. Standard = ausgewogen, 1h. Aggressiv = mehr Trades, enge Stops, 15m.",
                 "default": "standard",
-                "options": ["conservative", "standard", "aggressive"],
+                "options": ["conservative", "standard"],
             },
             "ema_fast_period": {
                 "type": "int", "label": "EMA Schnell-Periode",

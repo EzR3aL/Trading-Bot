@@ -315,9 +315,8 @@ function SectionRisk() {
   const { t } = useTranslation()
 
   const zones = [
-    { label: t('guide.riskConservative'), color: '#22c55e', width: '33%' },
-    { label: t('guide.riskModerate'), color: '#eab308', width: '34%' },
-    { label: t('guide.riskAggressive'), color: '#ef4444', width: '33%' },
+    { label: t('guide.riskConservative'), color: '#22c55e', width: '50%' },
+    { label: t('guide.riskModerate'), color: '#eab308', width: '50%' },
   ]
 
   const configItems = [

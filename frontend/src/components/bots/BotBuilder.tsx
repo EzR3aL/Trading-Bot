@@ -755,7 +755,7 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
                                     onChange={val => {
                                       const updates: Record<string, any> = { [key]: val }
                                       if (key === 'risk_profile') {
-                                        const klineMap: Record<string, string> = { conservative: '4h', standard: '1h', aggressive: '15m' }
+                                        const klineMap: Record<string, string> = { conservative: '4h', standard: '1h' }
                                         if (klineMap[val]) updates.kline_interval = klineMap[val]
                                       }
                                       setStrategyParams(prev => ({ ...prev, ...updates }))
