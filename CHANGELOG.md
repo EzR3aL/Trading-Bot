@@ -20,6 +20,9 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 ### Entfernt
 - **Aggressives Risikoprofil (Edge Indicator)**: 15m-Modus entfernt — Simulation ueber 30 Tage zeigte 27% Winrate und -7.27% PnL. Nur noch Standard (1h) und Konservativ (4h) verfuegbar
 
+### Verbessert
+- **BotBuilder Empfehlung**: Zeigt jetzt empfohlenen Timeframe (4h) UND Zeitplan-Intervall (240min) an
+
 ---
 
 ## [4.6.1] - 2026-03-26

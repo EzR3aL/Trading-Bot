@@ -686,6 +686,7 @@
       "strategyDesc_contrarian_pulse": "Kontäre Fear & Greed Scalping-Strategie für BTC. Nutzt den F&G Index als Kontraindikator: Long bei extremer Angst (<30), Short bei extremer Gier (>70). Bestätigung durch 50/200 EMA-Trend, RSI und Derivate-Signale (CVD, Long/Short Ratio, Volumen, Open Interest, Funding Rate). Rein algorithmisch. Default: HOLD bei neutralem F&G (30-70).",
       "strategyDesc_edge_indicator": "Technische Analyse basierend auf dem TradingView \"Trading Edge\" Indikator. EMA 8/21 Ribbon, ADX-Chop-Filter und Predator Momentum Score.",
       "recommendedTimeframe": "Empfohlener Timeframe: <strong>{{timeframe}}</strong>",
+      "recommendedSchedule": "Zeitplan-Intervall: <strong>{{minutes}}min</strong>",
       "backtestDays": "90-Tage Backtest",
       "deterministic": "Deterministisch",
       "creative": "Kreativ",

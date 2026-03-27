@@ -104,8 +104,8 @@ const CATEGORY_ICONS: Record<string, typeof Brain> = {
 }
 
 // Backtest-based timeframe recommendations (90-day BTCUSDT backtest)
-const STRATEGY_RECOMMENDATIONS: Record<string, { bestTimeframe: string }> = {
-  edge_indicator: { bestTimeframe: '1h' },
+const STRATEGY_RECOMMENDATIONS: Record<string, { bestTimeframe: string; scheduleMinutes: number }> = {
+  edge_indicator: { bestTimeframe: '4h', scheduleMinutes: 240 },
 }
 
 const EXCHANGES = ['bitget', 'weex', 'hyperliquid', 'bitunix', 'bingx']
@@ -706,6 +706,8 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
                 <Clock size={14} className="text-primary-400 shrink-0" />
                 <span className="text-xs text-primary-300">
                   <Trans i18nKey="bots.builder.recommendedTimeframe" values={{ timeframe: STRATEGY_RECOMMENDATIONS[strategyType].bestTimeframe }} components={{ strong: <strong /> }} />
+                  {' · '}
+                  <Trans i18nKey="bots.builder.recommendedSchedule" values={{ minutes: STRATEGY_RECOMMENDATIONS[strategyType].scheduleMinutes }} components={{ strong: <strong /> }} />
                 </span>
                 <span className="text-xs text-gray-400 ml-auto">{t('bots.builder.backtestDays')}</span>
               </div>
