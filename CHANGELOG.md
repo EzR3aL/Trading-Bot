@@ -9,6 +9,16 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [4.6.2] - 2026-03-27
+
+### Behoben
+- **Dropdown-Buttons nicht klickbar (Bots-Seite)**: Desktop-Overlay (z-40) blockierte Klicks auf das 3-Punkt-Menue (Bearbeiten/Kopieren/Loeschen) weil der Bot-Card Stacking Context (z-30) das Dropdown einschloss. Overlay z-index auf z-20 gesenkt
+
+### Geaendert
+- **Dashboard Positions-Tabelle**: Vereinfachte Tabelle durch vollstaendige Portfolio-Version ersetzt — zeigt jetzt Trailing Stop (Preis, Distanz%, Shield-Icon), Size (Token/USDT toggle), PnL-Sortierung, expandierbare Zeilen mit Margin und Bot-Name
+
+---
+
 ## [4.6.1] - 2026-03-26
 
 ### Behoben

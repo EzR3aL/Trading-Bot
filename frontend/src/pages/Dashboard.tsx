@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef, useCallback } from 'react'
+import { useEffect, useState, useRef, useCallback, Fragment } from 'react'
 import { useTranslation } from 'react-i18next'
 import api from '../api/client'
 import { useFilterStore } from '../stores/filterStore'
@@ -7,8 +7,10 @@ import PnlChart from '../components/dashboard/PnlChart'
 import WinLossChart from '../components/dashboard/WinLossChart'
 import RevenueChart from '../components/dashboard/RevenueChart'
 import { DashboardSkeleton } from '../components/ui/Skeleton'
-import { ArrowUpRight, ArrowDownRight } from 'lucide-react'
+import { ArrowUpRight, ArrowDownRight, TrendingUp, ChevronRight, ChevronUp, ChevronDown, ShieldCheck } from 'lucide-react'
 import { ExchangeIcon } from '../components/ui/ExchangeLogo'
+import SizeValue from '../components/ui/SizeValue'
+import { useSizeUnitStore } from '../stores/sizeUnitStore'
 import GuidedTour, { TourHelpButton, type TourStep } from '../components/ui/GuidedTour'
 import MobilePositionCard from '../components/ui/MobilePositionCard'
 import useIsMobile from '../hooks/useIsMobile'
@@ -254,11 +256,21 @@ export default function Dashboard() {
 function DashboardOpenPositions({ positions, loading }: { positions: PortfolioPosition[]; loading: boolean }) {
   const { t } = useTranslation()
   const isMobile = useIsMobile()
+  const { unit: sizeUnit, toggle: toggleSizeUnit } = useSizeUnitStore()
+  const [sortAsc, setSortAsc] = useState(false)
+  const [expandedIdx, setExpandedIdx] = useState<number | null>(null)
+
+  const sortedPositions = [...positions].sort((a, b) =>
+    sortAsc
+      ? a.unrealized_pnl - b.unrealized_pnl
+      : b.unrealized_pnl - a.unrealized_pnl
+  )
 
   return (
-    <div className="glass-card rounded-xl overflow-hidden" data-tour="dash-trades">
-      <div className="px-4 sm:px-5 pt-4 sm:pt-5 pb-3 sm:pb-4 sm:border-b sm:border-white/5">
-        <h2 className="text-base font-semibold text-white">
+    <div className="glass-card rounded-2xl overflow-hidden min-w-0" data-tour="dash-trades">
+      <div className="p-5 border-b border-white/5 flex flex-wrap items-center justify-between gap-2">
+        <h2 className="text-base font-semibold text-white flex items-center gap-2">
+          <TrendingUp size={16} className="text-primary-400" />
           {t('portfolio.positions')}
         </h2>
       </div>
@@ -266,11 +278,11 @@ function DashboardOpenPositions({ positions, loading }: { positions: PortfolioPo
         <div className="p-8 flex items-center justify-center">
           <div className="w-6 h-6 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
         </div>
-      ) : positions.length === 0 ? (
-        <div className="p-8 text-center text-gray-500 text-sm">{t('portfolio.noPositions')}</div>
+      ) : sortedPositions.length === 0 ? (
+        <div className="p-8 text-center text-gray-500">{t('portfolio.noPositions')}</div>
       ) : isMobile ? (
         <div className="px-1 pb-1 pt-1 space-y-1.5">
-          {positions.map((pos, idx) => (
+          {sortedPositions.map((pos, idx) => (
             <MobilePositionCard key={`${pos.exchange}-${pos.symbol}-${idx}`} pos={pos} />
           ))}
         </div>
@@ -282,44 +294,132 @@ function DashboardOpenPositions({ positions, loading }: { positions: PortfolioPo
                 <th className="text-left">{t('portfolio.exchange')}</th>
                 <th className="text-left">{t('portfolio.symbol')}</th>
                 <th className="text-center">{t('portfolio.side')}</th>
+                <th className="text-right hidden xl:table-cell">
+                  <button
+                    onClick={() => toggleSizeUnit()}
+                    className="inline-flex items-center gap-1 hover:text-white transition-colors ml-auto"
+                    title={sizeUnit === 'token' ? 'Show USDT value' : 'Show token size'}
+                  >
+                    {t('portfolio.size')} <span className="text-[10px] text-gray-500">{sizeUnit === 'usdt' ? '$' : '#'}</span>
+                  </button>
+                </th>
                 <th className="text-right hidden lg:table-cell">{t('portfolio.entryPrice')}</th>
                 <th className="text-right hidden lg:table-cell">{t('portfolio.currentPrice')}</th>
-                <th className="text-right">{t('portfolio.pnl')}</th>
-                <th className="text-center hidden xl:table-cell">{t('portfolio.leverage')}</th>
+                <th className="text-right">
+                  <button
+                    onClick={() => setSortAsc(!sortAsc)}
+                    className="inline-flex items-center gap-1 hover:text-white transition-colors"
+                  >
+                    {t('portfolio.pnl')}
+                    {sortAsc ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+                  </button>
+                </th>
+                <th className="text-center hidden 2xl:table-cell">{t('portfolio.leverage')}</th>
+                <th className="text-center hidden xl:table-cell">{t('bots.trailingStop')}</th>
               </tr>
             </thead>
             <tbody>
-              {positions.map((pos, idx) => (
-                <tr key={`${pos.exchange}-${pos.symbol}-${idx}`}>
-                  <td>
-                    <span className="inline-flex items-center gap-2">
-                      <ExchangeIcon exchange={pos.exchange} size={16} />
-                      <span className="text-gray-300 capitalize text-sm hidden md:inline">{pos.exchange}</span>
-                    </span>
-                  </td>
-                  <td className="text-white font-medium text-sm">{pos.symbol}</td>
-                  <td className="text-center">
-                    <span className={`text-xs font-medium px-2 py-0.5 rounded ${
-                      pos.side.toLowerCase() === 'long'
-                        ? 'bg-emerald-500/10 text-emerald-400'
-                        : 'bg-red-500/10 text-red-400'
+              {sortedPositions.map((pos, idx) => (
+                <Fragment key={`${pos.exchange}-${pos.symbol}-${idx}`}>
+                  <tr
+                    onClick={() => setExpandedIdx(expandedIdx === idx ? null : idx)}
+                    className="cursor-pointer"
+                  >
+                    <td>
+                      <span className="inline-flex items-center gap-2">
+                        <ChevronRight size={14} className={`expand-chevron ${expandedIdx === idx ? 'open' : ''}`} />
+                        <ExchangeIcon exchange={pos.exchange} size={16} />
+                        <span className="text-gray-300 capitalize text-sm hidden md:inline">{pos.exchange}</span>
+                      </span>
+                    </td>
+                    <td className="text-white font-medium text-sm">{pos.symbol}</td>
+                    <td className="text-center">
+                      <span className={`text-xs font-medium px-2 py-0.5 rounded ${
+                        pos.side.toLowerCase() === 'long'
+                          ? 'bg-emerald-500/10 text-emerald-400'
+                          : 'bg-red-500/10 text-red-400'
+                      }`}>
+                        {pos.side.toUpperCase()}
+                      </span>
+                    </td>
+                    <td className="text-right text-gray-300 text-sm font-mono hidden xl:table-cell">
+                      <SizeValue size={pos.size} price={pos.current_price || pos.entry_price} symbol={pos.symbol} />
+                    </td>
+                    <td className="text-right text-gray-300 text-sm font-mono hidden lg:table-cell">
+                      ${pos.entry_price.toLocaleString()}
+                    </td>
+                    <td className="text-right text-gray-300 text-sm font-mono hidden lg:table-cell">
+                      ${pos.current_price.toLocaleString()}
+                    </td>
+                    <td className={`text-right text-sm font-medium font-mono whitespace-nowrap ${
+                      pos.unrealized_pnl >= 0 ? 'text-emerald-400' : 'text-red-400'
                     }`}>
-                      {pos.side.toUpperCase()}
-                    </span>
-                  </td>
-                  <td className="text-right text-gray-300 text-sm font-mono hidden lg:table-cell">
-                    ${pos.entry_price.toLocaleString()}
-                  </td>
-                  <td className="text-right text-gray-300 text-sm font-mono hidden lg:table-cell">
-                    ${pos.current_price.toLocaleString()}
-                  </td>
-                  <td className={`text-right text-sm font-medium font-mono whitespace-nowrap ${
-                    pos.unrealized_pnl >= 0 ? 'text-emerald-400' : 'text-red-400'
-                  }`}>
-                    {pos.unrealized_pnl >= 0 ? '▲ +' : '▼ '}${Math.abs(pos.unrealized_pnl).toFixed(2)}
-                  </td>
-                  <td className="text-center text-gray-300 text-sm hidden xl:table-cell">{pos.leverage}x</td>
-                </tr>
+                      {pos.unrealized_pnl >= 0 ? '▲ +' : '▼ '}${Math.abs(pos.unrealized_pnl).toFixed(2)}
+                    </td>
+                    <td className="text-center text-gray-300 text-sm hidden 2xl:table-cell">{pos.leverage}x</td>
+                    <td className="text-center hidden xl:table-cell">
+                      {pos.trailing_stop_active && pos.trailing_stop_price != null ? (
+                        <span className="inline-flex items-center justify-center gap-1 text-emerald-400 text-sm">
+                          ${pos.trailing_stop_price.toLocaleString()}
+                          <span className="text-xs text-gray-400">({pos.trailing_stop_distance_pct?.toFixed(2)}%)</span>
+                          {pos.can_close_at_loss === false && (
+                            <span title={t('bots.trailingStopProtecting')}>
+                              <ShieldCheck size={14} className="text-emerald-400" />
+                            </span>
+                          )}
+                        </span>
+                      ) : (
+                        <span className="text-gray-600 text-sm">--</span>
+                      )}
+                    </td>
+                  </tr>
+                  {expandedIdx === idx && (
+                    <tr className="table-expand-row">
+                      <td colSpan={9} className="!p-0 !border-b-0">
+                        <dl className="table-expand-content">
+                          <div className="xl:hidden">
+                            <dt>{t('portfolio.size')}</dt>
+                            <dd>
+                              <SizeValue size={pos.size} price={pos.current_price || pos.entry_price} symbol={pos.symbol} />
+                            </dd>
+                          </div>
+                          <div className="lg:hidden">
+                            <dt>{t('portfolio.entryPrice')}</dt>
+                            <dd>${pos.entry_price.toLocaleString()}</dd>
+                          </div>
+                          <div className="lg:hidden">
+                            <dt>{t('portfolio.currentPrice')}</dt>
+                            <dd>${pos.current_price.toLocaleString()}</dd>
+                          </div>
+                          <div className="2xl:hidden">
+                            <dt>{t('portfolio.leverage')}</dt>
+                            <dd>{pos.leverage}x</dd>
+                          </div>
+                          <div className="xl:hidden">
+                            <dt>{t('bots.trailingStop')}</dt>
+                            <dd>
+                              {pos.trailing_stop_active && pos.trailing_stop_price != null
+                                ? `$${pos.trailing_stop_price.toLocaleString()} (${pos.trailing_stop_distance_pct?.toFixed(2)}%)`
+                                : '--'}
+                            </dd>
+                          </div>
+                          {pos.bot_name && (
+                            <div>
+                              <dt>{t('trades.bot')}</dt>
+                              <dd>{pos.bot_name}</dd>
+                            </div>
+                          )}
+                          {pos.margin != null && pos.margin > 0 && (
+                            <div>
+                              <dt>{t('portfolio.margin', 'Margin')}</dt>
+                              <dd>${pos.margin.toFixed(2)}</dd>
+                            </div>
+                          )}
+                        </dl>
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
               ))}
             </tbody>
           </table>

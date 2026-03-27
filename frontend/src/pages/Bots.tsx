@@ -1280,7 +1280,7 @@ export default function Bots() {
       {/* Desktop overlay (transparent click-catcher) */}
       {!isMobile && moreMenuOpen !== null && (
         <div
-          className="fixed inset-0 z-40"
+          className="fixed inset-0 z-20"
           onClick={() => setMoreMenuOpen(null)}
         />
       )}
