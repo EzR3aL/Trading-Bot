@@ -29,6 +29,7 @@ from src.auth.jwt_handler import (
 )
 from src.auth.password import hash_password
 from src.auth.supabase_jwt import verify_supabase_token
+from src.api.rate_limit import limiter
 from src.models.database import User
 from src.models.session import get_db
 
@@ -40,6 +41,7 @@ router = APIRouter(prefix="/api/auth/bridge", tags=["auth-bridge"])
 # ── POST /generate — called by the Supabase Edge Function ─────────
 
 @router.post("/generate", response_model=GenerateCodeResponse)
+@limiter.limit("10/minute")
 async def generate_code(request: Request):
     """Generate a one-time auth code from a valid Supabase JWT.
 
@@ -73,6 +75,7 @@ async def generate_code(request: Request):
 # ── POST /exchange — called by the bot frontend ───────────────────
 
 @router.post("/exchange", response_model=ExchangeCodeResponse)
+@limiter.limit("10/minute")
 async def exchange_code(
     body: ExchangeCodeRequest,
     request: Request,

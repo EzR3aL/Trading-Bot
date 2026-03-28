@@ -59,11 +59,17 @@ def verify_supabase_token(token: str) -> SupabaseClaims | None:
         payload = jwt.decode(
             token,
             signing_key.key,
-            algorithms=["ES256", "HS256"],
+            algorithms=["ES256"],
             audience="authenticated",
+            issuer=f"{SUPABASE_PROJECT_URL}/auth/v1",
         )
     except PyJWTError as exc:
         logger.warning("Supabase JWT validation failed: %s", exc)
+        return None
+
+    # Reject unverified email addresses (prevents account takeover via email linking)
+    if not payload.get("email_confirmed_at"):
+        logger.warning("Supabase JWT: email not confirmed")
         return None
 
     sub = payload.get("sub")
