@@ -1599,8 +1599,8 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
                         className="filter-select w-full text-sm"
                       />
                     </div>
-                    <div className="bg-blue-900/15 border border-blue-800/40 rounded-lg p-2.5">
-                      <p className="text-xs text-blue-300 leading-relaxed">{t('bots.builder.telegramHint')}</p>
+                    <div className="bg-blue-500/5 dark:bg-blue-900/15 border border-blue-500/20 dark:border-blue-800/40 rounded-lg p-2.5">
+                      <p className="text-xs text-blue-600 dark:text-blue-300 leading-relaxed">{t('bots.builder.telegramHint')}</p>
                     </div>
                   </div>
                 )}

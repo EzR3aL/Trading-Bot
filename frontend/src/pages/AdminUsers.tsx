@@ -198,7 +198,7 @@ export default function AdminUsers() {
               )}
               <div className="flex items-center justify-between pl-8 mb-1">
                 <span className={`text-[9px] px-1 py-0.5 rounded ${
-                  user.auth_provider === 'supabase' ? 'bg-blue-900/30 text-blue-400' : 'bg-white/5 text-gray-500'
+                  user.auth_provider === 'supabase' ? 'bg-blue-500/10 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400' : 'bg-white/5 text-gray-500'
                 }`}>{user.auth_provider || 'local'}</span>
                 {user.last_login_at && (
                   <span className="text-[9px] text-gray-600">{new Date(user.last_login_at).toLocaleDateString()}</span>
@@ -261,7 +261,7 @@ export default function AdminUsers() {
                 <ArrowLeftRight size={11} /> {user.total_trades || 0}
               </span>
               <span className={`text-[9px] px-1 py-0.5 rounded hidden lg:inline ${
-                user.auth_provider === 'supabase' ? 'bg-blue-900/30 text-blue-400' : 'bg-white/5 text-gray-500'
+                user.auth_provider === 'supabase' ? 'bg-blue-500/10 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400' : 'bg-white/5 text-gray-500'
               }`}>{user.auth_provider || 'local'}</span>
               <span className={`text-[10px] px-1.5 py-0.5 rounded ${
                 user.is_active ? 'bg-green-900/30 text-green-400' : 'bg-red-900/30 text-red-400'

@@ -35,7 +35,7 @@ export default function MobileCollapsibleCard({
   const toggle = onToggle ?? (() => setInternalOpen(!internalOpen))
 
   return (
-    <div className={`border border-gray-200/50 dark:border-white/[0.06] rounded-lg bg-white dark:bg-white/[0.02] overflow-hidden ${className}`}>
+    <div className={`border border-gray-200 dark:border-white/[0.06] rounded-lg bg-white dark:bg-white/[0.02] shadow-sm dark:shadow-none overflow-hidden ${className}`}>
       {/* Header — always visible, clickable */}
       <div className="cursor-pointer" onClick={toggle}>
         <div className="flex items-center justify-between px-3 pt-2 pb-1">
@@ -58,7 +58,7 @@ export default function MobileCollapsibleCard({
       </div>
       {/* Expandable details */}
       {isOpen && (
-        <div className="border-t border-gray-200/50 dark:border-white/[0.04] px-3 py-2">
+        <div className="border-t border-gray-200 dark:border-white/[0.04] px-3 py-2">
           {children}
         </div>
       )}
