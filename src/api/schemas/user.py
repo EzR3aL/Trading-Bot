@@ -56,3 +56,13 @@ class UserResponse(BaseModel):
     role: str
     language: str
     is_active: bool
+
+
+class AdminUserResponse(UserResponse):
+    """Extended user info for admin panel with support-relevant details."""
+    auth_provider: str = "local"
+    last_login_at: Optional[str] = None
+    created_at: Optional[str] = None
+    exchanges: list[str] = []
+    active_bots: int = 0
+    total_trades: int = 0

@@ -9,6 +9,22 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [4.6.5] - 2026-03-28
+
+### Hinzugefuegt
+- **Admin-Rolle von Supabase synchronisieren**: Beim SSO-Login wird `app_metadata.role` aus dem Supabase JWT gelesen. Ist der Wert `admin`, wird der Bot-User automatisch zum Admin. Bestehende lokale Admins bleiben unangetastet (nur Upgrade, nie Downgrade)
+- **Erweitertes User Management**: Admin-Panel zeigt jetzt pro User: verbundene Exchanges (Icons), aktive Bots, Gesamtzahl Trades, Auth-Provider (local/supabase), letzter Login. Hilft beim Support
+- **Last-Login Tracking**: `last_login_at` wird bei jedem Login aktualisiert (lokal und SSO). Neue Alembic Migration 013
+
+### Behoben
+- **Einheitliche Zahlen-Schriftart**: `font-mono` von allen Trading-Tabellen entfernt (Portfolio, Dashboard, Bots, Trades). Alle Zahlen nutzen jetzt die gleiche Inter-Schrift mit `tabular-nums` fuer saubere Ausrichtung — konsistentes Erscheinungsbild ueber alle Seiten hinweg
+- **3-Punkte-Menu hinter Sidebar**: Dropdown-Menu bei Bot-Karten in der linken Spalte wurde von der Sidebar verdeckt. Dropdown oeffnet jetzt nach rechts statt nach links
+- **Live/Demo-Filter bei Positionen**: Portfolio-Seite filtert offene Positionen jetzt nach dem globalen Demo/Live-Modus. Im Live-Modus werden nur Live-Positionen angezeigt, nicht mehr alle
+- **Light-Mode Fixes**: Donut-Chart Text (Gesamt/Betrag) im Light-Mode sichtbar, Period-Buttons mit gruenem Hintergrund, Settings-Seite farbliche Felder (LIVE/DEMO/Success-Banner) Light-Mode-kompatibel, Asset-Name in Letzter Trade sichtbar, Tailwind `darkMode: 'class'` aktiviert
+- **Uebersetzung**: `bots.confidence` korrigiert zu `trades.confidence` (zeigte rohen Schluessel statt "Konfidenz")
+
+---
+
 ## [4.6.4] - 2026-03-28
 
 ### Sicherheit

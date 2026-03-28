@@ -500,7 +500,7 @@ function BotTradeHistoryModal({ bot, onClose, t }: { bot: BotStatus; onClose: ()
                     pnl={stats.summary.total_pnl}
                     fees={stats.summary.total_fees}
                     fundingPaid={stats.summary.total_funding ?? 0}
-                    className={`text-lg font-bold font-mono ${stats.summary.total_pnl >= 0 ? 'text-profit' : 'text-loss'}`}
+                    className={`text-lg font-bold ${stats.summary.total_pnl >= 0 ? 'text-profit' : 'text-loss'}`}
                   />
                 </div>
                 <div className="glass-card rounded-xl p-3 text-center border border-white/5">
@@ -514,13 +514,13 @@ function BotTradeHistoryModal({ bot, onClose, t }: { bot: BotStatus; onClose: ()
                   <div className="text-[10px] text-gray-400 uppercase tracking-wider mb-1 flex items-center justify-center gap-1">
                     <ArrowUpRight size={11} className="text-profit" /> {t('bots.bestTrade')}
                   </div>
-                  <div className="text-lg font-bold text-profit font-mono">{formatPnl(stats.summary.best_trade)}</div>
+                  <div className="text-lg font-bold text-profit">{formatPnl(stats.summary.best_trade)}</div>
                 </div>
                 <div className="glass-card rounded-xl p-3 text-center border border-white/5">
                   <div className="text-[10px] text-gray-400 uppercase tracking-wider mb-1 flex items-center justify-center gap-1">
                     <ArrowDownRight size={11} className="text-loss" /> {t('bots.worstTrade')}
                   </div>
-                  <div className="text-lg font-bold text-loss font-mono">{formatPnl(stats.summary.worst_trade)}</div>
+                  <div className="text-lg font-bold text-loss">{formatPnl(stats.summary.worst_trade)}</div>
                 </div>
               </div>
 
@@ -671,7 +671,7 @@ function BotTradeHistoryModal({ bot, onClose, t }: { bot: BotStatus; onClose: ()
                             fees={trade.fees ?? 0}
                             fundingPaid={trade.funding_paid ?? 0}
                             status={trade.status}
-                            className={`text-sm font-semibold font-mono ${
+                            className={`text-sm font-semibold ${
                               trade.status === 'open' ? 'text-gray-500' :
                               trade.pnl >= 0 ? 'text-profit' : 'text-loss'
                             }`}
@@ -1056,12 +1056,12 @@ export default function Bots() {
                 <div className="grid grid-cols-3 gap-1 sm:gap-2 mb-3 text-center" {...(bot === bots[0] ? { 'data-tour': 'bot-stats' } : {})}>
                   <div>
                     <div className="text-xs text-gray-400 uppercase tracking-wider">{t('bots.totalPnl')}</div>
-                    <div className={`text-base font-mono font-semibold ${bot.total_pnl >= 0 ? 'text-profit' : 'text-loss'}`}>
+                    <div className={`text-base font-semibold ${bot.total_pnl >= 0 ? 'text-profit' : 'text-loss'}`}>
                       <PnlCell
                         pnl={bot.total_pnl}
                         fees={bot.total_fees ?? 0}
                         fundingPaid={bot.total_funding ?? 0}
-                        className={`text-base font-mono font-semibold ${bot.total_pnl >= 0 ? 'text-profit' : 'text-loss'}`}
+                        className={`text-base font-semibold ${bot.total_pnl >= 0 ? 'text-profit' : 'text-loss'}`}
                       />
                     </div>
                   </div>
@@ -1231,7 +1231,7 @@ export default function Bots() {
                     </button>
                     {/* Desktop dropdown menu */}
                     {!isMobile && moreMenuOpen === bot.bot_config_id && (
-                      <div className="absolute right-0 top-full mt-1 w-48 bg-[#141a2a] border border-white/10 rounded-xl shadow-2xl z-50 py-1 overflow-hidden">
+                      <div className="absolute left-0 top-full mt-1 w-48 bg-[#141a2a] border border-white/10 rounded-xl shadow-2xl z-50 py-1 overflow-hidden">
                         <button
                           onClick={() => { setMoreMenuOpen(null); setEditBotId(bot.bot_config_id) }}
                           disabled={bot.status === 'running'}

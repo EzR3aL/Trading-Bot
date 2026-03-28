@@ -10,6 +10,7 @@ Flow:
 
 import logging
 import secrets
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy import select
@@ -102,7 +103,7 @@ async def exchange_code(
         )
 
     # Look up or provision the bot user
-    user, is_new = await _get_or_create_user(db, claims.sub, claims.email)
+    user, is_new = await _get_or_create_user(db, claims.sub, claims.email, claims.app_role)
 
     # Issue bot JWT tokens
     tv = getattr(user, "token_version", 0) or 0
@@ -134,12 +135,29 @@ async def exchange_code(
     )
 
 
+# ── Role sync ─────────────────────────────────────────────────────
+
+async def _sync_role(db: AsyncSession, user: User, app_role: str) -> None:
+    """Sync admin role from Supabase app_metadata. Only upgrades, never downgrades."""
+    changed = False
+    if app_role == "admin" and user.role != "admin":
+        user.role = "admin"
+        changed = True
+        logger.info("AUTH_BRIDGE: Upgraded user '%s' (id=%s) to admin via Supabase", user.username, user.id)
+    # Update last login timestamp
+    user.last_login_at = datetime.now(timezone.utc)
+    if changed:
+        await db.commit()
+        await db.refresh(user)
+
+
 # ── User provisioning ─────────────────────────────────────────────
 
 async def _get_or_create_user(
     db: AsyncSession,
     supabase_uid: str,
     email: str,
+    app_role: str = "user",
 ) -> tuple[User, bool]:
     """Find an existing bot user or create a new one.
 
@@ -159,6 +177,7 @@ async def _get_or_create_user(
     )
     user = result.scalar_one_or_none()
     if user:
+        await _sync_role(db, user, app_role)
         return user, False
 
     # 2. Lookup by verified email — link existing account
@@ -172,6 +191,7 @@ async def _get_or_create_user(
     if user:
         user.supabase_user_id = supabase_uid
         user.auth_provider = "supabase"
+        await _sync_role(db, user, app_role)
         await db.commit()
         await db.refresh(user)
         logger.info(

@@ -72,16 +72,16 @@ export default function PnlCell({ pnl, fees, fundingPaid, status = 'closed', cla
           <div className="bg-[#141a2a]/95 border border-white/10 rounded-xl px-3 py-2 text-xs whitespace-nowrap shadow-2xl backdrop-blur-xl">
             <div className="flex justify-between gap-4">
               <span className="text-gray-400">{t('trades.fees')}:</span>
-              <span className="text-amber-400 font-mono">{fees > 0 ? `$${fees.toFixed(2)}` : '--'}</span>
+              <span className="text-amber-400 tabular-nums">{fees > 0 ? `$${fees.toFixed(2)}` : '--'}</span>
             </div>
             <div className="flex justify-between gap-4 mt-0.5">
               <span className="text-gray-400">{t('dashboard.funding')}:</span>
-              <span className="text-purple-400 font-mono">{fundingPaid > 0 ? `$${fundingPaid.toFixed(2)}` : '--'}</span>
+              <span className="text-purple-400 tabular-nums">{fundingPaid > 0 ? `$${fundingPaid.toFixed(2)}` : '--'}</span>
             </div>
             {total > 0 && (
               <div className="flex justify-between gap-4 mt-1 pt-1 border-t border-white/10">
                 <span className="text-gray-300">{t('common.total')}:</span>
-                <span className="text-white font-mono font-semibold">${total.toFixed(2)}</span>
+                <span className="text-white tabular-nums font-semibold">${total.toFixed(2)}</span>
               </div>
             )}
           </div>

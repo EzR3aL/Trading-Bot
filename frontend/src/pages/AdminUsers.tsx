@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Shield, ShieldOff, LayoutGrid, List, Trash2, UserCheck, UserX } from 'lucide-react'
+import { Shield, ShieldOff, LayoutGrid, List, Trash2, UserCheck, UserX, Bot, ArrowLeftRight, Globe } from 'lucide-react'
+import { ExchangeIcon } from '../components/ui/ExchangeLogo'
 import api from '../api/client'
 import { getApiErrorMessage } from '../utils/api-error'
 import FilterDropdown from '../components/ui/FilterDropdown'
@@ -169,8 +170,40 @@ export default function AdminUsers() {
                 }`}>{user.is_active ? t('admin.active') : t('admin.inactive')}</span>
               </div>
               {user.email && (
-                <div className="text-xs text-gray-500 truncate mb-1.5 pl-8">{user.email}</div>
+                <div className="text-xs text-gray-500 truncate mb-1 pl-8">{user.email}</div>
               )}
+              {/* Support info */}
+              <div className="grid grid-cols-3 gap-1 mb-1.5 pl-8">
+                <div className="flex items-center gap-1 text-[10px] text-gray-500" title={t('admin.exchanges')}>
+                  <Globe size={10} />
+                  <span>{user.exchanges?.length || 0}</span>
+                </div>
+                <div className="flex items-center gap-1 text-[10px] text-gray-500" title={t('admin.activeBots')}>
+                  <Bot size={10} />
+                  <span>{user.active_bots || 0}</span>
+                </div>
+                <div className="flex items-center gap-1 text-[10px] text-gray-500" title={t('admin.totalTrades')}>
+                  <ArrowLeftRight size={10} />
+                  <span>{user.total_trades || 0}</span>
+                </div>
+              </div>
+              {user.exchanges && user.exchanges.length > 0 && (
+                <div className="flex gap-1 mb-1.5 pl-8">
+                  {user.exchanges.map((ex) => (
+                    <span key={ex} className="inline-flex items-center gap-0.5">
+                      <ExchangeIcon exchange={ex} size={12} />
+                    </span>
+                  ))}
+                </div>
+              )}
+              <div className="flex items-center justify-between pl-8 mb-1">
+                <span className={`text-[9px] px-1 py-0.5 rounded ${
+                  user.auth_provider === 'supabase' ? 'bg-blue-900/30 text-blue-400' : 'bg-white/5 text-gray-500'
+                }`}>{user.auth_provider || 'local'}</span>
+                {user.last_login_at && (
+                  <span className="text-[9px] text-gray-600">{new Date(user.last_login_at).toLocaleDateString()}</span>
+                )}
+              </div>
               <div className="flex gap-1.5 pt-1.5 border-t border-white/5">
                 <button onClick={() => toggleRole(user)} disabled={user.id === currentUser?.id}
                   className={`p-1 rounded transition-colors disabled:opacity-30 disabled:cursor-not-allowed ${
@@ -215,6 +248,21 @@ export default function AdminUsers() {
               {user.email && (
                 <span className="text-xs text-gray-500 truncate hidden lg:block">{user.email}</span>
               )}
+              {/* Exchange icons */}
+              <span className="hidden xl:flex items-center gap-1">
+                {(user.exchanges || []).map((ex) => (
+                  <ExchangeIcon key={ex} exchange={ex} size={14} />
+                ))}
+              </span>
+              <span className="hidden xl:flex items-center gap-1 text-[10px] text-gray-500">
+                <Bot size={11} /> {user.active_bots || 0}
+              </span>
+              <span className="hidden xl:flex items-center gap-1 text-[10px] text-gray-500">
+                <ArrowLeftRight size={11} /> {user.total_trades || 0}
+              </span>
+              <span className={`text-[9px] px-1 py-0.5 rounded hidden lg:inline ${
+                user.auth_provider === 'supabase' ? 'bg-blue-900/30 text-blue-400' : 'bg-white/5 text-gray-500'
+              }`}>{user.auth_provider || 'local'}</span>
               <span className={`text-[10px] px-1.5 py-0.5 rounded ${
                 user.is_active ? 'bg-green-900/30 text-green-400' : 'bg-red-900/30 text-red-400'
               }`}>

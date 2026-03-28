@@ -59,15 +59,15 @@ function KeyForm({
   const isDemo = label.toLowerCase().includes('demo') || label.toLowerCase().includes('testnet')
 
   const sectionBorder = isLive
-    ? 'border-l-4 border-l-red-500 bg-red-950/20'
+    ? 'border-l-4 border-l-red-500 bg-red-500/5 dark:bg-red-950/20'
     : isDemo
-      ? 'border-l-4 border-l-amber-500 bg-amber-950/20'
+      ? 'border-l-4 border-l-amber-500 bg-amber-500/5 dark:bg-amber-950/20'
       : ''
 
   const badgeClass = isLive
-    ? 'bg-red-500/20 text-red-400 border border-red-500/40 ring-1 ring-red-500/20'
+    ? 'bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/20 dark:border-red-500/40 ring-1 ring-red-500/10 dark:ring-red-500/20'
     : isDemo
-      ? 'bg-amber-500/20 text-amber-400 border border-amber-500/40 ring-1 ring-amber-500/20'
+      ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 dark:border-amber-500/40 ring-1 ring-amber-500/10 dark:ring-amber-500/20'
       : 'text-gray-400'
 
   return (
@@ -81,7 +81,7 @@ function KeyForm({
         </span>
       </div>
       {isWallet && (
-        <div className="p-2.5 bg-blue-900/20 border border-blue-800/40 rounded text-xs text-blue-300">
+        <div className="p-2.5 bg-blue-500/5 dark:bg-blue-900/20 border border-blue-500/20 dark:border-blue-800/40 rounded text-xs text-blue-600 dark:text-blue-300">
           {t('settings.hyperliquidHint')}
         </div>
       )}
@@ -584,7 +584,7 @@ export default function Settings() {
       </div>
 
       {message && (
-        <div className="mb-4 p-3 bg-primary-900/30 border border-primary-800 rounded text-primary-400 text-sm">
+        <div className="mb-4 p-3 bg-emerald-500/10 dark:bg-primary-900/30 border border-emerald-500/20 dark:border-primary-800 rounded text-emerald-700 dark:text-primary-400 text-sm">
           {message}
         </div>
       )}
@@ -620,7 +620,7 @@ export default function Settings() {
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div className="flex items-center gap-4">
                   <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
-                    liveCount === exchanges.length ? 'bg-emerald-500/15' : liveCount > 0 ? 'bg-yellow-500/15' : 'bg-white/5'
+                    liveCount === exchanges.length ? 'bg-emerald-500/10 dark:bg-emerald-500/15' : liveCount > 0 ? 'bg-yellow-500/10 dark:bg-yellow-500/15' : 'bg-gray-100 dark:bg-white/5'
                   }`}>
                     <Zap size={22} className={
                       liveCount === exchanges.length ? 'text-emerald-400' : liveCount > 0 ? 'text-yellow-400' : 'text-gray-600'

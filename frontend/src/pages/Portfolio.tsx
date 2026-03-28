@@ -10,6 +10,7 @@ import {
   ChevronUp, ChevronDown, ChevronRight, ShieldCheck,
 } from 'lucide-react'
 import api from '../api/client'
+import { useFilterStore } from '../stores/filterStore'
 import { ExchangeIcon } from '../components/ui/ExchangeLogo'
 import type {
   PortfolioSummary, PortfolioPosition,
@@ -18,6 +19,7 @@ import type {
 import MobilePositionCard from '../components/ui/MobilePositionCard'
 import SizeValue from '../components/ui/SizeValue'
 import { useSizeUnitStore } from '../stores/sizeUnitStore'
+import { useThemeStore } from '../stores/themeStore'
 import useIsMobile from '../hooks/useIsMobile'
 import usePullToRefresh from '../hooks/usePullToRefresh'
 import PullToRefreshIndicator from '../components/ui/PullToRefreshIndicator'
@@ -63,6 +65,9 @@ function ChartTooltip({ active, payload, label }: any) {
 
 export default function Portfolio() {
   const { t } = useTranslation()
+  const { demoFilter } = useFilterStore()
+  const { theme } = useThemeStore()
+  const isLight = theme === 'light'
 
   // Data state
   const [summary, setSummary] = useState<PortfolioSummary | null>(null)
@@ -84,13 +89,14 @@ export default function Portfolio() {
   /* ── Data Fetching ──────────────────────────────────────── */
 
   const fetchFastData = useCallback(async () => {
+    const demoParam = demoFilter === 'demo' ? '&demo_mode=true' : demoFilter === 'live' ? '&demo_mode=false' : ''
     const [sumRes, dailyRes] = await Promise.all([
-      api.get(`/portfolio/summary?days=${period}`),
-      api.get(`/portfolio/daily?days=${period}`),
+      api.get(`/portfolio/summary?days=${period}${demoParam}`),
+      api.get(`/portfolio/daily?days=${period}${demoParam}`),
     ])
     setSummary(sumRes.data)
     setDailyData(dailyRes.data.daily || dailyRes.data || [])
-  }, [period])
+  }, [period, demoFilter])
 
   const fetchExchangeData = useCallback(async () => {
     const [posRes, allocRes] = await Promise.all([
@@ -174,8 +180,13 @@ export default function Portfolio() {
   // Total balance from allocation
   const totalBalance = allocation.reduce((sum, a) => sum + a.balance, 0)
 
+  // Filter positions by demo/live mode
+  const filteredPositions = demoFilter === 'all'
+    ? positions
+    : positions.filter((p) => demoFilter === 'demo' ? p.demo_mode : !p.demo_mode)
+
   // Sorted positions
-  const sortedPositions = [...positions].sort((a, b) =>
+  const sortedPositions = [...filteredPositions].sort((a, b) =>
     sortAsc
       ? a.unrealized_pnl - b.unrealized_pnl
       : b.unrealized_pnl - a.unrealized_pnl
@@ -205,10 +216,10 @@ export default function Portfolio() {
           opacity={1}
         />
         {/* Center label: exchange name + funds */}
-        <text x={cx} y={cy - 10} textAnchor="middle" fill="#fff" fontSize={14} fontWeight={600}>
+        <text x={cx} y={cy - 10} textAnchor="middle" fill={isLight ? '#0f172a' : '#fff'} fontSize={14} fontWeight={600}>
           {payload.name.charAt(0).toUpperCase() + payload.name.slice(1)}
         </text>
-        <text x={cx} y={cy + 12} textAnchor="middle" fill="rgba(255,255,255,0.7)" fontSize={13}>
+        <text x={cx} y={cy + 12} textAnchor="middle" fill={isLight ? 'rgba(15,23,42,0.6)' : 'rgba(255,255,255,0.7)'} fontSize={13}>
           ${value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
         </text>
       </g>
@@ -488,12 +499,12 @@ export default function Portfolio() {
                   ))}
                 </Pie>
                 {activePieIndex === undefined && (
-                  <text x="50%" y="42%" textAnchor="middle" fill="rgba(255,255,255,0.5)" fontSize={12}>
+                  <text x="50%" y="42%" textAnchor="middle" fill={isLight ? 'rgba(15,23,42,0.5)' : 'rgba(255,255,255,0.5)'} fontSize={12}>
                     {t('portfolio.total', 'Gesamt')}
                   </text>
                 )}
                 {activePieIndex === undefined && (
-                  <text x="50%" y="50%" textAnchor="middle" fill="#fff" fontSize={14} fontWeight={600}>
+                  <text x="50%" y="50%" textAnchor="middle" fill={isLight ? '#0f172a' : '#fff'} fontSize={14} fontWeight={600}>
                     ${totalBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </text>
                 )}
@@ -587,16 +598,16 @@ export default function Portfolio() {
                           {pos.side.toUpperCase()}
                         </span>
                       </td>
-                      <td className="text-right text-gray-300 text-sm font-mono hidden xl:table-cell">
+                      <td className="text-right text-gray-300 text-sm hidden xl:table-cell">
                         <SizeValue size={pos.size} price={pos.current_price || pos.entry_price} symbol={pos.symbol} />
                       </td>
-                      <td className="text-right text-gray-300 text-sm font-mono hidden lg:table-cell">
+                      <td className="text-right text-gray-300 text-sm hidden lg:table-cell">
                         ${pos.entry_price.toLocaleString()}
                       </td>
-                      <td className="text-right text-gray-300 text-sm font-mono hidden lg:table-cell">
+                      <td className="text-right text-gray-300 text-sm hidden lg:table-cell">
                         ${pos.current_price.toLocaleString()}
                       </td>
-                      <td className={`text-right text-sm font-medium font-mono whitespace-nowrap ${
+                      <td className={`text-right text-sm font-medium whitespace-nowrap ${
                         pos.unrealized_pnl >= 0 ? 'text-emerald-400' : 'text-red-400'
                       }`}>
                         {pos.unrealized_pnl >= 0 ? '▲ +' : '▼ '}${Math.abs(pos.unrealized_pnl).toFixed(2)}

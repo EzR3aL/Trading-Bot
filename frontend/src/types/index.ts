@@ -6,6 +6,12 @@ export interface User {
   language: 'de' | 'en'
   is_active: boolean
   totp_enabled?: boolean
+  auth_provider?: string
+  last_login_at?: string | null
+  created_at?: string | null
+  exchanges?: string[]
+  active_bots?: number
+  total_trades?: number
 }
 
 export interface TokenResponse {

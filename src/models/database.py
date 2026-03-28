@@ -50,6 +50,7 @@ class User(Base):
     totp_secret = Column(Text, nullable=True)  # Fernet-encrypted TOTP secret
     totp_enabled = Column(Boolean, default=False, server_default="false")
     totp_backup_codes = Column(Text, nullable=True)  # JSON list of bcrypt-hashed backup codes
+    last_login_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 

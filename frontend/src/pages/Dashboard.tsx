@@ -342,16 +342,16 @@ function DashboardOpenPositions({ positions, loading }: { positions: PortfolioPo
                         {pos.side.toUpperCase()}
                       </span>
                     </td>
-                    <td className="text-right text-gray-300 text-sm font-mono hidden xl:table-cell">
+                    <td className="text-right text-gray-300 text-sm hidden xl:table-cell">
                       <SizeValue size={pos.size} price={pos.current_price || pos.entry_price} symbol={pos.symbol} />
                     </td>
-                    <td className="text-right text-gray-300 text-sm font-mono hidden lg:table-cell">
+                    <td className="text-right text-gray-300 text-sm hidden lg:table-cell">
                       ${pos.entry_price.toLocaleString()}
                     </td>
-                    <td className="text-right text-gray-300 text-sm font-mono hidden lg:table-cell">
+                    <td className="text-right text-gray-300 text-sm hidden lg:table-cell">
                       ${pos.current_price.toLocaleString()}
                     </td>
-                    <td className={`text-right text-sm font-medium font-mono whitespace-nowrap ${
+                    <td className={`text-right text-sm font-medium whitespace-nowrap ${
                       pos.unrealized_pnl >= 0 ? 'text-emerald-400' : 'text-red-400'
                     }`}>
                       {pos.unrealized_pnl >= 0 ? '▲ +' : '▼ '}${Math.abs(pos.unrealized_pnl).toFixed(2)}

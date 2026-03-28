@@ -868,7 +868,11 @@
     "noUsers": "No users found.",
     "usernamePlaceholder": "Username",
     "passwordPlaceholder": "Password (min 8)",
-    "emailPlaceholder": "Email (optional)"
+    "emailPlaceholder": "Email (optional)",
+    "exchanges": "Exchanges",
+    "activeBots": "Active Bots",
+    "totalTrades": "Total Trades",
+    "userCreated": "User created"
   },
   "affiliate": {
     "uid": "Exchange UID",

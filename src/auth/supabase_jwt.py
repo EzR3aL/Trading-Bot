@@ -42,6 +42,7 @@ class SupabaseClaims:
     sub: str  # Supabase user UUID
     email: str
     role: str  # "authenticated"
+    app_role: str  # "admin" | "user" from app_metadata
 
 
 def verify_supabase_token(token: str) -> SupabaseClaims | None:
@@ -84,4 +85,10 @@ def verify_supabase_token(token: str) -> SupabaseClaims | None:
         logger.warning("Supabase JWT has unexpected role: %s", role)
         return None
 
-    return SupabaseClaims(sub=sub, email=email, role=role)
+    # Extract app_metadata.role for admin sync (defaults to "user")
+    app_metadata = payload.get("app_metadata", {})
+    app_role = app_metadata.get("role", "user") if isinstance(app_metadata, dict) else "user"
+    if app_role not in ("admin", "user"):
+        app_role = "user"
+
+    return SupabaseClaims(sub=sub, email=email, role=role, app_role=app_role)

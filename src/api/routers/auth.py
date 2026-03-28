@@ -281,7 +281,8 @@ async def login(request: Request, response: Response, body: LoginRequest, db: As
     access_token = create_access_token(token_data)
     refresh_token = create_refresh_token(token_data)
 
-    # Track session in DB for explicit revocation
+    # Track last login + session in DB
+    user.last_login_at = datetime.now(timezone.utc)
     await _create_session(db, user.id, refresh_token, request)
     await db.commit()
 
