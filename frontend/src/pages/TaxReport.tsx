@@ -79,9 +79,9 @@ export default function TaxReport() {
 
   return (
     <div className="animate-in">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
+      <div className="flex items-center justify-between gap-3 mb-6">
         <h1 className="text-2xl font-bold text-white tracking-tight">{t('tax.title')}</h1>
-        <div className="flex gap-3">
+        <div className="flex items-center gap-2">
           <FilterDropdown
             value={String(year)}
             onChange={val => setYear(Number(val))}
@@ -92,11 +92,10 @@ export default function TaxReport() {
             onClick={downloadCsv}
             disabled={downloading}
             aria-label={t('tax.downloadCsv')}
-            className="btn-gradient flex items-center gap-2 disabled:opacity-50 whitespace-nowrap"
+            className="btn-gradient flex items-center gap-1.5 px-3 py-2 text-sm disabled:opacity-50 whitespace-nowrap"
           >
-            {downloading ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />}
-            <span className="hidden sm:inline">{t('tax.downloadCsv')}</span>
-            <span className="sm:hidden">CSV</span>
+            {downloading ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
+            CSV
           </button>
         </div>
       </div>

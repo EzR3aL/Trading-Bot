@@ -157,16 +157,16 @@ export default function AdminUsers() {
             >
               <div className="flex items-center gap-2 mb-1">
                 <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold flex-shrink-0 ${
-                  user.role === 'admin' ? 'bg-purple-900/40 text-purple-400' : 'bg-white/5 text-gray-500'
+                  user.role === 'admin' ? 'bg-purple-500/10 dark:bg-purple-900/40 text-purple-600 dark:text-purple-400' : 'bg-white/5 text-gray-500'
                 }`}>
                   {user.username.charAt(0).toUpperCase()}
                 </div>
                 <span className="text-sm font-medium text-white truncate">{user.username}</span>
                 <span className={`ml-auto text-[10px] px-1.5 py-0.5 rounded font-medium flex-shrink-0 ${
-                  user.role === 'admin' ? 'bg-purple-900/30 text-purple-400' : 'bg-white/5 text-gray-500'
+                  user.role === 'admin' ? 'bg-purple-500/10 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400' : 'bg-white/5 text-gray-500'
                 }`}>{user.role.charAt(0).toUpperCase() + user.role.slice(1)}</span>
                 <span className={`text-[10px] px-1.5 py-0.5 rounded flex-shrink-0 ${
-                  user.is_active ? 'bg-green-900/30 text-green-400' : 'bg-red-900/30 text-red-400'
+                  user.is_active ? 'bg-green-500/10 dark:bg-green-900/30 text-green-600 dark:text-green-400' : 'bg-red-500/10 dark:bg-red-900/30 text-red-600 dark:text-red-400'
                 }`}>{user.is_active ? t('admin.active') : t('admin.inactive')}</span>
               </div>
               {user.email && (
@@ -207,7 +207,7 @@ export default function AdminUsers() {
               <div className="flex gap-1.5 pt-1.5 border-t border-white/5">
                 <button onClick={() => toggleRole(user)} disabled={user.id === currentUser?.id}
                   className={`p-1 rounded transition-colors disabled:opacity-30 disabled:cursor-not-allowed ${
-                    user.role === 'admin' ? 'text-purple-400 hover:bg-purple-900/30' : 'text-blue-400 hover:bg-blue-900/30'
+                    user.role === 'admin' ? 'text-purple-600 dark:text-purple-400 hover:bg-purple-500/10 dark:hover:bg-purple-900/30' : 'text-blue-600 dark:text-blue-400 hover:bg-blue-500/10 dark:hover:bg-blue-900/30'
                   }`} title={user.id === currentUser?.id ? t('admin.cannotDemoteSelf') : (user.role === 'admin' ? t('admin.makeUser') : t('admin.makeAdmin'))}>
                   {user.role === 'admin' ? <ShieldOff size={14} /> : <Shield size={14} />}
                 </button>
@@ -235,13 +235,13 @@ export default function AdminUsers() {
               }`}
             >
               <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold flex-shrink-0 ${
-                user.role === 'admin' ? 'bg-purple-900/40 text-purple-400' : 'bg-white/5 text-gray-500'
+                user.role === 'admin' ? 'bg-purple-500/10 dark:bg-purple-900/40 text-purple-600 dark:text-purple-400' : 'bg-white/5 text-gray-500'
               }`}>
                 {user.username.charAt(0).toUpperCase()}
               </div>
               <span className="text-sm font-medium text-white whitespace-nowrap">{user.username}</span>
               <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
-                user.role === 'admin' ? 'bg-purple-900/30 text-purple-400' : 'bg-white/5 text-gray-500'
+                user.role === 'admin' ? 'bg-purple-500/10 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400' : 'bg-white/5 text-gray-500'
               }`}>
                 {user.role.charAt(0).toUpperCase() + user.role.slice(1)}
               </span>
@@ -264,7 +264,7 @@ export default function AdminUsers() {
                 user.auth_provider === 'supabase' ? 'bg-blue-500/10 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400' : 'bg-white/5 text-gray-500'
               }`}>{user.auth_provider || 'local'}</span>
               <span className={`text-[10px] px-1.5 py-0.5 rounded ${
-                user.is_active ? 'bg-green-900/30 text-green-400' : 'bg-red-900/30 text-red-400'
+                user.is_active ? 'bg-green-500/10 dark:bg-green-900/30 text-green-600 dark:text-green-400' : 'bg-red-500/10 dark:bg-red-900/30 text-red-600 dark:text-red-400'
               }`}>
                 {user.is_active ? t('admin.active') : t('admin.inactive')}
               </span>
@@ -275,8 +275,8 @@ export default function AdminUsers() {
                   disabled={user.id === currentUser?.id}
                   className={`p-1 rounded-md transition-colors disabled:opacity-30 disabled:cursor-not-allowed ${
                     user.role === 'admin'
-                      ? 'text-purple-400 hover:bg-purple-900/30'
-                      : 'text-blue-400 hover:bg-blue-900/30'
+                      ? 'text-purple-600 dark:text-purple-400 hover:bg-purple-500/10 dark:hover:bg-purple-900/30'
+                      : 'text-blue-600 dark:text-blue-400 hover:bg-blue-500/10 dark:hover:bg-blue-900/30'
                   }`}
                   title={user.id === currentUser?.id ? t('admin.cannotDemoteSelf') : (user.role === 'admin' ? t('admin.makeUser') : t('admin.makeAdmin'))}
                 >

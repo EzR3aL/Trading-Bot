@@ -1025,6 +1025,14 @@ html.light .border-white\/\[0\.08\] {
   border-color: #d1d5db;
 }
 
+html.light .border-white\/\[0\.04\] {
+  border-color: #e2e8f0;
+}
+
+html.light .border-white\/\[0\.06\] {
+  border-color: #e2e8f0;
+}
+
 html.light .border-gray-700 {
   border-color: #e2e8f0;
 }
