@@ -27,6 +27,7 @@ from src.api.routers import (  # noqa: E402
     admin_logs,
     affiliate,
     auth,
+    auth_bridge,
     bots,
     config,
     config_audit,
@@ -149,6 +150,10 @@ async def lifespan(app: FastAPI):
     # Restore bots that were running before shutdown
     await orchestrator.restore_on_startup()
 
+    # Start auth bridge code cleanup
+    from src.auth.auth_code import auth_code_store
+    auth_code_store.start_cleanup()
+
     # Start Prometheus bot-metrics collector
     from src.monitoring.collectors import collect_bot_metrics
     from src.monitoring.metrics import APP_INFO
@@ -161,6 +166,7 @@ async def lifespan(app: FastAPI):
 
     # Shutdown
     logger.info("Shutting down — graceful shutdown initiated...")
+    auth_code_store.stop_cleanup()
     collector_task.cancel()
 
     # Graceful bot shutdown: wait for in-flight trades, log open positions.
@@ -308,6 +314,7 @@ def create_app() -> FastAPI:
     app.include_router(metrics.router)
     app.include_router(status.router)
     app.include_router(auth.router)
+    app.include_router(auth_bridge.router)
     app.include_router(users.router)
     app.include_router(trades.router)
     app.include_router(statistics.router)

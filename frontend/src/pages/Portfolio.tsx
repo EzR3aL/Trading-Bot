@@ -21,6 +21,7 @@ import { useSizeUnitStore } from '../stores/sizeUnitStore'
 import useIsMobile from '../hooks/useIsMobile'
 import usePullToRefresh from '../hooks/usePullToRefresh'
 import PullToRefreshIndicator from '../components/ui/PullToRefreshIndicator'
+import GuidedTour, { TourHelpButton, type TourStep } from '../components/ui/GuidedTour'
 
 /* ── Constants ────────────────────────────────────────────── */
 
@@ -268,7 +269,9 @@ export default function Portfolio() {
           </h1>
           <p className="text-sm text-gray-400 mt-1">{t('portfolio.subtitle')}</p>
         </div>
-        <div className="flex items-center gap-1.5 bg-white/5 rounded-xl p-0.5 border border-white/5">
+        <div className="flex items-center gap-2">
+          <TourHelpButton tourId="portfolio" />
+          <div className="flex items-center gap-1.5 bg-white/5 rounded-xl p-0.5 border border-white/5">
           {PERIODS.map((p) => (
             <button
               key={p}
@@ -282,11 +285,12 @@ export default function Portfolio() {
               {t(`portfolio.days${p}` as any)}
             </button>
           ))}
+          </div>
         </div>
       </div>
 
       {/* Summary Hero */}
-      <div className="glass-card rounded-2xl p-6 mb-6">
+      <div className="glass-card rounded-2xl p-6 mb-6" data-tour="portfolio-summary">
         <div className="grid grid-cols-1 md:grid-cols-5 gap-6 items-center">
           {/* Total Balance */}
           <div className="md:col-span-2 text-center md:text-left">
@@ -387,7 +391,7 @@ export default function Portfolio() {
       )}
 
       {/* Charts Row: Daily PnL + Allocation Donut */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6" data-tour="portfolio-charts">
         {/* Stacked Area Chart */}
         <div className="lg:col-span-2 glass-card rounded-2xl p-5">
           <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-4">
@@ -508,7 +512,7 @@ export default function Portfolio() {
       </div>
 
       {/* Positions Table */}
-      <div className="glass-card rounded-2xl overflow-hidden min-w-0">
+      <div className="glass-card rounded-2xl overflow-hidden min-w-0" data-tour="portfolio-positions">
         <div className="p-5 border-b border-white/5 flex flex-wrap items-center justify-between gap-2">
           <h2 className="text-base font-semibold text-white flex items-center gap-2">
             <TrendingUp size={16} className="text-primary-400" />
@@ -667,6 +671,31 @@ export default function Portfolio() {
           </div>
         )}
       </div>
+
+      <GuidedTour tourId="portfolio" steps={portfolioTourSteps} />
     </div>
   )
 }
+
+/* ── Tour Steps ───────────────────────────────────────────── */
+
+const portfolioTourSteps: TourStep[] = [
+  {
+    target: '[data-tour="portfolio-summary"]',
+    titleKey: 'tour.portfolioSummaryTitle',
+    descriptionKey: 'tour.portfolioSummaryDesc',
+    position: 'bottom',
+  },
+  {
+    target: '[data-tour="portfolio-charts"]',
+    titleKey: 'tour.portfolioChartsTitle',
+    descriptionKey: 'tour.portfolioChartsDesc',
+    position: 'bottom',
+  },
+  {
+    target: '[data-tour="portfolio-positions"]',
+    titleKey: 'tour.portfolioPositionsTitle',
+    descriptionKey: 'tour.portfolioPositionsDesc',
+    position: 'top',
+  },
+]

@@ -930,7 +930,13 @@
     "settingsApiKeysTitle": "API-Schlüssel einrichten",
     "settingsApiKeysDesc": "Trage hier deine Exchange-API-Schlüssel ein. Jede Exchange hat einen eigenen Bereich mit Live- und Demo-Formularen.",
     "settingsTestConnTitle": "Verbindung testen",
-    "settingsTestConnDesc": "Klicke nach dem Speichern auf 'Verbindung testen', um zu prüfen, ob alles korrekt konfiguriert ist."
+    "settingsTestConnDesc": "Klicke nach dem Speichern auf 'Verbindung testen', um zu prüfen, ob alles korrekt konfiguriert ist.",
+    "portfolioSummaryTitle": "Portfolio-Übersicht",
+    "portfolioSummaryDesc": "Gesamtguthaben über alle Exchanges, Tages-PnL, Anzahl Trades, Gewinnrate und Gebühren auf einen Blick.",
+    "portfolioChartsTitle": "Charts & Allocation",
+    "portfolioChartsDesc": "Links der tägliche PnL-Verlauf pro Exchange als gestapeltes Flächendiagramm. Rechts die Verteilung deines Guthabens über alle Exchanges als Donut-Chart.",
+    "portfolioPositionsTitle": "Offene Positionen",
+    "portfolioPositionsDesc": "Alle aktuell offenen Positionen über alle Exchanges mit Symbol, Richtung, Größe, Einstiegs- und Marktpreis, unrealisiertem PnL und Trailing Stop."
   },
   "portfolio": {
     "title": "Portfolio",

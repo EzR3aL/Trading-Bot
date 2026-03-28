@@ -43,6 +43,9 @@ class User(Base):
     locked_until = Column(DateTime(timezone=True), nullable=True)
     is_deleted = Column(Boolean, default=False)
     deleted_at = Column(DateTime(timezone=True), nullable=True)
+    # Supabase Auth Bridge
+    supabase_user_id = Column(String(36), unique=True, nullable=True, index=True)
+    auth_provider = Column(String(20), nullable=False, default="local", server_default="local")  # local | supabase
     # Two-Factor Authentication (TOTP)
     totp_secret = Column(Text, nullable=True)  # Fernet-encrypted TOTP secret
     totp_enabled = Column(Boolean, default=False, server_default="false")

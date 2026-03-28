@@ -930,7 +930,13 @@
     "settingsApiKeysTitle": "API Key Setup",
     "settingsApiKeysDesc": "Enter your exchange API keys here. Each exchange has its own section with Live and Demo key forms.",
     "settingsTestConnTitle": "Test Connection",
-    "settingsTestConnDesc": "After saving your keys, click 'Test Connection' to verify everything is configured correctly."
+    "settingsTestConnDesc": "After saving your keys, click 'Test Connection' to verify everything is configured correctly.",
+    "portfolioSummaryTitle": "Portfolio Overview",
+    "portfolioSummaryDesc": "Total balance across all exchanges, daily PnL, number of trades, win rate and fees at a glance.",
+    "portfolioChartsTitle": "Charts & Allocation",
+    "portfolioChartsDesc": "On the left the daily PnL per exchange as stacked area chart. On the right the distribution of your balance across all exchanges as donut chart.",
+    "portfolioPositionsTitle": "Open Positions",
+    "portfolioPositionsDesc": "All currently open positions across all exchanges with symbol, direction, size, entry and market price, unrealized PnL and trailing stop."
   },
   "portfolio": {
     "title": "Portfolio",
