@@ -43,7 +43,7 @@ async def list_users(
         .where(BotConfig.user_id.in_(user_ids), BotConfig.is_enabled == True)  # noqa: E712
         .group_by(BotConfig.user_id)
     )
-    bots_map = dict(bot_result)
+    bots_map = {uid: cnt for uid, cnt in bot_result.all()}
 
     # Batch: total trades per user
     trade_result = await db.execute(
@@ -51,7 +51,7 @@ async def list_users(
         .where(TradeRecord.user_id.in_(user_ids))
         .group_by(TradeRecord.user_id)
     )
-    trades_map = dict(trade_result)
+    trades_map = {uid: cnt for uid, cnt in trade_result.all()}
 
     return [
         AdminUserResponse(
