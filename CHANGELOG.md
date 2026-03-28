@@ -20,8 +20,20 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 - **Einheitliche Zahlen-Schriftart**: `font-mono` von allen Trading-Tabellen entfernt (Portfolio, Dashboard, Bots, Trades). Alle Zahlen nutzen jetzt die gleiche Inter-Schrift mit `tabular-nums` fuer saubere Ausrichtung — konsistentes Erscheinungsbild ueber alle Seiten hinweg
 - **3-Punkte-Menu hinter Sidebar**: Dropdown-Menu bei Bot-Karten in der linken Spalte wurde von der Sidebar verdeckt. Dropdown oeffnet jetzt nach rechts statt nach links
 - **Live/Demo-Filter bei Positionen**: Portfolio-Seite filtert offene Positionen jetzt nach dem globalen Demo/Live-Modus. Im Live-Modus werden nur Live-Positionen angezeigt, nicht mehr alle
-- **Light-Mode Fixes**: Donut-Chart Text (Gesamt/Betrag) im Light-Mode sichtbar, Period-Buttons mit gruenem Hintergrund, Settings-Seite farbliche Felder (LIVE/DEMO/Success-Banner) Light-Mode-kompatibel, Asset-Name in Letzter Trade sichtbar, Tailwind `darkMode: 'class'` aktiviert
+- **Light-Mode umfassend ueberarbeitet**:
+  - Donut-Chart Text (Gesamt/Betrag) sichtbar gemacht
+  - Period-Buttons mit gruenem Hintergrund + Glow
+  - Settings-Seite farbliche Felder (LIVE/DEMO/Success-Banner) Light-Mode-kompatibel
+  - Asset-Name (ETHUSDT etc.) in Trade-Karten sichtbar — Tailwind `darkMode: 'class'` aktiviert
+  - Glass-Cards und alle Karten mit sichtbaren Raendern (`border-gray-200`, `shadow-sm`)
+  - Globale Border-Overrides fuer `border-white/5`, `border-white/10`, `border-white/[0.06]` verstaerkt
+  - Amber/Gelb-Texte (Warnungen, Testnet-Hinweise) auf dunkle Brauntoene umgestellt fuer Lesbarkeit
+  - Blaue Hint-Texte (`text-blue-300`) auf `#2563eb` umgestellt
+  - Admin User-Karten: Badges (Active/Inactive, Admin/User) mit `dark:` Prefix fuer beide Modi
+  - MobileCollapsibleCard mit solidem Rand im Light-Mode
+- **Tax Report CSV-Button**: Auf Mobile kompakter, immer horizontal neben dem Jahresdropdown
 - **Uebersetzung**: `bots.confidence` korrigiert zu `trades.confidence` (zeigte rohen Schluessel statt "Konfidenz")
+- **Admin API**: `BotConfig.is_active` zu `is_enabled` korrigiert, async SQLAlchemy Result-Handling gefixt
 
 ---
 
