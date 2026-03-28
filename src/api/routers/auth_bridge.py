@@ -30,7 +30,7 @@ from src.auth.jwt_handler import (
 from src.auth.password import hash_password
 from src.auth.supabase_jwt import verify_supabase_token
 from src.models.database import User
-from src.models.session import get_session as get_db
+from src.models.session import get_db
 
 logger = logging.getLogger(__name__)
 
