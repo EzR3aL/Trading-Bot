@@ -9,12 +9,25 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [4.6.4] - 2026-03-28
+
+### Sicherheit
+- **JWT-Validierung auf JWKS/ES256 umgestellt**: Supabase nutzt ES256 (nicht HS256). Neuer `PyJWKClient` holt und cached den Public Key automatisch von Supabase JWKS-Endpoint. HS256 als erlaubter Algorithmus entfernt (Algorithm-Confusion-Schutz)
+- **Issuer-Validierung**: JWT decode prueft jetzt `iss` Claim gegen konfigurierte `SUPABASE_PROJECT_URL` — Tokens von fremden Supabase-Projekten werden abgelehnt
+- **Email-Bestaetigungspruefung**: `email_confirmed_at` Claim wird validiert — unbestaetigte Email-Adressen koennen keine Bot-Accounts verknuepfen (Account-Takeover-Schutz)
+- **Rate-Limiting auf Auth Bridge**: `@limiter.limit("10/minute")` auf `/api/auth/bridge/generate` und `/exchange` — verhindert Brute-Force und DoS
+- **BEHIND_PROXY aktiviert**: Rate-Limiter erkennt jetzt echte Client-IPs hinter Nginx statt nur 127.0.0.1
+- **Nginx gehaertet**: TLS 1.0/1.1 deaktiviert (nur TLS 1.2+), `server_tokens off` aktiviert (Server-Version versteckt)
+
+---
+
 ## [4.6.3] - 2026-03-28
 
 ### Hinzugefuegt
 - **Hilfe-Tooltip auf Portfolio-Seite**: GuidedTour mit 3 Schritten (Übersicht, Charts & Allocation, Offene Positionen) analog zu Dashboard, Bots, Settings und Getting Started. Übersetzungen DE + EN.
 - **Integrations-Anleitung**: Vollständige Schritt-für-Schritt-Anleitung (DE/EN) für die Integration in trading-department.com unter `Anleitungen/integration-plan-step-by-step.md`.
 - **Auth Bridge Backend (Phase 1)**: Supabase-Auth-Integration mit One-Time-Code System. Neue Dateien: `src/auth/supabase_jwt.py`, `src/auth/auth_code.py`, `src/api/routers/auth_bridge.py`. Neue Endpoints: `POST /api/auth/bridge/generate` und `POST /api/auth/bridge/exchange`. Alembic Migration 012 fügt `supabase_user_id` und `auth_provider` zum User-Model hinzu. Auto-Provisioning erstellt Bot-Accounts für neue Supabase-User automatisch.
+- **Auth Bridge Bugfixes**: Edge Function `getSession()` durch direkten JWT ersetzt (funktioniert nicht serverseitig). JWKS/ES256 statt HS256 fuer Supabase JWT-Validierung.
 - **Nginx Subdomain Config**: `bots.trading-department.com` mit SSL (Let's Encrypt), Rate Limiting für Auth-Endpoints, alte duckdns-URL bleibt als Fallback.
 - **Auth Callback Frontend (Phase 2)**: Neue `/auth/callback` Seite im Bot-Frontend empfängt One-Time-Codes und tauscht sie gegen Bot-JWT. Neuer `exchangeAuthCode()` im authStore. i18n Keys DE/EN.
 
