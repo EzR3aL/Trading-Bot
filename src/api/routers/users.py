@@ -40,7 +40,7 @@ async def list_users(
     # Batch: active bots per user
     bot_result = await db.execute(
         select(BotConfig.user_id, func.count(BotConfig.id))
-        .where(BotConfig.user_id.in_(user_ids), BotConfig.is_active == True)  # noqa: E712
+        .where(BotConfig.user_id.in_(user_ids), BotConfig.is_enabled == True)  # noqa: E712
         .group_by(BotConfig.user_id)
     )
     bots_map = dict(bot_result)
