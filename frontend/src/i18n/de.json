@@ -12,6 +12,12 @@
     "logout": "Abmelden",
     "more": "Mehr"
   },
+  "authCallback": {
+    "noCode": "Kein Autorisierungscode vorhanden.",
+    "failed": "Anmeldung fehlgeschlagen. Der Code ist moeglicherweise abgelaufen.",
+    "backToMain": "Zurueck zu Trading Department",
+    "loading": "Anmeldung laeuft..."
+  },
   "login": {
     "title": "Anmeldung",
     "username": "Benutzername",

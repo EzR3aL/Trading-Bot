@@ -13,6 +13,7 @@ interface AuthState {
   isLoading: boolean
   login: (username: string, password: string) => Promise<LoginResult>
   verify2fa: (tempToken: string, code: string) => Promise<void>
+  exchangeAuthCode: (code: string) => Promise<void>
   logout: () => Promise<void>
   fetchUser: () => Promise<void>
 }
@@ -58,6 +59,19 @@ export const useAuthStore = create<AuthState>((set) => ({
       // Fetch user profile
       const userRes = await api.get('/auth/me')
       set({ user: userRes.data, isAuthenticated: true, isLoading: false })
+    } catch (error) {
+      set({ isLoading: false })
+      throw error
+    }
+  },
+
+  exchangeAuthCode: async (code: string) => {
+    set({ isLoading: true })
+    try {
+      const res = await api.post('/auth/bridge/exchange', { code })
+      const { access_token, user } = res.data
+      localStorage.setItem('access_token', access_token)
+      set({ user, isAuthenticated: true, isLoading: false })
     } catch (error) {
       set({ isLoading: false })
       throw error

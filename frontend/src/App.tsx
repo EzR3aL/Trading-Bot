@@ -6,6 +6,7 @@ import AppLayout from './components/layout/AppLayout'
 import ToastContainer from './components/ui/Toast'
 import ErrorBoundary from './components/ui/ErrorBoundary'
 import Login from './pages/Login'
+import AuthCallback from './pages/AuthCallback'
 
 // Lazy-loaded page components for code splitting
 const Dashboard = lazy(() => import('./pages/Dashboard'))
@@ -62,6 +63,7 @@ export default function App() {
       <ToastContainer />
       <Routes>
         <Route path="/login" element={<Login />} />
+        <Route path="/auth/callback" element={<AuthCallback />} />
         <Route
           path="/*"
           element={

@@ -12,6 +12,12 @@
     "logout": "Logout",
     "more": "More"
   },
+  "authCallback": {
+    "noCode": "No authorization code provided.",
+    "failed": "Authentication failed. The code may have expired.",
+    "backToMain": "Back to Trading Department",
+    "loading": "Signing you in..."
+  },
   "login": {
     "title": "Login",
     "username": "Username",

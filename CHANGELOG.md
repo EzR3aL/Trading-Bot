@@ -16,6 +16,7 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 - **Integrations-Anleitung**: Vollständige Schritt-für-Schritt-Anleitung (DE/EN) für die Integration in trading-department.com unter `Anleitungen/integration-plan-step-by-step.md`.
 - **Auth Bridge Backend (Phase 1)**: Supabase-Auth-Integration mit One-Time-Code System. Neue Dateien: `src/auth/supabase_jwt.py`, `src/auth/auth_code.py`, `src/api/routers/auth_bridge.py`. Neue Endpoints: `POST /api/auth/bridge/generate` und `POST /api/auth/bridge/exchange`. Alembic Migration 012 fügt `supabase_user_id` und `auth_provider` zum User-Model hinzu. Auto-Provisioning erstellt Bot-Accounts für neue Supabase-User automatisch.
 - **Nginx Subdomain Config**: `bots.trading-department.com` mit SSL (Let's Encrypt), Rate Limiting für Auth-Endpoints, alte duckdns-URL bleibt als Fallback.
+- **Auth Callback Frontend (Phase 2)**: Neue `/auth/callback` Seite im Bot-Frontend empfängt One-Time-Codes und tauscht sie gegen Bot-JWT. Neuer `exchangeAuthCode()` im authStore. i18n Keys DE/EN.
 
 ---
 
