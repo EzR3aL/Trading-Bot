@@ -28,9 +28,10 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 - **"Beide"-Modus im Bot Builder**: Option entfernt, Bots können nur noch "Demo" oder "Live" sein. Bestehende "both"-Bots funktionieren weiterhin im Backend
 
 ### Hinzugefuegt
+- **Manueller Trailing-ATR-Override**: Neues DB-Feld `trailing_atr_override` auf TradeRecord (Alembic Migration 015). User kann per Slider den ATR-Multiplikator anpassen. Backend berechnet trigger_price und callback_% aus echtem ATR automatisch. Position Monitor und Strategy should_exit nutzen den Override. UI zeigt Trailing-Stop mit Shield-Symbol wenn aktiv
 - **DB-Index auf `exit_time`**: Neuer Index `ix_trade_exit_time` für performante Abfragen nach Schließdatum (Alembic Migration 014)
 - **Integration-Test für NULL-exit_time-Fallback**: Prüft, dass geschlossene Trades ohne `exit_time` via COALESCE auf `entry_time` zurückfallen und in Charts/Statistiken erscheinen
-- **TP/SL nachträglich bearbeiten (Issue #120)**: Offene Positionen können jetzt per Zahnrad-Icon in Dashboard und Portfolio bearbeitet werden. Neuer Backend-Endpoint `PUT /api/trades/{id}/tp-sl` setzt TP/SL auf der Exchange und aktualisiert die DB. Frontend-Panel mit Preis/Prozent-Eingabe (bidirektional synchronisiert), ATR-Slider für Trailing Stop, Exchange-Hinweis (nativ vs. Bot-überwacht), Validierung (TP/SL-Richtung), und i18n DE/EN. Funktioniert auf allen Exchanges die `set_position_tpsl` unterstützen (Bitget, Hyperliquid, BingX, Weex, Bitunix)
+- **TP/SL + Trailing Stop nachträglich bearbeiten (Issue #120)**: Offene Positionen können jetzt per Zahnrad-Icon in Dashboard und Portfolio bearbeitet werden. Neuer Backend-Endpoint `PUT /api/trades/{id}/tp-sl` setzt TP/SL auf der Exchange und aktualisiert die DB. Frontend-Panel mit Preis/Prozent-Eingabe (bidirektional synchronisiert), ATR-Slider für Trailing Stop, Exchange-Hinweis (nativ vs. Bot-überwacht), Validierung (TP/SL-Richtung), und i18n DE/EN. Funktioniert auf allen Exchanges die `set_position_tpsl` unterstützen (Bitget, Hyperliquid, BingX, Weex, Bitunix)
 - **Edge Indicator Anleitung (PDF)**: Vollständige zweisprachige Dokumentation der Strategie — Signallogik, Konfidenz-Bewertung, Trailing Stop, Risikomanagement, Exchange-Besonderheiten, alle Parameter. Unter `Anleitungen/Edge_Indicator_Strategie.pdf`
 
 ## [4.6.5] - 2026-03-28

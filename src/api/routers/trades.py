@@ -39,7 +39,14 @@ async def _compute_trailing_stop(
         klines_cache: Optional pre-fetched klines keyed by symbol.
             When provided, avoids per-trade Binance API calls.
     """
-    if trade.status != "open" or strategy_type != "edge_indicator":
+    if trade.status != "open":
+        return {}
+
+    # Manual override takes precedence — works without a bot strategy
+    has_manual_override = trade.trailing_atr_override is not None
+    has_strategy = strategy_type == "edge_indicator"
+
+    if not has_manual_override and not has_strategy:
         return {}
 
     # Merge strategy defaults with custom params
@@ -50,7 +57,7 @@ async def _compute_trailing_stop(
         except (json.JSONDecodeError, TypeError):
             pass
 
-    if not params.get("trailing_stop_enabled", True):
+    if not has_manual_override and not params.get("trailing_stop_enabled", True):
         return {}
 
     highest_price = trade.highest_price
@@ -80,7 +87,8 @@ async def _compute_trailing_stop(
     atr_val = atr_series[-1] if atr_series else trade.entry_price * 0.015
 
     breakeven_atr = params.get("trailing_breakeven_atr", 1.5)
-    trail_atr = params.get("trailing_trail_atr", 2.5)
+    # Manual ATR override takes precedence over strategy default
+    trail_atr = trade.trailing_atr_override or params.get("trailing_trail_atr", 2.5)
     breakeven_threshold = atr_val * breakeven_atr
     trail_distance = atr_val * trail_atr
 
@@ -532,8 +540,7 @@ from pydantic import BaseModel as PydanticBaseModel
 
 
 class TrailingStopParams(PydanticBaseModel):
-    callback_pct: float
-    trigger_price: float
+    callback_pct: float  # ATR multiplier (e.g., 2.5 = 2.5x ATR)
 
 
 class UpdateTpSlRequest(PydanticBaseModel):
@@ -620,22 +627,41 @@ async def update_trade_tpsl(
                 size=trade.size,
             )
 
-        # Trailing Stop
+        # Trailing Stop — compute trigger_price and callback from ATR
         if body.trailing_stop is not None:
+            atr_mult = body.trailing_stop.callback_pct  # ATR multiplier from slider
+            try:
+                fetcher = MarketDataFetcher()
+                klines = await fetcher.get_binance_klines(trade.symbol, "1h", 30)
+                await fetcher.close()
+                atr_series = MarketDataFetcher.calculate_atr(klines, 14)
+                atr_val = atr_series[-1] if atr_series else trade.entry_price * 0.015
+            except Exception:
+                atr_val = trade.entry_price * 0.015
+
+            trail_distance = atr_val * atr_mult
+            callback_pct = (trail_distance / trade.entry_price) * 100
+            breakeven_atr = 1.5
+            trigger = (
+                trade.entry_price + atr_val * breakeven_atr
+                if trade.side == "long"
+                else trade.entry_price - atr_val * breakeven_atr
+            )
+
             result = await client.place_trailing_stop(
                 symbol=trade.symbol,
                 hold_side=trade.side,
                 size=trade.size,
-                callback_ratio=body.trailing_stop.callback_pct,
-                trigger_price=body.trailing_stop.trigger_price,
+                callback_ratio=round(callback_pct, 2),
+                trigger_price=round(trigger, 2),
                 margin_mode="cross",
             )
             if result is not None:
                 trailing_placed = True
             else:
-                logger.warning(
-                    "Trailing stop not supported by %s — will use software trailing for trade %s",
-                    trade.exchange, trade_id,
+                logger.info(
+                    "Native trailing not supported by %s — using software trailing for trade %s (ATR override=%sx)",
+                    trade.exchange, trade_id, atr_mult,
                 )
     except NotImplementedError:
         raise HTTPException(
@@ -653,6 +679,7 @@ async def update_trade_tpsl(
     trade.stop_loss = body.stop_loss
     if body.trailing_stop is not None:
         trade.native_trailing_stop = trailing_placed
+        trade.trailing_atr_override = body.trailing_stop.callback_pct
     await db.commit()
 
     logger.info(

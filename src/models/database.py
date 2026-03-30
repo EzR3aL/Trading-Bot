@@ -162,6 +162,7 @@ class TradeRecord(Base):
     metrics_snapshot = Column(Text, nullable=True)  # JSON string
     highest_price = Column(Float, nullable=True)  # Trailing stop: highest mark price since entry
     native_trailing_stop = Column(Boolean, default=False, nullable=False, server_default=text("false"))
+    trailing_atr_override = Column(Float, nullable=True)  # Manual ATR multiplier override (from edit panel)
     demo_mode = Column(Boolean, default=False, nullable=False, server_default=text("false"))
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())

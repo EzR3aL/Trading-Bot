@@ -557,9 +557,12 @@ class EdgeIndicatorStrategy(BaseStrategy):
                 current_price = closes[-1]
 
             # --- Layer 1: ATR Trailing Stop + Breakeven ---
-            if self._p.get("trailing_stop_enabled") and highest_price and entry_price:
+            trailing_atr_override = kwargs.get("trailing_atr_override")
+            trailing_enabled = self._p.get("trailing_stop_enabled") or trailing_atr_override is not None
+            if trailing_enabled and highest_price and entry_price:
                 trail_exit, trail_reason = self._check_trailing_stop(
                     side, entry_price, current_price, highest_price, klines,
+                    trail_atr_override=trailing_atr_override,
                 )
                 if trail_exit:
                     return True, trail_reason
@@ -628,13 +631,14 @@ class EdgeIndicatorStrategy(BaseStrategy):
         current_price: float,
         highest_price: float,
         klines: List[List],
+        trail_atr_override: float | None = None,
     ) -> Tuple[bool, str]:
         """Check ATR-based trailing stop with breakeven floor."""
         atr_series = MarketDataFetcher.calculate_atr(klines, self._p["atr_period"])
         atr_val = atr_series[-1] if atr_series else current_price * 0.015
 
         breakeven_atr = self._p.get("trailing_breakeven_atr", 1.5)
-        trail_atr = self._p.get("trailing_trail_atr", 2.5)
+        trail_atr = trail_atr_override or self._p.get("trailing_trail_atr", 2.5)
         trail_distance = atr_val * trail_atr
         breakeven_threshold = atr_val * breakeven_atr
 

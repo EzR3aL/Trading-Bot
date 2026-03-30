@@ -127,9 +127,12 @@ class PositionMonitorMixin:
             # (software trailing stop may trigger before exchange SL)
             has_exchange_tpsl = trade.take_profit is not None or trade.stop_loss is not None
             has_trailing = (
-                self._strategy
-                and hasattr(self._strategy, '_p')
-                and self._strategy._p.get("trailing_stop_enabled")
+                trade.trailing_atr_override is not None
+                or (
+                    self._strategy
+                    and hasattr(self._strategy, '_p')
+                    and self._strategy._p.get("trailing_stop_enabled")
+                )
             )
             if has_exchange_tpsl and not has_trailing:
                 logger.debug(
@@ -156,6 +159,7 @@ class PositionMonitorMixin:
                         current_price=current_price,
                         highest_price=trade.highest_price,
                         entry_time=trade.entry_time,
+                        trailing_atr_override=trade.trailing_atr_override,
                     )
 
                     if should_close:

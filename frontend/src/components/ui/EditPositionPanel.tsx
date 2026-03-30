@@ -35,7 +35,7 @@ interface EditPositionPanelProps {
   onSave: (data: {
     take_profit: number | null
     stop_loss: number | null
-    trailing_stop: { callback_pct: number; trigger_price: number } | null
+    trailing_stop: { callback_pct: number } | null
   }) => Promise<void>
 }
 
@@ -168,7 +168,6 @@ export default function EditPositionPanel({ position, onClose, onSave }: EditPos
       const sl = slPrice ? parseFloat(slPrice) : null
       const trailing = trailingEnabled ? {
         callback_pct: trailingAtr,
-        trigger_price: position.entry_price * (isLong ? 1.02 : 0.98),
       } : null
       await onSave({ take_profit: tp, stop_loss: sl, trailing_stop: trailing })
       onClose()
