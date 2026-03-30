@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, Fragment } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toBlob } from 'html-to-image'
 import api from '../api/client'
@@ -35,10 +35,12 @@ import {
   XCircle,
   Shield,
   ShieldCheck,
+  ChevronRight,
 } from 'lucide-react'
 import GuidedTour, { TourHelpButton, type TourStep } from '../components/ui/GuidedTour'
-import { formatDateTime, formatTime } from '../utils/dateUtils'
+import { formatDate, formatDateTime, formatTime } from '../utils/dateUtils'
 import MobileTradeCard from '../components/ui/MobileTradeCard'
+import SizeValue from '../components/ui/SizeValue'
 import useIsMobile from '../hooks/useIsMobile'
 import useHaptic from '../hooks/useHaptic'
 import useSwipeToClose from '../hooks/useSwipeToClose'
@@ -600,11 +602,138 @@ function BotTradeHistoryModal({ bot, onClose, t }: { bot: BotStatus; onClose: ()
               <div className="px-6 pt-3 pb-2">
                 <div className="text-xs text-gray-400 uppercase tracking-wider font-semibold">{t('bots.tradeHistory')}</div>
               </div>
-              <div className="px-3 pb-6 space-y-1.5">
-                {stats.recent_trades.map(trade => (
-                  <MobileTradeCard key={trade.id} trade={{ ...trade, bot_exchange: bot.exchange_type, entry_time: trade.entry_time || '' }} />
-                ))}
-              </div>
+              {isMobile ? (
+                <div className="px-3 pb-6 space-y-1.5">
+                  {stats.recent_trades.map(trade => (
+                    <MobileTradeCard key={trade.id} trade={{ ...trade, bot_exchange: bot.exchange_type, entry_time: trade.entry_time || '' }} />
+                  ))}
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="table-premium w-full">
+                    <thead>
+                      <tr>
+                        <th className="text-left">{t('trades.date')}</th>
+                        <th className="text-center hidden lg:table-cell">{t('trades.exchange')}</th>
+                        <th className="text-left">{t('trades.symbol')}</th>
+                        <th className="text-center">{t('trades.side')}</th>
+                        <th className="text-right hidden xl:table-cell">{t('trades.entryPrice')}</th>
+                        <th className="text-right hidden xl:table-cell">{t('trades.exitPrice')}</th>
+                        <th className="text-right">{t('trades.pnl')}</th>
+                        <th className="text-center hidden 2xl:table-cell">{t('trades.mode')}</th>
+                        <th className="text-center">{t('trades.status')}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {stats.recent_trades.map((trade) => (
+                        <Fragment key={trade.id}>
+                          <tr
+                            onClick={() => setSelectedTrade(selectedTrade?.id === trade.id ? null : trade)}
+                            className="cursor-pointer"
+                          >
+                            <td className="text-gray-300">
+                              <span className="inline-flex items-center">
+                                <ChevronRight size={14} className={`expand-chevron ${selectedTrade?.id === trade.id ? 'open' : ''}`} />
+                                <span title={formatTime(trade.entry_time)}>{formatDate(trade.entry_time)}</span>
+                              </span>
+                            </td>
+                            <td className="text-center hidden lg:table-cell">
+                              <span className="inline-flex justify-center">
+                                <ExchangeIcon exchange={bot.exchange_type} size={18} />
+                              </span>
+                            </td>
+                            <td className="text-white font-medium">{trade.symbol}</td>
+                            <td className="text-center">
+                              <span className={trade.side === 'long' ? 'text-profit' : 'text-loss'}>
+                                {trade.side === 'long' ? '+' : '-'} {trade.side.toUpperCase()}
+                              </span>
+                            </td>
+                            <td className="text-right text-gray-300 hidden xl:table-cell">${trade.entry_price.toLocaleString()}</td>
+                            <td className="text-right text-gray-300 hidden xl:table-cell">
+                              {trade.exit_price ? `$${trade.exit_price.toLocaleString()}` : '--'}
+                            </td>
+                            <td className="text-right">
+                              <PnlCell
+                                pnl={trade.pnl}
+                                fees={trade.fees ?? 0}
+                                fundingPaid={trade.funding_paid ?? 0}
+                                status={trade.status}
+                                className={trade.pnl >= 0 ? 'pnl-positive' : 'pnl-negative'}
+                              />
+                            </td>
+                            <td className="text-center hidden 2xl:table-cell">
+                              <span className={trade.demo_mode ? 'badge-demo' : 'badge-live'}>
+                                {trade.demo_mode ? t('common.demo') : t('common.live')}
+                              </span>
+                            </td>
+                            <td className="text-center">
+                              <span className={
+                                trade.status === 'open' ? 'badge-open' :
+                                trade.status === 'closed' ? 'badge-neutral' :
+                                'badge-demo'
+                              }>
+                                {t(`trades.${trade.status}`)}
+                              </span>
+                            </td>
+                          </tr>
+                          {selectedTrade?.id === trade.id && (
+                            <tr className="table-expand-row">
+                              <td colSpan={9} className="!p-0 !border-b-0">
+                                <dl className="table-expand-content">
+                                  <div>
+                                    <dt>ID</dt>
+                                    <dd>{trade.id}</dd>
+                                  </div>
+                                  <div className="xl:hidden">
+                                    <dt>{t('trades.entryPrice')}</dt>
+                                    <dd>${trade.entry_price.toLocaleString()}</dd>
+                                  </div>
+                                  <div className="xl:hidden">
+                                    <dt>{t('trades.exitPrice')}</dt>
+                                    <dd>{trade.exit_price ? `$${trade.exit_price.toLocaleString()}` : '--'}</dd>
+                                  </div>
+                                  <div>
+                                    <dt>{t('trades.size')}</dt>
+                                    <dd><SizeValue size={trade.size} price={trade.entry_price} symbol={trade.symbol} /></dd>
+                                  </div>
+                                  <div>
+                                    <dt>{t('trades.pnl')} %</dt>
+                                    <dd className={trade.pnl_percent >= 0 ? 'text-profit' : 'text-loss'}>
+                                      {trade.pnl_percent >= 0 ? '+' : ''}{trade.pnl_percent.toFixed(2)}%
+                                    </dd>
+                                  </div>
+                                  <div className="2xl:hidden">
+                                    <dt>{t('trades.mode')}</dt>
+                                    <dd>{trade.demo_mode ? t('common.demo') : t('common.live')}</dd>
+                                  </div>
+                                  {trade.exit_time && (
+                                    <div>
+                                      <dt>{t('trades.exitTime')}</dt>
+                                      <dd>{formatDate(trade.exit_time)} {formatTime(trade.exit_time)}</dd>
+                                    </div>
+                                  )}
+                                  {trade.exit_reason && (
+                                    <div>
+                                      <dt>{t('trades.exitReason')}</dt>
+                                      <dd><ExitReasonBadge reason={trade.exit_reason} /></dd>
+                                    </div>
+                                  )}
+                                  {trade.fees > 0 && (
+                                    <div>
+                                      <dt>{t('trades.fees')}</dt>
+                                      <dd>${trade.fees.toFixed(2)}</dd>
+                                    </div>
+                                  )}
+                                </dl>
+                              </td>
+                            </tr>
+                          )}
+                        </Fragment>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </>
           )}
         </div>

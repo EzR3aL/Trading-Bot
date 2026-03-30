@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo, useRef, useCallback } from 'react'
+import { useEffect, useState, useMemo, useRef, useCallback, Fragment } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   XAxis, YAxis, CartesianGrid, Tooltip,
@@ -17,7 +17,8 @@ import ExitReasonBadge from '../components/ui/ExitReasonBadge'
 import MobileTradeCard from '../components/ui/MobileTradeCard'
 import useIsMobile from '../hooks/useIsMobile'
 import useSwipeToClose from '../hooks/useSwipeToClose'
-import { Eye, EyeOff, ArrowUpRight, ArrowDownRight, Trophy, Target, LayoutGrid, BarChart3, FileText, X, Copy, ShieldCheck } from 'lucide-react'
+import { Eye, EyeOff, ArrowUpRight, ArrowDownRight, Trophy, Target, LayoutGrid, BarChart3, X, Copy, ShieldCheck, ChevronRight } from 'lucide-react'
+import SizeValue from '../components/ui/SizeValue'
 
 import { formatDate, formatDateTime, formatChartDate, formatTime, formatChartCurrency } from '../utils/dateUtils'
 
@@ -73,9 +74,9 @@ interface BotDetailStats {
   }
   daily_series: { date: string; pnl: number; cumulative_pnl: number; trades: number; wins: number; fees: number; funding: number }[]
   recent_trades: {
-    id: number; symbol: string; side: string; entry_price: number; exit_price: number | null
+    id: number; symbol: string; side: string; size?: number; entry_price: number; exit_price: number | null
     pnl: number; pnl_percent: number; confidence: number; reason: string; status: string
-    fees: number; funding_paid: number
+    fees: number; funding_paid: number; leverage?: number
     demo_mode: boolean; entry_time: string | null; exit_time: string | null; exit_reason: string | null
     trailing_stop_active?: boolean | null; trailing_stop_price?: number | null
     trailing_stop_distance?: number | null; trailing_stop_distance_pct?: number | null
@@ -832,7 +833,7 @@ export default function BotPerformance() {
                 </div>
               ) : (
                 <div className="overflow-x-auto rounded-xl border border-white/5">
-                  <table className="table-premium">
+                  <table className="table-premium w-full">
                     <thead>
                       <tr>
                         <th className="text-left">{t('trades.date')}</th>
@@ -840,20 +841,26 @@ export default function BotPerformance() {
                         <th className="text-left">{t('trades.symbol')}</th>
                         <th className="text-center">{t('trades.side')}</th>
                         <th className="text-right hidden xl:table-cell">{t('trades.entryPrice')}</th>
+                        <th className="text-right hidden xl:table-cell">{t('trades.exitPrice')}</th>
                         <th className="text-right">{t('trades.pnl')}</th>
                         <th className="text-center hidden 2xl:table-cell">{t('trades.mode')}</th>
                         <th className="text-center">{t('trades.status')}</th>
-                        <th className="text-left hidden 2xl:table-cell">{t('bots.reasoning')}</th>
-                        <th className="text-center">{t('bots.details')}</th>
                       </tr>
                     </thead>
                     <tbody>
                       {(() => {
                         const botExchange = compareData.find(b => b.bot_id === selectedBot)?.exchange_type || ''
                         return botDetail.recent_trades.map((trade) => (
-                          <tr key={trade.id}>
-                            <td className="text-gray-300 cursor-default" title={formatTime(trade.entry_time)}>
-                              {formatDate(trade.entry_time)}
+                          <Fragment key={trade.id}>
+                          <tr
+                            onClick={() => setSelectedTrade(selectedTrade?.id === trade.id ? null : trade)}
+                            className="cursor-pointer"
+                          >
+                            <td className="text-gray-300">
+                              <span className="inline-flex items-center">
+                                <ChevronRight size={14} className={`expand-chevron ${selectedTrade?.id === trade.id ? 'open' : ''}`} />
+                                <span title={formatTime(trade.entry_time)}>{formatDate(trade.entry_time)}</span>
+                              </span>
                             </td>
                             <td className="text-center hidden lg:table-cell">
                               <span className="inline-flex justify-center">
@@ -866,8 +873,9 @@ export default function BotPerformance() {
                                 {trade.side === 'long' ? '+' : '-'} {trade.side.toUpperCase()}
                               </span>
                             </td>
+                            <td className="text-right text-gray-300 hidden xl:table-cell">${trade.entry_price.toLocaleString()}</td>
                             <td className="text-right text-gray-300 hidden xl:table-cell">
-                              ${trade.entry_price.toLocaleString()}
+                              {trade.exit_price ? `$${trade.exit_price.toLocaleString()}` : '--'}
                             </td>
                             <td className="text-right">
                               <PnlCell
@@ -892,19 +900,66 @@ export default function BotPerformance() {
                                 {t(`trades.${trade.status}`)}
                               </span>
                             </td>
-                            <td className="text-sm text-gray-400 max-w-[280px] truncate hidden 2xl:table-cell" title={trade.reason}>
-                              {trade.reason || '--'}
-                            </td>
-                            <td className="text-center">
-                              <button
-                                onClick={() => setSelectedTrade(trade)}
-                                className="p-1.5 text-gray-400 hover:text-white transition-colors rounded-lg hover:bg-white/5"
-                                aria-label={t('bots.details')}
-                              >
-                                <FileText size={16} />
-                              </button>
-                            </td>
                           </tr>
+                          {selectedTrade?.id === trade.id && (
+                            <tr className="table-expand-row">
+                              <td colSpan={9} className="!p-0 !border-b-0">
+                                <dl className="table-expand-content">
+                                  <div>
+                                    <dt>ID</dt>
+                                    <dd>{trade.id}</dd>
+                                  </div>
+                                  <div className="xl:hidden">
+                                    <dt>{t('trades.entryPrice')}</dt>
+                                    <dd>${trade.entry_price.toLocaleString()}</dd>
+                                  </div>
+                                  <div className="xl:hidden">
+                                    <dt>{t('trades.exitPrice')}</dt>
+                                    <dd>{trade.exit_price ? `$${trade.exit_price.toLocaleString()}` : '--'}</dd>
+                                  </div>
+                                  <div>
+                                    <dt>{t('trades.size')}</dt>
+                                    <dd><SizeValue size={trade.size ?? 0} price={trade.entry_price} symbol={trade.symbol} /></dd>
+                                  </div>
+                                  <div>
+                                    <dt>{t('trades.pnl')} %</dt>
+                                    <dd className={trade.pnl_percent >= 0 ? 'text-profit' : 'text-loss'}>
+                                      {trade.pnl_percent >= 0 ? '+' : ''}{trade.pnl_percent.toFixed(2)}%
+                                    </dd>
+                                  </div>
+                                  <div className="2xl:hidden">
+                                    <dt>{t('trades.mode')}</dt>
+                                    <dd>{trade.demo_mode ? t('common.demo') : t('common.live')}</dd>
+                                  </div>
+                                  {trade.exit_time && (
+                                    <div>
+                                      <dt>{t('trades.exitTime')}</dt>
+                                      <dd>{formatDate(trade.exit_time)} {formatTime(trade.exit_time)}</dd>
+                                    </div>
+                                  )}
+                                  {trade.exit_reason && (
+                                    <div>
+                                      <dt>{t('trades.exitReason')}</dt>
+                                      <dd><ExitReasonBadge reason={trade.exit_reason} /></dd>
+                                    </div>
+                                  )}
+                                  {trade.fees > 0 && (
+                                    <div>
+                                      <dt>{t('trades.fees')}</dt>
+                                      <dd>${trade.fees.toFixed(2)}</dd>
+                                    </div>
+                                  )}
+                                  {trade.reason && (
+                                    <div className="col-span-2">
+                                      <dt>{t('bots.reasoning')}</dt>
+                                      <dd className="text-gray-400 text-xs">{trade.reason}</dd>
+                                    </div>
+                                  )}
+                                </dl>
+                              </td>
+                            </tr>
+                          )}
+                          </Fragment>
                         ))
                       })()}
                     </tbody>
