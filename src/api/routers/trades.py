@@ -654,8 +654,8 @@ async def update_trade_tpsl(
     trailing_placed = False
     fetcher = None
     try:
-        # TP/SL (set or remove)
-        if body.take_profit is not None or body.stop_loss is not None or body.remove_tp or body.remove_sl:
+        # TP/SL (set or remove) — only call exchange if at least one value is set
+        if effective_tp is not None or effective_sl is not None:
             await client.set_position_tpsl(
                 symbol=trade.symbol,
                 take_profit=effective_tp,
