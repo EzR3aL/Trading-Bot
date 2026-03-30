@@ -30,6 +30,7 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 ### Hinzugefuegt
 - **DB-Index auf `exit_time`**: Neuer Index `ix_trade_exit_time` für performante Abfragen nach Schließdatum (Alembic Migration 014)
 - **Integration-Test für NULL-exit_time-Fallback**: Prüft, dass geschlossene Trades ohne `exit_time` via COALESCE auf `entry_time` zurückfallen und in Charts/Statistiken erscheinen
+- **Edge Indicator Anleitung (PDF)**: Vollständige zweisprachige Dokumentation der Strategie — Signallogik, Konfidenz-Bewertung, Trailing Stop, Risikomanagement, Exchange-Besonderheiten, alle Parameter. Unter `Anleitungen/Edge_Indicator_Strategie.pdf`
 
 ## [4.6.5] - 2026-03-28
 
