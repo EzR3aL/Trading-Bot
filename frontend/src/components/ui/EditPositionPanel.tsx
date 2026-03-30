@@ -64,6 +64,7 @@ export default function EditPositionPanel({ position, onClose, onSave }: EditPos
   const isMobile = useIsMobile()
   const swipe = useSwipeToClose({ onClose, enabled: isMobile })
   const isLong = position.side.toLowerCase() === 'long'
+  const exchangeName = position.exchange.charAt(0).toUpperCase() + position.exchange.slice(1)
   const hasNativeTrailing = TRAILING_EXCHANGES.includes(position.exchange.toLowerCase())
 
   /* ── State ── */
@@ -221,7 +222,7 @@ export default function EditPositionPanel({ position, onClose, onSave }: EditPos
                 )}
               </div>
               <span className="text-xs text-gray-500">
-                {position.bot_name && `${position.bot_name} · `}{position.leverage}x · {position.exchange}
+                {position.bot_name && `${position.bot_name} · `}{position.leverage}x · {exchangeName}
               </span>
             </div>
           </div>
@@ -380,30 +381,30 @@ export default function EditPositionPanel({ position, onClose, onSave }: EditPos
                 </div>
 
                 {/* Recommendation hint (placeholder) */}
-                <div className="bg-blue-500/[0.06] border border-blue-500/15 rounded-lg p-3 flex items-start gap-2.5">
-                  <Info size={14} className="text-blue-400 shrink-0 mt-0.5" />
-                  <div className="text-[11px] text-blue-300/80 leading-relaxed">
+                <div className="bg-blue-500/[0.06] border border-blue-500/15 rounded-lg px-3 py-2 flex items-start gap-2">
+                  <Info size={12} className="text-blue-400 shrink-0 mt-0.5" />
+                  <span className="text-xs text-blue-300/80">
                     {t(
                       'editPosition.trailingHint',
                       'Die Empfehlung basiert auf deinen bisherigen Trades und wird berechnet sobald genug Daten vorliegen (min. 10 Trades).'
                     )}
-                  </div>
+                  </span>
                 </div>
 
                 {/* Exchange type indicator */}
-                <div className="flex items-center gap-2 text-[11px]">
+                <div className="flex items-center gap-2 text-xs">
                   {hasNativeTrailing ? (
                     <>
-                      <Zap size={12} className="text-amber-400" />
+                      <Zap size={12} className="text-amber-400 shrink-0" />
                       <span className="text-gray-400">
-                        Exchange-nativ ({position.exchange}) — {t('editPosition.nativeHint', 'funktioniert auch wenn der Bot offline ist')}
+                        Exchange-nativ ({exchangeName}) — {t('editPosition.nativeHint', 'funktioniert auch wenn der Bot offline ist')}
                       </span>
                     </>
                   ) : (
                     <>
-                      <Bot size={12} className="text-blue-400" />
+                      <Bot size={12} className="text-blue-400 shrink-0" />
                       <span className="text-gray-400">
-                        Bot-{'\u00FC'}berwacht (Software) — {t('editPosition.softwareHint', 'Bot muss online sein')}
+                        Bot-überwacht (Software) — {t('editPosition.softwareHint', 'Bot muss online sein')}
                       </span>
                     </>
                   )}
@@ -414,9 +415,9 @@ export default function EditPositionPanel({ position, onClose, onSave }: EditPos
 
           {/* ── Validation errors ── */}
           {validation.length > 0 && (
-            <div className="bg-red-500/[0.08] border border-red-500/20 rounded-lg p-3 space-y-1">
+            <div className="bg-red-500/[0.08] border border-red-500/20 rounded-lg px-3 py-2 space-y-1">
               {validation.map((msg, i) => (
-                <div key={i} className="flex items-center gap-2 text-[11px] text-red-400">
+                <div key={i} className="flex items-center gap-2 text-xs text-red-400">
                   <AlertTriangle size={12} className="shrink-0" />
                   <span>{msg}</span>
                 </div>
@@ -426,15 +427,12 @@ export default function EditPositionPanel({ position, onClose, onSave }: EditPos
 
           {/* ── Info notice ── */}
           {(tpPrice || slPrice) && !trailingEnabled && (
-            <div className="bg-amber-500/[0.06] border border-amber-500/15 rounded-lg p-3 flex items-start gap-2.5">
-              <AlertTriangle size={14} className="text-amber-400 shrink-0 mt-0.5" />
-              <div className="text-[11px] text-amber-300/80 leading-relaxed">
-                {t(
-                  'editPosition.strategyExitNote',
-                  'Hinweis: Wenn TP/SL gesetzt ist, wird der Strategie-Exit deaktiviert. Die Exchange-Orders haben Vorrang.'
-                )}
-              </div>
-            </div>
+            <p className="text-[11px] text-gray-500 leading-relaxed">
+              {t(
+                'editPosition.strategyExitNote',
+                'Hinweis: Wenn TP/SL gesetzt ist, wird der Strategie-Exit deaktiviert. Die Exchange-Orders haben Vorrang.'
+              )}
+            </p>
           )}
 
           {/* ── Error ── */}
