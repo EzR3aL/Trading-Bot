@@ -51,6 +51,15 @@ function MobilePositionCardInner({ pos }: { pos: Position }) {
       {pos.trailing_stop_active && (
         <ShieldCheck size={10} className="text-emerald-400" />
       )}
+      {pos.trade_id && (
+        <button
+          onClick={(e) => { e.stopPropagation(); setEditOpen(true) }}
+          className="ml-auto p-1 text-gray-500 hover:text-white transition-colors rounded shrink-0"
+          title={t('editPosition.title')}
+        >
+          <Settings size={13} />
+        </button>
+      )}
     </>
   )
 
@@ -112,19 +121,7 @@ function MobilePositionCardInner({ pos }: { pos: Position }) {
 
   return (
     <>
-      <MobileCollapsibleCard
-        header={header}
-        summary={summary}
-        action={pos.trade_id ? (
-          <button
-            onClick={(e) => { e.stopPropagation(); setEditOpen(true) }}
-            className="p-1 text-gray-500 hover:text-white transition-colors rounded"
-            title={t('editPosition.title')}
-          >
-            <Settings size={13} />
-          </button>
-        ) : undefined}
-      >
+      <MobileCollapsibleCard header={header} summary={summary}>
         <DetailGrid items={details} />
       </MobileCollapsibleCard>
       {editOpen && pos.trade_id && (
