@@ -92,11 +92,7 @@ function formatPnlPercent(value: number): string {
   return `${value >= 0 ? '+' : ''}${value.toFixed(1)}%`
 }
 
-function confidenceColor(value: number): string {
-  if (value >= 75) return 'text-emerald-400'
-  if (value >= 50) return 'text-amber-400'
-  return 'text-red-400'
-}
+
 
 /* ── Sparkline (SVG) ─────────────────────────────────────── */
 
@@ -749,10 +745,6 @@ export default function BotPerformance() {
                             {latestClosed.exit_price ? `$${latestClosed.exit_price.toLocaleString()}` : '--'}
                           </div>
                         </div>
-                        <div>
-                          <div className="text-xs text-gray-400 uppercase tracking-wider mb-0.5">{t('bots.confidence')}</div>
-                          <div className={`text-lg font-bold ${confidenceColor(latestClosed.confidence)}`}>{latestClosed.confidence}%</div>
-                        </div>
                       </div>
                       {affiliateLink && (
                         <div className="mt-3 pt-2 border-t border-white/5 flex items-center justify-between">
@@ -832,7 +824,6 @@ export default function BotPerformance() {
                           exit_reason: trade.exit_reason,
                         }}
                         extraDetails={[
-                          ...(trade.confidence != null ? [{ label: t('bots.confidence'), value: `${trade.confidence}%` }] : []),
                           ...(trade.reason ? [{ label: t('bots.reasoning'), value: trade.reason }] : []),
                         ]}
                       />
@@ -852,7 +843,6 @@ export default function BotPerformance() {
                         <th className="text-right">{t('trades.pnl')}</th>
                         <th className="text-center hidden 2xl:table-cell">{t('trades.mode')}</th>
                         <th className="text-center">{t('trades.status')}</th>
-                        <th className="text-center hidden xl:table-cell">{t('bots.confidence')}</th>
                         <th className="text-left hidden 2xl:table-cell">{t('bots.reasoning')}</th>
                         <th className="text-center">{t('bots.details')}</th>
                       </tr>
@@ -902,7 +892,6 @@ export default function BotPerformance() {
                                 {t(`trades.${trade.status}`)}
                               </span>
                             </td>
-                            <td className={`text-center text-sm font-medium hidden xl:table-cell ${confidenceColor(trade.confidence)}`}>{trade.confidence}%</td>
                             <td className="text-sm text-gray-400 max-w-[280px] truncate hidden 2xl:table-cell" title={trade.reason}>
                               {trade.reason || '--'}
                             </td>
@@ -1026,11 +1015,6 @@ export default function BotPerformance() {
                   </span>
                 </div>
               )}
-
-              <div className="flex items-center justify-between mb-5 bg-white/[0.03] rounded-xl p-4 border border-white/5">
-                <span className="text-sm text-gray-400">{t('bots.confidence')}</span>
-                <span className={`font-bold text-lg ${confidenceColor(selectedTrade.confidence)}`}>{selectedTrade.confidence}%</span>
-              </div>
 
               {selectedTrade.reason && (
                 <div className="mb-5">

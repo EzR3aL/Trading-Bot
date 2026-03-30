@@ -536,16 +536,25 @@ async def get_trade(
 # Update TP/SL on an open position
 # ---------------------------------------------------------------------------
 
-from pydantic import BaseModel as PydanticBaseModel
+from pydantic import BaseModel as PydanticBaseModel, field_validator
 
 
 class TrailingStopParams(PydanticBaseModel):
     callback_pct: float  # ATR multiplier (e.g., 2.5 = 2.5x ATR)
 
+    @field_validator("callback_pct")
+    @classmethod
+    def validate_atr_range(cls, v: float) -> float:
+        if v < 1.0 or v > 5.0:
+            raise ValueError("ATR multiplier must be between 1.0 and 5.0")
+        return v
+
 
 class UpdateTpSlRequest(PydanticBaseModel):
     take_profit: Optional[float] = None
     stop_loss: Optional[float] = None
+    remove_tp: bool = False
+    remove_sl: bool = False
     trailing_stop: Optional[TrailingStopParams] = None
 
 
@@ -614,26 +623,40 @@ async def update_trade_tpsl(
         demo_mode=trade.demo_mode,
     )
 
+    # Resolve margin_mode from bot config
+    margin_mode = "cross"
+    if trade.bot_config_id:
+        bot_result = await db.execute(
+            select(BotConfig.margin_mode).where(BotConfig.id == trade.bot_config_id)
+        )
+        bot_margin = bot_result.scalar_one_or_none()
+        if bot_margin:
+            margin_mode = bot_margin
+
+    # Resolve effective TP/SL (handle remove flags)
+    effective_tp = None if body.remove_tp else (body.take_profit or trade.take_profit)
+    effective_sl = None if body.remove_sl else (body.stop_loss or trade.stop_loss)
+
     # Set TP/SL on exchange
     trailing_placed = False
+    fetcher = None
     try:
-        # TP/SL
-        if body.take_profit is not None or body.stop_loss is not None:
+        # TP/SL (set or remove)
+        if body.take_profit is not None or body.stop_loss is not None or body.remove_tp or body.remove_sl:
             await client.set_position_tpsl(
                 symbol=trade.symbol,
-                take_profit=body.take_profit,
-                stop_loss=body.stop_loss,
+                take_profit=effective_tp,
+                stop_loss=effective_sl,
                 side=trade.side,
                 size=trade.size,
             )
 
         # Trailing Stop — compute trigger_price and callback from ATR
         if body.trailing_stop is not None:
-            atr_mult = body.trailing_stop.callback_pct  # ATR multiplier from slider
+            atr_mult = body.trailing_stop.callback_pct
             try:
                 fetcher = MarketDataFetcher()
                 klines = await fetcher.get_binance_klines(trade.symbol, "1h", 30)
-                await fetcher.close()
                 atr_series = MarketDataFetcher.calculate_atr(klines, 14)
                 atr_val = atr_series[-1] if atr_series else trade.entry_price * 0.015
             except Exception:
@@ -654,7 +677,7 @@ async def update_trade_tpsl(
                 size=trade.size,
                 callback_ratio=round(callback_pct, 2),
                 trigger_price=round(trigger, 2),
-                margin_mode="cross",
+                margin_mode=margin_mode,
             )
             if result is not None:
                 trailing_placed = True
@@ -673,10 +696,12 @@ async def update_trade_tpsl(
         raise HTTPException(status_code=502, detail=f"Exchange error: {str(e)}")
     finally:
         await client.close()
+        if fetcher:
+            await fetcher.close()
 
     # Update DB
-    trade.take_profit = body.take_profit
-    trade.stop_loss = body.stop_loss
+    trade.take_profit = effective_tp
+    trade.stop_loss = effective_sl
     if body.trailing_stop is not None:
         trade.native_trailing_stop = trailing_placed
         trade.trailing_atr_override = body.trailing_stop.callback_pct
@@ -684,7 +709,7 @@ async def update_trade_tpsl(
 
     logger.info(
         "TP/SL updated for trade %s: TP=%s, SL=%s, trailing=%s (native=%s)",
-        trade_id, body.take_profit, body.stop_loss,
+        trade_id, effective_tp, effective_sl,
         body.trailing_stop is not None, trailing_placed,
     )
     return {

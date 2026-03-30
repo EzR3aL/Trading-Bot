@@ -156,12 +156,6 @@ function formatPnlPercent(value: number): string {
   return `${prefix}${value.toFixed(2)}%`
 }
 
-function confidenceColor(value: number): string {
-  if (value >= 75) return 'text-emerald-400'
-  if (value >= 50) return 'text-amber-400'
-  return 'text-red-400'
-}
-
 /* ── Schedule Dots Helper ───────────────────────────────── */
 
 function getScheduleHoursUtc(scheduleType?: string | null, scheduleConfig?: { interval_minutes?: number; hours?: number[] } | null): number[] | null {
@@ -285,12 +279,6 @@ function TradeDetailModal({ trade, onClose, t, affiliateLink }: { trade: BotTrad
           </div>
         )}
 
-        {/* Confidence */}
-        <div className="flex items-center justify-between mb-5 bg-white/[0.03] rounded-xl p-4 border border-white/5">
-          <span className="text-sm text-gray-400">{t('bots.confidence')}</span>
-          <span className={`font-bold text-lg ${confidenceColor(trade.confidence)}`}>{trade.confidence}%</span>
-        </div>
-
         {/* Reasoning */}
         {trade.reason && (
           <div className="mb-5">
@@ -341,10 +329,6 @@ function TradeDetailModal({ trade, onClose, t, affiliateLink }: { trade: BotTrad
               <div className="text-xs text-gray-400 mb-1.5">{t('bots.exitPrice')}</div>
               <div className="text-white font-semibold text-lg">{trade.exit_price ? `$${trade.exit_price.toLocaleString()}` : '--'}</div>
             </div>
-          </div>
-          <div className="flex items-center justify-between mb-5 bg-white/[0.03] rounded-xl p-4 border border-white/5">
-            <span className="text-sm text-gray-400">{t('bots.confidence')}</span>
-            <span className={`font-bold text-lg ${confidenceColor(trade.confidence)}`}>{trade.confidence}%</span>
           </div>
           {trade.reason && (
             <div className="mb-5">
@@ -590,10 +574,6 @@ function BotTradeHistoryModal({ bot, onClose, t }: { bot: BotStatus; onClose: ()
                           <div className="text-xs text-gray-400 mb-1.5">{t('bots.exitPrice')}</div>
                           <div className="text-white font-semibold text-lg">{latestClosed.exit_price ? `$${latestClosed.exit_price.toLocaleString()}` : '--'}</div>
                         </div>
-                      </div>
-                      <div className="flex items-center justify-between mb-5 bg-white/[0.03] rounded-xl p-4 border border-white/5">
-                        <span className="text-sm text-gray-400">{t('bots.confidence')}</span>
-                        <span className={`font-bold text-lg ${confidenceColor(latestClosed.confidence)}`}>{latestClosed.confidence}%</span>
                       </div>
                       {latestClosed.reason && (
                         <div className="mb-5">
