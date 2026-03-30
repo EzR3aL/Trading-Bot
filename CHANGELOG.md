@@ -17,6 +17,13 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 - **"Bots.confidence" Übersetzung fehlte**: Der Schlüssel `bots.confidence` war in den Sprachdateien nicht vorhanden und wurde als roher Key angezeigt. Übersetzung ergänzt: "Konfidenz" (DE) / "Confidence" (EN)
 - **CSV-Test für leeres Jahr**: Test prüfte auf englischen Text ("Trade Count"), aber CSV wird standardmäßig auf Deutsch generiert ("Anzahl Trades")
 - **"Trades.confidence" in Mobile-Karte**: MobileTradeCard nutzte `trades.confidence` statt `bots.confidence` — zeigt jetzt korrekt "Konfidenz" / "Confidence"
+- **Demo-Trade unter LIVE angezeigt**: Dashboard filterte offene Positionen nicht nach Demo/Live-Modus. Demo-Trades erschienen unter "LIVE". Frontend-Filter hinzugefügt (Portfolio hatte den Filter bereits)
+- **TP/SL sendet nur geänderte Werte an Exchange**: Beim Setzen von nur TP wurde der alte SL-Wert aus der DB mitgeschickt, was auf Bitget einen ungewollten SL erzeugte. Jetzt werden nur explizit vom User geänderte Werte an die Exchange gesendet
+- **Circuit Breaker durch leeren TP/SL-Call**: Wenn beide Werte null waren, wurde trotzdem die Exchange-API aufgerufen → Bitget-Fehler → Circuit Breaker offen → alle Bitget-Daten weg. Jetzt wird die Exchange nur aufgerufen wenn mindestens ein Wert gesetzt ist
+- **Security-Hardening TP/SL-Endpoint**: Row-Level-Lock (with_for_update), positive Wert-Validierung, sanitized Error-Response, extra="forbid" auf Request-Model, contradictory Flags abgelehnt
+- **Trailing Stop Override löschen**: Wenn Trailing deaktiviert wird, wird trailing_atr_override in DB auf NULL gesetzt
+- **Bot-Lösch-Dialog übersetzt**: "Delete Bot" / "Are you sure" jetzt auf Deutsch und Englisch korrekt
+- **Sentiment Surfer Strategie entfernt**: Komplett gelöscht aus Backend, Frontend, Tests, Docs (1.987 Zeilen)
 
 ### Geaendert
 - **Bot Trade-Historie: Einheitliche Card-Ansicht**: Desktop-Tabelle durch aufklappbare Trade-Cards ersetzt (gleiche Komponente wie mobil). Zeigt Einstieg, Ausstieg, PNL%, Hebel, Gebühren, Konfidenz und Exit-Grund. Kein horizontales Scrollen mehr
