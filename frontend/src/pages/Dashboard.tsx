@@ -247,7 +247,11 @@ export default function Dashboard() {
       )}
 
       {/* Recent trades */}
-      <DashboardOpenPositions positions={positions} loading={loadingPositions} onEditPosition={setEditingPos} />
+      <DashboardOpenPositions
+        positions={demoFilter === 'all' ? positions : positions.filter(p => demoFilter === 'demo' ? p.demo_mode : !p.demo_mode)}
+        loading={loadingPositions}
+        onEditPosition={setEditingPos}
+      />
 
       {/* Guided Tour */}
       <GuidedTour tourId="dashboard" steps={dashboardTourSteps} />
