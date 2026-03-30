@@ -1,4 +1,5 @@
 import { memo } from 'react'
+import { Copy } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { ExchangeIcon } from './ExchangeLogo'
 import ExitReasonBadge from './ExitReasonBadge'
@@ -31,6 +32,7 @@ interface MobileTradeCardProps {
     exit_reason?: string | null
   }
   extraDetails?: { label: string; value: string | React.ReactNode }[]
+  onShare?: () => void
 }
 
 function formatPnl(v: number | null | undefined): string {
@@ -39,7 +41,7 @@ function formatPnl(v: number | null | undefined): string {
   return `${prefix}$${v.toFixed(2)}`
 }
 
-function MobileTradeCardInner({ trade, extraDetails }: MobileTradeCardProps) {
+function MobileTradeCardInner({ trade, extraDetails, onShare }: MobileTradeCardProps) {
   const { t } = useTranslation()
 
   const isLong = trade.side === 'long'
@@ -119,6 +121,15 @@ function MobileTradeCardInner({ trade, extraDetails }: MobileTradeCardProps) {
   return (
     <MobileCollapsibleCard header={header} summary={summary}>
       <DetailGrid items={details} />
+      {onShare && (
+        <button
+          onClick={onShare}
+          className="mt-2 flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg text-gray-400 hover:text-white bg-white/5 hover:bg-white/10 border border-white/5 transition-all"
+        >
+          <Copy size={12} />
+          {t('bots.copyImage')}
+        </button>
+      )}
     </MobileCollapsibleCard>
   )
 }

@@ -4,6 +4,7 @@
  * Backend integration pending (Issue #120).
  */
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { X, Target, ShieldAlert, TrendingUp, AlertTriangle, Info, Zap, Bot } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { ExchangeIcon } from './ExchangeLogo'
@@ -189,7 +190,7 @@ export default function EditPositionPanel({ position, onClose, onSave }: EditPos
   const mobilePanel = 'fixed bottom-0 left-0 right-0 z-[100] bg-[#0f1420] border-t border-white/10 rounded-t-2xl max-h-[80vh] flex flex-col'
   const desktopPanel = 'bg-[#0b0f19] rounded-2xl max-w-lg w-full mx-4 max-h-[90vh] flex flex-col border border-white/10 shadow-2xl overflow-hidden'
 
-  return (
+  return createPortal(
     <>
       {/* ── Backdrop ── */}
       <div
@@ -228,7 +229,8 @@ export default function EditPositionPanel({ position, onClose, onSave }: EditPos
           <div className="h-[env(safe-area-inset-bottom,0px)]" />
         </div>
       )}
-    </>
+    </>,
+    document.body,
   )
 
   function renderContent() {
