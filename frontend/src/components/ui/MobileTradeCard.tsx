@@ -1,5 +1,5 @@
 import { memo } from 'react'
-import { Copy } from 'lucide-react'
+import { Share } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { ExchangeIcon } from './ExchangeLogo'
 import ExitReasonBadge from './ExitReasonBadge'
@@ -124,10 +124,10 @@ function MobileTradeCardInner({ trade, extraDetails, onShare }: MobileTradeCardP
       {onShare && (
         <button
           onClick={onShare}
-          className="mt-2 flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg text-gray-400 hover:text-white bg-white/5 hover:bg-white/10 border border-white/5 transition-all"
+          className="mt-2 p-2 rounded-lg text-gray-400 hover:text-white bg-white/5 hover:bg-white/10 border border-white/5 transition-all"
+          title={t('bots.copyImage')}
         >
-          <Copy size={12} />
-          {t('bots.copyImage')}
+          <Share size={14} />
         </button>
       )}
     </MobileCollapsibleCard>
