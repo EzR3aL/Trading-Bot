@@ -182,7 +182,7 @@ export default function EditPositionPanel({ position, onClose, onSave }: EditPos
     ? isLong
     : !isLong
 
-  const mobilePanel = 'fixed bottom-0 left-0 right-0 z-[100] bg-[#0f1420] border-t border-white/10 rounded-t-2xl max-h-[85vh] flex flex-col overflow-hidden'
+  const mobilePanel = 'fixed bottom-0 left-0 right-0 z-[100] bg-[#0f1420] border-t border-white/10 rounded-t-2xl max-h-[80vh] flex flex-col'
   const desktopPanel = 'bg-[#0b0f19] rounded-2xl max-w-lg w-full mx-4 max-h-[90vh] flex flex-col border border-white/10 shadow-2xl overflow-hidden'
 
   return (
@@ -217,7 +217,9 @@ export default function EditPositionPanel({ position, onClose, onSave }: EditPos
           <div className="flex justify-center pt-3 pb-1 shrink-0">
             <div className="w-10 h-1 rounded-full bg-white/20" />
           </div>
-          {renderContent()}
+          <div className="flex-1 overflow-y-auto overscroll-contain">
+            {renderContent()}
+          </div>
           {/* Safe area spacer */}
           <div className="h-[env(safe-area-inset-bottom,0px)]" />
         </div>
