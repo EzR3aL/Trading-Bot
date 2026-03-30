@@ -7,12 +7,13 @@ import PnlChart from '../components/dashboard/PnlChart'
 import WinLossChart from '../components/dashboard/WinLossChart'
 import RevenueChart from '../components/dashboard/RevenueChart'
 import { DashboardSkeleton } from '../components/ui/Skeleton'
-import { ArrowUpRight, ArrowDownRight, TrendingUp, ChevronRight, ChevronUp, ChevronDown, ShieldCheck } from 'lucide-react'
+import { ArrowUpRight, ArrowDownRight, TrendingUp, ChevronRight, ChevronUp, ChevronDown, ShieldCheck, Settings } from 'lucide-react'
 import { ExchangeIcon } from '../components/ui/ExchangeLogo'
 import SizeValue from '../components/ui/SizeValue'
 import { useSizeUnitStore } from '../stores/sizeUnitStore'
 import GuidedTour, { TourHelpButton, type TourStep } from '../components/ui/GuidedTour'
 import MobilePositionCard from '../components/ui/MobilePositionCard'
+import EditPositionPanel from '../components/ui/EditPositionPanel'
 import useIsMobile from '../hooks/useIsMobile'
 import usePullToRefresh from '../hooks/usePullToRefresh'
 import PullToRefreshIndicator from '../components/ui/PullToRefreshIndicator'
@@ -260,6 +261,7 @@ function DashboardOpenPositions({ positions, loading }: { positions: PortfolioPo
   const { unit: sizeUnit, toggle: toggleSizeUnit } = useSizeUnitStore()
   const [sortAsc, setSortAsc] = useState(false)
   const [expandedIdx, setExpandedIdx] = useState<number | null>(null)
+  const [editingPos, setEditingPos] = useState<PortfolioPosition | null>(null)
 
   const sortedPositions = [...positions].sort((a, b) =>
     sortAsc
@@ -317,6 +319,7 @@ function DashboardOpenPositions({ positions, loading }: { positions: PortfolioPo
                 </th>
                 <th className="text-center hidden 2xl:table-cell">{t('portfolio.leverage')}</th>
                 <th className="text-center hidden xl:table-cell">{t('bots.trailingStop')}</th>
+                <th className="w-8"></th>
               </tr>
             </thead>
             <tbody>
@@ -373,10 +376,21 @@ function DashboardOpenPositions({ positions, loading }: { positions: PortfolioPo
                         <span className="text-gray-600 text-sm">--</span>
                       )}
                     </td>
+                    <td className="text-center">
+                      {pos.trade_id && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setEditingPos(pos) }}
+                          className="p-1.5 text-gray-500 hover:text-white transition-colors rounded-lg hover:bg-white/5"
+                          title={t('editPosition.title')}
+                        >
+                          <Settings size={14} />
+                        </button>
+                      )}
+                    </td>
                   </tr>
                   {expandedIdx === idx && (
                     <tr className="table-expand-row">
-                      <td colSpan={9} className="!p-0 !border-b-0">
+                      <td colSpan={10} className="!p-0 !border-b-0">
                         <dl className="table-expand-content">
                           <div className="xl:hidden">
                             <dt>{t('portfolio.size')}</dt>
@@ -427,6 +441,34 @@ function DashboardOpenPositions({ positions, loading }: { positions: PortfolioPo
         </div>
       )}
 
+      {editingPos && editingPos.trade_id && (
+        <EditPositionPanel
+          position={{
+            trade_id: editingPos.trade_id,
+            symbol: editingPos.symbol,
+            side: editingPos.side,
+            entry_price: editingPos.entry_price,
+            current_price: editingPos.current_price,
+            leverage: editingPos.leverage,
+            exchange: editingPos.exchange,
+            bot_name: editingPos.bot_name,
+            demo_mode: editingPos.demo_mode,
+            take_profit: editingPos.take_profit,
+            stop_loss: editingPos.stop_loss,
+            trailing_stop_active: editingPos.trailing_stop_active,
+            trailing_stop_price: editingPos.trailing_stop_price,
+            trailing_stop_distance_pct: editingPos.trailing_stop_distance_pct,
+          }}
+          onClose={() => setEditingPos(null)}
+          onSave={async (data) => {
+            if (!editingPos.trade_id) return
+            await api.put(`/trades/${editingPos.trade_id}/tp-sl`, {
+              take_profit: data.take_profit,
+              stop_loss: data.stop_loss,
+            })
+          }}
+        />
+      )}
     </div>
   )
 }

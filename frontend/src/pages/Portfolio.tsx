@@ -7,7 +7,7 @@ import {
 } from 'recharts'
 import {
   Briefcase, ArrowUpRight, ArrowDownRight, TrendingUp,
-  ChevronUp, ChevronDown, ChevronRight, ShieldCheck,
+  ChevronUp, ChevronDown, ChevronRight, ShieldCheck, Settings,
 } from 'lucide-react'
 import api from '../api/client'
 import { useFilterStore } from '../stores/filterStore'
@@ -17,6 +17,7 @@ import type {
   PortfolioDaily, PortfolioAllocation,
 } from '../types'
 import MobilePositionCard from '../components/ui/MobilePositionCard'
+import EditPositionPanel from '../components/ui/EditPositionPanel'
 import SizeValue from '../components/ui/SizeValue'
 import { useSizeUnitStore } from '../stores/sizeUnitStore'
 import { useThemeStore } from '../stores/themeStore'
@@ -191,6 +192,7 @@ export default function Portfolio() {
       ? a.unrealized_pnl - b.unrealized_pnl
       : b.unrealized_pnl - a.unrealized_pnl
   )
+  const [editingPos, setEditingPos] = useState<PortfolioPosition | null>(null)
 
   // Pie chart data
   const pieData = allocation.map((a) => ({
@@ -572,6 +574,7 @@ export default function Portfolio() {
                   </th>
                   <th className="text-center hidden 2xl:table-cell">{t('portfolio.leverage')}</th>
                   <th className="text-center hidden xl:table-cell">{t('bots.trailingStop')}</th>
+                  <th className="w-8"></th>
                 </tr>
               </thead>
               <tbody>
@@ -628,10 +631,21 @@ export default function Portfolio() {
                           <span className="text-gray-600 text-sm">--</span>
                         )}
                       </td>
+                      <td className="text-center">
+                        {pos.trade_id && (
+                          <button
+                            onClick={(e) => { e.stopPropagation(); setEditingPos(pos) }}
+                            className="p-1.5 text-gray-500 hover:text-white transition-colors rounded-lg hover:bg-white/5"
+                            title={t('editPosition.title')}
+                          >
+                            <Settings size={14} />
+                          </button>
+                        )}
+                      </td>
                     </tr>
                     {expandedIdx === idx && (
                       <tr className="table-expand-row">
-                        <td colSpan={9} className="!p-0 !border-b-0">
+                        <td colSpan={10} className="!p-0 !border-b-0">
                           <dl className="table-expand-content">
                             <div className="xl:hidden">
                               <dt>{t('portfolio.size')}</dt>
@@ -684,6 +698,35 @@ export default function Portfolio() {
       </div>
 
       <GuidedTour tourId="portfolio" steps={portfolioTourSteps} />
+
+      {editingPos && editingPos.trade_id && (
+        <EditPositionPanel
+          position={{
+            trade_id: editingPos.trade_id,
+            symbol: editingPos.symbol,
+            side: editingPos.side,
+            entry_price: editingPos.entry_price,
+            current_price: editingPos.current_price,
+            leverage: editingPos.leverage,
+            exchange: editingPos.exchange,
+            bot_name: editingPos.bot_name,
+            demo_mode: editingPos.demo_mode,
+            take_profit: editingPos.take_profit,
+            stop_loss: editingPos.stop_loss,
+            trailing_stop_active: editingPos.trailing_stop_active,
+            trailing_stop_price: editingPos.trailing_stop_price,
+            trailing_stop_distance_pct: editingPos.trailing_stop_distance_pct,
+          }}
+          onClose={() => setEditingPos(null)}
+          onSave={async (data) => {
+            if (!editingPos.trade_id) return
+            await api.put(`/trades/${editingPos.trade_id}/tp-sl`, {
+              take_profit: data.take_profit,
+              stop_loss: data.stop_loss,
+            })
+          }}
+        />
+      )}
     </div>
   )
 }
