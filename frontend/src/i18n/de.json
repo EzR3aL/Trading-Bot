@@ -826,6 +826,21 @@
     "setupRequired": "Bitte richte Hyperliquid zuerst in den Einstellungen ein.",
     "pendingSteps": "{{count}} Schritt(e) ausstehend"
   },
+  "editPosition": {
+    "title": "Position bearbeiten",
+    "price": "Preis",
+    "percent": "Prozent",
+    "trailDistance": "Nachlauf-Abstand (ATR)",
+    "save": "Übernehmen",
+    "tpBelowEntry": "TP muss über dem Einstiegspreis liegen (Long)",
+    "tpAboveEntry": "TP muss unter dem Einstiegspreis liegen (Short)",
+    "slAboveEntry": "SL muss unter dem Einstiegspreis liegen (Long)",
+    "slBelowEntry": "SL muss über dem Einstiegspreis liegen (Short)",
+    "nativeHint": "funktioniert auch wenn der Bot offline ist",
+    "softwareHint": "Bot muss online sein",
+    "trailingHint": "Die Empfehlung basiert auf deinen bisherigen Trades und wird berechnet sobald genug Daten vorliegen (min. 10 Trades).",
+    "strategyExitNote": "Hinweis: Wenn TP/SL gesetzt ist, wird der Strategie-Exit deaktiviert. Die Exchange-Orders haben Vorrang."
+  },
   "common": {
     "loading": "Laden...",
     "error": "Etwas ist schiefgelaufen. Bitte versuche es erneut.",
