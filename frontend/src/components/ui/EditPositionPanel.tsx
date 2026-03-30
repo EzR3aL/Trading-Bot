@@ -347,7 +347,7 @@ export default function EditPositionPanel({ position, onClose, onSave }: EditPos
                     onChange={(e) => handleSlPct(e.target.value)}
                     placeholder="--"
                     step="0.1"
-                    className="w-full bg-white/[0.04] border border-white/10 rounded-lg px-3 pl-7 py-2 text-sm text-white tabular-nums placeholder:text-gray-600 focus:outline-none focus:border-red-500/50 focus:ring-1 focus:ring-red-500/20 transition-colors"
+                    className="w-full bg-white/[0.04] border border-white/10 rounded-lg px-3 pr-7 py-2 text-sm text-white tabular-nums placeholder:text-gray-600 focus:outline-none focus:border-red-500/50 focus:ring-1 focus:ring-red-500/20 transition-colors"
                   />
                   <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">%</span>
                 </div>
