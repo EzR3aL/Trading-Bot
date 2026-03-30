@@ -706,9 +706,12 @@ class BitunixClient(ExchangeClient):
     async def set_position_tpsl(
         self,
         symbol: str,
-        position_id: str,
+        position_id: Optional[str] = None,
         take_profit: Optional[float] = None,
         stop_loss: Optional[float] = None,
+        side: str = "long",
+        size: float = 0,
+        **kwargs,
     ) -> Optional[str]:
         """Set position-level TP/SL via /tpsl/position/place_order.
 
@@ -719,9 +722,20 @@ class BitunixClient(ExchangeClient):
         if take_profit is None and stop_loss is None:
             return None
 
+        # Auto-fetch position_id if not provided
+        if not position_id:
+            try:
+                positions = await self.get_open_positions()
+                for pos in positions:
+                    if pos.symbol == symbol and pos.side == side:
+                        position_id = getattr(pos, 'position_id', None) or f"{symbol}_{side}"
+                        break
+            except Exception:
+                position_id = f"{symbol}_{side}"
+
         tpsl_data: Dict[str, Any] = {
             "symbol": symbol,
-            "positionId": position_id,
+            "positionId": position_id or f"{symbol}_{side}",
         }
         if take_profit is not None:
             tpsl_data["tpPrice"] = str(take_profit)

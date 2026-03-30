@@ -839,7 +839,8 @@
     "nativeHint": "funktioniert auch wenn der Bot offline ist",
     "softwareHint": "Bot muss online sein",
     "trailingHint": "Die Empfehlung basiert auf deinen bisherigen Trades und wird berechnet sobald genug Daten vorliegen (min. 10 Trades).",
-    "strategyExitNote": "Hinweis: Wenn TP/SL gesetzt ist, wird der Strategie-Exit deaktiviert. Die Exchange-Orders haben Vorrang."
+    "strategyExitNote": "Hinweis: Wenn TP/SL gesetzt ist, wird der Strategie-Exit deaktiviert. Die Exchange-Orders haben Vorrang.",
+    "saveError": "Fehler beim Speichern"
   },
   "common": {
     "loading": "Laden...",

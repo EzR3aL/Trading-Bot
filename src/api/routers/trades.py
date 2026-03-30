@@ -88,7 +88,7 @@ async def _compute_trailing_stop(
 
     breakeven_atr = params.get("trailing_breakeven_atr", 1.5)
     # Manual ATR override takes precedence over strategy default
-    trail_atr = trade.trailing_atr_override or params.get("trailing_trail_atr", 2.5)
+    trail_atr = trade.trailing_atr_override if trade.trailing_atr_override is not None else params.get("trailing_trail_atr", 2.5)
     breakeven_threshold = atr_val * breakeven_atr
     trail_distance = atr_val * trail_atr
 
@@ -725,6 +725,10 @@ async def update_trade_tpsl(
     if body.trailing_stop is not None:
         trade.native_trailing_stop = trailing_placed
         trade.trailing_atr_override = body.trailing_stop.callback_pct
+    elif body.remove_tp or body.remove_sl or body.take_profit is not None or body.stop_loss is not None:
+        # User submitted the form but trailing was off — clear any previous override
+        trade.trailing_atr_override = None
+        trade.native_trailing_stop = False
     await db.commit()
 
     logger.info(

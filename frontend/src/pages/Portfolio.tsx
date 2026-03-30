@@ -727,6 +727,11 @@ export default function Portfolio() {
               remove_sl: data.remove_sl,
               trailing_stop: data.trailing_stop,
             })
+            // Refresh positions to show updated TP/SL
+            try {
+              const res = await api.get('/portfolio/positions')
+              setPositions(res.data.positions || res.data || [])
+            } catch {}
           }}
         />
       )}

@@ -177,7 +177,7 @@ export default function EditPositionPanel({ position, onClose, onSave }: EditPos
       await onSave({ take_profit: tp, stop_loss: sl, remove_tp: removeTp, remove_sl: removeSl, trailing_stop: trailing })
       onClose()
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Fehler beim Speichern')
+      setError(err instanceof Error ? err.message : t('editPosition.saveError', 'Fehler beim Speichern'))
     } finally {
       setSaving(false)
     }

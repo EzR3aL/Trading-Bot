@@ -118,8 +118,7 @@ function MobilePositionCardInner({ pos }: { pos: Position }) {
       remove_sl: data.remove_sl,
       trailing_stop: data.trailing_stop,
     })
-    pos.take_profit = data.take_profit
-    pos.stop_loss = data.stop_loss
+    // Parent component handles state refresh via positions re-fetch
   }
 
   return (

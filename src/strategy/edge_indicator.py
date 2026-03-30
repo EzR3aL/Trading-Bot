@@ -638,7 +638,7 @@ class EdgeIndicatorStrategy(BaseStrategy):
         atr_val = atr_series[-1] if atr_series else current_price * 0.015
 
         breakeven_atr = self._p.get("trailing_breakeven_atr", 1.5)
-        trail_atr = trail_atr_override or self._p.get("trailing_trail_atr", 2.5)
+        trail_atr = trail_atr_override if trail_atr_override is not None else self._p.get("trailing_trail_atr", 2.5)
         trail_distance = atr_val * trail_atr
         breakeven_threshold = atr_val * breakeven_atr
 
