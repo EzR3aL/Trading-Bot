@@ -671,20 +671,26 @@ async def update_trade_tpsl(
                 else trade.entry_price - atr_val * breakeven_atr
             )
 
-            result = await client.place_trailing_stop(
-                symbol=trade.symbol,
-                hold_side=trade.side,
-                size=trade.size,
-                callback_ratio=round(callback_pct, 2),
-                trigger_price=round(trigger, 2),
-                margin_mode=margin_mode,
-            )
-            if result is not None:
-                trailing_placed = True
-            else:
-                logger.info(
-                    "Native trailing not supported by %s — using software trailing for trade %s (ATR override=%sx)",
-                    trade.exchange, trade_id, atr_mult,
+            try:
+                result = await client.place_trailing_stop(
+                    symbol=trade.symbol,
+                    hold_side=trade.side,
+                    size=trade.size,
+                    callback_ratio=round(callback_pct, 2),
+                    trigger_price=round(trigger, 2),
+                    margin_mode=margin_mode,
+                )
+                if result is not None:
+                    trailing_placed = True
+                else:
+                    logger.info(
+                        "Native trailing not supported by %s — using software trailing for trade %s (ATR override=%sx)",
+                        trade.exchange, trade_id, atr_mult,
+                    )
+            except Exception as trail_err:
+                logger.warning(
+                    "Native trailing stop failed for trade %s on %s: %s — falling back to software trailing",
+                    trade_id, trade.exchange, trail_err,
                 )
     except NotImplementedError:
         raise HTTPException(

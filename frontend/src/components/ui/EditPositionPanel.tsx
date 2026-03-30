@@ -35,6 +35,8 @@ interface EditPositionPanelProps {
   onSave: (data: {
     take_profit: number | null
     stop_loss: number | null
+    remove_tp: boolean
+    remove_sl: boolean
     trailing_stop: { callback_pct: number } | null
   }) => Promise<void>
 }
@@ -166,10 +168,12 @@ export default function EditPositionPanel({ position, onClose, onSave }: EditPos
     try {
       const tp = tpPrice ? parseFloat(tpPrice) : null
       const sl = slPrice ? parseFloat(slPrice) : null
+      const removeTp = position.take_profit != null && tp == null
+      const removeSl = position.stop_loss != null && sl == null
       const trailing = trailingEnabled ? {
         callback_pct: trailingAtr,
       } : null
-      await onSave({ take_profit: tp, stop_loss: sl, trailing_stop: trailing })
+      await onSave({ take_profit: tp, stop_loss: sl, remove_tp: removeTp, remove_sl: removeSl, trailing_stop: trailing })
       onClose()
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Fehler beim Speichern')
