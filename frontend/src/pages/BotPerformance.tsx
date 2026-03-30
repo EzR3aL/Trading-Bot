@@ -828,6 +828,7 @@ export default function BotPerformance() {
                         extraDetails={[
                           ...(trade.reason ? [{ label: t('bots.reasoning'), value: trade.reason }] : []),
                         ]}
+                        onShare={() => setSelectedTrade(trade)}
                       />
                     ))
                   })()}

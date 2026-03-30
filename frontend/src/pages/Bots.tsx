@@ -623,7 +623,7 @@ function BotTradeHistoryModal({ bot, onClose, t }: { bot: BotStatus; onClose: ()
               {isMobile ? (
                 <div className="px-3 pb-6 space-y-1.5">
                   {stats.recent_trades.map(trade => (
-                    <MobileTradeCard key={trade.id} trade={{ ...trade, bot_exchange: bot.exchange_type, entry_time: trade.entry_time || '' }} />
+                    <MobileTradeCard key={trade.id} trade={{ ...trade, bot_exchange: bot.exchange_type, entry_time: trade.entry_time || '' }} onShare={() => setSelectedTrade(trade)} />
                   ))}
                 </div>
               ) : (
