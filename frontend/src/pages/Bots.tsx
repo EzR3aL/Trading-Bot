@@ -26,7 +26,6 @@ import {
   Activity,
   Clock,
   TrendingUp,
-  FileText,
   X,
   ArrowUpRight,
   ArrowDownRight,
@@ -38,7 +37,7 @@ import {
   ShieldCheck,
 } from 'lucide-react'
 import GuidedTour, { TourHelpButton, type TourStep } from '../components/ui/GuidedTour'
-import { formatDate, formatDateTime, formatTime } from '../utils/dateUtils'
+import { formatDateTime, formatTime } from '../utils/dateUtils'
 import MobileTradeCard from '../components/ui/MobileTradeCard'
 import useIsMobile from '../hooks/useIsMobile'
 import useHaptic from '../hooks/useHaptic'
@@ -621,93 +620,11 @@ function BotTradeHistoryModal({ bot, onClose, t }: { bot: BotStatus; onClose: ()
               <div className="px-6 pt-3 pb-2">
                 <div className="text-xs text-gray-400 uppercase tracking-wider font-semibold">{t('bots.tradeHistory')}</div>
               </div>
-              {isMobile ? (
-                <div className="px-3 pb-6 space-y-1.5">
-                  {stats.recent_trades.map(trade => (
-                    <MobileTradeCard key={trade.id} trade={{ ...trade, bot_exchange: bot.exchange_type, entry_time: trade.entry_time || '' }} />
-                  ))}
-                </div>
-              ) : (
-                <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead>
-                    <tr className="border-t border-b border-white/5 bg-white/[0.02]">
-                      <th className="text-left px-3 py-2.5 text-xs text-gray-400 uppercase font-semibold tracking-wider">{t('trades.date')}</th>
-                      <th className="text-center px-3 py-2.5 text-xs text-gray-400 uppercase font-semibold tracking-wider">{t('trades.exchange')}</th>
-                      <th className="text-left px-3 py-2.5 text-xs text-gray-400 uppercase font-semibold tracking-wider">{t('trades.symbol')}</th>
-                      <th className="text-center px-3 py-2.5 text-xs text-gray-400 uppercase font-semibold tracking-wider">{t('trades.side')}</th>
-                      <th className="text-right px-3 py-2.5 text-xs text-gray-400 uppercase font-semibold tracking-wider">{t('trades.entryPrice')}</th>
-                      <th className="text-right px-3 py-2.5 text-xs text-gray-400 uppercase font-semibold tracking-wider">{t('trades.exitPrice')}</th>
-                      <th className="text-right px-3 py-2.5 text-xs text-gray-400 uppercase font-semibold tracking-wider">{t('trades.pnl')}</th>
-                      <th className="text-right px-3 py-2.5 text-xs text-gray-400 uppercase font-semibold tracking-wider">{t('trades.fees')}</th>
-                      <th className="text-center px-3 py-2.5 text-xs text-gray-400 uppercase font-semibold tracking-wider">{t('trades.status')}</th>
-                      <th className="text-center px-3 py-2.5 text-xs text-gray-400 uppercase font-semibold tracking-wider">{t('bots.confidence')}</th>
-                      <th className="text-center px-3 py-2.5 text-xs text-gray-400 uppercase font-semibold tracking-wider">{t('bots.details')}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {stats.recent_trades.map((trade) => (
-                      <tr key={trade.id} className="border-b border-white/5 hover:bg-white/[0.02] transition-colors">
-                        <td className="px-3 py-2.5 text-sm text-gray-300" title={formatTime(trade.entry_time)}>
-                          {formatDate(trade.entry_time)}
-                        </td>
-                        <td className="px-3 py-2.5 text-center">
-                          <span className="inline-flex justify-center">
-                            <ExchangeIcon exchange={bot.exchange_type} size={18} />
-                          </span>
-                        </td>
-                        <td className="px-3 py-2.5 text-sm text-white font-semibold">{trade.symbol}</td>
-                        <td className="px-3 py-2.5 text-center">
-                          <span className={`text-sm ${trade.side === 'long' ? 'text-profit' : 'text-loss'}`}>
-                            {trade.side === 'long' ? '+' : '-'} {trade.side.toUpperCase()}
-                          </span>
-                        </td>
-                        <td className="px-3 py-2.5 text-right text-sm text-gray-300">
-                          ${trade.entry_price.toLocaleString()}
-                        </td>
-                        <td className="px-3 py-2.5 text-right text-sm text-gray-300">
-                          {trade.exit_price != null ? `$${trade.exit_price.toLocaleString()}` : '--'}
-                        </td>
-                        <td className="px-3 py-2.5 text-right">
-                          <PnlCell
-                            pnl={trade.pnl}
-                            fees={trade.fees ?? 0}
-                            fundingPaid={trade.funding_paid ?? 0}
-                            status={trade.status}
-                            className={`text-sm font-semibold ${
-                              trade.status === 'open' ? 'text-gray-500' :
-                              trade.pnl >= 0 ? 'text-profit' : 'text-loss'
-                            }`}
-                          />
-                        </td>
-                        <td className="px-3 py-2.5 text-right text-sm text-gray-400">
-                          ${((trade.fees ?? 0) + Math.abs(trade.funding_paid ?? 0)).toFixed(2)}
-                        </td>
-                        <td className="px-3 py-2.5 text-center">
-                          <span className={
-                            trade.status === 'open' ? 'badge-open' :
-                            trade.status === 'closed' ? 'badge-neutral' :
-                            'badge-demo'
-                          }>
-                            {t(`trades.${trade.status}`)}
-                          </span>
-                        </td>
-                        <td className={`px-3 py-2.5 text-center text-sm font-medium ${confidenceColor(trade.confidence)}`}>{trade.confidence}%</td>
-                        <td className="px-3 py-2.5 text-center">
-                          <button
-                            onClick={() => setSelectedTrade(trade)}
-                            className="p-1.5 text-gray-400 hover:text-white transition-colors rounded-lg hover:bg-white/5"
-                            aria-label={t('bots.details')}
-                          >
-                            <FileText size={16} />
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                </div>
-              )}
+              <div className="px-3 pb-6 space-y-1.5">
+                {stats.recent_trades.map(trade => (
+                  <MobileTradeCard key={trade.id} trade={{ ...trade, bot_exchange: bot.exchange_type, entry_time: trade.entry_time || '' }} />
+                ))}
+              </div>
             </>
           )}
         </div>

@@ -19,7 +19,8 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 - **"Trades.confidence" in Mobile-Karte**: MobileTradeCard nutzte `trades.confidence` statt `bots.confidence` — zeigt jetzt korrekt "Konfidenz" / "Confidence"
 
 ### Geaendert
-- **Bot Trade-Historie: Ausstieg- und Gebühren-Spalte ergänzt (Desktop)**: Desktop-Tabelle zeigt jetzt auch Ausstiegspreis und Gesamtgebühren (Fees + Funding) — konsistent mit der mobilen Ansicht
+- **Bot Trade-Historie: Einheitliche Card-Ansicht**: Desktop-Tabelle durch aufklappbare Trade-Cards ersetzt (gleiche Komponente wie mobil). Zeigt Einstieg, Ausstieg, PNL%, Hebel, Gebühren, Konfidenz und Exit-Grund. Kein horizontales Scrollen mehr
+- **Hebel im Bot-Trade-Response**: Backend gibt jetzt `leverage` pro Trade zurück — sichtbar in der aufklappbaren Trade-Card zur Analyse vergangener Konfigurationen
 
 ### Entfernt
 - **Trailing-Stop-Spalte aus Bot Trade-Historie**: Zeigt nach Trade-Schließung sowieso nur "--" — unnötige Spalte entfernt

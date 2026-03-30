@@ -130,6 +130,7 @@ async def get_bot_statistics(
             "pnl": round(float(trade.pnl or 0), 2),
             "pnl_percent": round(float(trade.pnl_percent or 0), 2),
             "confidence": trade.confidence,
+            "leverage": trade.leverage,
             "reason": trade.reason,
             "status": trade.status,
             "demo_mode": trade.demo_mode,
