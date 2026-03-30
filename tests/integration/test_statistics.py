@@ -326,3 +326,45 @@ async def test_statistics_best_and_worst_trade(client, auth_headers, sample_trad
     # Best trade: +10.0 (trade 1 or 2), Worst trade: -20.0 (trade 3)
     assert data["best_trade"] == pytest.approx(10.0)
     assert data["worst_trade"] == pytest.approx(-20.0)
+
+
+@pytest.mark.asyncio
+async def test_closed_trade_with_null_exit_time_still_counted(client, auth_headers, test_user_obj):
+    """A closed trade with exit_time=NULL falls back to entry_time via COALESCE."""
+    now = datetime.now(timezone.utc)
+    trade = TradeRecord(
+        user_id=test_user_obj.id,
+        symbol="SOLUSDT",
+        side="long",
+        size=1.0,
+        entry_price=150.0,
+        exit_price=155.0,
+        leverage=3,
+        confidence=65,
+        reason="Test NULL exit_time fallback",
+        order_id="order_null_exit",
+        status="closed",
+        pnl=5.0,
+        pnl_percent=3.33,
+        fees=0.2,
+        entry_time=now - timedelta(days=1),
+        exit_time=None,
+        exchange="bitget",
+        demo_mode=False,
+    )
+    async with get_session() as session:
+        session.add(trade)
+
+    # Aggregate stats must include this trade
+    response = await client.get("/api/statistics", headers=auth_headers)
+    assert response.status_code == 200
+    data = response.json()
+    assert data["total_trades"] == 1
+    assert data["total_pnl"] == pytest.approx(5.0)
+
+    # Daily stats must show one day entry (falling back to entry_time date)
+    response = await client.get("/api/statistics/daily", headers=auth_headers)
+    assert response.status_code == 200
+    days = response.json()["days"]
+    assert len(days) == 1
+    assert days[0]["pnl"] == pytest.approx(5.0)

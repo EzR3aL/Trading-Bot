@@ -8,12 +8,15 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import StreamingResponse
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.auth.dependencies import get_current_user
 from src.models.database import TradeRecord, User
 from src.models.session import get_db
+
+# Use exit_time for tax year assignment (realization date), fall back to entry_time if NULL
+_closed_date = func.coalesce(TradeRecord.exit_time, TradeRecord.entry_time)
 
 
 def _resolve_tz(tz_name: Optional[str]) -> ZoneInfo:
@@ -57,16 +60,20 @@ def _fmt(value: Optional[float], decimals: int = 2, de: bool = False) -> str:
 
 
 def _query_trades(user_id: int, year: int, demo_mode: Optional[bool]):
-    """Build common trade query filters."""
+    """Build common trade query filters.
+
+    Uses exit_time (realization date) for tax year assignment — in Germany,
+    private disposal transactions (§23 EStG) are taxed by disposal date.
+    """
     filters = [
         TradeRecord.user_id == user_id,
         TradeRecord.status == "closed",
-        TradeRecord.entry_time >= datetime(year, 1, 1),
-        TradeRecord.entry_time < datetime(year + 1, 1, 1),
+        _closed_date >= datetime(year, 1, 1),
+        _closed_date < datetime(year + 1, 1, 1),
     ]
     if demo_mode is not None:
         filters.append(TradeRecord.demo_mode == demo_mode)
-    return select(TradeRecord).where(*filters).order_by(TradeRecord.entry_time)
+    return select(TradeRecord).where(*filters).order_by(_closed_date)
 
 
 @router.get("")
@@ -87,10 +94,10 @@ async def get_tax_report(
     total_fees = sum(t.fees or 0 for t in trades)
     total_funding = sum(t.funding_paid or 0 for t in trades)
 
-    # Monthly breakdown
+    # Monthly breakdown (by realization/exit date)
     months: dict = {}
     for t in trades:
-        month_key = t.entry_time.strftime("%Y-%m")
+        month_key = (t.exit_time or t.entry_time).strftime("%Y-%m")
         if month_key not in months:
             months[month_key] = {"trades": 0, "pnl": 0, "fees": 0, "funding": 0}
         months[month_key]["trades"] += 1
@@ -200,7 +207,7 @@ async def download_tax_report_csv(
     # ── Monthly breakdown ──
     months: dict = {}
     for t in trades:
-        mk = t.entry_time.strftime("%Y-%m")
+        mk = (t.exit_time or t.entry_time).strftime("%Y-%m")
         if mk not in months:
             months[mk] = {"trades": 0, "pnl": 0.0, "fees": 0.0, "funding": 0.0}
         months[mk]["trades"] += 1

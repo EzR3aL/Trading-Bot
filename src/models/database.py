@@ -130,6 +130,7 @@ class TradeRecord(Base):
         Index("ix_trade_user_symbol_side", "user_id", "symbol", "side"),
         Index("ix_trade_bot_status", "bot_config_id", "status"),
         Index("ix_trade_entry_time", "entry_time"),
+        Index("ix_trade_exit_time", "exit_time"),
     )
 
     id = Column(Integer, primary_key=True, autoincrement=True)

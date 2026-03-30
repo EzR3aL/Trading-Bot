@@ -996,6 +996,7 @@ async def get_revenue_summary(
         from datetime import datetime, timedelta, timezone
         from sqlalchemy import func as sqlfunc
 
+        _closed = sqlfunc.coalesce(TradeRecord.exit_time, TradeRecord.entry_time)
         since_30d = datetime.now(timezone.utc) - timedelta(days=30)
         trade_stats = await db.execute(
             select(
@@ -1005,7 +1006,7 @@ async def get_revenue_summary(
                 TradeRecord.user_id == user.id,
                 TradeRecord.status == "closed",
                 TradeRecord.exchange == "hyperliquid",
-                TradeRecord.entry_time >= since_30d,
+                _closed >= since_30d,
             )
         )
         stats_row = trade_stats.one()

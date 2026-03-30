@@ -23,6 +23,8 @@ from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
+_closed_date = func.coalesce(TradeRecord.exit_time, TradeRecord.entry_time)
+
 router = APIRouter(prefix="/api/portfolio", tags=["portfolio"])
 
 # --- In-memory cache for exchange API responses (positions, allocation) ---
@@ -58,7 +60,7 @@ async def get_portfolio_summary(
     filters = [
         TradeRecord.user_id == user.id,
         TradeRecord.status == "closed",
-        TradeRecord.entry_time >= since,
+        _closed_date >= since,
     ]
     if demo_mode and demo_mode != "all":
         filters.append(TradeRecord.demo_mode == (demo_mode == "true"))
@@ -228,22 +230,22 @@ async def get_portfolio_daily(
     filters = [
         TradeRecord.user_id == user.id,
         TradeRecord.status == "closed",
-        TradeRecord.entry_time >= since,
+        _closed_date >= since,
     ]
     if demo_mode and demo_mode != "all":
         filters.append(TradeRecord.demo_mode == (demo_mode == "true"))
 
     result = await db.execute(
         select(
-            func.date(TradeRecord.entry_time).label("date"),
+            func.date(_closed_date).label("date"),
             TradeRecord.exchange,
             func.sum(TradeRecord.pnl).label("pnl"),
             func.count().label("trades"),
             func.sum(TradeRecord.fees).label("fees"),
         )
         .where(*filters)
-        .group_by(func.date(TradeRecord.entry_time), TradeRecord.exchange)
-        .order_by(func.date(TradeRecord.entry_time))
+        .group_by(func.date(_closed_date), TradeRecord.exchange)
+        .order_by(func.date(_closed_date))
     )
 
     return [

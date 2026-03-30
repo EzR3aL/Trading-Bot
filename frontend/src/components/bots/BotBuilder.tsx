@@ -1119,12 +1119,11 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
               <div>
                 <label className="block text-sm text-gray-400 mb-2">{b.mode}</label>
                 <div className="flex gap-2">
-                  {(['demo', 'live', 'both'] as const).map(m => {
+                  {(['demo', 'live'] as const).map(m => {
                     const active = mode === m
                     const colorMap = {
                       demo: active ? 'border-blue-500 bg-blue-500/10 text-blue-400 ring-1 ring-blue-500/30' : '',
                       live: active ? 'border-orange-500 bg-orange-500/10 text-orange-400 ring-1 ring-orange-500/30' : '',
-                      both: active ? 'border-purple-500 bg-purple-500/10 text-purple-400 ring-1 ring-purple-500/30' : '',
                     }
                     return (
                       <button key={m} onClick={() => setMode(m)}

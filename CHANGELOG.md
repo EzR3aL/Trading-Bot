@@ -9,6 +9,27 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [4.6.6] - 2026-03-30
+
+### Behoben
+- **PNL-Charts zeigen jetzt nach Schließdatum**: Alle Endpoints (Dashboard, Portfolio Summary, Portfolio Daily, Revenue-Analytics, Bot-Statistiken, Config-Revenue) gruppierten Trades bisher nach Eröffnungsdatum (`entry_time`). Umgestellt auf `exit_time` mit COALESCE-Fallback auf `entry_time` bei NULL-Werten — zeigt realisierten PNL am Tag der tatsächlichen Schließung, wie bei Exchanges üblich
+- **Steuerbericht nach Veräußerungsdatum**: Steuerbericht ordnete Trades bisher nach Eröffnungsdatum dem Steuerjahr zu. Umgestellt auf `exit_time` (Veräußerungsdatum) — steuerlich relevant nach §23 EStG. Trade am 31.12. eröffnet, am 02.01. geschlossen, landet jetzt korrekt im neuen Steuerjahr
+- **"Bots.confidence" Übersetzung fehlte**: Der Schlüssel `bots.confidence` war in den Sprachdateien nicht vorhanden und wurde als roher Key angezeigt. Übersetzung ergänzt: "Konfidenz" (DE) / "Confidence" (EN)
+- **CSV-Test für leeres Jahr**: Test prüfte auf englischen Text ("Trade Count"), aber CSV wird standardmäßig auf Deutsch generiert ("Anzahl Trades")
+- **"Trades.confidence" in Mobile-Karte**: MobileTradeCard nutzte `trades.confidence` statt `bots.confidence` — zeigt jetzt korrekt "Konfidenz" / "Confidence"
+
+### Geaendert
+- **Bot Trade-Historie: Ausstieg- und Gebühren-Spalte ergänzt (Desktop)**: Desktop-Tabelle zeigt jetzt auch Ausstiegspreis und Gesamtgebühren (Fees + Funding) — konsistent mit der mobilen Ansicht
+
+### Entfernt
+- **Trailing-Stop-Spalte aus Bot Trade-Historie**: Zeigt nach Trade-Schließung sowieso nur "--" — unnötige Spalte entfernt
+- **Modus-Spalte aus Bot Trade-Historie**: Redundant, da der Bot selbst bereits das DEMO/LIVE-Label trägt
+- **"Beide"-Modus im Bot Builder**: Option entfernt, Bots können nur noch "Demo" oder "Live" sein. Bestehende "both"-Bots funktionieren weiterhin im Backend
+
+### Hinzugefuegt
+- **DB-Index auf `exit_time`**: Neuer Index `ix_trade_exit_time` für performante Abfragen nach Schließdatum (Alembic Migration 014)
+- **Integration-Test für NULL-exit_time-Fallback**: Prüft, dass geschlossene Trades ohne `exit_time` via COALESCE auf `entry_time` zurückfallen und in Charts/Statistiken erscheinen
+
 ## [4.6.5] - 2026-03-28
 
 ### Hinzugefuegt

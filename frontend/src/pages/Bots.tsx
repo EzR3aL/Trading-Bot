@@ -637,9 +637,9 @@ function BotTradeHistoryModal({ bot, onClose, t }: { bot: BotStatus; onClose: ()
                       <th className="text-left px-3 py-2.5 text-xs text-gray-400 uppercase font-semibold tracking-wider">{t('trades.symbol')}</th>
                       <th className="text-center px-3 py-2.5 text-xs text-gray-400 uppercase font-semibold tracking-wider">{t('trades.side')}</th>
                       <th className="text-right px-3 py-2.5 text-xs text-gray-400 uppercase font-semibold tracking-wider">{t('trades.entryPrice')}</th>
+                      <th className="text-right px-3 py-2.5 text-xs text-gray-400 uppercase font-semibold tracking-wider">{t('trades.exitPrice')}</th>
                       <th className="text-right px-3 py-2.5 text-xs text-gray-400 uppercase font-semibold tracking-wider">{t('trades.pnl')}</th>
-                      <th className="text-center px-3 py-2.5 text-xs text-gray-400 uppercase font-semibold tracking-wider">{t('trades.trailingStop')}</th>
-                      <th className="text-center px-3 py-2.5 text-xs text-gray-400 uppercase font-semibold tracking-wider">{t('trades.mode')}</th>
+                      <th className="text-right px-3 py-2.5 text-xs text-gray-400 uppercase font-semibold tracking-wider">{t('trades.fees')}</th>
                       <th className="text-center px-3 py-2.5 text-xs text-gray-400 uppercase font-semibold tracking-wider">{t('trades.status')}</th>
                       <th className="text-center px-3 py-2.5 text-xs text-gray-400 uppercase font-semibold tracking-wider">{t('bots.confidence')}</th>
                       <th className="text-center px-3 py-2.5 text-xs text-gray-400 uppercase font-semibold tracking-wider">{t('bots.details')}</th>
@@ -665,6 +665,9 @@ function BotTradeHistoryModal({ bot, onClose, t }: { bot: BotStatus; onClose: ()
                         <td className="px-3 py-2.5 text-right text-sm text-gray-300">
                           ${trade.entry_price.toLocaleString()}
                         </td>
+                        <td className="px-3 py-2.5 text-right text-sm text-gray-300">
+                          {trade.exit_price != null ? `$${trade.exit_price.toLocaleString()}` : '--'}
+                        </td>
                         <td className="px-3 py-2.5 text-right">
                           <PnlCell
                             pnl={trade.pnl}
@@ -677,24 +680,8 @@ function BotTradeHistoryModal({ bot, onClose, t }: { bot: BotStatus; onClose: ()
                             }`}
                           />
                         </td>
-                        <td className="px-3 py-2.5 text-center">
-                          {trade.status === 'open' && trade.trailing_stop_active && trade.trailing_stop_price != null ? (
-                            <span className="inline-flex items-center justify-center gap-1 text-emerald-400 text-sm">
-                              ${trade.trailing_stop_price.toLocaleString()} ({trade.trailing_stop_distance_pct?.toFixed(2)}%)
-                              {trade.can_close_at_loss === false && (
-                                <span title={t('trades.trailingStopProtecting')}>
-                                  <ShieldCheck size={14} className="text-emerald-400" />
-                                </span>
-                              )}
-                            </span>
-                          ) : (
-                            <span className="text-gray-600">--</span>
-                          )}
-                        </td>
-                        <td className="px-3 py-2.5 text-center">
-                          <span className={trade.demo_mode ? 'badge-demo' : 'badge-live'}>
-                            {trade.demo_mode ? t('common.demo') : t('common.live')}
-                          </span>
+                        <td className="px-3 py-2.5 text-right text-sm text-gray-400">
+                          ${((trade.fees ?? 0) + Math.abs(trade.funding_paid ?? 0)).toFixed(2)}
                         </td>
                         <td className="px-3 py-2.5 text-center">
                           <span className={

@@ -107,7 +107,7 @@ function MobileTradeCardInner({ trade, extraDetails }: MobileTradeCardProps) {
       hidden: trade.pnl_percent == null,
     },
     { label: t('trades.fees'), value: <span className="tabular-nums">${trade.fees?.toFixed(2)}</span>, hidden: !trade.fees || trade.fees <= 0 },
-    { label: t('trades.confidence'), value: `${trade.confidence}%`, hidden: !trade.confidence || trade.confidence <= 0 },
+    { label: t('bots.confidence'), value: `${trade.confidence}%`, hidden: !trade.confidence || trade.confidence <= 0 },
     {
       label: t('trades.exitReason'),
       value: <ExitReasonBadge reason={trade.exit_reason ?? null} compact />,

@@ -202,8 +202,8 @@ async def test_download_csv_empty_year(client, auth_headers, test_user):
 
     # Report still has header sections but no trade data
     assert "STEUERREPORT" in lines[0] or "TAX REPORT" in lines[0]
-    # Trade count should be 0
-    assert any("0" in line and "Trade Count" in line for line in lines)
+    # Trade count should be 0 (default lang=de uses "Anzahl Trades")
+    assert any("0" in line and ("Trade Count" in line or "Anzahl Trades" in line) for line in lines)
 
 
 @pytest.mark.asyncio

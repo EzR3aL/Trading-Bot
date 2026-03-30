@@ -17,6 +17,8 @@ from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
+_closed_date = func.coalesce(TradeRecord.exit_time, TradeRecord.entry_time)
+
 statistics_router = APIRouter(tags=["bots"])
 
 
@@ -42,14 +44,14 @@ async def get_bot_statistics(
     daily_filters = [
         TradeRecord.bot_config_id == bot_id,
         TradeRecord.status == "closed",
-        TradeRecord.exit_time >= since,
+        _closed_date >= since,
     ]
     if demo_mode is not None:
         daily_filters.append(TradeRecord.demo_mode == demo_mode)
 
     daily_result = await db.execute(
         select(
-            func.date(TradeRecord.exit_time).label("date"),
+            func.date(_closed_date).label("date"),
             func.sum(TradeRecord.pnl).label("pnl"),
             func.count(TradeRecord.id).label("trades"),
             func.sum(case((TradeRecord.pnl > 0, 1), else_=0)).label("wins"),
@@ -58,9 +60,9 @@ async def get_bot_statistics(
         ).where(
             *daily_filters
         ).group_by(
-            func.date(TradeRecord.exit_time)
+            func.date(_closed_date)
         ).order_by(
-            func.date(TradeRecord.exit_time)
+            func.date(_closed_date)
         )
     )
     daily_rows = daily_result.all()
@@ -195,7 +197,7 @@ async def compare_bots_performance(
     daily_filters = [
         TradeRecord.bot_config_id.in_(bot_ids),
         TradeRecord.status == "closed",
-        TradeRecord.exit_time >= since,
+        _closed_date >= since,
     ]
     if demo_mode is not None:
         daily_filters.append(TradeRecord.demo_mode == demo_mode)
@@ -203,12 +205,12 @@ async def compare_bots_performance(
     daily_result = await db.execute(
         select(
             TradeRecord.bot_config_id,
-            func.date(TradeRecord.exit_time).label("date"),
+            func.date(_closed_date).label("date"),
             func.sum(TradeRecord.pnl).label("pnl"),
         ).where(*daily_filters).group_by(
-            TradeRecord.bot_config_id, func.date(TradeRecord.exit_time)
+            TradeRecord.bot_config_id, func.date(_closed_date)
         ).order_by(
-            TradeRecord.bot_config_id, func.date(TradeRecord.exit_time)
+            TradeRecord.bot_config_id, func.date(_closed_date)
         )
     )
     # Build per-bot daily series

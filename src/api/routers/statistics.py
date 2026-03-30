@@ -11,6 +11,9 @@ from src.auth.dependencies import get_current_user
 from src.models.database import TradeRecord, User
 from src.models.session import get_db
 
+# Fallback to entry_time when exit_time is NULL (defensive against data issues)
+_closed_date = func.coalesce(TradeRecord.exit_time, TradeRecord.entry_time)
+
 router = APIRouter(prefix="/api/statistics", tags=["statistics"])
 
 
@@ -31,7 +34,7 @@ async def get_statistics(
     filters = [
         TradeRecord.user_id == user.id,
         TradeRecord.status == "closed",
-        TradeRecord.entry_time >= since,
+        _closed_date >= since,
     ]
     if demo_mode is not None:
         filters.append(TradeRecord.demo_mode == demo_mode)
@@ -94,14 +97,14 @@ async def get_daily_stats(
     filters = [
         TradeRecord.user_id == user.id,
         TradeRecord.status == "closed",
-        TradeRecord.entry_time >= since,
+        _closed_date >= since,
     ]
     if demo_mode is not None:
         filters.append(TradeRecord.demo_mode == demo_mode)
 
     result = await db.execute(
         select(
-            func.date(TradeRecord.entry_time).label("date"),
+            func.date(_closed_date).label("date"),
             func.count().label("trades"),
             func.sum(TradeRecord.pnl).label("pnl"),
             func.sum(TradeRecord.fees).label("fees"),
@@ -111,8 +114,8 @@ async def get_daily_stats(
             func.sum(case((TradeRecord.pnl <= 0, 1), else_=0)).label("losses"),
         )
         .where(*filters)
-        .group_by(func.date(TradeRecord.entry_time))
-        .order_by(func.date(TradeRecord.entry_time))
+        .group_by(func.date(_closed_date))
+        .order_by(func.date(_closed_date))
     )
 
     return {
@@ -149,7 +152,7 @@ async def get_revenue_analytics(
     filters = [
         TradeRecord.user_id == user.id,
         TradeRecord.status == "closed",
-        TradeRecord.entry_time >= since,
+        _closed_date >= since,
         TradeRecord.exchange == "hyperliquid",
     ]
     if demo_mode is not None:
@@ -174,15 +177,15 @@ async def get_revenue_analytics(
 
     daily_result = await db.execute(
         select(
-            func.date(TradeRecord.entry_time).label("date"),
+            func.date(_closed_date).label("date"),
             func.count().label("trades"),
             func.sum(TradeRecord.builder_fee).label("builder_fees"),
             func.sum(TradeRecord.fees).label("exchange_fees"),
             func.sum(TradeRecord.pnl).label("pnl"),
         )
         .where(*filters)
-        .group_by(func.date(TradeRecord.entry_time))
-        .order_by(func.date(TradeRecord.entry_time))
+        .group_by(func.date(_closed_date))
+        .order_by(func.date(_closed_date))
     )
 
     return {

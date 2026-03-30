@@ -479,6 +479,7 @@
     "restart": "Restart",
     "edit": "Edit",
     "delete": "Delete",
+    "confidence": "Confidence",
     "confirmDelete": "Delete this bot?",
     "stopAll": "Stop All",
     "trades": "trades",
