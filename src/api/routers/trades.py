@@ -645,8 +645,14 @@ async def update_trade_tpsl(
         if bot_margin:
             margin_mode = bot_margin
 
-    # Resolve effective TP/SL (handle remove flags)
-    # Use `is not None` instead of `or` to avoid falsy-float bug (0.0 is falsy in Python)
+    # Resolve what to send to exchange:
+    # - User sets a value → send that value
+    # - User removes (remove_tp/sl) → send None (exchange should clear it)
+    # - User doesn't touch the field → DON'T send it (don't override exchange state)
+    exchange_tp = None if body.remove_tp else body.take_profit  # only what user explicitly set
+    exchange_sl = None if body.remove_sl else body.stop_loss
+
+    # For DB: keep existing values if user didn't change them
     effective_tp = None if body.remove_tp else (body.take_profit if body.take_profit is not None else trade.take_profit)
     effective_sl = None if body.remove_sl else (body.stop_loss if body.stop_loss is not None else trade.stop_loss)
 
@@ -654,12 +660,15 @@ async def update_trade_tpsl(
     trailing_placed = False
     fetcher = None
     try:
-        # TP/SL (set or remove) — only call exchange if at least one value is set
-        if effective_tp is not None or effective_sl is not None:
+        # Only call exchange if user explicitly set or removed something
+        has_tp_change = body.take_profit is not None or body.remove_tp
+        has_sl_change = body.stop_loss is not None or body.remove_sl
+        if has_tp_change or has_sl_change:
+            # Send only changed values to exchange (don't re-send unchanged DB values)
             await client.set_position_tpsl(
                 symbol=trade.symbol,
-                take_profit=effective_tp,
-                stop_loss=effective_sl,
+                take_profit=exchange_tp,
+                stop_loss=exchange_sl,
                 side=trade.side,
                 size=trade.size,
             )
