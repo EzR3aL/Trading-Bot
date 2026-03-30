@@ -184,7 +184,7 @@ export default function EditPositionPanel({ position, onClose, onSave }: EditPos
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-md"
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-md"
       onClick={onClose}
       role="dialog"
       aria-modal="true"
@@ -192,7 +192,7 @@ export default function EditPositionPanel({ position, onClose, onSave }: EditPos
       <div
         ref={swipe.ref}
         style={swipe.style}
-        className="bg-[#0b0f19] rounded-2xl max-w-lg w-full mx-2 sm:mx-4 my-2 sm:my-3 max-h-[95vh] lg:max-h-[90vh] flex flex-col border border-white/10 shadow-2xl overflow-hidden"
+        className="bg-[#0b0f19] rounded-2xl max-w-lg w-full mx-2 sm:mx-4 my-2 sm:my-3 max-h-[80vh] sm:max-h-[85vh] lg:max-h-[90vh] flex flex-col border border-white/10 shadow-2xl overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
         {/* ── Swipe indicator (mobile) ── */}
@@ -234,7 +234,7 @@ export default function EditPositionPanel({ position, onClose, onSave }: EditPos
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-5">
 
           {/* ── Price overview ── */}
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-3">
             <div className="bg-white/[0.03] rounded-xl p-3 border border-white/5">
               <div className="text-[9px] text-gray-500 uppercase tracking-wider mb-1">{t('trades.entryPrice', 'Einstieg')}</div>
               <div className="text-white font-semibold tabular-nums">${position.entry_price.toLocaleString()}</div>

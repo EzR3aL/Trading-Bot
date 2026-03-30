@@ -88,6 +88,7 @@ export default function Dashboard() {
   const [period, setPeriod] = useState<number>(30)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [editingPos, setEditingPos] = useState<PortfolioPosition | null>(null)
 
   const fetchData = useCallback(async () => {
     // Only sync once per session to avoid hammering the API
@@ -246,22 +247,50 @@ export default function Dashboard() {
       )}
 
       {/* Recent trades */}
-      <DashboardOpenPositions positions={positions} loading={loadingPositions} />
+      <DashboardOpenPositions positions={positions} loading={loadingPositions} onEditPosition={setEditingPos} />
 
       {/* Guided Tour */}
       <GuidedTour tourId="dashboard" steps={dashboardTourSteps} />
 
+      {/* Edit TP/SL Panel — rendered at top level for correct z-index */}
+      {editingPos && editingPos.trade_id && (
+        <EditPositionPanel
+          position={{
+            trade_id: editingPos.trade_id,
+            symbol: editingPos.symbol,
+            side: editingPos.side,
+            entry_price: editingPos.entry_price,
+            current_price: editingPos.current_price,
+            leverage: editingPos.leverage,
+            exchange: editingPos.exchange,
+            bot_name: editingPos.bot_name,
+            demo_mode: editingPos.demo_mode,
+            take_profit: editingPos.take_profit,
+            stop_loss: editingPos.stop_loss,
+            trailing_stop_active: editingPos.trailing_stop_active,
+            trailing_stop_price: editingPos.trailing_stop_price,
+            trailing_stop_distance_pct: editingPos.trailing_stop_distance_pct,
+          }}
+          onClose={() => setEditingPos(null)}
+          onSave={async (data) => {
+            if (!editingPos.trade_id) return
+            await api.put(`/trades/${editingPos.trade_id}/tp-sl`, {
+              take_profit: data.take_profit,
+              stop_loss: data.stop_loss,
+            })
+          }}
+        />
+      )}
     </div>
   )
 }
 
-function DashboardOpenPositions({ positions, loading }: { positions: PortfolioPosition[]; loading: boolean }) {
+function DashboardOpenPositions({ positions, loading, onEditPosition }: { positions: PortfolioPosition[]; loading: boolean; onEditPosition: (pos: PortfolioPosition) => void }) {
   const { t } = useTranslation()
   const isMobile = useIsMobile()
   const { unit: sizeUnit, toggle: toggleSizeUnit } = useSizeUnitStore()
   const [sortAsc, setSortAsc] = useState(false)
   const [expandedIdx, setExpandedIdx] = useState<number | null>(null)
-  const [editingPos, setEditingPos] = useState<PortfolioPosition | null>(null)
 
   const sortedPositions = [...positions].sort((a, b) =>
     sortAsc
@@ -379,7 +408,7 @@ function DashboardOpenPositions({ positions, loading }: { positions: PortfolioPo
                     <td className="text-center">
                       {pos.trade_id && (
                         <button
-                          onClick={(e) => { e.stopPropagation(); setEditingPos(pos) }}
+                          onClick={(e) => { e.stopPropagation(); onEditPosition(pos) }}
                           className="p-1.5 text-gray-500 hover:text-white transition-colors rounded-lg hover:bg-white/5"
                           title={t('editPosition.title')}
                         >
@@ -441,34 +470,6 @@ function DashboardOpenPositions({ positions, loading }: { positions: PortfolioPo
         </div>
       )}
 
-      {editingPos && editingPos.trade_id && (
-        <EditPositionPanel
-          position={{
-            trade_id: editingPos.trade_id,
-            symbol: editingPos.symbol,
-            side: editingPos.side,
-            entry_price: editingPos.entry_price,
-            current_price: editingPos.current_price,
-            leverage: editingPos.leverage,
-            exchange: editingPos.exchange,
-            bot_name: editingPos.bot_name,
-            demo_mode: editingPos.demo_mode,
-            take_profit: editingPos.take_profit,
-            stop_loss: editingPos.stop_loss,
-            trailing_stop_active: editingPos.trailing_stop_active,
-            trailing_stop_price: editingPos.trailing_stop_price,
-            trailing_stop_distance_pct: editingPos.trailing_stop_distance_pct,
-          }}
-          onClose={() => setEditingPos(null)}
-          onSave={async (data) => {
-            if (!editingPos.trade_id) return
-            await api.put(`/trades/${editingPos.trade_id}/tp-sl`, {
-              take_profit: data.take_profit,
-              stop_loss: data.stop_loss,
-            })
-          }}
-        />
-      )}
     </div>
   )
 }
