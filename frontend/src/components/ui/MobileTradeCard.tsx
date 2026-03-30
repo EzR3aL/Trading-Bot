@@ -60,6 +60,15 @@ function MobileTradeCardInner({ trade, extraDetails, onShare }: MobileTradeCardP
       {trade.demo_mode && (
         <span className="text-[8px] font-medium px-1 py-px rounded bg-amber-500/10 text-amber-400">DEMO</span>
       )}
+      {onShare && (
+        <button
+          onClick={(e) => { e.stopPropagation(); onShare() }}
+          className="ml-auto p-1 text-gray-500 hover:text-white transition-colors rounded shrink-0"
+          title={t('bots.copyImage')}
+        >
+          <Share size={13} />
+        </button>
+      )}
     </>
   )
 
@@ -121,15 +130,6 @@ function MobileTradeCardInner({ trade, extraDetails, onShare }: MobileTradeCardP
   return (
     <MobileCollapsibleCard header={header} summary={summary}>
       <DetailGrid items={details} />
-      {onShare && (
-        <button
-          onClick={onShare}
-          className="mt-2 p-2 rounded-lg text-gray-400 hover:text-white bg-white/5 hover:bg-white/10 border border-white/5 transition-all"
-          title={t('bots.copyImage')}
-        >
-          <Share size={14} />
-        </button>
-      )}
     </MobileCollapsibleCard>
   )
 }
