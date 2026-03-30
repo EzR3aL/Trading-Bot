@@ -9,6 +9,18 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [4.6.9] - 2026-03-31
+
+### Behoben
+- **TP/SL Entfernen sendet finalen Zustand an Exchange**: Beim Entfernen von TP wird jetzt der verbleibende SL mitgeschickt (und umgekehrt), statt beide auf null zu setzen — verhindert Bitget "must set one or both" Fehler
+- **Share-Icon einheitlich**: Desktop und Mobile nutzen jetzt das Android 3-Punkte Share-Icon statt "Bild kopieren" Text-Button. Mobil immer sichtbar in der Header-Zeile
+
+### Performance-Optimierungen
+- **Vite Chunk-Splitting**: Wallet-Libs (wagmi/viem/rainbowkit) und Recharts in separate Bundles — kleineres Hauptbundle
+- **3 neue DB-Indexes**: `ix_trade_user_demo`, `ix_funding_user_timestamp`, `ix_funding_user_symbol` (Migration 016)
+- **N+1 Kline-Fix**: Portfolio-Positions nutzt Batch-Kline-Cache statt N einzelner Binance-API-Calls
+- **Toter Code entfernt**: BotDetail.tsx (438 Zeilen), 3 npm-Pakete, tote i18n-Keys, unbenutzte CSS
+
 ## [4.6.8] - 2026-03-30
 
 ### Verbessert
