@@ -30,7 +30,7 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 ### Hinzugefuegt
 - **DB-Index auf `exit_time`**: Neuer Index `ix_trade_exit_time` für performante Abfragen nach Schließdatum (Alembic Migration 014)
 - **Integration-Test für NULL-exit_time-Fallback**: Prüft, dass geschlossene Trades ohne `exit_time` via COALESCE auf `entry_time` zurückfallen und in Charts/Statistiken erscheinen
-- **EditPositionPanel UI-Komponente**: Slide-Over-Panel zum nachträglichen Setzen/Ändern von TP, SL und Trailing Stop auf offenen Positionen. Preis- und Prozent-Eingabe synchronisiert, ATR-Slider für Trailing, Exchange-spezifische Anzeige (nativ vs. Bot-überwacht), Validierung. Noch nicht eingebunden — Backend-Integration folgt in Issue #120
+- **TP/SL nachträglich bearbeiten (Issue #120)**: Offene Positionen können jetzt per Zahnrad-Icon in Dashboard und Portfolio bearbeitet werden. Neuer Backend-Endpoint `PUT /api/trades/{id}/tp-sl` setzt TP/SL auf der Exchange und aktualisiert die DB. Frontend-Panel mit Preis/Prozent-Eingabe (bidirektional synchronisiert), ATR-Slider für Trailing Stop, Exchange-Hinweis (nativ vs. Bot-überwacht), Validierung (TP/SL-Richtung), und i18n DE/EN. Funktioniert auf allen Exchanges die `set_position_tpsl` unterstützen (Bitget, Hyperliquid, BingX, Weex, Bitunix)
 - **Edge Indicator Anleitung (PDF)**: Vollständige zweisprachige Dokumentation der Strategie — Signallogik, Konfidenz-Bewertung, Trailing Stop, Risikomanagement, Exchange-Besonderheiten, alle Parameter. Unter `Anleitungen/Edge_Indicator_Strategie.pdf`
 
 ## [4.6.5] - 2026-03-28

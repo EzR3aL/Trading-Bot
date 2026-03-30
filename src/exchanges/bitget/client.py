@@ -321,6 +321,18 @@ class BitgetExchangeClient(ExchangeClient):
         )
         logger.info(f"Entire TP/SL set for {symbol} {hold_side}: TP={take_profit}, SL={stop_loss}")
 
+    async def set_position_tpsl(
+        self,
+        symbol: str,
+        position_id: Optional[str] = None,
+        take_profit: Optional[float] = None,
+        stop_loss: Optional[float] = None,
+        side: str = "long",
+        size: float = 0,
+    ) -> None:
+        """Public wrapper for Bitget position TP/SL."""
+        await self._set_position_tpsl(symbol, side, take_profit, stop_loss)
+
     async def cancel_order(self, symbol: str, order_id: str) -> bool:
         data = {
             "symbol": symbol,

@@ -184,6 +184,7 @@ async def get_portfolio_positions(
                         pass
 
                 positions.append(PortfolioPosition(
+                    trade_id=trade.id if trade else None,
                     exchange=exchange_type,
                     symbol=pos.symbol,
                     side=pos.side,
@@ -195,6 +196,8 @@ async def get_portfolio_positions(
                     margin=pos.margin,
                     bot_name=bot_name,
                     demo_mode=trade.demo_mode if trade else False,
+                    take_profit=trade.take_profit if trade else None,
+                    stop_loss=trade.stop_loss if trade else None,
                     trailing_stop_active=ts_info.get("trailing_stop_active", False),
                     trailing_stop_price=ts_info.get("trailing_stop_price"),
                     trailing_stop_distance_pct=ts_info.get("trailing_stop_distance_pct"),

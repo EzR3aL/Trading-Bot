@@ -522,3 +522,112 @@ async def get_trade(
         bot_exchange=bot_exchange,
         **ts_info,
     )
+
+
+# ---------------------------------------------------------------------------
+# Update TP/SL on an open position
+# ---------------------------------------------------------------------------
+
+from pydantic import BaseModel as PydanticBaseModel
+
+
+class UpdateTpSlRequest(PydanticBaseModel):
+    take_profit: Optional[float] = None
+    stop_loss: Optional[float] = None
+
+
+@router.put("/{trade_id}/tp-sl")
+@limiter.limit("10/minute")
+async def update_trade_tpsl(
+    trade_id: int,
+    body: UpdateTpSlRequest,
+    request: Request,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Update TP/SL on an open position — sets on exchange + updates DB."""
+    from fastapi import HTTPException
+
+    # Load trade
+    result = await db.execute(
+        select(TradeRecord).where(
+            TradeRecord.id == trade_id,
+            TradeRecord.user_id == user.id,
+        )
+    )
+    trade = result.scalar_one_or_none()
+    if not trade:
+        raise HTTPException(status_code=404, detail=ERR_TRADE_NOT_FOUND)
+    if trade.status != "open":
+        raise HTTPException(status_code=400, detail="Trade is not open")
+
+    # Validate TP/SL direction
+    is_long = trade.side == "long"
+    if body.take_profit is not None:
+        if is_long and body.take_profit <= trade.entry_price:
+            raise HTTPException(status_code=400, detail="TP must be above entry price for long")
+        if not is_long and body.take_profit >= trade.entry_price:
+            raise HTTPException(status_code=400, detail="TP must be below entry price for short")
+    if body.stop_loss is not None:
+        if is_long and body.stop_loss >= trade.entry_price:
+            raise HTTPException(status_code=400, detail="SL must be below entry price for long")
+        if not is_long and body.stop_loss <= trade.entry_price:
+            raise HTTPException(status_code=400, detail="SL must be above entry price for short")
+
+    # Load exchange connection
+    conn_result = await db.execute(
+        select(ExchangeConnection).where(
+            ExchangeConnection.user_id == user.id,
+            ExchangeConnection.exchange_type == trade.exchange,
+        )
+    )
+    conn = conn_result.scalar_one_or_none()
+    if not conn:
+        raise HTTPException(status_code=400, detail="No exchange connection found")
+
+    # Create exchange client
+    api_key_enc = conn.demo_api_key_encrypted if trade.demo_mode else conn.api_key_encrypted
+    api_secret_enc = conn.demo_api_secret_encrypted if trade.demo_mode else conn.api_secret_encrypted
+    passphrase_enc = conn.demo_passphrase_encrypted if trade.demo_mode else conn.passphrase_encrypted
+
+    if not api_key_enc or not api_secret_enc:
+        raise HTTPException(status_code=400, detail="API keys not configured for this mode")
+
+    client = create_exchange_client(
+        exchange_type=trade.exchange,
+        api_key=decrypt_value(api_key_enc),
+        api_secret=decrypt_value(api_secret_enc),
+        passphrase=decrypt_value(passphrase_enc) if passphrase_enc else "",
+        demo_mode=trade.demo_mode,
+    )
+
+    # Set TP/SL on exchange
+    try:
+        await client.set_position_tpsl(
+            symbol=trade.symbol,
+            take_profit=body.take_profit,
+            stop_loss=body.stop_loss,
+            side=trade.side,
+            size=trade.size,
+        )
+    except NotImplementedError:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Exchange {trade.exchange} does not support TP/SL modification",
+        )
+    except Exception as e:
+        logger.error("Failed to set TP/SL on exchange for trade %s: %s", trade_id, e)
+        raise HTTPException(status_code=502, detail=f"Exchange error: {str(e)}")
+    finally:
+        await client.close()
+
+    # Update DB
+    trade.take_profit = body.take_profit
+    trade.stop_loss = body.stop_loss
+    await db.commit()
+
+    logger.info(
+        "TP/SL updated for trade %s: TP=%s, SL=%s",
+        trade_id, body.take_profit, body.stop_loss,
+    )
+    return {"status": "ok", "take_profit": body.take_profit, "stop_loss": body.stop_loss}

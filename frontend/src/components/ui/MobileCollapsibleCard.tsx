@@ -14,6 +14,8 @@ interface MobileCollapsibleCardProps {
   onToggle?: () => void
   /** Additional className for the outer container */
   className?: string
+  /** Action button shown in the header row (e.g., settings icon) */
+  action?: React.ReactNode
 }
 
 /**
@@ -29,6 +31,7 @@ export default function MobileCollapsibleCard({
   isOpen: controlledOpen,
   onToggle,
   className = '',
+  action,
 }: MobileCollapsibleCardProps) {
   const [internalOpen, setInternalOpen] = useState(false)
   const isOpen = controlledOpen ?? internalOpen
@@ -42,9 +45,12 @@ export default function MobileCollapsibleCard({
           <div className="flex items-center gap-1.5 min-w-0 flex-1">
             {header}
           </div>
-          {!summary && (
-            <ChevronDown size={12} className={`text-gray-400 shrink-0 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
-          )}
+          <div className="flex items-center gap-1 shrink-0">
+            {action}
+            {!summary && (
+              <ChevronDown size={12} className={`text-gray-400 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
+            )}
+          </div>
         </div>
         {/* Summary row — always visible */}
         {summary && (

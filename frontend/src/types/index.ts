@@ -214,6 +214,7 @@ export interface PortfolioSummary {
 }
 
 export interface PortfolioPosition {
+  trade_id?: number
   exchange: string
   symbol: string
   side: string
@@ -225,6 +226,8 @@ export interface PortfolioPosition {
   margin: number
   bot_name?: string
   demo_mode?: boolean
+  take_profit?: number | null
+  stop_loss?: number | null
   trailing_stop_active?: boolean
   trailing_stop_price?: number
   trailing_stop_distance_pct?: number

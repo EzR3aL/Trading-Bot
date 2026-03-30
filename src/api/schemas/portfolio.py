@@ -26,6 +26,7 @@ class PortfolioSummary(BaseModel):
 
 
 class PortfolioPosition(BaseModel):
+    trade_id: Optional[int] = None
     exchange: str
     symbol: str
     side: str
@@ -37,6 +38,8 @@ class PortfolioPosition(BaseModel):
     margin: float = 0
     bot_name: Optional[str] = None
     demo_mode: bool = False
+    take_profit: Optional[float] = None
+    stop_loss: Optional[float] = None
     trailing_stop_active: bool = False
     trailing_stop_price: Optional[float] = None
     trailing_stop_distance_pct: Optional[float] = None

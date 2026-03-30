@@ -97,6 +97,18 @@ class ExchangeClient(ABC):
         """Close HTTP session and clean up resources."""
         ...
 
+    async def set_position_tpsl(
+        self,
+        symbol: str,
+        position_id: Optional[str] = None,
+        take_profit: Optional[float] = None,
+        stop_loss: Optional[float] = None,
+        side: str = "long",
+        size: float = 0,
+    ) -> None:
+        """Set/update TP/SL for an open position. Override in exchange-specific client."""
+        raise NotImplementedError(f"{self.exchange_name} does not support set_position_tpsl")
+
     async def place_trailing_stop(
         self,
         symbol: str,

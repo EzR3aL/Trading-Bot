@@ -249,6 +249,7 @@ export default function Dashboard() {
 
       {/* Guided Tour */}
       <GuidedTour tourId="dashboard" steps={dashboardTourSteps} />
+
     </div>
   )
 }
@@ -425,6 +426,7 @@ function DashboardOpenPositions({ positions, loading }: { positions: PortfolioPo
           </table>
         </div>
       )}
+
     </div>
   )
 }
