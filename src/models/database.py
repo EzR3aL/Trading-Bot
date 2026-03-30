@@ -131,6 +131,7 @@ class TradeRecord(Base):
         Index("ix_trade_bot_status", "bot_config_id", "status"),
         Index("ix_trade_entry_time", "entry_time"),
         Index("ix_trade_exit_time", "exit_time"),
+        Index("ix_trade_user_demo", "user_id", "demo_mode"),
     )
 
     id = Column(Integer, primary_key=True, autoincrement=True)
@@ -176,6 +177,10 @@ class TradeRecord(Base):
 
 class FundingPayment(Base):
     __tablename__ = "funding_payments"
+    __table_args__ = (
+        Index("ix_funding_user_timestamp", "user_id", "timestamp"),
+        Index("ix_funding_user_symbol", "user_id", "symbol"),
+    )
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)

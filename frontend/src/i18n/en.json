@@ -39,13 +39,9 @@
   },
   "dashboard": {
     "title": "Dashboard",
-    "balance": "Account Balance",
     "totalPnl": "Total PnL",
     "winRate": "Win Rate",
     "totalTrades": "Total Trades",
-    "openPositions": "Open Positions",
-    "recentTrades": "Recent Trades",
-    "noPositions": "No open positions",
     "noTrades": "No trades yet",
     "pnlOverTime": "PnL Over Time",
     "winLoss": "Win / Loss",
@@ -179,10 +175,6 @@
     "testConnectionResult": "{{mode}} {{exchange}} connected! Balance: ${{balance}}",
     "mainnet": "Mainnet",
     "testnet": "Testnet",
-    "free": "Free",
-    "models": "Models",
-    "availableModels": "Available Models",
-    "defaultModel": "Default",
     "affiliateLabelPlaceholder": "e.g. 10% fee discount",
     "hlBuilderConfig": "Hyperliquid Builder Config",
     "hlBuilderConfigDesc": "Configure builder address, fee rate, and referral code",
@@ -255,21 +247,6 @@
     "twoFactorVerifyError": "Invalid code. Please try again.",
     "twoFactorDisableError": "Error disabling 2FA",
     "twoFactorRegenerateError": "Error generating new backup codes"
-  },
-  "bot": {
-    "title": "Bot Control",
-    "start": "Start Bot",
-    "stop": "Stop Bot",
-    "confirmStop": "Confirm Stop?",
-    "running": "Running",
-    "stopped": "Stopped",
-    "demoMode": "Demo Mode",
-    "liveMode": "Live Mode",
-    "selectExchange": "Select Exchange",
-    "selectPreset": "Select Preset",
-    "stopAll": "Stop All",
-    "noKeysConfigured": "No API keys configured for this exchange.",
-    "configureKeys": "Configure API Keys"
   },
   "tax": {
     "title": "Tax Report",
@@ -999,5 +976,13 @@
     "exchangeCards": "Exchange Overview",
     "total": "Total",
     "margin": "Margin"
+  },
+  "ws": {
+    "botStarted": "Bot started",
+    "botStopped": "Bot stopped",
+    "tradeOpened": "Trade opened",
+    "tradeClosed": "Trade closed",
+    "connectionLost": "Connection lost",
+    "reconnecting": "Reconnecting..."
   }
 }

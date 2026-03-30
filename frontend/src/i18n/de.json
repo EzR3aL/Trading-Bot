@@ -39,13 +39,9 @@
   },
   "dashboard": {
     "title": "Dashboard",
-    "balance": "Kontostand",
     "totalPnl": "Gesamt-PnL",
     "winRate": "Gewinnrate",
     "totalTrades": "Gesamt-Trades",
-    "openPositions": "Offene Positionen",
-    "recentTrades": "Letzte Trades",
-    "noPositions": "Keine offenen Positionen",
     "noTrades": "Keine Trades vorhanden",
     "pnlOverTime": "PnL im Zeitverlauf",
     "winLoss": "Gewinn / Verlust",
@@ -179,10 +175,6 @@
     "testConnectionResult": "{{mode}} {{exchange}} verbunden! Guthaben: ${{balance}}",
     "mainnet": "Mainnet",
     "testnet": "Testnet",
-    "free": "Kostenlos",
-    "models": "Modelle",
-    "availableModels": "Verfügbare Modelle",
-    "defaultModel": "Standard",
     "affiliateLabelPlaceholder": "z.B. 10% Rabatt auf Gebühren",
     "hlBuilderConfig": "Hyperliquid Builder-Konfiguration",
     "hlBuilderConfigDesc": "Builder-Adresse, Gebührenrate und Empfehlungscode konfigurieren",
@@ -255,21 +247,6 @@
     "twoFactorVerifyError": "Ungültiger Code. Bitte versuche es erneut.",
     "twoFactorDisableError": "Fehler beim Deaktivieren von 2FA",
     "twoFactorRegenerateError": "Fehler beim Generieren neuer Backup-Codes"
-  },
-  "bot": {
-    "title": "Bot-Steuerung",
-    "start": "Bot starten",
-    "stop": "Bot stoppen",
-    "confirmStop": "Wirklich stoppen?",
-    "running": "Läuft",
-    "stopped": "Gestoppt",
-    "demoMode": "Demo-Modus",
-    "liveMode": "Live-Modus",
-    "selectExchange": "Exchange wählen",
-    "selectPreset": "Preset wählen",
-    "stopAll": "Alle stoppen",
-    "noKeysConfigured": "Keine API-Schlüssel für diese Exchange konfiguriert.",
-    "configureKeys": "API-Schlüssel konfigurieren"
   },
   "tax": {
     "title": "Steuerbericht",
@@ -999,5 +976,13 @@
     "exchangeCards": "Exchange-Übersicht",
     "total": "Gesamt",
     "margin": "Margin"
+  },
+  "ws": {
+    "botStarted": "Bot gestartet",
+    "botStopped": "Bot gestoppt",
+    "tradeOpened": "Trade eröffnet",
+    "tradeClosed": "Trade geschlossen",
+    "connectionLost": "Verbindung verloren",
+    "reconnecting": "Verbindung wird wiederhergestellt..."
   }
 }

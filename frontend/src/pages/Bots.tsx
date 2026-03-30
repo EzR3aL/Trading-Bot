@@ -193,7 +193,10 @@ function TradeDetailModal({ trade, onClose, t, affiliateLink }: { trade: BotTrad
       await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })])
       setCopied(true)
       setTimeout(() => setCopied(false), 2000)
-    } catch (err) { console.error('Failed to copy image:', err) }
+    } catch (err) {
+      console.error('Failed to copy image:', err)
+      useToastStore.getState().addToast('error', t('common.error'))
+    }
   }
 
   return (
@@ -403,7 +406,10 @@ function BotTradeHistoryModal({ bot, onClose, t }: { bot: BotStatus; onClose: ()
         const links: AffiliateLink[] = affRes.data
         const match = links.find(l => l.exchange_type === bot.exchange_type)
         if (match) setAffiliateLink(match)
-      } catch (err) { console.error('Failed to load bot trade history:', err) }
+      } catch (err) {
+        console.error('Failed to load bot trade history:', err)
+        useToastStore.getState().addToast('error', t('common.error'))
+      }
       setLoading(false)
     }
     load()
@@ -424,7 +430,10 @@ function BotTradeHistoryModal({ bot, onClose, t }: { bot: BotStatus; onClose: ()
       ])
       setCopied(true)
       setTimeout(() => setCopied(false), 2000)
-    } catch (err) { console.error('Failed to copy image:', err) }
+    } catch (err) {
+      console.error('Failed to copy image:', err)
+      useToastStore.getState().addToast('error', t('common.error'))
+    }
   }
 
   const latestClosed = stats?.recent_trades.find(tr => tr.status === 'closed')

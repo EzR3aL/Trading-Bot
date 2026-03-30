@@ -9,6 +9,21 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [4.6.8] - 2026-03-30
+
+### Verbessert
+- **Error Toasts statt stiller Fehler**: `console.error`-Aufrufe in Bots.tsx, BotPerformance.tsx und Dashboard.tsx zeigen jetzt zusätzlich einen Toast — Benutzer sehen sofort, wenn Bildkopie, Trade-Historie oder Positionen-Laden fehlschlägt
+- **Dashboard Memoization**: `sortedPositions` in `DashboardOpenPositions` mit `useMemo` gewrappt, `onEditPosition` mit `useCallback` im Parent — verhindert unnötige Re-Renders
+- **Aria-Labels ergänzt**: Theme-Toggle und Sprach-Toggle in MobileBottomNav, PnL-Sort-Button im Dashboard — verbesserte Screenreader-Unterstützung
+
+## [4.6.7] - 2026-03-30
+
+### Behoben
+- **i18n: Ungenutzte Keys entfernt**: "bot"-Namespace (ohne 's') aus de.json und en.json entfernt — war veraltet und nicht mehr in Verwendung. "bots"-Namespace (mit 's') bleibt erhalten
+- **i18n: Weitere ungenutzte Keys entfernt**: `dashboard.balance`, `dashboard.openPositions`, `dashboard.recentTrades`, `dashboard.noPositions`, `settings.free`, `settings.models`, `settings.availableModels`, `settings.defaultModel` aus beiden Sprachdateien entfernt
+- **i18n: "ws"-Namespace hinzugefügt**: WebSocket-Benachrichtigungs-Übersetzungen (botStarted, botStopped, tradeOpened, tradeClosed, connectionLost, reconnecting) in de.json und en.json ergänzt
+- **CSS: `.glass-card-hover` entfernt**: Ungenutzte CSS-Klasse und zugehörige Light-Mode-Variante aus index.css entfernt
+
 ## [4.6.6] - 2026-03-30
 
 ### Behoben

@@ -690,7 +690,10 @@ export default function BotPerformance() {
                             await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })])
                             setLatestCopied(true)
                             setTimeout(() => setLatestCopied(false), 2000)
-                          } catch (err) { console.error('Failed to copy image:', err) }
+                          } catch (err) {
+                            console.error('Failed to copy image:', err)
+                            useToastStore.getState().addToast('error', t('common.error'))
+                          }
                         }}
                         className={`flex items-center gap-1.5 px-3 py-1 text-xs rounded-lg transition-all border ${
                           latestCopied
@@ -1021,7 +1024,10 @@ export default function BotPerformance() {
                       ])
                       setCopied(true)
                       setTimeout(() => setCopied(false), 2000)
-                    } catch (err) { console.error('Failed to copy image:', err) }
+                    } catch (err) {
+                      console.error('Failed to copy image:', err)
+                      useToastStore.getState().addToast('error', t('common.error'))
+                    }
                   }}
                   className={`flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg transition-all border ${
                     copied

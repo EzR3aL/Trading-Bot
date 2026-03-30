@@ -160,6 +160,28 @@ async def get_portfolio_positions(
         for bot in bot_result.scalars().all():
             bot_cache[bot.id] = bot
 
+    # Batch pre-fetch klines for trailing stop calculation (avoid N+1 Binance API calls)
+    klines_cache: dict[str, list] = {}
+    open_symbols = {
+        t.symbol for t in open_trades
+        if t.status == "open" and (
+            t.trailing_atr_override is not None
+            or (bot_cache.get(t.bot_config_id) and bot_cache[t.bot_config_id].strategy_type == "edge_indicator")
+        )
+    }
+    if open_symbols:
+        try:
+            from src.data.market_data import MarketDataFetcher
+            fetcher = MarketDataFetcher()
+            for sym in open_symbols:
+                try:
+                    klines_cache[sym] = await fetcher.get_binance_klines(sym, "1h", 30)
+                except Exception:
+                    pass
+            await fetcher.close()
+        except Exception:
+            pass
+
     positions: list[PortfolioPosition] = []
 
     async def fetch_positions(exchange_type: str, client):
@@ -179,7 +201,7 @@ async def get_portfolio_positions(
                     strat_type = bot.strategy_type if bot else None
                     strat_params = bot.strategy_params if bot else None
                     try:
-                        ts_info = await _compute_trailing_stop(trade, strat_type, strat_params)
+                        ts_info = await _compute_trailing_stop(trade, strat_type, strat_params, klines_cache=klines_cache)
                     except Exception:
                         pass
 

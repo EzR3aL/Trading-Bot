@@ -176,12 +176,14 @@ export default function MobileBottomNav() {
             <button
               onClick={toggleTheme}
               className="px-3 py-2 text-xs bg-white/5 text-gray-300 rounded-lg hover:bg-white/10 border border-white/5 transition-all"
+              aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
             >
               {theme === 'dark' ? <Sun size={14} /> : <Moon size={14} />}
             </button>
             <button
               onClick={toggleLang}
               className="px-3 py-2 text-xs bg-white/5 text-gray-300 rounded-lg hover:bg-white/10 border border-white/5 transition-all font-medium"
+              aria-label="Toggle language"
             >
               {i18n.language === 'de' ? 'EN' : 'DE'}
             </button>

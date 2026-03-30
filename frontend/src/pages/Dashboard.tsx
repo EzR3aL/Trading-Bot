@@ -1,6 +1,7 @@
-import { useEffect, useState, useRef, useCallback, Fragment } from 'react'
+import { useEffect, useState, useRef, useCallback, useMemo, Fragment } from 'react'
 import { useTranslation } from 'react-i18next'
 import api from '../api/client'
+import { useToastStore } from '../stores/toastStore'
 import { useFilterStore } from '../stores/filterStore'
 import type { Statistics, DailyStats, PortfolioPosition } from '../types'
 import PnlChart from '../components/dashboard/PnlChart'
@@ -109,7 +110,10 @@ export default function Dashboard() {
     api.get('/portfolio/positions').then(res => {
       setPositions(res.data.positions || res.data || [])
       setLoadingPositions(false)
-    }).catch(() => setLoadingPositions(false))
+    }).catch(() => {
+      setLoadingPositions(false)
+      useToastStore.getState().addToast('error', t('common.error'))
+    })
   }, [period, demoFilter])
 
   useEffect(() => {
@@ -134,6 +138,10 @@ export default function Dashboard() {
       setError(t('common.error'))
     }
   }, [fetchData, t])
+
+  const handleEditPosition = useCallback((pos: PortfolioPosition) => {
+    setEditingPos(pos)
+  }, [])
 
   const { containerRef, refreshing, pullDistance } = usePullToRefresh({
     onRefresh: refreshData,
@@ -250,7 +258,7 @@ export default function Dashboard() {
       <DashboardOpenPositions
         positions={demoFilter === 'all' ? positions : positions.filter(p => demoFilter === 'demo' ? p.demo_mode : !p.demo_mode)}
         loading={loadingPositions}
-        onEditPosition={setEditingPos}
+        onEditPosition={handleEditPosition}
       />
 
       {/* Guided Tour */}
@@ -304,10 +312,12 @@ function DashboardOpenPositions({ positions, loading, onEditPosition }: { positi
   const [sortAsc, setSortAsc] = useState(false)
   const [expandedIdx, setExpandedIdx] = useState<number | null>(null)
 
-  const sortedPositions = [...positions].sort((a, b) =>
-    sortAsc
-      ? a.unrealized_pnl - b.unrealized_pnl
-      : b.unrealized_pnl - a.unrealized_pnl
+  const sortedPositions = useMemo(() =>
+    [...positions].sort((a, b) =>
+      sortAsc
+        ? a.unrealized_pnl - b.unrealized_pnl
+        : b.unrealized_pnl - a.unrealized_pnl
+    ), [positions, sortAsc]
   )
 
   return (
@@ -353,6 +363,7 @@ function DashboardOpenPositions({ positions, loading, onEditPosition }: { positi
                   <button
                     onClick={() => setSortAsc(!sortAsc)}
                     className="inline-flex items-center gap-1 hover:text-white transition-colors"
+                    aria-label="Sort by PnL"
                   >
                     {t('portfolio.pnl')}
                     {sortAsc ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
