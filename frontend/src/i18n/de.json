@@ -481,6 +481,8 @@
     "delete": "Löschen",
     "confidence": "Konfidenz",
     "confirmDelete": "Diesen Bot wirklich löschen?",
+    "deleteBot": "Bot löschen",
+    "confirmDeleteMessage": "Möchtest du \"{{name}}\" wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.",
     "stopAll": "Alle stoppen",
     "trades": "Trades",
     "openTrades": "offen",

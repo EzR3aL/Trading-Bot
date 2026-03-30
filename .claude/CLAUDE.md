@@ -13,7 +13,6 @@
 | Edge Indicator | EMA + MACD + ADX + ATR (Risikoprofile: standard/1h, conservative/4h) |
 | Contrarian Pulse | Fear/Greed + Funding Rate |
 | Liquidation Hunter | Liquidations-Kaskaden |
-| Sentiment Surfer | Sentiment-basiert |
 
 ## Exchanges (`src/exchanges/`)
 Bitget, Weex, Hyperliquid (DEX), Bitunix, BingX — alle via `ExchangeClient` Interface

@@ -70,13 +70,10 @@ interface BotBuilderProps {
 }
 
 // Strategies that use market data and should show the data sources step
-const DATA_STRATEGIES = ['sentiment_surfer', 'liquidation_hunter', 'edge_indicator', 'contrarian_pulse']
+const DATA_STRATEGIES = ['liquidation_hunter', 'edge_indicator', 'contrarian_pulse']
 
 // Fixed data sources per strategy (used after selection to show which sources are used)
 const FIXED_STRATEGY_SOURCES: Record<string, string[]> = {
-  sentiment_surfer: [
-    'fear_greed', 'news_sentiment', 'vwap', 'supertrend', 'spot_volume', 'spot_price', 'oiwap',
-  ],
   liquidation_hunter: [
     'fear_greed', 'long_short_ratio', 'funding_rate', 'open_interest', 'spot_price',
   ],

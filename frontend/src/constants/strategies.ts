@@ -1,6 +1,5 @@
 // Display names for bot strategy types
 export const STRATEGY_DISPLAY: Record<string, string> = {
-  sentiment_surfer: 'Sentiment Surfer',
   liquidation_hunter: 'Liquidation Hunter',
   edge_indicator: 'Edge Indicator',
   contrarian_pulse: 'Contrarian Pulse',

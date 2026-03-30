@@ -327,7 +327,7 @@ class TestEdgeIndicatorShouldExit:
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# 4. LiquidationHunter + SentimentSurfer: Optional TP/SL
+# 4. LiquidationHunter: Optional TP/SL
 # ═══════════════════════════════════════════════════════════════════════════════
 
 class TestLiquidationHunterOptionalTpSl:
@@ -351,31 +351,6 @@ class TestLiquidationHunterOptionalTpSl:
 
     def test_defaults_dict_has_no_tp_sl(self):
         from src.strategy.liquidation_hunter import DEFAULTS
-        assert "take_profit_percent" not in DEFAULTS
-        assert "stop_loss_percent" not in DEFAULTS
-
-
-class TestSentimentSurferOptionalTpSl:
-
-    def test_no_defaults_returns_none(self):
-        from src.strategy.sentiment_surfer import SentimentSurferStrategy
-        strategy = SentimentSurferStrategy()
-        tp, sl = strategy._calculate_targets(SignalDirection.LONG, 95000.0)
-        assert tp is None
-        assert sl is None
-
-    def test_user_configured_works(self):
-        from src.strategy.sentiment_surfer import SentimentSurferStrategy
-        strategy = SentimentSurferStrategy(params={
-            "take_profit_percent": 3.5,
-            "stop_loss_percent": 1.5,
-        })
-        tp, sl = strategy._calculate_targets(SignalDirection.LONG, 100000.0)
-        assert tp == 103500.0
-        assert sl == 98500.0
-
-    def test_defaults_dict_has_no_tp_sl(self):
-        from src.strategy.sentiment_surfer import DEFAULTS
         assert "take_profit_percent" not in DEFAULTS
         assert "stop_loss_percent" not in DEFAULTS
 

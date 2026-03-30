@@ -18,7 +18,6 @@ import {
   Play,
   BarChart3,
   ArrowRightCircle,
-  TrendingUp,
   Activity,
   Target,
   AlertTriangle,
@@ -267,7 +266,6 @@ function SectionStrategies() {
 
   const strategies = [
     { name: 'Edge Indicator', icon: <Activity size={18} className="text-green-400" />, desc: t('guide.stratEdge'), tf: t('guide.stratEdgeTf'), type: t('guide.stratTypeKline') },
-    { name: 'Sentiment Surfer', icon: <TrendingUp size={18} className="text-cyan-400" />, desc: t('guide.stratSentiment'), tf: t('guide.stratSentimentTf'), type: t('guide.stratTypeSentiment') },
     { name: 'Liquidation Hunter', icon: <Target size={18} className="text-red-400" />, desc: t('guide.stratLiquidation'), tf: t('guide.stratLiquidationTf'), type: t('guide.stratTypeLiq') },
   ]
 

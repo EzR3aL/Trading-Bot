@@ -1390,7 +1390,7 @@ export default function Bots() {
       <ConfirmModal
         open={confirmModal?.type === 'delete'}
         title={t('bots.deleteBot', 'Delete Bot')}
-        message={t('bots.confirmDeleteMessage', `Are you sure you want to delete "${confirmModal?.name}"? This action cannot be undone.`)}
+        message={t('bots.confirmDeleteMessage', { name: confirmModal?.name })}
         confirmLabel={t('common.delete', 'Delete')}
         variant="danger"
         onConfirm={confirmDelete}

@@ -481,6 +481,8 @@
     "delete": "Delete",
     "confidence": "Confidence",
     "confirmDelete": "Delete this bot?",
+    "deleteBot": "Delete Bot",
+    "confirmDeleteMessage": "Are you sure you want to delete \"{{name}}\"? This action cannot be undone.",
     "stopAll": "Stop All",
     "trades": "trades",
     "openTrades": "open",

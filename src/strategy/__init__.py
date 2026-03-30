@@ -7,7 +7,6 @@ from .base import BaseStrategy, SignalDirection, StrategyRegistry, TradeSignal
 from .contrarian_pulse import ContrarianPulseStrategy
 from .edge_indicator import EdgeIndicatorStrategy
 from .liquidation_hunter import LiquidationHunterStrategy
-from .sentiment_surfer import SentimentSurferStrategy
 
 __all__ = [
     "BaseStrategy",
@@ -17,5 +16,4 @@ __all__ = [
     "StrategyRegistry",
     "TradeSignal",
     "LiquidationHunterStrategy",
-    "SentimentSurferStrategy",
 ]
