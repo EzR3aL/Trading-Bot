@@ -1040,6 +1040,24 @@ export default function BotPerformance() {
 
             {/* Capturable Card Content */}
             <div ref={tradeCardRef} className="p-7">
+              {/* Exchange + Leverage */}
+              {(() => {
+                const botEx = compareData.find(b => b.bot_id === selectedBot)?.exchange_type
+                return (botEx || selectedTrade.leverage) ? (
+                  <div className="flex items-center gap-4 mb-5 text-sm text-gray-400">
+                    {botEx && (
+                      <span className="inline-flex items-center gap-1.5">
+                        <ExchangeIcon exchange={botEx} size={16} />
+                        <span className="capitalize text-gray-300">{botEx}</span>
+                      </span>
+                    )}
+                    {selectedTrade.leverage && (
+                      <span>{t('trades.leverage')}: <span className="text-white font-medium">{selectedTrade.leverage}x</span></span>
+                    )}
+                  </div>
+                ) : null
+              })()}
+
               <div className="text-center py-6 mb-5 bg-white/[0.02] rounded-xl border border-white/5">
                 <div className="text-xs text-gray-400 uppercase tracking-wider mb-2">{t('bots.result')}</div>
                 <div className={`text-5xl font-bold tracking-tight ${selectedTrade.pnl_percent >= 0 ? 'text-profit' : 'text-loss'}`}>
@@ -1097,6 +1115,17 @@ export default function BotPerformance() {
                   : <ExitReasonBadge reason={selectedTrade.exit_reason} compact />
                 }
               </div>
+
+              {(() => {
+                const botEx = compareData.find(b => b.bot_id === selectedBot)?.exchange_type
+                const aLink = botEx ? affiliateLinks.find(l => l.exchange_type === botEx) : null
+                return aLink ? (
+                  <div className="mt-3 pt-3 border-t border-white/5">
+                    <div className="text-xs text-gray-500 mb-1">{aLink.label || t('bots.affiliateLink')}</div>
+                    <div className="text-xs text-primary-400 font-medium">{aLink.affiliate_url}</div>
+                  </div>
+                ) : null
+              })()}
             </div>
           </div>
         </div>
