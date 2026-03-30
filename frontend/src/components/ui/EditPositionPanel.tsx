@@ -183,25 +183,52 @@ export default function EditPositionPanel({ position, onClose, onSave }: EditPos
     ? isLong
     : !isLong
 
+  const mobilePanel = 'fixed bottom-0 left-0 right-0 z-[100] bg-[#0f1420] border-t border-white/10 rounded-t-2xl max-h-[85vh] flex flex-col overflow-hidden'
+  const desktopPanel = 'bg-[#0b0f19] rounded-2xl max-w-lg w-full mx-4 max-h-[90vh] flex flex-col border border-white/10 shadow-2xl overflow-hidden'
+
   return (
-    <div
-      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-md"
-      onClick={onClose}
-      role="dialog"
-      aria-modal="true"
-    >
+    <>
+      {/* ── Backdrop ── */}
       <div
-        ref={swipe.ref}
-        style={swipe.style}
-        className="bg-[#0b0f19] rounded-2xl max-w-lg w-full mx-2 sm:mx-4 my-2 sm:my-3 max-h-[80vh] sm:max-h-[85vh] lg:max-h-[90vh] flex flex-col border border-white/10 shadow-2xl overflow-hidden"
-        onClick={(e) => e.stopPropagation()}
-      >
-        {/* ── Swipe indicator (mobile) ── */}
-        {isMobile && (
-          <div className="flex justify-center pt-2 pb-1">
+        className="fixed inset-0 z-[99] bg-black/60 backdrop-blur-sm"
+        onClick={onClose}
+        aria-hidden="true"
+      />
+
+      {/* ── Desktop wrapper (centers the panel) ── */}
+      {!isMobile && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center pointer-events-none">
+          <div className={`${desktopPanel} pointer-events-auto`} onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
+            {renderContent()}
+          </div>
+        </div>
+      )}
+
+      {/* ── Mobile bottom sheet ── */}
+      {isMobile && (
+        <div
+          ref={swipe.ref}
+          style={swipe.style}
+          className={mobilePanel}
+          onClick={(e) => e.stopPropagation()}
+          role="dialog"
+          aria-modal="true"
+        >
+          {/* Swipe handle */}
+          <div className="flex justify-center pt-3 pb-1 shrink-0">
             <div className="w-10 h-1 rounded-full bg-white/20" />
           </div>
-        )}
+          {renderContent()}
+          {/* Safe area spacer */}
+          <div className="h-[env(safe-area-inset-bottom,0px)]" />
+        </div>
+      )}
+    </>
+  )
+
+  function renderContent() {
+    return (
+      <>
 
         {/* ── Header ── */}
         <div className="flex items-center justify-between px-5 py-3.5 border-b border-white/5 shrink-0">
@@ -464,7 +491,7 @@ export default function EditPositionPanel({ position, onClose, onSave }: EditPos
             {t('editPosition.save', 'Übernehmen')}
           </button>
         </div>
-      </div>
-    </div>
-  )
+      </>
+    )
+  }
 }
