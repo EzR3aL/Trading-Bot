@@ -645,14 +645,7 @@ async def update_trade_tpsl(
         if bot_margin:
             margin_mode = bot_margin
 
-    # Resolve what to send to exchange:
-    # - User sets a value → send that value
-    # - User removes (remove_tp/sl) → send None (exchange should clear it)
-    # - User doesn't touch the field → DON'T send it (don't override exchange state)
-    exchange_tp = None if body.remove_tp else body.take_profit  # only what user explicitly set
-    exchange_sl = None if body.remove_sl else body.stop_loss
-
-    # For DB: keep existing values if user didn't change them
+    # For DB: resolve final TP/SL values
     effective_tp = None if body.remove_tp else (body.take_profit if body.take_profit is not None else trade.take_profit)
     effective_sl = None if body.remove_sl else (body.stop_loss if body.stop_loss is not None else trade.stop_loss)
 
@@ -660,18 +653,24 @@ async def update_trade_tpsl(
     trailing_placed = False
     fetcher = None
     try:
-        # Only call exchange if user explicitly set or removed something
+        # Only call exchange if user explicitly changed something
         has_tp_change = body.take_profit is not None or body.remove_tp
         has_sl_change = body.stop_loss is not None or body.remove_sl
         if has_tp_change or has_sl_change:
-            # Send only changed values to exchange (don't re-send unchanged DB values)
-            await client.set_position_tpsl(
-                symbol=trade.symbol,
-                take_profit=exchange_tp,
-                stop_loss=exchange_sl,
-                side=trade.side,
-                size=trade.size,
-            )
+            # Send the final state to exchange: what should be active after this update
+            # If removing TP but SL stays → send (tp=None, sl=existing)
+            # If setting TP, SL unchanged → send (tp=new, sl=None means don't touch)
+            # Only skip call if both would be None AND nothing to remove
+            final_tp = effective_tp  # None if removed, new value if set, old if unchanged
+            final_sl = effective_sl
+            if final_tp is not None or final_sl is not None:
+                await client.set_position_tpsl(
+                    symbol=trade.symbol,
+                    take_profit=final_tp,
+                    stop_loss=final_sl,
+                    side=trade.side,
+                    size=trade.size,
+                )
 
         # Trailing Stop — compute trigger_price and callback from ATR
         if body.trailing_stop is not None:

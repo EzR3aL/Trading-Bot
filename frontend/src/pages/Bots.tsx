@@ -36,6 +36,7 @@ import {
   Shield,
   ShieldCheck,
   ChevronRight,
+  Share,
 } from 'lucide-react'
 import GuidedTour, { TourHelpButton, type TourStep } from '../components/ui/GuidedTour'
 import { formatDate, formatDateTime, formatTime } from '../utils/dateUtils'
@@ -760,10 +761,10 @@ function BotTradeHistoryModal({ bot, onClose, t }: { bot: BotStatus; onClose: ()
                                   <div className="col-span-2 pt-1">
                                     <button
                                       onClick={() => setSelectedTrade({ ...trade, exchange: bot.exchange_type })}
-                                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg text-gray-400 hover:text-white bg-white/5 hover:bg-white/10 border border-white/5 transition-all"
+                                      className="p-2 rounded-lg text-gray-400 hover:text-white bg-white/5 hover:bg-white/10 border border-white/5 transition-all"
+                                      title={t('bots.copyImage')}
                                     >
-                                      <Copy size={13} />
-                                      {t('bots.copyImage')}
+                                      <Share size={14} />
                                     </button>
                                   </div>
                                 </dl>
