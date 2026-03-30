@@ -277,6 +277,7 @@ export default function Dashboard() {
             await api.put(`/trades/${editingPos.trade_id}/tp-sl`, {
               take_profit: data.take_profit,
               stop_loss: data.stop_loss,
+              trailing_stop: data.trailing_stop,
             })
           }}
         />

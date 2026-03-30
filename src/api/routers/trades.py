@@ -531,9 +531,15 @@ async def get_trade(
 from pydantic import BaseModel as PydanticBaseModel
 
 
+class TrailingStopParams(PydanticBaseModel):
+    callback_pct: float
+    trigger_price: float
+
+
 class UpdateTpSlRequest(PydanticBaseModel):
     take_profit: Optional[float] = None
     stop_loss: Optional[float] = None
+    trailing_stop: Optional[TrailingStopParams] = None
 
 
 @router.put("/{trade_id}/tp-sl")
@@ -602,14 +608,35 @@ async def update_trade_tpsl(
     )
 
     # Set TP/SL on exchange
+    trailing_placed = False
     try:
-        await client.set_position_tpsl(
-            symbol=trade.symbol,
-            take_profit=body.take_profit,
-            stop_loss=body.stop_loss,
-            side=trade.side,
-            size=trade.size,
-        )
+        # TP/SL
+        if body.take_profit is not None or body.stop_loss is not None:
+            await client.set_position_tpsl(
+                symbol=trade.symbol,
+                take_profit=body.take_profit,
+                stop_loss=body.stop_loss,
+                side=trade.side,
+                size=trade.size,
+            )
+
+        # Trailing Stop
+        if body.trailing_stop is not None:
+            result = await client.place_trailing_stop(
+                symbol=trade.symbol,
+                hold_side=trade.side,
+                size=trade.size,
+                callback_ratio=body.trailing_stop.callback_pct,
+                trigger_price=body.trailing_stop.trigger_price,
+                margin_mode="cross",
+            )
+            if result is not None:
+                trailing_placed = True
+            else:
+                logger.warning(
+                    "Trailing stop not supported by %s — will use software trailing for trade %s",
+                    trade.exchange, trade_id,
+                )
     except NotImplementedError:
         raise HTTPException(
             status_code=400,
@@ -624,10 +651,19 @@ async def update_trade_tpsl(
     # Update DB
     trade.take_profit = body.take_profit
     trade.stop_loss = body.stop_loss
+    if body.trailing_stop is not None:
+        trade.native_trailing_stop = trailing_placed
     await db.commit()
 
     logger.info(
-        "TP/SL updated for trade %s: TP=%s, SL=%s",
+        "TP/SL updated for trade %s: TP=%s, SL=%s, trailing=%s (native=%s)",
         trade_id, body.take_profit, body.stop_loss,
+        body.trailing_stop is not None, trailing_placed,
     )
-    return {"status": "ok", "take_profit": body.take_profit, "stop_loss": body.stop_loss}
+    return {
+        "status": "ok",
+        "take_profit": body.take_profit,
+        "stop_loss": body.stop_loss,
+        "trailing_stop_placed": trailing_placed,
+        "trailing_stop_software": body.trailing_stop is not None and not trailing_placed,
+    }

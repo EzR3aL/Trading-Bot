@@ -114,6 +114,7 @@ function MobilePositionCardInner({ pos }: { pos: Position }) {
     await api.put(`/trades/${pos.trade_id}/tp-sl`, {
       take_profit: data.take_profit,
       stop_loss: data.stop_loss,
+      trailing_stop: data.trailing_stop,
     })
     pos.take_profit = data.take_profit
     pos.stop_loss = data.stop_loss
