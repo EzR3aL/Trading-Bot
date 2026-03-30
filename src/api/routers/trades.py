@@ -5,7 +5,7 @@ from collections import defaultdict
 from datetime import datetime, timezone
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -478,7 +478,6 @@ async def get_trade(
     db: AsyncSession = Depends(get_db),
 ):
     """Get a specific trade."""
-    from fastapi import HTTPException
 
     result = await db.execute(
         select(
@@ -551,6 +550,8 @@ class TrailingStopParams(PydanticBaseModel):
 
 
 class UpdateTpSlRequest(PydanticBaseModel):
+    model_config = {"extra": "forbid"}
+
     take_profit: Optional[float] = None
     stop_loss: Optional[float] = None
     remove_tp: bool = False
@@ -568,29 +569,40 @@ async def update_trade_tpsl(
     db: AsyncSession = Depends(get_db),
 ):
     """Update TP/SL on an open position — sets on exchange + updates DB."""
-    from fastapi import HTTPException
 
-    # Load trade
-    result = await db.execute(
+    # Reject contradictory flags
+    if body.remove_tp and body.take_profit is not None:
+        raise HTTPException(status_code=400, detail="Cannot set take_profit and remove_tp simultaneously")
+    if body.remove_sl and body.stop_loss is not None:
+        raise HTTPException(status_code=400, detail="Cannot set stop_loss and remove_sl simultaneously")
+
+    # Load trade with row-level lock to prevent race conditions
+    trade_result = await db.execute(
         select(TradeRecord).where(
             TradeRecord.id == trade_id,
             TradeRecord.user_id == user.id,
-        )
+        ).with_for_update()
     )
-    trade = result.scalar_one_or_none()
+    trade = trade_result.scalar_one_or_none()
     if not trade:
         raise HTTPException(status_code=404, detail=ERR_TRADE_NOT_FOUND)
     if trade.status != "open":
         raise HTTPException(status_code=400, detail="Trade is not open")
+    if trade.entry_price <= 0:
+        raise HTTPException(status_code=400, detail="Trade has invalid entry price")
 
-    # Validate TP/SL direction
+    # Validate TP/SL values
     is_long = trade.side == "long"
     if body.take_profit is not None:
+        if body.take_profit <= 0:
+            raise HTTPException(status_code=400, detail="TP must be a positive value")
         if is_long and body.take_profit <= trade.entry_price:
             raise HTTPException(status_code=400, detail="TP must be above entry price for long")
         if not is_long and body.take_profit >= trade.entry_price:
             raise HTTPException(status_code=400, detail="TP must be below entry price for short")
     if body.stop_loss is not None:
+        if body.stop_loss <= 0:
+            raise HTTPException(status_code=400, detail="SL must be a positive value")
         if is_long and body.stop_loss >= trade.entry_price:
             raise HTTPException(status_code=400, detail="SL must be below entry price for long")
         if not is_long and body.stop_loss <= trade.entry_price:
@@ -634,8 +646,9 @@ async def update_trade_tpsl(
             margin_mode = bot_margin
 
     # Resolve effective TP/SL (handle remove flags)
-    effective_tp = None if body.remove_tp else (body.take_profit or trade.take_profit)
-    effective_sl = None if body.remove_sl else (body.stop_loss or trade.stop_loss)
+    # Use `is not None` instead of `or` to avoid falsy-float bug (0.0 is falsy in Python)
+    effective_tp = None if body.remove_tp else (body.take_profit if body.take_profit is not None else trade.take_profit)
+    effective_sl = None if body.remove_sl else (body.stop_loss if body.stop_loss is not None else trade.stop_loss)
 
     # Set TP/SL on exchange
     trailing_placed = False
@@ -659,7 +672,8 @@ async def update_trade_tpsl(
                 klines = await fetcher.get_binance_klines(trade.symbol, "1h", 30)
                 atr_series = MarketDataFetcher.calculate_atr(klines, 14)
                 atr_val = atr_series[-1] if atr_series else trade.entry_price * 0.015
-            except Exception:
+            except Exception as atr_err:
+                logger.warning("ATR fetch failed for %s, using 1.5%% estimate: %s", trade.symbol, atr_err)
                 atr_val = trade.entry_price * 0.015
 
             trail_distance = atr_val * atr_mult
@@ -672,7 +686,7 @@ async def update_trade_tpsl(
             )
 
             try:
-                result = await client.place_trailing_stop(
+                trail_order = await client.place_trailing_stop(
                     symbol=trade.symbol,
                     hold_side=trade.side,
                     size=trade.size,
@@ -680,7 +694,7 @@ async def update_trade_tpsl(
                     trigger_price=round(trigger, 2),
                     margin_mode=margin_mode,
                 )
-                if result is not None:
+                if trail_order is not None:
                     trailing_placed = True
                 else:
                     logger.info(
@@ -699,7 +713,7 @@ async def update_trade_tpsl(
         )
     except Exception as e:
         logger.error("Failed to set TP/SL on exchange for trade %s: %s", trade_id, e)
-        raise HTTPException(status_code=502, detail=f"Exchange error: {str(e)}")
+        raise HTTPException(status_code=502, detail="Failed to update TP/SL on exchange. Please try again.")
     finally:
         await client.close()
         if fetcher:
