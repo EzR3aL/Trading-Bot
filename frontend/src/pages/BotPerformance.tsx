@@ -434,6 +434,7 @@ export default function BotPerformance() {
   const [showCosts, setShowCosts] = useState(true)
   const [viewMode, setViewMode] = useState<'cards' | 'grid'>('cards')
   const [selectedTrade, setSelectedTrade] = useState<BotDetailStats['recent_trades'][0] | null>(null)
+  const [expandedTradeId, setExpandedTradeId] = useState<number | null>(null)
   const [copied, setCopied] = useState(false)
   const [latestCopied, setLatestCopied] = useState(false)
   const tradeCardRef = useRef<HTMLDivElement>(null)
@@ -853,12 +854,12 @@ export default function BotPerformance() {
                         return botDetail.recent_trades.map((trade) => (
                           <Fragment key={trade.id}>
                           <tr
-                            onClick={() => setSelectedTrade(selectedTrade?.id === trade.id ? null : trade)}
+                            onClick={() => setExpandedTradeId(expandedTradeId === trade.id ? null : trade.id)}
                             className="cursor-pointer"
                           >
                             <td className="text-gray-300">
                               <span className="inline-flex items-center">
-                                <ChevronRight size={14} className={`expand-chevron ${selectedTrade?.id === trade.id ? 'open' : ''}`} />
+                                <ChevronRight size={14} className={`expand-chevron ${expandedTradeId === trade.id ? 'open' : ''}`} />
                                 <span title={formatTime(trade.entry_time)}>{formatDate(trade.entry_time)}</span>
                               </span>
                             </td>
@@ -901,7 +902,7 @@ export default function BotPerformance() {
                               </span>
                             </td>
                           </tr>
-                          {selectedTrade?.id === trade.id && (
+                          {expandedTradeId === trade.id && (
                             <tr className="table-expand-row">
                               <td colSpan={9} className="!p-0 !border-b-0">
                                 <dl className="table-expand-content">
@@ -955,6 +956,15 @@ export default function BotPerformance() {
                                       <dd className="text-gray-400 text-xs">{trade.reason}</dd>
                                     </div>
                                   )}
+                                  <div className="col-span-2 pt-1">
+                                    <button
+                                      onClick={() => setSelectedTrade(trade)}
+                                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg text-gray-400 hover:text-white bg-white/5 hover:bg-white/10 border border-white/5 transition-all"
+                                    >
+                                      <Copy size={13} />
+                                      {t('bots.copyImage')}
+                                    </button>
+                                  </div>
                                 </dl>
                               </td>
                             </tr>

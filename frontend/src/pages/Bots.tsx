@@ -86,8 +86,10 @@ interface BotTrade {
   pnl_percent: number
   confidence: number
   reason: string
+  leverage?: number
   status: string
   demo_mode: boolean
+  exchange?: string
   entry_time: string
   exit_time: string | null
   exit_reason: string | null
@@ -237,6 +239,21 @@ function TradeDetailModal({ trade, onClose, t, affiliateLink }: { trade: BotTrad
           </div>
         </div>
 
+        {/* Exchange + Leverage */}
+        {(trade.exchange || trade.leverage) && (
+          <div className="flex items-center gap-4 mb-5 text-sm text-gray-400">
+            {trade.exchange && (
+              <span className="inline-flex items-center gap-1.5">
+                <ExchangeIcon exchange={trade.exchange} size={16} />
+                <span className="capitalize text-gray-300">{trade.exchange}</span>
+              </span>
+            )}
+            {trade.leverage && (
+              <span>{t('trades.leverage')}: <span className="text-white font-medium">{trade.leverage}x</span></span>
+            )}
+          </div>
+        )}
+
         {/* Result - Hero */}
         <div className="text-center py-6 mb-5 bg-white/[0.02] rounded-xl border border-white/5">
           <div className="text-xs text-gray-400 uppercase tracking-wider mb-2">{t('bots.result')}</div>
@@ -366,6 +383,7 @@ function BotTradeHistoryModal({ bot, onClose, t }: { bot: BotStatus; onClose: ()
   const [stats, setStats] = useState<BotStatistics | null>(null)
   const [loading, setLoading] = useState(true)
   const [selectedTrade, setSelectedTrade] = useState<BotTrade | null>(null)
+  const [expandedTradeId, setExpandedTradeId] = useState<number | null>(null)
   const [affiliateLink, setAffiliateLink] = useState<AffiliateLink | null>(null)
   const latestCardRef = useRef<HTMLDivElement>(null)
   const copyCardRef = useRef<HTMLDivElement>(null)
@@ -628,12 +646,12 @@ function BotTradeHistoryModal({ bot, onClose, t }: { bot: BotStatus; onClose: ()
                       {stats.recent_trades.map((trade) => (
                         <Fragment key={trade.id}>
                           <tr
-                            onClick={() => setSelectedTrade(selectedTrade?.id === trade.id ? null : trade)}
+                            onClick={() => setExpandedTradeId(expandedTradeId === trade.id ? null : trade.id)}
                             className="cursor-pointer"
                           >
                             <td className="text-gray-300">
                               <span className="inline-flex items-center">
-                                <ChevronRight size={14} className={`expand-chevron ${selectedTrade?.id === trade.id ? 'open' : ''}`} />
+                                <ChevronRight size={14} className={`expand-chevron ${expandedTradeId === trade.id ? 'open' : ''}`} />
                                 <span title={formatTime(trade.entry_time)}>{formatDate(trade.entry_time)}</span>
                               </span>
                             </td>
@@ -676,7 +694,7 @@ function BotTradeHistoryModal({ bot, onClose, t }: { bot: BotStatus; onClose: ()
                               </span>
                             </td>
                           </tr>
-                          {selectedTrade?.id === trade.id && (
+                          {expandedTradeId === trade.id && (
                             <tr className="table-expand-row">
                               <td colSpan={9} className="!p-0 !border-b-0">
                                 <dl className="table-expand-content">
@@ -724,6 +742,21 @@ function BotTradeHistoryModal({ bot, onClose, t }: { bot: BotStatus; onClose: ()
                                       <dd>${trade.fees.toFixed(2)}</dd>
                                     </div>
                                   )}
+                                  {trade.leverage && (
+                                    <div>
+                                      <dt>{t('trades.leverage')}</dt>
+                                      <dd>{trade.leverage}x</dd>
+                                    </div>
+                                  )}
+                                  <div className="col-span-2 pt-1">
+                                    <button
+                                      onClick={() => setSelectedTrade({ ...trade, exchange: bot.exchange_type })}
+                                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg text-gray-400 hover:text-white bg-white/5 hover:bg-white/10 border border-white/5 transition-all"
+                                    >
+                                      <Copy size={13} />
+                                      {t('bots.copyImage')}
+                                    </button>
+                                  </div>
                                 </dl>
                               </td>
                             </tr>
