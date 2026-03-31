@@ -298,12 +298,12 @@ function TradeDetailModal({ trade, onClose, t, affiliateLink }: { trade: BotTrad
         </div>
 
         {/* Entry / Exit Price */}
-        <div className="grid grid-cols-2 gap-3 mb-4">
-          <div>
+        <div className="grid grid-cols-2 gap-4 max-w-xs mx-auto mb-4">
+          <div className="text-center">
             <div className="text-xs text-gray-400 mb-1">{t('bots.entryPrice')}</div>
             <div className="text-white font-semibold text-lg">${trade.entry_price.toLocaleString()}</div>
           </div>
-          <div>
+          <div className="text-center">
             <div className="text-xs text-gray-400 mb-1">{t('bots.exitPrice')}</div>
             <div className="text-white font-semibold text-lg">
               {trade.exit_price ? `$${trade.exit_price.toLocaleString()}` : '--'}
@@ -574,12 +574,12 @@ function BotTradeHistoryModal({ bot, onClose, t }: { bot: BotStatus; onClose: ()
                         </div>
                       </div>
                       {/* Entry / Exit */}
-                      <div className="grid grid-cols-2 gap-3 mb-4">
-                        <div>
+                      <div className="grid grid-cols-2 gap-4 max-w-xs mx-auto mb-4">
+                        <div className="text-center">
                           <div className="text-xs text-gray-400 mb-1">{t('bots.entryPrice')}</div>
                           <div className="text-white font-semibold text-lg">${latestClosed.entry_price.toLocaleString()}</div>
                         </div>
-                        <div>
+                        <div className="text-center">
                           <div className="text-xs text-gray-400 mb-1">{t('bots.exitPrice')}</div>
                           <div className="text-white font-semibold text-lg">{latestClosed.exit_price ? `$${latestClosed.exit_price.toLocaleString()}` : '--'}</div>
                         </div>

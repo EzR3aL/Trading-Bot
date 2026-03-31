@@ -1092,12 +1092,12 @@ export default function BotPerformance() {
               </div>
 
               {/* Entry / Exit Price */}
-              <div className="grid grid-cols-2 gap-3 mb-4">
-                <div>
+              <div className="grid grid-cols-2 gap-4 max-w-xs mx-auto mb-4">
+                <div className="text-center">
                   <div className="text-xs text-gray-400 mb-1">{t('bots.entryPrice')}</div>
                   <div className="text-white font-semibold text-lg">${selectedTrade.entry_price.toLocaleString()}</div>
                 </div>
-                <div>
+                <div className="text-center">
                   <div className="text-xs text-gray-400 mb-1">{t('bots.exitPrice')}</div>
                   <div className="text-white font-semibold text-lg">
                     {selectedTrade.exit_price ? `$${selectedTrade.exit_price.toLocaleString()}` : '--'}
