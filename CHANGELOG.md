@@ -15,6 +15,7 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 - **Weex cancel_position_tpsl()**: Neue Methode zum Abfragen und Stornieren ausstehender TP/SL-Orders über `/capi/v3/pendingTpSlOrders` und `/capi/v3/cancelTpSlOrder`. Filtert nach Symbol und Position-Seite, loggt Fehler bei Teilausfällen
 
 ### Behoben
+- **TP/SL "place first, cancel old" Strategie**: Router setzt neue TP/SL-Orders ZUERST, storniert alte DANACH — Position ist immer geschützt (BingX/Weex). Bei Entfernen beider Werte wird `cancel_position_tpsl()` direkt aufgerufen statt den Call zu überspringen
 - **TP/SL Entfernen sendet finalen Zustand an Exchange**: Beim Entfernen von TP wird jetzt der verbleibende SL mitgeschickt (und umgekehrt), statt beide auf null zu setzen — verhindert Bitget "must set one or both" Fehler
 - **Share-Icon einheitlich**: Desktop und Mobile nutzen jetzt das Android 3-Punkte Share-Icon statt "Bild kopieren" Text-Button. Mobil immer sichtbar in der Header-Zeile
 

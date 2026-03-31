@@ -653,23 +653,31 @@ async def update_trade_tpsl(
     trailing_placed = False
     fetcher = None
     try:
-        # Only call exchange if user explicitly changed something
         has_tp_change = body.take_profit is not None or body.remove_tp
         has_sl_change = body.stop_loss is not None or body.remove_sl
         if has_tp_change or has_sl_change:
-            # Send the final state to exchange: what should be active after this update
-            # If removing TP but SL stays → send (tp=None, sl=existing)
-            # If setting TP, SL unchanged → send (tp=new, sl=None means don't touch)
-            # Only skip call if both would be None AND nothing to remove
-            final_tp = effective_tp  # None if removed, new value if set, old if unchanged
+            final_tp = effective_tp
             final_sl = effective_sl
+
             if final_tp is not None or final_sl is not None:
+                # Step 1: Place new TP/SL orders first (position always protected)
                 await client.set_position_tpsl(
                     symbol=trade.symbol,
                     take_profit=final_tp,
                     stop_loss=final_sl,
                     side=trade.side,
                     size=trade.size,
+                )
+                # Step 2: Cancel old orders (safe — new ones already in place)
+                await client.cancel_position_tpsl(
+                    symbol=trade.symbol,
+                    side=trade.side,
+                )
+            else:
+                # Both TP and SL removed — cancel all existing orders on exchange
+                await client.cancel_position_tpsl(
+                    symbol=trade.symbol,
+                    side=trade.side,
                 )
 
         # Trailing Stop — compute trigger_price and callback from ATR
