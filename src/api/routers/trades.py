@@ -723,7 +723,12 @@ async def update_trade_tpsl(
             detail=f"Exchange {trade.exchange} does not support TP/SL modification",
         )
     except Exception as e:
-        logger.error("Failed to set TP/SL on exchange for trade %s: %s", trade_id, e)
+        error_msg = str(e)
+        logger.error("Failed to set TP/SL on exchange for trade %s: %s", trade_id, error_msg)
+        # Surface exchange validation errors as 400 (user can fix), not 502
+        exchange_hints = ["price", "less than", "greater than", "invalid", "must be", "should be"]
+        if any(hint in error_msg.lower() for hint in exchange_hints):
+            raise HTTPException(status_code=400, detail=error_msg)
         raise HTTPException(status_code=502, detail="Failed to update TP/SL on exchange. Please try again.")
     finally:
         await client.close()
