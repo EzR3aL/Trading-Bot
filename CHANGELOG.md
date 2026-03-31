@@ -16,6 +16,7 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 - **Trailing-Stop-Slider zeigt gespeicherten Wert**: ATR-Slider im TP/SL-Panel startete immer bei 2.5x, ignorierte den gespeicherten `trailing_atr_override`. Jetzt wird der Override-Wert aus der API geladen und als Slider-Startwert gesetzt (Schema, Backend-Response, Frontend in Dashboard/Portfolio/MobilePositionCard)
 - **BingX/Weex: Orphan-TP/SL-Orders bei Update**: Beim Aendern von TP/SL wurden neue Orders auf der Exchange platziert ohne die alten zu loeschen — fuehrte zu doppelten Triggern. Jetzt werden bestehende TP/SL-Orders VOR dem Platzieren neuer gecancelt (BingX via open_orders-Query + cancel, Weex via pendingTpSlOrders + cancelTpSlOrder). BingX-Cancel erkennt auch `TRAILING_STOP_MARKET` Orders und `orderType`-Feldnamen-Fallback. Cancel wird ebenfalls bei `place_trailing_stop` aufgerufen
 - **TypeScript-Typen fuer `trailing_atr_override`**: Fehlende Felddefinition in `PortfolioPosition` (types/index.ts) und `Position` (MobilePositionCard.tsx) ergaenzt — verhindert TypeScript-Kompilierfehler
+- **`normalize_symbol()` Replace-Reihenfolge**: `.replace("USDT","").replace("-USDT","")` erzeugte fuer Hyperliquid-Eingaben wie `ETH-USDT` das Ergebnis `ETH-` (mit Bindestrich). Reihenfolge umgekehrt: zuerst `-USDT`, dann `USDT` strippen
 
 ## [4.6.9] - 2026-03-31
 
