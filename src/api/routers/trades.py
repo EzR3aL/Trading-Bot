@@ -108,7 +108,7 @@ async def _compute_trailing_stop(
                 "trailing_stop_distance_pct": round(distance_pct, 2),
                 "can_close_at_loss": False,
             }
-        return {"trailing_stop_active": False, "can_close_at_loss": True}
+        return {"trailing_stop_active": False, "trailing_stop_distance_pct": round(trail_atr, 1), "can_close_at_loss": True}
     else:
         # SHORT: highest_price tracks the lowest price since entry
         was_profitable = (entry - highest_price) >= breakeven_threshold
@@ -123,7 +123,7 @@ async def _compute_trailing_stop(
                 "trailing_stop_distance_pct": round(distance_pct, 2),
                 "can_close_at_loss": False,
             }
-        return {"trailing_stop_active": False, "can_close_at_loss": True}
+        return {"trailing_stop_active": False, "trailing_stop_distance_pct": round(trail_atr, 1), "can_close_at_loss": True}
 
 router = APIRouter(prefix="/api/trades", tags=["trades"])
 

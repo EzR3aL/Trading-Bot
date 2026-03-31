@@ -224,6 +224,8 @@ async def get_portfolio_positions(
                     trailing_stop_active=ts_info.get("trailing_stop_active", False),
                     trailing_stop_price=ts_info.get("trailing_stop_price"),
                     trailing_stop_distance_pct=ts_info.get("trailing_stop_distance_pct"),
+                    trailing_atr_override=trade.trailing_atr_override if trade else None,
+                    native_trailing_stop=trade.native_trailing_stop if trade else False,
                     can_close_at_loss=ts_info.get("can_close_at_loss"),
                 ))
         except asyncio.TimeoutError:
