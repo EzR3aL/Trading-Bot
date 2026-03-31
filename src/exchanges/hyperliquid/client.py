@@ -842,12 +842,12 @@ class HyperliquidClient(ExchangeClient):
         except Exception as e:
             logger.debug("Empty positionTpsl failed for %s: %s — trying order cancel fallback", coin, e)
 
-        # Strategy 2: Query open orders and cancel trigger orders for this coin
+        # Strategy 2: Query frontend_open_orders (includes trigger/tpsl metadata)
         address = (self.wallet_address or self._wallet.address).lower()
         try:
-            open_orders = await self._cb_call(self._info.open_orders, address)
+            open_orders = await self._cb_call(self._info.frontend_open_orders, address)
         except Exception as e:
-            logger.warning("Failed to query open orders for %s: %s", coin, e)
+            logger.warning("Failed to query frontend open orders for %s: %s", coin, e)
             return False
 
         if not isinstance(open_orders, list):
@@ -857,7 +857,7 @@ class HyperliquidClient(ExchangeClient):
             o for o in open_orders
             if isinstance(o, dict)
             and o.get("coin") == coin
-            and o.get("orderType", "").startswith("trigger")
+            and (o.get("isTrigger") or o.get("isPositionTpsl"))
         ]
 
         if not to_cancel:
