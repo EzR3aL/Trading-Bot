@@ -92,6 +92,31 @@ export default function EditPositionPanel({ position, onClose, onSave }: EditPos
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  /* ── Re-sync state when the panel opens for a (possibly different) position ── */
+  useEffect(() => {
+    setTpPrice(position.take_profit?.toString() ?? '')
+    setSlPrice(position.stop_loss?.toString() ?? '')
+    setTpPct(
+      position.take_profit
+        ? pctFromEntry(position.entry_price, position.take_profit, isLong)
+        : ''
+    )
+    setSlPct(
+      position.stop_loss
+        ? pctFromEntry(position.entry_price, position.stop_loss, isLong)
+        : ''
+    )
+    const hasTrailing =
+      position.trailing_atr_override != null ||
+      position.native_trailing_stop === true ||
+      position.trailing_stop_active === true
+    setTrailingEnabled(hasTrailing)
+    setTrailingAtr(position.trailing_atr_override ?? 2.5)
+    setError(null)
+  }, [position.trade_id, position.take_profit, position.stop_loss,
+      position.trailing_atr_override, position.native_trailing_stop,
+      position.trailing_stop_active, position.entry_price, isLong])
+
   /* ── Sync price <-> pct ── */
   const handleTpPrice = useCallback((val: string) => {
     setTpPrice(val)

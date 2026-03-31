@@ -37,6 +37,7 @@ import {
   ShieldCheck,
   ChevronRight,
   Share,
+  Share2,
 } from 'lucide-react'
 import GuidedTour, { TourHelpButton, type TourStep } from '../components/ui/GuidedTour'
 import { formatDate, formatDateTime, formatTime } from '../utils/dateUtils'
@@ -183,13 +184,17 @@ function TradeDetailModal({ trade, onClose, t, affiliateLink }: { trade: BotTrad
   const isMobile = useIsMobile()
   const swipe = useSwipeToClose({ onClose, enabled: isMobile })
 
+  const captureBlob = async () => {
+    if (!copyRef.current) return null
+    return toBlob(copyRef.current, {
+      pixelRatio: 2,
+      backgroundColor: theme === 'light' ? '#f8fafc' : '#0b0f19',
+    })
+  }
+
   const handleCopyImage = async () => {
-    if (!copyRef.current) return
     try {
-      const blob = await toBlob(copyRef.current, {
-        pixelRatio: 2,
-        backgroundColor: theme === 'light' ? '#f8fafc' : '#0b0f19',
-      })
+      const blob = await captureBlob()
       if (!blob) return
       await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })])
       setCopied(true)
@@ -200,12 +205,34 @@ function TradeDetailModal({ trade, onClose, t, affiliateLink }: { trade: BotTrad
     }
   }
 
+  const handleNativeShare = async () => {
+    try {
+      const blob = await captureBlob()
+      if (!blob) return
+      const file = new File([blob], 'trade.png', { type: 'image/png' })
+      if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+        const pnlStr = trade.pnl_percent >= 0 ? `+${trade.pnl_percent.toFixed(2)}%` : `${trade.pnl_percent.toFixed(2)}%`
+        await navigator.share({
+          title: `${trade.symbol} ${trade.side.toUpperCase()} ${pnlStr}`,
+          files: [file],
+        })
+      }
+    } catch (err) {
+      if ((err as DOMException).name !== 'AbortError') {
+        console.error('Failed to share image:', err)
+        useToastStore.getState().addToast('error', t('common.error'))
+      }
+    }
+  }
+
+  const supportsNativeShare = typeof navigator !== 'undefined' && !!navigator.share && !!navigator.canShare
+
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 backdrop-blur-md" onClick={onClose} role="dialog" aria-modal="true" onKeyDown={(e) => { if (e.key === 'Escape') onClose() }}>
       <div
         ref={swipe.ref}
         style={swipe.style}
-        className="bg-[#0f1420] rounded-2xl max-w-lg w-full mx-4 border border-white/10 shadow-2xl overflow-hidden"
+        className="bg-[#0f1420] rounded-2xl max-w-lg w-full mx-4 border border-white/10 shadow-2xl max-h-[90vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
         aria-label={t('bots.tradeDetail')}
       >
@@ -225,6 +252,16 @@ function TradeDetailModal({ trade, onClose, t, affiliateLink }: { trade: BotTrad
             </span>
           </div>
           <div className="flex items-center gap-2">
+            {supportsNativeShare && (
+              <button
+                onClick={handleNativeShare}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg transition-all border text-gray-400 hover:text-white bg-white/5 hover:bg-white/10 border-white/5"
+                title={t('bots.shareImage')}
+              >
+                <Share2 size={13} />
+                {t('bots.shareImage')}
+              </button>
+            )}
             <button
               onClick={handleCopyImage}
               className={`flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg transition-all border ${
@@ -244,7 +281,7 @@ function TradeDetailModal({ trade, onClose, t, affiliateLink }: { trade: BotTrad
         </div>
 
         {/* Capturable Card Content */}
-        <div ref={copyRef} className="p-7 max-h-[80vh] overflow-y-auto">
+        <div ref={copyRef} className="p-7">
         {/* Exchange + Leverage */}
         {(trade.exchange || trade.leverage) && (
           <div className="flex items-center gap-4 mb-5 text-sm text-gray-400">
@@ -308,7 +345,7 @@ function TradeDetailModal({ trade, onClose, t, affiliateLink }: { trade: BotTrad
         {trade.reason && (
           <div className="mb-5">
             <div className="text-xs text-gray-400 uppercase tracking-wider mb-2">{t('bots.reasoning')}</div>
-            <p className="text-sm text-gray-300 leading-relaxed bg-white/[0.03] rounded-xl p-4 border border-white/5">
+            <p className="text-sm text-gray-300 leading-relaxed bg-white/[0.03] rounded-xl p-4 border border-white/5 max-h-60 overflow-y-auto">
               {trade.reason}
             </p>
           </div>
@@ -378,13 +415,17 @@ function BotTradeHistoryModal({ bot, onClose, t }: { bot: BotStatus; onClose: ()
 
   const [copied, setCopied] = useState(false)
 
+  const captureCardBlob = async () => {
+    if (!copyCardRef.current) return null
+    return toBlob(copyCardRef.current, {
+      pixelRatio: 2,
+      backgroundColor: theme === 'light' ? '#f8fafc' : '#0b0f19',
+    })
+  }
+
   const handleCopyImage = async () => {
-    if (!copyCardRef.current) return
     try {
-      const blob = await toBlob(copyCardRef.current, {
-        pixelRatio: 2,
-        backgroundColor: theme === 'light' ? '#f8fafc' : '#0b0f19',
-      })
+      const blob = await captureCardBlob()
       if (!blob) return
       await navigator.clipboard.write([
         new ClipboardItem({ 'image/png': blob }),
@@ -394,6 +435,30 @@ function BotTradeHistoryModal({ bot, onClose, t }: { bot: BotStatus; onClose: ()
     } catch (err) {
       console.error('Failed to copy image:', err)
       useToastStore.getState().addToast('error', t('common.error'))
+    }
+  }
+
+  const supportsNativeShare = typeof navigator !== 'undefined' && !!navigator.share && !!navigator.canShare
+
+  const handleNativeShare = async () => {
+    const trade = latestClosed
+    if (!trade) return
+    try {
+      const blob = await captureCardBlob()
+      if (!blob) return
+      const file = new File([blob], 'trade.png', { type: 'image/png' })
+      if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+        const pnlStr = trade.pnl_percent >= 0 ? `+${trade.pnl_percent.toFixed(2)}%` : `${trade.pnl_percent.toFixed(2)}%`
+        await navigator.share({
+          title: `${trade.symbol} ${trade.side.toUpperCase()} ${pnlStr}`,
+          files: [file],
+        })
+      }
+    } catch (err) {
+      if ((err as DOMException).name !== 'AbortError') {
+        console.error('Failed to share image:', err)
+        useToastStore.getState().addToast('error', t('common.error'))
+      }
     }
   }
 
@@ -502,18 +567,30 @@ function BotTradeHistoryModal({ bot, onClose, t }: { bot: BotStatus; onClose: ()
                 <div className="mx-3 mt-4 mb-2">
                   <div className="flex items-center justify-between mb-2">
                     <div className="text-xs text-gray-400 uppercase tracking-wider font-semibold">{t('bots.latestTrade')}</div>
-                    <button
-                      onClick={(e) => { e.stopPropagation(); handleCopyImage() }}
-                      className={`flex items-center gap-1.5 px-3 py-1 text-xs rounded-lg transition-all border ${
-                        copied
-                          ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20'
-                          : 'text-gray-400 hover:text-white bg-white/5 hover:bg-white/10 border-white/5'
-                      }`}
-                      title={t('bots.copyImage')}
-                    >
-                      <Copy size={13} />
-                      {copied ? t('bots.copied') : t('bots.copyImage')}
-                    </button>
+                    <div className="flex items-center gap-2">
+                      {supportsNativeShare && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleNativeShare() }}
+                          className="flex items-center gap-1.5 px-3 py-1 text-xs rounded-lg transition-all border text-gray-400 hover:text-white bg-white/5 hover:bg-white/10 border-white/5"
+                          title={t('bots.shareImage')}
+                        >
+                          <Share2 size={13} />
+                          {t('bots.shareImage')}
+                        </button>
+                      )}
+                      <button
+                        onClick={(e) => { e.stopPropagation(); handleCopyImage() }}
+                        className={`flex items-center gap-1.5 px-3 py-1 text-xs rounded-lg transition-all border ${
+                          copied
+                            ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20'
+                            : 'text-gray-400 hover:text-white bg-white/5 hover:bg-white/10 border-white/5'
+                        }`}
+                        title={t('bots.copyImage')}
+                      >
+                        <Copy size={13} />
+                        {copied ? t('bots.copied') : t('bots.copyImage')}
+                      </button>
+                    </div>
                   </div>
                   {/* Visible card — uses MobileTradeCard style on mobile */}
                   <div ref={latestCardRef}>

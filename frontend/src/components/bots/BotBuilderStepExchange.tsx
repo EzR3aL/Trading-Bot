@@ -296,8 +296,46 @@ export default function BotBuilderStepExchange({
               )}
             </div>
 
-            {/* Compact table */}
-            <div className="overflow-x-auto rounded-lg border border-white/[0.04]">
+            {/* Mobile: Cards */}
+            <div className="sm:hidden space-y-2">
+              {balanceOverview.map(entry => {
+                const isSelected = entry.exchange_type === exchangeType && entry.mode === effectiveMode
+                const isOver = entry.existing_allocated_pct > 100
+                return (
+                  <div key={`${entry.exchange_type}-${entry.mode}`} className={`p-3 rounded-lg border transition-colors ${
+                    isSelected ? 'bg-primary-500/5 border-primary-500/20' : 'bg-white/[0.02] border-white/[0.06]'
+                  }`}>
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <ExchangeLogo exchange={entry.exchange_type} size={18} />
+                        {isSelected && <span className="w-1.5 h-1.5 rounded-full bg-primary-400" />}
+                        <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${
+                          entry.mode === 'demo' ? 'bg-blue-500/10 text-blue-400' : 'bg-orange-500/10 text-orange-400'
+                        }`}>
+                          {entry.mode.toUpperCase()}
+                        </span>
+                      </div>
+                      <span className="font-mono text-sm font-semibold text-gray-200">
+                        ${entry.exchange_equity.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                        <span className="text-gray-400 ml-0.5 text-xs font-normal">{entry.currency}</span>
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between text-xs">
+                      <span className={isOver ? 'text-red-400' : 'text-amber-400'}>
+                        {t('bots.builder.allocated')}: {entry.existing_allocated_pct.toFixed(0)}%
+                        <span className="text-gray-400 ml-1">(${entry.existing_allocated_amount.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })})</span>
+                      </span>
+                      <span className="text-green-400">
+                        {t('bots.builder.available')}: ${entry.remaining_balance.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                      </span>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+
+            {/* Desktop: Table */}
+            <div className="hidden sm:block overflow-x-auto rounded-lg border border-white/[0.04]">
               <table className="w-full text-xs min-w-[480px]">
                 <thead>
                   <tr className="bg-white/[0.03] text-gray-400 text-xs uppercase tracking-wider">

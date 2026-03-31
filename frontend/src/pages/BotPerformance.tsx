@@ -17,7 +17,7 @@ import ExitReasonBadge from '../components/ui/ExitReasonBadge'
 import MobileTradeCard from '../components/ui/MobileTradeCard'
 import useIsMobile from '../hooks/useIsMobile'
 import useSwipeToClose from '../hooks/useSwipeToClose'
-import { Eye, EyeOff, ArrowUpRight, ArrowDownRight, Trophy, Target, LayoutGrid, BarChart3, X, Copy, ShieldCheck, ChevronRight, Share } from 'lucide-react'
+import { Eye, EyeOff, ArrowUpRight, ArrowDownRight, Trophy, Target, LayoutGrid, BarChart3, X, Copy, ShieldCheck, ChevronRight, Share, Share2 } from 'lucide-react'
 import SizeValue from '../components/ui/SizeValue'
 
 import { formatDate, formatDateTime, formatChartDate, formatTime, formatChartCurrency } from '../utils/dateUtils'
@@ -442,6 +442,32 @@ export default function BotPerformance() {
   const latestCardRef = useRef<HTMLDivElement>(null)
   const [affiliateLinks, setAffiliateLinks] = useState<{ exchange_type: string; affiliate_url: string; label: string | null }[]>([])
 
+  const supportsNativeShare = typeof navigator !== 'undefined' && !!navigator.share && !!navigator.canShare
+
+  const handleNativeShare = async (ref: React.RefObject<HTMLDivElement | null>, trade: { symbol: string; side: string; pnl_percent: number }) => {
+    if (!ref.current) return
+    try {
+      const blob = await toBlob(ref.current, {
+        pixelRatio: 2,
+        backgroundColor: theme === 'light' ? '#f8fafc' : '#0b0f19',
+      })
+      if (!blob) return
+      const file = new File([blob], 'trade.png', { type: 'image/png' })
+      if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+        const pnlStr = trade.pnl_percent >= 0 ? `+${trade.pnl_percent.toFixed(2)}%` : `${trade.pnl_percent.toFixed(2)}%`
+        await navigator.share({
+          title: `${trade.symbol} ${trade.side.toUpperCase()} ${pnlStr}`,
+          files: [file],
+        })
+      }
+    } catch (err) {
+      if ((err as DOMException).name !== 'AbortError') {
+        console.error('Failed to share image:', err)
+        useToastStore.getState().addToast('error', t('common.error'))
+      }
+    }
+  }
+
   const loadCompareData = useCallback(async () => {
     const dp = demoFilter === 'demo' ? '&demo_mode=true' : demoFilter === 'live' ? '&demo_mode=false' : ''
     setLoading(true)
@@ -678,33 +704,45 @@ export default function BotPerformance() {
                   <div className="mb-5">
                     <div className="flex items-center justify-between mb-2">
                       <div className="text-xs text-gray-400 uppercase tracking-wider font-semibold">{t('bots.latestTrade')}</div>
-                      <button
-                        onClick={async () => {
-                          if (!latestCardRef.current) return
-                          try {
-                            const blob = await toBlob(latestCardRef.current, {
-                              pixelRatio: 2,
-                              backgroundColor: theme === 'light' ? '#f8fafc' : '#0b0f19',
-                            })
-                            if (!blob) return
-                            await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })])
-                            setLatestCopied(true)
-                            setTimeout(() => setLatestCopied(false), 2000)
-                          } catch (err) {
-                            console.error('Failed to copy image:', err)
-                            useToastStore.getState().addToast('error', t('common.error'))
-                          }
-                        }}
-                        className={`flex items-center gap-1.5 px-3 py-1 text-xs rounded-lg transition-all border ${
-                          latestCopied
-                            ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20'
-                            : 'text-gray-400 hover:text-white bg-white/5 hover:bg-white/10 border-white/5'
-                        }`}
-                        title={t('bots.copyImage')}
-                      >
-                        <Copy size={13} />
-                        {latestCopied ? t('bots.copied') : t('bots.copyImage')}
-                      </button>
+                      <div className="flex items-center gap-2">
+                        {supportsNativeShare && (
+                          <button
+                            onClick={() => handleNativeShare(latestCardRef, latestClosed)}
+                            className="flex items-center gap-1.5 px-3 py-1 text-xs rounded-lg transition-all border text-gray-400 hover:text-white bg-white/5 hover:bg-white/10 border-white/5"
+                            title={t('bots.shareImage')}
+                          >
+                            <Share2 size={13} />
+                            {t('bots.shareImage')}
+                          </button>
+                        )}
+                        <button
+                          onClick={async () => {
+                            if (!latestCardRef.current) return
+                            try {
+                              const blob = await toBlob(latestCardRef.current, {
+                                pixelRatio: 2,
+                                backgroundColor: theme === 'light' ? '#f8fafc' : '#0b0f19',
+                              })
+                              if (!blob) return
+                              await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })])
+                              setLatestCopied(true)
+                              setTimeout(() => setLatestCopied(false), 2000)
+                            } catch (err) {
+                              console.error('Failed to copy image:', err)
+                              useToastStore.getState().addToast('error', t('common.error'))
+                            }
+                          }}
+                          className={`flex items-center gap-1.5 px-3 py-1 text-xs rounded-lg transition-all border ${
+                            latestCopied
+                              ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20'
+                              : 'text-gray-400 hover:text-white bg-white/5 hover:bg-white/10 border-white/5'
+                          }`}
+                          title={t('bots.copyImage')}
+                        >
+                          <Copy size={13} />
+                          {latestCopied ? t('bots.copied') : t('bots.copyImage')}
+                        </button>
+                      </div>
                     </div>
                     <div
                       ref={latestCardRef}
@@ -1010,6 +1048,16 @@ export default function BotPerformance() {
                 </span>
               </div>
               <div className="flex items-center gap-2">
+                {supportsNativeShare && (
+                  <button
+                    onClick={() => handleNativeShare(tradeCardRef, selectedTrade)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg transition-all border text-gray-400 hover:text-white bg-white/5 hover:bg-white/10 border-white/5"
+                    title={t('bots.shareImage')}
+                  >
+                    <Share2 size={14} />
+                    {t('bots.shareImage')}
+                  </button>
+                )}
                 <button
                   onClick={async () => {
                     if (!tradeCardRef.current) return

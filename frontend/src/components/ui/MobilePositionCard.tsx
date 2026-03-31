@@ -23,6 +23,8 @@ interface Position {
   trailing_stop_active?: boolean
   trailing_stop_price?: number | null
   trailing_stop_distance_pct?: number | null
+  trailing_atr_override?: number | null
+  native_trailing_stop?: boolean
   can_close_at_loss?: boolean | null
   bot_name?: string | null
   demo_mode?: boolean
@@ -143,6 +145,8 @@ function MobilePositionCardInner({ pos }: { pos: Position }) {
             trailing_stop_active: pos.trailing_stop_active ?? false,
             trailing_stop_price: pos.trailing_stop_price,
             trailing_stop_distance_pct: pos.trailing_stop_distance_pct,
+            trailing_atr_override: pos.trailing_atr_override,
+            native_trailing_stop: pos.native_trailing_stop,
           }}
           onClose={() => setEditOpen(false)}
           onSave={handleSave}
