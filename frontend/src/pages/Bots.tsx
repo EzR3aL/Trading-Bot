@@ -269,19 +269,22 @@ function TradeDetailModal({ trade, onClose, t, affiliateLink }: { trade: BotTrad
           {trade.exchange && <ExchangeIcon exchange={trade.exchange} size={18} />}
           <span className="text-lg font-bold text-white">{trade.symbol}</span>
         </div>
-        {/* Perp | Side | Leverage */}
-        <div className="flex items-center gap-2 text-sm text-gray-400 mb-4">
-          <span>Perp</span>
-          <span className="text-gray-600">|</span>
-          <span className={trade.side === 'long' ? 'text-emerald-400 font-medium' : 'text-red-400 font-medium'}>
-            {trade.side === 'long' ? '+ LONG' : '- SHORT'}
-          </span>
-          {trade.leverage && (
-            <>
-              <span className="text-gray-600">|</span>
-              <span className="text-white font-medium">{trade.leverage}x</span>
-            </>
-          )}
+        {/* Perp | Side | Leverage | Date */}
+        <div className="flex items-center justify-between text-sm text-gray-400 mb-4">
+          <div className="flex items-center gap-2">
+            <span>Perp</span>
+            <span className="text-gray-600">|</span>
+            <span className={trade.side === 'long' ? 'text-emerald-400 font-medium' : 'text-red-400 font-medium'}>
+              {trade.side === 'long' ? '+ LONG' : '- SHORT'}
+            </span>
+            {trade.leverage && (
+              <>
+                <span className="text-gray-600">|</span>
+                <span className="text-white font-medium">{trade.leverage}x</span>
+              </>
+            )}
+          </div>
+          <span className="text-xs text-gray-500">{formatDate(trade.entry_time)}</span>
         </div>
 
         {/* PnL - Hero */}
@@ -314,10 +317,9 @@ function TradeDetailModal({ trade, onClose, t, affiliateLink }: { trade: BotTrad
           </div>
         </div>
 
-        {/* Footer: Date + Branding + Affiliate */}
+        {/* Footer: Branding + Affiliate */}
         <div className="pt-3 border-t border-white/5">
-          <div className="text-sm text-gray-500">{formatDate(trade.entry_time)}</div>
-          <div className="text-xs text-gray-500 mt-1">Edge Bots by Trading Department</div>
+          <div className="text-xs text-gray-500">Edge Bots by Trading Department</div>
           {affiliateLink && (
             <>
               {affiliateLink.label && <div className="text-xs text-gray-400 mt-0.5">{affiliateLink.label}</div>}
@@ -535,19 +537,22 @@ function BotTradeHistoryModal({ bot, onClose, t }: { bot: BotStatus; onClose: ()
                         <ExchangeIcon exchange={bot.exchange_type} size={18} />
                         <span className="text-lg font-bold text-white">{latestClosed.symbol}</span>
                       </div>
-                      {/* Perp | Side | Leverage */}
-                      <div className="flex items-center gap-2 text-sm text-gray-400 mb-4">
-                        <span>Perp</span>
-                        <span className="text-gray-600">|</span>
-                        <span className={latestClosed.side === 'long' ? 'text-emerald-400 font-medium' : 'text-red-400 font-medium'}>
-                          {latestClosed.side === 'long' ? '+ LONG' : '- SHORT'}
-                        </span>
-                        {latestClosed.leverage && (
-                          <>
-                            <span className="text-gray-600">|</span>
-                            <span className="text-white font-medium">{latestClosed.leverage}x</span>
-                          </>
-                        )}
+                      {/* Perp | Side | Leverage | Date */}
+                      <div className="flex items-center justify-between text-sm text-gray-400 mb-4">
+                        <div className="flex items-center gap-2">
+                          <span>Perp</span>
+                          <span className="text-gray-600">|</span>
+                          <span className={latestClosed.side === 'long' ? 'text-emerald-400 font-medium' : 'text-red-400 font-medium'}>
+                            {latestClosed.side === 'long' ? '+ LONG' : '- SHORT'}
+                          </span>
+                          {latestClosed.leverage && (
+                            <>
+                              <span className="text-gray-600">|</span>
+                              <span className="text-white font-medium">{latestClosed.leverage}x</span>
+                            </>
+                          )}
+                        </div>
+                        <span className="text-xs text-gray-500">{formatDate(latestClosed.entry_time)}</span>
                       </div>
                       {/* PnL - Hero */}
                       <div className="text-center py-5 mb-4">
@@ -570,10 +575,9 @@ function BotTradeHistoryModal({ bot, onClose, t }: { bot: BotStatus; onClose: ()
                           <div className="text-white font-semibold text-lg">{latestClosed.exit_price ? `$${latestClosed.exit_price.toLocaleString()}` : '--'}</div>
                         </div>
                       </div>
-                      {/* Footer: Date + Branding + Affiliate */}
+                      {/* Footer: Branding + Affiliate */}
                       <div className="pt-3 border-t border-white/5">
-                        <div className="text-sm text-gray-500">{formatDate(latestClosed.entry_time)}</div>
-                        <div className="text-xs text-gray-500 mt-1">Edge Bots by Trading Department</div>
+                        <div className="text-xs text-gray-500">Edge Bots by Trading Department</div>
                         {affiliateLink && (
                           <>
                             {affiliateLink.label && <div className="text-xs text-gray-400 mt-0.5">{affiliateLink.label}</div>}
@@ -607,18 +611,21 @@ function BotTradeHistoryModal({ bot, onClose, t }: { bot: BotStatus; onClose: ()
                           <ExchangeIcon exchange={bot.exchange_type} size={18} />
                           <span className="text-lg font-bold text-white">{trade.symbol}</span>
                         </div>
-                        <div className="flex items-center gap-2 text-sm text-gray-400 mb-4">
-                          <span>Perp</span>
-                          <span className="text-gray-600">|</span>
-                          <span className={trade.side === 'long' ? 'text-emerald-400 font-medium' : 'text-red-400 font-medium'}>
-                            {trade.side === 'long' ? '+ LONG' : '- SHORT'}
-                          </span>
-                          {trade.leverage && (
-                            <>
-                              <span className="text-gray-600">|</span>
-                              <span className="text-white font-medium">{trade.leverage}x</span>
-                            </>
-                          )}
+                        <div className="flex items-center justify-between text-sm text-gray-400 mb-4">
+                          <div className="flex items-center gap-2">
+                            <span>Perp</span>
+                            <span className="text-gray-600">|</span>
+                            <span className={trade.side === 'long' ? 'text-emerald-400 font-medium' : 'text-red-400 font-medium'}>
+                              {trade.side === 'long' ? '+ LONG' : '- SHORT'}
+                            </span>
+                            {trade.leverage && (
+                              <>
+                                <span className="text-gray-600">|</span>
+                                <span className="text-white font-medium">{trade.leverage}x</span>
+                              </>
+                            )}
+                          </div>
+                          <span className="text-xs text-gray-500">{formatDate(trade.entry_time)}</span>
                         </div>
                         <div className="text-center py-5 mb-4">
                           <div className={`text-5xl font-bold tracking-tight ${trade.pnl_percent >= 0 ? 'text-profit' : 'text-loss'}`}>
@@ -640,8 +647,7 @@ function BotTradeHistoryModal({ bot, onClose, t }: { bot: BotStatus; onClose: ()
                           </div>
                         </div>
                         <div className="pt-3 border-t border-white/5">
-                          <div className="text-sm text-gray-500">{formatDate(trade.entry_time)}</div>
-                          <div className="text-xs text-gray-500 mt-1">Edge Bots by Trading Department</div>
+                          <div className="text-xs text-gray-500">Edge Bots by Trading Department</div>
                           {affiliateLink && (
                             <>
                               {affiliateLink.label && <div className="text-xs text-gray-400 mt-0.5">{affiliateLink.label}</div>}

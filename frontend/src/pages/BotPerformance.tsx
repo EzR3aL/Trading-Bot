@@ -907,18 +907,21 @@ export default function BotPerformance() {
                                 <ExchangeIcon exchange={botExchange} size={18} />
                                 <span className="text-lg font-bold text-white">{trade.symbol}</span>
                               </div>
-                              <div className="flex items-center gap-2 text-sm text-gray-400 mb-4">
-                                <span>Perp</span>
-                                <span className="text-gray-600">|</span>
-                                <span className={trade.side === 'long' ? 'text-emerald-400 font-medium' : 'text-red-400 font-medium'}>
-                                  {trade.side === 'long' ? '+ LONG' : '- SHORT'}
-                                </span>
-                                {trade.leverage && (
-                                  <>
-                                    <span className="text-gray-600">|</span>
-                                    <span className="text-white font-medium">{trade.leverage}x</span>
-                                  </>
-                                )}
+                              <div className="flex items-center justify-between text-sm text-gray-400 mb-4">
+                                <div className="flex items-center gap-2">
+                                  <span>Perp</span>
+                                  <span className="text-gray-600">|</span>
+                                  <span className={trade.side === 'long' ? 'text-emerald-400 font-medium' : 'text-red-400 font-medium'}>
+                                    {trade.side === 'long' ? '+ LONG' : '- SHORT'}
+                                  </span>
+                                  {trade.leverage && (
+                                    <>
+                                      <span className="text-gray-600">|</span>
+                                      <span className="text-white font-medium">{trade.leverage}x</span>
+                                    </>
+                                  )}
+                                </div>
+                                <span className="text-xs text-gray-500">{formatDate(trade.entry_time)}</span>
                               </div>
                               <div className="text-center py-5 mb-4">
                                 <div className={`text-5xl font-bold tracking-tight ${trade.pnl_percent >= 0 ? 'text-profit' : 'text-loss'}`}>
@@ -940,8 +943,7 @@ export default function BotPerformance() {
                                 </div>
                               </div>
                               <div className="pt-3 border-t border-white/5">
-                                <div className="text-sm text-gray-500">{formatDate(trade.entry_time)}</div>
-                                <div className="text-xs text-gray-500 mt-1">Edge Bots by Trading Department</div>
+                                <div className="text-xs text-gray-500">Edge Bots by Trading Department</div>
                                 {affiliateLink && (
                                   <>
                                     {affiliateLink.label && <div className="text-xs text-gray-400 mt-0.5">{affiliateLink.label}</div>}
@@ -1164,19 +1166,22 @@ export default function BotPerformance() {
                   </div>
                 )
               })()}
-              {/* Perp | Side | Leverage */}
-              <div className="flex items-center gap-2 text-sm text-gray-400 mb-4">
-                <span>Perp</span>
-                <span className="text-gray-600">|</span>
-                <span className={selectedTrade.side === 'long' ? 'text-emerald-400 font-medium' : 'text-red-400 font-medium'}>
-                  {selectedTrade.side === 'long' ? '+ LONG' : '- SHORT'}
-                </span>
-                {selectedTrade.leverage && (
-                  <>
-                    <span className="text-gray-600">|</span>
-                    <span className="text-white font-medium">{selectedTrade.leverage}x</span>
-                  </>
-                )}
+              {/* Perp | Side | Leverage | Date */}
+              <div className="flex items-center justify-between text-sm text-gray-400 mb-4">
+                <div className="flex items-center gap-2">
+                  <span>Perp</span>
+                  <span className="text-gray-600">|</span>
+                  <span className={selectedTrade.side === 'long' ? 'text-emerald-400 font-medium' : 'text-red-400 font-medium'}>
+                    {selectedTrade.side === 'long' ? '+ LONG' : '- SHORT'}
+                  </span>
+                  {selectedTrade.leverage && (
+                    <>
+                      <span className="text-gray-600">|</span>
+                      <span className="text-white font-medium">{selectedTrade.leverage}x</span>
+                    </>
+                  )}
+                </div>
+                <span className="text-xs text-gray-500">{formatDate(selectedTrade.entry_time)}</span>
               </div>
 
               {/* PnL - Hero */}
@@ -1209,10 +1214,9 @@ export default function BotPerformance() {
                 </div>
               </div>
 
-              {/* Footer: Date + Branding + Affiliate */}
+              {/* Footer: Branding + Affiliate */}
               <div className="pt-3 border-t border-white/5">
-                <div className="text-sm text-gray-500">{formatDate(selectedTrade.entry_time)}</div>
-                <div className="text-xs text-gray-500 mt-1">Edge Bots by Trading Department</div>
+                <div className="text-xs text-gray-500">Edge Bots by Trading Department</div>
                 {(() => {
                   const botEx = compareData.find(b => b.bot_id === selectedBot)?.exchange_type
                   const aLink = botEx ? affiliateLinks.find(l => l.exchange_type === botEx) : null
