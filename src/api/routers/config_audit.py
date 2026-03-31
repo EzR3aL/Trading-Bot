@@ -31,7 +31,7 @@ class ConfigChangeListResponse(BaseModel):
     page_size: int
 
 
-@router.get("", response_model=ConfigChangeListResponse)
+@router.get("/", response_model=ConfigChangeListResponse)
 async def list_config_changes(
     entity_type: Optional[str] = Query(None, pattern="^(bot_config|preset|exchange_connection)$"),
     entity_id: Optional[int] = Query(None),

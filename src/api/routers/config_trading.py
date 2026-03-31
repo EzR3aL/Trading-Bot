@@ -23,7 +23,7 @@ from src.api.rate_limit import limiter
 router = APIRouter()
 
 
-@router.get("", response_model=ConfigResponse)
+@router.get("/", response_model=ConfigResponse)
 async def get_config(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
