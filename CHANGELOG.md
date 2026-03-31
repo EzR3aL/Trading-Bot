@@ -12,15 +12,16 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 ## [4.6.10] - 2026-03-31
 
 ### Behoben
-- **TP/SL Cancel auf BingX/Weex**: Neue `cancel_position_tpsl()` Methode — fragt offene Conditional/Trigger-Orders ab und cancelt sie gezielt. Behebt das Problem dass alte TP/SL-Orders auf der Exchange verbleiben wenn neue gesetzt oder bestehende entfernt werden
-- **Race Condition bei TP/SL-Update (BingX/Weex)**: Strategie "Place First, Cancel Old" — neue Orders werden zuerst platziert, dann alte gecancelt. Position ist nie ungeschützt, auch bei API-Fehlern
+- **TP/SL Cancel auf allen Exchanges**: Neue `cancel_position_tpsl()` Methode auf allen 5 Exchanges — fragt offene TP/SL-Orders ab und cancelt sie gezielt. Behebt das Problem dass alte TP/SL-Orders auf der Exchange verbleiben wenn neue gesetzt oder bestehende entfernt werden
+- **Race Condition bei TP/SL-Update**: Strategie "Place First, Cancel Old" — neue Orders werden zuerst platziert, dann alte gecancelt. Position ist nie ungeschützt, auch bei API-Fehlern
 - **Beide TP+SL entfernen entfernt jetzt auch Exchange-Orders**: Wenn beide Werte gleichzeitig gelöscht werden, wird `cancel_position_tpsl()` direkt aufgerufen statt den Exchange-Call zu überspringen
 
 ### Hinzugefuegt
 - **BingX `cancel_position_tpsl()`**: Fragt `/openApi/swap/v2/trade/openOrders` ab, filtert auf `TAKE_PROFIT_MARKET`/`STOP_MARKET` nach Symbol und Position-Side, cancelt jede Order einzeln
 - **Weex `cancel_position_tpsl()`**: Fragt `/capi/v3/pendingTpSlOrders` ab, filtert nach Symbol und Position-Side, cancelt via `/capi/v3/cancelTpSlOrder`
-- **Bitunix `cancel_position_tpsl()`**: Fragt `/api/v1/futures/tpsl/get_pending_orders` ab, filtert nach Symbol und Position-Side, cancelt via `/api/v1/futures/tpsl/cancel_order` — nutzt die bisher ungenutzten TPSL-Endpoints aus den Constants
-- **Base-Methode `cancel_position_tpsl()`**: No-op Default für Position-Level Exchanges (Bitget, Hyperliquid) — dort ersetzt `set_position_tpsl` implizit
+- **Bitget `cancel_position_tpsl()`**: Fragt `/api/v2/mix/order/orders-pending` ab, filtert nach TP/SL Plan-Order-Typen und Hold-Side, cancelt jede Order einzeln
+- **Hyperliquid `cancel_position_tpsl()`**: Zwei-Stufen-Strategie — (1) leere `positionTpsl` via `bulk_orders` zum Clearen aller Trigger, (2) Fallback: `open_orders` abfragen und Trigger-Orders einzeln canceln
+- **Bitunix `cancel_position_tpsl()`**: Fragt `/api/v1/futures/tpsl/get_pending_orders` ab, filtert nach Symbol und Position-Side, cancelt via `/api/v1/futures/tpsl/cancel_order`
 
 ## [4.6.9] - 2026-03-31
 
