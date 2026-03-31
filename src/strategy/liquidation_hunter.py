@@ -423,7 +423,7 @@ class LiquidationHunterStrategy(BaseStrategy):
                     if in_profit:
                         pnl_pct = abs(current_price - entry_price) / entry_price * 100
                         return True, (
-                            "Max Haltezeit: %.0fh ueberschritten (Limit: %.0fh). "
+                            "Max Haltezeit: %.0fh überschritten (Limit: %.0fh). "
                             "Trade im Profit (+%.2f%%), Gewinnmitnahme."
                             % (elapsed_hours, max_hours, pnl_pct)
                         )
@@ -478,7 +478,7 @@ class LiquidationHunterStrategy(BaseStrategy):
             if current_price >= trailing_stop:
                 pnl_pct = (entry_price - current_price) / entry_price * 100
                 return True, (
-                    "Trailing Stop: Preis $%.2f ueber Stop $%.2f "
+                    "Trailing Stop: Preis $%.2f über Stop $%.2f "
                     "(Tiefst=$%.2f, ATR=%.0f, Trail=%.1fx). PnL=%.2f%%"
                     % (current_price, trailing_stop, highest_price, atr_val, trail_atr, pnl_pct)
                 )
@@ -541,7 +541,7 @@ class LiquidationHunterStrategy(BaseStrategy):
                 "type": "select",
                 "label": "Risikoprofil",
                 "description": (
-                    "Konservativ = weniger Trades, weite Stops, laengere Haltezeit. "
+                    "Konservativ = weniger Trades, weite Stops, längere Haltezeit. "
                     "Standard = ausgewogen. "
                     "Aggressiv = mehr Trades, enge Stops, schnelle Gewinnmitnahme."
                 ),

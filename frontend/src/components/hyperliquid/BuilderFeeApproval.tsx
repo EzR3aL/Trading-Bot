@@ -267,7 +267,7 @@ function BuilderFeeApprovalInner({ onApproved, onClose }: BuilderFeeApprovalProp
           <div className="bg-emerald-950/40 border border-emerald-700/30 rounded-lg px-4 py-4">
             <Link2 className="w-8 h-8 text-emerald-400 mx-auto mb-3" />
             <p className="text-emerald-300/90 text-sm leading-snug mb-3">
-              {t('builderFee.referralRequired', 'Bevor du Hyperliquid nutzen kannst, registriere dich ueber unseren Affiliate Link:')}
+              {t('builderFee.referralRequired', 'Bevor du Hyperliquid nutzen kannst, registriere dich über unseren Affiliate Link:')}
             </p>
             <a
               href={`https://app.hyperliquid.xyz/join/${config.referral_code}`}

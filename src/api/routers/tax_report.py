@@ -147,7 +147,7 @@ async def download_tax_report_csv(
 
     # ── Header section ──
     if de:
-        writer.writerow(["STEUERREPORT KRYPTOWAEHRUNGSHANDEL"])
+        writer.writerow(["STEUERREPORT KRYPTOWÄHRUNGSHANDEL"])
         writer.writerow(["Berichtszeitraum", f"{year}-01-01 bis {year}-12-31"])
         writer.writerow(["Erstellt am", datetime.now(timezone.utc).astimezone(user_tz).strftime(f"%d.%m.%Y %H:%M ({tz_label})")])
         mode_label = "Demo" if demo_mode is True else "Live" if demo_mode is False else "Alle"
@@ -163,7 +163,7 @@ async def download_tax_report_csv(
     # ── Disclaimer ──
     if de:
         writer.writerow(["HINWEIS: Dieser Bericht dient nur zu Informationszwecken. "
-                          "Konsultieren Sie einen Steuerberater fuer offizielle Steuererklaerungen."])
+                          "Konsultieren Sie einen Steuerberater für offizielle Steuererklärungen."])
     else:
         writer.writerow(["NOTE: This report is for informational purposes only. "
                           "Consult a tax advisor for official tax declarations."])
@@ -187,7 +187,7 @@ async def download_tax_report_csv(
         writer.writerow(["Gewinne", f(total_gains)])
         writer.writerow(["Verluste", f(total_losses)])
         writer.writerow(["Brutto PnL", f(total_pnl)])
-        writer.writerow(["Gebuehren", f(total_fees)])
+        writer.writerow(["Gebühren", f(total_fees)])
         writer.writerow(["Finanzierungskosten", f(total_funding)])
         writer.writerow(["Netto PnL", f(net_pnl)])
         writer.writerow(["Gewinnrate", f"{win_rate:.1f}%".replace(".", ",")])
@@ -216,8 +216,8 @@ async def download_tax_report_csv(
         months[mk]["funding"] += abs(t.funding_paid or 0)
 
     if de:
-        writer.writerow(["MONATLICHE AUFSCHLUESSELUNG"])
-        writer.writerow(["Monat", "Trades", "PnL (USDT)", "Gebuehren", "Finanzierung", "Netto"])
+        writer.writerow(["MONATLICHE AUFSCHLÜSSELUNG"])
+        writer.writerow(["Monat", "Trades", "PnL (USDT)", "Gebühren", "Finanzierung", "Netto"])
     else:
         writer.writerow(["MONTHLY BREAKDOWN"])
         writer.writerow(["Month", "Trades", "PnL (USDT)", "Fees", "Funding", "Net"])
@@ -237,9 +237,9 @@ async def download_tax_report_csv(
         writer.writerow(["Zeitzone", tz_label])
         writer.writerow([
             "Einstieg", "Ausstieg", "Symbol", "Richtung", "Hebel",
-            "Groesse", "Einstiegspreis", "Ausstiegspreis",
-            "PnL (USDT)", "PnL %", "Gebuehren", "Finanzierung",
-            "Netto PnL", "Haltedauer (h)", "Schlussgrund", "Boerse",
+            "Größe", "Einstiegspreis", "Ausstiegspreis",
+            "PnL (USDT)", "PnL %", "Gebühren", "Finanzierung",
+            "Netto PnL", "Haltedauer (h)", "Schlussgrund", "Börse",
         ])
     else:
         writer.writerow(["DETAILED TRADES"])

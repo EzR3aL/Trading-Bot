@@ -37,9 +37,12 @@ function PnlTooltip({ active, payload, label }: {
   const funding = fundingEntry?.value ?? 0
   const total = pnl - fees - funding
 
+  const tooltipTheme = useThemeStore((s) => s.theme)
+  const tooltipLight = tooltipTheme === 'light'
+
   return (
-    <div className="bg-[#141a2a]/95 border border-white/10 rounded-xl p-3 shadow-lg backdrop-blur-xl min-w-[180px]">
-      <p className="text-gray-400 text-xs mb-2 font-medium">{label}</p>
+    <div className={`${tooltipLight ? 'bg-white/95 border-gray-200' : 'bg-[#141a2a]/95 border-white/10'} border rounded-xl p-3 shadow-lg backdrop-blur-xl min-w-[180px]`}>
+      <p className={`${tooltipLight ? 'text-gray-500' : 'text-gray-400'} text-xs mb-2 font-medium`}>{label}</p>
       {pnlEntry && (
         <div className="flex justify-between text-sm mb-0.5">
           <span style={{ color: pnl >= 0 ? PNL_POS : PNL_NEG }}>{pnlEntry.name}</span>
@@ -59,13 +62,13 @@ function PnlTooltip({ active, payload, label }: {
         </div>
       )}
       {(feesEntry || fundingEntry) && (fees > 0 || funding > 0) && (
-        <div className="flex justify-between text-sm mt-1.5 pt-1.5 border-t border-white/10">
-          <span className="text-gray-400">{i18n.t('common.net')}</span>
+        <div className={`flex justify-between text-sm mt-1.5 pt-1.5 border-t ${tooltipLight ? 'border-gray-200' : 'border-white/10'}`}>
+          <span className={tooltipLight ? 'text-gray-500' : 'text-gray-400'}>{i18n.t('common.net')}</span>
           <span className="font-bold ml-4" style={{ color: total >= 0 ? PNL_POS : PNL_NEG }}>${total.toFixed(2)}</span>
         </div>
       )}
       {cumEntry && (
-        <div className="flex justify-between text-sm mt-1.5 pt-1.5 border-t border-white/10">
+        <div className={`flex justify-between text-sm mt-1.5 pt-1.5 border-t ${tooltipLight ? 'border-gray-200' : 'border-white/10'}`}>
           <span style={{ color: CUMULATIVE_COLOR }}>{cumEntry.name}</span>
           <span className="font-medium ml-4" style={{ color: cumEntry.value >= 0 ? PNL_POS : PNL_NEG }}>${cumEntry.value.toFixed(2)}</span>
         </div>
@@ -77,9 +80,10 @@ function PnlTooltip({ active, payload, label }: {
 export default function PnlChart({ data }: Props) {
   const { t } = useTranslation()
   const theme = useThemeStore((s) => s.theme)
-  const gridColor = theme === 'light' ? '#e2e8f0' : '#374151'
-  const tickColor = theme === 'light' ? '#64748b' : '#9ca3af'
-  const refColor = theme === 'light' ? '#cbd5e1' : '#6b7280'
+  const isLight = theme === 'light'
+  const gridColor = isLight ? '#e2e8f0' : '#374151'
+  const tickColor = isLight ? '#64748b' : '#9ca3af'
+  const refColor = isLight ? '#cbd5e1' : '#6b7280'
   const [showCosts, setShowCosts] = useState(true)
 
   const chartData = useMemo(() => {
@@ -110,8 +114,12 @@ export default function PnlChart({ data }: Props) {
         onClick={() => setShowCosts(!showCosts)}
         className={`absolute -top-9 right-0 z-10 flex items-center gap-1 sm:gap-1.5 px-1.5 sm:px-2.5 py-1 rounded-lg text-[10px] sm:text-xs font-medium transition-all duration-200 border ${
           showCosts
-            ? 'bg-white/5 border-white/10 text-gray-300 hover:bg-white/10'
-            : 'bg-white/[0.02] border-white/5 text-gray-500 hover:text-gray-400'
+            ? isLight
+              ? 'bg-gray-100 border-gray-200 text-gray-600 hover:bg-gray-200'
+              : 'bg-white/5 border-white/10 text-gray-300 hover:bg-white/10'
+            : isLight
+              ? 'bg-gray-50 border-gray-100 text-gray-400 hover:text-gray-500'
+              : 'bg-white/[0.02] border-white/5 text-gray-500 hover:text-gray-400'
         }`}
       >
         {showCosts ? <Eye size={13} /> : <EyeOff size={13} />}
@@ -166,7 +174,7 @@ export default function PnlChart({ data }: Props) {
             stroke={CUMULATIVE_COLOR}
             strokeWidth={2}
             dot={false}
-            activeDot={{ r: 4, fill: CUMULATIVE_COLOR, stroke: '#fff', strokeWidth: 1 }}
+            activeDot={{ r: 4, fill: CUMULATIVE_COLOR, stroke: isLight ? '#f8fafc' : '#fff', strokeWidth: 1 }}
           />
         </ComposedChart>
       </ResponsiveContainer>

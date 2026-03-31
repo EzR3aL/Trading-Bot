@@ -343,8 +343,8 @@ class PositionMonitorMixin:
                         await self._send_notification(
                             lambda n, s=trade.symbol, c=count: n.send_risk_alert(
                                 alert_type="API_GLITCH",
-                                message=f"{s}: {c} API-Glitches erkannt — Position wird weiter ueberwacht, "
-                                        f"aber die Exchange-API ist instabil. Bitte manuell pruefen.",
+                                message=f"{s}: {c} API-Glitches erkannt — Position wird weiter überwacht, "
+                                        f"aber die Exchange-API ist instabil. Bitte manuell prüfen.",
                             ),
                             event_type="risk_alert",
                             summary=f"API_GLITCH: {trade.symbol} ({count}x)",

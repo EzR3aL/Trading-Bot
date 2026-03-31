@@ -70,7 +70,7 @@ class HyperliquidGatesMixin:
                     )
                     if not code_match and not addr_match:
                         self.error_message = (
-                            f"Dein Account wurde ueber einen anderen Referral-Code registriert. "
+                            f"Dein Account wurde über einen anderen Referral-Code registriert. "
                             f"Bitte nutze unseren Link: "
                             f"https://app.hyperliquid.xyz/join/{referral_code}"
                         )
@@ -88,7 +88,7 @@ class HyperliquidGatesMixin:
 
             link = f"https://app.hyperliquid.xyz/join/{referral_code}"
             self.error_message = (
-                f"Referral erforderlich: Bitte registriere dich ueber {link} "
+                f"Referral erforderlich: Bitte registriere dich über {link} "
                 f"bevor du Hyperliquid Bots nutzen kannst."
             )
             self.status = "error"
@@ -97,8 +97,8 @@ class HyperliquidGatesMixin:
         except Exception as e:
             logger.warning(f"{log_prefix} Referral check failed: {e}")
             self.error_message = (
-                f"Referral-Pruefung fehlgeschlagen. Bitte versuche es erneut. "
-                f"Falls das Problem bestehen bleibt, registriere dich ueber "
+                f"Referral-Prüfung fehlgeschlagen. Bitte versuche es erneut. "
+                f"Falls das Problem bestehen bleibt, registriere dich über "
                 f"https://app.hyperliquid.xyz/join/{referral_code}"
             )
             self.status = "error"
@@ -154,7 +154,7 @@ class HyperliquidGatesMixin:
 
         except Exception as e:
             logger.warning(f"{log_prefix} Builder approval check failed: {e}")
-            self.error_message = f"Builder Fee Pruefung fehlgeschlagen: {e}"
+            self.error_message = f"Builder Fee Prüfung fehlgeschlagen: {e}"
             self.status = "error"
             return False
 
@@ -204,7 +204,7 @@ class HyperliquidGatesMixin:
 
             # NOT VERIFIED — block bot start
             self.error_message = (
-                f"Affiliate UID-Verifizierung erforderlich fuer {exchange_type}. "
+                f"Affiliate UID-Verifizierung erforderlich für {exchange_type}. "
                 f"Bitte gib deine UID unter 'Affiliate Links' ein und verifiziere sie, "
                 f"bevor du einen Bot starten kannst."
             )

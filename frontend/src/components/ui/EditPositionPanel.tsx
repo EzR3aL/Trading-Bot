@@ -289,7 +289,7 @@ export default function EditPositionPanel({ position, onClose, onSave }: EditPos
               </span>
             </div>
           </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-white transition-colors p-1.5 rounded-lg hover:bg-white/5">
+          <button onClick={onClose} className="text-gray-400 hover:text-white transition-colors p-1.5 rounded-lg hover:bg-white/5" aria-label="Close">
             <X size={20} />
           </button>
         </div>
@@ -403,6 +403,7 @@ export default function EditPositionPanel({ position, onClose, onSave }: EditPos
               </div>
               <button
                 onClick={() => setTrailingEnabled(!trailingEnabled)}
+                aria-label="Toggle trailing stop"
                 className={`relative w-10 h-5 rounded-full transition-colors duration-200 ${
                   trailingEnabled ? 'bg-emerald-500' : 'bg-white/10'
                 }`}
@@ -430,9 +431,11 @@ export default function EditPositionPanel({ position, onClose, onSave }: EditPos
                     step="0.1"
                     value={trailingAtr}
                     onChange={(e) => setTrailingAtr(parseFloat(e.target.value))}
-                    className="w-full h-1.5 bg-white/10 rounded-full appearance-none cursor-pointer accent-emerald-500
-                      [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-emerald-400 [&::-webkit-slider-thumb]:shadow-lg [&::-webkit-slider-thumb]:shadow-emerald-500/30 [&::-webkit-slider-thumb]:cursor-pointer
-                      [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-emerald-400 [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:cursor-pointer"
+                    onTouchStart={(e) => e.stopPropagation()}
+                    onTouchMove={(e) => e.stopPropagation()}
+                    className="w-full h-2 bg-white/10 rounded-full appearance-none cursor-pointer accent-emerald-500 touch-none
+                      [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-6 [&::-webkit-slider-thumb]:h-6 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-emerald-400 [&::-webkit-slider-thumb]:shadow-lg [&::-webkit-slider-thumb]:shadow-emerald-500/30 [&::-webkit-slider-thumb]:cursor-pointer
+                      [&::-moz-range-thumb]:w-6 [&::-moz-range-thumb]:h-6 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-emerald-400 [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:cursor-pointer"
                   />
                   <div className="flex justify-between text-[9px] text-gray-600 mt-1 tabular-nums">
                     <span>1.0x</span>

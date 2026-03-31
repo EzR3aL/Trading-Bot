@@ -205,7 +205,7 @@ function TradeDetailModal({ trade, onClose, t, affiliateLink }: { trade: BotTrad
       <div
         ref={swipe.ref}
         style={swipe.style}
-        className="bg-[#0f1420] rounded-2xl p-7 max-w-lg w-full mx-4 border border-white/10 shadow-2xl"
+        className="bg-[#0f1420] rounded-2xl max-w-lg w-full mx-4 border border-white/10 shadow-2xl overflow-hidden"
         onClick={(e) => e.stopPropagation()}
         aria-label={t('bots.tradeDetail')}
       >
@@ -215,7 +215,7 @@ function TradeDetailModal({ trade, onClose, t, affiliateLink }: { trade: BotTrad
           </div>
         )}
         {/* Header */}
-        <div className="flex items-center justify-between mb-5">
+        <div className="flex items-center justify-between px-7 pt-7 pb-0">
           <div className="flex items-center gap-3">
             <h3 className="text-xl font-bold text-white">{trade.symbol}</h3>
             <span className={`px-3 py-1 rounded-lg text-xs font-bold ${
@@ -243,6 +243,8 @@ function TradeDetailModal({ trade, onClose, t, affiliateLink }: { trade: BotTrad
           </div>
         </div>
 
+        {/* Capturable Card Content */}
+        <div ref={copyRef} className="p-7 max-h-[80vh] overflow-y-auto">
         {/* Exchange + Leverage */}
         {(trade.exchange || trade.leverage) && (
           <div className="flex items-center gap-4 mb-5 text-sm text-gray-400">
@@ -320,56 +322,14 @@ function TradeDetailModal({ trade, onClose, t, affiliateLink }: { trade: BotTrad
             : <ExitReasonBadge reason={trade.exit_reason} compact />
           }
         </div>
-      </div>
 
-      {/* Hidden compact card for image copy */}
-      <div className="absolute -left-[9999px] pointer-events-none" aria-hidden="true">
-        <div ref={copyRef} className="bg-[#0f1420] rounded-2xl p-7 w-[420px] border border-white/10 shadow-2xl">
-          <div className="flex items-center gap-3 mb-5">
-            <h3 className="text-xl font-bold text-white">{trade.symbol}</h3>
-            <span className={`px-3 py-1 rounded-lg text-xs font-bold ${
-              trade.side === 'long' ? 'bg-emerald-500/15 text-profit border border-emerald-500/20' : 'bg-red-500/15 text-loss border border-red-500/20'
-            }`}>
-              {trade.side === 'long' ? '+ LONG' : '- SHORT'}
-            </span>
-          </div>
-          <div className="text-center py-6 mb-5 bg-white/[0.02] rounded-xl border border-white/5">
-            <div className="text-xs text-gray-400 uppercase tracking-wider mb-2">{t('bots.result')}</div>
-            <div className={`text-5xl font-bold tracking-tight ${trade.pnl_percent >= 0 ? 'text-profit' : 'text-loss'}`}>
-              {formatPnlPercent(trade.pnl_percent)}
-            </div>
-            <div className={`text-lg font-semibold mt-1 ${trade.pnl >= 0 ? 'text-profit/70' : 'text-loss/70'}`}>
-              <PnlCell pnl={trade.pnl} fees={trade.fees ?? 0} fundingPaid={trade.funding_paid ?? 0} status={trade.status}
-                className={`text-lg font-semibold ${trade.pnl >= 0 ? 'text-profit/70' : 'text-loss/70'}`} />
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-3 mb-5">
-            <div className="bg-white/[0.03] rounded-xl p-4 border border-white/5">
-              <div className="text-xs text-gray-400 mb-1.5">{t('bots.entryPrice')}</div>
-              <div className="text-white font-semibold text-lg">${trade.entry_price.toLocaleString()}</div>
-            </div>
-            <div className="bg-white/[0.03] rounded-xl p-4 border border-white/5">
-              <div className="text-xs text-gray-400 mb-1.5">{t('bots.exitPrice')}</div>
-              <div className="text-white font-semibold text-lg">{trade.exit_price ? `$${trade.exit_price.toLocaleString()}` : '--'}</div>
-            </div>
-          </div>
-          {trade.reason && (
-            <div className="mb-5">
-              <div className="text-xs text-gray-400 uppercase tracking-wider mb-2">{t('bots.reasoning')}</div>
-              <p className="text-sm text-gray-300 leading-relaxed bg-white/[0.03] rounded-xl p-4 border border-white/5">{trade.reason}</p>
-            </div>
-          )}
-          <div className="flex items-center justify-between text-sm text-gray-500 pt-4 border-t border-white/5">
-            <span>{formatDateTime(trade.entry_time)}</span>
-            <ExitReasonBadge reason={trade.exit_reason} compact />
-          </div>
           {affiliateLink && (
             <div className="mt-3 pt-3 border-t border-white/5">
               <div className="text-xs text-gray-500 mb-1">{affiliateLink.label || t('bots.affiliateLink')}</div>
               <div className="text-xs text-primary-400 font-medium">{affiliateLink.affiliate_url}</div>
             </div>
           )}
-        </div>
+        </div>{/* end capturable content */}
       </div>
     </div>
   )
@@ -763,6 +723,7 @@ function BotTradeHistoryModal({ bot, onClose, t }: { bot: BotStatus; onClose: ()
                                       onClick={() => setSelectedTrade({ ...trade, exchange: bot.exchange_type })}
                                       className="p-2 rounded-lg text-gray-400 hover:text-white bg-white/5 hover:bg-white/10 border border-white/5 transition-all"
                                       title={t('bots.copyImage')}
+                                      aria-label="Share trade"
                                     >
                                       <Share size={14} />
                                     </button>
@@ -974,7 +935,7 @@ export default function Bots() {
   const getStatusStyle = (status: string) => STATUS_STYLES[status] || STATUS_STYLES.idle
 
   return (
-    <div ref={containerRef} style={{ overscrollBehavior: 'contain' }} className="animate-in">
+    <div ref={containerRef} style={{ overscrollBehavior: 'contain' }} className="animate-in" aria-busy={loading}>
       <PullToRefreshIndicator pullDistance={pullDistance} refreshing={refreshing} />
       {/* Header */}
       <div className="flex items-center justify-between gap-3 mb-6">
@@ -1021,8 +982,16 @@ export default function Bots() {
       {/* Empty state */}
       {!loading && bots.length === 0 && (
         <div className="glass-card rounded-xl text-center py-16">
-          <Activity className="mx-auto mb-4 text-gray-600" size={48} />
-          <p className="text-gray-400">{t('bots.noBots')}</p>
+          <Activity className="mx-auto mb-4 text-gray-600 dark:text-gray-600" size={48} />
+          <p className="text-gray-500 dark:text-gray-400 font-medium">{t('bots.noBots')}</p>
+          <p className="text-gray-400 dark:text-gray-500 text-sm mt-1">{t('bots.noBotsHint')}</p>
+          <button
+            onClick={() => setShowBuilder(true)}
+            className="mt-4 inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-primary-600 to-primary-500 text-white text-sm font-medium rounded-xl shadow-glow-sm hover:shadow-glow transition-all duration-200"
+          >
+            <Plus size={16} />
+            {t('bots.noBotsAction')}
+          </button>
         </div>
       )}
 
@@ -1401,7 +1370,7 @@ export default function Bots() {
         open={confirmModal?.type === 'delete'}
         title={t('bots.deleteBot', 'Delete Bot')}
         message={t('bots.confirmDeleteMessage', { name: confirmModal?.name })}
-        confirmLabel={t('common.delete', 'Delete')}
+        confirmLabel={t('bots.delete')}
         variant="danger"
         onConfirm={confirmDelete}
         onCancel={() => setConfirmModal(null)}
@@ -1409,7 +1378,7 @@ export default function Bots() {
       <ConfirmModal
         open={confirmModal?.type === 'close-position'}
         title={t('bots.closePosition', 'Close Position')}
-        message={t('bots.closePositionMessage', `Are you sure you want to close the ${confirmModal?.symbol} position? This will send a market order.`)}
+        message={t('bots.closePositionConfirm', { symbol: confirmModal?.symbol })}
         confirmLabel={t('bots.closePosition', 'Close Position')}
         variant="warning"
         onConfirm={confirmClosePosition}

@@ -30,16 +30,25 @@ async def websocket_endpoint(websocket: WebSocket):
     """Authenticated WebSocket endpoint for real-time events."""
     await websocket.accept()
 
-    # Wait for auth message (first message must be the JWT token)
-    try:
-        token = await asyncio.wait_for(
-            websocket.receive_text(), timeout=AUTH_TIMEOUT_SECONDS
-        )
-    except asyncio.TimeoutError:
-        await websocket.close(code=4001, reason="Auth timeout")
-        return
+    # Try httpOnly cookie first (browser sends cookies on WebSocket handshake)
+    cookie_token = websocket.cookies.get("access_token")
+    payload = None
 
-    payload = decode_token(token, expected_type="access")
+    if cookie_token:
+        payload = decode_token(cookie_token, expected_type="access")
+        # If cookie token is invalid, fall through to message-based auth
+
+    # Fallback: wait for auth message (first message = JWT token)
+    if not payload:
+        try:
+            first_msg = await asyncio.wait_for(
+                websocket.receive_text(), timeout=AUTH_TIMEOUT_SECONDS
+            )
+        except asyncio.TimeoutError:
+            await websocket.close(code=4001, reason="Auth timeout")
+            return
+        payload = decode_token(first_msg, expected_type="access")
+
     if not payload:
         await websocket.close(code=4001, reason="Invalid token")
         return

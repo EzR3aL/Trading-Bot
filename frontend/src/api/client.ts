@@ -5,24 +5,27 @@ const api = axios.create({
   baseURL: '/api',
   headers: { 'Content-Type': 'application/json' },
   timeout: 15_000,
-  withCredentials: true,
+  withCredentials: true, // Sends httpOnly cookies with every request
 })
 
 // Refresh lock to prevent multiple simultaneous refresh attempts
 let isRefreshing = false
-let refreshSubscribers: ((token: string) => void)[] = []
+let refreshSubscribers: (() => void)[] = []
 let refreshRetryCount = 0
 const MAX_REFRESH_RETRIES = 3
+
+// Module-level token expiry timestamp (ms) — set by login/refresh responses
+let tokenExpiryMs: number | null = null
 
 // Proactive refresh: refresh token 5 minutes before expiry
 let proactiveRefreshTimer: ReturnType<typeof setTimeout> | null = null
 
-function subscribeTokenRefresh(cb: (token: string) => void) {
+function subscribeTokenRefresh(cb: () => void) {
   refreshSubscribers.push(cb)
 }
 
-function onTokenRefreshed(token: string) {
-  refreshSubscribers.forEach((cb) => cb(token))
+function onTokenRefreshed() {
+  refreshSubscribers.forEach((cb) => cb())
   refreshSubscribers = []
 }
 
@@ -37,7 +40,7 @@ function handleSessionExpiry() {
   if (sessionExpiring) return
   sessionExpiring = true
 
-  localStorage.removeItem('access_token')
+  tokenExpiryMs = null
   clearProactiveRefresh()
 
   // Show a brief message before redirect — use existing element or create one
@@ -61,23 +64,28 @@ function handleSessionExpiry() {
   }, 1500)
 }
 
+/** Update the module-level token expiry from a login/refresh response. */
+export function setTokenExpiry(expiresInSeconds: number) {
+  tokenExpiryMs = Date.now() + expiresInSeconds * 1000
+  scheduleProactiveRefresh()
+}
+
+/** Clear stored token expiry (used on logout). */
+export function clearTokenExpiry() {
+  tokenExpiryMs = null
+  clearProactiveRefresh()
+}
+
 /** Schedule a proactive token refresh 5 minutes before expiry. */
 function scheduleProactiveRefresh() {
   clearProactiveRefresh()
-  const token = localStorage.getItem('access_token')
-  if (!token) return
+  if (!tokenExpiryMs) return
 
-  try {
-    const payload = JSON.parse(atob(token.split('.')[1]))
-    const expiresAt = payload.exp * 1000 // ms
-    const refreshAt = expiresAt - 5 * 60 * 1000 // 5 min before expiry
-    const delay = refreshAt - Date.now()
+  const refreshAt = tokenExpiryMs - 5 * 60 * 1000 // 5 min before expiry
+  const delay = refreshAt - Date.now()
 
-    if (delay > 0) {
-      proactiveRefreshTimer = setTimeout(() => doRefresh(), delay)
-    }
-  } catch {
-    // Invalid token — reactive refresh will handle it
+  if (delay > 0) {
+    proactiveRefreshTimer = setTimeout(() => doRefresh(), delay)
   }
 }
 
@@ -89,8 +97,8 @@ function clearProactiveRefresh() {
 }
 
 /** Perform a token refresh (used by both proactive and reactive paths). */
-async function doRefresh(): Promise<string | null> {
-  if (isRefreshing) return null
+async function doRefresh(): Promise<boolean> {
+  if (isRefreshing) return false
   isRefreshing = true
 
   try {
@@ -98,30 +106,34 @@ async function doRefresh(): Promise<string | null> {
       withCredentials: true,
     })
     const { access_token } = res.data
-    localStorage.setItem('access_token', access_token)
+
+    // Extract expiry from the response token for proactive refresh scheduling
+    try {
+      const payload = JSON.parse(atob(access_token.split('.')[1]))
+      if (payload.exp) {
+        tokenExpiryMs = payload.exp * 1000
+      }
+    } catch {
+      // If token parsing fails, fall back to 4h default
+      tokenExpiryMs = Date.now() + 240 * 60 * 1000
+    }
 
     refreshRetryCount = 0
     isRefreshing = false
 
-    onTokenRefreshed(access_token)
+    onTokenRefreshed()
     scheduleProactiveRefresh()
 
-    return access_token
+    return true
   } catch {
     isRefreshing = false
     onRefreshFailed()
-    return null
+    return false
   }
 }
 
-// Request interceptor: attach JWT
-api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('access_token')
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`
-  }
-  return config
-})
+// No request interceptor needed — httpOnly cookies are sent automatically
+// via withCredentials: true
 
 // Response interceptor: handle 401 with token refresh
 api.interceptors.response.use(
@@ -135,8 +147,7 @@ api.interceptors.response.use(
       // If already refreshing, queue this request
       if (isRefreshing) {
         return new Promise((resolve) => {
-          subscribeTokenRefresh((token) => {
-            originalRequest.headers.Authorization = `Bearer ${token}`
+          subscribeTokenRefresh(() => {
             resolve(api(originalRequest))
           })
         })
@@ -151,9 +162,8 @@ api.interceptors.response.use(
 
       refreshRetryCount++
 
-      const newToken = await doRefresh()
-      if (newToken) {
-        originalRequest.headers.Authorization = `Bearer ${newToken}`
+      const refreshed = await doRefresh()
+      if (refreshed) {
         return api(originalRequest)
       }
 
@@ -165,12 +175,9 @@ api.interceptors.response.use(
   }
 )
 
-// Start proactive refresh on load (if token exists)
-scheduleProactiveRefresh()
-
-// Re-schedule when tab becomes visible (user returns after sleep/idle)
+// Re-schedule proactive refresh when tab becomes visible (user returns after sleep/idle)
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible' && localStorage.getItem('access_token')) {
+  if (document.visibilityState === 'visible' && tokenExpiryMs) {
     scheduleProactiveRefresh()
   }
 })

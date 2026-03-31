@@ -90,24 +90,18 @@ async def _store_change(
 ) -> None:
     """Store a config change record using the event logger's dedicated engine."""
     from src.utils.event_logger import _get_event_session_factory
-    from sqlalchemy import text
+    from src.models.database import ConfigChangeLog
 
     factory = _get_event_session_factory()
     async with factory() as session:
-        await session.execute(
-            text(
-                "INSERT INTO config_change_logs "
-                "(user_id, entity_type, entity_id, action, changes) "
-                "VALUES (:user_id, :entity_type, :entity_id, :action, :changes)"
-            ),
-            {
-                "user_id": user_id,
-                "entity_type": entity_type,
-                "entity_id": entity_id,
-                "action": action,
-                "changes": changes,
-            },
+        record = ConfigChangeLog(
+            user_id=user_id,
+            entity_type=entity_type,
+            entity_id=entity_id,
+            action=action,
+            changes=changes,
         )
+        session.add(record)
         await session.commit()
 
 

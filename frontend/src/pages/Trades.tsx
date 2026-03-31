@@ -7,7 +7,7 @@ import type { Trade } from '../types'
 import { ExchangeIcon } from '../components/ui/ExchangeLogo'
 import { SkeletonTable } from '../components/ui/Skeleton'
 import PnlCell from '../components/ui/PnlCell'
-import { X, ChevronRight } from 'lucide-react'
+import { X, ChevronRight, FileText } from 'lucide-react'
 import { formatDate, formatTime } from '../utils/dateUtils'
 import Pagination from '../components/ui/Pagination'
 import DatePicker from '../components/ui/DatePicker'
@@ -135,7 +135,7 @@ export default function Trades() {
   }
 
   return (
-    <div ref={containerRef} style={{ overscrollBehavior: 'contain' }} className="animate-in min-w-0">
+    <div ref={containerRef} style={{ overscrollBehavior: 'contain' }} className="animate-in min-w-0" aria-busy={loading}>
       <PullToRefreshIndicator pullDistance={pullDistance} refreshing={refreshing} />
       <h1 className="text-2xl font-bold text-white mb-6 tracking-tight">{t('trades.title')}</h1>
 
@@ -206,6 +206,7 @@ export default function Trades() {
           <button
             onClick={clearAllFilters}
             className="filter-reset"
+            aria-label="Clear all filters"
           >
             <X size={12} />
             {t('trades.reset')}
@@ -221,8 +222,10 @@ export default function Trades() {
         <div className="glass-card rounded-xl overflow-hidden min-w-0">
           {isMobile ? (
             trades.length === 0 ? (
-              <div className="p-8 text-center text-gray-500">
-                {t('dashboard.noTrades')}
+              <div className="flex flex-col items-center justify-center py-12 text-center">
+                <FileText className="w-12 h-12 text-gray-600 dark:text-gray-600 mb-3" />
+                <p className="text-gray-500 dark:text-gray-400 font-medium">{t('trades.noTradesTitle')}</p>
+                <p className="text-gray-400 dark:text-gray-500 text-sm mt-1">{t('trades.noTradesHint')}</p>
               </div>
             ) : (
               <div className="px-1 py-1 space-y-1.5">
@@ -259,8 +262,12 @@ export default function Trades() {
               <tbody>
                 {trades.length === 0 ? (
                   <tr>
-                    <td colSpan={12} className="p-8 text-center text-gray-500">
-                      {t('dashboard.noTrades')}
+                    <td colSpan={12} className="p-8 text-center">
+                      <div className="flex flex-col items-center justify-center py-4">
+                        <FileText className="w-10 h-10 text-gray-600 dark:text-gray-600 mb-2" />
+                        <p className="text-gray-500 dark:text-gray-400 font-medium">{t('trades.noTradesTitle')}</p>
+                        <p className="text-gray-400 dark:text-gray-500 text-sm mt-1">{t('trades.noTradesHint')}</p>
+                      </div>
                     </td>
                   </tr>
                 ) : (

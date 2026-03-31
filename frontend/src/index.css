@@ -239,6 +239,15 @@ html.light .num-input-wrap .num-arrow-up {
 
 /* ── Scrollbar Styling ───────────────────────────────────── */
 
+/* Hide scrollbar but keep scrolling */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;

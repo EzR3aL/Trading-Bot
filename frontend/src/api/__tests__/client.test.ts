@@ -4,7 +4,6 @@ import axios from 'axios'
 // We need to test the module's configuration, so we mock axios.create
 // and verify the interceptors are set up correctly.
 vi.mock('axios', () => {
-  const requestInterceptors: Array<(config: Record<string, unknown>) => Record<string, unknown>> = []
   const responseInterceptors: Array<{
     onFulfilled: (response: unknown) => unknown
     onRejected: (error: unknown) => unknown
@@ -15,9 +14,7 @@ vi.mock('axios', () => {
     get: vi.fn(),
     interceptors: {
       request: {
-        use: vi.fn((fn: (config: Record<string, unknown>) => Record<string, unknown>) => {
-          requestInterceptors.push(fn)
-        }),
+        use: vi.fn(),
       },
       response: {
         use: vi.fn((onFulfilled: (r: unknown) => unknown, onRejected: (e: unknown) => unknown) => {
@@ -25,7 +22,6 @@ vi.mock('axios', () => {
         }),
       },
     },
-    _requestInterceptors: requestInterceptors,
     _responseInterceptors: responseInterceptors,
   }
 
@@ -40,53 +36,24 @@ vi.mock('axios', () => {
 describe('API Client Configuration', () => {
   beforeEach(() => {
     vi.resetModules()
-    localStorage.clear()
   })
 
-  it('should create axios instance with correct baseURL', async () => {
+  it('should create axios instance with correct baseURL and withCredentials', async () => {
     await import('../client')
 
     expect(axios.create).toHaveBeenCalledWith(expect.objectContaining({
       baseURL: '/api',
       headers: { 'Content-Type': 'application/json' },
+      withCredentials: true,
     }))
   })
 
-  it('should register request and response interceptors', async () => {
+  it('should register response interceptor (no request interceptor needed for cookie auth)', async () => {
     await import('../client')
 
     const instance = vi.mocked(axios.create).mock.results[0].value
-    expect(instance.interceptors.request.use).toHaveBeenCalledTimes(1)
+    // No request interceptor — cookies are sent automatically via withCredentials
     expect(instance.interceptors.response.use).toHaveBeenCalledTimes(1)
-  })
-
-  describe('request interceptor', () => {
-    it('should attach Authorization header when token exists', async () => {
-      localStorage.setItem('access_token', 'test-jwt-token')
-      await import('../client')
-
-      const instance = vi.mocked(axios.create).mock.results[0].value
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const requestInterceptor = (instance as any)._requestInterceptors[0]
-
-      const config = { headers: {} as Record<string, string> }
-      const result = requestInterceptor(config)
-
-      expect(result.headers.Authorization).toBe('Bearer test-jwt-token')
-    })
-
-    it('should not attach Authorization header when no token', async () => {
-      await import('../client')
-
-      const instance = vi.mocked(axios.create).mock.results[0].value
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const requestInterceptor = (instance as any)._requestInterceptors[0]
-
-      const config = { headers: {} as Record<string, string> }
-      const result = requestInterceptor(config)
-
-      expect(result.headers.Authorization).toBeUndefined()
-    })
   })
 
   describe('response interceptor', () => {

@@ -31,10 +31,12 @@ from src.auth.dependencies import get_current_user
 from src.auth.jwt_handler import (
     REFRESH_COOKIE_NAME,
     REFRESH_TOKEN_EXPIRE_DAYS,
+    clear_access_cookie,
     clear_refresh_cookie,
     create_access_token,
     create_refresh_token,
     decode_token,
+    set_access_cookie,
     set_refresh_cookie,
 )
 from src.auth.password import hash_password, verify_password
@@ -286,7 +288,8 @@ async def login(request: Request, response: Response, body: LoginRequest, db: As
     await _create_session(db, user.id, refresh_token, request)
     await db.commit()
 
-    # Set refresh token as httpOnly cookie (XSS-safe)
+    # Set tokens as httpOnly cookies (XSS-safe)
+    set_access_cookie(response, access_token)
     set_refresh_cookie(response, refresh_token)
 
     logger.info("AUTH: User '%s' (id=%s) logged in from %s", user.username, user.id, client_ip)
@@ -347,6 +350,7 @@ async def verify_2fa_login(
     await _create_session(db, user.id, refresh_token, request)
     await db.commit()
 
+    set_access_cookie(response, access_token)
     set_refresh_cookie(response, refresh_token)
 
     logger.info("AUTH: User '%s' (id=%s) completed 2FA login from %s", user.username, user.id, client_ip)
@@ -439,7 +443,8 @@ async def refresh_token(
     access_token = create_access_token(token_data)
     new_refresh = create_refresh_token(token_data)
 
-    # Rotate refresh token cookie and update session hash in DB
+    # Rotate token cookies and update session hash in DB
+    set_access_cookie(response, access_token)
     set_refresh_cookie(response, new_refresh)
     if raw_token and refresh_token_cookie:
         old_hash = _hash_token(raw_token)
@@ -478,6 +483,7 @@ async def logout(
         await db.commit()
         logger.info("AUTH: Session invalidated via logout")
 
+    clear_access_cookie(response)
     clear_refresh_cookie(response)
     return {"message": "Logged out"}
 
@@ -501,10 +507,12 @@ async def change_password(
     user.token_version = (user.token_version or 0) + 1
     await db.commit()
     token_data = {"sub": str(user.id), "role": user.role, "tv": user.token_version}
+    new_access = create_access_token(token_data)
     new_refresh = create_refresh_token(token_data)
+    set_access_cookie(response, new_access)
     set_refresh_cookie(response, new_refresh)
     return {
-        "access_token": create_access_token(token_data),
+        "access_token": new_access,
         "token_type": "bearer",
         "message": "Password changed successfully",
     }

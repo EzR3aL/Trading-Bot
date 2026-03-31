@@ -599,7 +599,7 @@ class EdgeIndicatorStrategy(BaseStrategy):
                 if ribbon["bull_trend"]:
                     indicator_exit = True
                     indicator_reason = (
-                        "Trend reversal: Preis ueber EMA-Ribbon (bullTrend). "
+                        "Trend reversal: Preis über EMA-Ribbon (bullTrend). "
                         "Momentum=%.2f" % momentum['smoothed_score']
                     )
                 elif ribbon["neutral"] and regime == 1:
@@ -668,7 +668,7 @@ class EdgeIndicatorStrategy(BaseStrategy):
             if current_price >= trailing_stop:
                 pnl_pct = (entry_price - current_price) / entry_price * 100
                 return True, (
-                    "Trailing Stop: Preis $%.2f ueber Stop $%.2f "
+                    "Trailing Stop: Preis $%.2f über Stop $%.2f "
                     "(Tiefst=$%.2f, ATR=%.0f, Trail=%.1fx). PnL=%.2f%%"
                     % (current_price, trailing_stop, highest_price, atr_val, trail_atr, pnl_pct)
                 )
@@ -849,7 +849,7 @@ class EdgeIndicatorStrategy(BaseStrategy):
             },
             "momentum_bull_threshold": {
                 "type": "float", "label": "Momentum Bull-Schwelle",
-                "description": "Momentum-Score ueber diesem Wert = bullisches Regime. Hoeher = weniger Fehl-Exits, Trades laufen laenger (Standard 0.35)",
+                "description": "Momentum-Score über diesem Wert = bullisches Regime. Höher = weniger Fehl-Exits, Trades laufen länger (Standard 0.35)",
                 "default": 0.35, "min": 0.0, "max": 1.0,
             },
             "momentum_bear_threshold": {

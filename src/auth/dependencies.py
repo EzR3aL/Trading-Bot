@@ -2,7 +2,7 @@
 
 from typing import Optional
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -23,22 +23,34 @@ security = HTTPBearer(auto_error=False)
 
 
 async def get_current_user(
+    request: Request,
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
     db: AsyncSession = Depends(get_db),
 ) -> User:
     """
-    Validate JWT Bearer token and return the authenticated user.
+    Validate JWT access token and return the authenticated user.
+
+    Token sources (checked in order):
+    1. Bearer header (backward compatible)
+    2. httpOnly cookie ``access_token`` (XSS-safe)
 
     Raises 401 if token is missing, invalid, or user not found.
     """
-    if not credentials:
+    # Try Bearer header first
+    token = credentials.credentials if credentials else None
+
+    # Fallback to httpOnly cookie
+    if not token:
+        token = request.cookies.get("access_token")
+
+    if not token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=ERR_NOT_AUTHENTICATED,
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    payload = decode_token(credentials.credentials, expected_type="access")
+    payload = decode_token(token, expected_type="access")
     if not payload:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

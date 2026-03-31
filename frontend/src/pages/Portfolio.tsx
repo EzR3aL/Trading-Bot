@@ -45,15 +45,17 @@ function exchangeColor(name: string): string {
 /* ── Custom Chart Tooltip ─────────────────────────────────── */
 
 function ChartTooltip({ active, payload, label }: any) {
+  const { theme: tooltipTheme } = useThemeStore()
+  const tooltipLight = tooltipTheme === 'light'
   if (!active || !payload?.length) return null
   return (
-    <div className="bg-[#0d1117]/95 border border-white/10 rounded-lg px-3 py-2 text-xs shadow-xl backdrop-blur-sm">
-      <div className="text-gray-400 mb-1">{label}</div>
+    <div className={`${tooltipLight ? 'bg-white/95 border-gray-200' : 'bg-[#0d1117]/95 border-white/10'} border rounded-lg px-3 py-2 text-xs shadow-xl backdrop-blur-sm`}>
+      <div className={tooltipLight ? 'text-gray-500 mb-1' : 'text-gray-400 mb-1'}>{label}</div>
       {payload.map((entry: any) => (
         <div key={entry.dataKey} className="flex items-center gap-2">
           <div className="w-2 h-2 rounded-full" style={{ background: entry.color }} />
-          <span className="text-gray-300">{entry.name}:</span>
-          <span className={entry.value >= 0 ? 'text-emerald-400' : 'text-red-400'}>
+          <span className={tooltipLight ? 'text-gray-600' : 'text-gray-300'}>{entry.name}:</span>
+          <span className={entry.value >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}>
             ${entry.value.toFixed(2)}
           </span>
         </div>
@@ -264,7 +266,7 @@ export default function Portfolio() {
   /* ── Render ─────────────────────────────────────────────── */
 
   return (
-    <div ref={containerRef} style={{ overscrollBehavior: 'contain' }} className="animate-in min-w-0">
+    <div ref={containerRef} style={{ overscrollBehavior: 'contain' }} className="animate-in min-w-0" aria-busy={loading}>
       <PullToRefreshIndicator pullDistance={pullDistance} refreshing={refreshing} />
       {/* Error */}
       {error && (
@@ -411,8 +413,9 @@ export default function Portfolio() {
             {t('portfolio.dailyChart')}
           </h3>
           {chartData.rows.length === 0 ? (
-            <div className="flex items-center justify-center h-48 text-gray-500 text-sm">
-              {t('portfolio.noData')}
+            <div className="flex flex-col items-center justify-center h-48 text-center">
+              <p className="text-gray-500 dark:text-gray-500 text-sm">{t('portfolio.noData')}</p>
+              <p className="text-gray-400 dark:text-gray-600 text-xs mt-1">{t('portfolio.noDataHint')}</p>
             </div>
           ) : (
             <ResponsiveContainer width="100%" height={280}>
@@ -425,18 +428,18 @@ export default function Portfolio() {
                     </linearGradient>
                   ))}
                 </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+                <CartesianGrid strokeDasharray="3 3" stroke={isLight ? '#e5e7eb' : 'rgba(255,255,255,0.05)'} />
                 <XAxis
                   dataKey="date"
-                  stroke="rgba(255,255,255,0.3)"
-                  tick={{ fill: 'rgba(255,255,255,0.5)', fontSize: 10 }}
+                  stroke={isLight ? '#d1d5db' : 'rgba(255,255,255,0.3)'}
+                  tick={{ fill: isLight ? '#374151' : 'rgba(255,255,255,0.5)', fontSize: 10 }}
                   tickLine={false}
                   axisLine={false}
                 />
                 <YAxis
                   width={45}
-                  stroke="rgba(255,255,255,0.3)"
-                  tick={{ fill: 'rgba(255,255,255,0.5)', fontSize: 10 }}
+                  stroke={isLight ? '#d1d5db' : 'rgba(255,255,255,0.3)'}
+                  tick={{ fill: isLight ? '#374151' : 'rgba(255,255,255,0.5)', fontSize: 10 }}
                   tickLine={false}
                   axisLine={false}
                   tickFormatter={formatChartCurrency}
@@ -469,8 +472,9 @@ export default function Portfolio() {
               <div className="w-6 h-6 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
             </div>
           ) : pieData.length === 0 ? (
-            <div className="flex items-center justify-center h-48 text-gray-500 text-sm">
-              {t('portfolio.noData')}
+            <div className="flex flex-col items-center justify-center h-48 text-center">
+              <Briefcase className="w-10 h-10 text-gray-600 dark:text-gray-600 mb-2" />
+              <p className="text-gray-500 dark:text-gray-500 text-sm">{t('portfolio.noData')}</p>
             </div>
           ) : (
             <ResponsiveContainer width="100%" height={280}>
@@ -515,7 +519,7 @@ export default function Portfolio() {
                   iconType="circle"
                   iconSize={8}
                   formatter={(value: string) => (
-                    <span className="text-xs text-gray-300 capitalize">{value}</span>
+                    <span className={`text-xs capitalize ${isLight ? 'text-gray-600' : 'text-gray-300'}`}>{value}</span>
                   )}
                 />
               </PieChart>
@@ -537,7 +541,11 @@ export default function Portfolio() {
             <div className="w-6 h-6 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
           </div>
         ) : sortedPositions.length === 0 ? (
-          <div className="p-8 text-center text-gray-500">{t('portfolio.noPositions')}</div>
+          <div className="flex flex-col items-center justify-center py-12 text-center">
+            <TrendingUp className="w-12 h-12 text-gray-600 dark:text-gray-600 mb-3" />
+            <p className="text-gray-500 dark:text-gray-400 font-medium">{t('portfolio.noPositions')}</p>
+            <p className="text-gray-400 dark:text-gray-500 text-sm mt-1">{t('portfolio.noPositionsHint')}</p>
+          </div>
         ) : isMobile ? (
           <div className="px-1 pb-1 pt-1 space-y-1.5">
             {sortedPositions.map((pos, idx) => (
@@ -567,6 +575,7 @@ export default function Portfolio() {
                     <button
                       onClick={() => setSortAsc(!sortAsc)}
                       className="inline-flex items-center gap-1 hover:text-white transition-colors"
+                      aria-label="Sort by PnL"
                     >
                       {t('portfolio.pnl')}
                       {sortAsc ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
@@ -637,6 +646,7 @@ export default function Portfolio() {
                             onClick={(e) => { e.stopPropagation(); setEditingPos(pos) }}
                             className="p-1.5 text-gray-500 hover:text-white transition-colors rounded-lg hover:bg-white/5"
                             title={t('editPosition.title')}
+                            aria-label="Edit position"
                           >
                             <Settings size={14} />
                           </button>

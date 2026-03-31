@@ -109,6 +109,41 @@ def decode_token(token: str, expected_type: Optional[str] = None) -> Optional[di
         return None
 
 
+ACCESS_COOKIE_NAME = "access_token"
+
+
+def set_access_cookie(response: Response, access_token: str) -> None:
+    """Set the access token as an httpOnly secure cookie.
+
+    Security properties:
+    - httponly: JS cannot read the cookie (XSS protection)
+    - secure: Only sent over HTTPS (except in development)
+    - samesite=lax: Prevents CSRF on cross-origin POST
+    - path=/api: Cookie sent to all API endpoints
+    """
+    environment = os.getenv("ENVIRONMENT", "development").lower()
+    is_prod = environment == "production"
+
+    response.set_cookie(
+        key=ACCESS_COOKIE_NAME,
+        value=access_token,
+        httponly=True,
+        secure=is_prod,
+        samesite="lax",
+        path="/api",
+        max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+    )
+
+
+def clear_access_cookie(response: Response) -> None:
+    """Clear the access token cookie (on logout or token revocation)."""
+    response.delete_cookie(
+        key=ACCESS_COOKIE_NAME,
+        httponly=True,
+        path="/api",
+    )
+
+
 def set_refresh_cookie(response: Response, refresh_token: str) -> None:
     """Set the refresh token as an httpOnly secure cookie.
 

@@ -1,6 +1,10 @@
 import { create } from 'zustand'
 import api from '../api/client'
+import { clearTokenExpiry, setTokenExpiry } from '../api/client'
 import type { User } from '../types'
+
+/** Default access token lifetime in seconds (must match backend ACCESS_TOKEN_EXPIRE_MINUTES). */
+const DEFAULT_TOKEN_LIFETIME_S = 240 * 60
 
 interface LoginResult {
   requires2fa: boolean
@@ -18,9 +22,27 @@ interface AuthState {
   fetchUser: () => Promise<void>
 }
 
+/**
+ * Extract token expiry (seconds from now) from a JWT access_token string.
+ * Falls back to the default lifetime if parsing fails.
+ */
+function extractExpirySeconds(accessToken: string): number {
+  try {
+    const payload = JSON.parse(atob(accessToken.split('.')[1]))
+    if (payload.exp) {
+      const remaining = payload.exp - Math.floor(Date.now() / 1000)
+      return remaining > 0 ? remaining : DEFAULT_TOKEN_LIFETIME_S
+    }
+  } catch {
+    // Fall through
+  }
+  return DEFAULT_TOKEN_LIFETIME_S
+}
+
 export const useAuthStore = create<AuthState>((set) => ({
   user: null,
-  isAuthenticated: !!localStorage.getItem('access_token'),
+  // Start unauthenticated; call fetchUser() on app mount to check cookie-based session
+  isAuthenticated: false,
   isLoading: false,
 
   login: async (username: string, password: string) => {
@@ -34,7 +56,9 @@ export const useAuthStore = create<AuthState>((set) => ({
         return { requires2fa: true, tempToken: temp_token }
       }
 
-      localStorage.setItem('access_token', access_token)
+      // Access token is now stored as httpOnly cookie by the backend.
+      // Track expiry for proactive refresh scheduling.
+      setTokenExpiry(extractExpirySeconds(access_token))
 
       // Fetch user profile
       const userRes = await api.get('/auth/me')
@@ -54,7 +78,8 @@ export const useAuthStore = create<AuthState>((set) => ({
         code,
       })
       const { access_token } = res.data
-      localStorage.setItem('access_token', access_token)
+
+      setTokenExpiry(extractExpirySeconds(access_token))
 
       // Fetch user profile
       const userRes = await api.get('/auth/me')
@@ -70,7 +95,9 @@ export const useAuthStore = create<AuthState>((set) => ({
     try {
       const res = await api.post('/auth/bridge/exchange', { code })
       const { access_token, user } = res.data
-      localStorage.setItem('access_token', access_token)
+
+      setTokenExpiry(extractExpirySeconds(access_token))
+
       set({ user, isAuthenticated: true, isLoading: false })
     } catch (error) {
       set({ isLoading: false })
@@ -84,7 +111,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     } catch {
       // Best-effort — clear local state regardless
     }
-    localStorage.removeItem('access_token')
+    clearTokenExpiry()
     set({ user: null, isAuthenticated: false })
   },
 

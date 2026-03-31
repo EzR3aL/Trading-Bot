@@ -15,8 +15,9 @@ interface Props {
 export default function RevenueChart({ data }: Props) {
   const { t } = useTranslation()
   const theme = useThemeStore((s) => s.theme)
-  const gridColor = theme === 'light' ? '#e2e8f0' : '#374151'
-  const tickColor = theme === 'light' ? '#64748b' : '#9ca3af'
+  const isLight = theme === 'light'
+  const gridColor = isLight ? '#e2e8f0' : '#374151'
+  const tickColor = isLight ? '#64748b' : '#9ca3af'
 
   const chartData = data.map((d) => ({
     date: formatChartDate(d.date),
@@ -41,13 +42,13 @@ export default function RevenueChart({ data }: Props) {
         <YAxis width={45} tick={{ fill: tickColor, fontSize: 10 }} tickLine={false} tickFormatter={formatChartCurrency} />
         <Tooltip content={<ChartTooltip />} />
         <Legend
-          wrapperStyle={{ fontSize: '12px', color: '#9ca3af' }}
-          formatter={(value) => <span className="text-gray-400">{value}</span>}
+          wrapperStyle={{ fontSize: '12px', color: isLight ? '#64748b' : '#9ca3af' }}
+          formatter={(value) => <span className={isLight ? 'text-gray-500' : 'text-gray-400'}>{value}</span>}
         />
         <Bar
           dataKey="builderFees"
           name={t('dashboard.builderFees')}
-          fill="#10b981"
+          fill={isLight ? '#059669' : '#10b981'}
           radius={[2, 2, 0, 0]}
         />
       </BarChart>

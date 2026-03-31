@@ -13,6 +13,8 @@ vi.mock('../../api/client', () => {
         response: { use: vi.fn() },
       },
     },
+    setTokenExpiry: vi.fn(),
+    clearTokenExpiry: vi.fn(),
   }
 })
 
@@ -36,7 +38,6 @@ describe('authStore', () => {
       isAuthenticated: false,
       isLoading: false,
     })
-    localStorage.clear()
     vi.clearAllMocks()
   })
 
@@ -47,22 +48,14 @@ describe('authStore', () => {
     expect(state.isLoading).toBe(false)
   })
 
-  it('should detect existing token in localStorage on init', () => {
-    localStorage.setItem('access_token', 'existing-token')
-    // Re-import to trigger the localStorage check in the store initializer
-    // Since Zustand stores are singletons, we test the behavior through setState
-    useAuthStore.setState({ isAuthenticated: true })
-    expect(useAuthStore.getState().isAuthenticated).toBe(true)
-  })
-
   describe('login', () => {
-    it('should login successfully and store tokens', async () => {
+    it('should login successfully and set authenticated state', async () => {
       const mockPost = vi.mocked(api.post)
       const mockGet = vi.mocked(api.get)
 
       mockPost.mockResolvedValueOnce({
         data: {
-          access_token: 'new-access-token',
+          access_token: 'eyJhbGciOiJIUzI1NiJ9.eyJleHAiOjk5OTk5OTk5OTl9.stub',
         },
       })
       mockGet.mockResolvedValueOnce({ data: mockUser })
@@ -75,8 +68,7 @@ describe('authStore', () => {
       })
       expect(mockGet).toHaveBeenCalledWith('/auth/me')
 
-      expect(localStorage.getItem('access_token')).toBe('new-access-token')
-
+      // Token is now in httpOnly cookie, not localStorage
       const state = useAuthStore.getState()
       expect(state.user).toEqual(mockUser)
       expect(state.isAuthenticated).toBe(true)
@@ -124,11 +116,10 @@ describe('authStore', () => {
   })
 
   describe('logout', () => {
-    it('should call logout API, clear access token, and reset state', async () => {
+    it('should call logout API, clear token expiry, and reset state', async () => {
       const mockPost = vi.mocked(api.post)
       mockPost.mockResolvedValueOnce({ data: { message: 'Logged out' } })
 
-      localStorage.setItem('access_token', 'some-token')
       useAuthStore.setState({
         user: mockUser,
         isAuthenticated: true,
@@ -137,7 +128,9 @@ describe('authStore', () => {
       await useAuthStore.getState().logout()
 
       expect(mockPost).toHaveBeenCalledWith('/auth/logout')
-      expect(localStorage.getItem('access_token')).toBeNull()
+      // Cookie is cleared server-side; client clears token expiry
+      const { clearTokenExpiry } = await import('../../api/client')
+      expect(clearTokenExpiry).toHaveBeenCalled()
 
       const state = useAuthStore.getState()
       expect(state.user).toBeNull()
@@ -148,7 +141,6 @@ describe('authStore', () => {
       const mockPost = vi.mocked(api.post)
       mockPost.mockRejectedValueOnce(new Error('Network error'))
 
-      localStorage.setItem('access_token', 'some-token')
       useAuthStore.setState({
         user: mockUser,
         isAuthenticated: true,
@@ -156,7 +148,6 @@ describe('authStore', () => {
 
       await useAuthStore.getState().logout()
 
-      expect(localStorage.getItem('access_token')).toBeNull()
       const state = useAuthStore.getState()
       expect(state.user).toBeNull()
       expect(state.isAuthenticated).toBe(false)

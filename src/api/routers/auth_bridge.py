@@ -26,6 +26,7 @@ from src.auth.auth_code import auth_code_store
 from src.auth.jwt_handler import (
     create_access_token,
     create_refresh_token,
+    set_access_cookie,
     set_refresh_cookie,
 )
 from src.auth.password import hash_password
@@ -111,6 +112,7 @@ async def exchange_code(
     access_token = create_access_token(token_data)
     refresh_token = create_refresh_token(token_data)
 
+    set_access_cookie(response, access_token)
     set_refresh_cookie(response, refresh_token)
 
     client_ip = request.headers.get("X-Forwarded-For", request.client.host if request.client else "unknown")

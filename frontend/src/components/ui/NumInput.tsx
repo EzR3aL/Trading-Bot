@@ -24,10 +24,10 @@ export default function NumInput({ wrapClassName, className, step, min, max, val
     <span className={`num-input-wrap ${wrapClassName || ''}`}>
       <input ref={ref} type="number" className={className} step={step} min={min} max={max} value={value} onChange={onChange} {...rest} />
       <span className="num-arrows">
-        <span className="num-arrow num-arrow-up" onPointerDown={() => nudge(1)} role="button" tabIndex={-1} aria-label="Increase">
+        <span className="num-arrow num-arrow-up" onPointerDown={() => nudge(1)} role="button" tabIndex={0} aria-label="Increase value">
           <svg viewBox="0 0 12 12" fill="none" stroke="currentColor"><path d="M3 7.5 6 4.5 9 7.5" /></svg>
         </span>
-        <span className="num-arrow num-arrow-down" onPointerDown={() => nudge(-1)} role="button" tabIndex={-1} aria-label="Decrease">
+        <span className="num-arrow num-arrow-down" onPointerDown={() => nudge(-1)} role="button" tabIndex={0} aria-label="Decrease value">
           <svg viewBox="0 0 12 12" fill="none" stroke="currentColor"><path d="M3 4.5 6 7.5 9 4.5" /></svg>
         </span>
       </span>

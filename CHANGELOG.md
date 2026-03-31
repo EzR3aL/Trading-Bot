@@ -9,6 +9,60 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [4.8.0] - 2026-03-31
+
+### Behoben (Mobile UI)
+- **Step-Indikator im Bot Builder**: Zeigt auf Mobile nur Schrittnummern + aktuellen Namen, horizontal scrollbar
+- **Exchange-Buttons Overflow**: `flex-wrap` damit alle Exchanges (Bitget, Weex, Hyperliquid, Bitunix, BingX) sichtbar sind
+- **Modus/Margin-Modus Überlappung**: Auf Mobile vertikal gestapelt statt nebeneinander
+- **Suchleiste Text/Lupe Überlappung**: Input padding-left erhöht für Icon-Platz
+- **Balance-Tabelle abgeschnitten**: Horizontal scrollbar auf Mobile
+- **Weiter-Button Position**: Cancel links, Weiter rechts — immer in einer Reihe
+- **Telegram Text-Overflow**: `break-words` + `overflow-wrap: anywhere` für URLs
+- **Trade-Share Modal abgeschnitten (Bots-Seite)**: Scrollbare Content-Area mit `max-h-[80vh]`, Pattern von Performance-Seite übernommen
+- **Bot-Löschen Buttons nicht übersetzt**: `common.delete` i18n-Keys in de.json/en.json ergänzt
+
+### Verbessert
+- **Übersicht-Schritt (Bot Builder Review)**: Visuelles Upgrade mit gruppierten Karten, Icons, Farbcodes und besserer Hierarchie
+- **30 Umlaut-Fixes**: ue→ü, ae→ä, oe→ö, ss→ß in de.json, errors.py, tax_report.py, Strategien, Bot-Komponenten, Hyperliquid-Gates
+
+---
+
+## [4.7.0] - 2026-03-31
+
+### Sicherheit (Security Audit)
+- **JWT httpOnly Cookie Migration**: Access-Token wird jetzt als httpOnly Cookie gesetzt statt in localStorage — verhindert Token-Diebstahl durch XSS
+  - Backend: Cookie-Fallback in `get_current_user()`, alle Auth-Endpoints setzen Cookie
+  - Frontend: localStorage komplett entfernt, `withCredentials: true` sendet Cookies automatisch
+  - WebSocket: Authentifizierung per Cookie statt Token-Nachricht
+  - Backward-kompatibel: Bearer Header funktioniert weiterhin
+
+### Verbessert
+- **config.py aufgeteilt (SRP)**: 1.186 LOC Monolith-Router in 4 fokussierte Module gesplittet: `config_exchange.py`, `config_trading.py`, `config_affiliate.py`, `config_hyperliquid.py` + shared `config_service.py` — alle API-Pfade unverändert
+- **BotBuilder.tsx aufgeteilt**: 1.928 LOC Monolith-Komponente in 8 fokussierte Dateien gesplittet (BotBuilderStepName, StepStrategy, StepDataSources, StepExchange, StepNotifications, StepSchedule, StepReview + Types)
+- **Accessibility (a11y)**: `aria-busy` auf Ladecontainern, `aria-label` auf Icon-Buttons, NumInput Keyboard-Navigation, Toast `aria-live="polite"`
+- **Empty States**: Dashboard, Trades, Bots, Portfolio haben jetzt Icons + Beschreibungstexte statt leerer Tabellen
+- **Light-Mode Chart Themes**: PnlChart, ChartTooltip, RevenueChart, Portfolio-Charts nutzen jetzt theme-aware Farben
+- **Trailing Stop Slider (Mobile Fix)**: `touch-action: none` + `stopPropagation` verhindert Swipe-Konflikt mit Bottom-Sheet
+
+---
+
+## [4.6.12] - 2026-03-31
+
+### Sicherheit (Security Audit)
+- **Raw SQL durch ORM-Inserts ersetzt (config_audit.py)**: `text("INSERT INTO config_change_logs ...")` durch `ConfigChangeLog`-Model + `session.add()` ersetzt — verhindert potenzielle SQL-Injection
+- **Raw SQL durch ORM-Inserts ersetzt (event_logger.py)**: `text("INSERT INTO event_logs ...")` durch `EventLog`-Model + `session.add()` ersetzt — verhindert potenzielle SQL-Injection
+- **CORS Origin-Validierung (main_app.py)**: Werte aus `CORS_ORIGINS` werden jetzt per `urlparse` auf gueltiges Schema und Host geprueft. Ungueltige Eintraege werden geloggt und uebersprungen
+- **SPA Path-Traversal gibt 404 zurueck (main_app.py)**: Bei erkannter Path-Traversal wird jetzt `HTTPException(404)` statt `index.html` zurueckgegeben — verhindert Information Disclosure
+- **Static-File Extension-Whitelist (main_app.py)**: Der SPA Catch-All-Endpoint liefert nur noch Dateien mit erlaubten Endungen aus (.html, .css, .js, .json, .png, etc.). Alle anderen Dateitypen ergeben 404
+- **npm Dependency-Schwachstellen behoben (frontend)**: 4 Schwachstellen (1 high, 3 moderate) gefixt
+  - `picomatch` Method Injection + ReDoS (high)
+  - `brace-expansion` ReDoS (moderate)
+  - `esbuild` Dev-Server Request-Schwachstelle (moderate)
+  - `vite` von v5.4.21 auf v7.3.1 aktualisiert
+
+---
+
 ## [4.6.11] - 2026-03-31
 
 ### Behoben

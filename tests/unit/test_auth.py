@@ -109,6 +109,13 @@ def _make_mock_db_session(user=None):
     return mock_session
 
 
+def _make_mock_request(cookies=None):
+    """Create a mock Request with a cookies dict (for get_current_user dependency)."""
+    req = MagicMock()
+    req.cookies = cookies or {}
+    return req
+
+
 def _make_starlette_request():
     """Create a real Starlette Request that satisfies slowapi's type check."""
     scope = {
@@ -317,26 +324,40 @@ class TestGetCurrentUser:
         token = create_access_token({"sub": "7", "role": "user", "tv": 0})
         credentials = _make_mock_credentials(token)
         db = _make_mock_db_session(user=mock_user)
+        request = _make_mock_request()
 
-        result = await get_current_user(credentials=credentials, db=db)
+        result = await get_current_user(request=request, credentials=credentials, db=db)
         assert result.id == 7
 
     @pytest.mark.asyncio
     async def test_get_current_user_raises_401_when_no_credentials(self):
-        """Missing credentials should raise HTTP 401."""
+        """Missing credentials and no cookie should raise HTTP 401."""
         db = _make_mock_db_session()
+        request = _make_mock_request()
         with pytest.raises(HTTPException) as exc_info:
-            await get_current_user(credentials=None, db=db)
+            await get_current_user(request=request, credentials=None, db=db)
         assert exc_info.value.status_code == 401
         assert ERR_NOT_AUTHENTICATED in exc_info.value.detail
+
+    @pytest.mark.asyncio
+    async def test_get_current_user_falls_back_to_cookie(self):
+        """When no Bearer header, should use access_token cookie."""
+        mock_user = _make_mock_user(user_id=42, role="user")
+        token = create_access_token({"sub": "42", "role": "user", "tv": 0})
+        db = _make_mock_db_session(user=mock_user)
+        request = _make_mock_request(cookies={"access_token": token})
+
+        result = await get_current_user(request=request, credentials=None, db=db)
+        assert result.id == 42
 
     @pytest.mark.asyncio
     async def test_get_current_user_raises_401_for_invalid_token(self):
         """A garbage token should raise HTTP 401."""
         credentials = _make_mock_credentials("garbage.token.value")
         db = _make_mock_db_session()
+        request = _make_mock_request()
         with pytest.raises(HTTPException) as exc_info:
-            await get_current_user(credentials=credentials, db=db)
+            await get_current_user(request=request, credentials=credentials, db=db)
         assert exc_info.value.status_code == 401
         assert ERR_INVALID_TOKEN in exc_info.value.detail
 
@@ -346,8 +367,9 @@ class TestGetCurrentUser:
         token = create_refresh_token({"sub": "1", "role": "user"})
         credentials = _make_mock_credentials(token)
         db = _make_mock_db_session()
+        request = _make_mock_request()
         with pytest.raises(HTTPException) as exc_info:
-            await get_current_user(credentials=credentials, db=db)
+            await get_current_user(request=request, credentials=credentials, db=db)
         assert exc_info.value.status_code == 401
         assert ERR_INVALID_TOKEN in exc_info.value.detail
 
@@ -360,8 +382,9 @@ class TestGetCurrentUser:
         )
         credentials = _make_mock_credentials(token)
         db = _make_mock_db_session()
+        request = _make_mock_request()
         with pytest.raises(HTTPException) as exc_info:
-            await get_current_user(credentials=credentials, db=db)
+            await get_current_user(request=request, credentials=credentials, db=db)
         assert exc_info.value.status_code == 401
 
     @pytest.mark.asyncio
@@ -370,9 +393,10 @@ class TestGetCurrentUser:
         token = create_access_token({"sub": "999", "role": "user", "tv": 0})
         credentials = _make_mock_credentials(token)
         db = _make_mock_db_session(user=None)
+        request = _make_mock_request()
 
         with pytest.raises(HTTPException) as exc_info:
-            await get_current_user(credentials=credentials, db=db)
+            await get_current_user(request=request, credentials=credentials, db=db)
         assert exc_info.value.status_code == 401
         assert ERR_USER_NOT_FOUND_OR_INACTIVE in exc_info.value.detail
 
@@ -383,9 +407,10 @@ class TestGetCurrentUser:
         token = create_access_token({"sub": "1", "role": "user", "tv": 0})
         credentials = _make_mock_credentials(token)
         db = _make_mock_db_session(user=mock_user)
+        request = _make_mock_request()
 
         with pytest.raises(HTTPException) as exc_info:
-            await get_current_user(credentials=credentials, db=db)
+            await get_current_user(request=request, credentials=credentials, db=db)
         assert exc_info.value.status_code == 401
         assert ERR_USER_NOT_FOUND_OR_INACTIVE in exc_info.value.detail
 
@@ -397,9 +422,10 @@ class TestGetCurrentUser:
         token = create_access_token({"sub": "1", "role": "user", "tv": 3})
         credentials = _make_mock_credentials(token)
         db = _make_mock_db_session(user=mock_user)
+        request = _make_mock_request()
 
         with pytest.raises(HTTPException) as exc_info:
-            await get_current_user(credentials=credentials, db=db)
+            await get_current_user(request=request, credentials=credentials, db=db)
         assert exc_info.value.status_code == 401
         assert ERR_TOKEN_REVOKED in exc_info.value.detail
 
@@ -410,8 +436,9 @@ class TestGetCurrentUser:
         token = create_access_token({"sub": "1", "role": "user", "tv": 3})
         credentials = _make_mock_credentials(token)
         db = _make_mock_db_session(user=mock_user)
+        request = _make_mock_request()
 
-        result = await get_current_user(credentials=credentials, db=db)
+        result = await get_current_user(request=request, credentials=credentials, db=db)
         assert result.id == 1
 
     @pytest.mark.asyncio
@@ -421,8 +448,9 @@ class TestGetCurrentUser:
         token = create_access_token({"sub": "1", "role": "user", "tv": 5})
         credentials = _make_mock_credentials(token)
         db = _make_mock_db_session(user=mock_user)
+        request = _make_mock_request()
 
-        result = await get_current_user(credentials=credentials, db=db)
+        result = await get_current_user(request=request, credentials=credentials, db=db)
         assert result.id == 1
 
     @pytest.mark.asyncio
@@ -432,8 +460,9 @@ class TestGetCurrentUser:
         token = create_access_token({"sub": "1", "role": "user"})
         credentials = _make_mock_credentials(token)
         db = _make_mock_db_session(user=mock_user)
+        request = _make_mock_request()
 
-        result = await get_current_user(credentials=credentials, db=db)
+        result = await get_current_user(request=request, credentials=credentials, db=db)
         assert result.id == 1
 
     @pytest.mark.asyncio
@@ -447,9 +476,10 @@ class TestGetCurrentUser:
         )
         credentials = _make_mock_credentials(token)
         db = _make_mock_db_session()
+        request = _make_mock_request()
 
         with pytest.raises(HTTPException) as exc_info:
-            await get_current_user(credentials=credentials, db=db)
+            await get_current_user(request=request, credentials=credentials, db=db)
         assert exc_info.value.status_code == 401
         assert ERR_INVALID_TOKEN_PAYLOAD in exc_info.value.detail
 

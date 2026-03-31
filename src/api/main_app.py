@@ -9,12 +9,13 @@ import asyncio
 import os
 from contextlib import asynccontextmanager
 from pathlib import Path
+from urllib.parse import urlparse
 
 from dotenv import load_dotenv
 
 load_dotenv()
 
-from fastapi import FastAPI, Request, Response  # noqa: E402
+from fastapi import FastAPI, HTTPException, Request, Response  # noqa: E402
 from fastapi.exceptions import RequestValidationError  # noqa: E402
 from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
 from fastapi.responses import JSONResponse  # noqa: E402
@@ -281,6 +282,13 @@ def create_app() -> FastAPI:
             origin = origin.strip()
             if not origin:
                 continue
+            # Validate that origin is a well-formed URL with scheme and host
+            parsed = urlparse(origin)
+            if not parsed.scheme or not parsed.netloc:
+                logger.warning(
+                    "Skipping invalid CORS origin (missing scheme or host): %s", origin
+                )
+                continue
             # In production, only allow HTTPS origins
             if environment == "production" and not origin.startswith("https://"):
                 logger.warning(
@@ -336,6 +344,14 @@ def create_app() -> FastAPI:
 
     # Serve frontend static files (built React app) with SPA catch-all
     frontend_dir = Path("static/frontend")
+    # Whitelist of static file extensions the SPA route is allowed to serve
+    STATIC_EXT_WHITELIST = {
+        ".html", ".css", ".js", ".json", ".map",
+        ".png", ".jpg", ".jpeg", ".gif", ".svg", ".ico", ".webp",
+        ".woff", ".woff2", ".ttf", ".eot",
+        ".txt", ".xml", ".webmanifest",
+    }
+
     if frontend_dir.exists():
         from fastapi.responses import FileResponse
 
@@ -347,8 +363,11 @@ def create_app() -> FastAPI:
             file_path = (frontend_dir / full_path).resolve()
             # Prevent path traversal — resolved path must stay inside frontend_dir
             if not str(file_path).startswith(str(frontend_dir.resolve())):
-                return FileResponse(str(frontend_dir / "index.html"))
+                raise HTTPException(status_code=404, detail="Not found")
             if file_path.is_file():
+                # Only serve files with whitelisted extensions
+                if file_path.suffix.lower() not in STATIC_EXT_WHITELIST:
+                    raise HTTPException(status_code=404, detail="Not found")
                 return FileResponse(str(file_path))
             return FileResponse(str(frontend_dir / "index.html"))
     else:

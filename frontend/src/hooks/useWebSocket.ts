@@ -36,9 +36,6 @@ export function useWebSocket(handlers: Record<string, EventHandler>) {
   const stableHandlers = useMemo(() => handlers, [handlerKeys]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const connect = useCallback(() => {
-    const token = localStorage.getItem('access_token')
-    if (!token) return
-
     // Don't reconnect if we've exceeded the attempt limit
     if (attemptCount.current >= MAX_RECONNECT_ATTEMPTS) {
       setStatus('failed')
@@ -56,11 +53,13 @@ export function useWebSocket(handlers: Record<string, EventHandler>) {
 
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
     const wsUrl = `${protocol}//${window.location.host}/api/ws`
+    // Browser automatically sends httpOnly cookies with same-origin WebSocket handshake
     const socket = new WebSocket(wsUrl)
 
     socket.onopen = () => {
-      // Send JWT as first message (instead of URL query param)
-      socket.send(token)
+      // Auth is handled via httpOnly cookie sent during the handshake.
+      // Send a cookie-auth marker so the backend fallback path is not triggered.
+      socket.send('cookie-auth')
 
       // Reset backoff on successful connection
       reconnectDelay.current = INITIAL_RECONNECT_DELAY_MS

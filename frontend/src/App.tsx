@@ -52,11 +52,11 @@ export default function App() {
     document.documentElement.lang = i18n.language || 'en'
   }, [i18n.language])
 
+  // On mount, check if a valid session exists via httpOnly cookie.
+  // This replaces the old localStorage token check.
   useEffect(() => {
-    if (isAuthenticated) {
-      fetchUser()
-    }
-  }, [isAuthenticated, fetchUser])
+    fetchUser()
+  }, [fetchUser])
 
   return (
     <ErrorBoundary>

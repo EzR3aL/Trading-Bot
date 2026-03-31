@@ -153,7 +153,7 @@ export default function Dashboard() {
   }
 
   return (
-    <div ref={containerRef} style={{ overscrollBehavior: 'contain' }} className="animate-in">
+    <div ref={containerRef} style={{ overscrollBehavior: 'contain' }} className="animate-in" aria-busy={loading}>
       <PullToRefreshIndicator pullDistance={pullDistance} refreshing={refreshing} />
       {/* Error */}
       {error && (
@@ -335,7 +335,11 @@ function DashboardOpenPositions({ positions, loading, onEditPosition }: { positi
           <div className="w-6 h-6 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
         </div>
       ) : sortedPositions.length === 0 ? (
-        <div className="p-8 text-center text-gray-500">{t('portfolio.noPositions')}</div>
+        <div className="flex flex-col items-center justify-center py-12 text-center">
+          <TrendingUp className="w-12 h-12 text-gray-600 dark:text-gray-600 mb-3" />
+          <p className="text-gray-500 dark:text-gray-400 font-medium">{t('dashboard.noPositionsTitle')}</p>
+          <p className="text-gray-400 dark:text-gray-500 text-sm mt-1">{t('dashboard.noPositionsHint')}</p>
+        </div>
       ) : isMobile ? (
         <div className="px-1 pb-1 pt-1 space-y-1.5">
           {sortedPositions.map((pos, idx) => (
@@ -436,6 +440,7 @@ function DashboardOpenPositions({ positions, loading, onEditPosition }: { positi
                           onClick={(e) => { e.stopPropagation(); onEditPosition(pos) }}
                           className="p-1.5 text-gray-500 hover:text-white transition-colors rounded-lg hover:bg-white/5"
                           title={t('editPosition.title')}
+                          aria-label="Edit position"
                         >
                           <Settings size={14} />
                         </button>

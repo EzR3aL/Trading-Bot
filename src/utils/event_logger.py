@@ -88,25 +88,19 @@ async def _store_event(
     details: Optional[str],
 ) -> None:
     """Store an event log record in the database."""
-    from sqlalchemy import text
+    from src.models.database import EventLog
 
     factory = _get_event_session_factory()
     async with factory() as session:
-        await session.execute(
-            text(
-                "INSERT INTO event_logs "
-                "(user_id, bot_id, event_type, severity, message, details) "
-                "VALUES (:user_id, :bot_id, :event_type, :severity, :message, :details)"
-            ),
-            {
-                "user_id": user_id,
-                "bot_id": bot_id,
-                "event_type": event_type,
-                "severity": severity,
-                "message": message,
-                "details": details,
-            },
+        record = EventLog(
+            user_id=user_id,
+            bot_id=bot_id,
+            event_type=event_type,
+            severity=severity,
+            message=message,
+            details=details,
         )
+        session.add(record)
         await session.commit()
 
 
