@@ -306,3 +306,352 @@ async def test_remove_both_tpsl(exchange, engine, session_factory):
             assert trade.stop_loss is None, f"{exchange}: DB SL should be None"
     finally:
         app.dependency_overrides.clear()
+
+
+# ─── Custom Helper: Trade with configurable TP/SL ──────────────────
+
+
+async def create_test_data_custom(session_factory, exchange: str, take_profit=None, stop_loss=None):
+    """Create user + exchange connection + open trade with configurable TP/SL."""
+    async with session_factory() as session:
+        user = User(
+            username=f"tester_{exchange}",
+            email=f"test_{exchange}@test.com",
+            password_hash=hash_password("testpass"),
+            is_active=True,
+        )
+        session.add(user)
+        await session.flush()
+
+        conn = ExchangeConnection(
+            user_id=user.id,
+            exchange_type=exchange,
+            demo_api_key_encrypted="enc_key",
+            demo_api_secret_encrypted="enc_secret",
+        )
+        session.add(conn)
+        await session.flush()
+
+        trade = TradeRecord(
+            user_id=user.id,
+            exchange=exchange,
+            symbol="BTC-USDT",
+            side="long",
+            size=0.01,
+            entry_price=68000.0,
+            leverage=10,
+            confidence=85,
+            reason="Test signal",
+            order_id="test_order_001",
+            status="open",
+            demo_mode=True,
+            take_profit=take_profit,
+            stop_loss=stop_loss,
+            entry_time=datetime.now(timezone.utc),
+        )
+        session.add(trade)
+        await session.commit()
+
+        token = create_access_token({"sub": str(user.id)})
+        return {"user": user, "trade": trade, "token": token}
+
+
+# ─── Scenario 5: Remove SL, keep TP (trade has both) ──────────────
+
+
+@pytest.mark.parametrize("exchange", ALL_EXCHANGES)
+async def test_remove_sl_keep_tp(exchange, engine, session_factory):
+    """Removing SL should: place(tp=70000, sl=None) -> cancel()."""
+    data = await create_test_data(session_factory, exchange)
+    mock_client, call_log = make_mock_client()
+
+    from src.api.main_app import create_app
+    app = create_app()
+
+    from src.api.rate_limit import limiter
+    limiter.enabled = False
+
+    _setup_app_overrides(app, session_factory)
+
+    try:
+        with patch("src.api.routers.trades.create_exchange_client", return_value=mock_client), \
+             patch("src.api.routers.trades.decrypt_value", return_value="decrypted"):
+            resp = await _send_tpsl_request(
+                app, data["trade"].id, data["token"],
+                {"remove_sl": True},
+            )
+
+        assert resp.status_code == 200, f"{exchange}: {resp.text}"
+        assert len(call_log) == 2, f"{exchange}: expected 2 calls, got {call_log}"
+        assert call_log[0][0] == "set_position_tpsl", f"{exchange}: first call should be set"
+        assert call_log[1][0] == "cancel_position_tpsl", f"{exchange}: second call should be cancel"
+
+        set_kwargs = call_log[0][1]
+        assert set_kwargs["take_profit"] == 70000.0, f"{exchange}: TP should stay 70000"
+        assert set_kwargs["stop_loss"] is None, f"{exchange}: SL should be None (removed)"
+    finally:
+        app.dependency_overrides.clear()
+
+
+# ─── Scenario 6: Change both TP and SL simultaneously ─────────────
+
+
+@pytest.mark.parametrize("exchange", ALL_EXCHANGES)
+async def test_change_both_tp_and_sl(exchange, engine, session_factory):
+    """Changing both should: place(tp=72000, sl=64000) -> cancel()."""
+    data = await create_test_data(session_factory, exchange)
+    mock_client, call_log = make_mock_client()
+
+    from src.api.main_app import create_app
+    app = create_app()
+
+    from src.api.rate_limit import limiter
+    limiter.enabled = False
+
+    _setup_app_overrides(app, session_factory)
+
+    try:
+        with patch("src.api.routers.trades.create_exchange_client", return_value=mock_client), \
+             patch("src.api.routers.trades.decrypt_value", return_value="decrypted"):
+            resp = await _send_tpsl_request(
+                app, data["trade"].id, data["token"],
+                {"take_profit": 72000.0, "stop_loss": 64000.0},
+            )
+
+        assert resp.status_code == 200, f"{exchange}: {resp.text}"
+        assert len(call_log) == 2, f"{exchange}: expected 2 calls, got {call_log}"
+        assert call_log[0][0] == "set_position_tpsl", f"{exchange}: first call should be set"
+        assert call_log[1][0] == "cancel_position_tpsl", f"{exchange}: second call should be cancel"
+
+        set_kwargs = call_log[0][1]
+        assert set_kwargs["take_profit"] == 72000.0, f"{exchange}: TP should be 72000"
+        assert set_kwargs["stop_loss"] == 64000.0, f"{exchange}: SL should be 64000"
+    finally:
+        app.dependency_overrides.clear()
+
+
+# ─── Scenario 7: Set only TP when no TP/SL exists ─────────────────
+
+
+@pytest.mark.parametrize("exchange", ALL_EXCHANGES)
+async def test_set_tp_only_from_none(exchange, engine, session_factory):
+    """Setting TP on empty trade should: place(tp=70000, sl=None) -> cancel()."""
+    data = await create_test_data_custom(session_factory, exchange, take_profit=None, stop_loss=None)
+    mock_client, call_log = make_mock_client()
+
+    from src.api.main_app import create_app
+    app = create_app()
+
+    from src.api.rate_limit import limiter
+    limiter.enabled = False
+
+    _setup_app_overrides(app, session_factory)
+
+    try:
+        with patch("src.api.routers.trades.create_exchange_client", return_value=mock_client), \
+             patch("src.api.routers.trades.decrypt_value", return_value="decrypted"):
+            resp = await _send_tpsl_request(
+                app, data["trade"].id, data["token"],
+                {"take_profit": 70000.0},
+            )
+
+        assert resp.status_code == 200, f"{exchange}: {resp.text}"
+        assert len(call_log) == 2, f"{exchange}: expected 2 calls, got {call_log}"
+        assert call_log[0][0] == "set_position_tpsl", f"{exchange}: first call should be set"
+        assert call_log[1][0] == "cancel_position_tpsl", f"{exchange}: second call should be cancel"
+
+        set_kwargs = call_log[0][1]
+        assert set_kwargs["take_profit"] == 70000.0, f"{exchange}: TP should be 70000"
+        assert set_kwargs["stop_loss"] is None, f"{exchange}: SL should stay None"
+    finally:
+        app.dependency_overrides.clear()
+
+
+# ─── Scenario 8: Set only SL when no TP/SL exists ─────────────────
+
+
+@pytest.mark.parametrize("exchange", ALL_EXCHANGES)
+async def test_set_sl_only_from_none(exchange, engine, session_factory):
+    """Setting SL on empty trade should: place(tp=None, sl=66000) -> cancel()."""
+    data = await create_test_data_custom(session_factory, exchange, take_profit=None, stop_loss=None)
+    mock_client, call_log = make_mock_client()
+
+    from src.api.main_app import create_app
+    app = create_app()
+
+    from src.api.rate_limit import limiter
+    limiter.enabled = False
+
+    _setup_app_overrides(app, session_factory)
+
+    try:
+        with patch("src.api.routers.trades.create_exchange_client", return_value=mock_client), \
+             patch("src.api.routers.trades.decrypt_value", return_value="decrypted"):
+            resp = await _send_tpsl_request(
+                app, data["trade"].id, data["token"],
+                {"stop_loss": 66000.0},
+            )
+
+        assert resp.status_code == 200, f"{exchange}: {resp.text}"
+        assert len(call_log) == 2, f"{exchange}: expected 2 calls, got {call_log}"
+        assert call_log[0][0] == "set_position_tpsl", f"{exchange}: first call should be set"
+        assert call_log[1][0] == "cancel_position_tpsl", f"{exchange}: second call should be cancel"
+
+        set_kwargs = call_log[0][1]
+        assert set_kwargs["take_profit"] is None, f"{exchange}: TP should stay None"
+        assert set_kwargs["stop_loss"] == 66000.0, f"{exchange}: SL should be 66000"
+    finally:
+        app.dependency_overrides.clear()
+
+
+# ─── Scenario 9: Set both TP and SL when none existed ─────────────
+
+
+@pytest.mark.parametrize("exchange", ALL_EXCHANGES)
+async def test_set_both_from_none(exchange, engine, session_factory):
+    """Setting both on empty trade should: place(tp=70000, sl=66000) -> cancel()."""
+    data = await create_test_data_custom(session_factory, exchange, take_profit=None, stop_loss=None)
+    mock_client, call_log = make_mock_client()
+
+    from src.api.main_app import create_app
+    app = create_app()
+
+    from src.api.rate_limit import limiter
+    limiter.enabled = False
+
+    _setup_app_overrides(app, session_factory)
+
+    try:
+        with patch("src.api.routers.trades.create_exchange_client", return_value=mock_client), \
+             patch("src.api.routers.trades.decrypt_value", return_value="decrypted"):
+            resp = await _send_tpsl_request(
+                app, data["trade"].id, data["token"],
+                {"take_profit": 70000.0, "stop_loss": 66000.0},
+            )
+
+        assert resp.status_code == 200, f"{exchange}: {resp.text}"
+        assert len(call_log) == 2, f"{exchange}: expected 2 calls, got {call_log}"
+        assert call_log[0][0] == "set_position_tpsl", f"{exchange}: first call should be set"
+        assert call_log[1][0] == "cancel_position_tpsl", f"{exchange}: second call should be cancel"
+
+        set_kwargs = call_log[0][1]
+        assert set_kwargs["take_profit"] == 70000.0, f"{exchange}: TP should be 70000"
+        assert set_kwargs["stop_loss"] == 66000.0, f"{exchange}: SL should be 66000"
+    finally:
+        app.dependency_overrides.clear()
+
+
+# ─── Scenario 10: Remove TP when only TP exists (no SL) ───────────
+
+
+@pytest.mark.parametrize("exchange", ALL_EXCHANGES)
+async def test_remove_tp_when_only_tp(exchange, engine, session_factory):
+    """Removing lone TP should: cancel only (both become None)."""
+    data = await create_test_data_custom(session_factory, exchange, take_profit=70000.0, stop_loss=None)
+    mock_client, call_log = make_mock_client()
+
+    from src.api.main_app import create_app
+    app = create_app()
+
+    from src.api.rate_limit import limiter
+    limiter.enabled = False
+
+    _setup_app_overrides(app, session_factory)
+
+    try:
+        with patch("src.api.routers.trades.create_exchange_client", return_value=mock_client), \
+             patch("src.api.routers.trades.decrypt_value", return_value="decrypted"):
+            resp = await _send_tpsl_request(
+                app, data["trade"].id, data["token"],
+                {"remove_tp": True},
+            )
+
+        assert resp.status_code == 200, f"{exchange}: {resp.text}"
+        assert len(call_log) == 1, f"{exchange}: expected only cancel call, got {call_log}"
+        assert call_log[0][0] == "cancel_position_tpsl", f"{exchange}: should only cancel"
+
+        # Verify DB: both TP and SL are None
+        from sqlalchemy import select
+        async with session_factory() as session:
+            result = await session.execute(
+                select(TradeRecord).where(TradeRecord.id == data["trade"].id)
+            )
+            trade = result.scalar_one()
+            assert trade.take_profit is None, f"{exchange}: DB TP should be None"
+            assert trade.stop_loss is None, f"{exchange}: DB SL should be None"
+    finally:
+        app.dependency_overrides.clear()
+
+
+# ─── Scenario 11: Add TP when only SL exists ──────────────────────
+
+
+@pytest.mark.parametrize("exchange", ALL_EXCHANGES)
+async def test_add_tp_when_only_sl(exchange, engine, session_factory):
+    """Adding TP to SL-only trade should: place(tp=70000, sl=66000) -> cancel()."""
+    data = await create_test_data_custom(session_factory, exchange, take_profit=None, stop_loss=66000.0)
+    mock_client, call_log = make_mock_client()
+
+    from src.api.main_app import create_app
+    app = create_app()
+
+    from src.api.rate_limit import limiter
+    limiter.enabled = False
+
+    _setup_app_overrides(app, session_factory)
+
+    try:
+        with patch("src.api.routers.trades.create_exchange_client", return_value=mock_client), \
+             patch("src.api.routers.trades.decrypt_value", return_value="decrypted"):
+            resp = await _send_tpsl_request(
+                app, data["trade"].id, data["token"],
+                {"take_profit": 70000.0},
+            )
+
+        assert resp.status_code == 200, f"{exchange}: {resp.text}"
+        assert len(call_log) == 2, f"{exchange}: expected 2 calls, got {call_log}"
+        assert call_log[0][0] == "set_position_tpsl", f"{exchange}: first call should be set"
+        assert call_log[1][0] == "cancel_position_tpsl", f"{exchange}: second call should be cancel"
+
+        set_kwargs = call_log[0][1]
+        assert set_kwargs["take_profit"] == 70000.0, f"{exchange}: TP should be 70000"
+        assert set_kwargs["stop_loss"] == 66000.0, f"{exchange}: SL should stay 66000"
+    finally:
+        app.dependency_overrides.clear()
+
+
+# ─── Scenario 12: Add SL when only TP exists ──────────────────────
+
+
+@pytest.mark.parametrize("exchange", ALL_EXCHANGES)
+async def test_add_sl_when_only_tp(exchange, engine, session_factory):
+    """Adding SL to TP-only trade should: place(tp=70000, sl=66000) -> cancel()."""
+    data = await create_test_data_custom(session_factory, exchange, take_profit=70000.0, stop_loss=None)
+    mock_client, call_log = make_mock_client()
+
+    from src.api.main_app import create_app
+    app = create_app()
+
+    from src.api.rate_limit import limiter
+    limiter.enabled = False
+
+    _setup_app_overrides(app, session_factory)
+
+    try:
+        with patch("src.api.routers.trades.create_exchange_client", return_value=mock_client), \
+             patch("src.api.routers.trades.decrypt_value", return_value="decrypted"):
+            resp = await _send_tpsl_request(
+                app, data["trade"].id, data["token"],
+                {"stop_loss": 66000.0},
+            )
+
+        assert resp.status_code == 200, f"{exchange}: {resp.text}"
+        assert len(call_log) == 2, f"{exchange}: expected 2 calls, got {call_log}"
+        assert call_log[0][0] == "set_position_tpsl", f"{exchange}: first call should be set"
+        assert call_log[1][0] == "cancel_position_tpsl", f"{exchange}: second call should be cancel"
+
+        set_kwargs = call_log[0][1]
+        assert set_kwargs["take_profit"] == 70000.0, f"{exchange}: TP should stay 70000"
+        assert set_kwargs["stop_loss"] == 66000.0, f"{exchange}: SL should be 66000"
+    finally:
+        app.dependency_overrides.clear()
