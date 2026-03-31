@@ -1,9 +1,9 @@
-"""Tests for Hyperliquid cancel_position_tpsl."""
+"""Tests for Hyperliquid cancel_position_tpsl — queries frontend_open_orders, cancels triggers."""
 
 import os
 import sys
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -25,115 +25,83 @@ def client():
         c._wallet = MagicMock()
         c._wallet.address = "0xTestAddress"
         c._builder = None
-        c._cb_state = "closed"
-        c._cb_failures = 0
-        c._cb_last_failure = 0
-        c._cb_threshold = 5
-        c._cb_timeout = 60
         c._asset_meta = {"BTC": {"szDecimals": 4}}
         c.demo_mode = False
-
-        # Make _cb_call just call the function directly
-        async def direct_call(fn, *args, **kwargs):
-            if hasattr(fn, '__call__'):
-                result = fn(*args, **kwargs)
-                if hasattr(result, '__await__'):
-                    return await result
-                return result
-        c._cb_call = AsyncMock(side_effect=direct_call)
-
         return c
 
 
 @pytest.mark.asyncio
-async def test_cancel_tpsl_clears_via_empty_position_tpsl(client):
-    """Should clear TP/SL by sending empty positionTpsl."""
-    client._exchange.bulk_orders = MagicMock(return_value={"status": "ok"})
-
-    async def mock_cb_call(fn, *args, **kwargs):
-        return fn(*args, **kwargs)
-
-    client._cb_call = AsyncMock(side_effect=mock_cb_call)
+async def test_cancel_tpsl_cancels_trigger_orders(client):
+    """Should query frontend_open_orders, filter triggers by coin, cancel each."""
+    client._info.frontend_open_orders = MagicMock(return_value=[
+        {"coin": "BTC", "oid": 111, "isTrigger": True, "isPositionTpsl": False},
+        {"coin": "BTC", "oid": 222, "isTrigger": True, "isPositionTpsl": False},
+        {"coin": "ETH", "oid": 333, "isTrigger": True, "isPositionTpsl": False},
+    ])
+    cancelled = []
+    client._exchange.cancel = MagicMock(side_effect=lambda coin, oid: cancelled.append(oid))
 
     result = await client.cancel_position_tpsl("BTC", side="long")
+
     assert result is True
-    client._exchange.bulk_orders.assert_called_once()
+    assert sorted(cancelled) == [111, 222]  # ETH filtered out
+    client._info.frontend_open_orders.assert_called_once_with("0xtestaddress")
 
 
 @pytest.mark.asyncio
-async def test_cancel_tpsl_fallback_to_order_cancel(client):
-    """If empty positionTpsl fails, should query and cancel trigger orders."""
-    call_count = 0
-
-    open_orders = [
-        {"coin": "BTC", "oid": 12345, "orderType": "trigger"},
-        {"coin": "BTC", "oid": 12346, "orderType": "trigger"},
-        {"coin": "ETH", "oid": 99999, "orderType": "trigger"},
-    ]
-    cancelled_oids = []
-
-    async def mock_cb_call(fn, *args, **kwargs):
-        nonlocal call_count
-        call_count += 1
-        if call_count == 1:
-            raise Exception("positionTpsl empty not supported")
-        if fn == client._info.open_orders:
-            return open_orders
-        if fn == client._exchange.cancel:
-            cancelled_oids.append(kwargs.get("oid") or (args[1] if len(args) > 1 else None))
-            return True
-        return fn(*args, **kwargs)
-
-    client._cb_call = AsyncMock(side_effect=mock_cb_call)
+async def test_cancel_tpsl_includes_position_tpsl_orders(client):
+    """Should also cancel orders with isPositionTpsl=True."""
+    client._info.frontend_open_orders = MagicMock(return_value=[
+        {"coin": "BTC", "oid": 111, "isTrigger": False, "isPositionTpsl": True},
+        {"coin": "BTC", "oid": 222, "isTrigger": True, "isPositionTpsl": False},
+    ])
+    cancelled = []
+    client._exchange.cancel = MagicMock(side_effect=lambda coin, oid: cancelled.append(oid))
 
     result = await client.cancel_position_tpsl("BTC", side="long")
+
     assert result is True
-    assert sorted(cancelled_oids) == [12345, 12346]
+    assert sorted(cancelled) == [111, 222]
 
 
 @pytest.mark.asyncio
-async def test_cancel_tpsl_no_trigger_orders(client):
+async def test_cancel_tpsl_no_triggers(client):
     """Should return True if no trigger orders found."""
-    call_count = 0
-
-    async def mock_cb_call(fn, *args, **kwargs):
-        nonlocal call_count
-        call_count += 1
-        if call_count == 1:
-            raise Exception("fail")
-        return []
-
-    client._cb_call = AsyncMock(side_effect=mock_cb_call)
+    client._info.frontend_open_orders = MagicMock(return_value=[
+        {"coin": "BTC", "oid": 111, "isTrigger": False, "isPositionTpsl": False},
+    ])
 
     result = await client.cancel_position_tpsl("BTC", side="long")
     assert result is True
+    client._exchange.cancel.assert_not_called()
 
 
 @pytest.mark.asyncio
-async def test_cancel_tpsl_both_strategies_fail(client):
-    """Should return False if both strategies fail."""
-    async def mock_cb_call(fn, *args, **kwargs):
-        raise Exception("All failed")
-
-    client._cb_call = AsyncMock(side_effect=mock_cb_call)
+async def test_cancel_tpsl_query_fails(client):
+    """Should return False if frontend_open_orders fails."""
+    client._info.frontend_open_orders = MagicMock(side_effect=Exception("API error"))
 
     result = await client.cancel_position_tpsl("BTC", side="long")
     assert result is False
 
 
 @pytest.mark.asyncio
-async def test_cancel_tpsl_with_builder(client):
-    """Should pass builder kwargs when builder is configured."""
-    client._builder = {"b": "0xbuilder", "f": 10}
-    client._exchange.bulk_orders = MagicMock(return_value={"status": "ok"})
+async def test_cancel_tpsl_partial_cancel_failure(client):
+    """Should continue and return True even if one cancel fails."""
+    client._info.frontend_open_orders = MagicMock(return_value=[
+        {"coin": "BTC", "oid": 111, "isTrigger": True},
+        {"coin": "BTC", "oid": 222, "isTrigger": True},
+    ])
+    call_count = 0
 
-    async def mock_cb_call(fn, *args, **kwargs):
-        return fn(*args, **kwargs)
+    def mock_cancel(coin, oid):
+        nonlocal call_count
+        call_count += 1
+        if call_count == 1:
+            raise Exception("cancel failed")
 
-    client._cb_call = AsyncMock(side_effect=mock_cb_call)
+    client._exchange.cancel = MagicMock(side_effect=mock_cancel)
 
     result = await client.cancel_position_tpsl("BTC", side="long")
     assert result is True
-    client._exchange.bulk_orders.assert_called_once_with(
-        [], grouping="positionTpsl", builder={"b": "0xbuilder", "f": 10}
-    )
+    assert call_count == 2  # Both attempted
