@@ -822,6 +822,68 @@ class BitunixClient(ExchangeClient):
             logger.warning("Failed to modify position TP/SL for %s: %s", symbol, e)
             return None
 
+    async def cancel_position_tpsl(
+        self,
+        symbol: str,
+        side: str = "long",
+    ) -> bool:
+        """Cancel all pending TP/SL orders for a position on Bitunix.
+
+        Queries /api/v1/futures/tpsl/get_pending_orders, filters by symbol
+        and position side, then cancels each via /api/v1/futures/tpsl/cancel_order.
+        Best-effort: partial failures are logged but don't fail the operation.
+        """
+        position_side = "LONG" if side == "long" else "SHORT"
+
+        try:
+            data = await self._request(
+                "GET", ENDPOINTS["tpsl_get_pending_orders"], params={
+                    "symbol": symbol,
+                }
+            )
+        except Exception as e:
+            logger.warning(
+                "Failed to query pending TP/SL orders for %s: %s", symbol, e
+            )
+            return False
+
+        orders = data if isinstance(data, list) else (
+            data.get("data", data.get("orders", []))
+            if isinstance(data, dict) else []
+        )
+
+        to_cancel = [
+            o for o in orders
+            if isinstance(o, dict)
+            and o.get("positionSide", "").upper() == position_side
+        ]
+
+        if not to_cancel:
+            logger.debug(
+                "No pending TP/SL orders to cancel for %s %s on Bitunix",
+                symbol, side,
+            )
+            return True
+
+        for order in to_cancel:
+            oid = str(order.get("orderId", ""))
+            try:
+                await self._request(
+                    "POST", ENDPOINTS["tpsl_cancel_order"], data={
+                        "symbol": symbol,
+                        "orderId": oid,
+                    }
+                )
+                logger.info(
+                    "Cancelled Bitunix TP/SL order %s for %s", oid, symbol
+                )
+            except Exception as e:
+                logger.warning(
+                    "Failed to cancel Bitunix TP/SL order %s for %s: %s",
+                    oid, symbol, e,
+                )
+
+        return True
 
     # ── Affiliate ──────────────────────────────────────────────────
 

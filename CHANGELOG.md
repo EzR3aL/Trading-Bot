@@ -19,7 +19,8 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 ### Hinzugefuegt
 - **BingX `cancel_position_tpsl()`**: Fragt `/openApi/swap/v2/trade/openOrders` ab, filtert auf `TAKE_PROFIT_MARKET`/`STOP_MARKET` nach Symbol und Position-Side, cancelt jede Order einzeln
 - **Weex `cancel_position_tpsl()`**: Fragt `/capi/v3/pendingTpSlOrders` ab, filtert nach Symbol und Position-Side, cancelt via `/capi/v3/cancelTpSlOrder`
-- **Base-Methode `cancel_position_tpsl()`**: No-op Default für Position-Level Exchanges (Bitget, Hyperliquid, Bitunix) — dort ersetzt `set_position_tpsl` implizit
+- **Bitunix `cancel_position_tpsl()`**: Fragt `/api/v1/futures/tpsl/get_pending_orders` ab, filtert nach Symbol und Position-Side, cancelt via `/api/v1/futures/tpsl/cancel_order` — nutzt die bisher ungenutzten TPSL-Endpoints aus den Constants
+- **Base-Methode `cancel_position_tpsl()`**: No-op Default für Position-Level Exchanges (Bitget, Hyperliquid) — dort ersetzt `set_position_tpsl` implizit
 
 ## [4.6.9] - 2026-03-31
 
