@@ -12,7 +12,8 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 ## [4.6.10] - 2026-03-31
 
 ### Behoben
-- **Zahnrad-Icon fehlt bei Hyperliquid-Positionen**: Position-Trade-Matching in Portfolio nutzte exakten Symbol-Vergleich (`ETHUSDT` vs `ETH`), was bei Hyperliquid fehlschlug. Jetzt wird `normalize_symbol()` auf beiden Seiten (DB + Exchange-API) angewendet — funktioniert fuer alle 5 Exchanges. Zusaetzlich: `normalize_symbol()` Fallback fuer Hyperliquid gefixt (strippte bisher kein USDT-Suffix), und bei Duplikat-Keys wird der neueste Trade bevorzugt
+- **Zahnrad-Icon fehlt bei Hyperliquid-Positionen**: Position-Trade-Matching in Portfolio nutzte exakten Symbol-Vergleich (`ETHUSDT` vs `ETH`), was bei Hyperliquid fehlschlug. Jetzt wird `normalize_symbol()` auf beiden Seiten (DB + Exchange-API) angewendet — funktioniert fuer alle 5 Exchanges (Bitget, Weex, Hyperliquid, Bitunix, BingX). Zusaetzlich: `normalize_symbol()` Fallback fuer Hyperliquid gefixt (strippte bisher kein USDT-Suffix), und bei Duplikat-Keys wird der neueste Trade bevorzugt
+- **Trailing-Stop-Slider zeigt gespeicherten Wert**: ATR-Slider im TP/SL-Panel startete immer bei 2.5x, ignorierte den gespeicherten `trailing_atr_override`. Jetzt wird der Override-Wert aus der API geladen und als Slider-Startwert gesetzt (Schema, Backend-Response, Frontend in Dashboard/Portfolio/MobilePositionCard)
 
 ## [4.6.9] - 2026-03-31
 

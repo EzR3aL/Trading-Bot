@@ -43,6 +43,7 @@ class PortfolioPosition(BaseModel):
     trailing_stop_active: bool = False
     trailing_stop_price: Optional[float] = None
     trailing_stop_distance_pct: Optional[float] = None
+    trailing_atr_override: Optional[float] = None
     can_close_at_loss: Optional[bool] = None
 
 

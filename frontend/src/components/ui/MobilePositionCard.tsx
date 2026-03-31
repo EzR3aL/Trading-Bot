@@ -143,6 +143,7 @@ function MobilePositionCardInner({ pos }: { pos: Position }) {
             trailing_stop_active: pos.trailing_stop_active ?? false,
             trailing_stop_price: pos.trailing_stop_price,
             trailing_stop_distance_pct: pos.trailing_stop_distance_pct,
+            trailing_atr_override: pos.trailing_atr_override,
           }}
           onClose={() => setEditOpen(false)}
           onSave={handleSave}

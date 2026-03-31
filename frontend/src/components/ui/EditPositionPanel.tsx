@@ -28,6 +28,7 @@ interface PositionData {
   trailing_stop_active?: boolean
   trailing_stop_price?: number | null
   trailing_stop_distance_pct?: number | null
+  trailing_atr_override?: number | null
 }
 
 interface EditPositionPanelProps {
@@ -84,7 +85,7 @@ export default function EditPositionPanel({ position, onClose, onSave }: EditPos
       : ''
   )
   const [trailingEnabled, setTrailingEnabled] = useState(position.trailing_stop_active ?? false)
-  const [trailingAtr, setTrailingAtr] = useState(2.5)
+  const [trailingAtr, setTrailingAtr] = useState(position.trailing_atr_override ?? 2.5)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 

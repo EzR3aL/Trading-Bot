@@ -282,6 +282,7 @@ export default function Dashboard() {
             trailing_stop_active: editingPos.trailing_stop_active,
             trailing_stop_price: editingPos.trailing_stop_price,
             trailing_stop_distance_pct: editingPos.trailing_stop_distance_pct,
+            trailing_atr_override: editingPos.trailing_atr_override,
           }}
           onClose={() => setEditingPos(null)}
           onSave={async (data) => {
