@@ -551,8 +551,8 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
         </div>
       )}
 
-      {/* Navigation */}
-      <div className="flex items-center justify-between gap-2 mt-4">
+      {/* Navigation — single row: Back/Cancel left, Next/Save right */}
+      <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%', marginTop: '1rem' }}>
         <button
           onClick={() => step > 0 ? setStep(step - 1) : onCancel()}
           className="flex items-center gap-1 px-4 py-2 text-sm text-gray-400 hover:text-white transition-colors"
