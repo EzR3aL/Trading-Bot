@@ -758,7 +758,7 @@ class HyperliquidClient(ExchangeClient):
         if take_profit is not None:
             rounded_tp = self._round_price(take_profit, tick_size)
             order_req.append({
-                "name": coin,
+                "coin": coin,
                 "is_buy": is_buy_close,
                 "sz": 0,
                 "limit_px": float(rounded_tp),
@@ -775,7 +775,7 @@ class HyperliquidClient(ExchangeClient):
         if stop_loss is not None:
             rounded_sl = self._round_price(stop_loss, tick_size)
             order_req.append({
-                "name": coin,
+                "coin": coin,
                 "is_buy": is_buy_close,
                 "sz": 0,
                 "limit_px": float(rounded_sl),

@@ -11,6 +11,9 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ## [4.6.10] - 2026-03-31
 
+### Behoben
+- **Hyperliquid positionTpsl KeyError**: `set_position_tpsl()` verwendete `"name"` als Key im Order-Dict fuer `bulk_orders()`, aber das Hyperliquid SDK erwartet `"coin"` bei `grouping="positionTpsl"`. Gefixt fuer TP- und SL-Order. Fallback `_place_trigger_order()` bleibt bei `"name"` (korrekt fuer Einzel-Orders via `order()`)
+
 ### Dokumentation
 - **Anleitungen aktualisiert**: Strategien-Uebersicht von 3 auf 2 Strategien (Sentiment Surfer entfernt), LLM-Provider-Konfiguration als Archiv markiert, 15m/Aggressiv-Profil aus Risikoprofil-Anleitung entfernt, README mit Edge Bots Branding aktualisiert
 
