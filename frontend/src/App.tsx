@@ -44,7 +44,7 @@ function AdminRoute({ children }: { children: React.ReactNode }) {
 }
 
 export default function App() {
-  const { isAuthenticated, fetchUser } = useAuthStore()
+  const fetchUser = useAuthStore((s) => s.fetchUser)
   const { i18n } = useTranslation()
 
   // Keep html lang attribute in sync with current language (accessibility)
