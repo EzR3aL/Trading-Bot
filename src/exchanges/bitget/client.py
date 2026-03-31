@@ -333,6 +333,61 @@ class BitgetExchangeClient(ExchangeClient):
         """Public wrapper for Bitget position TP/SL."""
         await self._set_position_tpsl(symbol, side, take_profit, stop_loss)
 
+    async def cancel_position_tpsl(
+        self,
+        symbol: str,
+        side: str = "long",
+    ) -> bool:
+        """Cancel position-level TP/SL on Bitget.
+
+        Bitget's place-pos-tpsl is a REPLACE operation, so partial updates
+        (e.g., remove TP, keep SL) are handled by set_position_tpsl itself.
+        This method handles the "remove both" case by querying pending plan
+        orders and cancelling TP/SL types.
+        """
+        hold_side = "long" if side == "long" else "short"
+        try:
+            data = await self._request("GET", ENDPOINTS["orders_pending"], params={
+                "symbol": symbol,
+                "productType": PRODUCT_TYPE_USDT,
+            })
+        except Exception as e:
+            logger.warning("Failed to query pending orders for %s: %s", symbol, e)
+            return False
+
+        orders = data if isinstance(data, list) else (
+            data.get("data", data.get("entrustedList", []))
+            if isinstance(data, dict) else []
+        )
+
+        # Filter for TP/SL plan orders matching this position
+        tpsl_types = {"profit_plan", "loss_plan", "pos_profit", "pos_loss",
+                      "moving_plan", "profit_loss"}
+        to_cancel = [
+            o for o in orders
+            if isinstance(o, dict)
+            and o.get("planType", "").lower() in tpsl_types
+            and o.get("holdSide", "").lower() == hold_side
+        ]
+
+        if not to_cancel:
+            logger.debug("No pending TP/SL plan orders to cancel for %s %s on Bitget", symbol, side)
+            return True
+
+        for order in to_cancel:
+            oid = str(order.get("orderId", ""))
+            try:
+                await self._request("POST", ENDPOINTS["cancel_order"], data={
+                    "symbol": symbol,
+                    "productType": PRODUCT_TYPE_USDT,
+                    "orderId": oid,
+                })
+                logger.info("Cancelled Bitget TP/SL plan order %s for %s", oid, symbol)
+            except Exception as e:
+                logger.warning("Failed to cancel Bitget order %s for %s: %s", oid, symbol, e)
+
+        return True
+
     async def cancel_order(self, symbol: str, order_id: str) -> bool:
         data = {
             "symbol": symbol,

@@ -816,6 +816,65 @@ class HyperliquidClient(ExchangeClient):
                 logger.warning("Hyperliquid trigger fallback also failed: %s", e2)
         return None
 
+    async def cancel_position_tpsl(
+        self,
+        symbol: str,
+        side: str = "long",
+    ) -> bool:
+        """Cancel all position-level TP/SL triggers on Hyperliquid.
+
+        Attempts to clear via empty positionTpsl bulk_orders first.
+        Falls back to querying open orders and cancelling trigger orders.
+        """
+        coin = self._normalize_symbol(symbol)
+        builder_kwargs = {"builder": self._builder} if self._builder else {}
+
+        # Strategy 1: Send empty positionTpsl to clear all position triggers
+        try:
+            await self._cb_call(
+                self._exchange.bulk_orders,
+                [],
+                grouping="positionTpsl",
+                **builder_kwargs,
+            )
+            logger.info("Hyperliquid position TP/SL cleared for %s via empty positionTpsl", coin)
+            return True
+        except Exception as e:
+            logger.debug("Empty positionTpsl failed for %s: %s — trying order cancel fallback", coin, e)
+
+        # Strategy 2: Query open orders and cancel trigger orders for this coin
+        address = (self.wallet_address or self._wallet.address).lower()
+        try:
+            open_orders = await self._cb_call(self._info.open_orders, address)
+        except Exception as e:
+            logger.warning("Failed to query open orders for %s: %s", coin, e)
+            return False
+
+        if not isinstance(open_orders, list):
+            return True
+
+        to_cancel = [
+            o for o in open_orders
+            if isinstance(o, dict)
+            and o.get("coin") == coin
+            and o.get("orderType", "").startswith("trigger")
+        ]
+
+        if not to_cancel:
+            logger.debug("No trigger orders to cancel for %s", coin)
+            return True
+
+        for order in to_cancel:
+            oid = order.get("oid")
+            if oid:
+                try:
+                    await self._cb_call(self._exchange.cancel, name=coin, oid=int(oid))
+                    logger.info("Cancelled Hyperliquid trigger order %s for %s", oid, coin)
+                except Exception as e:
+                    logger.warning("Failed to cancel Hyperliquid order %s: %s", oid, e)
+
+        return True
+
     async def get_close_fill_price(self, symbol: str) -> Optional[float]:
         """Get fill price of the most recent close fill from Hyperliquid."""
         coin = self._normalize_symbol(symbol)
