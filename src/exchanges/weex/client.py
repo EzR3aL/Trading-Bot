@@ -498,6 +498,53 @@ class WeexClient(ExchangeClient):
 
     # ── TP/SL Management (v3 endpoints) ─────────────────────────────
 
+    async def cancel_position_tpsl(
+        self,
+        symbol: str,
+        side: str = "long",
+    ) -> bool:
+        """Cancel all pending TP/SL orders for a position on Weex.
+
+        Queries /capi/v3/pendingTpSlOrders, filters by symbol and positionSide,
+        then cancels each via /capi/v3/cancelTpSlOrder.
+        Best-effort: partial failures are logged but don't fail the operation.
+        """
+        v3_symbol = symbol.upper().replace("-", "")
+        position_side = "LONG" if side == "long" else "SHORT"
+
+        try:
+            data = await self._request("GET", ENDPOINTS["pending_tpsl_orders"], params={
+                "symbol": v3_symbol,
+            })
+        except Exception as e:
+            logger.warning("Failed to query pending TP/SL orders for %s: %s", symbol, e)
+            return False
+
+        orders = data if isinstance(data, list) else (data.get("orders", []) if isinstance(data, dict) else [])
+
+        to_cancel = [
+            o for o in orders
+            if isinstance(o, dict)
+            and o.get("positionSide") == position_side
+        ]
+
+        if not to_cancel:
+            logger.debug("No pending TP/SL orders to cancel for %s %s", symbol, side)
+            return True
+
+        for order in to_cancel:
+            oid = str(order.get("orderId", ""))
+            try:
+                await self._request("POST", ENDPOINTS["cancel_tpsl_order"], data={
+                    "symbol": v3_symbol,
+                    "orderId": oid,
+                })
+                logger.info("Cancelled Weex TP/SL order %s for %s", oid, symbol)
+            except Exception as e:
+                logger.warning("Failed to cancel Weex TP/SL order %s for %s: %s", oid, symbol, e)
+
+        return True
+
     async def set_position_tpsl(
         self,
         symbol: str,

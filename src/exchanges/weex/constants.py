@@ -41,6 +41,8 @@ ENDPOINTS = {
     "order_fills": "/capi/v2/order/fills",
     # === TP/SL & Trigger (V3) ===
     "place_tpsl_order": "/capi/v3/placeTpSlOrder",
+    "cancel_tpsl_order": "/capi/v3/cancelTpSlOrder",
+    "pending_tpsl_orders": "/capi/v3/pendingTpSlOrders",
     "place_trigger_order": "/capi/v3/placePendingOrder",
     # === Fee/Income (V3) ===
     "user_trades": "/capi/v3/userTrades",
