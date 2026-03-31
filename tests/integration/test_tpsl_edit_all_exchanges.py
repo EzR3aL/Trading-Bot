@@ -1,7 +1,7 @@
 """
 E2E tests for TP/SL editing across all 5 exchanges.
 
-Verifies the "place first, cancel old" strategy works correctly for:
+Verifies the "cancel first, set after" strategy works correctly for:
 - Setting new TP/SL values
 - Changing existing TP/SL
 - Removing individual TP or SL
@@ -181,11 +181,11 @@ async def test_set_new_tp_places_then_cancels(exchange, engine, session_factory)
 
         assert resp.status_code == 200, f"{exchange}: {resp.text}"
         assert len(call_log) == 2, f"{exchange}: expected 2 calls, got {call_log}"
-        assert call_log[0][0] == "set_position_tpsl", f"{exchange}: first call should be set"
-        assert call_log[1][0] == "cancel_position_tpsl", f"{exchange}: second call should be cancel"
+        assert call_log[0][0] == "cancel_position_tpsl", f"{exchange}: first call should be cancel"
+        assert call_log[1][0] == "set_position_tpsl", f"{exchange}: second call should be set"
 
         # Verify TP value was sent correctly
-        set_kwargs = call_log[0][1]
+        set_kwargs = call_log[1][1]
         assert set_kwargs["take_profit"] == 71000.0, f"{exchange}: TP should be 71000"
         assert set_kwargs["stop_loss"] == 66000.0, f"{exchange}: SL should stay 66000"
     finally:
@@ -219,10 +219,10 @@ async def test_change_sl_places_then_cancels(exchange, engine, session_factory):
 
         assert resp.status_code == 200, f"{exchange}: {resp.text}"
         assert len(call_log) == 2, f"{exchange}: expected 2 calls"
-        assert call_log[0][0] == "set_position_tpsl"
-        assert call_log[1][0] == "cancel_position_tpsl"
+        assert call_log[0][0] == "cancel_position_tpsl", f"{exchange}: first call should be cancel"
+        assert call_log[1][0] == "set_position_tpsl", f"{exchange}: second call should be set"
 
-        set_kwargs = call_log[0][1]
+        set_kwargs = call_log[1][1]
         assert set_kwargs["take_profit"] == 70000.0, f"{exchange}: TP should stay 70000"
         assert set_kwargs["stop_loss"] == 65000.0, f"{exchange}: SL should be 65000"
     finally:
@@ -256,10 +256,10 @@ async def test_remove_tp_keep_sl(exchange, engine, session_factory):
 
         assert resp.status_code == 200, f"{exchange}: {resp.text}"
         assert len(call_log) == 2, f"{exchange}: expected 2 calls"
-        assert call_log[0][0] == "set_position_tpsl"
-        assert call_log[1][0] == "cancel_position_tpsl"
+        assert call_log[0][0] == "cancel_position_tpsl", f"{exchange}: first call should be cancel"
+        assert call_log[1][0] == "set_position_tpsl", f"{exchange}: second call should be set"
 
-        set_kwargs = call_log[0][1]
+        set_kwargs = call_log[1][1]
         assert set_kwargs["take_profit"] is None, f"{exchange}: TP should be None (removed)"
         assert set_kwargs["stop_loss"] == 66000.0, f"{exchange}: SL should stay 66000"
     finally:
@@ -383,10 +383,10 @@ async def test_remove_sl_keep_tp(exchange, engine, session_factory):
 
         assert resp.status_code == 200, f"{exchange}: {resp.text}"
         assert len(call_log) == 2, f"{exchange}: expected 2 calls, got {call_log}"
-        assert call_log[0][0] == "set_position_tpsl", f"{exchange}: first call should be set"
-        assert call_log[1][0] == "cancel_position_tpsl", f"{exchange}: second call should be cancel"
+        assert call_log[0][0] == "cancel_position_tpsl", f"{exchange}: first call should be cancel"
+        assert call_log[1][0] == "set_position_tpsl", f"{exchange}: second call should be set"
 
-        set_kwargs = call_log[0][1]
+        set_kwargs = call_log[1][1]
         assert set_kwargs["take_profit"] == 70000.0, f"{exchange}: TP should stay 70000"
         assert set_kwargs["stop_loss"] is None, f"{exchange}: SL should be None (removed)"
     finally:
@@ -420,10 +420,10 @@ async def test_change_both_tp_and_sl(exchange, engine, session_factory):
 
         assert resp.status_code == 200, f"{exchange}: {resp.text}"
         assert len(call_log) == 2, f"{exchange}: expected 2 calls, got {call_log}"
-        assert call_log[0][0] == "set_position_tpsl", f"{exchange}: first call should be set"
-        assert call_log[1][0] == "cancel_position_tpsl", f"{exchange}: second call should be cancel"
+        assert call_log[0][0] == "cancel_position_tpsl", f"{exchange}: first call should be cancel"
+        assert call_log[1][0] == "set_position_tpsl", f"{exchange}: second call should be set"
 
-        set_kwargs = call_log[0][1]
+        set_kwargs = call_log[1][1]
         assert set_kwargs["take_profit"] == 72000.0, f"{exchange}: TP should be 72000"
         assert set_kwargs["stop_loss"] == 64000.0, f"{exchange}: SL should be 64000"
     finally:
@@ -457,10 +457,10 @@ async def test_set_tp_only_from_none(exchange, engine, session_factory):
 
         assert resp.status_code == 200, f"{exchange}: {resp.text}"
         assert len(call_log) == 2, f"{exchange}: expected 2 calls, got {call_log}"
-        assert call_log[0][0] == "set_position_tpsl", f"{exchange}: first call should be set"
-        assert call_log[1][0] == "cancel_position_tpsl", f"{exchange}: second call should be cancel"
+        assert call_log[0][0] == "cancel_position_tpsl", f"{exchange}: first call should be cancel"
+        assert call_log[1][0] == "set_position_tpsl", f"{exchange}: second call should be set"
 
-        set_kwargs = call_log[0][1]
+        set_kwargs = call_log[1][1]
         assert set_kwargs["take_profit"] == 70000.0, f"{exchange}: TP should be 70000"
         assert set_kwargs["stop_loss"] is None, f"{exchange}: SL should stay None"
     finally:
@@ -494,10 +494,10 @@ async def test_set_sl_only_from_none(exchange, engine, session_factory):
 
         assert resp.status_code == 200, f"{exchange}: {resp.text}"
         assert len(call_log) == 2, f"{exchange}: expected 2 calls, got {call_log}"
-        assert call_log[0][0] == "set_position_tpsl", f"{exchange}: first call should be set"
-        assert call_log[1][0] == "cancel_position_tpsl", f"{exchange}: second call should be cancel"
+        assert call_log[0][0] == "cancel_position_tpsl", f"{exchange}: first call should be cancel"
+        assert call_log[1][0] == "set_position_tpsl", f"{exchange}: second call should be set"
 
-        set_kwargs = call_log[0][1]
+        set_kwargs = call_log[1][1]
         assert set_kwargs["take_profit"] is None, f"{exchange}: TP should stay None"
         assert set_kwargs["stop_loss"] == 66000.0, f"{exchange}: SL should be 66000"
     finally:
@@ -531,10 +531,10 @@ async def test_set_both_from_none(exchange, engine, session_factory):
 
         assert resp.status_code == 200, f"{exchange}: {resp.text}"
         assert len(call_log) == 2, f"{exchange}: expected 2 calls, got {call_log}"
-        assert call_log[0][0] == "set_position_tpsl", f"{exchange}: first call should be set"
-        assert call_log[1][0] == "cancel_position_tpsl", f"{exchange}: second call should be cancel"
+        assert call_log[0][0] == "cancel_position_tpsl", f"{exchange}: first call should be cancel"
+        assert call_log[1][0] == "set_position_tpsl", f"{exchange}: second call should be set"
 
-        set_kwargs = call_log[0][1]
+        set_kwargs = call_log[1][1]
         assert set_kwargs["take_profit"] == 70000.0, f"{exchange}: TP should be 70000"
         assert set_kwargs["stop_loss"] == 66000.0, f"{exchange}: SL should be 66000"
     finally:
@@ -610,10 +610,10 @@ async def test_add_tp_when_only_sl(exchange, engine, session_factory):
 
         assert resp.status_code == 200, f"{exchange}: {resp.text}"
         assert len(call_log) == 2, f"{exchange}: expected 2 calls, got {call_log}"
-        assert call_log[0][0] == "set_position_tpsl", f"{exchange}: first call should be set"
-        assert call_log[1][0] == "cancel_position_tpsl", f"{exchange}: second call should be cancel"
+        assert call_log[0][0] == "cancel_position_tpsl", f"{exchange}: first call should be cancel"
+        assert call_log[1][0] == "set_position_tpsl", f"{exchange}: second call should be set"
 
-        set_kwargs = call_log[0][1]
+        set_kwargs = call_log[1][1]
         assert set_kwargs["take_profit"] == 70000.0, f"{exchange}: TP should be 70000"
         assert set_kwargs["stop_loss"] == 66000.0, f"{exchange}: SL should stay 66000"
     finally:
@@ -647,10 +647,10 @@ async def test_add_sl_when_only_tp(exchange, engine, session_factory):
 
         assert resp.status_code == 200, f"{exchange}: {resp.text}"
         assert len(call_log) == 2, f"{exchange}: expected 2 calls, got {call_log}"
-        assert call_log[0][0] == "set_position_tpsl", f"{exchange}: first call should be set"
-        assert call_log[1][0] == "cancel_position_tpsl", f"{exchange}: second call should be cancel"
+        assert call_log[0][0] == "cancel_position_tpsl", f"{exchange}: first call should be cancel"
+        assert call_log[1][0] == "set_position_tpsl", f"{exchange}: second call should be set"
 
-        set_kwargs = call_log[0][1]
+        set_kwargs = call_log[1][1]
         assert set_kwargs["take_profit"] == 70000.0, f"{exchange}: TP should stay 70000"
         assert set_kwargs["stop_loss"] == 66000.0, f"{exchange}: SL should be 66000"
     finally:

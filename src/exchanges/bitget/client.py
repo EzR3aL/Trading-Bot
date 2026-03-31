@@ -340,51 +340,31 @@ class BitgetExchangeClient(ExchangeClient):
     ) -> bool:
         """Cancel position-level TP/SL on Bitget.
 
-        Bitget's place-pos-tpsl is a REPLACE operation, so partial updates
-        (e.g., remove TP, keep SL) are handled by set_position_tpsl itself.
-        This method handles the "remove both" case by querying pending plan
-        orders and cancelling TP/SL types.
+        Bitget position TP/SL (set via place-pos-tpsl) are NOT regular plan orders.
+        They must be cancelled via cancel-plan-order with planType='pos_profit'
+        or 'pos_loss' — using orderId alone does not work.
+
+        Also cancels moving_plan (trailing stop) orders.
         """
-        hold_side = "long" if side == "long" else "short"
-        try:
-            data = await self._request("GET", ENDPOINTS["orders_pending"], params={
-                "symbol": symbol,
-                "productType": PRODUCT_TYPE_USDT,
-            })
-        except Exception as e:
-            logger.warning("Failed to query pending orders for %s: %s", symbol, e)
-            return False
+        plan_types = ["pos_profit", "pos_loss", "moving_plan"]
 
-        orders = data if isinstance(data, list) else (
-            data.get("data", data.get("entrustedList", []))
-            if isinstance(data, dict) else []
-        )
-
-        # Filter for TP/SL plan orders matching this position
-        tpsl_types = {"profit_plan", "loss_plan", "pos_profit", "pos_loss",
-                      "moving_plan", "profit_loss"}
-        to_cancel = [
-            o for o in orders
-            if isinstance(o, dict)
-            and o.get("planType", "").lower() in tpsl_types
-            and o.get("holdSide", "").lower() == hold_side
-        ]
-
-        if not to_cancel:
-            logger.debug("No pending TP/SL plan orders to cancel for %s %s on Bitget", symbol, side)
-            return True
-
-        for order in to_cancel:
-            oid = str(order.get("orderId", ""))
+        for plan_type in plan_types:
             try:
-                await self._request("POST", ENDPOINTS["cancel_order"], data={
+                result = await self._request("POST", ENDPOINTS["cancel_order"].replace(
+                    "cancel-order", "cancel-plan-order"
+                ), data={
                     "symbol": symbol,
                     "productType": PRODUCT_TYPE_USDT,
-                    "orderId": oid,
+                    "planType": plan_type,
                 })
-                logger.info("Cancelled Bitget TP/SL plan order %s for %s", oid, symbol)
+                success = result.get("successList", []) if isinstance(result, dict) else []
+                if success:
+                    logger.info(
+                        "Cancelled Bitget %s for %s: %s",
+                        plan_type, symbol, [s.get("orderId") for s in success],
+                    )
             except Exception as e:
-                logger.warning("Failed to cancel Bitget order %s for %s: %s", oid, symbol, e)
+                logger.debug("Bitget cancel %s for %s: %s (may not exist)", plan_type, symbol, e)
 
         return True
 

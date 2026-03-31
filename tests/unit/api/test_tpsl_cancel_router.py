@@ -162,7 +162,7 @@ async def test_update_tpsl_places_first_then_cancels(app, setup_data):
 
     assert resp.status_code == 200
     # Core invariant: place BEFORE cancel
-    assert call_order == ["set_position_tpsl", "cancel_position_tpsl"]
+    assert call_order == ["cancel_position_tpsl", "set_position_tpsl"]
 
 
 @pytest.mark.asyncio
@@ -218,4 +218,4 @@ async def test_remove_tp_keep_sl_places_then_cancels(app, setup_data):
 
     assert resp.status_code == 200
     # SL remains (66000.0 from trade), TP removed -> set with only SL, then cancel old
-    assert call_order == ["set_position_tpsl", "cancel_position_tpsl"]
+    assert call_order == ["cancel_position_tpsl", "set_position_tpsl"]

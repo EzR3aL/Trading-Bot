@@ -659,25 +659,20 @@ async def update_trade_tpsl(
             final_tp = effective_tp
             final_sl = effective_sl
 
+            # Step 1: Cancel ALL old TP/SL on exchange (clean slate)
+            await client.cancel_position_tpsl(
+                symbol=trade.symbol,
+                side=trade.side,
+            )
+
+            # Step 2: Set new values if any remain
             if final_tp is not None or final_sl is not None:
-                # Step 1: Place new TP/SL orders first (position always protected)
                 await client.set_position_tpsl(
                     symbol=trade.symbol,
                     take_profit=final_tp,
                     stop_loss=final_sl,
                     side=trade.side,
                     size=trade.size,
-                )
-                # Step 2: Cancel old orders (safe — new ones already in place)
-                await client.cancel_position_tpsl(
-                    symbol=trade.symbol,
-                    side=trade.side,
-                )
-            else:
-                # Both TP and SL removed — cancel all existing orders on exchange
-                await client.cancel_position_tpsl(
-                    symbol=trade.symbol,
-                    side=trade.side,
                 )
 
         # Trailing Stop — compute trigger_price and callback from ATR
