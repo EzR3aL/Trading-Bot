@@ -845,7 +845,7 @@ class HyperliquidClient(ExchangeClient):
         # Strategy 2: Query frontend_open_orders (includes trigger/tpsl metadata)
         address = (self.wallet_address or self._wallet.address).lower()
         try:
-            open_orders = await self._cb_call(self._info.frontend_open_orders, address)
+            open_orders = self._info.frontend_open_orders(address)
         except Exception as e:
             logger.warning("Failed to query frontend open orders for %s: %s", coin, e)
             return False
@@ -868,7 +868,8 @@ class HyperliquidClient(ExchangeClient):
             oid = order.get("oid")
             if oid:
                 try:
-                    await self._cb_call(self._exchange.cancel, name=coin, oid=int(oid))
+                    # Direct call — _exchange.cancel is synchronous, _cb_call re-wraps it
+                    self._exchange.cancel(coin, oid)
                     logger.info("Cancelled Hyperliquid trigger order %s for %s", oid, coin)
                 except Exception as e:
                     logger.warning("Failed to cancel Hyperliquid order %s: %s", oid, e)
