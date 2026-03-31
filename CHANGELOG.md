@@ -13,18 +13,30 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ### Behoben (Mobile UI)
 - **Step-Indikator im Bot Builder**: Zeigt auf Mobile nur Schrittnummern + aktuellen Namen, horizontal scrollbar
-- **Exchange-Buttons Overflow**: `flex-wrap` damit alle Exchanges (Bitget, Weex, Hyperliquid, Bitunix, BingX) sichtbar sind
+- **Exchange-Buttons Overflow**: `flex-wrap` damit alle Exchanges sichtbar sind
 - **Modus/Margin-Modus Überlappung**: Auf Mobile vertikal gestapelt statt nebeneinander
 - **Suchleiste Text/Lupe Überlappung**: Input padding-left erhöht für Icon-Platz
-- **Balance-Tabelle abgeschnitten**: Horizontal scrollbar auf Mobile
-- **Weiter-Button Position**: Cancel links, Weiter rechts — immer in einer Reihe
+- **Balance-Übersicht Mobile**: Karten-Layout statt Tabelle (Logo + Modus + Kapital pro Exchange)
+- **Weiter-Button Position**: Cancel links, Weiter rechts — immer in einer Reihe (inline style)
 - **Telegram Text-Overflow**: `break-words` + `overflow-wrap: anywhere` für URLs
-- **Trade-Share Modal abgeschnitten (Bots-Seite)**: Scrollbare Content-Area mit `max-h-[80vh]`, Pattern von Performance-Seite übernommen
 - **Bot-Löschen Buttons nicht übersetzt**: `common.delete` i18n-Keys in de.json/en.json ergänzt
+- **Trailing Stop Slider State**: `useEffect` synct Toggle + ATR-Wert bei Position-Wechsel, `MobilePositionCard` übergibt `trailing_atr_override` + `native_trailing_stop`
+- **Desktop Share kopiert nicht**: Desktop nutzt jetzt Clipboard statt `navigator.share`
 
 ### Verbessert
 - **Übersicht-Schritt (Bot Builder Review)**: Visuelles Upgrade mit gruppierten Karten, Icons, Farbcodes und besserer Hierarchie
 - **30 Umlaut-Fixes**: ue→ü, ae→ä, oe→ö, ss→ß in de.json, errors.py, tax_report.py, Strategien, Bot-Komponenten, Hyperliquid-Gates
+- **Share-Karten komplett überarbeitet**: Kompaktes Format (Symbol + Perp|Side|Hebel|Datum, zentrierter PnL, Einstieg/Ausstieg nebeneinander)
+- **Alle Share-Icons auf Share2 (Android 3-Punkte)**: Einheitlich in MobileTradeCard, Trade-Listen, Modals
+- **"Bild kopieren" entfernt**: Nur noch ein "Teilen" Button (Mobile → App-Auswahl, Desktop → Clipboard)
+- **Native Web Share API**: Affiliate-Link als Text bei `navigator.share()` — erscheint in WhatsApp/Telegram
+- **Direct Mobile Share**: Share-Button in Trade-Liste öffnet direkt die App-Auswahl ohne Umweg über Modal
+- **Letzter Trade Karte (Mobile)**: PnL zentriert groß, Einstieg/Ausstieg zentriert nebeneinander
+- **Datum in Share-Karten**: Verschoben in die Perp|Side|Leverage Zeile (oben rechts)
+- **X-Buttons auf Mobile ausgeblendet**: In Trade-Detail und Bot-Detail Modals (Swipe-to-Close reicht)
+- **Redundanter "Teilen" Button bei "LETZTER TRADE" entfernt**: Klick auf Trade öffnet Detail-Modal
+- **Nginx Cache-Headers**: `no-cache` für index.html + sw.js, `immutable` für Vite-Assets
+- **Service Worker Cache v2**: Invalidiert alten Cache bei Deployment
 
 ---
 
