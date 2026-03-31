@@ -109,6 +109,21 @@ class ExchangeClient(ABC):
         """Set/update TP/SL for an open position. Override in exchange-specific client."""
         raise NotImplementedError(f"{self.exchange_name} does not support set_position_tpsl")
 
+    async def cancel_position_tpsl(
+        self,
+        symbol: str,
+        side: str = "long",
+    ) -> bool:
+        """Cancel all TP/SL orders for a position.
+
+        Position-level exchanges (Bitget, Hyperliquid, Bitunix) don't need this
+        because set_position_tpsl implicitly replaces. Order-based exchanges
+        (BingX, Weex) must override to cancel existing conditional orders.
+
+        Returns True if cancellation succeeded or no orders to cancel.
+        """
+        return True
+
     async def place_trailing_stop(
         self,
         symbol: str,
