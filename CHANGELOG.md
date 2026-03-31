@@ -11,6 +11,9 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ## [4.6.10] - 2026-03-31
 
+### Hinzugefuegt
+- **E2E-Tests fuer TP/SL-Bearbeitung (alle 5 Exchanges)**: 20 parametrisierte Tests (5 Exchanges x 4 Szenarien) — verifiziert die "Place First, Cancel Old"-Strategie fuer Bitget, BingX, Weex, Hyperliquid und Bitunix. Testet: neuen TP setzen, SL aendern, TP entfernen (SL behalten), beide entfernen
+
 ### Behoben
 - **TP/SL Cancel auf allen Exchanges**: Neue `cancel_position_tpsl()` Methode auf allen 5 Exchanges — fragt offene TP/SL-Orders ab und cancelt sie gezielt. Behebt das Problem dass alte TP/SL-Orders auf der Exchange verbleiben wenn neue gesetzt oder bestehende entfernt werden
 - **Race Condition bei TP/SL-Update**: Strategie "Place First, Cancel Old" — neue Orders werden zuerst platziert, dann alte gecancelt. Position ist nie ungeschützt, auch bei API-Fehlern
