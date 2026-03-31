@@ -256,7 +256,7 @@ function TradeDetailModal({ trade, onClose, t, affiliateLink }: { trade: BotTrad
               <Share2 size={13} />
               {copied ? t('bots.copied') : t('bots.shareImage')}
             </button>
-            <button onClick={onClose} className="p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-white/5 transition-all" aria-label="Close">
+            <button onClick={onClose} className="hidden sm:block p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-white/5 transition-all" aria-label="Close">
               <X size={20} />
             </button>
           </div>
@@ -452,7 +452,7 @@ function BotTradeHistoryModal({ bot, onClose, t }: { bot: BotStatus; onClose: ()
           </div>
           <button
             onClick={onClose}
-            className="p-2 rounded-xl text-gray-400 hover:text-white hover:bg-white/5 transition-all"
+            className="hidden sm:block p-2 rounded-xl text-gray-400 hover:text-white hover:bg-white/5 transition-all"
             aria-label="Close"
           >
             <X size={22} />

@@ -1148,7 +1148,7 @@ export default function BotPerformance() {
                   <Share2 size={14} />
                   {copied ? t('bots.copied') : t('bots.shareImage')}
                 </button>
-                <button onClick={() => setSelectedTrade(null)} className="p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-white/5 transition-all" aria-label="Close">
+                <button onClick={() => setSelectedTrade(null)} className="hidden sm:block p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-white/5 transition-all" aria-label="Close">
                   <X size={20} />
                 </button>
               </div>
