@@ -253,24 +253,59 @@ Der Bot fuhrt drei periodische Aufgaben aus:
 
 ## 9. Exchange-Besonderheiten
 
+### Exchange-Support-Matrix
+
+| Feature | Bitget | BingX | Weex | Hyperliquid | Bitunix |
+|---------|--------|-------|------|-------------|---------|
+| **TP/SL setzen** | Nativ (Position-Level) | Nativ (Conditional Orders) | Nativ (Trigger Orders) | Nativ (positionTpsl) | Nativ (Position-Level) |
+| **TP/SL andern** | Ersetzt automatisch | Place + Cancel alte | Place + Cancel alte | Ersetzt automatisch | Ersetzt automatisch |
+| **TP/SL entfernen** | Cancel Plan-Orders | Cancel Conditional | Cancel Trigger | Empty positionTpsl | Cancel Pending |
+| **Trailing Stop** | **Nativ** (moving_plan) | **Nativ** (TRAILING_STOP_MARKET) | Software (Bot-uberwacht) | Software (Bot-uberwacht) | Software (Bot-uberwacht) |
+| **Demo-Modus** | Testnet-API | VST-API | Paper-Trading Header | Testnet | Testnet |
+| **Margin-Modi** | Cross + Isolated | Cross + Isolated | Cross + Isolated | Cross + Isolated | Cross + Isolated |
+
+**Legende:**
+- **Nativ** = Exchange fuhrt den Stop eigenstandig aus (auch bei Bot-Ausfall)
+- **Software** = Bot uberwacht den Preis und schliesst die Position (erfordert laufenden Bot)
+
 ### Bitget
 
-- **Margin-Modi:** Cross und Isolated
-- **Demo-Modus:** Uber Testnet-API (kein echtes Geld)
-- **Trailing Stop:** Nativ unterstutzt
+- **Trailing Stop:** Nativ unterstutzt via `place-tpsl-order` (planType: moving_plan)
+- **TP/SL:** Position-Level-Endpoint (`place-pos-tpsl`) — jeder Aufruf ersetzt den vorherigen Stand
 - **Funding Fees:** Werden beim Schliessen abgefragt und gespeichert
 - **Ordertyp:** Market Orders
 
+### BingX
+
+- **Trailing Stop:** Nativ unterstutzt via TRAILING_STOP_MARKET
+- **TP/SL:** Separate Conditional Orders (TAKE_PROFIT_MARKET, STOP_MARKET)
+- **Besonderheit:** TP/SL sind eigenstandige Orders — beim Andern werden erst neue platziert, dann alte gecancelt (Position immer geschutzt)
+- **Demo-Modus:** VST (Virtual Simulated Trading)
+
+### Weex
+
+- **Trailing Stop:** Software-basiert (Bot-uberwacht)
+- **TP/SL:** Separate Trigger-Orders uber V3 API (`placeTpSlOrder`)
+- **Besonderheit:** V3 API seit 2026-03-09, einige Endpoints noch auf V2
+- **Demo-Modus:** Paper-Trading uber Header-Flag
+
 ### Hyperliquid (DEX)
 
-- **Margin-Modi:** Cross und Isolated
-- **Demo-Modus:** Uber Testnet (separates Netzwerk)
+- **Trailing Stop:** Software-basiert (Bot-uberwacht)
+- **TP/SL:** Position-Level via `positionTpsl` Grouping (size=0, auto-adjusting)
 - **Builder Fee:** Hyperliquid-spezifische Umsatzbeteiligung
   - Wird vom Admin konfiguriert (Wallet-Adresse + Fee-Rate)
   - Benutzer mussen die Teilnahme genehmigen (4-Schritt-Wizard)
   - Fee wird pro Trade berechnet und separat gespeichert
 - **Referral-Programm:** Wird beim Bot-Start gepruft
 - **Funding Fees:** Werden uber die API abgefragt
+
+### Bitunix
+
+- **Trailing Stop:** Software-basiert (Bot-uberwacht)
+- **TP/SL:** Position-Level mit Fallback auf regulare Orders
+- **Besonderheit:** Hat `modify_position_tpsl` Endpoint fur Updates
+- **Demo-Modus:** Testnet-API
 
 ### Demo-Modus Einschrankungen
 
@@ -592,24 +627,59 @@ The bot executes three periodic tasks:
 
 ## 9. Exchange Specifics
 
+### Exchange Support Matrix
+
+| Feature | Bitget | BingX | Weex | Hyperliquid | Bitunix |
+|---------|--------|-------|------|-------------|---------|
+| **Set TP/SL** | Native (Position-Level) | Native (Conditional Orders) | Native (Trigger Orders) | Native (positionTpsl) | Native (Position-Level) |
+| **Modify TP/SL** | Replaces automatically | Place + Cancel old | Place + Cancel old | Replaces automatically | Replaces automatically |
+| **Remove TP/SL** | Cancel Plan Orders | Cancel Conditionals | Cancel Triggers | Empty positionTpsl | Cancel Pending |
+| **Trailing Stop** | **Native** (moving_plan) | **Native** (TRAILING_STOP_MARKET) | Software (bot-monitored) | Software (bot-monitored) | Software (bot-monitored) |
+| **Demo Mode** | Testnet API | VST API | Paper Trading Header | Testnet | Testnet |
+| **Margin Modes** | Cross + Isolated | Cross + Isolated | Cross + Isolated | Cross + Isolated | Cross + Isolated |
+
+**Legend:**
+- **Native** = Exchange executes the stop independently (works even if bot is offline)
+- **Software** = Bot monitors price and closes position (requires running bot)
+
 ### Bitget
 
-- **Margin Modes:** Cross and Isolated
-- **Demo Mode:** Via testnet API (no real money)
-- **Trailing Stop:** Natively supported
+- **Trailing Stop:** Natively supported via `place-tpsl-order` (planType: moving_plan)
+- **TP/SL:** Position-level endpoint — each call replaces the previous state
 - **Funding Fees:** Queried on close and stored
 - **Order Type:** Market orders
 
+### BingX
+
+- **Trailing Stop:** Natively supported via TRAILING_STOP_MARKET
+- **TP/SL:** Separate conditional orders (TAKE_PROFIT_MARKET, STOP_MARKET)
+- **Note:** When modifying, new orders are placed first, then old ones cancelled (position always protected)
+- **Demo Mode:** VST (Virtual Simulated Trading)
+
+### Weex
+
+- **Trailing Stop:** Software-based (bot-monitored)
+- **TP/SL:** Separate trigger orders via V3 API
+- **Note:** V3 API since 2026-03-09, some endpoints still on V2
+- **Demo Mode:** Paper trading via header flag
+
 ### Hyperliquid (DEX)
 
-- **Margin Modes:** Cross and Isolated
-- **Demo Mode:** Via testnet (separate network)
+- **Trailing Stop:** Software-based (bot-monitored)
+- **TP/SL:** Position-level via positionTpsl grouping (size=0, auto-adjusting)
 - **Builder Fee:** Hyperliquid-specific revenue sharing
   - Configured by admin (wallet address + fee rate)
   - Users must approve participation (4-step wizard)
   - Fee calculated per trade and stored separately
 - **Referral Program:** Verified on bot startup
 - **Funding Fees:** Queried via API
+
+### Bitunix
+
+- **Trailing Stop:** Software-based (bot-monitored)
+- **TP/SL:** Position-level with fallback to regular orders
+- **Note:** Has dedicated `modify_position_tpsl` endpoint for updates
+- **Demo Mode:** Testnet API
 
 ### Demo Mode Limitations
 
