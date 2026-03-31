@@ -17,10 +17,10 @@ import ExitReasonBadge from '../components/ui/ExitReasonBadge'
 import MobileTradeCard from '../components/ui/MobileTradeCard'
 import useIsMobile from '../hooks/useIsMobile'
 import useSwipeToClose from '../hooks/useSwipeToClose'
-import { Eye, EyeOff, ArrowUpRight, ArrowDownRight, Trophy, Target, LayoutGrid, BarChart3, X, Copy, ShieldCheck, ChevronRight, Share, Share2 } from 'lucide-react'
+import { Eye, EyeOff, ArrowUpRight, ArrowDownRight, Trophy, Target, LayoutGrid, BarChart3, X, ChevronRight, Share2 } from 'lucide-react'
 import SizeValue from '../components/ui/SizeValue'
 
-import { formatDate, formatDateTime, formatChartDate, formatTime, formatChartCurrency } from '../utils/dateUtils'
+import { formatDate, formatChartDate, formatTime, formatChartCurrency } from '../utils/dateUtils'
 
 import { strategyLabel } from '../constants/strategies'
 
@@ -442,10 +442,9 @@ export default function BotPerformance() {
   const latestCardRef = useRef<HTMLDivElement>(null)
   const [affiliateLinks, setAffiliateLinks] = useState<{ exchange_type: string; affiliate_url: string; label: string | null }[]>([])
 
-  const supportsNativeShare = typeof navigator !== 'undefined' && !!navigator.share && !!navigator.canShare
-
-  const handleNativeShare = async (ref: React.RefObject<HTMLDivElement | null>, trade: { symbol: string; side: string; pnl_percent: number }) => {
+  const handleShare = async (ref: React.RefObject<HTMLDivElement | null>, trade: { symbol: string; side: string; pnl_percent: number }, affiliateUrl?: string, copiedSetter?: (v: boolean) => void) => {
     if (!ref.current) return
+    const setFlag = copiedSetter || setCopied
     try {
       const blob = await toBlob(ref.current, {
         pixelRatio: 2,
@@ -453,12 +452,18 @@ export default function BotPerformance() {
       })
       if (!blob) return
       const file = new File([blob], 'trade.png', { type: 'image/png' })
+      const pnlStr = trade.pnl_percent >= 0 ? `+${trade.pnl_percent.toFixed(2)}%` : `${trade.pnl_percent.toFixed(2)}%`
       if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
-        const pnlStr = trade.pnl_percent >= 0 ? `+${trade.pnl_percent.toFixed(2)}%` : `${trade.pnl_percent.toFixed(2)}%`
         await navigator.share({
           title: `${trade.symbol} ${trade.side.toUpperCase()} ${pnlStr}`,
+          text: affiliateUrl || 'Edge Bots by Trading Department',
           files: [file],
         })
+      } else {
+        // Desktop fallback: copy image to clipboard
+        await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })])
+        setFlag(true)
+        setTimeout(() => setFlag(false), 2000)
       }
     } catch (err) {
       if ((err as DOMException).name !== 'AbortError') {
@@ -704,45 +709,18 @@ export default function BotPerformance() {
                   <div className="mb-5">
                     <div className="flex items-center justify-between mb-2">
                       <div className="text-xs text-gray-400 uppercase tracking-wider font-semibold">{t('bots.latestTrade')}</div>
-                      <div className="flex items-center gap-2">
-                        {supportsNativeShare && (
-                          <button
-                            onClick={() => handleNativeShare(latestCardRef, latestClosed)}
-                            className="flex items-center gap-1.5 px-3 py-1 text-xs rounded-lg transition-all border text-gray-400 hover:text-white bg-white/5 hover:bg-white/10 border-white/5"
-                            title={t('bots.shareImage')}
-                          >
-                            <Share2 size={13} />
-                            {t('bots.shareImage')}
-                          </button>
-                        )}
-                        <button
-                          onClick={async () => {
-                            if (!latestCardRef.current) return
-                            try {
-                              const blob = await toBlob(latestCardRef.current, {
-                                pixelRatio: 2,
-                                backgroundColor: theme === 'light' ? '#f8fafc' : '#0b0f19',
-                              })
-                              if (!blob) return
-                              await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })])
-                              setLatestCopied(true)
-                              setTimeout(() => setLatestCopied(false), 2000)
-                            } catch (err) {
-                              console.error('Failed to copy image:', err)
-                              useToastStore.getState().addToast('error', t('common.error'))
-                            }
-                          }}
-                          className={`flex items-center gap-1.5 px-3 py-1 text-xs rounded-lg transition-all border ${
-                            latestCopied
-                              ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20'
-                              : 'text-gray-400 hover:text-white bg-white/5 hover:bg-white/10 border-white/5'
-                          }`}
-                          title={t('bots.copyImage')}
-                        >
-                          <Copy size={13} />
-                          {latestCopied ? t('bots.copied') : t('bots.copyImage')}
-                        </button>
-                      </div>
+                      <button
+                        onClick={() => handleShare(latestCardRef, latestClosed, affiliateLink?.affiliate_url, setLatestCopied)}
+                        className={`flex items-center gap-1.5 px-3 py-1 text-xs rounded-lg transition-all border ${
+                          latestCopied
+                            ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20'
+                            : 'text-gray-400 hover:text-white bg-white/5 hover:bg-white/10 border-white/5'
+                        }`}
+                        title={t('bots.shareImage')}
+                      >
+                        <Share2 size={13} />
+                        {latestCopied ? t('bots.copied') : t('bots.shareImage')}
+                      </button>
                     </div>
                     <div
                       ref={latestCardRef}
@@ -1002,9 +980,9 @@ export default function BotPerformance() {
                                     <button
                                       onClick={() => setSelectedTrade(trade)}
                                       className="p-2 rounded-lg text-gray-400 hover:text-white bg-white/5 hover:bg-white/10 border border-white/5 transition-all"
-                                      title={t('bots.copyImage')}
+                                      title={t('bots.shareImage')}
                                     >
-                                      <Share size={14} />
+                                      <Share2 size={14} />
                                     </button>
                                   </div>
                                 </dl>
@@ -1048,44 +1026,21 @@ export default function BotPerformance() {
                 </span>
               </div>
               <div className="flex items-center gap-2">
-                {supportsNativeShare && (
-                  <button
-                    onClick={() => handleNativeShare(tradeCardRef, selectedTrade)}
-                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg transition-all border text-gray-400 hover:text-white bg-white/5 hover:bg-white/10 border-white/5"
-                    title={t('bots.shareImage')}
-                  >
-                    <Share2 size={14} />
-                    {t('bots.shareImage')}
-                  </button>
-                )}
                 <button
-                  onClick={async () => {
-                    if (!tradeCardRef.current) return
-                    try {
-                      const blob = await toBlob(tradeCardRef.current, {
-                        pixelRatio: 2,
-                        backgroundColor: theme === 'light' ? '#f8fafc' : '#0f1420',
-                      })
-                      if (!blob) return
-                      await navigator.clipboard.write([
-                        new ClipboardItem({ 'image/png': blob }),
-                      ])
-                      setCopied(true)
-                      setTimeout(() => setCopied(false), 2000)
-                    } catch (err) {
-                      console.error('Failed to copy image:', err)
-                      useToastStore.getState().addToast('error', t('common.error'))
-                    }
+                  onClick={() => {
+                    const botEx = compareData.find(b => b.bot_id === selectedBot)?.exchange_type
+                    const aLink = botEx ? affiliateLinks.find(l => l.exchange_type === botEx) : null
+                    handleShare(tradeCardRef, selectedTrade, aLink?.affiliate_url)
                   }}
                   className={`flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg transition-all border ${
                     copied
                       ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20'
                       : 'text-gray-400 hover:text-white bg-white/5 hover:bg-white/10 border-white/5'
                   }`}
-                  title={t('bots.copyImage')}
+                  title={t('bots.shareImage')}
                 >
-                  <Copy size={14} />
-                  {copied ? t('bots.copied') : t('bots.copyImage')}
+                  <Share2 size={14} />
+                  {copied ? t('bots.copied') : t('bots.shareImage')}
                 </button>
                 <button onClick={() => setSelectedTrade(null)} className="p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-white/5 transition-all" aria-label="Close">
                   <X size={20} />
@@ -1094,27 +1049,34 @@ export default function BotPerformance() {
             </div>
 
             {/* Capturable Card Content */}
-            <div ref={tradeCardRef} className="p-7">
-              {/* Exchange + Leverage */}
+            <div ref={tradeCardRef} className="p-5">
+              {/* Header: Exchange logo + Symbol */}
               {(() => {
                 const botEx = compareData.find(b => b.bot_id === selectedBot)?.exchange_type
-                return (botEx || selectedTrade.leverage) ? (
-                  <div className="flex items-center gap-4 mb-5 text-sm text-gray-400">
-                    {botEx && (
-                      <span className="inline-flex items-center gap-1.5">
-                        <ExchangeIcon exchange={botEx} size={16} />
-                        <span className="capitalize text-gray-300">{botEx}</span>
-                      </span>
-                    )}
-                    {selectedTrade.leverage && (
-                      <span>{t('trades.leverage')}: <span className="text-white font-medium">{selectedTrade.leverage}x</span></span>
-                    )}
+                return (
+                  <div className="flex items-center gap-2 mb-1">
+                    {botEx && <ExchangeIcon exchange={botEx} size={18} />}
+                    <span className="text-lg font-bold text-white">{selectedTrade.symbol}</span>
                   </div>
-                ) : null
+                )
               })()}
+              {/* Perp | Side | Leverage */}
+              <div className="flex items-center gap-2 text-sm text-gray-400 mb-4">
+                <span>Perp</span>
+                <span className="text-gray-600">|</span>
+                <span className={selectedTrade.side === 'long' ? 'text-emerald-400 font-medium' : 'text-red-400 font-medium'}>
+                  {selectedTrade.side === 'long' ? '+ LONG' : '- SHORT'}
+                </span>
+                {selectedTrade.leverage && (
+                  <>
+                    <span className="text-gray-600">|</span>
+                    <span className="text-white font-medium">{selectedTrade.leverage}x</span>
+                  </>
+                )}
+              </div>
 
-              <div className="text-center py-6 mb-5 bg-white/[0.02] rounded-xl border border-white/5">
-                <div className="text-xs text-gray-400 uppercase tracking-wider mb-2">{t('bots.result')}</div>
+              {/* PnL - Hero */}
+              <div className="text-center py-5 mb-4">
                 <div className={`text-5xl font-bold tracking-tight ${selectedTrade.pnl_percent >= 0 ? 'text-profit' : 'text-loss'}`}>
                   {formatPnlPercent(selectedTrade.pnl_percent)}
                 </div>
@@ -1129,58 +1091,32 @@ export default function BotPerformance() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3 mb-5">
-                <div className="bg-white/[0.03] rounded-xl p-4 border border-white/5">
-                  <div className="text-xs text-gray-400 mb-1.5">{t('trades.entryPrice')}</div>
+              {/* Entry / Exit Price */}
+              <div className="grid grid-cols-2 gap-3 mb-4">
+                <div>
+                  <div className="text-xs text-gray-400 mb-1">{t('bots.entryPrice')}</div>
                   <div className="text-white font-semibold text-lg">${selectedTrade.entry_price.toLocaleString()}</div>
                 </div>
-                <div className="bg-white/[0.03] rounded-xl p-4 border border-white/5">
-                  <div className="text-xs text-gray-400 mb-1.5">{t('trades.exitPrice')}</div>
+                <div>
+                  <div className="text-xs text-gray-400 mb-1">{t('bots.exitPrice')}</div>
                   <div className="text-white font-semibold text-lg">
                     {selectedTrade.exit_price ? `$${selectedTrade.exit_price.toLocaleString()}` : '--'}
                   </div>
                 </div>
               </div>
 
-              {selectedTrade.status === 'open' && selectedTrade.trailing_stop_active && selectedTrade.trailing_stop_price != null && (
-                <div className="flex items-center justify-between mb-5 bg-emerald-500/5 rounded-xl p-4 border border-emerald-500/10">
-                  <span className="text-sm text-gray-400 flex items-center gap-2">
-                    <ShieldCheck size={16} className="text-emerald-400" />
-                    {t('trades.trailingStop')}
-                  </span>
-                  <span className="font-bold text-lg text-emerald-400">
-                    ${selectedTrade.trailing_stop_price.toLocaleString()} ({selectedTrade.trailing_stop_distance_pct?.toFixed(2)}%)
-                  </span>
-                </div>
-              )}
-
-              {selectedTrade.reason && (
-                <div className="mb-5">
-                  <div className="text-xs text-gray-400 uppercase tracking-wider mb-2">{t('bots.reasoning')}</div>
-                  <p className="text-sm text-gray-300 leading-relaxed bg-white/[0.03] rounded-xl p-4 border border-white/5 max-h-60 overflow-y-auto">
-                    {selectedTrade.reason}
-                  </p>
-                </div>
-              )}
-
-              <div className="flex items-center justify-between text-sm text-gray-500 pt-4 border-t border-white/5">
-                <span>{formatDateTime(selectedTrade.entry_time)}</span>
-                {selectedTrade.status === 'open'
-                  ? <span className="text-amber-400 font-medium">{t('bots.pending')}</span>
-                  : <ExitReasonBadge reason={selectedTrade.exit_reason} compact />
-                }
+              {/* Footer: Date + Branding + Affiliate */}
+              <div className="pt-3 border-t border-white/5">
+                <div className="text-sm text-gray-500">{formatDate(selectedTrade.entry_time)}</div>
+                <div className="text-xs text-gray-500 mt-1">Edge Bots by Trading Department</div>
+                {(() => {
+                  const botEx = compareData.find(b => b.bot_id === selectedBot)?.exchange_type
+                  const aLink = botEx ? affiliateLinks.find(l => l.exchange_type === botEx) : null
+                  return aLink ? (
+                    <div className="text-xs text-primary-400 font-medium mt-0.5">{aLink.affiliate_url}</div>
+                  ) : null
+                })()}
               </div>
-
-              {(() => {
-                const botEx = compareData.find(b => b.bot_id === selectedBot)?.exchange_type
-                const aLink = botEx ? affiliateLinks.find(l => l.exchange_type === botEx) : null
-                return aLink ? (
-                  <div className="mt-3 pt-3 border-t border-white/5">
-                    <div className="text-xs text-gray-500 mb-1">{aLink.label || t('bots.affiliateLink')}</div>
-                    <div className="text-xs text-primary-400 font-medium">{aLink.affiliate_url}</div>
-                  </div>
-                ) : null
-              })()}
             </div>
           </div>
         </div>

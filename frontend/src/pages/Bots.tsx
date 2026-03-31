@@ -34,13 +34,11 @@ import {
   MoreVertical,
   XCircle,
   Shield,
-  ShieldCheck,
   ChevronRight,
-  Share,
   Share2,
 } from 'lucide-react'
 import GuidedTour, { TourHelpButton, type TourStep } from '../components/ui/GuidedTour'
-import { formatDate, formatDateTime, formatTime } from '../utils/dateUtils'
+import { formatDate, formatTime } from '../utils/dateUtils'
 import MobileTradeCard from '../components/ui/MobileTradeCard'
 import SizeValue from '../components/ui/SizeValue'
 import useIsMobile from '../hooks/useIsMobile'
@@ -192,30 +190,23 @@ function TradeDetailModal({ trade, onClose, t, affiliateLink }: { trade: BotTrad
     })
   }
 
-  const handleCopyImage = async () => {
-    try {
-      const blob = await captureBlob()
-      if (!blob) return
-      await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })])
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
-    } catch (err) {
-      console.error('Failed to copy image:', err)
-      useToastStore.getState().addToast('error', t('common.error'))
-    }
-  }
-
-  const handleNativeShare = async () => {
+  const handleShare = async () => {
     try {
       const blob = await captureBlob()
       if (!blob) return
       const file = new File([blob], 'trade.png', { type: 'image/png' })
+      const pnlStr = trade.pnl_percent >= 0 ? `+${trade.pnl_percent.toFixed(2)}%` : `${trade.pnl_percent.toFixed(2)}%`
       if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
-        const pnlStr = trade.pnl_percent >= 0 ? `+${trade.pnl_percent.toFixed(2)}%` : `${trade.pnl_percent.toFixed(2)}%`
         await navigator.share({
           title: `${trade.symbol} ${trade.side.toUpperCase()} ${pnlStr}`,
+          text: affiliateLink?.affiliate_url || 'Edge Bots by Trading Department',
           files: [file],
         })
+      } else {
+        // Desktop fallback: copy image to clipboard
+        await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })])
+        setCopied(true)
+        setTimeout(() => setCopied(false), 2000)
       }
     } catch (err) {
       if ((err as DOMException).name !== 'AbortError') {
@@ -224,8 +215,6 @@ function TradeDetailModal({ trade, onClose, t, affiliateLink }: { trade: BotTrad
       }
     }
   }
-
-  const supportsNativeShare = typeof navigator !== 'undefined' && !!navigator.share && !!navigator.canShare
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 backdrop-blur-md" onClick={onClose} role="dialog" aria-modal="true" onKeyDown={(e) => { if (e.key === 'Escape') onClose() }}>
@@ -252,27 +241,17 @@ function TradeDetailModal({ trade, onClose, t, affiliateLink }: { trade: BotTrad
             </span>
           </div>
           <div className="flex items-center gap-2">
-            {supportsNativeShare && (
-              <button
-                onClick={handleNativeShare}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg transition-all border text-gray-400 hover:text-white bg-white/5 hover:bg-white/10 border-white/5"
-                title={t('bots.shareImage')}
-              >
-                <Share2 size={13} />
-                {t('bots.shareImage')}
-              </button>
-            )}
             <button
-              onClick={handleCopyImage}
+              onClick={handleShare}
               className={`flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg transition-all border ${
                 copied
                   ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20'
                   : 'text-gray-400 hover:text-white bg-white/5 hover:bg-white/10 border-white/5'
               }`}
-              title={t('bots.copyImage')}
+              title={t('bots.shareImage')}
             >
-              <Copy size={13} />
-              {copied ? t('bots.copied') : t('bots.copyImage')}
+              <Share2 size={13} />
+              {copied ? t('bots.copied') : t('bots.shareImage')}
             </button>
             <button onClick={onClose} className="p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-white/5 transition-all" aria-label="Close">
               <X size={20} />
@@ -281,25 +260,29 @@ function TradeDetailModal({ trade, onClose, t, affiliateLink }: { trade: BotTrad
         </div>
 
         {/* Capturable Card Content */}
-        <div ref={copyRef} className="p-7">
-        {/* Exchange + Leverage */}
-        {(trade.exchange || trade.leverage) && (
-          <div className="flex items-center gap-4 mb-5 text-sm text-gray-400">
-            {trade.exchange && (
-              <span className="inline-flex items-center gap-1.5">
-                <ExchangeIcon exchange={trade.exchange} size={16} />
-                <span className="capitalize text-gray-300">{trade.exchange}</span>
-              </span>
-            )}
-            {trade.leverage && (
-              <span>{t('trades.leverage')}: <span className="text-white font-medium">{trade.leverage}x</span></span>
-            )}
-          </div>
-        )}
+        <div ref={copyRef} className="p-5">
+        {/* Header: Exchange logo + Symbol */}
+        <div className="flex items-center gap-2 mb-1">
+          {trade.exchange && <ExchangeIcon exchange={trade.exchange} size={18} />}
+          <span className="text-lg font-bold text-white">{trade.symbol}</span>
+        </div>
+        {/* Perp | Side | Leverage */}
+        <div className="flex items-center gap-2 text-sm text-gray-400 mb-4">
+          <span>Perp</span>
+          <span className="text-gray-600">|</span>
+          <span className={trade.side === 'long' ? 'text-emerald-400 font-medium' : 'text-red-400 font-medium'}>
+            {trade.side === 'long' ? '+ LONG' : '- SHORT'}
+          </span>
+          {trade.leverage && (
+            <>
+              <span className="text-gray-600">|</span>
+              <span className="text-white font-medium">{trade.leverage}x</span>
+            </>
+          )}
+        </div>
 
-        {/* Result - Hero */}
-        <div className="text-center py-6 mb-5 bg-white/[0.02] rounded-xl border border-white/5">
-          <div className="text-xs text-gray-400 uppercase tracking-wider mb-2">{t('bots.result')}</div>
+        {/* PnL - Hero */}
+        <div className="text-center py-5 mb-4">
           <div className={`text-5xl font-bold tracking-tight ${trade.pnl_percent >= 0 ? 'text-profit' : 'text-loss'}`}>
             {formatPnlPercent(trade.pnl_percent)}
           </div>
@@ -315,57 +298,27 @@ function TradeDetailModal({ trade, onClose, t, affiliateLink }: { trade: BotTrad
         </div>
 
         {/* Entry / Exit Price */}
-        <div className="grid grid-cols-2 gap-3 mb-5">
-          <div className="bg-white/[0.03] rounded-xl p-4 border border-white/5">
-            <div className="text-xs text-gray-400 mb-1.5">{t('bots.entryPrice')}</div>
+        <div className="grid grid-cols-2 gap-3 mb-4">
+          <div>
+            <div className="text-xs text-gray-400 mb-1">{t('bots.entryPrice')}</div>
             <div className="text-white font-semibold text-lg">${trade.entry_price.toLocaleString()}</div>
           </div>
-          <div className="bg-white/[0.03] rounded-xl p-4 border border-white/5">
-            <div className="text-xs text-gray-400 mb-1.5">{t('bots.exitPrice')}</div>
+          <div>
+            <div className="text-xs text-gray-400 mb-1">{t('bots.exitPrice')}</div>
             <div className="text-white font-semibold text-lg">
               {trade.exit_price ? `$${trade.exit_price.toLocaleString()}` : '--'}
             </div>
           </div>
         </div>
 
-        {/* Trailing Stop */}
-        {trade.status === 'open' && trade.trailing_stop_active && trade.trailing_stop_price != null && (
-          <div className="flex items-center justify-between mb-5 bg-emerald-500/5 rounded-xl p-4 border border-emerald-500/10">
-            <span className="text-sm text-gray-400 flex items-center gap-2">
-              <ShieldCheck size={16} className="text-emerald-400" />
-              {t('trades.trailingStop')}
-            </span>
-            <span className="font-bold text-lg text-emerald-400">
-              ${trade.trailing_stop_price.toLocaleString()} ({trade.trailing_stop_distance_pct?.toFixed(2)}%)
-            </span>
-          </div>
-        )}
-
-        {/* Reasoning */}
-        {trade.reason && (
-          <div className="mb-5">
-            <div className="text-xs text-gray-400 uppercase tracking-wider mb-2">{t('bots.reasoning')}</div>
-            <p className="text-sm text-gray-300 leading-relaxed bg-white/[0.03] rounded-xl p-4 border border-white/5 max-h-60 overflow-y-auto">
-              {trade.reason}
-            </p>
-          </div>
-        )}
-
-        {/* Footer info */}
-        <div className="flex items-center justify-between text-sm text-gray-500 pt-4 border-t border-white/5">
-          <span>{formatDateTime(trade.entry_time)}</span>
-          {trade.status === 'open'
-            ? <span className="text-amber-400 font-medium">{t('bots.pending')}</span>
-            : <ExitReasonBadge reason={trade.exit_reason} compact />
-          }
-        </div>
-
+        {/* Footer: Date + Branding + Affiliate */}
+        <div className="pt-3 border-t border-white/5">
+          <div className="text-sm text-gray-500">{formatDate(trade.entry_time)}</div>
+          <div className="text-xs text-gray-500 mt-1">Edge Bots by Trading Department</div>
           {affiliateLink && (
-            <div className="mt-3 pt-3 border-t border-white/5">
-              <div className="text-xs text-gray-500 mb-1">{affiliateLink.label || t('bots.affiliateLink')}</div>
-              <div className="text-xs text-primary-400 font-medium">{affiliateLink.affiliate_url}</div>
-            </div>
+            <div className="text-xs text-primary-400 font-medium mt-0.5">{affiliateLink.affiliate_url}</div>
           )}
+        </div>
         </div>{/* end capturable content */}
       </div>
     </div>
@@ -423,36 +376,25 @@ function BotTradeHistoryModal({ bot, onClose, t }: { bot: BotStatus; onClose: ()
     })
   }
 
-  const handleCopyImage = async () => {
-    try {
-      const blob = await captureCardBlob()
-      if (!blob) return
-      await navigator.clipboard.write([
-        new ClipboardItem({ 'image/png': blob }),
-      ])
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
-    } catch (err) {
-      console.error('Failed to copy image:', err)
-      useToastStore.getState().addToast('error', t('common.error'))
-    }
-  }
-
-  const supportsNativeShare = typeof navigator !== 'undefined' && !!navigator.share && !!navigator.canShare
-
-  const handleNativeShare = async () => {
+  const handleShareLatest = async () => {
     const trade = latestClosed
     if (!trade) return
     try {
       const blob = await captureCardBlob()
       if (!blob) return
       const file = new File([blob], 'trade.png', { type: 'image/png' })
+      const pnlStr = trade.pnl_percent >= 0 ? `+${trade.pnl_percent.toFixed(2)}%` : `${trade.pnl_percent.toFixed(2)}%`
       if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
-        const pnlStr = trade.pnl_percent >= 0 ? `+${trade.pnl_percent.toFixed(2)}%` : `${trade.pnl_percent.toFixed(2)}%`
         await navigator.share({
           title: `${trade.symbol} ${trade.side.toUpperCase()} ${pnlStr}`,
+          text: affiliateLink?.affiliate_url || 'Edge Bots by Trading Department',
           files: [file],
         })
+      } else {
+        // Desktop fallback: copy image to clipboard
+        await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })])
+        setCopied(true)
+        setTimeout(() => setCopied(false), 2000)
       }
     } catch (err) {
       if ((err as DOMException).name !== 'AbortError') {
@@ -567,30 +509,18 @@ function BotTradeHistoryModal({ bot, onClose, t }: { bot: BotStatus; onClose: ()
                 <div className="mx-3 mt-4 mb-2">
                   <div className="flex items-center justify-between mb-2">
                     <div className="text-xs text-gray-400 uppercase tracking-wider font-semibold">{t('bots.latestTrade')}</div>
-                    <div className="flex items-center gap-2">
-                      {supportsNativeShare && (
-                        <button
-                          onClick={(e) => { e.stopPropagation(); handleNativeShare() }}
-                          className="flex items-center gap-1.5 px-3 py-1 text-xs rounded-lg transition-all border text-gray-400 hover:text-white bg-white/5 hover:bg-white/10 border-white/5"
-                          title={t('bots.shareImage')}
-                        >
-                          <Share2 size={13} />
-                          {t('bots.shareImage')}
-                        </button>
-                      )}
-                      <button
-                        onClick={(e) => { e.stopPropagation(); handleCopyImage() }}
-                        className={`flex items-center gap-1.5 px-3 py-1 text-xs rounded-lg transition-all border ${
-                          copied
-                            ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20'
-                            : 'text-gray-400 hover:text-white bg-white/5 hover:bg-white/10 border-white/5'
-                        }`}
-                        title={t('bots.copyImage')}
-                      >
-                        <Copy size={13} />
-                        {copied ? t('bots.copied') : t('bots.copyImage')}
-                      </button>
-                    </div>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); handleShareLatest() }}
+                      className={`flex items-center gap-1.5 px-3 py-1 text-xs rounded-lg transition-all border ${
+                        copied
+                          ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20'
+                          : 'text-gray-400 hover:text-white bg-white/5 hover:bg-white/10 border-white/5'
+                      }`}
+                      title={t('bots.shareImage')}
+                    >
+                      <Share2 size={13} />
+                      {copied ? t('bots.copied') : t('bots.shareImage')}
+                    </button>
                   </div>
                   {/* Visible card — uses MobileTradeCard style on mobile */}
                   <div ref={latestCardRef}>
@@ -608,22 +538,33 @@ function BotTradeHistoryModal({ bot, onClose, t }: { bot: BotStatus; onClose: ()
                     />
                   </div>
 
-                  {/* Hidden compact card — only used for "Bild kopieren" image export */}
+                  {/* Hidden compact card — used for share image export */}
                   <div className="absolute -left-[9999px] pointer-events-none" aria-hidden="true">
                     <div
                       ref={copyCardRef}
-                      className="bg-[#0f1420] rounded-2xl p-7 w-[420px] border border-white/10 shadow-2xl"
+                      className="bg-[#0f1420] rounded-2xl p-5 w-[420px] border border-white/10 shadow-2xl"
                     >
-                      <div className="flex items-center gap-3 mb-5">
-                        <h3 className="text-xl font-bold text-white">{latestClosed.symbol}</h3>
-                        <span className={`px-3 py-1 rounded-lg text-xs font-bold ${
-                          latestClosed.side === 'long' ? 'bg-emerald-500/15 text-profit border border-emerald-500/20' : 'bg-red-500/15 text-loss border border-red-500/20'
-                        }`}>
+                      {/* Header: Exchange logo + Symbol */}
+                      <div className="flex items-center gap-2 mb-1">
+                        <ExchangeIcon exchange={bot.exchange_type} size={18} />
+                        <span className="text-lg font-bold text-white">{latestClosed.symbol}</span>
+                      </div>
+                      {/* Perp | Side | Leverage */}
+                      <div className="flex items-center gap-2 text-sm text-gray-400 mb-4">
+                        <span>Perp</span>
+                        <span className="text-gray-600">|</span>
+                        <span className={latestClosed.side === 'long' ? 'text-emerald-400 font-medium' : 'text-red-400 font-medium'}>
                           {latestClosed.side === 'long' ? '+ LONG' : '- SHORT'}
                         </span>
+                        {latestClosed.leverage && (
+                          <>
+                            <span className="text-gray-600">|</span>
+                            <span className="text-white font-medium">{latestClosed.leverage}x</span>
+                          </>
+                        )}
                       </div>
-                      <div className="text-center py-6 mb-5 bg-white/[0.02] rounded-xl border border-white/5">
-                        <div className="text-xs text-gray-400 uppercase tracking-wider mb-2">{t('bots.result')}</div>
+                      {/* PnL - Hero */}
+                      <div className="text-center py-5 mb-4">
                         <div className={`text-5xl font-bold tracking-tight ${latestClosed.pnl_percent >= 0 ? 'text-profit' : 'text-loss'}`}>
                           {formatPnlPercent(latestClosed.pnl_percent)}
                         </div>
@@ -632,32 +573,25 @@ function BotTradeHistoryModal({ bot, onClose, t }: { bot: BotStatus; onClose: ()
                             className={`text-lg font-semibold ${latestClosed.pnl >= 0 ? 'text-profit/70' : 'text-loss/70'}`} />
                         </div>
                       </div>
-                      <div className="grid grid-cols-2 gap-3 mb-5">
-                        <div className="bg-white/[0.03] rounded-xl p-4 border border-white/5">
-                          <div className="text-xs text-gray-400 mb-1.5">{t('bots.entryPrice')}</div>
+                      {/* Entry / Exit */}
+                      <div className="grid grid-cols-2 gap-3 mb-4">
+                        <div>
+                          <div className="text-xs text-gray-400 mb-1">{t('bots.entryPrice')}</div>
                           <div className="text-white font-semibold text-lg">${latestClosed.entry_price.toLocaleString()}</div>
                         </div>
-                        <div className="bg-white/[0.03] rounded-xl p-4 border border-white/5">
-                          <div className="text-xs text-gray-400 mb-1.5">{t('bots.exitPrice')}</div>
+                        <div>
+                          <div className="text-xs text-gray-400 mb-1">{t('bots.exitPrice')}</div>
                           <div className="text-white font-semibold text-lg">{latestClosed.exit_price ? `$${latestClosed.exit_price.toLocaleString()}` : '--'}</div>
                         </div>
                       </div>
-                      {latestClosed.reason && (
-                        <div className="mb-5">
-                          <div className="text-xs text-gray-400 uppercase tracking-wider mb-2">{t('bots.reasoning')}</div>
-                          <p className="text-sm text-gray-300 leading-relaxed bg-white/[0.03] rounded-xl p-4 border border-white/5">{latestClosed.reason}</p>
-                        </div>
-                      )}
-                      <div className="flex items-center justify-between text-sm text-gray-500 pt-4 border-t border-white/5">
-                        <span>{formatDateTime(latestClosed.entry_time)}</span>
-                        <ExitReasonBadge reason={latestClosed.exit_reason} compact />
+                      {/* Footer: Date + Branding + Affiliate */}
+                      <div className="pt-3 border-t border-white/5">
+                        <div className="text-sm text-gray-500">{formatDate(latestClosed.entry_time)}</div>
+                        <div className="text-xs text-gray-500 mt-1">Edge Bots by Trading Department</div>
+                        {affiliateLink && (
+                          <div className="text-xs text-primary-400 font-medium mt-0.5">{affiliateLink.affiliate_url}</div>
+                        )}
                       </div>
-                      {affiliateLink && (
-                        <div className="mt-3 pt-3 border-t border-white/5">
-                          <div className="text-xs text-gray-500 mb-1">{affiliateLink.label || t('bots.affiliateLink')}</div>
-                          <div className="text-xs text-primary-400 font-medium">{affiliateLink.affiliate_url}</div>
-                        </div>
-                      )}
                     </div>
                   </div>
                 </div>
@@ -799,10 +733,10 @@ function BotTradeHistoryModal({ bot, onClose, t }: { bot: BotStatus; onClose: ()
                                     <button
                                       onClick={() => setSelectedTrade({ ...trade, exchange: bot.exchange_type })}
                                       className="p-2 rounded-lg text-gray-400 hover:text-white bg-white/5 hover:bg-white/10 border border-white/5 transition-all"
-                                      title={t('bots.copyImage')}
+                                      title={t('bots.shareImage')}
                                       aria-label="Share trade"
                                     >
-                                      <Share size={14} />
+                                      <Share2 size={14} />
                                     </button>
                                   </div>
                                 </dl>

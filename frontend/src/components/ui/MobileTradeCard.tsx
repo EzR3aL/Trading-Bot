@@ -1,5 +1,5 @@
 import { memo } from 'react'
-import { Share } from 'lucide-react'
+import { Share2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { ExchangeIcon } from './ExchangeLogo'
 import ExitReasonBadge from './ExitReasonBadge'
@@ -64,9 +64,9 @@ function MobileTradeCardInner({ trade, extraDetails, onShare }: MobileTradeCardP
         <button
           onClick={(e) => { e.stopPropagation(); onShare() }}
           className="ml-auto p-1 text-gray-500 hover:text-white transition-colors rounded shrink-0"
-          title={t('bots.copyImage')}
+          title={t('bots.shareImage')}
         >
-          <Share size={13} />
+          <Share2 size={13} />
         </button>
       )}
     </>
