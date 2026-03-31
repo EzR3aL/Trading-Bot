@@ -436,10 +436,10 @@ export default function BotPerformance() {
   const [selectedTrade, setSelectedTrade] = useState<BotDetailStats['recent_trades'][0] | null>(null)
   const [expandedTradeId, setExpandedTradeId] = useState<number | null>(null)
   const [copied, setCopied] = useState(false)
-  const [latestCopied, setLatestCopied] = useState(false)
   const tradeCardRef = useRef<HTMLDivElement>(null)
   const swipeTradeModal = useSwipeToClose({ onClose: () => setSelectedTrade(null), enabled: isMobile && selectedTrade !== null })
   const latestCardRef = useRef<HTMLDivElement>(null)
+  const mobileShareRefs = useRef<Map<number, HTMLDivElement>>(new Map())
   const [affiliateLinks, setAffiliateLinks] = useState<{ exchange_type: string; affiliate_url: string; label: string | null }[]>([])
 
   const handleShare = async (ref: React.RefObject<HTMLDivElement | null>, trade: { symbol: string; side: string; pnl_percent: number }, affiliateUrl?: string, copiedSetter?: (v: boolean) => void) => {
@@ -472,6 +472,37 @@ export default function BotPerformance() {
       }
     }
   }
+
+  const handleMobileDirectShare = useCallback(async (trade: BotDetailStats['recent_trades'][0]) => {
+    const ref = mobileShareRefs.current.get(trade.id)
+    if (!ref) { setSelectedTrade(trade); return }
+    try {
+      const blob = await toBlob(ref, {
+        pixelRatio: 2,
+        backgroundColor: theme === 'light' ? '#f8fafc' : '#0b0f19',
+      })
+      if (!blob) { setSelectedTrade(trade); return }
+      const file = new File([blob], 'trade.png', { type: 'image/png' })
+      const pnlStr = trade.pnl_percent >= 0 ? `+${trade.pnl_percent.toFixed(2)}%` : `${trade.pnl_percent.toFixed(2)}%`
+      if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+        const botEx = compareData.find(b => b.bot_id === selectedBot)?.exchange_type
+        const aLink = botEx ? affiliateLinks.find(l => l.exchange_type === botEx) : null
+        await navigator.share({
+          title: `${trade.symbol} ${trade.side.toUpperCase()} ${pnlStr}`,
+          text: aLink?.affiliate_url || 'Edge Bots by Trading Department',
+          files: [file],
+        })
+      } else {
+        // Fallback: open modal
+        setSelectedTrade(trade)
+      }
+    } catch (err) {
+      if ((err as DOMException).name !== 'AbortError') {
+        console.error('Failed to share image:', err)
+        useToastStore.getState().addToast('error', t('common.error'))
+      }
+    }
+  }, [theme, compareData, selectedBot, affiliateLinks, t])
 
   const loadCompareData = useCallback(async () => {
     const dp = demoFilter === 'demo' ? '&demo_mode=true' : demoFilter === 'live' ? '&demo_mode=false' : ''
@@ -707,20 +738,8 @@ export default function BotPerformance() {
                 if (!latestClosed) return null
                 return (
                   <div className="mb-5">
-                    <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center mb-2">
                       <div className="text-xs text-gray-400 uppercase tracking-wider font-semibold">{t('bots.latestTrade')}</div>
-                      <button
-                        onClick={() => handleShare(latestCardRef, latestClosed, affiliateLink?.affiliate_url, setLatestCopied)}
-                        className={`flex items-center gap-1.5 px-3 py-1 text-xs rounded-lg transition-all border ${
-                          latestCopied
-                            ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20'
-                            : 'text-gray-400 hover:text-white bg-white/5 hover:bg-white/10 border-white/5'
-                        }`}
-                        title={t('bots.shareImage')}
-                      >
-                        <Share2 size={13} />
-                        {latestCopied ? t('bots.copied') : t('bots.shareImage')}
-                      </button>
                     </div>
                     <div
                       ref={latestCardRef}
@@ -730,11 +749,14 @@ export default function BotPerformance() {
                       <div className="flex items-center justify-between mb-3">
                         <div className="flex items-center gap-3">
                           <span className="text-white font-bold text-lg">{latestClosed.symbol}</span>
-                          <span className={`px-2.5 py-0.5 rounded-lg text-xs font-bold ${
+                          <span className={`px-2 py-0.5 rounded-lg text-sm font-bold ${
                             latestClosed.side === 'long' ? 'bg-emerald-500/15 text-profit border border-emerald-500/20' : 'bg-red-500/15 text-loss border border-red-500/20'
                           }`}>
                             {latestClosed.side === 'long' ? '+ LONG' : '- SHORT'}
                           </span>
+                          {latestClosed.leverage && (
+                            <span className="text-sm font-semibold text-white bg-white/10 px-2 py-0.5 rounded-lg">{latestClosed.leverage}x</span>
+                          )}
                         </div>
                         <span className="text-xs text-gray-500" title={formatTime(latestClosed.entry_time)}>
                           {formatDate(latestClosed.entry_time)}
@@ -767,12 +789,15 @@ export default function BotPerformance() {
                           </div>
                         </div>
                       </div>
-                      {affiliateLink && (
-                        <div className="mt-3 pt-2 border-t border-white/5 flex items-center justify-between">
-                          <span className="text-xs text-gray-500">{affiliateLink.label || t('bots.affiliateLink')}</span>
-                          <span className="text-xs text-primary-400 font-medium">{affiliateLink.affiliate_url}</span>
-                        </div>
-                      )}
+                      <div className="mt-3 pt-2 border-t border-white/5">
+                        <div className="text-xs text-gray-500">Edge Bots by Trading Department</div>
+                        {affiliateLink && (
+                          <div className="flex items-center justify-between mt-0.5">
+                            <span className="text-xs text-gray-500">{affiliateLink.label || t('bots.affiliateLink')}</span>
+                            <span className="text-xs text-primary-400 font-medium">{affiliateLink.affiliate_url}</span>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
                 )
@@ -832,24 +857,86 @@ export default function BotPerformance() {
                 <div className="space-y-2">
                   {(() => {
                     const botExchange = compareData.find(b => b.bot_id === selectedBot)?.exchange_type || ''
-                    return botDetail.recent_trades.map((trade) => (
-                      <MobileTradeCard
-                        key={trade.id}
-                        trade={{
-                          ...trade,
-                          entry_time: trade.entry_time || '',
-                          pnl_percent: trade.pnl_percent,
-                          fees: trade.fees,
-                          funding_paid: trade.funding_paid,
-                          bot_exchange: botExchange,
-                          exit_reason: trade.exit_reason,
-                        }}
-                        extraDetails={[
-                          ...(trade.reason ? [{ label: t('bots.reasoning'), value: trade.reason }] : []),
-                        ]}
-                        onShare={() => setSelectedTrade(trade)}
-                      />
-                    ))
+                    const affiliateLink = affiliateLinks.find(l => l.exchange_type === botExchange)
+                    return (
+                      <>
+                        {botDetail.recent_trades.map((trade) => (
+                          <MobileTradeCard
+                            key={trade.id}
+                            trade={{
+                              ...trade,
+                              entry_time: trade.entry_time || '',
+                              pnl_percent: trade.pnl_percent,
+                              fees: trade.fees,
+                              funding_paid: trade.funding_paid,
+                              bot_exchange: botExchange,
+                              exit_reason: trade.exit_reason,
+                            }}
+                            extraDetails={[
+                              ...(trade.reason ? [{ label: t('bots.reasoning'), value: trade.reason }] : []),
+                            ]}
+                            onShare={() => handleMobileDirectShare(trade)}
+                          />
+                        ))}
+                        {/* Hidden capture divs for mobile direct share */}
+                        <div className="absolute -left-[9999px] pointer-events-none" aria-hidden="true">
+                          {botDetail.recent_trades.filter(tr => tr.status === 'closed').map((trade) => (
+                            <div
+                              key={trade.id}
+                              ref={(el) => { if (el) mobileShareRefs.current.set(trade.id, el); else mobileShareRefs.current.delete(trade.id) }}
+                              className="bg-[#0f1420] rounded-2xl p-5 w-[420px] border border-white/10 shadow-2xl"
+                            >
+                              <div className="flex items-center gap-2 mb-1">
+                                <ExchangeIcon exchange={botExchange} size={18} />
+                                <span className="text-lg font-bold text-white">{trade.symbol}</span>
+                              </div>
+                              <div className="flex items-center gap-2 text-sm text-gray-400 mb-4">
+                                <span>Perp</span>
+                                <span className="text-gray-600">|</span>
+                                <span className={trade.side === 'long' ? 'text-emerald-400 font-medium' : 'text-red-400 font-medium'}>
+                                  {trade.side === 'long' ? '+ LONG' : '- SHORT'}
+                                </span>
+                                {trade.leverage && (
+                                  <>
+                                    <span className="text-gray-600">|</span>
+                                    <span className="text-white font-medium">{trade.leverage}x</span>
+                                  </>
+                                )}
+                              </div>
+                              <div className="text-center py-5 mb-4">
+                                <div className={`text-5xl font-bold tracking-tight ${trade.pnl_percent >= 0 ? 'text-profit' : 'text-loss'}`}>
+                                  {formatPnlPercent(trade.pnl_percent)}
+                                </div>
+                                <div className={`text-lg font-semibold mt-1 ${trade.pnl >= 0 ? 'text-profit/70' : 'text-loss/70'}`}>
+                                  <PnlCell pnl={trade.pnl} fees={trade.fees ?? 0} fundingPaid={trade.funding_paid ?? 0} status={trade.status}
+                                    className={`text-lg font-semibold ${trade.pnl >= 0 ? 'text-profit/70' : 'text-loss/70'}`} />
+                                </div>
+                              </div>
+                              <div className="grid grid-cols-2 gap-4 max-w-xs mx-auto mb-4">
+                                <div className="text-center">
+                                  <div className="text-xs text-gray-400 mb-1">{t('bots.entryPrice')}</div>
+                                  <div className="text-white font-semibold text-lg">${trade.entry_price.toLocaleString()}</div>
+                                </div>
+                                <div className="text-center">
+                                  <div className="text-xs text-gray-400 mb-1">{t('bots.exitPrice')}</div>
+                                  <div className="text-white font-semibold text-lg">{trade.exit_price ? `$${trade.exit_price.toLocaleString()}` : '--'}</div>
+                                </div>
+                              </div>
+                              <div className="pt-3 border-t border-white/5">
+                                <div className="text-sm text-gray-500">{formatDate(trade.entry_time)}</div>
+                                <div className="text-xs text-gray-500 mt-1">Edge Bots by Trading Department</div>
+                                {affiliateLink && (
+                                  <>
+                                    {affiliateLink.label && <div className="text-xs text-gray-400 mt-0.5">{affiliateLink.label}</div>}
+                                    <div className="text-xs text-primary-400 font-medium mt-0.5">{affiliateLink.affiliate_url}</div>
+                                  </>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </>
+                    )
                   })()}
                 </div>
               ) : (
@@ -1113,7 +1200,10 @@ export default function BotPerformance() {
                   const botEx = compareData.find(b => b.bot_id === selectedBot)?.exchange_type
                   const aLink = botEx ? affiliateLinks.find(l => l.exchange_type === botEx) : null
                   return aLink ? (
-                    <div className="text-xs text-primary-400 font-medium mt-0.5">{aLink.affiliate_url}</div>
+                    <>
+                      {aLink.label && <div className="text-xs text-gray-400 mt-0.5">{aLink.label}</div>}
+                      <div className="text-xs text-primary-400 font-medium mt-0.5">{aLink.affiliate_url}</div>
+                    </>
                   ) : null
                 })()}
               </div>

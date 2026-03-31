@@ -316,7 +316,10 @@ function TradeDetailModal({ trade, onClose, t, affiliateLink }: { trade: BotTrad
           <div className="text-sm text-gray-500">{formatDate(trade.entry_time)}</div>
           <div className="text-xs text-gray-500 mt-1">Edge Bots by Trading Department</div>
           {affiliateLink && (
-            <div className="text-xs text-primary-400 font-medium mt-0.5">{affiliateLink.affiliate_url}</div>
+            <>
+              {affiliateLink.label && <div className="text-xs text-gray-400 mt-0.5">{affiliateLink.label}</div>}
+              <div className="text-xs text-primary-400 font-medium mt-0.5">{affiliateLink.affiliate_url}</div>
+            </>
           )}
         </div>
         </div>{/* end capturable content */}
@@ -341,6 +344,7 @@ function BotTradeHistoryModal({ bot, onClose, t }: { bot: BotStatus; onClose: ()
   const [affiliateLink, setAffiliateLink] = useState<AffiliateLink | null>(null)
   const latestCardRef = useRef<HTMLDivElement>(null)
   const copyCardRef = useRef<HTMLDivElement>(null)
+  const mobileShareRefs = useRef<Map<number, HTMLDivElement>>(new Map())
   const theme = useThemeStore((s) => s.theme)
   const isMobile = useIsMobile()
   const swipe = useSwipeToClose({ onClose, enabled: isMobile })
@@ -366,22 +370,15 @@ function BotTradeHistoryModal({ bot, onClose, t }: { bot: BotStatus; onClose: ()
     load()
   }, [bot.bot_config_id, bot.exchange_type])
 
-  const [copied, setCopied] = useState(false)
-
-  const captureCardBlob = async () => {
-    if (!copyCardRef.current) return null
-    return toBlob(copyCardRef.current, {
-      pixelRatio: 2,
-      backgroundColor: theme === 'light' ? '#f8fafc' : '#0b0f19',
-    })
-  }
-
-  const handleShareLatest = async () => {
-    const trade = latestClosed
-    if (!trade) return
+  const handleMobileDirectShare = async (trade: BotTrade) => {
+    const ref = mobileShareRefs.current.get(trade.id)
+    if (!ref) { setSelectedTrade(trade); return }
     try {
-      const blob = await captureCardBlob()
-      if (!blob) return
+      const blob = await toBlob(ref, {
+        pixelRatio: 2,
+        backgroundColor: theme === 'light' ? '#f8fafc' : '#0b0f19',
+      })
+      if (!blob) { setSelectedTrade(trade); return }
       const file = new File([blob], 'trade.png', { type: 'image/png' })
       const pnlStr = trade.pnl_percent >= 0 ? `+${trade.pnl_percent.toFixed(2)}%` : `${trade.pnl_percent.toFixed(2)}%`
       if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
@@ -391,10 +388,8 @@ function BotTradeHistoryModal({ bot, onClose, t }: { bot: BotStatus; onClose: ()
           files: [file],
         })
       } else {
-        // Desktop fallback: copy image to clipboard
-        await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })])
-        setCopied(true)
-        setTimeout(() => setCopied(false), 2000)
+        // Fallback: open modal
+        setSelectedTrade(trade)
       }
     } catch (err) {
       if ((err as DOMException).name !== 'AbortError') {
@@ -507,20 +502,8 @@ function BotTradeHistoryModal({ bot, onClose, t }: { bot: BotStatus; onClose: ()
               {/* Latest Trade */}
               {latestClosed && (
                 <div className="mx-3 mt-4 mb-2">
-                  <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center mb-2">
                     <div className="text-xs text-gray-400 uppercase tracking-wider font-semibold">{t('bots.latestTrade')}</div>
-                    <button
-                      onClick={(e) => { e.stopPropagation(); handleShareLatest() }}
-                      className={`flex items-center gap-1.5 px-3 py-1 text-xs rounded-lg transition-all border ${
-                        copied
-                          ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20'
-                          : 'text-gray-400 hover:text-white bg-white/5 hover:bg-white/10 border-white/5'
-                      }`}
-                      title={t('bots.shareImage')}
-                    >
-                      <Share2 size={13} />
-                      {copied ? t('bots.copied') : t('bots.shareImage')}
-                    </button>
                   </div>
                   {/* Visible card — uses MobileTradeCard style on mobile */}
                   <div ref={latestCardRef}>
@@ -589,7 +572,10 @@ function BotTradeHistoryModal({ bot, onClose, t }: { bot: BotStatus; onClose: ()
                         <div className="text-sm text-gray-500">{formatDate(latestClosed.entry_time)}</div>
                         <div className="text-xs text-gray-500 mt-1">Edge Bots by Trading Department</div>
                         {affiliateLink && (
-                          <div className="text-xs text-primary-400 font-medium mt-0.5">{affiliateLink.affiliate_url}</div>
+                          <>
+                            {affiliateLink.label && <div className="text-xs text-gray-400 mt-0.5">{affiliateLink.label}</div>}
+                            <div className="text-xs text-primary-400 font-medium mt-0.5">{affiliateLink.affiliate_url}</div>
+                          </>
                         )}
                       </div>
                     </div>
@@ -604,8 +590,65 @@ function BotTradeHistoryModal({ bot, onClose, t }: { bot: BotStatus; onClose: ()
               {isMobile ? (
                 <div className="px-3 pb-6 space-y-1.5">
                   {stats.recent_trades.map(trade => (
-                    <MobileTradeCard key={trade.id} trade={{ ...trade, bot_exchange: bot.exchange_type, entry_time: trade.entry_time || '' }} onShare={() => setSelectedTrade(trade)} />
+                    <MobileTradeCard key={trade.id} trade={{ ...trade, bot_exchange: bot.exchange_type, entry_time: trade.entry_time || '' }} onShare={() => handleMobileDirectShare(trade)} />
                   ))}
+                  {/* Hidden capture divs for mobile direct share */}
+                  <div className="absolute -left-[9999px] pointer-events-none" aria-hidden="true">
+                    {stats.recent_trades.filter(tr => tr.status === 'closed').map((trade) => (
+                      <div
+                        key={trade.id}
+                        ref={(el) => { if (el) mobileShareRefs.current.set(trade.id, el); else mobileShareRefs.current.delete(trade.id) }}
+                        className="bg-[#0f1420] rounded-2xl p-5 w-[420px] border border-white/10 shadow-2xl"
+                      >
+                        <div className="flex items-center gap-2 mb-1">
+                          <ExchangeIcon exchange={bot.exchange_type} size={18} />
+                          <span className="text-lg font-bold text-white">{trade.symbol}</span>
+                        </div>
+                        <div className="flex items-center gap-2 text-sm text-gray-400 mb-4">
+                          <span>Perp</span>
+                          <span className="text-gray-600">|</span>
+                          <span className={trade.side === 'long' ? 'text-emerald-400 font-medium' : 'text-red-400 font-medium'}>
+                            {trade.side === 'long' ? '+ LONG' : '- SHORT'}
+                          </span>
+                          {trade.leverage && (
+                            <>
+                              <span className="text-gray-600">|</span>
+                              <span className="text-white font-medium">{trade.leverage}x</span>
+                            </>
+                          )}
+                        </div>
+                        <div className="text-center py-5 mb-4">
+                          <div className={`text-5xl font-bold tracking-tight ${trade.pnl_percent >= 0 ? 'text-profit' : 'text-loss'}`}>
+                            {formatPnlPercent(trade.pnl_percent)}
+                          </div>
+                          <div className={`text-lg font-semibold mt-1 ${trade.pnl >= 0 ? 'text-profit/70' : 'text-loss/70'}`}>
+                            <PnlCell pnl={trade.pnl} fees={trade.fees ?? 0} fundingPaid={trade.funding_paid ?? 0} status={trade.status}
+                              className={`text-lg font-semibold ${trade.pnl >= 0 ? 'text-profit/70' : 'text-loss/70'}`} />
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-4 max-w-xs mx-auto mb-4">
+                          <div className="text-center">
+                            <div className="text-xs text-gray-400 mb-1">{t('bots.entryPrice')}</div>
+                            <div className="text-white font-semibold text-lg">${trade.entry_price.toLocaleString()}</div>
+                          </div>
+                          <div className="text-center">
+                            <div className="text-xs text-gray-400 mb-1">{t('bots.exitPrice')}</div>
+                            <div className="text-white font-semibold text-lg">{trade.exit_price ? `$${trade.exit_price.toLocaleString()}` : '--'}</div>
+                          </div>
+                        </div>
+                        <div className="pt-3 border-t border-white/5">
+                          <div className="text-sm text-gray-500">{formatDate(trade.entry_time)}</div>
+                          <div className="text-xs text-gray-500 mt-1">Edge Bots by Trading Department</div>
+                          {affiliateLink && (
+                            <>
+                              {affiliateLink.label && <div className="text-xs text-gray-400 mt-0.5">{affiliateLink.label}</div>}
+                              <div className="text-xs text-primary-400 font-medium mt-0.5">{affiliateLink.affiliate_url}</div>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               ) : (
                 <div className="overflow-x-auto">
