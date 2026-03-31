@@ -827,23 +827,9 @@ class HyperliquidClient(ExchangeClient):
         Falls back to querying open orders and cancelling trigger orders.
         """
         coin = self._normalize_symbol(symbol)
-        builder_kwargs = {"builder": self._builder} if self._builder else {}
-
-        # Strategy 1: Send empty positionTpsl to clear all position triggers
-        try:
-            await self._cb_call(
-                self._exchange.bulk_orders,
-                [],
-                grouping="positionTpsl",
-                **builder_kwargs,
-            )
-            logger.info("Hyperliquid position TP/SL cleared for %s via empty positionTpsl", coin)
-            return True
-        except Exception as e:
-            logger.debug("Empty positionTpsl failed for %s: %s — trying order cancel fallback", coin, e)
-
-        # Strategy 2: Query frontend_open_orders (includes trigger/tpsl metadata)
         address = (self.wallet_address or self._wallet.address).lower()
+
+        # Query all open trigger orders for this coin
         try:
             open_orders = self._info.frontend_open_orders(address)
         except Exception as e:
@@ -868,7 +854,6 @@ class HyperliquidClient(ExchangeClient):
             oid = order.get("oid")
             if oid:
                 try:
-                    # Direct call — _exchange.cancel is synchronous, _cb_call re-wraps it
                     self._exchange.cancel(coin, oid)
                     logger.info("Cancelled Hyperliquid trigger order %s for %s", oid, coin)
                 except Exception as e:
