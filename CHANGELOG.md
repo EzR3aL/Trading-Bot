@@ -9,6 +9,11 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [4.6.10] - 2026-03-31
+
+### Behoben
+- **Zahnrad-Icon fehlt bei Hyperliquid-Positionen**: Position-Trade-Matching in Portfolio nutzte exakten Symbol-Vergleich (`ETHUSDT` vs `ETH`), was bei Hyperliquid fehlschlug. Jetzt wird `normalize_symbol()` auf beiden Seiten (DB + Exchange-API) angewendet — funktioniert fuer alle 5 Exchanges. Zusaetzlich: `normalize_symbol()` Fallback fuer Hyperliquid gefixt (strippte bisher kein USDT-Suffix), und bei Duplikat-Keys wird der neueste Trade bevorzugt
+
 ## [4.6.9] - 2026-03-31
 
 ### Behoben

@@ -94,7 +94,7 @@ def normalize_symbol(exchange_symbol: str, exchange: str) -> str:
     elif exchange == "weex":
         return exchange_symbol.replace("USDT", "")
     elif exchange == "hyperliquid":
-        return exchange_symbol
+        return exchange_symbol.replace("USDT", "").replace("-USDT", "")
     elif exchange == "bingx":
         return exchange_symbol.split("-")[0]
 
