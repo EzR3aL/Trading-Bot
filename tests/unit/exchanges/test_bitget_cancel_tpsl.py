@@ -1,4 +1,4 @@
-"""Tests for Bitget cancel_position_tpsl."""
+"""Tests for Bitget cancel_position_tpsl — uses cancel-plan-order with planType."""
 
 import os
 import sys
@@ -20,70 +20,72 @@ def client():
 
 
 @pytest.mark.asyncio
-async def test_cancel_tpsl_cancels_plan_orders(client):
-    """Should cancel TP/SL plan orders matching the position."""
-    pending = {
-        "entrustedList": [
-            {"orderId": "111", "planType": "pos_profit", "holdSide": "long", "symbol": "BTCUSDT"},
-            {"orderId": "222", "planType": "pos_loss", "holdSide": "long", "symbol": "BTCUSDT"},
-            {"orderId": "333", "planType": "limit", "holdSide": "long", "symbol": "BTCUSDT"},
-        ]
-    }
-    cancel_ids = []
+async def test_cancel_tpsl_sends_all_plan_types(client):
+    """Should call cancel-plan-order for pos_profit, pos_loss, and moving_plan."""
+    cancelled_types = []
 
     async def mock_request(method, endpoint, **kwargs):
-        if "pending" in endpoint:
-            return pending
-        if method == "POST" and "cancel" in endpoint:
-            data = kwargs.get("data", {})
-            cancel_ids.append(data.get("orderId"))
-            return {}
+        if "cancel-plan-order" in endpoint:
+            cancelled_types.append(kwargs.get("data", {}).get("planType"))
+            return {"successList": [{"orderId": "123"}], "failureList": []}
         return {}
 
     client._request = AsyncMock(side_effect=mock_request)
-    result = await client.cancel_position_tpsl("BTCUSDT", side="long")
+    result = await client.cancel_position_tpsl("ETHUSDT", side="long")
 
     assert result is True
-    assert sorted(cancel_ids) == ["111", "222"]
+    assert sorted(cancelled_types) == ["moving_plan", "pos_loss", "pos_profit"]
 
 
 @pytest.mark.asyncio
-async def test_cancel_tpsl_no_pending_orders(client):
-    """Should return True if no plan orders found."""
-    client._request = AsyncMock(return_value={"entrustedList": []})
-    result = await client.cancel_position_tpsl("BTCUSDT", side="long")
-    assert result is True
-
-
-@pytest.mark.asyncio
-async def test_cancel_tpsl_query_fails(client):
-    """Should return False on query failure."""
-    client._request = AsyncMock(side_effect=Exception("API error"))
-    result = await client.cancel_position_tpsl("BTCUSDT", side="long")
-    assert result is False
-
-
-@pytest.mark.asyncio
-async def test_cancel_tpsl_filters_by_hold_side(client):
-    """Should only cancel orders matching the hold side."""
-    pending = {
-        "entrustedList": [
-            {"orderId": "111", "planType": "pos_profit", "holdSide": "long"},
-            {"orderId": "222", "planType": "pos_loss", "holdSide": "short"},
-        ]
-    }
-    cancel_ids = []
-
+async def test_cancel_tpsl_returns_true_when_nothing_to_cancel(client):
+    """Should return True even when no orders exist to cancel."""
     async def mock_request(method, endpoint, **kwargs):
-        if "pending" in endpoint:
-            return pending
-        if method == "POST" and "cancel" in endpoint:
-            cancel_ids.append(kwargs.get("data", {}).get("orderId"))
-            return {}
+        if "cancel-plan-order" in endpoint:
+            return {"successList": [], "failureList": []}
         return {}
 
     client._request = AsyncMock(side_effect=mock_request)
-    result = await client.cancel_position_tpsl("BTCUSDT", side="long")
+    result = await client.cancel_position_tpsl("ETHUSDT", side="long")
+    assert result is True
+
+
+@pytest.mark.asyncio
+async def test_cancel_tpsl_handles_api_errors_gracefully(client):
+    """Should return True even if individual cancel calls fail (best effort)."""
+    call_count = 0
+
+    async def mock_request(method, endpoint, **kwargs):
+        nonlocal call_count
+        if "cancel-plan-order" in endpoint:
+            call_count += 1
+            if call_count == 1:
+                raise Exception("API error")
+            return {"successList": [], "failureList": []}
+        return {}
+
+    client._request = AsyncMock(side_effect=mock_request)
+    result = await client.cancel_position_tpsl("ETHUSDT", side="long")
 
     assert result is True
-    assert cancel_ids == ["111"]
+    assert call_count == 3  # All 3 planTypes attempted despite first failure
+
+
+@pytest.mark.asyncio
+async def test_cancel_tpsl_includes_symbol_and_product_type(client):
+    """Should pass correct symbol and productType in each cancel call."""
+    call_data = []
+
+    async def mock_request(method, endpoint, **kwargs):
+        if "cancel-plan-order" in endpoint:
+            call_data.append(kwargs.get("data", {}))
+            return {"successList": [], "failureList": []}
+        return {}
+
+    client._request = AsyncMock(side_effect=mock_request)
+    await client.cancel_position_tpsl("BTCUSDT", side="long")
+
+    assert len(call_data) == 3
+    for data in call_data:
+        assert data["symbol"] == "BTCUSDT"
+        assert "productType" in data
