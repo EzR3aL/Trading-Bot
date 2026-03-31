@@ -765,21 +765,35 @@ export default function BotPerformance() {
                           {formatDate(latestClosed.entry_time)}
                         </span>
                       </div>
-                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                      {/* Mobile: centered PnL + entry/exit row */}
+                      <div className="sm:hidden">
+                        <div className="text-center my-4">
+                          <div className={`text-4xl font-bold tracking-tight ${latestClosed.pnl_percent >= 0 ? 'text-profit' : 'text-loss'}`}>
+                            {formatPnlPercent(latestClosed.pnl_percent)}
+                          </div>
+                          <PnlCell pnl={latestClosed.pnl} fees={latestClosed.fees ?? 0} fundingPaid={latestClosed.funding_paid ?? 0} status={latestClosed.status}
+                            className={`text-lg font-semibold ${latestClosed.pnl >= 0 ? 'text-profit/70' : 'text-loss/70'}`} />
+                        </div>
+                        <div className="grid grid-cols-2 gap-4 max-w-xs mx-auto">
+                          <div className="text-center">
+                            <div className="text-xs text-gray-400 mb-1">{t('bots.entryPrice')}</div>
+                            <div className="text-white font-semibold text-lg">${latestClosed.entry_price.toLocaleString()}</div>
+                          </div>
+                          <div className="text-center">
+                            <div className="text-xs text-gray-400 mb-1">{t('bots.exitPrice')}</div>
+                            <div className="text-white font-semibold text-lg">{latestClosed.exit_price ? `$${latestClosed.exit_price.toLocaleString()}` : '--'}</div>
+                          </div>
+                        </div>
+                      </div>
+                      {/* Desktop: horizontal grid */}
+                      <div className="hidden sm:grid grid-cols-4 gap-4">
                         <div>
                           <div className="text-xs text-gray-400 uppercase tracking-wider mb-0.5">{t('bots.result')}</div>
                           <div className={`text-2xl font-bold tracking-tight ${latestClosed.pnl_percent >= 0 ? 'text-profit' : 'text-loss'}`}>
                             {formatPnlPercent(latestClosed.pnl_percent)}
                           </div>
-                          <div className={`text-sm font-medium ${latestClosed.pnl >= 0 ? 'text-profit/60' : 'text-loss/60'}`}>
-                            <PnlCell
-                              pnl={latestClosed.pnl}
-                              fees={latestClosed.fees ?? 0}
-                              fundingPaid={latestClosed.funding_paid ?? 0}
-                              status={latestClosed.status}
-                              className={`text-sm font-medium ${latestClosed.pnl >= 0 ? 'text-profit/60' : 'text-loss/60'}`}
-                            />
-                          </div>
+                          <PnlCell pnl={latestClosed.pnl} fees={latestClosed.fees ?? 0} fundingPaid={latestClosed.funding_paid ?? 0} status={latestClosed.status}
+                            className={`text-sm font-medium ${latestClosed.pnl >= 0 ? 'text-profit/60' : 'text-loss/60'}`} />
                         </div>
                         <div>
                           <div className="text-xs text-gray-400 uppercase tracking-wider mb-0.5">{t('bots.entryPrice')}</div>
