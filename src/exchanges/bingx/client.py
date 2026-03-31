@@ -21,6 +21,7 @@ from src.exceptions import ExchangeError
 from src.exchanges.base import ExchangeClient
 from src.exchanges.bingx.constants import (
     BASE_URL,
+    CONDITIONAL_ORDER_TYPES,
     DEFAULT_RECV_WINDOW,
     ENDPOINTS,
     ERROR_CODES,
@@ -755,6 +756,52 @@ class BingXClient(ExchangeClient):
             symbol, hold_side, size, callback_ratio, trigger_price, order_id,
         )
         return {"orderId": order_id}
+
+    async def cancel_position_tpsl(
+        self,
+        symbol: str,
+        side: str = "long",
+    ) -> bool:
+        """Cancel all conditional TP/SL orders for a position on BingX.
+
+        Queries open orders, filters for TAKE_PROFIT_MARKET / STOP_MARKET
+        matching the symbol and position side, then cancels each one.
+        Best-effort: partial cancel failures are logged but don't fail the operation.
+        """
+        position_side = POSITION_LONG if side == "long" else POSITION_SHORT
+
+        try:
+            data = await self._request("GET", ENDPOINTS["open_orders"], params={"symbol": symbol})
+        except Exception as e:
+            logger.warning("Failed to query open orders for %s: %s", symbol, e)
+            return False
+
+        orders = data.get("orders", []) if isinstance(data, dict) else (data if isinstance(data, list) else [])
+
+        to_cancel = [
+            o for o in orders
+            if isinstance(o, dict)
+            and o.get("type") in CONDITIONAL_ORDER_TYPES
+            and o.get("symbol") == symbol
+            and o.get("positionSide") == position_side
+        ]
+
+        if not to_cancel:
+            logger.debug("No conditional TP/SL orders to cancel for %s %s", symbol, side)
+            return True
+
+        for order in to_cancel:
+            oid = str(order.get("orderId", ""))
+            try:
+                await self._request("DELETE", ENDPOINTS["cancel_order"], params={
+                    "symbol": symbol,
+                    "orderId": oid,
+                })
+                logger.info("Cancelled BingX TP/SL order %s for %s", oid, symbol)
+            except Exception as e:
+                logger.warning("Failed to cancel BingX order %s for %s: %s", oid, symbol, e)
+
+        return True
 
     async def set_position_tpsl(
         self,
