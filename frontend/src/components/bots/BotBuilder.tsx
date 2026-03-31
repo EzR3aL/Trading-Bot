@@ -552,16 +552,16 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
       )}
 
       {/* Navigation */}
-      <div className="flex flex-row flex-nowrap items-center justify-between w-full gap-2">
+      <div className="flex items-center justify-between gap-2 mt-4">
         <button
           onClick={() => step > 0 ? setStep(step - 1) : onCancel()}
-          className="flex items-center gap-1 px-4 py-2 text-sm text-gray-400 hover:text-white transition-colors shrink-0"
+          className="flex items-center gap-1 px-4 py-2 text-sm text-gray-400 hover:text-white transition-colors"
         >
           <ArrowLeft size={16} />
           {step > 0 ? b.back : t('common.cancel')}
         </button>
 
-        <div className="flex gap-2 shrink-0 ml-auto">
+        <div className="flex gap-2">
           {step < steps.length - 1 ? (
             <button
               onClick={handleNext}
