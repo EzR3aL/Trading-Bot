@@ -1,8 +1,10 @@
 # LLM-Provider Konfiguration
 
-Anleitung zur Einrichtung und Konfiguration der unterstuetzten LLM-Provider fuer die KI-Strategien (LLM Signal und Degen).
+> **Hinweis (2026-03-26):** Die LLM-Integration wurde in Version 4.6.0 vollstaendig entfernt.
+> Diese Anleitung ist nur noch als Archiv-Referenz vorhanden.
+> Der Code ist unter dem Git-Tag `llm-archive-v4.5` archiviert.
 
-> **Hinweis:** Die LLM-Strategien (LLM Signal und Degen) sind derzeit nur fuer Admin-Nutzer verfuegbar. Diese Anleitung ist relevant, falls ein Admin dir Zugang freischaltet.
+~~Anleitung zur Einrichtung und Konfiguration der unterstuetzten LLM-Provider fuer die KI-Strategien (LLM Signal und Degen).~~
 
 ---
 
@@ -226,9 +228,11 @@ Beim Erstellen eines Bots mit der Strategie **LLM Signal** oder **Degen**:
 
 # LLM Provider Configuration (English)
 
-Guide for setting up and configuring supported LLM providers for AI strategies (LLM Signal and Degen).
+> **Note (2026-03-26):** The LLM integration was completely removed in version 4.6.0.
+> This guide is kept as an archive reference only.
+> The code is archived under git tag `llm-archive-v4.5`.
 
-> **Note:** LLM strategies (LLM Signal and Degen) are currently only available to admin users. This guide is relevant if an admin grants you access.
+~~Guide for setting up and configuring supported LLM providers for AI strategies (LLM Signal and Degen).~~
 
 ---
 

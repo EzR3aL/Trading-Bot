@@ -1,6 +1,6 @@
 # Strategien-Uebersicht
 
-Die 3 verfuegbaren Trading-Strategien erklaert: Funktionsweise, Risikoprofil, Parameter-Empfehlungen und wann welche Strategie sinnvoll ist.
+Die 2 verfuegbaren Trading-Strategien erklaert: Funktionsweise, Risikoprofil, Parameter-Empfehlungen und wann welche Strategie sinnvoll ist.
 
 ---
 
@@ -9,9 +9,8 @@ Die 3 verfuegbaren Trading-Strategien erklaert: Funktionsweise, Risikoprofil, Pa
 1. [Strategie-Vergleich](#1-strategie-vergleich)
 2. [Edge Indicator](#2-edge-indicator)
 3. [LiquidationHunter](#3-liquidationhunter)
-4. [Sentiment Surfer](#4-sentiment-surfer)
-5. [Welche Strategie passt zu mir?](#5-welche-strategie-passt-zu-mir)
-6. [Weitere Strategien (derzeit nicht verfuegbar)](#6-weitere-strategien-derzeit-nicht-verfuegbar)
+4. [Welche Strategie passt zu mir?](#4-welche-strategie-passt-zu-mir)
+5. [Weitere Strategien (derzeit nicht verfuegbar)](#5-weitere-strategien-derzeit-nicht-verfuegbar)
 
 ---
 
@@ -23,7 +22,6 @@ Die 3 verfuegbaren Trading-Strategien erklaert: Funktionsweise, Risikoprofil, Pa
 |-----------|-----|-------------|------------|--------|----------------|
 | Edge Indicator | Technisch | Nur Klines | Keine | Niedrig-Mittel | Anfaenger/Technisch |
 | LiquidationHunter | Contrarian | L/S, F&G, Funding | Keine | Mittel | Erfahrene Trader |
-| Sentiment Surfer | Hybrid | 6 Quellen | Keine | Mittel | Balanced Trading |
 
 ### Backtest-Ergebnisse (90 Tage, BTCUSDT, $10k, 1h)
 
@@ -31,7 +29,6 @@ Die 3 verfuegbaren Trading-Strategien erklaert: Funktionsweise, Risikoprofil, Pa
 |-----------|--------|----------|--------|--------|-----|--------|
 | **LiquidationHunter** | +26.2% | 53.9% | 4.7% | 5.51 | 1.98 | 104 |
 | **Edge Indicator** | +18.6% | 47.1% | 9.8% | 2.91 | 1.65 | 68 |
-| Sentiment Surfer | -3.7% | 32.3% | 9.4% | -1.07 | 0.84 | 65 |
 
 ### Risikoprofil-Matrix
 
@@ -39,7 +36,6 @@ Die 3 verfuegbaren Trading-Strategien erklaert: Funktionsweise, Risikoprofil, Pa
 |--------|-----------|-------------|
 | **Niedrig** | Edge Indicator | Nur Kline-Daten, klare Regeln, ADX-Filter |
 | **Mittel** | LiquidationHunter | Contrarian mit klaren Signalen |
-| **Mittel** | Sentiment Surfer | Multi-Faktor, ausgewogen |
 
 ---
 
@@ -73,18 +69,20 @@ KEIN TRADE: Neutral ODER choppy Market
 
 ### Parameter-Empfehlungen
 
-| Parameter | Konservativ | Standard | Aggressiv |
-|-----------|------------|----------|-----------|
-| EMA Fast | 8 | 8 | 5 |
-| EMA Slow | 21 | 21 | 13 |
-| ADX Threshold | 22 | 18 | 15 |
-| Momentum Threshold | 0.40 | **0.35** | 0.25 |
-| Trailing Trail ATR | 3.0 | **2.5** | 2.0 |
-| Trailing Breakeven ATR | 2.0 | **1.5** | 1.0 |
-| Momentum Smooth | 7 | **5** | 3 |
-| Timeframe | 4h | **1h** | 15m |
-| Take Profit | 3.0% | 2.5% | 2.0% |
-| Stop Loss | 1.5% | 1.5% | 1.0% |
+| Parameter | Konservativ | Standard |
+|-----------|------------|----------|
+| EMA Fast | 8 | 8 |
+| EMA Slow | 21 | 21 |
+| ADX Threshold | 22 | 18 |
+| Momentum Threshold | 0.40 | **0.35** |
+| Trailing Trail ATR | 3.0 | **2.5** |
+| Trailing Breakeven ATR | 2.0 | **1.5** |
+| Momentum Smooth | 7 | **5** |
+| Timeframe | 4h | **1h** |
+| Take Profit | 3.0% | 2.5% |
+| Stop Loss | 1.5% | 1.5% |
+
+> **Hinweis:** Das Aggressiv-Profil (15m) wurde in v4.6.2 entfernt. Simulationen zeigten eine Winrate von nur 27% und -7.27% PnL. Es stehen nur noch Standard (1h) und Konservativ (4h) zur Verfuegung.
 
 ---
 
@@ -120,41 +118,7 @@ Wettet **gegen die Masse**. Wenn zu viele Trader Long sind (L/S Ratio > 2.5), ge
 
 ---
 
-## 4. Sentiment Surfer
-
-### Was macht sie?
-
-Kombiniert **6 verschiedene Datenquellen** mit konfigurierbaren Gewichtungen. Jede Quelle erzeugt einen Score von -100 bis +100. Der gewichtete Durchschnitt ergibt die finale Entscheidung.
-
-### Fuer wen?
-
-- Trader, die einen ausgewogenen Multi-Faktor-Ansatz bevorzugen
-- Wer nicht nur auf einen Indikator vertrauen moechte
-- Mittleres Risiko-Profil
-
-### 6 Scoring-Quellen
-
-| # | Quelle | Gewicht | Logik |
-|---|--------|---------|-------|
-| 1 | News Sentiment | 1.0x | Positive Medien = bullish |
-| 2 | Fear & Greed | 1.0x | Contrarian: Angst = bullish |
-| 3 | VWAP/OIWAP | 1.2x | Preis ueber Fair Value = bullish |
-| 4 | Supertrend | 1.2x | ATR-Trend: gruen = bullish |
-| 5 | Spot Volume | 0.8x | Buy-Dominanz = bullish |
-| 6 | Price Momentum | 0.8x | 24h Richtung |
-
-### Parameter-Empfehlungen
-
-| Parameter | Konservativ | Standard | Aggressiv |
-|-----------|------------|----------|-----------|
-| Min Agreement | 4 | 3 | 2 |
-| Min Confidence | 50 | 40 | 30 |
-| Take Profit | 3.5% | 3.5% | 3.0% |
-| Stop Loss | 1.5% | 1.5% | 2.0% |
-
----
-
-## 5. Welche Strategie passt zu mir?
+## 4. Welche Strategie passt zu mir?
 
 ### Entscheidungsbaum
 
@@ -165,17 +129,17 @@ Bist du Anfaenger?
 Bevorzugst du Contrarian-Trading?
   Ja -> LiquidationHunter (L/S Ratio, Funding)
 
-Willst du einen ausgewogenen Multi-Faktor-Ansatz?
-  Ja -> Sentiment Surfer (6 Quellen, gewichtet)
+Unsicher?
+  -> Edge Indicator als Einstieg, spaeter LiquidationHunter dazu
 ```
 
 ### Empfehlungen nach Erfahrungslevel
 
 | Level | Primaere Strategie | Alternative |
 |-------|-------------------|-------------|
-| Anfaenger | Edge Indicator | LiquidationHunter |
-| Fortgeschritten | Sentiment Surfer | LiquidationHunter |
-| Experte | LiquidationHunter | Sentiment Surfer |
+| Anfaenger | Edge Indicator | -- |
+| Fortgeschritten | Edge Indicator | LiquidationHunter |
+| Experte | LiquidationHunter | Edge Indicator |
 
 ### Empfehlungen nach Risikotoleranz
 
@@ -183,7 +147,6 @@ Willst du einen ausgewogenen Multi-Faktor-Ansatz?
 |--------|-----------|--------------|----------|
 | Niedrig | Edge Indicator | 5% | 2x |
 | Mittel | LiquidationHunter | 10% | 3x |
-| Mittel | Sentiment Surfer | 10% | 3x |
 
 ### Kombinationsstrategien
 
@@ -192,22 +155,20 @@ Du kannst **mehrere Bots parallel** laufen lassen:
 | Kombination | Vorteil |
 |-------------|---------|
 | Edge Indicator + LiquidationHunter | Technisch + Contrarian diversifiziert |
-| Edge Indicator + Sentiment Surfer | Technisch + Multi-Faktor diversifiziert |
 | Edge Indicator (BTC) + Edge Indicator (ETH) | Gleiche Strategie, verschiedene Assets |
+| LiquidationHunter (BTC) + Edge Indicator (ETH) | Unterschiedliche Strategien pro Asset |
 
 ---
 
-## 6. Weitere Strategien (derzeit nicht verfuegbar)
+## 5. Weitere Strategien (derzeit nicht verfuegbar)
 
-Die folgenden 3 Strategien existieren im System, sind aber derzeit fuer normale Nutzer nicht sichtbar:
+Die folgende Strategie existiert im Code, ist aber derzeit fuer normale Nutzer nicht sichtbar:
 
 | Strategie | Grund fuer Ausblendung |
 |-----------|----------------------|
-| **Contrarian Pulse** | ~70% Ueberschneidung mit LiquidationHunter. Die beiden Strategien nutzen sehr aehnliche Datenquellen und Contrarian-Logik, weshalb Contrarian Pulse zugunsten von LiquidationHunter versteckt wurde. |
-| **LLM Signal** | Erfordert externe LLM-API-Keys (OpenAI, Anthropic, Groq, etc.). Derzeit nur fuer Admin-Nutzer verfuegbar. |
-| **Degen** | Erfordert externe LLM-API-Keys. Aggressiver, vorkonfigurierter KI-Prompt mit 19 Datenquellen. Derzeit nur fuer Admin-Nutzer verfuegbar. |
+| **Contrarian Pulse** | ~70% Ueberschneidung mit LiquidationHunter. Beide nutzen sehr aehnliche Datenquellen und Contrarian-Logik, weshalb Contrarian Pulse zugunsten von LiquidationHunter versteckt wurde. |
 
-Falls ein Admin dir Zugang zu LLM Signal oder Degen freischaltet, findest du die LLM-Provider-Konfiguration in der Anleitung [LLM-Provider-Konfiguration](LLM-Provider-Konfiguration.md).
+> **Entfernte Strategien:** Die Strategien *Sentiment Surfer* (v4.6.6), *LLM Signal* und *Degen* (v4.6.0) wurden vollstaendig aus dem Projekt entfernt. Der LLM-Code ist unter dem Git-Tag `llm-archive-v4.5` archiviert.
 
 ---
 
@@ -215,7 +176,7 @@ Falls ein Admin dir Zugang zu LLM Signal oder Degen freischaltet, findest du die
 
 # Strategy Overview (English)
 
-The 3 available trading strategies explained: how they work, risk profiles, parameter recommendations, and when to use each.
+The 2 available trading strategies explained: how they work, risk profiles, parameter recommendations, and when to use each.
 
 ---
 
@@ -225,20 +186,25 @@ The 3 available trading strategies explained: how they work, risk profiles, para
 |----------|------|-------------|-----------|------|----------|
 | Edge Indicator | Technical | Kline only | None | Low-Medium | Beginners / Technical |
 | LiquidationHunter | Contrarian | L/S, F&G, Funding | None | Medium | Experienced traders |
-| Sentiment Surfer | Hybrid | 6 sources | None | Medium | Balanced trading |
+
+### Backtest Results (90 days, BTCUSDT, $10k, 1h)
+
+| Strategy | Return | Win Rate | Max DD | Sharpe | PF | Trades |
+|----------|--------|----------|--------|--------|-----|--------|
+| **LiquidationHunter** | +26.2% | 53.9% | 4.7% | 5.51 | 1.98 | 104 |
+| **Edge Indicator** | +18.6% | 47.1% | 9.8% | 2.91 | 1.65 | 68 |
 
 ---
 
 ## Quick Strategy Guide
 
 ### Edge Indicator (v2 — Optimized Exits)
-Pure technical strategy using only Binance kline data. Three layers: EMA Ribbon (8/21), ADX filter, Predator Momentum Score. No external API dependencies. v2 exit tuning lets profitable trades run longer (+200% avg return on 1h).
+Pure technical strategy using only Binance kline data. Three layers: EMA Ribbon (8/21), ADX filter, Predator Momentum Score. No external API dependencies. v2 exit tuning lets profitable trades run longer (+200% avg return on 1h). Available risk profiles: Standard (1h) and Conservative (4h).
+
+> **Note:** The Aggressive profile (15m) was removed in v4.6.2 due to poor simulation results (27% winrate, -7.27% PnL).
 
 ### LiquidationHunter
 Contrarian strategy that bets against crowded positions. Uses L/S Ratio, Fear & Greed, and Funding Rate. Best when markets are at extremes.
-
-### Sentiment Surfer
-Combines 6 weighted data sources (News, Fear & Greed, VWAP, Supertrend, Volume, Momentum). Requires minimum agreement of 3/6 sources.
 
 ---
 
@@ -246,26 +212,33 @@ Combines 6 weighted data sources (News, Fear & Greed, VWAP, Supertrend, Volume, 
 
 | Experience | Primary | Alternative |
 |-----------|---------|-------------|
-| Beginner | Edge Indicator | LiquidationHunter |
-| Intermediate | Sentiment Surfer | LiquidationHunter |
-| Expert | LiquidationHunter | Sentiment Surfer |
+| Beginner | Edge Indicator | -- |
+| Intermediate | Edge Indicator | LiquidationHunter |
+| Expert | LiquidationHunter | Edge Indicator |
 
 | Risk Tolerance | Strategy | Position Size | Leverage |
 |---------------|----------|--------------|----------|
 | Low | Edge Indicator | 5% | 2x |
 | Medium | LiquidationHunter | 10% | 3x |
-| Medium | Sentiment Surfer | 10% | 3x |
+
+### Combination Strategies
+
+You can run **multiple bots in parallel**:
+
+| Combination | Advantage |
+|-------------|-----------|
+| Edge Indicator + LiquidationHunter | Technical + Contrarian diversification |
+| Edge Indicator (BTC) + Edge Indicator (ETH) | Same strategy, different assets |
+| LiquidationHunter (BTC) + Edge Indicator (ETH) | Different strategies per asset |
 
 ---
 
 ## Additional Strategies (Currently Unavailable)
 
-The following 3 strategies exist in the system but are currently hidden from regular users:
+The following strategy exists in the code but is currently hidden from regular users:
 
 | Strategy | Reason |
 |----------|--------|
 | **Contrarian Pulse** | ~70% overlap with LiquidationHunter. Both use similar data sources and contrarian logic, so Contrarian Pulse was hidden in favor of LiquidationHunter. |
-| **LLM Signal** | Requires external LLM API keys (OpenAI, Anthropic, Groq, etc.). Currently only available to admin users. |
-| **Degen** | Requires external LLM API keys. Aggressive, pre-configured AI prompt with 19 data sources. Currently only available to admin users. |
 
-If an admin grants you access to LLM Signal or Degen, see the [LLM Provider Configuration](en/Trading-Strategies-Overview.md) guide for setup instructions.
+> **Removed strategies:** *Sentiment Surfer* (v4.6.6), *LLM Signal* and *Degen* (v4.6.0) were completely removed from the project. The LLM code is archived under git tag `llm-archive-v4.5`.

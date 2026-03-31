@@ -11,6 +11,9 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ## [4.6.10] - 2026-03-31
 
+### Dokumentation
+- **Anleitungen aktualisiert**: Strategien-Uebersicht von 3 auf 2 Strategien (Sentiment Surfer entfernt), LLM-Provider-Konfiguration als Archiv markiert, 15m/Aggressiv-Profil aus Risikoprofil-Anleitung entfernt, README mit Edge Bots Branding aktualisiert
+
 ### Hinzugefuegt
 - **E2E-Tests fuer TP/SL-Bearbeitung (alle 5 Exchanges)**: 20 parametrisierte Tests (5 Exchanges x 4 Szenarien) — verifiziert die "Place First, Cancel Old"-Strategie fuer Bitget, BingX, Weex, Hyperliquid und Bitunix. Testet: neuen TP setzen, SL aendern, TP entfernen (SL behalten), beide entfernen
 
