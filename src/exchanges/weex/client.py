@@ -498,6 +498,29 @@ class WeexClient(ExchangeClient):
 
     # ── TP/SL Management (v3 endpoints) ─────────────────────────────
 
+    async def _cancel_existing_tpsl(self, symbol: str) -> None:
+        """Cancel existing TP/SL plan orders for a symbol before placing new ones."""
+        v3_symbol = symbol.upper().replace("-", "")
+        try:
+            data = await self._request("GET", ENDPOINTS["pending_tpsl_orders"], params={
+                "symbol": v3_symbol,
+            })
+            orders = data if isinstance(data, list) else []
+            for order in orders:
+                oid = str(order.get("orderId", order.get("id", "")))
+                plan_type = order.get("planType", "")
+                if oid:
+                    try:
+                        await self._request("POST", ENDPOINTS["cancel_tpsl_order"], data={
+                            "symbol": v3_symbol,
+                            "orderId": oid,
+                        })
+                        logger.info("Weex: cancelled old %s order %s for %s", plan_type, oid, symbol)
+                    except Exception as e:
+                        logger.warning("Weex: failed to cancel %s order %s: %s", plan_type, oid, e)
+        except Exception as e:
+            logger.debug("Weex: pending TP/SL query not available for %s: %s", symbol, e)
+
     async def set_position_tpsl(
         self,
         symbol: str,
@@ -515,6 +538,9 @@ class WeexClient(ExchangeClient):
         v3_symbol = symbol.upper().replace("-", "")
         position_side = "LONG" if side == "long" else "SHORT"
         order_ids = []
+
+        # Cancel existing TP/SL orders to prevent orphan duplicates
+        await self._cancel_existing_tpsl(symbol)
 
         # Get position size if not provided
         if size is None:
