@@ -231,6 +231,8 @@ export interface PortfolioPosition {
   trailing_stop_active?: boolean
   trailing_stop_price?: number
   trailing_stop_distance_pct?: number
+  trailing_atr_override?: number | null
+  native_trailing_stop?: boolean
   can_close_at_loss?: boolean
 }
 
