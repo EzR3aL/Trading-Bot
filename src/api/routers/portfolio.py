@@ -160,7 +160,8 @@ async def get_portfolio_positions(
         for bot in bot_result.scalars().all():
             bot_cache[bot.id] = bot
 
-    # Batch pre-fetch klines for trailing stop calculation (avoid N+1 Binance API calls)
+    # Batch pre-fetch klines for trailing stop calculation (avoid N+1 Binance API calls).
+    # Cache keys use raw symbol format (t.symbol) — matches lookup in trades.py.
     klines_cache: dict[str, list] = {}
     open_symbols = {
         t.symbol for t in open_trades

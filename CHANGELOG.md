@@ -9,13 +9,21 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
-## [4.6.9] - 2026-03-31
-
-### Hinzugefügt
-- **Weex cancel_position_tpsl()**: Neue Methode zum Abfragen und Stornieren ausstehender TP/SL-Orders über `/capi/v3/pendingTpSlOrders` und `/capi/v3/cancelTpSlOrder`. Filtert nach Symbol und Position-Seite, loggt Fehler bei Teilausfällen
+## [4.6.10] - 2026-03-31
 
 ### Behoben
-- **TP/SL "place first, cancel old" Strategie**: Router setzt neue TP/SL-Orders ZUERST, storniert alte DANACH — Position ist immer geschützt (BingX/Weex). Bei Entfernen beider Werte wird `cancel_position_tpsl()` direkt aufgerufen statt den Call zu überspringen
+- **TP/SL Cancel auf BingX/Weex**: Neue `cancel_position_tpsl()` Methode — fragt offene Conditional/Trigger-Orders ab und cancelt sie gezielt. Behebt das Problem dass alte TP/SL-Orders auf der Exchange verbleiben wenn neue gesetzt oder bestehende entfernt werden
+- **Race Condition bei TP/SL-Update (BingX/Weex)**: Strategie "Place First, Cancel Old" — neue Orders werden zuerst platziert, dann alte gecancelt. Position ist nie ungeschützt, auch bei API-Fehlern
+- **Beide TP+SL entfernen entfernt jetzt auch Exchange-Orders**: Wenn beide Werte gleichzeitig gelöscht werden, wird `cancel_position_tpsl()` direkt aufgerufen statt den Exchange-Call zu überspringen
+
+### Hinzugefuegt
+- **BingX `cancel_position_tpsl()`**: Fragt `/openApi/swap/v2/trade/openOrders` ab, filtert auf `TAKE_PROFIT_MARKET`/`STOP_MARKET` nach Symbol und Position-Side, cancelt jede Order einzeln
+- **Weex `cancel_position_tpsl()`**: Fragt `/capi/v3/pendingTpSlOrders` ab, filtert nach Symbol und Position-Side, cancelt via `/capi/v3/cancelTpSlOrder`
+- **Base-Methode `cancel_position_tpsl()`**: No-op Default für Position-Level Exchanges (Bitget, Hyperliquid, Bitunix) — dort ersetzt `set_position_tpsl` implizit
+
+## [4.6.9] - 2026-03-31
+
+### Behoben
 - **TP/SL Entfernen sendet finalen Zustand an Exchange**: Beim Entfernen von TP wird jetzt der verbleibende SL mitgeschickt (und umgekehrt), statt beide auf null zu setzen — verhindert Bitget "must set one or both" Fehler
 - **Share-Icon einheitlich**: Desktop und Mobile nutzen jetzt das Android 3-Punkte Share-Icon statt "Bild kopieren" Text-Button. Mobil immer sichtbar in der Header-Zeile
 
