@@ -741,7 +741,7 @@ async def update_trade_tpsl(
     if body.trailing_stop is not None:
         trade.native_trailing_stop = trailing_placed
         trade.trailing_atr_override = body.trailing_stop.callback_pct
-    elif body.remove_tp or body.remove_sl or body.take_profit is not None or body.stop_loss is not None:
+    else:
         # User submitted the form but trailing was off — clear any previous override
         trade.trailing_atr_override = None
         trade.native_trailing_stop = False
