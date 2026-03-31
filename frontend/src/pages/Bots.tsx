@@ -194,20 +194,23 @@ function TradeDetailModal({ trade, onClose, t, affiliateLink }: { trade: BotTrad
     try {
       const blob = await captureBlob()
       if (!blob) return
-      const file = new File([blob], 'trade.png', { type: 'image/png' })
-      const pnlStr = trade.pnl_percent >= 0 ? `+${trade.pnl_percent.toFixed(2)}%` : `${trade.pnl_percent.toFixed(2)}%`
-      if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
-        await navigator.share({
-          title: `${trade.symbol} ${trade.side.toUpperCase()} ${pnlStr}`,
-          text: affiliateLink?.affiliate_url || 'Edge Bots by Trading Department',
-          files: [file],
-        })
-      } else {
-        // Desktop fallback: copy image to clipboard
-        await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })])
-        setCopied(true)
-        setTimeout(() => setCopied(false), 2000)
+      const isMobile = 'ontouchstart' in window || navigator.maxTouchPoints > 0
+      if (isMobile && navigator.share && navigator.canShare) {
+        const file = new File([blob], 'trade.png', { type: 'image/png' })
+        const pnlStr = trade.pnl_percent >= 0 ? `+${trade.pnl_percent.toFixed(2)}%` : `${trade.pnl_percent.toFixed(2)}%`
+        if (navigator.canShare({ files: [file] })) {
+          await navigator.share({
+            title: `${trade.symbol} ${trade.side.toUpperCase()} ${pnlStr}`,
+            text: affiliateLink?.affiliate_url || 'Edge Bots by Trading Department',
+            files: [file],
+          })
+          return
+        }
       }
+      // Desktop: copy image to clipboard
+      await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })])
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
     } catch (err) {
       if ((err as DOMException).name !== 'AbortError') {
         console.error('Failed to share image:', err)
