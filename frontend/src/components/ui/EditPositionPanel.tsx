@@ -84,7 +84,7 @@ export default function EditPositionPanel({ position, onClose, onSave }: EditPos
       : ''
   )
   const [trailingEnabled, setTrailingEnabled] = useState(position.trailing_stop_active ?? false)
-  const [trailingAtr, setTrailingAtr] = useState(2.5)
+  const [trailingAtr, setTrailingAtr] = useState(position.trailing_stop_distance_pct ?? 2.5)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -134,6 +134,7 @@ export default function EditPositionPanel({ position, onClose, onSave }: EditPos
     const issues: string[] = []
     const tp = parseFloat(tpPrice)
     const sl = parseFloat(slPrice)
+    const cur = position.current_price
 
     if (tpPrice && !isNaN(tp)) {
       if (isLong && tp <= position.entry_price) {
@@ -150,9 +151,26 @@ export default function EditPositionPanel({ position, onClose, onSave }: EditPos
       if (!isLong && sl <= position.entry_price) {
         issues.push(t('editPosition.slBelowEntry', 'SL muss über dem Einstiegspreis liegen (Short)'))
       }
+      // Also check against current price (exchanges reject SL on wrong side of market)
+      if (cur > 0) {
+        if (isLong && sl >= cur) {
+          issues.push(t('editPosition.slAboveCurrentPrice', 'SL muss unter dem aktuellen Preis liegen'))
+        }
+        if (!isLong && sl <= cur) {
+          issues.push(t('editPosition.slBelowCurrentPrice', 'SL muss über dem aktuellen Preis liegen'))
+        }
+      }
+    }
+    if (tpPrice && !isNaN(tp) && cur > 0) {
+      if (isLong && tp <= cur) {
+        issues.push(t('editPosition.tpBelowCurrentPrice', 'TP muss über dem aktuellen Preis liegen'))
+      }
+      if (!isLong && tp >= cur) {
+        issues.push(t('editPosition.tpAboveCurrentPrice', 'TP muss unter dem aktuellen Preis liegen'))
+      }
     }
     return issues
-  }, [tpPrice, slPrice, position.entry_price, isLong, t])
+  }, [tpPrice, slPrice, position.entry_price, position.current_price, isLong, t])
 
   /* ── ESC handler ── */
   useEffect(() => {
@@ -177,7 +195,14 @@ export default function EditPositionPanel({ position, onClose, onSave }: EditPos
       await onSave({ take_profit: tp, stop_loss: sl, remove_tp: removeTp, remove_sl: removeSl, trailing_stop: trailing })
       onClose()
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : t('editPosition.saveError', 'Fehler beim Speichern'))
+      // Extract error detail from API response if available
+      const axiosErr = err as { response?: { data?: { detail?: string } } }
+      const detail = axiosErr?.response?.data?.detail
+      if (detail) {
+        setError(detail)
+      } else {
+        setError(err instanceof Error ? err.message : t('editPosition.saveError', 'Fehler beim Speichern'))
+      }
     } finally {
       setSaving(false)
     }
@@ -413,6 +438,11 @@ export default function EditPositionPanel({ position, onClose, onSave }: EditPos
                     <span>5.0x</span>
                   </div>
                 </div>
+
+                {/* ATR explanation */}
+                <p className="text-[10px] text-gray-500 leading-relaxed">
+                  {t('editPosition.atrExplanation', 'Je höher der ATR-Wert, desto mehr Spielraum hat der Preis bevor der Trailing Stop auslöst. 1.0x = eng (schneller Ausstieg), 3.0x = Standard, 5.0x = weit (mehr Spielraum).')}
+                </p>
 
                 {/* Recommendation hint (placeholder) */}
                 <div className="bg-blue-500/[0.06] border border-blue-500/15 rounded-lg px-3 py-2 flex items-start gap-2">

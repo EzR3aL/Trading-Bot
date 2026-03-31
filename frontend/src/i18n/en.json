@@ -819,7 +819,12 @@
     "softwareHint": "bot must be online",
     "trailingHint": "Recommendation based on your past trades will appear once enough data is available (min. 10 trades).",
     "strategyExitNote": "Note: When TP/SL is set, strategy exit is disabled. Exchange orders take priority.",
-    "saveError": "Failed to save changes"
+    "saveError": "Failed to save changes",
+    "slAboveCurrentPrice": "SL must be below current price",
+    "slBelowCurrentPrice": "SL must be above current price",
+    "tpBelowCurrentPrice": "TP must be above current price",
+    "tpAboveCurrentPrice": "TP must be below current price",
+    "atrExplanation": "Higher ATR values give more room before the trailing stop triggers. 1.0x = tight (quick exit), 3.0x = standard, 5.0x = wide (more room)."
   },
   "common": {
     "loading": "Loading...",

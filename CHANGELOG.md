@@ -9,6 +9,19 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [4.6.11] - 2026-03-31
+
+### Behoben
+- **Trailing Stop Toggle-State nicht korrekt**: `trailingAtr` wurde immer auf 2.5 initialisiert statt den gespeicherten Wert aus `position.trailing_stop_distance_pct` zu verwenden
+- **TP/SL-Validierung nur gegen Entry-Price**: Exchanges wie Bitget lehnen SL/TP ab wenn sie auf der falschen Seite des aktuellen Preises liegen. Validierung prueft jetzt zusaetzlich gegen `current_price`
+- **Generische Fehlermeldungen bei API-Fehler**: Der Catch-Block zeigt jetzt die echte Exchange-Fehlermeldung aus `response.data.detail` an statt nur "Fehler beim Speichern"
+
+### Hinzugefuegt
+- **ATR-Erklaerungstext im Trailing Stop**: Neuer Hilfetext erklaert was der ATR-Multiplikator bedeutet (1.0x = eng, 3.0x = Standard, 5.0x = weit)
+- **i18n-Keys fuer neue Validierungsmeldungen**: `slAboveCurrentPrice`, `slBelowCurrentPrice`, `tpBelowCurrentPrice`, `tpAboveCurrentPrice`, `atrExplanation` in de.json und en.json
+
+---
+
 ## [4.6.10] - 2026-03-31
 
 ### Behoben

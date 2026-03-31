@@ -819,7 +819,12 @@
     "softwareHint": "Bot muss online sein",
     "trailingHint": "Die Empfehlung basiert auf deinen bisherigen Trades und wird berechnet sobald genug Daten vorliegen (min. 10 Trades).",
     "strategyExitNote": "Hinweis: Wenn TP/SL gesetzt ist, wird der Strategie-Exit deaktiviert. Die Exchange-Orders haben Vorrang.",
-    "saveError": "Fehler beim Speichern"
+    "saveError": "Fehler beim Speichern",
+    "slAboveCurrentPrice": "SL muss unter dem aktuellen Preis liegen",
+    "slBelowCurrentPrice": "SL muss über dem aktuellen Preis liegen",
+    "tpBelowCurrentPrice": "TP muss über dem aktuellen Preis liegen",
+    "tpAboveCurrentPrice": "TP muss unter dem aktuellen Preis liegen",
+    "atrExplanation": "Je höher der ATR-Wert, desto mehr Spielraum hat der Preis bevor der Trailing Stop auslöst. 1.0x = eng (schneller Ausstieg), 3.0x = Standard, 5.0x = weit (mehr Spielraum)."
   },
   "common": {
     "loading": "Laden...",
