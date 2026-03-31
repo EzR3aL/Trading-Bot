@@ -716,6 +716,8 @@ export default function Portfolio() {
             trailing_stop_active: editingPos.trailing_stop_active,
             trailing_stop_price: editingPos.trailing_stop_price,
             trailing_stop_distance_pct: editingPos.trailing_stop_distance_pct,
+            trailing_atr_override: editingPos.trailing_atr_override,
+            native_trailing_stop: editingPos.native_trailing_stop,
           }}
           onClose={() => setEditingPos(null)}
           onSave={async (data) => {
