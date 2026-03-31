@@ -734,6 +734,9 @@ class BingXClient(ExchangeClient):
         close_side = SIDE_SELL if hold_side == "long" else SIDE_BUY
         position_side = POSITION_LONG if hold_side == "long" else POSITION_SHORT
 
+        # Cancel existing TP/SL and trailing stops to prevent orphan duplicates
+        await self._cancel_existing_tpsl(symbol)
+
         order_params = {
             "symbol": symbol,
             "side": close_side,
@@ -756,14 +759,22 @@ class BingXClient(ExchangeClient):
         )
         return {"orderId": order_id}
 
+    _TPSL_ORDER_TYPES = frozenset({
+        "TAKE_PROFIT_MARKET", "STOP_MARKET", "TAKE_PROFIT", "STOP",
+        "TRAILING_STOP_MARKET",
+    })
+
     async def _cancel_existing_tpsl(self, symbol: str) -> None:
         """Cancel existing TP/SL conditional orders for a symbol before placing new ones."""
         try:
             data = await self._request("GET", ENDPOINTS["open_orders"], params={"symbol": symbol})
             orders = data if isinstance(data, list) else data.get("orders", []) if isinstance(data, dict) else []
+            if not orders:
+                return
+            logger.debug("BingX open_orders for %s: %d orders found", symbol, len(orders))
             for order in orders:
-                order_type = str(order.get("type", "")).upper()
-                if order_type in ("TAKE_PROFIT_MARKET", "STOP_MARKET", "TAKE_PROFIT", "STOP"):
+                order_type = str(order.get("type") or order.get("orderType", "")).upper()
+                if order_type in self._TPSL_ORDER_TYPES:
                     oid = str(order.get("orderId", ""))
                     if oid:
                         try:
