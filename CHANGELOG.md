@@ -92,19 +92,20 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ### Behoben
 - **Hyperliquid positionTpsl KeyError**: `set_position_tpsl()` verwendete `"name"` als Key im Order-Dict fuer `bulk_orders()`, aber das Hyperliquid SDK erwartet `"coin"` bei `grouping="positionTpsl"`. Gefixt fuer TP- und SL-Order. Fallback `_place_trigger_order()` bleibt bei `"name"` (korrekt fuer Einzel-Orders via `order()`)
+- **Zahnrad-Icon fehlt bei Hyperliquid-Positionen**: Position-Trade-Matching in Portfolio nutzte exakten Symbol-Vergleich (`ETHUSDT` vs `ETH`), was bei Hyperliquid fehlschlug. Jetzt wird `normalize_symbol()` auf beiden Seiten (DB + Exchange-API) angewendet — funktioniert fuer alle 5 Exchanges (Bitget, Weex, Hyperliquid, Bitunix, BingX). Zusaetzlich: `normalize_symbol()` Fallback fuer Hyperliquid gefixt (strippte bisher kein USDT-Suffix), und bei Duplikat-Keys wird der neueste Trade bevorzugt
+- **Trailing-Stop-Slider zeigt gespeicherten Wert**: ATR-Slider im TP/SL-Panel startete immer bei 2.5x, ignorierte den gespeicherten `trailing_atr_override`. Jetzt wird der Override-Wert aus der API geladen und als Slider-Startwert gesetzt (Schema, Backend-Response, Frontend in Dashboard/Portfolio/MobilePositionCard)
+- **BingX/Weex: Orphan-TP/SL-Orders bei Update**: Beim Aendern von TP/SL wurden neue Orders auf der Exchange platziert ohne die alten zu loeschen — fuehrte zu doppelten Triggern. Jetzt werden bestehende TP/SL-Orders VOR dem Platzieren neuer gecancelt (BingX via open_orders-Query + cancel, Weex via pendingTpSlOrders + cancelTpSlOrder). BingX-Cancel erkennt auch `TRAILING_STOP_MARKET` Orders und `orderType`-Feldnamen-Fallback. Cancel wird ebenfalls bei `place_trailing_stop` aufgerufen
+- **TypeScript-Typen fuer `trailing_atr_override`**: Fehlende Felddefinition in `PortfolioPosition` (types/index.ts) und `Position` (MobilePositionCard.tsx) ergaenzt — verhindert TypeScript-Kompilierfehler
+- **`normalize_symbol()` Replace-Reihenfolge**: `.replace("USDT","").replace("-USDT","")` erzeugte fuer Hyperliquid-Eingaben wie `ETH-USDT` das Ergebnis `ETH-` (mit Bindestrich). Reihenfolge umgekehrt: zuerst `-USDT`, dann `USDT` strippen
+- **TP/SL Cancel auf allen Exchanges**: Neue `cancel_position_tpsl()` Methode auf allen 5 Exchanges — fragt offene TP/SL-Orders ab und cancelt sie gezielt. Behebt das Problem dass alte TP/SL-Orders auf der Exchange verbleiben wenn neue gesetzt oder bestehende entfernt werden
+- **Race Condition bei TP/SL-Update**: Strategie "Place First, Cancel Old" — neue Orders werden zuerst platziert, dann alte gecancelt. Position ist nie ungeschützt, auch bei API-Fehlern
+- **Beide TP+SL entfernen entfernt jetzt auch Exchange-Orders**: Wenn beide Werte gleichzeitig gelöscht werden, wird `cancel_position_tpsl()` direkt aufgerufen statt den Exchange-Call zu überspringen
 
 ### Dokumentation
 - **Anleitungen aktualisiert**: Strategien-Uebersicht von 3 auf 2 Strategien (Sentiment Surfer entfernt), LLM-Provider-Konfiguration als Archiv markiert, 15m/Aggressiv-Profil aus Risikoprofil-Anleitung entfernt, README mit Edge Bots Branding aktualisiert
 
 ### Hinzugefuegt
 - **E2E-Tests fuer TP/SL-Bearbeitung (alle 5 Exchanges)**: 20 parametrisierte Tests (5 Exchanges x 4 Szenarien) — verifiziert die "Place First, Cancel Old"-Strategie fuer Bitget, BingX, Weex, Hyperliquid und Bitunix. Testet: neuen TP setzen, SL aendern, TP entfernen (SL behalten), beide entfernen
-
-### Behoben
-- **TP/SL Cancel auf allen Exchanges**: Neue `cancel_position_tpsl()` Methode auf allen 5 Exchanges — fragt offene TP/SL-Orders ab und cancelt sie gezielt. Behebt das Problem dass alte TP/SL-Orders auf der Exchange verbleiben wenn neue gesetzt oder bestehende entfernt werden
-- **Race Condition bei TP/SL-Update**: Strategie "Place First, Cancel Old" — neue Orders werden zuerst platziert, dann alte gecancelt. Position ist nie ungeschützt, auch bei API-Fehlern
-- **Beide TP+SL entfernen entfernt jetzt auch Exchange-Orders**: Wenn beide Werte gleichzeitig gelöscht werden, wird `cancel_position_tpsl()` direkt aufgerufen statt den Exchange-Call zu überspringen
-
-### Hinzugefuegt
 - **BingX `cancel_position_tpsl()`**: Fragt `/openApi/swap/v2/trade/openOrders` ab, filtert auf `TAKE_PROFIT_MARKET`/`STOP_MARKET` nach Symbol und Position-Side, cancelt jede Order einzeln
 - **Weex `cancel_position_tpsl()`**: Fragt `/capi/v3/pendingTpSlOrders` ab, filtert nach Symbol und Position-Side, cancelt via `/capi/v3/cancelTpSlOrder`
 - **Bitget `cancel_position_tpsl()`**: Fragt `/api/v2/mix/order/orders-pending` ab, filtert nach TP/SL Plan-Order-Typen und Hold-Side, cancelt jede Order einzeln

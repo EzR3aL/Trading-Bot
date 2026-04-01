@@ -19,6 +19,7 @@ from src.api.schemas.portfolio import (
 from src.auth.dependencies import get_current_user
 from src.models.database import BotConfig, ExchangeConnection, TradeRecord, User
 from src.models.session import get_db
+from src.exchanges.symbol_map import normalize_symbol
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -144,11 +145,14 @@ async def get_portfolio_positions(
     )
     open_trades = open_trades_result.scalars().all()
 
-    # Build lookup: (exchange, symbol, side) -> trade + bot config
+    # Build lookup: (exchange, base_symbol, side) -> trade + bot config
     trade_lookup: dict[tuple, TradeRecord] = {}
     for t in open_trades:
-        key = (t.exchange, t.symbol, t.side)
-        trade_lookup[key] = t
+        base_sym = normalize_symbol(t.symbol, t.exchange)
+        key = (t.exchange, base_sym, t.side)
+        existing = trade_lookup.get(key)
+        if existing is None or (t.entry_time and existing.entry_time and t.entry_time > existing.entry_time):
+            trade_lookup[key] = t
 
     # Batch-load all referenced BotConfigs in a single query (fix N+1)
     bot_cache: dict[int, BotConfig] = {}
@@ -192,8 +196,14 @@ async def get_portfolio_positions(
             )
             for pos in open_positions:
                 # Match with DB trade for trailing stop info
-                key = (exchange_type, pos.symbol, pos.side)
+                base_sym = normalize_symbol(pos.symbol, exchange_type)
+                key = (exchange_type, base_sym, pos.side)
                 trade = trade_lookup.get(key)
+                if trade is None:
+                    logger.debug(
+                        "No DB trade match: exchange=%s symbol=%s (base=%s) side=%s",
+                        exchange_type, pos.symbol, base_sym, pos.side,
+                    )
                 bot_name = None
                 ts_info: dict = {}
                 if trade:
