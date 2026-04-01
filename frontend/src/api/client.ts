@@ -115,7 +115,7 @@ async function doRefresh(): Promise<boolean> {
       }
     } catch {
       // If token parsing fails, fall back to 4h default
-      tokenExpiryMs = Date.now() + 240 * 60 * 1000
+      tokenExpiryMs = Date.now() + 1440 * 60 * 1000
     }
 
     refreshRetryCount = 0
@@ -178,7 +178,13 @@ api.interceptors.response.use(
 // Re-schedule proactive refresh when tab becomes visible (user returns after sleep/idle)
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible' && tokenExpiryMs) {
-    scheduleProactiveRefresh()
+    const timeLeft = tokenExpiryMs - Date.now()
+    if (timeLeft <= 5 * 60 * 1000) {
+      // Token expired or about to expire — refresh immediately
+      doRefresh()
+    } else {
+      scheduleProactiveRefresh()
+    }
   }
 })
 

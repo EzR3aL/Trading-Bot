@@ -4,7 +4,7 @@ import { clearTokenExpiry, setTokenExpiry } from '../api/client'
 import type { User } from '../types'
 
 /** Default access token lifetime in seconds (must match backend ACCESS_TOKEN_EXPIRE_MINUTES). */
-const DEFAULT_TOKEN_LIFETIME_S = 240 * 60
+const DEFAULT_TOKEN_LIFETIME_S = 1440 * 60
 
 interface LoginResult {
   requires2fa: boolean
