@@ -18,7 +18,20 @@ from src.models.session import get_db
 from src.strategy.edge_indicator import DEFAULTS as EDGE_DEFAULTS
 from src.utils.encryption import decrypt_value
 from src.api.rate_limit import limiter
-from src.errors import ERR_TRADE_NOT_FOUND
+from src.errors import (
+    ERR_SL_ABOVE_ENTRY_SHORT,
+    ERR_SL_BELOW_ENTRY_LONG,
+    ERR_SL_POSITIVE,
+    ERR_TP_ABOVE_ENTRY_LONG,
+    ERR_TP_BELOW_ENTRY_SHORT,
+    ERR_TP_POSITIVE,
+    ERR_TP_SL_CONFLICT_SL,
+    ERR_TP_SL_CONFLICT_TP,
+    ERR_TPSL_EXCHANGE_NOT_SUPPORTED,
+    ERR_TPSL_UPDATE_FAILED,
+    ERR_TRADE_NOT_FOUND,
+    translate_exchange_error,
+)
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -572,9 +585,9 @@ async def update_trade_tpsl(
 
     # Reject contradictory flags
     if body.remove_tp and body.take_profit is not None:
-        raise HTTPException(status_code=400, detail="Cannot set take_profit and remove_tp simultaneously")
+        raise HTTPException(status_code=400, detail=ERR_TP_SL_CONFLICT_TP)
     if body.remove_sl and body.stop_loss is not None:
-        raise HTTPException(status_code=400, detail="Cannot set stop_loss and remove_sl simultaneously")
+        raise HTTPException(status_code=400, detail=ERR_TP_SL_CONFLICT_SL)
 
     # Load trade with row-level lock to prevent race conditions
     trade_result = await db.execute(
@@ -595,18 +608,18 @@ async def update_trade_tpsl(
     is_long = trade.side == "long"
     if body.take_profit is not None:
         if body.take_profit <= 0:
-            raise HTTPException(status_code=400, detail="TP must be a positive value")
+            raise HTTPException(status_code=400, detail=ERR_TP_POSITIVE)
         if is_long and body.take_profit <= trade.entry_price:
-            raise HTTPException(status_code=400, detail="TP must be above entry price for long")
+            raise HTTPException(status_code=400, detail=ERR_TP_ABOVE_ENTRY_LONG)
         if not is_long and body.take_profit >= trade.entry_price:
-            raise HTTPException(status_code=400, detail="TP must be below entry price for short")
+            raise HTTPException(status_code=400, detail=ERR_TP_BELOW_ENTRY_SHORT)
     if body.stop_loss is not None:
         if body.stop_loss <= 0:
-            raise HTTPException(status_code=400, detail="SL must be a positive value")
+            raise HTTPException(status_code=400, detail=ERR_SL_POSITIVE)
         if is_long and body.stop_loss >= trade.entry_price:
-            raise HTTPException(status_code=400, detail="SL must be below entry price for long")
+            raise HTTPException(status_code=400, detail=ERR_SL_BELOW_ENTRY_LONG)
         if not is_long and body.stop_loss <= trade.entry_price:
-            raise HTTPException(status_code=400, detail="SL must be above entry price for short")
+            raise HTTPException(status_code=400, detail=ERR_SL_ABOVE_ENTRY_SHORT)
 
     # Load exchange connection
     conn_result = await db.execute(
@@ -720,7 +733,7 @@ async def update_trade_tpsl(
     except NotImplementedError:
         raise HTTPException(
             status_code=400,
-            detail=f"Exchange {trade.exchange} does not support TP/SL modification",
+            detail=ERR_TPSL_EXCHANGE_NOT_SUPPORTED.format(exchange=trade.exchange),
         )
     except Exception as e:
         error_msg = str(e)
@@ -728,8 +741,8 @@ async def update_trade_tpsl(
         # Surface exchange validation errors as 400 (user can fix), not 502
         exchange_hints = ["price", "less than", "greater than", "invalid", "must be", "should be"]
         if any(hint in error_msg.lower() for hint in exchange_hints):
-            raise HTTPException(status_code=400, detail=error_msg)
-        raise HTTPException(status_code=502, detail="Failed to update TP/SL on exchange. Please try again.")
+            raise HTTPException(status_code=400, detail=translate_exchange_error(error_msg))
+        raise HTTPException(status_code=502, detail=ERR_TPSL_UPDATE_FAILED)
     finally:
         await client.close()
         if fetcher:

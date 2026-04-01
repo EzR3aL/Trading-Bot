@@ -25,6 +25,7 @@ from src.exceptions import (
     TradingBotError,
     ValidationError,
 )
+from src.errors import translate_exchange_error
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -76,6 +77,11 @@ async def global_exception_handler(request: Request, exc: Exception) -> JSONResp
         exc_info=True,
     )
 
+    # Translate exchange API error messages to German for user-facing display
+    exc_detail = str(exc)
+    if isinstance(exc, ExchangeError):
+        exc_detail = translate_exchange_error(exc_detail)
+
     if environment == "production":
         return JSONResponse(
             status_code=status_code,
@@ -85,7 +91,7 @@ async def global_exception_handler(request: Request, exc: Exception) -> JSONResp
         return JSONResponse(
             status_code=status_code,
             content={
-                "detail": f"{safe_message}: {str(exc)}",
+                "detail": f"{safe_message}: {exc_detail}",
                 "traceback": traceback.format_exception(type(exc), exc, exc.__traceback__),
             },
         )

@@ -22,15 +22,16 @@ from src.errors import (
     ERR_NO_EXCHANGE_CONNECTION,
     ERR_NO_HL_CONNECTION,
     ERR_NO_OPEN_TRADE,
+    ERR_PENDING_TRADE_NOT_FOUND,
     ERR_POSITION_CLOSE_FAILED,
     ERR_POSITION_VERIFY_FAILED,
     ERR_SYMBOL_CONFLICT,
-    ERR_PENDING_TRADE_NOT_FOUND,
     ERR_TELEGRAM_NOT_CONFIGURED,
     ERR_TELEGRAM_SEND_FAILED,
     ERR_TRADE_ALREADY_RESOLVED,
     ERR_WHATSAPP_NOT_CONFIGURED,
     ERR_WHATSAPP_SEND_FAILED,
+    translate_exchange_error,
 )
 from src.exceptions import BotError
 from src.models.database import AffiliateLink, BotConfig, ExchangeConnection, TradeRecord, User
@@ -155,7 +156,7 @@ async def start_bot(
     try:
         await orchestrator.start_bot(bot_id)
     except (ValueError, BotError) as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=translate_exchange_error(str(e)))
 
     # Mark as enabled
     config.is_enabled = True
@@ -249,7 +250,7 @@ async def restart_bot(
     try:
         await orchestrator.restart_bot(bot_id)
     except (ValueError, BotError) as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=translate_exchange_error(str(e)))
 
     config.is_enabled = True
     await db.flush()

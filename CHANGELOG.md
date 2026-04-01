@@ -9,6 +9,28 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [4.10.0] - 2026-04-01
+
+### Hinzugefügt
+- **Exchange-Fehlermeldungen auf Deutsch übersetzt** — Neue Übersetzungsfunktion `translate_exchange_error()` in `src/errors.py` mit 40+ englisch→deutsch Zuordnungen für häufige Exchange-API-Fehler:
+  - Bitget TP/SL-Preisfehler (Long/Short)
+  - Guthaben-/Margin-Fehler (Insufficient balance, margin)
+  - Order-Fehler (nicht gefunden, zu klein, Preislimit)
+  - Positions-Fehler (nicht vorhanden, Schließbetrag)
+  - Hebel-Fehler (zu hoch, nicht im erlaubten Bereich)
+  - API-Key/Auth-Fehler (ungültig, abgelaufen, IP-Whitelist)
+  - Netzwerk-/Timeout-Fehler
+  - Exchange-spezifische Fehler (Hyperliquid, BingX)
+- **TP/SL-Validierungsmeldungen auf Deutsch** — Alle hartcodierten englischen Fehlermeldungen im TP/SL-Endpunkt (`PUT /trades/{id}/tp-sl`) durch deutsche Fehlerkonstanten aus `src/errors.py` ersetzt
+- **Unit-Tests** — 17 Tests für die Übersetzungsfunktion (`tests/unit/test_exchange_error_translation.py`)
+
+### Geändert
+- **Error Handler Middleware** — Übersetzt jetzt Exchange-Fehler automatisch ins Deutsche bevor sie an das Frontend gesendet werden
+- **Bot Lifecycle Router** — Exchange-Fehler bei Start/Restart werden jetzt übersetzt
+- **Trades Router** — Exchange-Validierungsfehler (TP/SL) werden übersetzt; alle lokalen Validierungsmeldungen nutzen jetzt zentrale Fehlerkonstanten
+
+---
+
 ## [4.9.0] - 2026-04-01
 
 ### Entfernt

@@ -170,3 +170,117 @@ ERR_CANNOT_DELETE_SELF_EN = "You cannot delete yourself"
 # ── Trades ─────────────────────────────────────────────────────────
 ERR_TRADE_NOT_FOUND = "Trade nicht gefunden"
 ERR_TRADE_NOT_FOUND_EN = "Trade not found"
+ERR_TP_SL_CONFLICT_TP = "TP und Entfernen von TP kann nicht gleichzeitig gesetzt werden"
+ERR_TP_SL_CONFLICT_TP_EN = "Cannot set take_profit and remove_tp simultaneously"
+ERR_TP_SL_CONFLICT_SL = "SL und Entfernen von SL kann nicht gleichzeitig gesetzt werden"
+ERR_TP_SL_CONFLICT_SL_EN = "Cannot set stop_loss and remove_sl simultaneously"
+ERR_TP_POSITIVE = "TP muss ein positiver Wert sein"
+ERR_TP_POSITIVE_EN = "TP must be a positive value"
+ERR_TP_ABOVE_ENTRY_LONG = "TP muss über dem Einstiegspreis liegen (Long)"
+ERR_TP_ABOVE_ENTRY_LONG_EN = "TP must be above entry price for long"
+ERR_TP_BELOW_ENTRY_SHORT = "TP muss unter dem Einstiegspreis liegen (Short)"
+ERR_TP_BELOW_ENTRY_SHORT_EN = "TP must be below entry price for short"
+ERR_SL_POSITIVE = "SL muss ein positiver Wert sein"
+ERR_SL_POSITIVE_EN = "SL must be a positive value"
+ERR_SL_BELOW_ENTRY_LONG = "SL muss unter dem Einstiegspreis liegen (Long)"
+ERR_SL_BELOW_ENTRY_LONG_EN = "SL must be below entry price for long"
+ERR_SL_ABOVE_ENTRY_SHORT = "SL muss über dem Einstiegspreis liegen (Short)"
+ERR_SL_ABOVE_ENTRY_SHORT_EN = "SL must be above entry price for short"
+ERR_TPSL_EXCHANGE_NOT_SUPPORTED = "Exchange {exchange} unterstützt keine TP/SL-Änderung"
+ERR_TPSL_EXCHANGE_NOT_SUPPORTED_EN = "Exchange {exchange} does not support TP/SL modification"
+ERR_TPSL_UPDATE_FAILED = "TP/SL konnte auf der Exchange nicht aktualisiert werden. Bitte erneut versuchen."
+ERR_TPSL_UPDATE_FAILED_EN = "Failed to update TP/SL on exchange. Please try again."
+
+# ── Exchange API Error Translation ──────────────────────────────────
+# Maps common English exchange API error substrings to German translations.
+# Used by translate_exchange_error() to provide user-friendly German messages.
+_EXCHANGE_ERROR_TRANSLATIONS: list[tuple[str, str]] = [
+    # Bitget TP/SL errors
+    ("the take profit price of the long position should be greater than the current price",
+     "Der Take-Profit-Preis der Long-Position muss über dem aktuellen Preis liegen"),
+    ("the stop loss price of the long position should be less than the current price",
+     "Der Stop-Loss-Preis der Long-Position muss unter dem aktuellen Preis liegen"),
+    ("the take profit price of the short position should be less than the current price",
+     "Der Take-Profit-Preis der Short-Position muss unter dem aktuellen Preis liegen"),
+    ("the stop loss price of the short position should be greater than the current price",
+     "Der Stop-Loss-Preis der Short-Position muss über dem aktuellen Preis liegen"),
+    ("the take profit price should be greater than the entry price",
+     "Der Take-Profit-Preis muss über dem Einstiegspreis liegen"),
+    ("the stop loss price should be less than the entry price",
+     "Der Stop-Loss-Preis muss unter dem Einstiegspreis liegen"),
+    ("the take profit price should be less than the entry price",
+     "Der Take-Profit-Preis muss unter dem Einstiegspreis liegen"),
+    ("the stop loss price should be greater than the entry price",
+     "Der Stop-Loss-Preis muss über dem Einstiegspreis liegen"),
+    # Balance / funds
+    ("insufficient balance", "Unzureichendes Guthaben"),
+    ("insufficient margin", "Unzureichende Margin"),
+    ("insufficient available margin", "Unzureichende verfügbare Margin"),
+    ("balance not enough", "Guthaben nicht ausreichend"),
+    ("not enough balance", "Guthaben nicht ausreichend"),
+    ("available balance is not enough", "Verfügbares Guthaben ist nicht ausreichend"),
+    # Order errors
+    ("order does not exist", "Order existiert nicht"),
+    ("order not found", "Order nicht gefunden"),
+    ("order has been filled", "Order wurde bereits ausgeführt"),
+    ("order has been cancelled", "Order wurde bereits storniert"),
+    ("order amount is too small", "Orderbetrag ist zu gering"),
+    ("the order price is not within the price limit range",
+     "Der Orderpreis liegt außerhalb des erlaubten Preisbereichs"),
+    ("order price is not within the limit", "Orderpreis liegt außerhalb des Limits"),
+    # Position errors
+    ("position does not exist", "Position existiert nicht"),
+    ("position not found", "Position nicht gefunden"),
+    ("no position", "Keine Position vorhanden"),
+    ("close amount exceeds the available amount", "Schließbetrag übersteigt den verfügbaren Betrag"),
+    # Leverage
+    ("leverage is too high", "Hebel ist zu hoch"),
+    ("leverage exceeds maximum", "Hebel überschreitet das Maximum"),
+    ("the leverage ratio is not in the allowable range", "Der Hebel liegt nicht im erlaubten Bereich"),
+    # Market / trading
+    ("market is closed", "Markt ist geschlossen"),
+    ("trading is not allowed", "Handel ist nicht erlaubt"),
+    ("symbol not found", "Handelspaar nicht gefunden"),
+    ("symbol does not exist", "Handelspaar existiert nicht"),
+    ("the symbol is not available for trading", "Das Handelspaar ist nicht für den Handel verfügbar"),
+    ("minimum order amount", "Mindestorderbetrag nicht erreicht"),
+    ("minimum order quantity", "Mindestordermenge nicht erreicht"),
+    ("the quantity of the order is less than the minimum", "Die Ordermenge ist unter dem Minimum"),
+    # Rate limiting
+    ("too many requests", "Zu viele Anfragen — bitte kurz warten"),
+    ("rate limit exceeded", "Anfragelimit überschritten — bitte kurz warten"),
+    # API key / auth
+    ("invalid api key", "Ungültiger API-Key"),
+    ("api key expired", "API-Key abgelaufen"),
+    ("signature error", "Signatur-Fehler — prüfe API-Secret"),
+    ("invalid signature", "Ungültige Signatur — prüfe API-Secret"),
+    ("ip not in whitelist", "IP-Adresse nicht in der Whitelist"),
+    ("permission denied", "Berechtigung verweigert — prüfe API-Key-Berechtigungen"),
+    ("api key does not have permission", "API-Key hat keine Berechtigung für diese Aktion"),
+    # Network / timeout
+    ("timeout", "Zeitüberschreitung — bitte erneut versuchen"),
+    ("connection refused", "Verbindung abgelehnt"),
+    ("service unavailable", "Exchange vorübergehend nicht verfügbar"),
+    # Hyperliquid specific
+    ("order rejected", "Order abgelehnt"),
+    ("user or api wallet does not exist", "Wallet existiert nicht auf Hyperliquid"),
+    ("not enough margin to place order", "Nicht genug Margin für diese Order"),
+    # BingX specific
+    ("the contract does not exist", "Der Kontrakt existiert nicht"),
+    # Generic
+    ("unknown error", "Unbekannter Fehler"),
+]
+
+
+def translate_exchange_error(error_msg: str) -> str:
+    """Translate common English exchange API error messages to German.
+
+    Performs case-insensitive substring matching against known error patterns.
+    Returns the German translation if a match is found, otherwise returns the
+    original message unchanged.
+    """
+    lower = error_msg.lower()
+    for english_pattern, german_translation in _EXCHANGE_ERROR_TRANSLATIONS:
+        if english_pattern in lower:
+            return german_translation
+    return error_msg
