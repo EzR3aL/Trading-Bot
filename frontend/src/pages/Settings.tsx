@@ -181,6 +181,7 @@ export default function Settings() {
   const [affiliateLinks, setAffiliateLinks] = useState<Record<string, { affiliate_url: string; label: string; is_active: boolean }>>({})
   const [affiliateForms, setAffiliateForms] = useState<Record<string, { url: string; label: string; active: boolean; uidRequired: boolean }>>({})
   const [affiliateLoaded, setAffiliateLoaded] = useState(false)
+  const [affiliateCardOpen, setAffiliateCardOpen] = useState<Record<string, boolean>>({})
 
   // Affiliate UID (user-facing)
   const [userAffiliateLinks, setUserAffiliateLinks] = useState<Record<string, { affiliate_url: string; label: string | null; uid_required: boolean }>>({})
@@ -875,23 +876,30 @@ export default function Settings() {
                     const hasExisting = !!affiliateLinks[ex]
                     return (
                       <div key={ex} className="border border-white/[0.08] bg-white/[0.02] rounded-xl overflow-hidden">
-                        {/* Exchange header with accent */}
-                        <div className={`px-4 py-2.5 flex items-center justify-between border-b ${
-                          hasExisting
-                            ? 'border-emerald-500/10 bg-emerald-500/[0.03]'
-                            : 'border-white/[0.06] bg-white/[0.02]'
-                        }`}>
+                        {/* Exchange header — clickable to toggle */}
+                        <div
+                          className={`px-4 py-2.5 flex items-center justify-between cursor-pointer select-none ${
+                            affiliateCardOpen[ex]
+                              ? `border-b ${hasExisting ? 'border-emerald-500/10 bg-emerald-500/[0.03]' : 'border-white/[0.06] bg-white/[0.02]'}`
+                              : hasExisting ? 'bg-emerald-500/[0.03]' : 'bg-white/[0.02]'
+                          }`}
+                          onClick={() => setAffiliateCardOpen(prev => ({ ...prev, [ex]: !prev[ex] }))}
+                        >
                           <div className="flex items-center gap-2.5">
                             <ExchangeIcon exchange={ex} size={18} />
                             <span className="text-xs font-semibold text-gray-300 uppercase tracking-wider capitalize">{ex}</span>
                           </div>
-                          <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${
-                            hasExisting ? 'bg-emerald-500/10 text-emerald-400' : 'bg-white/5 text-gray-500'
-                          }`}>
-                            {hasExisting ? t('settings.configured') : t('settings.notConfigured')}
-                          </span>
+                          <div className="flex items-center gap-2">
+                            <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${
+                              hasExisting ? 'bg-emerald-500/10 text-emerald-400' : 'bg-white/5 text-gray-500'
+                            }`}>
+                              {hasExisting ? t('settings.configured') : t('settings.notConfigured')}
+                            </span>
+                            <ChevronDown size={14} className={`text-gray-400 transition-transform duration-200 ${affiliateCardOpen[ex] ? 'rotate-180' : ''}`} />
+                          </div>
                         </div>
-                        {/* Form content */}
+                        {/* Collapsible form content */}
+                        {affiliateCardOpen[ex] && (
                         <div className="p-4 space-y-3">
                           <div>
                             <label className="block text-xs text-gray-500 mb-1">{t('settings.affiliateUrl')}</label>
@@ -956,6 +964,7 @@ export default function Settings() {
                             )}
                           </div>
                         </div>
+                        )}
                       </div>
                     )
                   })}

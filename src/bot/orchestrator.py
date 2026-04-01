@@ -414,6 +414,19 @@ class BotOrchestrator:
                 worker = self._workers.get(bot_config_id)
                 config = worker.config if worker else None
 
+                # If worker has no config, fall back to DB lookup
+                if config is None:
+                    result2 = await session.execute(
+                        select(BotConfig).where(BotConfig.id == bot_config_id)
+                    )
+                    config = result2.scalar_one_or_none()
+                    if config is None:
+                        logger.error(
+                            "Orchestrator: Cannot update instance state — "
+                            "no config found for bot_config_id=%s", bot_config_id
+                        )
+                        return
+
                 if instance:
                     instance.is_running = is_running
                     instance.error_message = error_msg
@@ -422,16 +435,15 @@ class BotOrchestrator:
                         instance.stopped_at = None
                     else:
                         instance.stopped_at = datetime.now(timezone.utc)
-                    if config:
-                        instance.demo_mode = config.mode in ("demo", "both")
+                    instance.demo_mode = config.mode in ("demo", "both")
                 else:
                     # Create new instance
                     instance = BotInstance(
-                        user_id=config.user_id if config else 0,
+                        user_id=config.user_id,
                         bot_config_id=bot_config_id,
-                        exchange_type=config.exchange_type if config else "unknown",
+                        exchange_type=config.exchange_type,
                         is_running=is_running,
-                        demo_mode=config.mode in ("demo", "both") if config else True,
+                        demo_mode=config.mode in ("demo", "both"),
                         started_at=datetime.now(timezone.utc) if is_running else None,
                         error_message=error_msg,
                     )

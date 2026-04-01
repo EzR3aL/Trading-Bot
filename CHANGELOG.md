@@ -9,6 +9,21 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [4.8.2] - 2026-04-01
+
+### Hinzugefügt
+- **BotBuilder Hyperliquid Gate-Check**: Warnung im Exchange-Schritt wenn Referral oder Builder Fee noch nicht abgeschlossen sind (amber Banner, kein Hard-Block)
+- **Bots-Seite HL-Warnung**: Amber Banner auf Bot-Karten für Hyperliquid-Bots mit unvollständiger Einrichtung (Admins ausgenommen)
+- **i18n**: Neue Übersetzungsschlüssel für HL Gate-Warnungen (DE + EN)
+
+### Behoben
+- **Orchestrator `user_id=0` Fix**: `_update_instance_state` fragt jetzt `BotConfig` aus der DB ab wenn der Worker keine Config hat, statt `user_id=0` / `exchange_type="unknown"` als Fallback zu verwenden
+
+### Geändert (UI)
+- **Affiliate-Link-Karten (Settings)**: Karten sind jetzt einklappbar/ausklappbar — standardmäßig eingeklappt, nur Exchange-Name, Icon, Status-Badge und Chevron sichtbar. Klick öffnet die Formulare. Spart Platz bei vielen Exchanges.
+
+---
+
 ## [4.8.1] - 2026-04-01
 
 ### Geändert (UI)

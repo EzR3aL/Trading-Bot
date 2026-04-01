@@ -63,6 +63,9 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
   const [whatsappToken, setWhatsappToken] = useState('')
   const [whatsappRecipient, setWhatsappRecipient] = useState('')
 
+  // Hyperliquid gate status (referral + builder fee)
+  const [hlGateStatus, setHlGateStatus] = useState<{ needs_approval: boolean; needs_referral: boolean }>({ needs_approval: false, needs_referral: false })
+
   // Symbol conflicts
   const [symbolConflicts, setSymbolConflicts] = useState<SymbolConflict[]>([])
 
@@ -187,6 +190,22 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
       .catch(() => { if (!cancelled) setExchangeSymbols([]) })
       .finally(() => { if (!cancelled) setSymbolsLoading(false) })
     return () => { cancelled = true }
+  }, [exchangeType])
+
+  // Fetch Hyperliquid gate status when exchange is hyperliquid
+  useEffect(() => {
+    if (exchangeType !== 'hyperliquid') {
+      setHlGateStatus({ needs_approval: false, needs_referral: false })
+      return
+    }
+    api.get('/config/hyperliquid/builder-config')
+      .then(res => {
+        setHlGateStatus({
+          needs_approval: !!res.data.needs_approval,
+          needs_referral: !!res.data.needs_referral,
+        })
+      })
+      .catch(() => setHlGateStatus({ needs_approval: false, needs_referral: false }))
   }, [exchangeType])
 
   // Convert trading pairs when exchange type changes and new symbols are loaded
@@ -491,6 +510,7 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
             exchangeSymbols={exchangeSymbols} symbolsLoading={symbolsLoading}
             balancePreview={balancePreview} balanceOverview={balanceOverview}
             overviewLoading={overviewLoading} symbolConflicts={symbolConflicts}
+            hlGateStatus={hlGateStatus}
             onExchangeTypeChange={setExchangeType} onModeChange={setMode}
             onMarginModeChange={setMarginMode} onTogglePair={togglePair}
             onPerAssetConfigChange={setPerAssetConfig}

@@ -18,6 +18,7 @@ interface Props {
   balanceOverview: BalancePreview[]
   overviewLoading: boolean
   symbolConflicts: SymbolConflict[]
+  hlGateStatus?: { needs_approval: boolean; needs_referral: boolean }
   onExchangeTypeChange: (val: string) => void
   onModeChange: (val: string) => void
   onMarginModeChange: (val: 'cross' | 'isolated') => void
@@ -29,7 +30,7 @@ interface Props {
 export default function BotBuilderStepExchange({
   exchangeType, mode, marginMode, tradingPairs, perAssetConfig,
   exchangeSymbols, symbolsLoading, balancePreview, balanceOverview, overviewLoading,
-  symbolConflicts,
+  symbolConflicts, hlGateStatus,
   onExchangeTypeChange, onModeChange, onMarginModeChange, onTogglePair, onPerAssetConfigChange,
   b,
 }: Props) {
@@ -95,6 +96,16 @@ export default function BotBuilderStepExchange({
             <div>
               <span className="font-semibold">{t('bots.builder.bitgetWarningTitle', 'Hinweis für deutsche Neukunden:')}</span>{' '}
               {t('bots.builder.bitgetWarningText', 'Bitget Futures sind für neue deutsche Kunden voraussichtlich bis 2027 nicht verfügbar. Bestehende Konten mit aktiviertem Futures-Trading sind nicht betroffen.')}
+            </div>
+          </div>
+        )}
+        {/* Hyperliquid gate warning: referral or builder fee not yet completed */}
+        {isHyperliquid && hlGateStatus && (hlGateStatus.needs_approval || hlGateStatus.needs_referral) && (
+          <div className="flex items-start gap-2 p-3 mt-3 bg-amber-500/10 border border-amber-500/20 rounded-xl text-amber-300 text-xs sm:w-fit">
+            <AlertTriangle size={16} className="shrink-0 mt-0.5" />
+            <div>
+              <span className="font-semibold">{t('hlSetup.gateWarningTitle', 'Einrichtung erforderlich:')}</span>{' '}
+              {t('hlSetup.gateWarningText', 'Hyperliquid Referral oder Builder Fee sind noch nicht abgeschlossen. Bitte schließe die Einrichtung in den Einstellungen ab.')}
             </div>
           </div>
         )}

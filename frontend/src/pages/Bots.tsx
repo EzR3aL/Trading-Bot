@@ -21,7 +21,7 @@ import {
   Pencil,
   Trash2,
   AlertCircle,
-
+  AlertTriangle,
   RefreshCw,
   Activity,
   Clock,
@@ -1174,6 +1174,14 @@ export default function Bots() {
                   <div className="flex items-center gap-1.5 mb-3 text-sm text-red-400 bg-red-500/5 rounded-lg px-2.5 py-2">
                     <AlertCircle size={14} />
                     <span className="truncate">{bot.error_message}</span>
+                  </div>
+                )}
+
+                {/* Hyperliquid gate warning: setup incomplete (hidden for admins) */}
+                {!isAdmin && bot.exchange_type === 'hyperliquid' && (bot.builder_fee_approved === false || bot.referral_verified === false) && bot.status !== 'running' && (
+                  <div className="flex items-center gap-1.5 mb-3 text-xs text-amber-300 bg-amber-500/10 border border-amber-500/20 rounded-lg px-2.5 py-2">
+                    <AlertTriangle size={14} className="shrink-0" />
+                    <span>{t('hlSetup.botCardWarning', 'Einrichtung in Einstellungen erforderlich')}</span>
                   </div>
                 )}
 

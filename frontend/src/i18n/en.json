@@ -811,7 +811,10 @@
     "affiliateSuccess": "Affiliate successfully verified!",
     "builderFeePrompt": "Approve the builder fee to activate trading:",
     "setupRequired": "Please set up Hyperliquid in Settings first.",
-    "pendingSteps": "{{count}} step(s) pending"
+    "pendingSteps": "{{count}} step(s) pending",
+    "gateWarningTitle": "Setup required:",
+    "gateWarningText": "Hyperliquid referral or builder fee not yet completed. Please finish the setup in Settings.",
+    "botCardWarning": "Setup required in Settings"
   },
   "editPosition": {
     "title": "Edit Position",
