@@ -80,7 +80,6 @@ export default function BotBuilderStepReview({
           <ReviewRow label={b.exchange}>
             <span className="inline-flex items-center gap-1.5">
               <ExchangeLogo exchange={exchangeType} size={14} />
-              <span className="capitalize">{exchangeType}</span>
             </span>
           </ReviewRow>
           <ReviewRow label={t('bots.builder.marginMode')}>{t(`bots.builder.${marginMode}`)}</ReviewRow>
