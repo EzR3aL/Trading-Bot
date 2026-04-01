@@ -294,7 +294,7 @@ function TradeDetailModal({ trade, onClose, t, affiliateLink }: { trade: BotTrad
                 <span className="text-white font-medium">{trade.leverage}x</span>
               </>
             )}
-            <span className="text-xs text-gray-500" style={{ marginLeft: 'auto' }}>{formatDate(trade.entry_time)}</span>
+            <span className="text-xs text-gray-500 shrink-0" style={{ marginLeft: 'auto' }}>{formatDate(trade.entry_time)}</span>
         </div>
 
         {/* PnL - Hero */}
@@ -540,7 +540,7 @@ function BotTradeHistoryModal({ bot, onClose, t }: { bot: BotStatus; onClose: ()
                   <div className="absolute -left-[9999px] pointer-events-none" aria-hidden="true">
                     <div
                       ref={copyCardRef}
-                      className="bg-[#0f1420] rounded-2xl p-5 w-[420px] border border-white/10 shadow-2xl"
+                      className="bg-[#0f1420] rounded-2xl p-5 border border-white/10 shadow-2xl" style={{ width: 420, minWidth: 420 }}
                     >
                       {/* Header: Exchange logo + Symbol */}
                       <div className="flex items-center gap-2 mb-1">
@@ -560,7 +560,7 @@ function BotTradeHistoryModal({ bot, onClose, t }: { bot: BotStatus; onClose: ()
                               <span className="text-white font-medium">{latestClosed.leverage}x</span>
                             </>
                           )}
-                          <span className="text-xs text-gray-500" style={{ marginLeft: 'auto' }}>{formatDate(latestClosed.entry_time)}</span>
+                          <span className="text-xs text-gray-500 shrink-0" style={{ marginLeft: 'auto' }}>{formatDate(latestClosed.entry_time)}</span>
                       </div>
                       {/* PnL - Hero */}
                       <div className="text-center py-5 mb-4">
@@ -613,7 +613,7 @@ function BotTradeHistoryModal({ bot, onClose, t }: { bot: BotStatus; onClose: ()
                       <div
                         key={trade.id}
                         ref={(el) => { if (el) mobileShareRefs.current.set(trade.id, el); else mobileShareRefs.current.delete(trade.id) }}
-                        className="bg-[#0f1420] rounded-2xl p-5 w-[420px] border border-white/10 shadow-2xl"
+                        className="bg-[#0f1420] rounded-2xl p-5 border border-white/10 shadow-2xl" style={{ width: 420, minWidth: 420 }}
                       >
                         <div className="flex items-center gap-2 mb-1">
                           <ExchangeIcon exchange={bot.exchange_type} size={18} />
@@ -631,7 +631,7 @@ function BotTradeHistoryModal({ bot, onClose, t }: { bot: BotStatus; onClose: ()
                                 <span className="text-white font-medium">{trade.leverage}x</span>
                               </>
                             )}
-                            <span className="text-xs text-gray-500" style={{ marginLeft: 'auto' }}>{formatDate(trade.entry_time)}</span>
+                            <span className="text-xs text-gray-500 shrink-0" style={{ marginLeft: 'auto' }}>{formatDate(trade.entry_time)}</span>
                         </div>
                         <div className="text-center py-5 mb-4">
                           <div className={`text-5xl font-bold tracking-tight ${trade.pnl_percent >= 0 ? 'text-profit' : 'text-loss'}`}>

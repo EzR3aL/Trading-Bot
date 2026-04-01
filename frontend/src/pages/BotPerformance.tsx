@@ -917,7 +917,7 @@ export default function BotPerformance() {
                             <div
                               key={trade.id}
                               ref={(el) => { if (el) mobileShareRefs.current.set(trade.id, el); else mobileShareRefs.current.delete(trade.id) }}
-                              className="bg-[#0f1420] rounded-2xl p-5 w-[420px] border border-white/10 shadow-2xl"
+                              className="bg-[#0f1420] rounded-2xl p-5 border border-white/10 shadow-2xl" style={{ width: 420, minWidth: 420 }}
                             >
                               <div className="flex items-center gap-2 mb-1">
                                 <ExchangeIcon exchange={botExchange} size={18} />
@@ -935,7 +935,7 @@ export default function BotPerformance() {
                                       <span className="text-white font-medium">{trade.leverage}x</span>
                                     </>
                                   )}
-                                  <span className="text-xs text-gray-500" style={{ marginLeft: 'auto' }}>{formatDate(trade.entry_time)}</span>
+                                  <span className="text-xs text-gray-500 shrink-0" style={{ marginLeft: 'auto' }}>{formatDate(trade.entry_time)}</span>
                               </div>
                               <div className="text-center py-5 mb-4">
                                 <div className={`text-5xl font-bold tracking-tight ${trade.pnl_percent >= 0 ? 'text-profit' : 'text-loss'}`}>
