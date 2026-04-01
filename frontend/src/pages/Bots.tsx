@@ -282,8 +282,7 @@ function TradeDetailModal({ trade, onClose, t, affiliateLink }: { trade: BotTrad
           <span className="text-lg font-bold text-white">{trade.symbol}</span>
         </div>
         {/* Perp | Side | Leverage | Date */}
-        <div className="flex items-center justify-between text-sm text-gray-400 mb-4">
-          <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 text-sm text-gray-400 mb-4">
             <span>Perp</span>
             <span className="text-gray-600">|</span>
             <span className={trade.side === 'long' ? 'text-emerald-400 font-medium' : 'text-red-400 font-medium'}>
@@ -295,8 +294,7 @@ function TradeDetailModal({ trade, onClose, t, affiliateLink }: { trade: BotTrad
                 <span className="text-white font-medium">{trade.leverage}x</span>
               </>
             )}
-          </div>
-          <span className="text-xs text-gray-500">{formatDate(trade.entry_time)}</span>
+            <span className="text-xs text-gray-500" style={{ marginLeft: 'auto' }}>{formatDate(trade.entry_time)}</span>
         </div>
 
         {/* PnL - Hero */}
@@ -550,8 +548,7 @@ function BotTradeHistoryModal({ bot, onClose, t }: { bot: BotStatus; onClose: ()
                         <span className="text-lg font-bold text-white">{latestClosed.symbol}</span>
                       </div>
                       {/* Perp | Side | Leverage | Date */}
-                      <div className="flex items-center justify-between text-sm text-gray-400 mb-4">
-                        <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 text-sm text-gray-400 mb-4">
                           <span>Perp</span>
                           <span className="text-gray-600">|</span>
                           <span className={latestClosed.side === 'long' ? 'text-emerald-400 font-medium' : 'text-red-400 font-medium'}>
@@ -563,8 +560,7 @@ function BotTradeHistoryModal({ bot, onClose, t }: { bot: BotStatus; onClose: ()
                               <span className="text-white font-medium">{latestClosed.leverage}x</span>
                             </>
                           )}
-                        </div>
-                        <span className="text-xs text-gray-500">{formatDate(latestClosed.entry_time)}</span>
+                          <span className="text-xs text-gray-500" style={{ marginLeft: 'auto' }}>{formatDate(latestClosed.entry_time)}</span>
                       </div>
                       {/* PnL - Hero */}
                       <div className="text-center py-5 mb-4">
@@ -623,8 +619,7 @@ function BotTradeHistoryModal({ bot, onClose, t }: { bot: BotStatus; onClose: ()
                           <ExchangeIcon exchange={bot.exchange_type} size={18} />
                           <span className="text-lg font-bold text-white">{trade.symbol}</span>
                         </div>
-                        <div className="flex items-center justify-between text-sm text-gray-400 mb-4">
-                          <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 text-sm text-gray-400 mb-4">
                             <span>Perp</span>
                             <span className="text-gray-600">|</span>
                             <span className={trade.side === 'long' ? 'text-emerald-400 font-medium' : 'text-red-400 font-medium'}>
@@ -636,8 +631,7 @@ function BotTradeHistoryModal({ bot, onClose, t }: { bot: BotStatus; onClose: ()
                                 <span className="text-white font-medium">{trade.leverage}x</span>
                               </>
                             )}
-                          </div>
-                          <span className="text-xs text-gray-500">{formatDate(trade.entry_time)}</span>
+                            <span className="text-xs text-gray-500" style={{ marginLeft: 'auto' }}>{formatDate(trade.entry_time)}</span>
                         </div>
                         <div className="text-center py-5 mb-4">
                           <div className={`text-5xl font-bold tracking-tight ${trade.pnl_percent >= 0 ? 'text-profit' : 'text-loss'}`}>

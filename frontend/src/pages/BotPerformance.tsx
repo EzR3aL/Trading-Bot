@@ -923,8 +923,7 @@ export default function BotPerformance() {
                                 <ExchangeIcon exchange={botExchange} size={18} />
                                 <span className="text-lg font-bold text-white">{trade.symbol}</span>
                               </div>
-                              <div className="flex items-center justify-between text-sm text-gray-400 mb-4">
-                                <div className="flex items-center gap-2">
+                              <div className="flex items-center gap-2 text-sm text-gray-400 mb-4">
                                   <span>Perp</span>
                                   <span className="text-gray-600">|</span>
                                   <span className={trade.side === 'long' ? 'text-emerald-400 font-medium' : 'text-red-400 font-medium'}>
@@ -936,8 +935,7 @@ export default function BotPerformance() {
                                       <span className="text-white font-medium">{trade.leverage}x</span>
                                     </>
                                   )}
-                                </div>
-                                <span className="text-xs text-gray-500">{formatDate(trade.entry_time)}</span>
+                                  <span className="text-xs text-gray-500" style={{ marginLeft: 'auto' }}>{formatDate(trade.entry_time)}</span>
                               </div>
                               <div className="text-center py-5 mb-4">
                                 <div className={`text-5xl font-bold tracking-tight ${trade.pnl_percent >= 0 ? 'text-profit' : 'text-loss'}`}>
@@ -1182,8 +1180,7 @@ export default function BotPerformance() {
                 )
               })()}
               {/* Perp | Side | Leverage | Date */}
-              <div className="flex items-center justify-between text-sm text-gray-400 mb-4">
-                <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 text-sm text-gray-400 mb-4">
                   <span>Perp</span>
                   <span className="text-gray-600">|</span>
                   <span className={selectedTrade.side === 'long' ? 'text-emerald-400 font-medium' : 'text-red-400 font-medium'}>
@@ -1195,8 +1192,7 @@ export default function BotPerformance() {
                       <span className="text-white font-medium">{selectedTrade.leverage}x</span>
                     </>
                   )}
-                </div>
-                <span className="text-xs text-gray-500">{formatDate(selectedTrade.entry_time)}</span>
+                  <span className="text-xs text-gray-500" style={{ marginLeft: 'auto' }}>{formatDate(selectedTrade.entry_time)}</span>
               </div>
 
               {/* PnL - Hero */}
