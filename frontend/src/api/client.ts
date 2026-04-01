@@ -38,6 +38,8 @@ let sessionExpiring = false
 function handleSessionExpiry() {
   // Guard: prevent multiple calls from concurrent 401 responses
   if (sessionExpiring) return
+  // Don't redirect if already on login page (prevents infinite loop)
+  if (window.location.pathname === '/login') return
   sessionExpiring = true
 
   tokenExpiryMs = null
@@ -141,9 +143,11 @@ api.interceptors.response.use(
   async (error) => {
     const originalRequest = error.config
 
-    // Skip refresh logic for auth endpoints (login, register) — they return
-    // 401 for invalid credentials, not for expired sessions
-    const isAuthEndpoint = originalRequest.url?.includes('/auth/login') || originalRequest.url?.includes('/auth/register')
+    // Skip refresh logic for auth endpoints — they return 401 for invalid
+    // credentials or missing session, not for expired tokens
+    const isAuthEndpoint = originalRequest.url?.includes('/auth/login')
+      || originalRequest.url?.includes('/auth/register')
+      || originalRequest.url?.includes('/auth/me')
     if (error.response?.status === 401 && !originalRequest._retry && !isAuthEndpoint) {
       originalRequest._retry = true
 
