@@ -81,11 +81,25 @@ async def create_user(
     db: AsyncSession = Depends(get_db),
 ):
     """Create a new user (admin only)."""
-    # Check uniqueness
+    # Check uniqueness — exclude soft-deleted users
     existing = await db.execute(
         select(User).where(User.username == data.username)
     )
-    if existing.scalar_one_or_none():
+    existing_user = existing.scalar_one_or_none()
+    if existing_user:
+        if existing_user.deleted_at is not None:
+            # Reactivate soft-deleted user with new credentials
+            existing_user.deleted_at = None
+            existing_user.is_active = True
+            existing_user.password_hash = hash_password(data.password)
+            existing_user.email = data.email
+            existing_user.role = data.role
+            existing_user.language = data.language
+            existing_user.failed_login_attempts = 0
+            existing_user.locked_until = None
+            await db.flush()
+            await db.refresh(existing_user)
+            return UserResponse.model_validate(existing_user)
         raise HTTPException(status_code=409, detail=ERR_USERNAME_EXISTS)
 
     user = User(
