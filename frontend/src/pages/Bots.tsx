@@ -192,9 +192,9 @@ function TradeDetailModal({ trade, onClose, t, affiliateLink }: { trade: BotTrad
 
   const handleShare = async () => {
     try {
-      const isMobile = 'ontouchstart' in window || navigator.maxTouchPoints > 0
+      const isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
 
-      if (!isMobile) {
+      if (!isMobileDevice) {
         // Desktop: pass a Promise to ClipboardItem so the async toBlob
         // stays within the user-gesture window (Chrome requirement)
         const blobPromise = captureBlob().then(b => {

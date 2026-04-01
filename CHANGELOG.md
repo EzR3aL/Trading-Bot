@@ -21,6 +21,8 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 - **Mobile Trade-Karten**: Datum wird jetzt oben rechts im Header angezeigt (wie auf Desktop)
 - **Share-Button Position**: Eigene Grid-Zelle in Detail-Zeile (sauber ausgerichtet wie andere Felder) — in Performance-Tab und Bot Trade-Historie
 - **Clipboard-Fix (Bots Trade-Historie)**: Promise-basierter ClipboardItem auch hier angewendet
+- **Desktop Share öffnete Teilen-Dialog statt Zwischenablage**: Mobile-Erkennung per Touch-Events erkannte Touchscreen-Laptops fälschlich als Mobil → jetzt User-Agent-basiert
+- MobileTradeCard: Doppeltes Datum im Header wieder entfernt (Summary-Zeile hat es bereits)
 
 ---
 
