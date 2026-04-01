@@ -446,13 +446,34 @@ export default function BotPerformance() {
     if (!ref.current) return
     const setFlag = copiedSetter || setCopied
     try {
-      const blob = await toBlob(ref.current, {
+      const isMobile = 'ontouchstart' in window || navigator.maxTouchPoints > 0
+      const el = ref.current
+
+      if (!isMobile) {
+        // Desktop: pass a Promise to ClipboardItem so the async toBlob
+        // stays within the user-gesture window (Chrome requirement)
+        const blobPromise = toBlob(el, {
+          pixelRatio: 2,
+          backgroundColor: theme === 'light' ? '#f8fafc' : '#0b0f19',
+        }).then(b => {
+          if (!b) throw new Error('toBlob returned null')
+          return new Blob([b], { type: 'image/png' })
+        })
+        await navigator.clipboard.write([
+          new ClipboardItem({ 'image/png': blobPromise }),
+        ])
+        setFlag(true)
+        setTimeout(() => setFlag(false), 2000)
+        return
+      }
+
+      // Mobile: native share
+      const blob = await toBlob(el, {
         pixelRatio: 2,
         backgroundColor: theme === 'light' ? '#f8fafc' : '#0b0f19',
       })
       if (!blob) return
-      const isMobile = 'ontouchstart' in window || navigator.maxTouchPoints > 0
-      if (isMobile && navigator.share && navigator.canShare) {
+      if (navigator.share && navigator.canShare) {
         const file = new File([blob], 'trade.png', { type: 'image/png' })
         const pnlStr = trade.pnl_percent >= 0 ? `+${trade.pnl_percent.toFixed(2)}%` : `${trade.pnl_percent.toFixed(2)}%`
         if (navigator.canShare({ files: [file] })) {
@@ -461,13 +482,8 @@ export default function BotPerformance() {
             text: affiliateUrl || 'Edge Bots by Trading Department',
             files: [file],
           })
-          return
         }
       }
-      // Desktop: copy image to clipboard
-      await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })])
-      setFlag(true)
-      setTimeout(() => setFlag(false), 2000)
     } catch (err) {
       if ((err as DOMException).name !== 'AbortError') {
         console.error('Failed to share image:', err)
@@ -1056,7 +1072,16 @@ export default function BotPerformance() {
                                   </div>
                                   <div className="2xl:hidden">
                                     <dt>{t('trades.mode')}</dt>
-                                    <dd>{trade.demo_mode ? t('common.demo') : t('common.live')}</dd>
+                                    <dd className="flex items-center gap-2">
+                                      {trade.demo_mode ? t('common.demo') : t('common.live')}
+                                      <button
+                                        onClick={() => setSelectedTrade(trade)}
+                                        className="hidden sm:inline-flex p-1.5 rounded-lg text-gray-400 hover:text-white bg-white/5 hover:bg-white/10 border border-white/5 transition-all"
+                                        title={t('bots.shareImage')}
+                                      >
+                                        <Share2 size={13} />
+                                      </button>
+                                    </dd>
                                   </div>
                                   {trade.exit_time && (
                                     <div>
@@ -1082,7 +1107,7 @@ export default function BotPerformance() {
                                       <dd className="text-gray-400 text-xs">{trade.reason}</dd>
                                     </div>
                                   )}
-                                  <div className="col-span-2 pt-1">
+                                  <div className="sm:hidden pt-1">
                                     <button
                                       onClick={() => setSelectedTrade(trade)}
                                       className="p-2 rounded-lg text-gray-400 hover:text-white bg-white/5 hover:bg-white/10 border border-white/5 transition-all"

@@ -9,6 +9,19 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [4.8.1] - 2026-04-01
+
+### Geändert (UI)
+- **Bot-Aktionsleiste**: Stoppen/Starten, Trade-Historie und 3-Punkte-Menü jetzt alle in einer Zeile (kompaktere Buttons, kleinere Icons)
+- Trade-Historie-Label wird jetzt immer angezeigt (nicht mehr nur auf Desktop)
+- **Share-Button (Desktop)**: In der Detail-Zeile neben Modus eingereiht statt in eigener Zeile unten
+
+### Behoben
+- **Share-to-Clipboard (Desktop)**: Bild wird jetzt korrekt in die Zwischenablage kopiert (ClipboardItem erhält Promise statt fertigen Blob, damit Chrome's User-Gesture-Fenster nicht abläuft)
+- **Mobile Trade-Karten**: Datum wird jetzt oben rechts im Header angezeigt (wie auf Desktop)
+
+---
+
 ## [4.8.0] - 2026-03-31
 
 ### Behoben (Mobile UI)

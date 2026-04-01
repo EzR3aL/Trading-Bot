@@ -1272,15 +1272,15 @@ export default function Bots() {
                 )}
 
                 {/* Actions */}
-                <div className="flex flex-wrap items-center gap-2 pt-3 border-t border-white/5" {...(bot === bots[0] ? { 'data-tour': 'bot-actions' } : {})}>
+                <div className="flex items-center gap-2 pt-3 border-t border-white/5" {...(bot === bots[0] ? { 'data-tour': 'bot-actions' } : {})}>
                   {bot.status === 'running' ? (
                     <button
                       onClick={() => handleStopClick(bot.bot_config_id)}
                       disabled={actionLoading === bot.bot_config_id}
                       aria-label={`${t('bots.stop')} ${bot.name}`}
-                      className={`w-full sm:w-auto sm:flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 text-sm rounded-xl border disabled:opacity-50 transition-all duration-200 ${confirmStopId === bot.bot_config_id ? 'bg-red-600 text-white border-red-500 animate-pulse' : 'bg-red-500/10 text-red-400 border-red-500/10 hover:bg-red-500/20'}`}
+                      className={`flex-1 flex items-center justify-center gap-1 px-2 py-1.5 text-xs rounded-lg border disabled:opacity-50 transition-all duration-200 ${confirmStopId === bot.bot_config_id ? 'bg-red-600 text-white border-red-500 animate-pulse' : 'bg-red-500/10 text-red-400 border-red-500/10 hover:bg-red-500/20'}`}
                     >
-                      <Square size={16} />
+                      <Square size={14} />
                       {confirmStopId === bot.bot_config_id ? t('bots.confirmStop') : t('bots.stop')}
                     </button>
                   ) : (
@@ -1288,12 +1288,12 @@ export default function Bots() {
                       onClick={() => handleStart(bot.bot_config_id)}
                       disabled={actionLoading === bot.bot_config_id}
                       aria-label={`${t('bots.start')} ${bot.name}`}
-                      className="w-full sm:w-auto sm:flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 text-sm bg-emerald-500/10 text-emerald-400 rounded-xl border border-emerald-500/10 hover:bg-emerald-500/20 disabled:opacity-50 transition-all duration-200"
+                      className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 text-xs bg-emerald-500/10 text-emerald-400 rounded-lg border border-emerald-500/10 hover:bg-emerald-500/20 disabled:opacity-50 transition-all duration-200"
                     >
                       {actionLoading === bot.bot_config_id ? (
-                        <RefreshCw size={16} className="animate-spin" />
+                        <RefreshCw size={14} className="animate-spin" />
                       ) : (
-                        <Play size={16} />
+                        <Play size={14} />
                       )}
                       {t('bots.start')}
                     </button>
@@ -1301,21 +1301,21 @@ export default function Bots() {
                   <button
                     onClick={() => setHistoryBot(bot)}
                     aria-label={t('bots.showTrades')}
-                    className="flex items-center gap-1.5 px-3 py-2 text-sm text-primary-400 bg-primary-500/10 hover:bg-primary-500/20 border border-primary-500/20 transition-all duration-200 rounded-xl"
+                    className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 text-xs text-primary-400 bg-primary-500/10 hover:bg-primary-500/20 border border-primary-500/20 transition-all duration-200 rounded-lg"
                     title={t('bots.tradeHistory')}
                   >
-                    <TrendingUp size={16} />
-                    <span className="hidden sm:inline">{t('bots.tradeHistory')}</span>
+                    <TrendingUp size={14} />
+                    {t('bots.tradeHistory')}
                   </button>
                   {/* 3-dot menu for Edit, Duplicate, Delete */}
-                  <div className="relative">
+                  <div className="relative flex-shrink-0">
                     <button
                       onClick={(e) => { e.stopPropagation(); setMoreMenuOpen(moreMenuOpen === bot.bot_config_id ? null : bot.bot_config_id) }}
                       aria-label={t('bots.moreActions')}
-                      className="p-3 -m-1 text-gray-400 hover:text-white transition-all duration-200 rounded-lg hover:bg-white/5"
+                      className="p-2 text-gray-400 hover:text-white transition-all duration-200 rounded-lg hover:bg-white/5"
                       title={t('bots.moreActions')}
                     >
-                      <MoreVertical size={18} />
+                      <MoreVertical size={16} />
                     </button>
                     {/* Desktop dropdown menu */}
                     {!isMobile && moreMenuOpen === bot.bot_config_id && (
