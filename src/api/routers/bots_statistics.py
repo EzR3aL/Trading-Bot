@@ -4,10 +4,11 @@ import json
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.api.rate_limit import limiter
 from src.auth.dependencies import get_current_user
 from src.errors import ERR_BOT_NOT_FOUND
 from src.models.database import BotConfig, TradeRecord, User
@@ -23,7 +24,9 @@ statistics_router = APIRouter(tags=["bots"])
 
 
 @statistics_router.get("/{bot_id}/statistics")
+@limiter.limit("30/minute")
 async def get_bot_statistics(
+    request: Request,
     bot_id: int,
     days: int = Query(default=30, ge=1, le=365),
     demo_mode: Optional[bool] = Query(None),
@@ -172,7 +175,9 @@ async def get_bot_statistics(
 
 
 @statistics_router.get("/compare/performance")
+@limiter.limit("30/minute")
 async def compare_bots_performance(
+    request: Request,
     days: int = Query(default=30, ge=1, le=365),
     demo_mode: Optional[bool] = Query(None),
     user: User = Depends(get_current_user),

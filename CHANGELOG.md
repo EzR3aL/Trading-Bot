@@ -9,6 +9,57 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [4.12.6] - 2026-04-01
+
+### Behoben
+- **24 fehlgeschlagene Tests nach RiskManager-Refactoring behoben** — Testdateien an die entfernte JSON-Dateispeicherung angepasst:
+  - `test_risk_manager.py`: `TestGetStatsFile`, `TestLoadDailyStats`, `TestSaveDailyStats` und `TestStatsFileHelpers` entfernt (testen entfernte Methoden). `TestGetHistoricalStats` und `TestGetPerformanceSummary` an neues Verhalten (leere Liste) angepasst. Tests fuer `data_dir`, `initialize_day`, `_halt_trading` und `net_pnl` an DB-basierte Architektur angepasst.
+  - `test_production_hardening.py`: `response=MagicMock()` Parameter zu allen `login()`, `change_password()` und `refresh_token()` Aufrufen hinzugefuegt (2FA-Entfernung hat `Response`-Parameter eingefuehrt).
+  - `test_auth.py`: Keine Aenderungen noetig — bereits korrekt.
+
+---
+
+## [4.12.5] - 2026-04-01
+
+### Entfernt
+- **Inline SQLite-Migrationen entfernt** — Die gesamte `_run_sqlite_migrations()`-Funktion (~150 Zeilen raw ALTER TABLE/CREATE TABLE) aus `src/models/session.py` entfernt. Alembic ist jetzt das einzige Migrationssystem. Die App wird auf PostgreSQL deployed; SQLite braucht keinen eigenen Migrationspfad.
+- **`requests`-Bibliothek aus requirements.txt entfernt** — War neben `httpx` und `aiohttp` gelistet, wurde aber nirgendwo in `src/` importiert.
+
+### Geaendert
+- **MAX_BOTS_PER_USER zentralisiert** — Duplizierte Konstante aus `orchestrator.py` und `bots.py` in `src/constants.py` zusammengefuehrt. Beide Dateien importieren jetzt von dort.
+- **Rate Limiting fuer bots_statistics-Endpunkte** — `GET /{bot_id}/statistics` und `GET /compare/performance` haben jetzt 30/minute Rate Limiting (gleicher Pattern wie auth.py und statistics.py).
+- **Orchestrator-Logging auf lazy %s-Format umgestellt** — Alle f-String-Logging-Aufrufe durch `logger.info("...", arg)` ersetzt, um unnoetige String-Formatierung zu vermeiden.
+- **Hardcodierten `data_dir`-Pfad durch Umgebungsvariable ersetzt** — `risk_manager.py` nutzt jetzt `os.getenv("RISK_DATA_DIR", "data/risk")` statt des hartkodierten Standardwerts.
+
+---
+
+## [4.12.4] - 2026-04-01
+
+### Geaendert
+- **RiskManager: JSON-Dateispeicherung entfernt, DB ist einzige Quelle** — `_read_stats_file()`, `_write_stats_file()`, `_get_stats_file()`, `_load_daily_stats()` und `get_historical_stats()` (dateibasiert) wurden entfernt. Die Datenbank (risk_stats-Tabelle) ist jetzt die einzige Persistenzschicht. `data_dir`-Parameter bleibt fuer Rueckwaertskompatibilitaet erhalten, wird aber ignoriert.
+- **TradeLogger: Blocking I/O in async Event Loop behoben** — `log_trade_entry()` und `log_trade_exit()` schreiben Trade-Logs jetzt ueber `asyncio.to_thread()` statt synchronem `open()`, um den Event Loop nicht zu blockieren. Neuer Helper `_schedule_log_write()` fuer non-blocking Writes mit synchronem Fallback.
+
+---
+
+## [4.12.3] - 2026-04-01
+
+### Sicherheit
+- **Refresh Token Revocation: Session-Validierung auch für Body-Tokens** — Die Session-Prüfung im `/api/auth/refresh`-Endpoint wurde bisher nur für Cookie-basierte Tokens durchgeführt. Tokens im Request-Body konnten die Session-Validierung umgehen und blieben nach Logout weiterhin gültig. Jetzt werden alle Refresh-Tokens gegen die `user_sessions`-Tabelle geprüft.
+- **Passwortänderung invalidiert jetzt alle bestehenden Sessions** — Beim Passwortwechsel wurde zwar `token_version` erhöht, aber bestehende Sessions in der DB blieben aktiv. Jetzt werden alle Sessions deaktiviert und eine neue Session für das aktuelle Gerät erstellt.
+
+### Behoben
+- **Risk Manager: Stille `RuntimeError`-Unterdrückung durch Debug-Log ersetzt** — In `_save_daily_stats()` wurde `except RuntimeError: pass` durch ein Debug-Log ersetzt, das erklärt warum der DB-Write übersprungen wird.
+- **Audit Log: Fehler-Zähler für fehlgeschlagene Audit-Schreibvorgänge** — `_store_audit_record_safe` zählt jetzt Fehler in einem globalen Counter. Der Zähler wird im `/api/health`-Endpoint angezeigt, sodass stumme Audit-Lücken sichtbar werden.
+
+---
+
+## [4.12.2] - 2026-04-01
+
+### Verbessert
+- **Web3-Abhängigkeiten lazy-loaded** — `@rainbow-me/rainbowkit`, `wagmi` und `viem` (~500KB+) werden jetzt per `React.lazy()` nur geladen, wenn der Hyperliquid-Setup tatsächlich angezeigt wird. Vorher wurden sie für alle Nutzer in das Haupt-Bundle eingebunden, unabhängig von der gewählten Exchange.
+
+---
+
 ## [4.12.1] - 2026-04-01
 
 ### Behoben

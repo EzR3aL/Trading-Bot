@@ -21,6 +21,9 @@ logger = get_logger(__name__)
 # Track pending audit tasks for clean shutdown
 _pending_audit_tasks: Set[asyncio.Task] = set()
 
+# Counter for audit storage failures so silent gaps are observable via /api/health or metrics
+_audit_failure_count: int = 0
+
 
 class AuditLogMiddleware(BaseHTTPMiddleware):
     """Middleware that logs every HTTP request for auditing purposes."""
@@ -90,11 +93,30 @@ def _extract_user_id(request: Request) -> Optional[int]:
 
 
 async def _store_audit_record_safe(**kwargs) -> None:
-    """Fire-and-forget wrapper — logs failures but never blocks."""
+    """Fire-and-forget wrapper — logs failures but never blocks.
+
+    Increments a global failure counter so audit gaps are visible
+    via get_audit_failure_count() (e.g. exposed in health/metrics).
+    """
+    global _audit_failure_count
     try:
         await _store_audit_record(**kwargs)
     except Exception as e:
-        logger.warning("Audit record storage failed: %s", e)
+        _audit_failure_count += 1
+        logger.warning(
+            "Audit record storage failed (total failures: %d): %s",
+            _audit_failure_count,
+            e,
+        )
+
+
+def get_audit_failure_count() -> int:
+    """Return the cumulative number of failed audit record writes.
+
+    Useful for health checks and monitoring dashboards to detect
+    silent audit gaps.
+    """
+    return _audit_failure_count
 
 
 # Dedicated engine for audit writes — zero busy_timeout to never block app queries

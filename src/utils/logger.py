@@ -3,6 +3,7 @@ Logging configuration for the Bitget Trading Bot.
 Provides colored console output, file logging, and optional JSON output.
 """
 
+import asyncio
 import json as json_lib
 import logging
 import logging.handlers
@@ -171,6 +172,20 @@ class TradeLogger:
         today = datetime.now().strftime("%Y-%m-%d")
         return self.log_dir / f"trades_{today}.log"
 
+    def _append_to_log(self, trade_data: dict) -> None:
+        """Write trade data to the daily log file (synchronous, for use with to_thread)."""
+        with open(self._get_trade_log_path(), "a") as f:
+            f.write(json_lib.dumps(trade_data) + "\n")
+
+    def _schedule_log_write(self, trade_data: dict) -> None:
+        """Schedule a non-blocking file write via asyncio.to_thread if an event loop is running."""
+        try:
+            loop = asyncio.get_running_loop()
+            loop.create_task(asyncio.to_thread(self._append_to_log, trade_data))
+        except RuntimeError:
+            # No running event loop — fall back to synchronous write
+            self._append_to_log(trade_data)
+
     def log_trade_entry(
         self,
         symbol: str,
@@ -211,10 +226,8 @@ class TradeLogger:
 
         self.logger.info(f"TRADE ENTRY: {trade_data}")
 
-        # Append to daily trade log
-        with open(self._get_trade_log_path(), "a") as f:
-            import json
-            f.write(json.dumps(trade_data) + "\n")
+        # Non-blocking file write — offloaded to thread pool
+        self._schedule_log_write(trade_data)
 
     def log_trade_exit(
         self,
@@ -265,10 +278,8 @@ class TradeLogger:
 
         self.logger.info(f"TRADE EXIT: {trade_data}")
 
-        # Append to daily trade log
-        with open(self._get_trade_log_path(), "a") as f:
-            import json
-            f.write(json.dumps(trade_data) + "\n")
+        # Non-blocking file write — offloaded to thread pool
+        self._schedule_log_write(trade_data)
 
     def get_daily_trades(self, date: str = None) -> list:
         """
@@ -289,10 +300,9 @@ class TradeLogger:
 
         trades = []
         with open(log_path, "r") as f:
-            import json
             for line in f:
                 if line.strip():
-                    trades.append(json.loads(line))
+                    trades.append(json_lib.loads(line))
 
         return trades
 

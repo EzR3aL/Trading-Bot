@@ -54,8 +54,8 @@ class TestDailyStats:
         # Net PnL = 150 - 20 - abs(30) = 100
         assert stats.net_pnl == 100.0
 
-    def test_net_pnl_negative_funding_is_absolute(self):
-        """Funding should be absolute value (received funding is subtracted)."""
+    def test_net_pnl_negative_funding_adds_back(self):
+        """Negative funding (received) is subtracted, effectively adding back."""
         stats = DailyStats(
             date="2024-01-01",
             starting_balance=10000.0,
@@ -69,8 +69,8 @@ class TestDailyStats:
             max_drawdown=0.0,
         )
 
-        # Net PnL = 100 - 10 - abs(-20) = 100 - 10 - 20 = 70
-        assert stats.net_pnl == 70.0
+        # Net PnL = 100 - 10 - (-20) = 100 - 10 + 20 = 110
+        assert stats.net_pnl == 110.0
 
     def test_net_pnl_zero_values(self):
         """Net PnL with all zeros should be zero."""
@@ -290,14 +290,15 @@ class TestRiskManagerInitialization:
         yield temp_dir
         shutil.rmtree(temp_dir, ignore_errors=True)
 
-    def test_creates_data_directory(self, temp_data_dir):
-        """Should create data directory if it doesn't exist."""
+    def test_data_dir_param_is_ignored(self, temp_data_dir):
+        """data_dir param is deprecated and should not create directories."""
         new_dir = Path(temp_data_dir) / "new_risk_dir"
         assert not new_dir.exists()
 
         RiskManager(data_dir=str(new_dir))
 
-        assert new_dir.exists()
+        # data_dir is ignored — no directory creation
+        assert not new_dir.exists()
 
     def test_uses_settings_defaults(self, temp_data_dir):
         """Should default to None when not explicitly provided."""
@@ -385,28 +386,14 @@ class TestRiskManagerDayInitialization:
         # Should return existing stats, not reset
         assert stats2.trades_executed == 5
 
-    def test_initialize_day_saves_to_file(self, risk_manager):
-        """Stats should be persisted to disk."""
+    def test_initialize_day_keeps_stats_in_memory(self, risk_manager):
+        """Stats should be stored in memory after initialization."""
         risk_manager.initialize_day(10000.0)
 
-        today = datetime.now().strftime("%Y-%m-%d")
-        stats_file = risk_manager.data_dir / f"daily_stats_{today}.json"
-
-        assert stats_file.exists()
-
-    def test_initialize_day_file_content(self, risk_manager):
-        """Saved file should contain valid JSON with correct values."""
-        risk_manager.initialize_day(10000.0)
-
-        today = datetime.now().strftime("%Y-%m-%d")
-        stats_file = risk_manager.data_dir / f"daily_stats_{today}.json"
-
-        with open(stats_file, "r") as f:
-            data = json.load(f)
-
-        assert data["starting_balance"] == 10000.0
-        assert data["trades_executed"] == 0
-        assert data["date"] == today
+        stats = risk_manager.get_daily_stats()
+        assert stats is not None
+        assert stats.starting_balance == 10000.0
+        assert stats.trades_executed == 0
 
 
 # ---------------------------------------------------------------------------
@@ -698,18 +685,13 @@ class TestHaltTrading:
         finally:
             shutil.rmtree(temp_dir, ignore_errors=True)
 
-    def test_halt_trading_saves_to_file(self, risk_manager):
-        """Halting should save stats to file."""
+    def test_halt_trading_updates_in_memory_stats(self, risk_manager):
+        """Halting should update in-memory stats."""
         risk_manager._halt_trading("Persisted halt")
 
-        today = datetime.now().strftime("%Y-%m-%d")
-        stats_file = risk_manager.data_dir / f"daily_stats_{today}.json"
-
-        with open(stats_file, "r") as f:
-            data = json.load(f)
-
-        assert data["is_trading_halted"] is True
-        assert data["halt_reason"] == "Persisted halt"
+        stats = risk_manager.get_daily_stats()
+        assert stats.is_trading_halted is True
+        assert stats.halt_reason == "Persisted halt"
 
 
 # ---------------------------------------------------------------------------
@@ -1668,33 +1650,18 @@ class TestGetHistoricalStats:
         finally:
             shutil.rmtree(temp_dir, ignore_errors=True)
 
-    def test_historical_stats_includes_today(self, risk_manager):
-        """Should include today's stats if they exist."""
+    def test_historical_stats_returns_empty_list(self, risk_manager):
+        """Sync get_historical_stats returns empty list (JSON storage removed)."""
         stats = risk_manager.get_historical_stats(days=1)
 
-        assert len(stats) == 1
-        assert stats[0]["starting_balance"] == 10000.0
+        # JSON file storage was removed; sync method always returns []
+        assert stats == []
 
-    def test_historical_stats_respects_days_parameter(self, risk_manager):
-        """Should only look back the specified number of days."""
+    def test_historical_stats_always_empty_regardless_of_days(self, risk_manager):
+        """Sync get_historical_stats returns empty list for any days value."""
         stats = risk_manager.get_historical_stats(days=30)
 
-        # Only today should exist
-        assert len(stats) == 1
-
-    def test_historical_stats_skips_corrupted_files(self, risk_manager):
-        """Should skip files that contain invalid JSON."""
-        # Create a corrupted stats file for yesterday
-        from datetime import timedelta
-        yesterday = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
-        corrupted_file = risk_manager.data_dir / f"daily_stats_{yesterday}.json"
-        with open(corrupted_file, "w") as f:
-            f.write("not valid json {{{")
-
-        stats = risk_manager.get_historical_stats(days=7)
-
-        # Should only include today's valid data
-        assert len(stats) == 1
+        assert stats == []
 
 
 # ---------------------------------------------------------------------------
@@ -1731,221 +1698,41 @@ class TestGetPerformanceSummary:
         finally:
             shutil.rmtree(temp_dir, ignore_errors=True)
 
-    def test_performance_summary_with_data(self, risk_manager):
-        """Should calculate correct summary from historical data."""
-        # Modify today's stats to have some data
+    def test_performance_summary_returns_zeros_without_db(self, risk_manager):
+        """Sync get_performance_summary returns zeros (JSON storage removed)."""
+        # Modify in-memory stats — but sync path always returns [] from get_historical_stats
         stats = risk_manager.get_daily_stats()
         stats.trades_executed = 5
         stats.winning_trades = 3
-        stats.losing_trades = 2
-        stats.total_pnl = 200.0
-        stats.total_fees = 10.0
-        risk_manager._save_daily_stats()
 
         summary = risk_manager.get_performance_summary(days=1)
 
-        assert summary["period_days"] == 1
-        assert summary["total_trades"] == 5
-        assert summary["winning_trades"] == 3
-        assert summary["losing_trades"] == 2
-        assert summary["win_rate"] == 60.0
+        # Without DB, get_historical_stats returns [], so summary is all zeros
+        assert summary["period_days"] == 0
+        assert summary["total_trades"] == 0
+        assert summary["win_rate"] == 0.0
 
     def test_performance_summary_win_rate_no_trades(self, risk_manager):
-        """Win rate should be 0 when no winning or losing trades."""
+        """Win rate should be 0 when no historical data."""
         summary = risk_manager.get_performance_summary(days=1)
 
         assert summary["win_rate"] == 0.0
 
-    def test_performance_summary_sharpe_zero_std(self, risk_manager):
-        """Sharpe should be 0 when return std is 0."""
-        # Only one day with 0 return -> std = 0
+    def test_performance_summary_sharpe_zero_without_data(self, risk_manager):
+        """Sharpe should be 0 when no historical data available."""
         summary = risk_manager.get_performance_summary(days=1)
 
         assert summary["sharpe_estimate"] == 0.0
 
-    def test_performance_summary_includes_max_drawdown(self, risk_manager):
-        """Should include max drawdown from historical data."""
-        stats = risk_manager.get_daily_stats()
-        stats.max_drawdown = 3.5
-        risk_manager._save_daily_stats()
-
+    def test_performance_summary_max_drawdown_zero_without_data(self, risk_manager):
+        """Max drawdown should be 0 when no historical data available."""
         summary = risk_manager.get_performance_summary(days=1)
 
-        assert summary["max_drawdown"] == 3.5
+        assert summary["max_drawdown"] == 0.0
 
 
-# ---------------------------------------------------------------------------
-# _get_stats_file tests
-# ---------------------------------------------------------------------------
-
-
-class TestGetStatsFile:
-    """Tests for _get_stats_file path generation."""
-
-    @pytest.fixture
-    def risk_manager(self):
-        """Create a risk manager with temp directory."""
-        temp_dir = tempfile.mkdtemp()
-        rm = RiskManager(data_dir=temp_dir)
-        yield rm
-        shutil.rmtree(temp_dir, ignore_errors=True)
-
-    def test_get_stats_file_today(self, risk_manager):
-        """Should return path with today's date."""
-        today = datetime.now().strftime("%Y-%m-%d")
-
-        path = risk_manager._get_stats_file()
-
-        assert path.name == f"daily_stats_{today}.json"
-
-    def test_get_stats_file_specific_date(self, risk_manager):
-        """Should return path with specified date."""
-        path = risk_manager._get_stats_file("2024-06-15")
-
-        assert path.name == "daily_stats_2024-06-15.json"
-
-    def test_get_stats_file_in_data_dir(self, risk_manager):
-        """File should be in the data directory."""
-        path = risk_manager._get_stats_file("2024-01-01")
-
-        assert path.parent == risk_manager.data_dir
-
-
-# ---------------------------------------------------------------------------
-# _load_daily_stats tests
-# ---------------------------------------------------------------------------
-
-
-class TestLoadDailyStats:
-    """Tests for _load_daily_stats."""
-
-    def test_load_daily_stats_from_existing_file(self):
-        """Should load stats from a valid JSON file."""
-        temp_dir = tempfile.mkdtemp()
-        try:
-            today = datetime.now().strftime("%Y-%m-%d")
-            stats_file = Path(temp_dir) / f"daily_stats_{today}.json"
-
-            # Create valid stats file
-            stats_data = {
-                "date": today,
-                "starting_balance": 10000.0,
-                "current_balance": 10200.0,
-                "trades_executed": 3,
-                "winning_trades": 2,
-                "losing_trades": 1,
-                "total_pnl": 250.0,
-                "total_fees": 30.0,
-                "total_funding": 20.0,
-                "net_pnl": 200.0,
-                "return_percent": 2.0,
-                "win_rate": 66.67,
-                "max_drawdown": 1.5,
-                "is_trading_halted": False,
-                "halt_reason": "",
-                "symbol_trades": {"BTCUSDT": 2},
-                "symbol_pnl": {"BTCUSDT": 200.0},
-                "halted_symbols": {},
-            }
-            with open(stats_file, "w") as f:
-                json.dump(stats_data, f)
-
-            rm = RiskManager(data_dir=temp_dir)
-
-            stats = rm.get_daily_stats()
-            assert stats is not None
-            assert stats.trades_executed == 3
-            assert stats.winning_trades == 2
-            assert stats.starting_balance == 10000.0
-        finally:
-            shutil.rmtree(temp_dir, ignore_errors=True)
-
-    def test_load_daily_stats_corrupted_file(self):
-        """Should set stats to None when file is corrupted."""
-        temp_dir = tempfile.mkdtemp()
-        try:
-            today = datetime.now().strftime("%Y-%m-%d")
-            stats_file = Path(temp_dir) / f"daily_stats_{today}.json"
-
-            with open(stats_file, "w") as f:
-                f.write("corrupted data {{{")
-
-            rm = RiskManager(data_dir=temp_dir)
-
-            stats = rm.get_daily_stats()
-            assert stats is None
-        finally:
-            shutil.rmtree(temp_dir, ignore_errors=True)
-
-    def test_load_daily_stats_no_file(self):
-        """Should leave stats as None when no file exists."""
-        temp_dir = tempfile.mkdtemp()
-        try:
-            rm = RiskManager(data_dir=temp_dir)
-
-            stats = rm.get_daily_stats()
-            assert stats is None
-        finally:
-            shutil.rmtree(temp_dir, ignore_errors=True)
-
-
-# ---------------------------------------------------------------------------
-# _save_daily_stats tests
-# ---------------------------------------------------------------------------
-
-
-class TestSaveDailyStats:
-    """Tests for _save_daily_stats."""
-
-    @pytest.fixture
-    def risk_manager(self):
-        """Create a risk manager with temp directory."""
-        temp_dir = tempfile.mkdtemp()
-        rm = RiskManager(data_dir=temp_dir)
-        rm.initialize_day(10000.0)
-        yield rm
-        shutil.rmtree(temp_dir, ignore_errors=True)
-
-    def test_save_daily_stats_creates_file(self, risk_manager):
-        """Should create a JSON file with correct content."""
-        risk_manager._save_daily_stats()
-
-        today = datetime.now().strftime("%Y-%m-%d")
-        stats_file = risk_manager.data_dir / f"daily_stats_{today}.json"
-
-        assert stats_file.exists()
-        with open(stats_file, "r") as f:
-            data = json.load(f)
-        assert data["starting_balance"] == 10000.0
-
-    def test_save_daily_stats_no_stats_is_noop(self):
-        """Should not crash or create files when stats is None."""
-        temp_dir = tempfile.mkdtemp()
-        try:
-            rm = RiskManager(data_dir=temp_dir)
-            rm._daily_stats = None
-
-            # Should not raise
-            rm._save_daily_stats()
-
-            # No files should be created (except the dir itself)
-            json_files = list(Path(temp_dir).glob("*.json"))
-            assert len(json_files) == 0
-        finally:
-            shutil.rmtree(temp_dir, ignore_errors=True)
-
-    def test_save_daily_stats_overwrites_existing(self, risk_manager):
-        """Should overwrite existing file with new data."""
-        stats = risk_manager.get_daily_stats()
-        stats.trades_executed = 5
-        risk_manager._save_daily_stats()
-
-        today = datetime.now().strftime("%Y-%m-%d")
-        stats_file = risk_manager.data_dir / f"daily_stats_{today}.json"
-        with open(stats_file, "r") as f:
-            data = json.load(f)
-
-        assert data["trades_executed"] == 5
+    # NOTE: TestGetStatsFile, TestLoadDailyStats, and TestSaveDailyStats were
+    # removed because JSON file-based persistence was replaced by DB storage.
 
 
 # ---------------------------------------------------------------------------
@@ -2057,34 +1844,5 @@ class TestRiskManagerIntegrationScenarios:
         assert base > 0
 
 
-class TestStatsFileHelpers:
-    """Tests for _read_stats_file / _write_stats_file static methods."""
-
-    @pytest.fixture
-    def temp_data_dir(self):
-        temp_dir = tempfile.mkdtemp()
-        yield temp_dir
-        shutil.rmtree(temp_dir, ignore_errors=True)
-
-    def test_write_and_read_roundtrip(self, temp_data_dir):
-        """_write_stats_file + _read_stats_file roundtrip."""
-        path = Path(temp_data_dir) / "test_stats.json"
-        data = {"date": "2026-02-17", "trades_executed": 5, "total_pnl": 42.5}
-
-        RiskManager._write_stats_file(path, data)
-        result = RiskManager._read_stats_file(path)
-
-        assert result == data
-
-    def test_read_nonexistent_file_raises(self, temp_data_dir):
-        """_read_stats_file raises on missing file."""
-        path = Path(temp_data_dir) / "nonexistent.json"
-        with pytest.raises(FileNotFoundError):
-            RiskManager._read_stats_file(path)
-
-    def test_write_creates_file(self, temp_data_dir):
-        """_write_stats_file creates the file."""
-        path = Path(temp_data_dir) / "new_stats.json"
-        assert not path.exists()
-        RiskManager._write_stats_file(path, {"test": True})
-        assert path.exists()
+    # NOTE: TestStatsFileHelpers was removed because _read_stats_file and
+    # _write_stats_file were removed along with JSON file storage.

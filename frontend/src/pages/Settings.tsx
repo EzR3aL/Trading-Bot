@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ChevronDown, Search, CheckCircle, Clock, Users, Activity, Wifi, WifiOff, Shield, Zap, BarChart3, TrendingUp, Database, Cpu, DollarSign, ExternalLink, Settings2 } from 'lucide-react'
 import Pagination from '../components/ui/Pagination'
@@ -10,7 +10,9 @@ import type { ConnectionsStatusResponse, ExchangeConnectionStatus, ExchangeInfo,
 import { ExchangeIcon } from '../components/ui/ExchangeLogo'
 import FilterDropdown from '../components/ui/FilterDropdown'
 import GuidedTour, { TourHelpButton, type TourStep } from '../components/ui/GuidedTour'
-import HyperliquidSetup from '../components/hyperliquid/HyperliquidSetup'
+// Lazy-load HyperliquidSetup to keep heavy Web3 deps (rainbowkit, wagmi, viem ~500KB)
+// out of the main bundle — only loaded when Hyperliquid exchange is active
+const HyperliquidSetup = lazy(() => import('../components/hyperliquid/HyperliquidSetup'))
 
 const BASE_TABS = ['apiKeys'] as const
 const ADMIN_TABS = [...BASE_TABS, 'connections', 'affiliateLinks', 'hyperliquid'] as const
@@ -657,7 +659,13 @@ export default function Settings() {
 
                         {/* Hyperliquid: Inline setup (affiliate + builder fee) — hidden for admins */}
                         {ex.name === 'hyperliquid' && hlSetupVisible && !isAdmin && (
-                          <HyperliquidSetup onComplete={() => loadHlReferralInfo()} />
+                          <Suspense fallback={
+                            <div className="flex items-center justify-center py-8">
+                              <div className="w-6 h-6 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+                            </div>
+                          }>
+                            <HyperliquidSetup onComplete={() => loadHlReferralInfo()} />
+                          </Suspense>
                         )}
 
                         {/* Bitget/Weex: Affiliate UID */}

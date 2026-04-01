@@ -21,12 +21,10 @@ from src.models.enums import BotStatus
 from src.models.session import get_session
 from src.strategy import StrategyRegistry  # noqa: F401 — triggers registration
 from src.strategy.liquidation_hunter import LiquidationHunterStrategy  # noqa: F401 — registers strategy
+from src.constants import MAX_BOTS_PER_USER
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
-
-# Maximum number of bots per user
-MAX_BOTS_PER_USER = 10
 
 
 class BotOrchestrator:
@@ -107,7 +105,7 @@ class BotOrchestrator:
         # Record running state in DB
         await self._update_instance_state(bot_config_id, True)
 
-        logger.info(f"Orchestrator: Bot {bot_config_id} started")
+        logger.info("Orchestrator: Bot %s started", bot_config_id)
 
         # Broadcast event via WebSocket
         self._broadcast_event(
@@ -142,7 +140,7 @@ class BotOrchestrator:
         # Update DB
         await self._update_instance_state(bot_config_id, False)
 
-        logger.info(f"Orchestrator: Bot {bot_config_id} stopped")
+        logger.info("Orchestrator: Bot %s stopped", bot_config_id)
 
         # Broadcast event via WebSocket
         if user_id is not None:
@@ -198,10 +196,10 @@ class BotOrchestrator:
                 else:
                     failed += 1
             except Exception as e:
-                logger.error(f"Orchestrator: Failed to restore bot {config.id} ({config.name}): {e}")
+                logger.error("Orchestrator: Failed to restore bot %s (%s): %s", config.id, config.name, e)
                 failed += 1
 
-        logger.info(f"Orchestrator: Restored {restored} bots, {failed} failed")
+        logger.info("Orchestrator: Restored %d bots, %d failed", restored, failed)
 
     async def stop_all_for_user(self, user_id: int) -> int:
         """Stop all bots for a specific user."""
@@ -288,7 +286,7 @@ class BotOrchestrator:
                         ).values(is_running=False, stopped_at=datetime.now(timezone.utc))
                     )
             except Exception as e:
-                logger.error(f"Orchestrator: Error updating DB on shutdown: {e}")
+                logger.error("Orchestrator: Error updating DB on shutdown: %s", e)
 
             # Shutdown shared scheduler
             if self._scheduler.running:
@@ -306,7 +304,7 @@ class BotOrchestrator:
                     try:
                         await worker.stop()
                     except Exception as e:
-                        logger.error(f"Orchestrator: Error stopping bot {bot_id}: {e}")
+                        logger.error("Orchestrator: Error stopping bot %s: %s", bot_id, e)
 
             # Mark all as not running in DB
             try:
@@ -317,7 +315,7 @@ class BotOrchestrator:
                         ).values(is_running=False, stopped_at=datetime.now(timezone.utc))
                     )
             except Exception as e:
-                logger.error(f"Orchestrator: Error updating DB on shutdown: {e}")
+                logger.error("Orchestrator: Error updating DB on shutdown: %s", e)
 
             # Shutdown shared scheduler
             if self._scheduler.running:
@@ -450,7 +448,7 @@ class BotOrchestrator:
                     session.add(instance)
 
         except Exception as e:
-            logger.error(f"Orchestrator: DB state update error: {e}")
+            logger.error("Orchestrator: DB state update error: %s", e)
 
     @staticmethod
     def _broadcast_event(user_id: int, event_type: str, data: dict) -> None:

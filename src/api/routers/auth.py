@@ -242,24 +242,25 @@ async def refresh_token(
             detail=ERR_TOKEN_REVOKED,
         )
 
-    # Validate session is still active in DB (catches explicit logout)
-    if raw_token and refresh_token_cookie:
-        token_hash = _hash_token(raw_token)
-        session_result = await db.execute(
-            select(UserSession).where(
-                UserSession.session_token_hash == token_hash,
-                UserSession.user_id == int(user_id),
-                UserSession.is_active.is_(True),
-            ).limit(1)
+    # Validate session is still active in DB (catches explicit logout).
+    # Check for both cookie-based and body-based tokens — a revoked session
+    # must block refresh regardless of how the token was transmitted.
+    token_hash = _hash_token(raw_token)
+    session_result = await db.execute(
+        select(UserSession).where(
+            UserSession.session_token_hash == token_hash,
+            UserSession.user_id == int(user_id),
+            UserSession.is_active.is_(True),
+        ).limit(1)
+    )
+    session = session_result.scalar_one_or_none()
+    if not session:
+        clear_refresh_cookie(response)
+        logger.warning("AUTH: Refresh with invalidated session for user_id=%s from %s", user_id, client_ip)
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=ERR_INVALID_REFRESH_TOKEN,
         )
-        session = session_result.scalar_one_or_none()
-        if not session:
-            clear_refresh_cookie(response)
-            logger.warning("AUTH: Refresh with invalidated session for user_id=%s from %s", user_id, client_ip)
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail=ERR_INVALID_REFRESH_TOKEN,
-            )
 
     token_data = {"sub": str(user.id), "role": user.role, "tv": user_tv}
     access_token = create_access_token(token_data)
@@ -268,15 +269,14 @@ async def refresh_token(
     # Rotate token cookies and update session hash in DB
     set_access_cookie(response, access_token)
     set_refresh_cookie(response, new_refresh)
-    if raw_token and refresh_token_cookie:
-        old_hash = _hash_token(raw_token)
-        new_hash = _hash_token(new_refresh)
-        await db.execute(
-            update(UserSession)
-            .where(UserSession.session_token_hash == old_hash)
-            .values(session_token_hash=new_hash, last_activity=datetime.now(timezone.utc))
-        )
-        await db.commit()
+    old_hash = _hash_token(raw_token)
+    new_hash = _hash_token(new_refresh)
+    await db.execute(
+        update(UserSession)
+        .where(UserSession.session_token_hash == old_hash)
+        .values(session_token_hash=new_hash, last_activity=datetime.now(timezone.utc))
+    )
+    await db.commit()
 
     logger.info("AUTH: Token refreshed for user_id=%s (tv=%s) from %s", user.id, user.token_version, client_ip)
     return TokenResponse(
@@ -327,12 +327,26 @@ async def change_password(
         raise HTTPException(status_code=401, detail=ERR_CURRENT_PASSWORD_WRONG)
     user.password_hash = hash_password(body.new_password)
     user.token_version = (user.token_version or 0) + 1
+
+    # Invalidate all existing sessions so old refresh tokens cannot be used,
+    # even if token_version alone would catch them.
+    await db.execute(
+        update(UserSession)
+        .where(UserSession.user_id == user.id, UserSession.is_active.is_(True))
+        .values(is_active=False)
+    )
     await db.commit()
+
+    # Issue fresh tokens and create a new session for the current device
     token_data = {"sub": str(user.id), "role": user.role, "tv": user.token_version}
     new_access = create_access_token(token_data)
     new_refresh = create_refresh_token(token_data)
     set_access_cookie(response, new_access)
     set_refresh_cookie(response, new_refresh)
+    await _create_session(db, user.id, new_refresh, request)
+    await db.commit()
+
+    logger.info("AUTH: Password changed for user_id=%s, all sessions revoked", user.id)
     return {
         "access_token": new_access,
         "token_type": "bearer",

@@ -8,6 +8,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
+from src.api.middleware.audit_log import get_audit_failure_count
 from src.api.rate_limit import limiter
 from src.models.session import get_session
 from src.utils.logger import get_logger
@@ -53,6 +54,11 @@ async def health_check(request: Request):
             checks["bots"] = f"{error_count}/{total_count} in error state"
     except Exception:
         pass
+
+    # Expose audit write failure count so monitoring can detect silent gaps
+    audit_failures = get_audit_failure_count()
+    if audit_failures > 0:
+        checks["audit_log_failures"] = audit_failures
 
     is_healthy = checks["database"] == "ok"
     status = "healthy" if is_healthy else "unhealthy"

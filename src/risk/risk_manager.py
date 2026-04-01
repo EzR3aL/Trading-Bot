@@ -10,9 +10,9 @@ Handles:
 """
 
 import json
+import os
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
-from pathlib import Path
 from typing import Optional, Dict, List
 
 from src.utils.logger import get_logger, TradeLogger
@@ -111,7 +111,7 @@ class RiskManager:
         max_trades_per_day: Optional[int] = None,
         daily_loss_limit_percent: Optional[float] = None,
         position_size_percent: Optional[float] = None,
-        data_dir: str = "data/risk",
+        data_dir: str = os.getenv("RISK_DATA_DIR", "data/risk"),
         enable_profit_lock: bool = True,
         profit_lock_percent: float = 75.0,
         min_profit_floor: float = 0.5,
@@ -125,10 +125,13 @@ class RiskManager:
             max_trades_per_day: Global max trades (fallback if no per-symbol limit)
             daily_loss_limit_percent: Global loss limit (fallback if no per-symbol limit)
             position_size_percent: Default position size as percentage of balance
-            data_dir: Directory to store risk data (fallback for file-based storage)
+            data_dir: Deprecated, kept for backward compatibility (ignored)
+            enable_profit_lock: Enable dynamic loss limits based on current PnL
+            profit_lock_percent: Percentage of gains to lock in
+            min_profit_floor: Minimum profit floor percentage
             per_symbol_limits: Per-symbol overrides, e.g.
                 {"BTCUSDT": {"max_trades": 5, "loss_limit": 3.0}}
-            bot_config_id: If set, use database storage instead of JSON files
+            bot_config_id: Bot config ID for DB-based persistence (required for stats)
         """
         # Use explicit bot config values only — NULL means no limit / no override
         self.max_trades = max_trades_per_day
@@ -144,74 +147,33 @@ class RiskManager:
         self.bot_config_id = bot_config_id
         self._use_db = bot_config_id is not None and _db_available
 
-        self.data_dir = Path(data_dir)
-        self.data_dir.mkdir(parents=True, exist_ok=True)
-
         self.trade_logger = TradeLogger()
         self._daily_stats: Optional[DailyStats] = None
         # Note: record_trade_entry/exit are synchronous with no await points,
         # so they are safe under asyncio's single-threaded model without a lock.
         # Per-symbol locks in BotWorker prevent concurrent calls for the same symbol.
-        self._load_daily_stats()
-
-    def _get_stats_file(self, for_date: Optional[str] = None) -> Path:
-        """Get the path to the daily stats file."""
-        date_str = for_date or datetime.now().strftime("%Y-%m-%d")
-        return self.data_dir / f"daily_stats_{date_str}.json"
-
-    def _load_daily_stats(self) -> None:
-        """Load today's stats from file or create new (synchronous, call from __init__)."""
-        today = datetime.now().strftime("%Y-%m-%d")
-        stats_file = self._get_stats_file(today)
-
-        if stats_file.exists():
-            try:
-                data = self._read_stats_file(stats_file)
-                # Remove computed properties that are not dataclass fields
-                for key in ("net_pnl", "return_percent", "win_rate"):
-                    data.pop(key, None)
-                self._daily_stats = DailyStats(**data)
-                logger.info(f"Loaded daily stats: {self._daily_stats.trades_executed} trades, "
-                           f"PnL: ${self._daily_stats.net_pnl:.2f}")
-            except Exception as e:
-                logger.error(f"Error loading daily stats: {e}")
-                self._daily_stats = None
-
-    @staticmethod
-    def _read_stats_file(path: Path) -> dict:
-        """Read and parse a stats JSON file (synchronous)."""
-        with open(path, "r") as f:
-            return json.load(f)
-
-    @staticmethod
-    def _write_stats_file(path: Path, data: dict) -> None:
-        """Write stats dict to a JSON file (synchronous)."""
-        with open(path, "w") as f:
-            json.dump(data, f, indent=2)
+        #
+        # Stats are loaded from DB via load_stats_from_db() after async init,
+        # not from __init__ (no blocking file I/O).
 
     def _save_daily_stats(self) -> None:
-        """Save current daily stats to file (synchronous fallback).
+        """Schedule an async DB write for current daily stats.
 
-        Also schedules an async DB write if bot_config_id is set.
+        DB is the single source of truth — no JSON file fallback.
         """
         if not self._daily_stats:
             return
 
-        # Always write JSON file as fallback
-        stats_file = self._get_stats_file(self._daily_stats.date)
-        try:
-            self._write_stats_file(stats_file, self._daily_stats.to_dict())
-        except Exception as e:
-            logger.error(f"Error saving daily stats: {e}")
-
-        # Schedule async DB write if available
         if self._use_db:
             import asyncio
             try:
                 loop = asyncio.get_running_loop()
                 loop.create_task(self._save_stats_to_db())
             except RuntimeError:
-                pass  # No running loop — skip DB write
+                # No running event loop (e.g. called from sync context).
+                # Stats remain in memory and will be persisted on the next
+                # call that happens inside an async context.
+                logger.debug("No running event loop — DB stats write deferred to next async call")
 
     async def _save_stats_to_db(self) -> None:
         """Persist current daily stats to the risk_stats table."""
@@ -276,7 +238,7 @@ class RiskManager:
     async def get_historical_stats_from_db(self, days: int = 30) -> List[Dict]:
         """Get historical stats from the database."""
         if not self._use_db:
-            return self.get_historical_stats(days)
+            return []
         try:
             cutoff = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
             async with get_session() as session:
@@ -290,7 +252,7 @@ class RiskManager:
                 return [json.loads(r.stats_json) for r in rows]
         except Exception as e:
             logger.warning("Failed to load historical stats from DB: %s", e)
-            return self.get_historical_stats(days)
+            return []
 
     def initialize_day(self, starting_balance: float) -> DailyStats:
         """
@@ -653,35 +615,19 @@ class RiskManager:
         return max(0, self.daily_loss_limit - current_loss)
 
     def get_historical_stats(self, days: int = 30) -> List[Dict]:
+        """Get historical daily stats from DB (sync wrapper).
+
+        Deprecated: Use get_historical_stats_from_db() in async code.
+        Returns empty list since JSON file storage was removed.
         """
-        Get historical daily stats.
-
-        Args:
-            days: Number of days to fetch
-
-        Returns:
-            List of daily stats dictionaries
-        """
-        stats = []
-        current_date = datetime.now()
-
-        for i in range(days):
-            check_date = current_date - timedelta(days=i)
-            date_str = check_date.strftime("%Y-%m-%d")
-            stats_file = self._get_stats_file(date_str)
-
-            if stats_file.exists():
-                try:
-                    with open(stats_file, "r") as f:
-                        stats.append(json.load(f))
-                except Exception as e:
-                    logger.warning("Failed to read stats file %s: %s", stats_file, e)
-
-        return stats
+        return []
 
     def get_performance_summary(self, days: int = 30) -> Dict:
         """
         Calculate performance summary over a period.
+
+        Note: In async code, use get_historical_stats_from_db() instead
+        for actual historical data from the database.
 
         Args:
             days: Number of days to analyze

@@ -38,14 +38,13 @@ from src.api.rate_limit import limiter
 from src.models.enums import CEX_EXCHANGES, EXCHANGE_NAMES, EXCHANGE_PATTERN
 from src.utils.encryption import encrypt_value
 from src.utils.json_helpers import parse_json_field
+from src.constants import MAX_BOTS_PER_USER
 from src.utils.logger import get_logger
 from src.exchanges.symbol_fetcher import get_exchange_symbols
 
 logger = get_logger(__name__)
 
 router = APIRouter(prefix="/api/bots", tags=["bots"])
-
-MAX_BOTS_PER_USER = 10
 
 
 def get_orchestrator(request: Request):

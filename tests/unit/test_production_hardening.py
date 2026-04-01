@@ -579,6 +579,7 @@ class TestAuthLoginLockoutFlow:
             with pytest.raises(HTTPException) as exc_info:
                 await login(
                     request=mock_request,
+                    response=MagicMock(),
                     body=LoginRequest(username="locktest", password="WrongPass!"),
                     db=mock_db,
                 )
@@ -611,6 +612,7 @@ class TestAuthLoginLockoutFlow:
         with pytest.raises(HTTPException) as exc_info:
             await login(
                 request=mock_request,
+                response=MagicMock(),
                 body=LoginRequest(username="locktest", password="CorrectPass1!"),
                 db=mock_db,
             )
@@ -638,6 +640,7 @@ class TestAuthLoginLockoutFlow:
 
         result = await login(
             request=mock_request,
+            response=MagicMock(),
             body=LoginRequest(username="locktest", password="CorrectPass1!"),
             db=mock_db,
         )
@@ -680,6 +683,7 @@ class TestPasswordChangeRevocation:
 
         result = await change_password(
             request=mock_request,
+            response=MagicMock(),
             body=ChangePasswordRequest(current_password="OldPass1!", new_password="NewPass1!"),
             user=user,
             db=mock_db,
@@ -718,7 +722,9 @@ class TestPasswordChangeRevocation:
         with pytest.raises(HTTPException) as exc_info:
             await refresh_token(
                 request=mock_request,
+                response=MagicMock(),
                 body=RefreshRequest(refresh_token=old_token),
+                refresh_token_cookie=None,
                 db=mock_db,
             )
         assert exc_info.value.status_code == 401
