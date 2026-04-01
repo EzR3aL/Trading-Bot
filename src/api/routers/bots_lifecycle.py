@@ -353,11 +353,8 @@ async def close_position(
     except Exception:
         exit_price = trade.entry_price  # fallback
 
-    if trade.side == "long":
-        pnl = (exit_price - trade.entry_price) * trade.size
-    else:
-        pnl = (trade.entry_price - exit_price) * trade.size
-    pnl_percent = (pnl / (trade.entry_price * trade.size)) * 100 if trade.entry_price and trade.size else 0
+    from src.bot.pnl import calculate_pnl
+    pnl, pnl_percent = calculate_pnl(trade.side, trade.entry_price, exit_price, trade.size)
 
     trade.status = "closed"
     trade.exit_price = exit_price

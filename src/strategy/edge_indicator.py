@@ -33,7 +33,7 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 
 from src.data.market_data import MarketDataFetcher
-from src.strategy.base import BaseStrategy, SignalDirection, StrategyRegistry, TradeSignal
+from src.strategy.base import BaseStrategy, SignalDirection, StrategyRegistry, TradeSignal, check_atr_trailing_stop
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -634,46 +634,17 @@ class EdgeIndicatorStrategy(BaseStrategy):
         trail_atr_override: float | None = None,
     ) -> Tuple[bool, str]:
         """Check ATR-based trailing stop with breakeven floor."""
-        atr_series = MarketDataFetcher.calculate_atr(klines, self._p["atr_period"])
-        atr_val = atr_series[-1] if atr_series else current_price * 0.015
-
-        breakeven_atr = self._p.get("trailing_breakeven_atr", 1.5)
         trail_atr = trail_atr_override if trail_atr_override is not None else self._p.get("trailing_trail_atr", 2.5)
-        trail_distance = atr_val * trail_atr
-        breakeven_threshold = atr_val * breakeven_atr
-
-        if side == "long":
-            was_profitable = (highest_price - entry_price) >= breakeven_threshold
-            if not was_profitable:
-                return False, ""
-
-            trailing_stop = highest_price - trail_distance
-            trailing_stop = max(trailing_stop, entry_price)
-
-            if current_price <= trailing_stop:
-                pnl_pct = (current_price - entry_price) / entry_price * 100
-                return True, (
-                    "Trailing Stop: Preis $%.2f unter Stop $%.2f "
-                    "(Hoechst=$%.2f, ATR=%.0f, Trail=%.1fx). PnL=%.2f%%"
-                    % (current_price, trailing_stop, highest_price, atr_val, trail_atr, pnl_pct)
-                )
-        else:
-            was_profitable = (entry_price - highest_price) >= breakeven_threshold
-            if not was_profitable:
-                return False, ""
-
-            trailing_stop = highest_price + trail_distance
-            trailing_stop = min(trailing_stop, entry_price)
-
-            if current_price >= trailing_stop:
-                pnl_pct = (entry_price - current_price) / entry_price * 100
-                return True, (
-                    "Trailing Stop: Preis $%.2f über Stop $%.2f "
-                    "(Tiefst=$%.2f, ATR=%.0f, Trail=%.1fx). PnL=%.2f%%"
-                    % (current_price, trailing_stop, highest_price, atr_val, trail_atr, pnl_pct)
-                )
-
-        return False, ""
+        return check_atr_trailing_stop(
+            side=side,
+            entry_price=entry_price,
+            current_price=current_price,
+            highest_price=highest_price,
+            klines=klines,
+            atr_period=self._p["atr_period"],
+            breakeven_atr=self._p.get("trailing_breakeven_atr", 1.5),
+            trail_atr=trail_atr,
+        )
 
     async def generate_signal(self, symbol: str = "BTCUSDT") -> TradeSignal:
         """Generate a trade signal using the Edge Indicator layers."""

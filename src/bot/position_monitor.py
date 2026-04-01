@@ -119,6 +119,10 @@ class PositionMonitorMixin:
                         last_attempt is None
                         or (datetime.now(timezone.utc) - last_attempt).total_seconds() > _TRAILING_STOP_RETRY_MINUTES * 60
                     )
+                    # Update backoff timestamp inside the lock to prevent
+                    # concurrent re-entry (Bug 3 fix: race condition)
+                    if should_retry:
+                        self._trailing_stop_backoff[trade.id] = datetime.now(timezone.utc)
                 if should_retry:
                     await self._try_place_native_trailing_stop(trade, client, position, current_price, session)
 
@@ -313,7 +317,9 @@ class PositionMonitorMixin:
         log_prefix = f"[Bot:{self.bot_config_id}]"
         glitch_key = f"{self.bot_config_id}:{trade.symbol}"
 
-        for attempt in range(1, _POSITION_GONE_THRESHOLD):
+        # Track whether all retries threw exceptions (Bug 1 fix)
+        any_exception = False
+        for attempt in range(1, _POSITION_GONE_THRESHOLD + 1):  # Bug 6 fix: +1 for correct retry count
             await asyncio.sleep(_POSITION_GONE_DELAY_S)
             try:
                 pos = await client.get_position(trade.symbol)
@@ -351,10 +357,19 @@ class PositionMonitorMixin:
                         )
                     return False
             except Exception as e:
+                any_exception = True
                 logger.warning(
                     "%s Retry %d/%d for %s failed: %s",
                     log_prefix, attempt, _POSITION_GONE_THRESHOLD, trade.symbol, e,
                 )
+
+        # If all retries threw exceptions, do not falsely confirm closure (Bug 1 fix)
+        if any_exception:
+            logger.warning(
+                "%s Cannot confirm %s closed — all retries raised exceptions, assuming still open",
+                log_prefix, trade.symbol,
+            )
+            return False
 
         # Position genuinely closed — reset glitch counter
         self._glitch_counter.pop(glitch_key, None)

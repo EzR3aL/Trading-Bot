@@ -111,7 +111,7 @@ async def get_tax_report(
         "total_pnl": total_pnl,
         "total_fees": total_fees,
         "total_funding": total_funding,
-        "net_pnl": total_pnl - total_fees - abs(total_funding),
+        "net_pnl": total_pnl - total_fees - total_funding,
         "months": [
             {"month": k, **v}
             for k, v in sorted(months.items())

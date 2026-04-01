@@ -93,8 +93,6 @@ function formatPnlPercent(value: number): string {
   return `${value >= 0 ? '+' : ''}${value.toFixed(1)}%`
 }
 
-
-
 /* ── Sparkline (SVG) ─────────────────────────────────────── */
 
 function Sparkline({ data, color, width = 80, height = 32 }: {

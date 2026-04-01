@@ -9,6 +9,51 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [4.12.1] - 2026-04-01
+
+### Behoben
+- **KRITISCH: Hyperliquid TP/SL-Fehler wurden stillschweigend verschluckt** — `_place_trigger_order` hat Exceptions gefangen ohne den Fehlerstatus weiterzugeben. Das zurückgegebene `Order`-Objekt hatte immer `tpsl_failed=False`, sodass der `trade_executor` niemals Fallback-TP/SL oder Risiko-Alerts auslösen konnte. Die Methode gibt jetzt `bool` zurück und `place_market_order` setzt `tpsl_failed=True` bei fehlgeschlagenen Trigger-Orders.
+
+---
+
+## [4.12.0] - 2026-04-01
+
+### Behoben
+- **net_pnl Berechnung: abs(total_funding) entfernt** — In `statistics.py`, `risk_manager.py` und `tax_report.py` wurde `abs(total_funding)` durch `total_funding` ersetzt. `funding_paid` wird bereits als positiver Kostenwert gespeichert; `abs()` konnte das Vorzeichen bei empfangenem Funding-Einkommen falsch maskieren (#4)
+
+### Entfernt
+- **Contrarian Pulse Strategie komplett entfernt** — `src/strategy/contrarian_pulse.py` geloescht und alle Imports/Referenzen aus `src/strategy/__init__.py` entfernt. Die Strategie hatte ~70% Ueberlappung mit Liquidation Hunter und wurde bereits im Frontend nicht mehr verwendet
+
+---
+
+## [4.11.3] - 2026-04-01
+
+### Behoben
+- **KRITISCH: Falsche Position-Schließung bei API-Exceptions** — `_confirm_position_closed` hat `True` zurückgegeben wenn alle Retries Exceptions warfen, was zu falschen Schließungen führte. Jetzt wird `False` zurückgegeben wenn Exceptions aufgetreten sind.
+- **Race Condition im Trailing-Stop-Lock** — Backoff-Timestamp wurde außerhalb des Locks aktualisiert, was gleichzeitigen Re-Entry ermöglichte. Timestamp wird jetzt innerhalb des Locks gesetzt.
+- **Off-by-one im Retry-Count** — `range(1, _POSITION_GONE_THRESHOLD)` ergab nur 2 statt 3 Iterationen. Korrigiert zu `range(1, _POSITION_GONE_THRESHOLD + 1)`.
+
+---
+
+## [4.11.2] - 2026-04-01
+
+### Bereinigt
+- **Backend Refactoring: Trailing Stop Deduplizierung** — Identische `_check_trailing_stop`-Methoden aus `EdgeIndicatorStrategy` und `LiquidationHunterStrategy` in eine gemeinsame `check_atr_trailing_stop()`-Funktion in `strategy/base.py` extrahiert. Beide Strategien delegieren jetzt an die gemeinsame Funktion.
+- **Backend Refactoring: PnL-Berechnung zentralisiert** — Inline-PnL-Berechnungen in `trades.py::sync_trades` und `bots_lifecycle.py::close_position` durch Aufrufe der bestehenden `calculate_pnl()`-Funktion aus `bot/pnl.py` ersetzt.
+- **Backend Refactoring: Doppelter Exchange-Client-Code entfernt** — `portfolio.py::_get_all_user_clients` delegiert jetzt an `factory.py::get_all_user_clients` statt die gleiche Logik zu duplizieren.
+- **Backend: Import-Pfad korrigiert** — `risk_manager.py` importiert `calculate_pnl` jetzt direkt aus `bot/pnl.py` statt über den Umweg `bot/bot_worker.py`. Der unnötige Re-Export in `bot_worker.py` wurde entfernt.
+- **Backend: Irreführenden noqa-Kommentar entfernt** — `auth.py` Import von `_get_real_client_ip` war als "re-export for backward compat" markiert, wird aber tatsächlich im selben Modul verwendet.
+
+---
+
+## [4.11.1] - 2026-04-01
+
+### Bereinigt
+- **Frontend Code Cleanup** — Stale Kommentare entfernt (`Bots.tsx`: BuilderFeeApproval-Hinweis, utcHourToLocal-Import-Notiz), doppelten Kommentar in `Portfolio.tsx` entfernt, überflüssige Leerzeilen in `Bots.tsx` und `BotPerformance.tsx` bereinigt
+- **Ungenutzte CSS-Klassen entfernt** — `.overlay-fade` (inkl. `@keyframes fadeOverlay`) und `.transition-smooth` aus `index.css` entfernt, da sie nirgendwo im Code referenziert wurden
+
+---
+
 ## [4.11.0] - 2026-04-01
 
 ### Hinzugefügt

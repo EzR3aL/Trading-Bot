@@ -405,11 +405,14 @@ class HyperliquidClient(ExchangeClient):
 
         logger.info(f"Hyperliquid order placed: oid={order_id}, avgPx={fill_price}")
 
-        # Place TP/SL trigger orders
+        # Place TP/SL trigger orders and track failures
+        tpsl_failed = False
         if take_profit is not None:
-            await self._place_trigger_order(coin, not is_buy, size, take_profit, "tp")
+            if not await self._place_trigger_order(coin, not is_buy, size, take_profit, "tp"):
+                tpsl_failed = True
         if stop_loss is not None:
-            await self._place_trigger_order(coin, not is_buy, size, stop_loss, "sl")
+            if not await self._place_trigger_order(coin, not is_buy, size, stop_loss, "sl"):
+                tpsl_failed = True
 
         return Order(
             order_id=str(order_id),
@@ -422,6 +425,7 @@ class HyperliquidClient(ExchangeClient):
             leverage=leverage,
             take_profit=take_profit,
             stop_loss=stop_loss,
+            tpsl_failed=tpsl_failed,
         )
 
     def _get_sz_decimals(self, coin: str) -> int:
@@ -471,8 +475,10 @@ class HyperliquidClient(ExchangeClient):
 
     async def _place_trigger_order(
         self, coin: str, is_buy: bool, size: float, trigger_px: float, tpsl: str,
-    ) -> None:
+    ) -> bool:
         """Place a TP or SL trigger order (reduce-only).
+
+        Returns True on success, False on failure or validation skip.
 
         is_buy is the CLOSE direction (opposite of position side):
         - Long position -> is_buy=False (sell to close)
@@ -491,26 +497,26 @@ class HyperliquidClient(ExchangeClient):
                             f"Hyperliquid TP trigger for {coin}: price {trigger_px} must be above "
                             f"market {market_px} for long position. Skipping."
                         )
-                        return
+                        return False
                     if is_buy and trigger_px >= market_px:
                         logger.warning(
                             f"Hyperliquid TP trigger for {coin}: price {trigger_px} must be below "
                             f"market {market_px} for short position. Skipping."
                         )
-                        return
+                        return False
                 elif tpsl == "sl":
                     if not is_buy and trigger_px >= market_px:
                         logger.warning(
                             f"Hyperliquid SL trigger for {coin}: price {trigger_px} must be below "
                             f"market {market_px} for long position. Skipping."
                         )
-                        return
+                        return False
                     if is_buy and trigger_px <= market_px:
                         logger.warning(
                             f"Hyperliquid SL trigger for {coin}: price {trigger_px} must be above "
                             f"market {market_px} for short position. Skipping."
                         )
-                        return
+                        return False
         except Exception as e:
             logger.debug(f"Could not validate trigger price for {coin}: {e}")
 
@@ -536,8 +542,10 @@ class HyperliquidClient(ExchangeClient):
                 **builder_kwargs,
             )
             logger.info(f"Hyperliquid {tpsl.upper()} trigger set for {coin} @ {rounded_px}: {result}")
+            return True
         except Exception as e:
             logger.warning(f"Hyperliquid {tpsl.upper()} trigger failed for {coin}: {e}")
+            return False
 
     async def close_position(self, symbol: str, side: str, margin_mode: str = "cross") -> Optional[Order]:
         coin = self._normalize_symbol(symbol)

@@ -542,7 +542,7 @@ class TestLoginEndpointLogic:
         mock_request = _make_starlette_request()
 
         with pytest.raises(HTTPException) as exc_info:
-            await login(request=mock_request, body=body, db=mock_db)
+            await login(request=mock_request, response=MagicMock(), body=body, db=mock_db)
         assert exc_info.value.status_code == 403
         assert ERR_ACCOUNT_DISABLED in exc_info.value.detail
 
@@ -564,7 +564,7 @@ class TestLoginEndpointLogic:
         mock_request = _make_starlette_request()
 
         with pytest.raises(HTTPException) as exc_info:
-            await login(request=mock_request, body=body, db=mock_db)
+            await login(request=mock_request, response=MagicMock(), body=body, db=mock_db)
         assert exc_info.value.status_code == 401
         assert ERR_INVALID_CREDENTIALS in exc_info.value.detail
 
@@ -585,7 +585,7 @@ class TestLoginEndpointLogic:
         mock_request = _make_starlette_request()
 
         with pytest.raises(HTTPException) as exc_info:
-            await login(request=mock_request, body=body, db=mock_db)
+            await login(request=mock_request, response=MagicMock(), body=body, db=mock_db)
         assert exc_info.value.status_code == 401
         assert ERR_INVALID_CREDENTIALS in exc_info.value.detail
 
@@ -607,7 +607,7 @@ class TestLoginEndpointLogic:
         mock_request = _make_starlette_request()
 
         with pytest.raises(HTTPException) as exc_info:
-            await login(request=mock_request, body=body, db=mock_db)
+            await login(request=mock_request, response=MagicMock(), body=body, db=mock_db)
         assert exc_info.value.status_code == 401
 
     @pytest.mark.asyncio
@@ -626,11 +626,11 @@ class TestLoginEndpointLogic:
         mock_db.execute = AsyncMock(return_value=mock_result)
 
         mock_request = _make_starlette_request()
+        mock_response = MagicMock()
 
-        result = await login(request=mock_request, body=body, db=mock_db)
+        result = await login(request=mock_request, response=mock_response, body=body, db=mock_db)
 
         assert result.access_token is not None
-        assert result.refresh_token is not None
         assert result.token_type == "bearer"
 
         # Verify the access token contains the correct user data
@@ -640,8 +640,16 @@ class TestLoginEndpointLogic:
         assert access_payload["tv"] == 2
         assert access_payload["type"] == "access"
 
-        # Verify the refresh token contains the correct user data
-        refresh_payload = decode_token(result.refresh_token)
+        # Verify the refresh token is set as httpOnly cookie (not in response body)
+        assert mock_response.set_cookie.call_count >= 1
+        # Find the refresh_token cookie call
+        refresh_cookie_calls = [
+            c for c in mock_response.set_cookie.call_args_list
+            if (c.kwargs.get("key") or (c.args[0] if c.args else "")) == "refresh_token"
+        ]
+        assert len(refresh_cookie_calls) == 1
+        refresh_cookie_value = refresh_cookie_calls[0].kwargs.get("value") or refresh_cookie_calls[0][1].get("value", "")
+        refresh_payload = decode_token(refresh_cookie_value)
         assert refresh_payload["sub"] == "5"
         assert refresh_payload["role"] == "admin"
         assert refresh_payload["tv"] == 2
@@ -679,8 +687,8 @@ class TestRefreshEndpointLogic:
 
         assert result.access_token is not None
         assert result.token_type == "bearer"
-        # Refresh token is set as httpOnly cookie, not in response body
-        mock_resp.set_cookie.assert_called_once()
+        # Refresh token + access token are set as httpOnly cookies
+        assert mock_resp.set_cookie.call_count == 2
 
     @pytest.mark.asyncio
     async def test_refresh_with_cookie_and_no_body_succeeds(self):
@@ -844,7 +852,7 @@ class TestRefreshEndpointLogic:
         mock_resp = MagicMock()
         result = await refresh_endpoint(request=mock_request, response=mock_resp, body=body, refresh_token_cookie=None, db=mock_db)
         assert result.access_token is not None
-        mock_resp.set_cookie.assert_called_once()
+        assert mock_resp.set_cookie.call_count == 2
 
     @pytest.mark.asyncio
     async def test_refresh_new_tokens_contain_updated_user_data(self):
@@ -875,9 +883,10 @@ class TestRefreshEndpointLogic:
         assert access_payload["tv"] == 7  # unchanged: no rotation on refresh
         assert access_payload["type"] == "access"
 
-        # Verify new refresh token set as httpOnly cookie
-        mock_resp.set_cookie.assert_called_once()
-        cookie_call = mock_resp.set_cookie.call_args
+        # Verify cookies were set (access_token + refresh_token)
+        assert mock_resp.set_cookie.call_count == 2
+        # Get the last set_cookie call (refresh_token cookie)
+        cookie_call = mock_resp.set_cookie.call_args_list[-1]
         refresh_cookie_value = cookie_call.kwargs.get("value") or cookie_call[1].get("value", "")
         refresh_payload = decode_token(refresh_cookie_value)
         assert refresh_payload["sub"] == "10"

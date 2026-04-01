@@ -9,7 +9,6 @@ import { useToastStore } from '../stores/toastStore'
 import { utcHourToLocal } from '../utils/timezone'
 import { ExchangeIcon } from '../components/ui/ExchangeLogo'
 import BotBuilder from '../components/bots/BotBuilder'
-// BuilderFeeApproval moved to Settings page — no longer needed as a modal here
 import { SkeletonBotCard } from '../components/ui/Skeleton'
 import PnlCell from '../components/ui/PnlCell'
 import ExitReasonBadge from '../components/ui/ExitReasonBadge'
@@ -166,8 +165,6 @@ function getScheduleHoursUtc(scheduleType?: string | null, scheduleConfig?: { in
   if (scheduleType === 'custom_cron' && scheduleConfig?.hours) return [...scheduleConfig.hours].sort((a, b) => a - b)
   return null
 }
-
-// utcHourToLocal is now imported from utils/timezone
 
 function formatHourLocal(utcHour: number): string {
   return String(utcHourToLocal(utcHour)).padStart(2, '0')
@@ -877,7 +874,6 @@ export default function Bots() {
     disabled: !isMobile,
   })
 
-
   const handleStart = async (id: number) => {
     haptic.medium()
     // Check if HL bot needs builder fee approval or referral first (admins bypass)
@@ -1167,7 +1163,6 @@ export default function Bots() {
                     </div>
                   </div>
                 </div>
-
 
                 {/* Error message */}
                 {bot.error_message && (

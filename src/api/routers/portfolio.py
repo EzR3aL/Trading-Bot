@@ -17,7 +17,7 @@ from src.api.schemas.portfolio import (
     PortfolioSummary,
 )
 from src.auth.dependencies import get_current_user
-from src.models.database import BotConfig, ExchangeConnection, TradeRecord, User
+from src.models.database import BotConfig, TradeRecord, User
 from src.models.session import get_db
 from src.exchanges.symbol_map import normalize_symbol
 from src.utils.logger import get_logger
@@ -342,40 +342,5 @@ async def get_portfolio_allocation(
 
 async def _get_all_user_clients(user_id: int, db: AsyncSession) -> dict:
     """Load all exchange connections and create clients."""
-    from src.exchanges.factory import create_exchange_client
-    from src.utils.encryption import decrypt_value
-
-    result = await db.execute(
-        select(ExchangeConnection).where(ExchangeConnection.user_id == user_id)
-    )
-    connections = result.scalars().all()
-
-    clients = {}
-    for conn in connections:
-        try:
-            # Prefer live keys, fall back to demo
-            api_key_enc = conn.api_key_encrypted or conn.demo_api_key_encrypted
-            api_secret_enc = conn.api_secret_encrypted or conn.demo_api_secret_encrypted
-            passphrase_enc = conn.passphrase_encrypted or conn.demo_passphrase_encrypted
-
-            if not api_key_enc or not api_secret_enc:
-                continue
-
-            api_key = decrypt_value(api_key_enc)
-            api_secret = decrypt_value(api_secret_enc)
-            passphrase = decrypt_value(passphrase_enc) if passphrase_enc else ""
-
-            demo_mode = not conn.api_key_encrypted  # demo if no live keys
-
-            client = create_exchange_client(
-                exchange_type=conn.exchange_type,
-                api_key=api_key,
-                api_secret=api_secret,
-                passphrase=passphrase,
-                demo_mode=demo_mode,
-            )
-            clients[conn.exchange_type] = client
-        except Exception as e:
-            logger.warning(f"Failed to create client for {conn.exchange_type}: {e}")
-
-    return clients
+    from src.exchanges.factory import get_all_user_clients
+    return await get_all_user_clients(user_id, db)

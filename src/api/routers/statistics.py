@@ -73,7 +73,7 @@ async def get_statistics(
         "total_fees": total_fees,
         "total_funding": total_funding,
         "total_builder_fees": total_builder_fees,
-        "net_pnl": total_pnl - total_fees - abs(total_funding),
+        "net_pnl": total_pnl - total_fees - total_funding,
         "avg_pnl_percent": row.avg_pnl_percent or 0,
         "best_trade": row.best_trade or 0,
         "worst_trade": row.worst_trade or 0,

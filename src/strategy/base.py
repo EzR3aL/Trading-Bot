@@ -152,6 +152,72 @@ class BaseStrategy(ABC):
         pass
 
 
+def check_atr_trailing_stop(
+    side: str,
+    entry_price: float,
+    current_price: float,
+    highest_price: float,
+    klines: List,
+    atr_period: int = 14,
+    breakeven_atr: float = 1.5,
+    trail_atr: float = 2.5,
+) -> Tuple[bool, str]:
+    """Shared ATR-based trailing stop with breakeven floor.
+
+    Used by EdgeIndicatorStrategy and LiquidationHunterStrategy to avoid
+    duplicating the same trailing stop logic.
+
+    Args:
+        side: "long" or "short"
+        entry_price: Trade entry price.
+        current_price: Current market price.
+        highest_price: Highest (long) or lowest (short) price since entry.
+        klines: OHLCV kline data for ATR calculation.
+        atr_period: ATR lookback period.
+        breakeven_atr: ATR multiplier for breakeven activation threshold.
+        trail_atr: ATR multiplier for trailing distance.
+
+    Returns:
+        (should_exit, reason_string)
+    """
+    from src.data.market_data import MarketDataFetcher
+
+    atr_series = MarketDataFetcher.calculate_atr(klines, atr_period)
+    atr_val = atr_series[-1] if atr_series else current_price * 0.015
+
+    trail_distance = atr_val * trail_atr
+    breakeven_threshold = atr_val * breakeven_atr
+
+    if side == "long":
+        was_profitable = (highest_price - entry_price) >= breakeven_threshold
+        if not was_profitable:
+            return False, ""
+
+        trailing_stop = max(highest_price - trail_distance, entry_price)
+        if current_price <= trailing_stop:
+            pnl_pct = (current_price - entry_price) / entry_price * 100
+            return True, (
+                "Trailing Stop: Preis $%.2f unter Stop $%.2f "
+                "(Hoechst=$%.2f, ATR=%.0f, Trail=%.1fx). PnL=%.2f%%"
+                % (current_price, trailing_stop, highest_price, atr_val, trail_atr, pnl_pct)
+            )
+    else:
+        was_profitable = (entry_price - highest_price) >= breakeven_threshold
+        if not was_profitable:
+            return False, ""
+
+        trailing_stop = min(highest_price + trail_distance, entry_price)
+        if current_price >= trailing_stop:
+            pnl_pct = (entry_price - current_price) / entry_price * 100
+            return True, (
+                "Trailing Stop: Preis $%.2f über Stop $%.2f "
+                "(Tiefst=$%.2f, ATR=%.0f, Trail=%.1fx). PnL=%.2f%%"
+                % (current_price, trailing_stop, highest_price, atr_val, trail_atr, pnl_pct)
+            )
+
+    return False, ""
+
+
 class StrategyRegistry:
     """
     Registry of available trading strategies.

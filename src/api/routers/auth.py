@@ -7,7 +7,7 @@ from fastapi import APIRouter, Cookie, Depends, HTTPException, Request, Response
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.api.rate_limit import _get_real_client_ip, limiter  # noqa: F401 — re-export for backward compat
+from src.api.rate_limit import _get_real_client_ip, limiter
 from src.api.schemas.auth import (
     ChangePasswordRequest,
     LoginRequest,

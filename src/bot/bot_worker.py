@@ -23,7 +23,6 @@ from apscheduler.triggers.interval import IntervalTrigger
 
 from src.bot.hyperliquid_gates import HyperliquidGatesMixin
 from src.bot.notifications import NotificationsMixin
-from src.bot.pnl import calculate_pnl  # noqa: F401 — re-export for backward compat
 from src.bot.position_monitor import PositionMonitorMixin
 from src.bot.trade_closer import TradeCloserMixin
 from src.bot.trade_executor import TradeExecutorMixin

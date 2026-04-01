@@ -231,7 +231,6 @@ export default function Portfolio() {
   }
 
   // Merge exchange cards: DB trades + live balances (so all exchanges appear)
-  // Merge exchange cards: DB trades + live balances (so all exchanges appear)
   const mergedExchanges = (() => {
     const byName = new Map<string, { exchange: string; total_pnl: number; win_rate: number; total_trades: number; total_fees: number; balance?: number }>()
     if (summary) {

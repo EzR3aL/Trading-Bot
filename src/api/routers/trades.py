@@ -368,11 +368,8 @@ async def sync_trades(
                         exit_reason = "MANUAL_CLOSE"
 
                     # Calculate PnL
-                    if trade.side == "long":
-                        pnl = (exit_price - trade.entry_price) * trade.size
-                    else:
-                        pnl = (trade.entry_price - exit_price) * trade.size
-                    pnl_percent = (pnl / (trade.entry_price * trade.size)) * 100
+                    from src.bot.pnl import calculate_pnl
+                    pnl, pnl_percent = calculate_pnl(trade.side, trade.entry_price, exit_price, trade.size)
 
                     # Fetch trading fees from exchange (entry + exit via orders-history)
                     try:

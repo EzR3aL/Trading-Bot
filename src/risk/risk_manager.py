@@ -52,7 +52,7 @@ class DailyStats:
     @property
     def net_pnl(self) -> float:
         """Net PnL after fees and funding."""
-        return self.total_pnl - self.total_fees - abs(self.total_funding)
+        return self.total_pnl - self.total_fees - self.total_funding
 
     @property
     def return_percent(self) -> float:
@@ -567,7 +567,7 @@ class RiskManager:
             logger.error("Daily stats not initialized!")
             return False
 
-        from src.bot.bot_worker import calculate_pnl
+        from src.bot.pnl import calculate_pnl
         pnl, pnl_percent = calculate_pnl(side, entry_price, exit_price, size)
 
         # Update stats (global + per-symbol)
