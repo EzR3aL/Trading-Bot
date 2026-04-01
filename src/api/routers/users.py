@@ -1,7 +1,9 @@
 """User management endpoints (admin only)."""
 
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.rate_limit import limiter
@@ -9,8 +11,11 @@ from src.api.schemas.user import AdminUserResponse, UserCreate, UserResponse, Us
 from src.errors import ERR_CANNOT_DELETE_SELF, ERR_USERNAME_EXISTS, ERR_USER_NOT_FOUND
 from src.auth.dependencies import get_current_admin
 from src.auth.password import hash_password
-from src.models.database import BotConfig, ExchangeConnection, TradeRecord, User
+from src.models.database import BotConfig, BotInstance, ExchangeConnection, TradeRecord, User, UserSession
 from src.models.session import get_db
+from src.utils.logger import get_logger
+
+logger = get_logger(__name__)
 
 router = APIRouter(prefix="/api/users", tags=["users"])
 
@@ -81,26 +86,21 @@ async def create_user(
     db: AsyncSession = Depends(get_db),
 ):
     """Create a new user (admin only)."""
-    # Check uniqueness — exclude soft-deleted users
     existing = await db.execute(
         select(User).where(User.username == data.username)
     )
     existing_user = existing.scalar_one_or_none()
     if existing_user:
-        if existing_user.deleted_at is not None:
-            # Reactivate soft-deleted user with new credentials
-            existing_user.deleted_at = None
-            existing_user.is_active = True
-            existing_user.password_hash = hash_password(data.password)
-            existing_user.email = data.email
-            existing_user.role = data.role
-            existing_user.language = data.language
-            existing_user.failed_login_attempts = 0
-            existing_user.locked_until = None
+        if existing_user.is_deleted:
+            # Hard-delete the soft-deleted user so the username can be reused.
+            # CASCADE on foreign keys removes bots, exchange connections, sessions.
+            # Trade records are also cascaded — acceptable for deleted users.
+            old_id = existing_user.id
+            await db.delete(existing_user)
             await db.flush()
-            await db.refresh(existing_user)
-            return UserResponse.model_validate(existing_user)
-        raise HTTPException(status_code=409, detail=ERR_USERNAME_EXISTS)
+            logger.info("Hard-deleted soft-deleted user %s (id=%d) for username reuse", data.username, old_id)
+        else:
+            raise HTTPException(status_code=409, detail=ERR_USERNAME_EXISTS)
 
     user = User(
         username=data.username,
@@ -169,6 +169,7 @@ async def delete_user(
 
     user.is_deleted = True
     user.is_active = False
+    user.deleted_at = datetime.now(timezone.utc)
     user.token_version = (user.token_version or 0) + 1
     await db.flush()
     await db.commit()
