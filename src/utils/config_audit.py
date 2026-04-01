@@ -22,7 +22,7 @@ _SENSITIVE_FIELDS = frozenset({
     "demo_api_key_encrypted", "demo_api_secret_encrypted", "demo_passphrase_encrypted",
     "discord_webhook_url", "telegram_bot_token", "telegram_chat_id",
     "whatsapp_phone_number_id", "whatsapp_access_token", "whatsapp_recipient",
-    "password_hash", "totp_secret", "totp_backup_codes",
+    "password_hash",
 })
 
 

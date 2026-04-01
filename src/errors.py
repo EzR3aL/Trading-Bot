@@ -35,22 +35,6 @@ ERR_INVALID_REFRESH_TOKEN_EN = "Invalid refresh token"
 ERR_CURRENT_PASSWORD_WRONG = "Aktuelles Passwort ist falsch"
 ERR_CURRENT_PASSWORD_WRONG_EN = "Current password is incorrect"
 
-# ── Auth / Two-Factor Authentication ────────────────────────────────
-ERR_2FA_ALREADY_ENABLED = "Zwei-Faktor-Authentifizierung ist bereits aktiviert"
-ERR_2FA_ALREADY_ENABLED_EN = "Two-factor authentication is already enabled"
-ERR_2FA_NOT_ENABLED = "Zwei-Faktor-Authentifizierung ist nicht aktiviert"
-ERR_2FA_NOT_ENABLED_EN = "Two-factor authentication is not enabled"
-ERR_2FA_SETUP_NOT_STARTED = "2FA-Einrichtung nicht gestartet. Bitte zuerst /2fa/setup aufrufen."
-ERR_2FA_SETUP_NOT_STARTED_EN = "2FA setup not started. Please call /2fa/setup first."
-ERR_2FA_INVALID_CODE = "Ungültiger 2FA-Code"
-ERR_2FA_INVALID_CODE_EN = "Invalid 2FA code"
-ERR_2FA_REQUIRED = "Zwei-Faktor-Authentifizierung erforderlich"
-ERR_2FA_REQUIRED_EN = "Two-factor authentication required"
-ERR_2FA_TEMP_TOKEN_INVALID = "Ungültiger oder abgelaufener temporärer Token"
-ERR_2FA_TEMP_TOKEN_INVALID_EN = "Invalid or expired temporary token"
-ERR_2FA_RATE_LIMIT = "Zu viele 2FA-Versuche. Bitte warte eine Minute."
-ERR_2FA_RATE_LIMIT_EN = "Too many 2FA attempts. Please wait a minute."
-
 # ── Auth / Sessions ─────────────────────────────────────────────────
 ERR_SESSION_NOT_FOUND = "Sitzung nicht gefunden"
 ERR_SESSION_NOT_FOUND_EN = "Session not found"

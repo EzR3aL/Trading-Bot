@@ -9,6 +9,19 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [4.9.0] - 2026-04-01
+
+### Entfernt
+- **2FA/TOTP komplett entfernt** — Zwei-Faktor-Authentifizierung (TOTP, Backup-Codes, QR-Code-Setup) wurde aus dem gesamten Projekt entfernt:
+  - **Backend**: TOTP-Endpunkte (`/2fa/setup`, `/2fa/verify-setup`, `/2fa/verify-login`, `/2fa/disable`, `/2fa/backup-codes`) entfernt, Login-Flow vereinfacht (kein Temp-Token-Schritt mehr), `totp_secret`/`totp_enabled`/`totp_backup_codes` aus User-Model entfernt, 2FA-Fehler-Konstanten entfernt
+  - **Frontend**: 2FA-Schritt aus Login-Seite entfernt, `verify2fa`/`tempToken`/`requires2fa` aus Auth-Store entfernt, 2FA-Bereich aus Settings-Seite entfernt, `totp_enabled` aus User-Type entfernt
+  - **i18n**: Alle `login.2fa.*` und `settings.twoFactor*` Uebersetzungsschluessel aus DE + EN entfernt
+  - **Tests**: TOTP-bezogene Mock-Felder aus test_auth.py und test_production_hardening.py entfernt
+  - **Dependencies**: `pyotp` und `qrcode[pil]` aus requirements.txt entfernt
+  - **Migration**: Neue Migration 017 entfernt `totp_secret`, `totp_enabled`, `totp_backup_codes` Spalten aus der `users`-Tabelle
+
+---
+
 ## [4.8.2] - 2026-04-01
 
 ### Hinzugefügt

@@ -6,17 +6,11 @@ import type { User } from '../types'
 /** Default access token lifetime in seconds (must match backend ACCESS_TOKEN_EXPIRE_MINUTES). */
 const DEFAULT_TOKEN_LIFETIME_S = 1440 * 60
 
-interface LoginResult {
-  requires2fa: boolean
-  tempToken?: string
-}
-
 interface AuthState {
   user: User | null
   isAuthenticated: boolean
   isLoading: boolean
-  login: (username: string, password: string) => Promise<LoginResult>
-  verify2fa: (tempToken: string, code: string) => Promise<void>
+  login: (username: string, password: string) => Promise<void>
   exchangeAuthCode: (code: string) => Promise<void>
   logout: () => Promise<void>
   fetchUser: () => Promise<void>
@@ -49,36 +43,10 @@ export const useAuthStore = create<AuthState>((set) => ({
     set({ isLoading: true })
     try {
       const res = await api.post('/auth/login', { username, password })
-      const { access_token, requires_2fa, temp_token } = res.data
-
-      if (requires_2fa) {
-        set({ isLoading: false })
-        return { requires2fa: true, tempToken: temp_token }
-      }
+      const { access_token } = res.data
 
       // Access token is now stored as httpOnly cookie by the backend.
       // Track expiry for proactive refresh scheduling.
-      setTokenExpiry(extractExpirySeconds(access_token))
-
-      // Fetch user profile
-      const userRes = await api.get('/auth/me')
-      set({ user: userRes.data, isAuthenticated: true, isLoading: false })
-      return { requires2fa: false }
-    } catch (error) {
-      set({ isLoading: false })
-      throw error
-    }
-  },
-
-  verify2fa: async (tempToken: string, code: string) => {
-    set({ isLoading: true })
-    try {
-      const res = await api.post('/auth/2fa/verify-login', {
-        temp_token: tempToken,
-        code,
-      })
-      const { access_token } = res.data
-
       setTokenExpiry(extractExpirySeconds(access_token))
 
       // Fetch user profile

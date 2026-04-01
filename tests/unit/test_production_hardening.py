@@ -554,8 +554,6 @@ class TestAuthLoginLockoutFlow:
         user.locked_until = None
         user.failed_login_attempts = 0
         user.language = "en"
-        user.totp_enabled = False
-        user.totp_secret = None
         return user
 
     @pytest.mark.asyncio

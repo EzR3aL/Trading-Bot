@@ -5,7 +5,6 @@ export interface User {
   role: 'admin' | 'user'
   language: 'de' | 'en'
   is_active: boolean
-  totp_enabled?: boolean
   auth_provider?: string
   last_login_at?: string | null
   created_at?: string | null
