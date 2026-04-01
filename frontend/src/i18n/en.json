@@ -23,7 +23,7 @@
     "username": "Username",
     "password": "Password",
     "submit": "Sign In",
-    "error": "Invalid credentials",
+    "error": "Invalid credentials"
   },
   "dashboard": {
     "title": "Dashboard",
@@ -208,7 +208,7 @@
     "hlAllConfigured": "Fully configured",
     "hlPartialConfig": "Partially configured",
     "hlNotReady": "Setup required",
-    "hlServicesActive": "services active",
+    "hlServicesActive": "services active"
   },
   "tax": {
     "title": "Tax Report",

@@ -23,7 +23,7 @@
     "username": "Benutzername",
     "password": "Passwort",
     "submit": "Anmelden",
-    "error": "Ungültige Anmeldedaten",
+    "error": "Ungültige Anmeldedaten"
   },
   "dashboard": {
     "title": "Dashboard",
@@ -208,7 +208,7 @@
     "hlAllConfigured": "Vollständig konfiguriert",
     "hlPartialConfig": "Teilweise konfiguriert",
     "hlNotReady": "Einrichtung erforderlich",
-    "hlServicesActive": "Dienste aktiv",
+    "hlServicesActive": "Dienste aktiv"
   },
   "tax": {
     "title": "Steuerbericht",
