@@ -1046,17 +1046,14 @@ export default function BotPerformance() {
                             <tr className="table-expand-row">
                               <td colSpan={9} className="!p-0 !border-b-0">
                                 <dl className="table-expand-content">
-                                  <div>
-                                    <dt>&nbsp;</dt>
-                                    <dd>
-                                      <button
-                                        onClick={() => setSelectedTrade(trade)}
-                                        className="p-2 rounded-lg text-gray-400 hover:text-white bg-white/5 hover:bg-white/10 border border-white/5 transition-all"
-                                        title={t('bots.shareImage')}
-                                      >
-                                        <Share2 size={14} />
-                                      </button>
-                                    </dd>
+                                  <div className="flex items-center h-full">
+                                    <button
+                                      onClick={() => setSelectedTrade(trade)}
+                                      className="mt-4 p-2 rounded-lg text-gray-400 hover:text-white bg-white/5 hover:bg-white/10 border border-white/5 transition-all"
+                                      title={t('bots.shareImage')}
+                                    >
+                                      <Share2 size={14} />
+                                    </button>
                                   </div>
                                   <div className="xl:hidden">
                                     <dt>{t('trades.entryPrice')}</dt>
