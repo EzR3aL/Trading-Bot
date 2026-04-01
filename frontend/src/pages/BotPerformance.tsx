@@ -1046,18 +1046,6 @@ export default function BotPerformance() {
                             <tr className="table-expand-row">
                               <td colSpan={9} className="!p-0 !border-b-0">
                                 <dl className="table-expand-content">
-                                  <div>
-                                    <dt className="invisible">.</dt>
-                                    <dd>
-                                      <button
-                                        onClick={() => setSelectedTrade(trade)}
-                                        className="p-2 rounded-lg text-gray-400 hover:text-white bg-white/5 hover:bg-white/10 border border-white/5 transition-all"
-                                        title={t('bots.shareImage')}
-                                      >
-                                        <Share2 size={14} />
-                                      </button>
-                                    </dd>
-                                  </div>
                                   <div className="xl:hidden">
                                     <dt>{t('trades.entryPrice')}</dt>
                                     <dd>${trade.entry_price.toLocaleString()}</dd>
@@ -1078,7 +1066,16 @@ export default function BotPerformance() {
                                   </div>
                                   <div className="2xl:hidden">
                                     <dt>{t('trades.mode')}</dt>
-                                    <dd>{trade.demo_mode ? t('common.demo') : t('common.live')}</dd>
+                                    <dd className="flex items-center gap-3">
+                                      <span>{trade.demo_mode ? t('common.demo') : t('common.live')}</span>
+                                      <button
+                                        onClick={() => setSelectedTrade(trade)}
+                                        className="p-1.5 rounded-lg text-gray-400 hover:text-white bg-white/5 hover:bg-white/10 border border-white/5 transition-all"
+                                        title={t('bots.shareImage')}
+                                      >
+                                        <Share2 size={13} />
+                                      </button>
+                                    </dd>
                                   </div>
                                   {trade.exit_time && (
                                     <div>
