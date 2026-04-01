@@ -9,6 +9,19 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [4.13.0] - 2026-04-01
+
+### Behoben
+- **Login-Endlosschleife** — Login-Seite leitete in Dauerschleife auf sich selbst weiter (`fetchUser` 401 → Refresh-Versuch → Session Expiry → Redirect → Loop)
+- **"Sitzung abgelaufen" statt "Ungültige Anmeldedaten"** — Login-401 wurde fälschlich als abgelaufene Session behandelt
+- **User löschen + neu anlegen** — Gelöschter Username konnte nicht wiederverwendet werden (Soft Delete blockierte Unique Constraint). Jetzt: Hard Delete bei Neuanlage
+- **DuckDNS-Domain** zu CORS hinzugefügt
+
+### Hinzugefügt
+- **Smart Deploy-Skript** (`scripts/deploy.sh`) — Erkennt ob Dependencies geändert wurden, nutzt Docker-Cache wenn möglich (~2 Min statt ~10 Min)
+
+---
+
 ## [4.12.8] - 2026-04-01
 
 ### Geaendert
