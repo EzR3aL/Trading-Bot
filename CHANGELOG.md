@@ -9,6 +9,18 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [4.11.0] - 2026-04-01
+
+### Hinzugefügt
+- **Builder Wallet Balance-Hinweis** — Im Hyperliquid-Setup (Settings-Seite und Builder Fee Approval Modal) wird jetzt ein Hinweis angezeigt, dass die Builder Wallet mindestens 100 USDC Guthaben benötigt, damit Trades ausgeführt werden können. Der Hinweis erscheint sowohl vor der Signierung als auch nach erfolgreicher Genehmigung.
+- **Fehlende Übersetzung `builderFee.signRejected`** — Neuer i18n-Schlüssel für die Fehlermeldung bei abgelehnter Wallet-Signierung, in DE ("Signierung wurde abgelehnt.") und EN ("Signing was rejected."). Vorher nur als Inline-Fallback vorhanden.
+- **`hlSetup.builderWalletHint`** — Neuer Übersetzungsschlüssel für den Builder-Wallet-Balance-Hinweis (DE + EN)
+
+### Geprüft
+- **Deutsche Übersetzungen vollständig geprüft** — Alle `hlSetup.*` und `builderFee.*` Schlüssel in `de.json` sind korrekt auf Deutsch übersetzt. Alle Hardcoded-Fallbacks in `BotBuilderStepExchange.tsx`, `HyperliquidSetup.tsx`, `BuilderFeeApproval.tsx` und `Bots.tsx` stimmen mit den i18n-Einträgen überein.
+
+---
+
 ## [4.10.0] - 2026-04-01
 
 ### Hinzugefügt

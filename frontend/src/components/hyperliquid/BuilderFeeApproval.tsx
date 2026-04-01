@@ -341,6 +341,12 @@ function BuilderFeeApprovalInner({ onApproved, onClose }: BuilderFeeApprovalProp
 
           <p className="text-gray-400 text-sm leading-relaxed">{t('builderFee.signHint')}</p>
 
+          {/* Builder wallet balance requirement hint */}
+          <div className="flex items-start gap-2 p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg text-xs text-amber-300">
+            <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+            {t('hlSetup.builderWalletHint')}
+          </div>
+
           <button
             onClick={handleSignAndSubmit}
             disabled={processing}
@@ -367,6 +373,11 @@ function BuilderFeeApprovalInner({ onApproved, onClose }: BuilderFeeApprovalProp
           <CheckCircle className="w-12 h-12 text-green-400 mx-auto" />
           <p className="text-green-400 font-semibold">{t('builderFee.approved')}</p>
           <p className="text-gray-400 text-sm">{t('builderFee.approvedHint')}</p>
+          {/* Builder wallet balance requirement hint */}
+          <div className="flex items-start gap-2 p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg text-xs text-amber-300 text-left">
+            <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+            {t('hlSetup.builderWalletHint')}
+          </div>
         </div>
       )}
     </div>

@@ -249,8 +249,15 @@ function HyperliquidSetupInner({ onComplete }: HyperliquidSetupProps) {
 
       {/* All done message */}
       {allDone && (
-        <div className="p-3 bg-emerald-950/30 border border-emerald-700/20 rounded-lg text-sm text-emerald-400">
-          {t('hlSetup.ready')}
+        <div className="space-y-2">
+          <div className="p-3 bg-emerald-950/30 border border-emerald-700/20 rounded-lg text-sm text-emerald-400">
+            {t('hlSetup.ready')}
+          </div>
+          {/* Builder wallet balance requirement hint */}
+          <div className="flex items-start gap-2 p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg text-xs text-amber-300">
+            <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+            {t('hlSetup.builderWalletHint')}
+          </div>
         </div>
       )}
 
@@ -287,6 +294,11 @@ function HyperliquidSetupInner({ onComplete }: HyperliquidSetupProps) {
       {referralVerified && !builderFeeApproved && (
         <div className="space-y-3">
           <p className="text-gray-400 text-xs">{t('hlSetup.builderFeePrompt')}</p>
+          {/* Builder wallet balance requirement hint */}
+          <div className="flex items-start gap-2 p-2.5 bg-amber-500/10 border border-amber-500/20 rounded-lg text-xs text-amber-300">
+            <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+            {t('hlSetup.builderWalletHint')}
+          </div>
 
           {/* Wallet connect */}
           {!isConnected && (
