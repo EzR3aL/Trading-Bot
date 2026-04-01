@@ -737,15 +737,18 @@ function BotTradeHistoryModal({ bot, onClose, t }: { bot: BotStatus; onClose: ()
                             <tr className="table-expand-row">
                               <td colSpan={9} className="!p-0 !border-b-0">
                                 <dl className="table-expand-content">
-                                  <div className="flex items-center h-full">
-                                    <button
-                                      onClick={() => setSelectedTrade({ ...trade, exchange: bot.exchange_type })}
-                                      className="mt-4 p-2 rounded-lg text-gray-400 hover:text-white bg-white/5 hover:bg-white/10 border border-white/5 transition-all"
-                                      title={t('bots.shareImage')}
-                                      aria-label="Share trade"
-                                    >
-                                      <Share2 size={14} />
-                                    </button>
+                                  <div>
+                                    <dt className="invisible">.</dt>
+                                    <dd>
+                                      <button
+                                        onClick={() => setSelectedTrade({ ...trade, exchange: bot.exchange_type })}
+                                        className="p-2 rounded-lg text-gray-400 hover:text-white bg-white/5 hover:bg-white/10 border border-white/5 transition-all"
+                                        title={t('bots.shareImage')}
+                                        aria-label="Share trade"
+                                      >
+                                        <Share2 size={14} />
+                                      </button>
+                                    </dd>
                                   </div>
                                   <div className="xl:hidden">
                                     <dt>{t('trades.entryPrice')}</dt>
