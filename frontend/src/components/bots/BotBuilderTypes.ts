@@ -63,7 +63,7 @@ export interface PerAssetEntry {
 }
 
 // Strategies that use market data and should show the data sources step
-export const DATA_STRATEGIES = ['liquidation_hunter', 'edge_indicator', 'contrarian_pulse']
+export const DATA_STRATEGIES = ['liquidation_hunter', 'edge_indicator']
 
 // Fixed data sources per strategy (used after selection to show which sources are used)
 export const FIXED_STRATEGY_SOURCES: Record<string, string[]> = {
@@ -72,10 +72,6 @@ export const FIXED_STRATEGY_SOURCES: Record<string, string[]> = {
   ],
   edge_indicator: [
     'spot_price', 'vwap', 'supertrend', 'spot_volume', 'volatility',
-  ],
-  contrarian_pulse: [
-    'fear_greed', 'spot_price', 'spot_volume', 'cvd', 'long_short_ratio',
-    'open_interest', 'funding_rate',
   ],
 }
 

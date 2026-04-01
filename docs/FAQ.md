@@ -4,24 +4,23 @@
 
 ### Was macht dieser Bot genau?
 
-Der Bot ist ein Multi-Exchange Trading System, das Kryptomaerkte analysiert und automatisch handelt. Er unterstuetzt **5 verschiedene Strategien** und **3 Exchanges** (Bitget, Weex, Hyperliquid). Du kannst mehrere Bots parallel laufen lassen, jeden mit einer eigenen Strategie, eigenem Trading-Paar und eigener Exchange.
+Der Bot ist ein Multi-Exchange Trading System, das Kryptomaerkte analysiert und automatisch handelt. Er unterstuetzt **2 Trading-Strategien** und **5 Exchanges** (Bitget, BingX, Weex, Bitunix, Hyperliquid). Du kannst mehrere Bots parallel laufen lassen, jeden mit einer eigenen Strategie, eigenem Trading-Paar und eigener Exchange.
 
 ### Welche Strategien stehen zur Verfuegung?
 
 | # | Strategie | Typ | Beschreibung |
 |---|-----------|-----|-------------|
-| 1 | **LiquidationHunter** | Contrarian | Wettet gegen ueberladene Positionen, nutzt L/S Ratio + Fear & Greed |
-| 2 | **LLM Signal** | KI-gesteuert | Konfigurierbarer LLM-Provider analysiert Marktdaten und generiert Signale |
-| 3 | **Sentiment Surfer** | Hybrid | Kombiniert 6 Datenquellen (News, Sentiment, VWAP, Supertrend, Volume, Momentum) |
-| 4 | **Degen** | KI-Arena | Fester Prompt mit 19 Datenquellen fuer aggressive 1h BTC-Predictions |
-| 5 | **Edge Indicator** | Technisch | EMA Ribbon + ADX Filter + Predator Momentum Score (nur Kline-Daten) |
+| 1 | **Edge Indicator** | Technisch | EMA Ribbon + ADX Filter + Predator Momentum Score (nur Kline-Daten) |
+| 2 | **LiquidationHunter** | Contrarian | Wettet gegen ueberladene Positionen, nutzt L/S Ratio + Fear & Greed |
 
 ### Welche Exchanges werden unterstuetzt?
 
 | Exchange | Demo-Modus | Auth-Typ | Passphrase |
 |----------|------------|----------|------------|
 | **Bitget** | Ja | API Key | Ja |
+| **BingX** | Ja | API Key | Nein |
 | **Weex** | Ja | API Key | Ja |
+| **Bitunix** | Ja | API Key | Ja |
 | **Hyperliquid** | Ja | Wallet | Nein |
 
 ### Ist der Bot profitabel?
@@ -79,7 +78,7 @@ Dann mit Docker Compose deployen (siehe [DEPLOYMENT.md](DEPLOYMENT.md)).
 
 **Ja!** Seit v3.3.1 ist ein vollstaendiges Backtesting-System eingebaut:
 - Im Frontend unter "Backtest" erreichbar
-- Alle 5 Strategien koennen getestet werden
+- Alle Strategien koennen getestet werden
 - Konfigurierbare Zeitraeume, Timeframes und Parameter
 - Equity Curve, Trade Log und Metriken
 - Siehe [Anleitungen/Backtesting.md](../Anleitungen/Backtesting.md)

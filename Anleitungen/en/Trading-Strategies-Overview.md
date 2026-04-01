@@ -1,6 +1,6 @@
 # Trading Strategies Overview
 
-The 3 available trading strategies explained: how they work, risk profiles, parameter recommendations, and when to use each.
+The 2 available trading strategies explained: how they work, risk profiles, parameter recommendations, and when to use each.
 
 ---
 
@@ -9,9 +9,7 @@ The 3 available trading strategies explained: how they work, risk profiles, para
 1. [Strategy Comparison](#1-strategy-comparison)
 2. [Edge Indicator](#2-edge-indicator)
 3. [LiquidationHunter](#3-liquidationhunter)
-4. [Sentiment Surfer](#4-sentiment-surfer)
-5. [Which Strategy is Right for You?](#5-which-strategy-is-right-for-you)
-6. [Additional Strategies (Currently Unavailable)](#6-additional-strategies-currently-unavailable)
+4. [Which Strategy is Right for You?](#4-which-strategy-is-right-for-you)
 
 ---
 
@@ -23,7 +21,6 @@ The 3 available trading strategies explained: how they work, risk profiles, para
 |----------|------|-------------|-----------|------|-----------------|
 | Edge Indicator | Technical | Kline only | None | Low-Medium | Beginners / Technical |
 | LiquidationHunter | Contrarian | L/S, F&G, Funding | None | Medium | Experienced traders |
-| Sentiment Surfer | Hybrid | 6 sources | None | Medium | Balanced trading |
 
 ### Backtest Results (90 Days, BTCUSDT, $10k, 1h)
 
@@ -31,7 +28,6 @@ The 3 available trading strategies explained: how they work, risk profiles, para
 |----------|--------|----------|--------|--------|-----|--------|
 | **LiquidationHunter** | +26.2% | 53.9% | 4.7% | 5.51 | 1.98 | 104 |
 | **Edge Indicator** | +18.6% | 47.1% | 9.8% | 2.91 | 1.65 | 68 |
-| Sentiment Surfer | -3.7% | 32.3% | 9.4% | -1.07 | 0.84 | 65 |
 
 ### Risk Profile Matrix
 
@@ -39,7 +35,6 @@ The 3 available trading strategies explained: how they work, risk profiles, para
 |------|----------|--------|
 | **Low** | Edge Indicator | Kline data only, clear rules, ADX filter |
 | **Medium** | LiquidationHunter | Contrarian with clear signals |
-| **Medium** | Sentiment Surfer | Multi-factor, balanced |
 
 ---
 
@@ -120,41 +115,7 @@ Bets **against the crowd**. When too many traders are long (L/S Ratio > 2.5), th
 
 ---
 
-## 4. Sentiment Surfer
-
-### What does it do?
-
-Combines **6 different data sources** with configurable weightings. Each source produces a score from -100 to +100. The weighted average determines the final decision.
-
-### Who is it for?
-
-- Traders who prefer a balanced multi-factor approach
-- Those who don't want to rely on a single indicator
-- Medium risk profile
-
-### 6 Scoring Sources
-
-| # | Source | Weight | Logic |
-|---|--------|--------|-------|
-| 1 | News Sentiment | 1.0x | Positive media = bullish |
-| 2 | Fear & Greed | 1.0x | Contrarian: fear = bullish |
-| 3 | VWAP/OIWAP | 1.2x | Price above fair value = bullish |
-| 4 | Supertrend | 1.2x | ATR trend: green = bullish |
-| 5 | Spot Volume | 0.8x | Buy dominance = bullish |
-| 6 | Price Momentum | 0.8x | 24h direction |
-
-### Parameter Recommendations
-
-| Parameter | Conservative | Standard | Aggressive |
-|-----------|-------------|----------|------------|
-| Min Agreement | 4 | 3 | 2 |
-| Min Confidence | 50 | 40 | 30 |
-| Take Profit | 3.5% | 3.5% | 3.0% |
-| Stop Loss | 1.5% | 1.5% | 2.0% |
-
----
-
-## 5. Which Strategy is Right for You?
+## 4. Which Strategy is Right for You?
 
 ### Decision Tree
 
@@ -165,17 +126,17 @@ Are you a beginner?
 Do you prefer contrarian trading?
   Yes -> LiquidationHunter (L/S Ratio, Funding)
 
-Do you want a balanced multi-factor approach?
-  Yes -> Sentiment Surfer (6 sources, weighted)
+Unsure?
+  -> Edge Indicator to start, add LiquidationHunter later
 ```
 
 ### Recommendations by Experience Level
 
 | Level | Primary Strategy | Alternative |
 |-------|-----------------|-------------|
-| Beginner | Edge Indicator | LiquidationHunter |
-| Intermediate | Sentiment Surfer | LiquidationHunter |
-| Expert | LiquidationHunter | Sentiment Surfer |
+| Beginner | Edge Indicator | -- |
+| Intermediate | Edge Indicator | LiquidationHunter |
+| Expert | LiquidationHunter | Edge Indicator |
 
 ### Recommendations by Risk Tolerance
 
@@ -183,7 +144,6 @@ Do you want a balanced multi-factor approach?
 |------|----------|--------------|----------|
 | Low | Edge Indicator | 5% | 2x |
 | Medium | LiquidationHunter | 10% | 3x |
-| Medium | Sentiment Surfer | 10% | 3x |
 
 ### Combination Strategies
 
@@ -192,19 +152,6 @@ You can run **multiple bots in parallel**:
 | Combination | Benefit |
 |-------------|---------|
 | Edge Indicator + LiquidationHunter | Technical + contrarian diversification |
-| Edge Indicator + Sentiment Surfer | Technical + multi-factor diversification |
 | Edge Indicator (BTC) + Edge Indicator (ETH) | Same strategy, different assets |
+| LiquidationHunter (BTC) + Edge Indicator (ETH) | Different strategies per asset |
 
----
-
-## 6. Additional Strategies (Currently Unavailable)
-
-The following 3 strategies exist in the system but are currently hidden from regular users:
-
-| Strategy | Reason |
-|----------|--------|
-| **Contrarian Pulse** | ~70% overlap with LiquidationHunter. Both use similar data sources and contrarian logic, so Contrarian Pulse was hidden in favor of LiquidationHunter. |
-| **LLM Signal** | Requires external LLM API keys (OpenAI, Anthropic, Groq, etc.). Currently only available to admin users. |
-| **Degen** | Requires external LLM API keys. Aggressive, pre-configured AI prompt with 19 data sources. Currently only available to admin users. |
-
-If an admin grants you access to LLM Signal or Degen, see the [LLM Provider Configuration](../LLM-Provider-Konfiguration.md) guide for setup instructions.

@@ -13,8 +13,7 @@ A production-grade automated cryptocurrency trading platform with multi-exchange
 - Demo and Live mode isolation per exchange
 
 **Strategy Engine**
-- Six pluggable strategies with a common `BaseStrategy` interface
-- LLM-powered signal generation (9 providers: OpenAI, Anthropic, Gemini Flash, Gemini Pro, Groq, Mistral, xAI, Perplexity, DeepSeek)
+- Two trading strategies with a common `BaseStrategy` interface
 - Strategy registry for runtime selection per bot instance
 
 **Real-Time Dashboard**
@@ -208,12 +207,8 @@ The strategy engine uses a plugin architecture. All strategies implement `BaseSt
 
 | Strategy | Type | Description |
 |----------|------|-------------|
-| **Liquidation Hunter** | Contrarian | Bets against crowded positions using long/short ratio, funding rate, and Fear & Greed Index |
-| **Contrarian Pulse** | Contrarian | Mean-reversion strategy combining Fear & Greed extremes (<35/>65) with funding rate divergence |
-| **LLM Signal** | AI-Powered | Delegates signal generation to configurable LLM providers (OpenAI, Anthropic, local). Stateless, prompt-driven |
-| **Degen** | AI-Powered | Pre-configured LLM arena strategy with 19 fixed data sources (funding, order flow, options, volatility) |
 | **Edge Indicator** | Technical | EMA ribbon + ADX chop filter + MACD/RSI momentum score. Pure price action from Binance klines |
-| **Sentiment Surfer** | Hybrid | Weighted scoring across 6 sources: news sentiment, Fear & Greed, VWAP, Supertrend, spot volume, price momentum |
+| **Liquidation Hunter** | Contrarian | Bets against crowded positions using long/short ratio, funding rate, and Fear & Greed Index |
 
 Each strategy can be assigned per bot instance, and users can run multiple bots with different strategies simultaneously (up to 10 per user).
 

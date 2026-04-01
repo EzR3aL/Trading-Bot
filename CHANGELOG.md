@@ -9,6 +9,17 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [4.12.8] - 2026-04-01
+
+### Geaendert
+- **Dokumentation bereinigt** — Alle Referenzen auf entfernte Strategien (Contrarian Pulse, LLM Signal, Degen, Sentiment Surfer) aus Dokumentation und Frontend-Code entfernt. Nur Edge Indicator und Liquidation Hunter bleiben.
+- **2FA/TOTP-Referenzen entfernt** — Integrations-Dokumentation aktualisiert (2FA wurde aus dem Bot entfernt).
+- **App-Name aktualisiert** — SETUP.md verwendet jetzt "Edge Bots by Trading Department" statt "Bitget Trading Bot".
+- **Exchange-Liste aktualisiert** — FAQ listet jetzt alle 5 Exchanges (Bitget, BingX, Weex, Bitunix, Hyperliquid).
+- **Frontend: `contrarian_pulse` entfernt** — Aus `strategies.ts`, `BotBuilderTypes.ts` und i18n-Dateien (de/en) bereinigt.
+
+---
+
 ## [4.12.7] - 2026-04-01
 
 ### Hinzugefuegt

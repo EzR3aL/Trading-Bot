@@ -10,8 +10,6 @@ Die 2 verfuegbaren Trading-Strategien erklaert: Funktionsweise, Risikoprofil, Pa
 2. [Edge Indicator](#2-edge-indicator)
 3. [LiquidationHunter](#3-liquidationhunter)
 4. [Welche Strategie passt zu mir?](#4-welche-strategie-passt-zu-mir)
-5. [Weitere Strategien (derzeit nicht verfuegbar)](#5-weitere-strategien-derzeit-nicht-verfuegbar)
-
 ---
 
 ## 1. Strategie-Vergleich
@@ -160,18 +158,6 @@ Du kannst **mehrere Bots parallel** laufen lassen:
 
 ---
 
-## 5. Weitere Strategien (derzeit nicht verfuegbar)
-
-Die folgende Strategie existiert im Code, ist aber derzeit fuer normale Nutzer nicht sichtbar:
-
-| Strategie | Grund fuer Ausblendung |
-|-----------|----------------------|
-| **Contrarian Pulse** | ~70% Ueberschneidung mit LiquidationHunter. Beide nutzen sehr aehnliche Datenquellen und Contrarian-Logik, weshalb Contrarian Pulse zugunsten von LiquidationHunter versteckt wurde. |
-
-> **Entfernte Strategien:** Die Strategien *Sentiment Surfer* (v4.6.6), *LLM Signal* und *Degen* (v4.6.0) wurden vollstaendig aus dem Projekt entfernt. Der LLM-Code ist unter dem Git-Tag `llm-archive-v4.5` archiviert.
-
----
-
 ---
 
 # Strategy Overview (English)
@@ -231,14 +217,3 @@ You can run **multiple bots in parallel**:
 | Edge Indicator (BTC) + Edge Indicator (ETH) | Same strategy, different assets |
 | LiquidationHunter (BTC) + Edge Indicator (ETH) | Different strategies per asset |
 
----
-
-## Additional Strategies (Currently Unavailable)
-
-The following strategy exists in the code but is currently hidden from regular users:
-
-| Strategy | Reason |
-|----------|--------|
-| **Contrarian Pulse** | ~70% overlap with LiquidationHunter. Both use similar data sources and contrarian logic, so Contrarian Pulse was hidden in favor of LiquidationHunter. |
-
-> **Removed strategies:** *Sentiment Surfer* (v4.6.6), *LLM Signal* and *Degen* (v4.6.0) were completely removed from the project. The LLM code is archived under git tag `llm-archive-v4.5`.

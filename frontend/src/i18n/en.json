@@ -634,7 +634,6 @@
       "proModeParamsActiveHint": "Strategy parameters are shown",
       "strategyDesc_sentiment_surfer": "Combines market sentiment with technical indicators to predict price movements. Uses news sentiment, Fear & Greed, VWAP, Supertrend and spot data. Requires agreement across multiple sources.",
       "strategyDesc_liquidation_hunter": "Contrarian strategy that trades against crowded positions. Analyzes long/short ratios, funding rates and Fear & Greed to detect liquidation cascades early.",
-      "strategyDesc_contrarian_pulse": "Contrarian Fear & Greed scalping strategy for BTC. Uses the F&G Index as contrarian indicator: Long on extreme fear (<30), Short on extreme greed (>70). Confirmed by 50/200 EMA trend, RSI and derivatives signals (CVD, Long/Short Ratio, Volume, Open Interest, Funding Rate). Pure algorithmic. Default: HOLD when F&G is neutral (30-70).",
       "strategyDesc_edge_indicator": "Technical analysis based on the TradingView \"Trading Edge\" indicator. EMA 8/21 Ribbon, ADX Chop Filter and Predator Momentum Score.",
       "recommendedTimeframe": "Recommended timeframe: <strong>{{timeframe}}</strong>",
       "recommendedSchedule": "Schedule interval: <strong>{{minutes}}min</strong>",

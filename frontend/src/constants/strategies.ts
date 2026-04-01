@@ -2,7 +2,6 @@
 export const STRATEGY_DISPLAY: Record<string, string> = {
   liquidation_hunter: 'Liquidation Hunter',
   edge_indicator: 'Edge Indicator',
-  contrarian_pulse: 'Contrarian Pulse',
 }
 
 // Convert a strategy key to a human-readable label

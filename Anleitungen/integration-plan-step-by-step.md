@@ -136,7 +136,7 @@ curl -I https://bots.trading-department.com/api/health
 
 Das ist das Herzstück der Integration. Wir bauen eine "Brücke" zwischen zwei Login-Systemen:
 - **Hauptseite:** Supabase Auth (Google Login, Email/Passwort)
-- **Trading-Bot:** Eigenes JWT-System (Username/Passwort + 2FA)
+- **Trading-Bot:** Eigenes JWT-System (Username/Passwort)
 
 Die Brücke funktioniert so: Die Hauptseite gibt dem User einen "Einmal-Code" (wie ein Zugticket), und der Bot akzeptiert dieses Ticket und lässt den User rein.
 
@@ -238,7 +238,7 @@ Die Brücke funktioniert so: Die Hauptseite gibt dem User einen "Einmal-Code" (w
 - Email-Verknüpfung (Schritt 3) passiert NUR mit verifizierten Emails
   - Warum? Sonst könnte jemand sich auf der Hauptseite mit einer fremden Email registrieren und den Bot-Account übernehmen
 - Bestehende User werden NICHT überschrieben, nur verknüpft
-- Das alte Passwort und die 2FA-Einstellungen bleiben erhalten
+- Das alte Passwort bleibt erhalten
 
 **Risiko:** Niedrig. Unique Constraint auf `supabase_user_id` verhindert doppelte Zuordnung. IntegrityError wird abgefangen.
 

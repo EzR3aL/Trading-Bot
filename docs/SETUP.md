@@ -1,8 +1,8 @@
 # Setup-Anleitung
 
-Diese Anleitung führt dich durch die vollständige Installation und Konfiguration des Bitget Trading Bots.
+Diese Anleitung führt dich durch die vollständige Installation und Konfiguration von Edge Bots by Trading Department.
 
-**Version:** 2.1.0
+**Version:** 4.12.7
 
 ---
 
