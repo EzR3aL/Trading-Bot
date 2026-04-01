@@ -19,6 +19,8 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 ### Behoben
 - **Share-to-Clipboard (Desktop)**: Bild wird jetzt korrekt in die Zwischenablage kopiert (ClipboardItem erhält Promise statt fertigen Blob, damit Chrome's User-Gesture-Fenster nicht abläuft)
 - **Mobile Trade-Karten**: Datum wird jetzt oben rechts im Header angezeigt (wie auf Desktop)
+- **Share-Button Position**: Eigene Grid-Zelle in Detail-Zeile (sauber ausgerichtet wie andere Felder) — in Performance-Tab und Bot Trade-Historie
+- **Clipboard-Fix (Bots Trade-Historie)**: Promise-basierter ClipboardItem auch hier angewendet
 
 ---
 

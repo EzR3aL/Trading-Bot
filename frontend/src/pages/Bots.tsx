@@ -192,10 +192,27 @@ function TradeDetailModal({ trade, onClose, t, affiliateLink }: { trade: BotTrad
 
   const handleShare = async () => {
     try {
+      const isMobile = 'ontouchstart' in window || navigator.maxTouchPoints > 0
+
+      if (!isMobile) {
+        // Desktop: pass a Promise to ClipboardItem so the async toBlob
+        // stays within the user-gesture window (Chrome requirement)
+        const blobPromise = captureBlob().then(b => {
+          if (!b) throw new Error('toBlob returned null')
+          return new Blob([b], { type: 'image/png' })
+        })
+        await navigator.clipboard.write([
+          new ClipboardItem({ 'image/png': blobPromise }),
+        ])
+        setCopied(true)
+        setTimeout(() => setCopied(false), 2000)
+        return
+      }
+
+      // Mobile: native share
       const blob = await captureBlob()
       if (!blob) return
-      const isMobile = 'ontouchstart' in window || navigator.maxTouchPoints > 0
-      if (isMobile && navigator.share && navigator.canShare) {
+      if (navigator.share && navigator.canShare) {
         const file = new File([blob], 'trade.png', { type: 'image/png' })
         const pnlStr = trade.pnl_percent >= 0 ? `+${trade.pnl_percent.toFixed(2)}%` : `${trade.pnl_percent.toFixed(2)}%`
         if (navigator.canShare({ files: [file] })) {
@@ -204,13 +221,8 @@ function TradeDetailModal({ trade, onClose, t, affiliateLink }: { trade: BotTrad
             text: affiliateLink?.affiliate_url || 'Edge Bots by Trading Department',
             files: [file],
           })
-          return
         }
       }
-      // Desktop: copy image to clipboard
-      await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })])
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
     } catch (err) {
       if ((err as DOMException).name !== 'AbortError') {
         console.error('Failed to share image:', err)
@@ -757,6 +769,19 @@ function BotTradeHistoryModal({ bot, onClose, t }: { bot: BotStatus; onClose: ()
                                     <dt>{t('trades.mode')}</dt>
                                     <dd>{trade.demo_mode ? t('common.demo') : t('common.live')}</dd>
                                   </div>
+                                  <div className="hidden sm:block">
+                                    <dt>&nbsp;</dt>
+                                    <dd>
+                                      <button
+                                        onClick={() => setSelectedTrade({ ...trade, exchange: bot.exchange_type })}
+                                        className="p-2 rounded-lg text-gray-400 hover:text-white bg-white/5 hover:bg-white/10 border border-white/5 transition-all"
+                                        title={t('bots.shareImage')}
+                                        aria-label="Share trade"
+                                      >
+                                        <Share2 size={14} />
+                                      </button>
+                                    </dd>
+                                  </div>
                                   {trade.exit_time && (
                                     <div>
                                       <dt>{t('trades.exitTime')}</dt>
@@ -781,7 +806,7 @@ function BotTradeHistoryModal({ bot, onClose, t }: { bot: BotStatus; onClose: ()
                                       <dd>{trade.leverage}x</dd>
                                     </div>
                                   )}
-                                  <div className="col-span-2 pt-1">
+                                  <div className="sm:hidden pt-1">
                                     <button
                                       onClick={() => setSelectedTrade({ ...trade, exchange: bot.exchange_type })}
                                       className="p-2 rounded-lg text-gray-400 hover:text-white bg-white/5 hover:bg-white/10 border border-white/5 transition-all"

@@ -1072,14 +1072,17 @@ export default function BotPerformance() {
                                   </div>
                                   <div className="2xl:hidden">
                                     <dt>{t('trades.mode')}</dt>
-                                    <dd className="flex items-center gap-2">
-                                      {trade.demo_mode ? t('common.demo') : t('common.live')}
+                                    <dd>{trade.demo_mode ? t('common.demo') : t('common.live')}</dd>
+                                  </div>
+                                  <div className="hidden sm:block">
+                                    <dt>&nbsp;</dt>
+                                    <dd>
                                       <button
                                         onClick={() => setSelectedTrade(trade)}
-                                        className="hidden sm:inline-flex p-1.5 rounded-lg text-gray-400 hover:text-white bg-white/5 hover:bg-white/10 border border-white/5 transition-all"
+                                        className="p-2 rounded-lg text-gray-400 hover:text-white bg-white/5 hover:bg-white/10 border border-white/5 transition-all"
                                         title={t('bots.shareImage')}
                                       >
-                                        <Share2 size={13} />
+                                        <Share2 size={14} />
                                       </button>
                                     </dd>
                                   </div>
