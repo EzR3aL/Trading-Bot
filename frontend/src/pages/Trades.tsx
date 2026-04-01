@@ -337,10 +337,6 @@ export default function Trades() {
                         <tr className="table-expand-row">
                           <td colSpan={12} className="!p-0 !border-b-0">
                             <dl className="table-expand-content">
-                              <div className="2xl:hidden">
-                                <dt>ID</dt>
-                                <dd>{trade.id}</dd>
-                              </div>
                               <div className="xl:hidden">
                                 <dt>{t('trades.bot')}</dt>
                                 <dd>{trade.bot_name || '--'}</dd>

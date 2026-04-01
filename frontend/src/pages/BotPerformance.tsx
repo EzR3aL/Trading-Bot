@@ -1049,8 +1049,16 @@ export default function BotPerformance() {
                               <td colSpan={9} className="!p-0 !border-b-0">
                                 <dl className="table-expand-content">
                                   <div>
-                                    <dt>ID</dt>
-                                    <dd>{trade.id}</dd>
+                                    <dt>&nbsp;</dt>
+                                    <dd>
+                                      <button
+                                        onClick={() => setSelectedTrade(trade)}
+                                        className="p-2 rounded-lg text-gray-400 hover:text-white bg-white/5 hover:bg-white/10 border border-white/5 transition-all"
+                                        title={t('bots.shareImage')}
+                                      >
+                                        <Share2 size={14} />
+                                      </button>
+                                    </dd>
                                   </div>
                                   <div className="xl:hidden">
                                     <dt>{t('trades.entryPrice')}</dt>
@@ -1073,18 +1081,6 @@ export default function BotPerformance() {
                                   <div className="2xl:hidden">
                                     <dt>{t('trades.mode')}</dt>
                                     <dd>{trade.demo_mode ? t('common.demo') : t('common.live')}</dd>
-                                  </div>
-                                  <div className="hidden sm:block">
-                                    <dt>&nbsp;</dt>
-                                    <dd>
-                                      <button
-                                        onClick={() => setSelectedTrade(trade)}
-                                        className="p-2 rounded-lg text-gray-400 hover:text-white bg-white/5 hover:bg-white/10 border border-white/5 transition-all"
-                                        title={t('bots.shareImage')}
-                                      >
-                                        <Share2 size={14} />
-                                      </button>
-                                    </dd>
                                   </div>
                                   {trade.exit_time && (
                                     <div>
@@ -1110,15 +1106,6 @@ export default function BotPerformance() {
                                       <dd className="text-gray-400 text-xs">{trade.reason}</dd>
                                     </div>
                                   )}
-                                  <div className="sm:hidden pt-1">
-                                    <button
-                                      onClick={() => setSelectedTrade(trade)}
-                                      className="p-2 rounded-lg text-gray-400 hover:text-white bg-white/5 hover:bg-white/10 border border-white/5 transition-all"
-                                      title={t('bots.shareImage')}
-                                    >
-                                      <Share2 size={14} />
-                                    </button>
-                                  </div>
                                 </dl>
                               </td>
                             </tr>

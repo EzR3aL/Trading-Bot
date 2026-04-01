@@ -23,6 +23,8 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 - **Clipboard-Fix (Bots Trade-Historie)**: Promise-basierter ClipboardItem auch hier angewendet
 - **Desktop Share öffnete Teilen-Dialog statt Zwischenablage**: Mobile-Erkennung per Touch-Events erkannte Touchscreen-Laptops fälschlich als Mobil → jetzt User-Agent-basiert
 - MobileTradeCard: Doppeltes Datum im Header wieder entfernt (Summary-Zeile hat es bereits)
+- **Trade-ID entfernt**: Interne DB-ID aus Detail-Ansicht entfernt (nicht relevant für Enduser)
+- Share-Button nimmt jetzt die Position der ehemaligen ID-Zelle ein (erste Zelle im Detail-Grid)
 
 ---
 
