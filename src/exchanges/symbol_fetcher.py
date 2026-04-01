@@ -28,16 +28,22 @@ def _get_lock(exchange: str) -> asyncio.Lock:
     return _locks[exchange]
 
 
-def _get_cached(exchange: str) -> Optional[list[str]]:
-    if exchange in _cache:
-        ts, symbols = _cache[exchange]
+def _cache_key(exchange: str, demo_mode: bool = False) -> str:
+    """Build cache key with separate namespace for demo vs live."""
+    return f"{exchange}_demo" if demo_mode else exchange
+
+
+def _get_cached(exchange: str, demo_mode: bool = False) -> Optional[list[str]]:
+    key = _cache_key(exchange, demo_mode)
+    if key in _cache:
+        ts, symbols = _cache[key]
         if time.time() - ts < _CACHE_TTL:
             return symbols
     return None
 
 
-def _set_cached(exchange: str, symbols: list[str]) -> None:
-    _cache[exchange] = (time.time(), symbols)
+def _set_cached(exchange: str, symbols: list[str], demo_mode: bool = False) -> None:
+    _cache[_cache_key(exchange, demo_mode)] = (time.time(), symbols)
 
 
 def _fallback_symbols(exchange: str) -> list[str]:
@@ -46,9 +52,16 @@ def _fallback_symbols(exchange: str) -> list[str]:
     return sorted(exchange_map.values())
 
 
-async def _fetch_with_timeout(url: str, params: Optional[dict] = None, timeout: int = 10) -> dict:
+async def _fetch_with_timeout(
+    url: str,
+    params: Optional[dict] = None,
+    timeout: int = 10,
+    headers: Optional[dict] = None,
+) -> dict:
     async with aiohttp.ClientSession() as session:
-        async with session.get(url, params=params, timeout=aiohttp.ClientTimeout(total=timeout)) as resp:
+        async with session.get(
+            url, params=params, headers=headers, timeout=aiohttp.ClientTimeout(total=timeout),
+        ) as resp:
             return await resp.json()
 
 
@@ -117,9 +130,11 @@ async def _fetch_bitunix() -> list[str]:
     return sorted(symbols)
 
 
-async def _fetch_bingx() -> list[str]:
+async def _fetch_bingx(demo_mode: bool = False) -> list[str]:
+    # BingX demo uses a separate VST API host
+    host = "open-api-vst.bingx.com" if demo_mode else "open-api.bingx.com"
     data = await _fetch_with_timeout(
-        "https://open-api.bingx.com/openApi/swap/v2/quote/contracts",
+        f"https://{host}/openApi/swap/v2/quote/contracts",
     )
     if data.get("code") != 0:
         raise ValueError(f"BingX API error: {data.get('msg')}")
@@ -131,6 +146,28 @@ async def _fetch_bingx() -> list[str]:
     return sorted(symbols)
 
 
+async def _fetch_hyperliquid_testnet() -> list[str]:
+    """Fetch symbols from the Hyperliquid testnet API."""
+    async with aiohttp.ClientSession() as session:
+        async with session.post(
+            "https://api.hyperliquid-testnet.xyz/info",
+            json={"type": "meta"},
+            timeout=aiohttp.ClientTimeout(total=10),
+        ) as resp:
+            data = await resp.json()
+    symbols = []
+    for asset in data.get("universe", []):
+        name = asset.get("name", "")
+        if name:
+            symbols.append(name)
+    return sorted(symbols)
+
+
+# Fetchers that accept demo_mode kwarg
+_DEMO_AWARE_FETCHERS: dict[str, bool] = {
+    "bingx": True,
+}
+
 _FETCHERS = {
     "bitget": _fetch_bitget,
     "weex": _fetch_weex,
@@ -140,33 +177,51 @@ _FETCHERS = {
 }
 
 
-async def get_exchange_symbols(exchange: str) -> list[str]:
+async def get_exchange_symbols(exchange: str, demo_mode: bool = False) -> list[str]:
     """Get all available perpetual futures symbols for an exchange.
+
+    Args:
+        exchange: Exchange name (e.g. 'bitget', 'bingx').
+        demo_mode: When True, fetch from demo/testnet endpoints where applicable.
+                   BingX uses a separate VST API host for demo trading.
+                   Hyperliquid uses a separate testnet API.
+                   Other exchanges share the same symbol list for demo and live.
 
     Returns cached data if available, otherwise fetches from the exchange API.
     Falls back to hardcoded SYMBOL_MAP if the API call fails.
     """
-    # Check cache first
-    cached = _get_cached(exchange)
+    # Check cache first (separate cache for demo vs live)
+    cached = _get_cached(exchange, demo_mode)
     if cached is not None:
         return cached
 
-    fetcher = _FETCHERS.get(exchange)
-    if not fetcher:
+    # Hyperliquid testnet has a completely separate API
+    if exchange == "hyperliquid" and demo_mode:
+        fetcher_fn = _fetch_hyperliquid_testnet
+    else:
+        fetcher_fn = _FETCHERS.get(exchange)
+
+    if not fetcher_fn:
         return _fallback_symbols(exchange)
 
-    lock = _get_lock(exchange)
+    lock_key = _cache_key(exchange, demo_mode)
+    lock = _get_lock(lock_key)
     async with lock:
         # Double-check cache after acquiring lock
-        cached = _get_cached(exchange)
+        cached = _get_cached(exchange, demo_mode)
         if cached is not None:
             return cached
 
         try:
-            symbols = await fetcher()
+            # Pass demo_mode to fetchers that support it (e.g. BingX)
+            if exchange in _DEMO_AWARE_FETCHERS:
+                symbols = await fetcher_fn(demo_mode=demo_mode)
+            else:
+                symbols = await fetcher_fn()
             if symbols:
-                _set_cached(exchange, symbols)
-                logger.info(f"Fetched {len(symbols)} symbols from {exchange}")
+                _set_cached(exchange, symbols, demo_mode)
+                mode_label = "demo" if demo_mode else "live"
+                logger.info(f"Fetched {len(symbols)} symbols from {exchange} ({mode_label})")
                 return symbols
         except Exception as e:
             logger.warning(f"Failed to fetch symbols from {exchange}: {e}")
@@ -178,8 +233,12 @@ async def get_exchange_symbols(exchange: str) -> list[str]:
 
 
 def clear_cache(exchange: Optional[str] = None) -> None:
-    """Clear symbol cache for a specific exchange or all exchanges."""
+    """Clear symbol cache for a specific exchange or all exchanges.
+
+    When an exchange name is given, clears both demo and live cache entries.
+    """
     if exchange:
         _cache.pop(exchange, None)
+        _cache.pop(f"{exchange}_demo", None)
     else:
         _cache.clear()

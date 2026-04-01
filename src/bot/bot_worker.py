@@ -280,7 +280,8 @@ class BotWorker(
             # Validate trading pairs exist on exchange
             try:
                 from src.exchanges.symbol_fetcher import get_exchange_symbols
-                available = await get_exchange_symbols(self._config.exchange_type)
+                is_demo = self._config.mode in ("demo", "both")
+                available = await get_exchange_symbols(self._config.exchange_type, demo_mode=is_demo)
                 if available:
                     pairs = _safe_json_loads(self._config.trading_pairs)
                     invalid = [p for p in pairs if p not in available]
@@ -292,6 +293,21 @@ class BotWorker(
                         logger.error(f"[Bot:{self.bot_config_id}] {self.error_message}")
                         self.status = BotStatus.ERROR
                         return False
+
+                    # Practical validation: verify each symbol is actually tradeable
+                    client = self._demo_client if is_demo else self._client
+                    if client:
+                        for pair in pairs:
+                            is_valid = await client.validate_symbol(pair)
+                            if not is_valid:
+                                self.error_message = (
+                                    f"Symbol {pair} exists on {self._config.exchange_type} "
+                                    f"but is not tradeable in "
+                                    f"{'demo' if is_demo else 'live'} mode"
+                                )
+                                logger.error(f"[Bot:{self.bot_config_id}] {self.error_message}")
+                                self.status = BotStatus.ERROR
+                                return False
             except Exception as e:
                 logger.warning(f"[Bot:{self.bot_config_id}] Symbol validation skipped: {e}")
 

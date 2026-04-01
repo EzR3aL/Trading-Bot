@@ -9,6 +9,22 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [4.12.7] - 2026-04-01
+
+### Hinzugefuegt
+- **Demo-Mode-aware Symbol-Validierung** — `get_exchange_symbols()` akzeptiert jetzt einen `demo_mode`-Parameter mit separatem Cache fuer Demo vs. Live:
+  - **BingX Demo**: Holt Symbole von `open-api-vst.bingx.com` statt `open-api.bingx.com`
+  - **Hyperliquid Testnet**: Holt Symbole von `api.hyperliquid-testnet.xyz` statt `api.hyperliquid.xyz`
+  - **Bitget/Weex/Bitunix**: Gleiche URL fuer Demo und Live (unveraendert)
+- **`validate_symbol()` Methode in `ExchangeClient` Basisklasse** — Praktische Validierung per `get_ticker()`, ob ein Symbol tatsaechlich handelbar ist. Faengt Faelle ab, in denen die Symbolliste ein Paar listet, das im Demo-Modus nicht tradebar ist.
+- **Praktische Symbol-Validierung im Bot-Worker** — Nach dem Symbollistencheck wird jedes Trading-Pair per `validate_symbol()` gegen die Exchange geprueft. Klare Fehlermeldung wenn ein Symbol zwar existiert aber im aktuellen Modus nicht handelbar ist.
+- **`?demo=true` Query-Parameter fuer `/api/exchanges/{name}/symbols`** — Ermoeglicht Abfrage der Demo-Symbolliste ueber die API.
+
+### Geaendert
+- **Bot-Erstellung und -Update validieren Symbole jetzt modus-abhaengig** — `POST /api/bots` und `PUT /api/bots/{id}` uebergeben den Bot-Modus (demo/live/both) an die Symbol-Validierung.
+
+---
+
 ## [4.12.6] - 2026-04-01
 
 ### Behoben

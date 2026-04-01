@@ -1,8 +1,9 @@
 """Exchange information endpoints."""
 
 import re
+from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Query, Request
 
 from src.api.rate_limit import limiter
 from src.errors import ERR_EXCHANGE_NOT_FOUND, ERR_INVALID_EXCHANGE
@@ -55,8 +56,16 @@ async def get_exchange_detail(request: Request, exchange_name: str):
 
 @router.get("/{exchange_name}/symbols")
 @limiter.limit("10/minute")
-async def get_symbols(request: Request, exchange_name: str):
-    """Get all available perpetual futures symbols for an exchange."""
+async def get_symbols(
+    request: Request,
+    exchange_name: str,
+    demo: Optional[bool] = Query(None, description="Fetch demo/testnet symbols instead of live"),
+):
+    """Get all available perpetual futures symbols for an exchange.
+
+    Pass ?demo=true to fetch symbols available in demo/testnet mode.
+    Some exchanges (BingX, Hyperliquid) have different symbol lists for demo trading.
+    """
     if not _EXCHANGE_NAME_RE.match(exchange_name):
         raise HTTPException(status_code=400, detail=ERR_INVALID_EXCHANGE)
 
@@ -65,5 +74,6 @@ async def get_symbols(request: Request, exchange_name: str):
     if exchange_name not in supported:
         raise HTTPException(status_code=404, detail=ERR_EXCHANGE_NOT_FOUND.format(name=exchange_name))
 
-    symbols = await get_exchange_symbols(exchange_name)
-    return {"exchange": exchange_name, "symbols": symbols, "count": len(symbols)}
+    demo_mode = demo or False
+    symbols = await get_exchange_symbols(exchange_name, demo_mode=demo_mode)
+    return {"exchange": exchange_name, "symbols": symbols, "count": len(symbols), "demo": demo_mode}

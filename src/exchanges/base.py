@@ -166,6 +166,18 @@ class ExchangeClient(ABC):
         """Check if a UID is in our affiliate/referral list. Override in exchange-specific client."""
         return False
 
+    async def validate_symbol(self, symbol: str) -> bool:
+        """Verify that a symbol is actually tradeable by fetching its ticker.
+
+        This catches cases where the symbol list says a pair exists but the
+        demo/testnet account cannot actually trade it.
+        """
+        try:
+            ticker = await self.get_ticker(symbol)
+            return ticker is not None and ticker.last_price > 0
+        except Exception:
+            return False
+
     @property
     @abstractmethod
     def exchange_name(self) -> str:

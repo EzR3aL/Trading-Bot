@@ -445,14 +445,16 @@ async def create_bot(
     except KeyError:
         raise HTTPException(status_code=400, detail=ERR_STRATEGY_NOT_FOUND.format(name=body.strategy_type))
 
-    # Validate trading pairs exist on exchange
-    available = await get_exchange_symbols(body.exchange_type)
+    # Validate trading pairs exist on exchange (use demo symbols when applicable)
+    is_demo = body.mode in ("demo", "both")
+    available = await get_exchange_symbols(body.exchange_type, demo_mode=is_demo)
     if available:
         invalid = [p for p in body.trading_pairs if p not in available]
         if invalid:
+            mode_label = "demo" if is_demo else "live"
             raise HTTPException(
                 status_code=400,
-                detail=f"Symbol(s) not available on {body.exchange_type}: {', '.join(invalid)}",
+                detail=f"Symbol(s) not available on {body.exchange_type} ({mode_label}): {', '.join(invalid)}",
             )
 
     # Check bot limit
@@ -966,13 +968,16 @@ async def update_bot(
     # Validate trading pairs exist on exchange (if pairs or exchange changed)
     if body.trading_pairs is not None:
         exchange = body.exchange_type or config.exchange_type
-        available = await get_exchange_symbols(exchange)
+        mode = body.mode or config.mode
+        is_demo = mode in ("demo", "both")
+        available = await get_exchange_symbols(exchange, demo_mode=is_demo)
         if available:
             invalid = [p for p in body.trading_pairs if p not in available]
             if invalid:
+                mode_label = "demo" if is_demo else "live"
                 raise HTTPException(
                     status_code=400,
-                    detail=f"Symbol(s) not available on {exchange}: {', '.join(invalid)}",
+                    detail=f"Symbol(s) not available on {exchange} ({mode_label}): {', '.join(invalid)}",
                 )
 
     # Snapshot old values for audit trail (only fields being updated)
