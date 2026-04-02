@@ -4,7 +4,7 @@ import { Check, Info, AlertTriangle, Wallet, Search, X, Loader2 } from 'lucide-r
 import ExchangeLogo from '../ui/ExchangeLogo'
 import NumInput from '../ui/NumInput'
 import type { BalancePreview, SymbolConflict, PerAssetEntry } from './BotBuilderTypes'
-import { EXCHANGES, POPULAR_BASES } from './BotBuilderTypes'
+import { EXCHANGES, EXCHANGE_SUPPORTS_DEMO, POPULAR_BASES } from './BotBuilderTypes'
 
 interface Props {
   exchangeType: string
@@ -118,22 +118,33 @@ export default function BotBuilderStepExchange({
           <div className="flex gap-2">
             {(['demo', 'live'] as const).map(m => {
               const active = mode === m
+              const demoDisabled = m === 'demo' && !EXCHANGE_SUPPORTS_DEMO[exchangeType]
               const colorMap = {
                 demo: active ? 'border-blue-500 bg-blue-500/10 text-blue-400 ring-1 ring-blue-500/30' : '',
                 live: active ? 'border-orange-500 bg-orange-500/10 text-orange-400 ring-1 ring-orange-500/30' : '',
               }
               return (
-                <button key={m} onClick={() => onModeChange(m)}
+                <button key={m} onClick={() => !demoDisabled && onModeChange(m)}
+                  disabled={demoDisabled}
+                  title={demoDisabled ? t('bots.builder.demoNotSupported') : undefined}
                   className={`px-4 py-2 rounded-xl border transition-all ${
-                    active
-                      ? colorMap[m]
-                      : 'border-white/10 bg-white/[0.03] text-gray-400 hover:border-white/20 hover:bg-white/[0.06]'
+                    demoDisabled
+                      ? 'border-white/5 bg-white/[0.02] text-gray-600 cursor-not-allowed opacity-50'
+                      : active
+                        ? colorMap[m]
+                        : 'border-white/10 bg-white/[0.03] text-gray-400 hover:border-white/20 hover:bg-white/[0.06]'
                   }`}>
                   {b[m]}
                 </button>
               )
             })}
           </div>
+          {!EXCHANGE_SUPPORTS_DEMO[exchangeType] && (
+            <p className="flex items-center gap-1.5 text-xs text-gray-500 mt-1.5">
+              <Info size={12} className="shrink-0" />
+              {t('bots.builder.demoNotSupportedHint')}
+            </p>
+          )}
         </div>
         <div>
           <label className="block text-sm text-gray-400 mb-2">{t('bots.builder.marginMode')}</label>

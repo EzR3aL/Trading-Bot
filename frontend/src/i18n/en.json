@@ -671,7 +671,9 @@
       "isolated": "Isolated",
       "marginModeHint": "Cross: Margin is shared across all positions. Isolated: Each position has its own margin budget.",
       "marginModeHintCross": "Cross: Margin is shared across all positions.",
-      "marginModeHintIsolated": "Isolated: Each position has its own margin budget."
+      "marginModeHintIsolated": "Isolated: Each position has its own margin budget.",
+      "demoNotSupported": "This exchange does not offer demo trading",
+      "demoNotSupportedHint": "This exchange does not support paper/demo trading. Please use live mode."
     }
   },
   "botDetail": {

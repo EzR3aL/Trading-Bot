@@ -8,7 +8,7 @@ import useHaptic from '../../hooks/useHaptic'
 import { localHourToUtc, utcHourToLocal } from '../../utils/timezone'
 
 import type { Strategy, DataSource, BalancePreview, SymbolConflict, PerAssetEntry } from './BotBuilderTypes'
-import { DATA_STRATEGIES, FIXED_STRATEGY_SOURCES, CATEGORY_ORDER } from './BotBuilderTypes'
+import { DATA_STRATEGIES, FIXED_STRATEGY_SOURCES, CATEGORY_ORDER, EXCHANGE_SUPPORTS_DEMO } from './BotBuilderTypes'
 
 import BotBuilderStepName from './BotBuilderStepName'
 import BotBuilderStepStrategy from './BotBuilderStepStrategy'
@@ -96,6 +96,13 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
 
   const isHyperliquid = exchangeType === 'hyperliquid'
   const isBingx = exchangeType === 'bingx'
+
+  const handleExchangeTypeChange = (ex: string) => {
+    setExchangeType(ex)
+    if (!EXCHANGE_SUPPORTS_DEMO[ex] && mode === 'demo') {
+      setMode('live')
+    }
+  }
 
   // Dynamic steps: insert data sources step for strategies without fixed sources
   const steps = useMemo(() => {
@@ -511,7 +518,7 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
             balancePreview={balancePreview} balanceOverview={balanceOverview}
             overviewLoading={overviewLoading} symbolConflicts={symbolConflicts}
             hlGateStatus={hlGateStatus}
-            onExchangeTypeChange={setExchangeType} onModeChange={setMode}
+            onExchangeTypeChange={handleExchangeTypeChange} onModeChange={setMode}
             onMarginModeChange={setMarginMode} onTogglePair={togglePair}
             onPerAssetConfigChange={setPerAssetConfig}
             b={b}
