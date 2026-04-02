@@ -83,4 +83,11 @@ export const STRATEGY_RECOMMENDATIONS: Record<string, { bestTimeframe: string; s
 export const CATEGORY_ORDER = ['sentiment', 'futures', 'options', 'spot', 'technical', 'tradfi']
 
 export const EXCHANGES = ['bitget', 'weex', 'hyperliquid', 'bitunix', 'bingx']
+export const EXCHANGE_SUPPORTS_DEMO: Record<string, boolean> = {
+  bitget: true,
+  weex: false,
+  hyperliquid: true,
+  bitunix: false,
+  bingx: true,
+}
 export const POPULAR_BASES = ['BTC', 'ETH', 'SOL', 'XRP', 'DOGE', 'AVAX']

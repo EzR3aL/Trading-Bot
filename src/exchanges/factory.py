@@ -238,7 +238,7 @@ def get_exchange_info(exchange_type: str) -> dict:
         "weex": {
             "name": "weex",
             "display_name": "Weex",
-            "supports_demo": True,
+            "supports_demo": False,
             "auth_type": "hmac_sha256",
             "api_style": "rest",
             "requires_passphrase": True,
@@ -254,7 +254,7 @@ def get_exchange_info(exchange_type: str) -> dict:
         "bitunix": {
             "name": "bitunix",
             "display_name": "Bitunix",
-            "supports_demo": True,
+            "supports_demo": False,
             "auth_type": "hmac_sha256",
             "api_style": "rest",
             "requires_passphrase": True,
