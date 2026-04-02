@@ -188,16 +188,29 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
     }
   }, [botId, isEdit, defaultSourceIds])
 
-  // Fetch available symbols when exchange changes
+  // Fetch available symbols when exchange or mode changes
   useEffect(() => {
     let cancelled = false
     setSymbolsLoading(true)
-    api.get(`/exchanges/${exchangeType}/symbols`)
-      .then(res => { if (!cancelled) setExchangeSymbols(res.data.symbols || []) })
+    const params = mode === 'demo' ? '?demo=true' : ''
+    api.get(`/exchanges/${exchangeType}/symbols${params}`)
+      .then(res => {
+        if (cancelled) return
+        const symbols: string[] = res.data.symbols || []
+        setExchangeSymbols(symbols)
+        // Remove selected pairs that are not available in the new mode
+        if (symbols.length > 0) {
+          const validSet = new Set(symbols)
+          setTradingPairs(prev => {
+            const filtered = prev.filter(p => validSet.has(p))
+            return filtered.length === prev.length ? prev : filtered
+          })
+        }
+      })
       .catch(() => { if (!cancelled) setExchangeSymbols([]) })
       .finally(() => { if (!cancelled) setSymbolsLoading(false) })
     return () => { cancelled = true }
-  }, [exchangeType])
+  }, [exchangeType, mode])
 
   // Fetch Hyperliquid gate status when exchange is hyperliquid
   useEffect(() => {
