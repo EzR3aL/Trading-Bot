@@ -9,6 +9,13 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [4.14.0] - 2026-04-02
+
+### Hinzugefügt
+- **Bot Builder: Mode-aware Symbol-Listen** — Symbol-Listen werden jetzt passend zum gewählten Modus (Demo/Live) geladen. Bitget Demo zeigt nur die ~22 handelbaren Symbole statt aller 544 Live-Symbole. BingX und Hyperliquid nutzen ebenfalls ihre Demo/Testnet-Endpunkte. Beim Mode-Wechsel werden ungültige Trading-Pairs automatisch entfernt. (#128)
+
+---
+
 ## [4.13.1] - 2026-04-02
 
 ### Verbessert

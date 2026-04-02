@@ -65,17 +65,21 @@ async def _fetch_with_timeout(
             return await resp.json()
 
 
-async def _fetch_bitget() -> list[str]:
+async def _fetch_bitget(demo_mode: bool = False) -> list[str]:
+    headers = {"paptrading": "1"} if demo_mode else None
     data = await _fetch_with_timeout(
         "https://api.bitget.com/api/v2/mix/market/contracts",
         params={"productType": "USDT-FUTURES"},
+        headers=headers,
     )
     if data.get("code") != "00000":
         raise ValueError(f"Bitget API error: {data.get('msg')}")
+    # Filter out Bitget test symbols that are not real trading pairs
+    _TEST_SYMBOLS = {"TESTZEUSUSDT", "BGTEST002USDT"}
     symbols = []
     for item in data.get("data", []):
         symbol = item.get("symbol", "")
-        if symbol and symbol.endswith("USDT"):
+        if symbol and symbol.endswith("USDT") and symbol not in _TEST_SYMBOLS and symbol.isascii():
             symbols.append(symbol)
     return sorted(symbols)
 
@@ -165,6 +169,7 @@ async def _fetch_hyperliquid_testnet() -> list[str]:
 
 # Fetchers that accept demo_mode kwarg
 _DEMO_AWARE_FETCHERS: dict[str, bool] = {
+    "bitget": True,
     "bingx": True,
 }
 
@@ -183,9 +188,9 @@ async def get_exchange_symbols(exchange: str, demo_mode: bool = False) -> list[s
     Args:
         exchange: Exchange name (e.g. 'bitget', 'bingx').
         demo_mode: When True, fetch from demo/testnet endpoints where applicable.
+                   Bitget uses the paptrading header to get demo symbols (~22 vs ~544 live).
                    BingX uses a separate VST API host for demo trading.
                    Hyperliquid uses a separate testnet API.
-                   Other exchanges share the same symbol list for demo and live.
 
     Returns cached data if available, otherwise fetches from the exchange API.
     Falls back to hardcoded SYMBOL_MAP if the API call fails.
