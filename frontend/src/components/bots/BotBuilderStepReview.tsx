@@ -156,9 +156,17 @@ export default function BotBuilderStepReview({
 
       {/* Symbol conflict warning */}
       {symbolConflicts.length > 0 && (
-        <div className="flex items-center gap-2 p-3 bg-amber-900/30 border border-amber-800 rounded-xl text-sm text-amber-400">
-          <AlertTriangle size={16} className="flex-shrink-0" />
-          <span>{t('bots.builder.symbolConflictTitle')}: {symbolConflicts.map(c => c.symbol).join(', ')}</span>
+        <div className="p-3 bg-amber-900/30 border border-amber-800 rounded-xl space-y-1.5">
+          <div className="flex items-center gap-2 text-amber-400 font-medium text-sm">
+            <AlertTriangle size={16} className="flex-shrink-0" />
+            {t('bots.builder.symbolConflictTitle')}
+          </div>
+          {symbolConflicts.map((c, i) => (
+            <div key={i} className="text-sm text-amber-300/80 ml-6">
+              {t('bots.builder.symbolConflictItem', { symbol: c.symbol, botName: c.existing_bot_name, mode: c.existing_bot_mode.toUpperCase() })}
+            </div>
+          ))}
+          <p className="text-xs text-amber-400/60 ml-6">{t('bots.builder.symbolConflictHint')}</p>
         </div>
       )}
 

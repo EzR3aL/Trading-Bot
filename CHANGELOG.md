@@ -13,6 +13,7 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ### Verbessert
 - **Bot Builder: Demo-Button per Exchange** — Demo-Button wird ausgegraut mit Info-Tooltip wenn die Exchange kein Paper/Demo-Trading anbietet (Weex, Bitunix). Beim Exchange-Wechsel wird automatisch auf Live umgeschaltet falls Demo nicht verfügbar ist. (#126)
+- **Bot Builder: Symbol-Konflikt in Übersicht verbessert** — Die Konflikt-Warnung auf der Review-Seite zeigt jetzt den betroffenen Bot-Namen, Modus und einen Hinweistext an (statt nur das Symbol). (#126)
 
 ---
 
