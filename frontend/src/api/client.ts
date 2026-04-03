@@ -14,8 +14,33 @@ let refreshSubscribers: (() => void)[] = []
 let refreshRetryCount = 0
 const MAX_REFRESH_RETRIES = 3
 
-// Module-level token expiry timestamp (ms) — set by login/refresh responses
-let tokenExpiryMs: number | null = null
+// Token expiry timestamp (ms) — persisted to localStorage so it survives PWA kills
+const TOKEN_EXPIRY_KEY = 'token_expiry_ms'
+
+function loadTokenExpiry(): number | null {
+  try {
+    const stored = localStorage.getItem(TOKEN_EXPIRY_KEY)
+    if (!stored) return null
+    const val = Number(stored)
+    return Number.isFinite(val) ? val : null
+  } catch {
+    return null
+  }
+}
+
+function persistTokenExpiry(ms: number | null) {
+  try {
+    if (ms !== null) {
+      localStorage.setItem(TOKEN_EXPIRY_KEY, String(ms))
+    } else {
+      localStorage.removeItem(TOKEN_EXPIRY_KEY)
+    }
+  } catch {
+    // localStorage unavailable (private browsing, storage full) — non-critical
+  }
+}
+
+let tokenExpiryMs: number | null = loadTokenExpiry()
 
 // Proactive refresh: refresh token 5 minutes before expiry
 let proactiveRefreshTimer: ReturnType<typeof setTimeout> | null = null
@@ -43,6 +68,7 @@ function handleSessionExpiry() {
   sessionExpiring = true
 
   tokenExpiryMs = null
+  persistTokenExpiry(null)
   clearProactiveRefresh()
 
   // Show a brief message before redirect — use existing element or create one
@@ -69,12 +95,14 @@ function handleSessionExpiry() {
 /** Update the module-level token expiry from a login/refresh response. */
 export function setTokenExpiry(expiresInSeconds: number) {
   tokenExpiryMs = Date.now() + expiresInSeconds * 1000
+  persistTokenExpiry(tokenExpiryMs)
   scheduleProactiveRefresh()
 }
 
 /** Clear stored token expiry (used on logout). */
 export function clearTokenExpiry() {
   tokenExpiryMs = null
+  persistTokenExpiry(null)
   clearProactiveRefresh()
 }
 
@@ -98,40 +126,52 @@ function clearProactiveRefresh() {
   }
 }
 
+// Shared promise so concurrent callers wait for the same in-flight refresh
+let refreshPromise: Promise<boolean> | null = null
+
 /** Perform a token refresh (used by both proactive and reactive paths). */
 async function doRefresh(): Promise<boolean> {
-  if (isRefreshing) return false
+  // If a refresh is already in flight, piggyback on it instead of returning false
+  if (isRefreshing && refreshPromise) return refreshPromise
+
   isRefreshing = true
 
-  try {
-    const res = await axios.post('/api/auth/refresh', undefined, {
-      withCredentials: true,
-    })
-    const { access_token } = res.data
-
-    // Extract expiry from the response token for proactive refresh scheduling
+  refreshPromise = (async () => {
     try {
-      const payload = JSON.parse(atob(access_token.split('.')[1]))
-      if (payload.exp) {
-        tokenExpiryMs = payload.exp * 1000
+      const res = await axios.post('/api/auth/refresh', undefined, {
+        withCredentials: true,
+      })
+      const { access_token } = res.data
+
+      // Extract expiry from the response token for proactive refresh scheduling
+      try {
+        const payload = JSON.parse(atob(access_token.split('.')[1]))
+        if (payload.exp) {
+          tokenExpiryMs = payload.exp * 1000
+        }
+      } catch {
+        // If token parsing fails, fall back to 24h default
+        tokenExpiryMs = Date.now() + 1440 * 60 * 1000
       }
+      persistTokenExpiry(tokenExpiryMs)
+
+      refreshRetryCount = 0
+      isRefreshing = false
+      refreshPromise = null
+
+      onTokenRefreshed()
+      scheduleProactiveRefresh()
+
+      return true
     } catch {
-      // If token parsing fails, fall back to 4h default
-      tokenExpiryMs = Date.now() + 1440 * 60 * 1000
+      isRefreshing = false
+      refreshPromise = null
+      onRefreshFailed()
+      return false
     }
+  })()
 
-    refreshRetryCount = 0
-    isRefreshing = false
-
-    onTokenRefreshed()
-    scheduleProactiveRefresh()
-
-    return true
-  } catch {
-    isRefreshing = false
-    onRefreshFailed()
-    return false
-  }
+  return refreshPromise
 }
 
 // No request interceptor needed — httpOnly cookies are sent automatically
@@ -143,11 +183,11 @@ api.interceptors.response.use(
   async (error) => {
     const originalRequest = error.config
 
-    // Skip refresh logic for auth endpoints — they return 401 for invalid
-    // credentials or missing session, not for expired tokens
+    // Skip refresh logic for login/register — they return 401 for invalid
+    // credentials, not for expired tokens. /auth/me MUST attempt refresh
+    // so the app can recover after token expiry (especially on PWA resume).
     const isAuthEndpoint = originalRequest.url?.includes('/auth/login')
       || originalRequest.url?.includes('/auth/register')
-      || originalRequest.url?.includes('/auth/me')
     if (error.response?.status === 401 && !originalRequest._retry && !isAuthEndpoint) {
       originalRequest._retry = true
 
@@ -182,13 +222,38 @@ api.interceptors.response.use(
   }
 )
 
-// Re-schedule proactive refresh when tab becomes visible (user returns after sleep/idle)
+// Re-schedule proactive refresh when tab becomes visible (user returns after sleep/idle).
+// On PWA resume the JS context may have been killed, so tokenExpiryMs could be null
+// even though the refresh-token cookie is still valid — always attempt recovery.
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible' && tokenExpiryMs) {
-    const timeLeft = tokenExpiryMs - Date.now()
-    if (timeLeft <= 5 * 60 * 1000) {
-      // Token expired or about to expire — refresh immediately
-      doRefresh()
+  if (document.visibilityState !== 'visible') return
+
+  // Re-hydrate from localStorage in case the module was re-initialized (PWA kill)
+  if (!tokenExpiryMs) {
+    tokenExpiryMs = loadTokenExpiry()
+  }
+
+  if (!tokenExpiryMs) {
+    // No expiry in memory or localStorage — user was never logged in or explicitly
+    // logged out. Don't spam the server with refresh attempts on every tab focus.
+    return
+  }
+
+  const timeLeft = tokenExpiryMs - Date.now()
+  if (timeLeft <= 5 * 60 * 1000) {
+    // Token expired or about to expire — refresh immediately
+    doRefresh()
+  } else {
+    scheduleProactiveRefresh()
+  }
+})
+
+// Sync token expiry across tabs (logout in one tab clears all)
+window.addEventListener('storage', (e) => {
+  if (e.key === TOKEN_EXPIRY_KEY) {
+    tokenExpiryMs = e.newValue ? Number(e.newValue) : null
+    if (!tokenExpiryMs) {
+      clearProactiveRefresh()
     } else {
       scheduleProactiveRefresh()
     }

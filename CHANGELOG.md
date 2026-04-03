@@ -9,6 +9,18 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [4.15.1] - 2026-04-03
+
+### Behoben
+- **Auth: Session-Verlust auf Mobile/PWA (#130)** — User wurden auf Android-PWA alle ~10 Min ausgeloggt. Drei Ursachen behoben:
+  1. `/auth/me` war fälschlicherweise von der Token-Refresh-Logik ausgeschlossen — bei abgelaufenem Access-Token wurde kein Refresh versucht
+  2. Token-Expiry war nur im Arbeitsspeicher — ging bei PWA-Kill/Background verloren. Jetzt in localStorage persistiert
+  3. Race Condition: Wenn Visibility-Handler und Interceptor gleichzeitig refreshen wollten, konnte der Interceptor fälschlicherweise einen Fehlschlag melden. Jetzt teilen sich alle Caller dieselbe Refresh-Promise
+- **Multi-Tab Logout-Sync** — Logout in einem Tab synchronisiert jetzt die Token-Expiry über alle offenen Tabs via `storage`-Event
+- **localStorage-Fehlerbehandlung** — Private-Browsing-Modus oder voller Speicher crasht die App nicht mehr
+
+---
+
 ## [4.15.0] - 2026-04-03
 
 ### Behoben
