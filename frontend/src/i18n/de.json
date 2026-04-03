@@ -652,11 +652,15 @@
       "equity": "Kapital",
       "allocated": "Zugeteilt",
       "noConnections": "Noch keine Exchange-Verbindungen konfiguriert.",
+      "noConnectionsTitle": "Keine Exchange-Verbindung vorhanden",
+      "noConnectionsHint": "Bevor du einen Bot erstellen kannst, musst du unter Einstellungen → API Keys deine Exchange-Zugangsdaten hinterlegen und ggf. deine Affiliate-UID verifizieren lassen.",
       "errors": {
         "nameRequired": "Bitte gib einen Bot-Namen ein",
         "strategyRequired": "Bitte wähle eine Strategie",
         "dataSourcesRequired": "Bitte wähle mindestens eine Datenquelle",
         "pairsRequired": "Bitte wähle mindestens ein Trading-Paar",
+        "noExchangeConnection": "Keine Exchange-Verbindung vorhanden. Bitte hinterlege zuerst deine API Keys unter Einstellungen → API Keys.",
+        "noConnectionForExchange": "Keine {{mode}}-Verbindung für {{exchange}} vorhanden. Bitte hinterlege die API Keys unter Einstellungen → API Keys.",
         "intervalMinimum": "Intervall muss mindestens 5 Minuten betragen",
         "hoursRequired": "Bitte wähle mindestens eine Uhrzeit",
         "symbolConflicts": "Speichern nicht möglich: Trading-Paare kollidieren mit einem bestehenden Bot."

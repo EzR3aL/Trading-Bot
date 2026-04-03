@@ -391,7 +391,16 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
     if (stepKey === 'step1' && !name.trim()) errors.push(t('bots.builder.errors.nameRequired'))
     if (stepKey === 'step2' && !strategyType) errors.push(t('bots.builder.errors.strategyRequired'))
     if (stepKey === 'step2b' && !hasFixedSources && selectedSources.length === 0) errors.push(t('bots.builder.errors.dataSourcesRequired'))
-    if (stepKey === 'step3' && tradingPairs.length === 0) errors.push(t('bots.builder.errors.pairsRequired'))
+    if (stepKey === 'step3') {
+      // Check if exchange connection exists for selected exchange+mode
+      const hasConnection = balanceOverview.some(e => e.exchange_type === exchangeType && (e.mode === mode || mode === 'both'))
+      if (!hasConnection && balanceOverview.length === 0) {
+        errors.push(t('bots.builder.errors.noExchangeConnection'))
+      } else if (!hasConnection) {
+        errors.push(t('bots.builder.errors.noConnectionForExchange', { exchange: exchangeType.charAt(0).toUpperCase() + exchangeType.slice(1), mode: mode.toUpperCase() }))
+      }
+      if (tradingPairs.length === 0) errors.push(t('bots.builder.errors.pairsRequired'))
+    }
     if (stepKey === 'step5') {
       if (scheduleType === 'custom_cron' && customHours.length === 0) errors.push(t('bots.builder.errors.hoursRequired'))
       if (scheduleType === 'interval' && (intervalMinutes === '' || intervalMinutes < 5)) errors.push(t('bots.builder.errors.intervalMinimum'))

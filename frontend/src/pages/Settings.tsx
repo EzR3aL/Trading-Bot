@@ -165,8 +165,6 @@ export default function Settings() {
 
   // Hyperliquid referral (user-facing)
   const [hlReferralInfo, setHlReferralInfo] = useState<{ referral_code?: string; referral_required?: boolean; referral_verified?: boolean; needs_referral?: boolean } | null>(null)
-  // Track whether to show inline HL setup after saving credentials
-  const [hlSetupVisible, setHlSetupVisible] = useState(false)
 
   // Hyperliquid revenue
   const [hlRevenue, setHlRevenue] = useState<HlRevenueInfo | null>(null)
@@ -259,9 +257,8 @@ export default function Settings() {
       setConnections(res.data.connections || [])
       updateForm(exchangeType, { apiKey: '', apiSecret: '', passphrase: '' })
       showMessage(t('settings.saved'))
-      // After saving HL credentials, show inline setup section
+      // Reload HL referral info after saving credentials
       if (exchangeType === 'hyperliquid') {
-        setHlSetupVisible(true)
         loadHlReferralInfo()
       }
     } catch (err) { showMessage(getApiErrorMessage(err, t('common.saveFailed'))) }
@@ -449,9 +446,6 @@ export default function Settings() {
   useEffect(() => {
     if (openExchange === 'hyperliquid') {
       if (!hlReferralInfo) loadHlReferralInfo()
-      // Show setup section if HL credentials are already configured
-      const hlConn = getConn('hyperliquid')
-      if (hlConn?.api_keys_configured) setHlSetupVisible(true)
     }
   }, [openExchange])
 
@@ -657,8 +651,8 @@ export default function Settings() {
                           </>
                         )}
 
-                        {/* Hyperliquid: Inline setup (affiliate + builder fee) — hidden for admins */}
-                        {ex.name === 'hyperliquid' && hlSetupVisible && !isAdmin && (
+                        {/* Hyperliquid: Inline setup (affiliate + builder fee) — always shown for non-admins */}
+                        {ex.name === 'hyperliquid' && !isAdmin && (
                           <Suspense fallback={
                             <div className="flex items-center justify-center py-8">
                               <div className="w-6 h-6 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />

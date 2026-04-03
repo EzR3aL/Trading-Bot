@@ -94,6 +94,9 @@ async def _enforce_affiliate_gate(exchange_type: str, user: User, db: AsyncSessi
     if not aff_link:
         return  # No UID requirement active
 
+    # Exchange display name for error messages
+    exchange_display = exchange_type.capitalize()
+
     conn_result = await db.execute(
         select(ExchangeConnection).where(
             ExchangeConnection.user_id == user.id,
@@ -105,19 +108,12 @@ async def _enforce_affiliate_gate(exchange_type: str, user: User, db: AsyncSessi
     if not conn or not conn.affiliate_uid:
         raise HTTPException(
             status_code=400,
-            detail={
-                "message": ERR_AFFILIATE_REQUIRED,
-                "affiliate_url": aff_link.affiliate_url,
-                "type": "affiliate_required",
-            },
+            detail=ERR_AFFILIATE_REQUIRED.format(exchange=exchange_display),
         )
     if not conn.affiliate_verified:
         raise HTTPException(
             status_code=400,
-            detail={
-                "message": ERR_AFFILIATE_PENDING,
-                "type": "affiliate_pending",
-            },
+            detail=ERR_AFFILIATE_PENDING.format(exchange=exchange_display),
         )
 
 

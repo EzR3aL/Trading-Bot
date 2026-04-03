@@ -652,11 +652,15 @@
       "equity": "Equity",
       "allocated": "Allocated",
       "noConnections": "No exchange connections configured yet.",
+      "noConnectionsTitle": "No exchange connection found",
+      "noConnectionsHint": "Before creating a bot, you need to set up your exchange API keys under Settings → API Keys and verify your affiliate UID if required.",
       "errors": {
         "nameRequired": "Please enter a bot name",
         "strategyRequired": "Please select a strategy",
         "dataSourcesRequired": "Please select at least one data source",
         "pairsRequired": "Please select at least one trading pair",
+        "noExchangeConnection": "No exchange connection found. Please set up your API keys under Settings → API Keys first.",
+        "noConnectionForExchange": "No {{mode}} connection for {{exchange}} found. Please set up your API keys under Settings → API Keys.",
         "intervalMinimum": "Interval must be at least 5 minutes",
         "hoursRequired": "Please select at least one hour",
         "symbolConflicts": "Cannot save: trading pairs conflict with an existing bot."

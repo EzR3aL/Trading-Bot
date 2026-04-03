@@ -76,18 +76,18 @@ ERR_TRADE_ALREADY_RESOLVED = "Trade ist bereits abgeschlossen"
 ERR_TRADE_ALREADY_RESOLVED_EN = "Trade is already resolved"
 
 # ── Bots / Affiliate Gate ────────────────────────────────────────────
-ERR_AFFILIATE_REQUIRED = "Registriere dich zuerst über unseren Affiliate-Link, trage dann deine UID unter Einstellungen → API Keys ein."
-ERR_AFFILIATE_REQUIRED_EN = "Please register via our affiliate link first, then enter your UID under Settings → API Keys."
-ERR_AFFILIATE_PENDING = "Deine UID wurde eingereicht, ist aber noch nicht freigegeben. Bitte warte auf die Freigabe durch einen Admin."
-ERR_AFFILIATE_PENDING_EN = "Your UID has been submitted but is not yet approved. Please wait for admin approval."
+ERR_AFFILIATE_REQUIRED = "Bot kann nicht gestartet werden: Du musst dich zuerst über unseren Affiliate-Link bei {exchange} registrieren und deine UID unter Einstellungen → API Keys hinterlegen."
+ERR_AFFILIATE_REQUIRED_EN = "Cannot start bot: Please register via our affiliate link at {exchange} first and enter your UID under Settings → API Keys."
+ERR_AFFILIATE_PENDING = "Bot kann nicht gestartet werden: Deine {exchange}-UID wurde eingereicht, ist aber noch nicht freigegeben. Bitte warte auf die Freigabe durch einen Admin."
+ERR_AFFILIATE_PENDING_EN = "Cannot start bot: Your {exchange} UID has been submitted but is not yet approved. Please wait for admin approval."
 
 # ── Bots / Hyperliquid Gate ──────────────────────────────────────────
-ERR_NO_HL_CONNECTION = "Keine Hyperliquid-Verbindung konfiguriert."
-ERR_NO_HL_CONNECTION_EN = "No Hyperliquid connection configured."
-ERR_HL_REFERRAL_REQUIRED = "Referral erforderlich. Bitte registriere dich über https://app.hyperliquid.xyz/join/{referral_code} bevor du Hyperliquid Bots nutzen kannst."
-ERR_HL_REFERRAL_REQUIRED_EN = "Referral required. Please register via https://app.hyperliquid.xyz/join/{referral_code} before using Hyperliquid bots."
-ERR_HL_BUILDER_FEE_NOT_APPROVED = "Builder Fee nicht genehmigt. Bitte genehmige die Builder Fee auf der Website."
-ERR_HL_BUILDER_FEE_NOT_APPROVED_EN = "Builder fee not approved. Please approve the builder fee on the website."
+ERR_NO_HL_CONNECTION = "Bot kann nicht gestartet werden: Du hast noch keine Hyperliquid-Wallet verbunden. Gehe zu Einstellungen → API Keys → Hyperliquid und verbinde deine Wallet."
+ERR_NO_HL_CONNECTION_EN = "Cannot start bot: No Hyperliquid wallet connected. Go to Settings → API Keys → Hyperliquid and connect your wallet."
+ERR_HL_REFERRAL_REQUIRED = "Bot kann nicht gestartet werden: Registriere dich zuerst über unseren Referral-Link https://app.hyperliquid.xyz/join/{referral_code} und verbinde dann deine Wallet unter Einstellungen → API Keys."
+ERR_HL_REFERRAL_REQUIRED_EN = "Cannot start bot: Please register via our referral link https://app.hyperliquid.xyz/join/{referral_code} first, then connect your wallet under Settings → API Keys."
+ERR_HL_BUILDER_FEE_NOT_APPROVED = "Bot kann nicht gestartet werden: Die Builder Fee wurde noch nicht genehmigt. Gehe zu Einstellungen → API Keys → Hyperliquid und genehmige die Builder Fee."
+ERR_HL_BUILDER_FEE_NOT_APPROVED_EN = "Cannot start bot: Builder fee not yet approved. Go to Settings → API Keys → Hyperliquid and approve the builder fee."
 
 # ── Config / Exchange Keys ───────────────────────────────────────────
 ERR_NO_API_KEYS_FOR = "Keine API-Keys für {exchange_type} konfiguriert"

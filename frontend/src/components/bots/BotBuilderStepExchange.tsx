@@ -290,9 +290,12 @@ export default function BotBuilderStepExchange({
         }
         if (balanceOverview.length === 0 && !overviewLoading) {
           return (
-            <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-3 flex items-center gap-2">
-              <Wallet size={16} className="text-gray-500" />
-              <p className="text-sm text-gray-500">{t('bots.builder.noConnections')}</p>
+            <div className="rounded-xl border border-amber-500/30 bg-amber-900/10 p-4 space-y-2">
+              <div className="flex items-center gap-2 text-amber-400">
+                <AlertTriangle size={16} />
+                <span className="text-sm font-medium">{t('bots.builder.noConnectionsTitle')}</span>
+              </div>
+              <p className="text-sm text-amber-300/80 ml-6">{t('bots.builder.noConnectionsHint')}</p>
             </div>
           )
         }

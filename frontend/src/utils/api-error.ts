@@ -8,6 +8,10 @@ export function getApiErrorMessage(error: unknown, fallback: string): string {
   if (error instanceof AxiosError) {
     const detail = error.response?.data?.detail
     if (typeof detail === 'string') return detail
+    // Object with message field (e.g. {message: "...", type: "..."})
+    if (detail && typeof detail === 'object' && !Array.isArray(detail) && typeof detail.message === 'string') {
+      return detail.message
+    }
     // FastAPI 422: detail is an array of {loc, msg, type}
     if (Array.isArray(detail) && detail.length > 0) {
       return detail

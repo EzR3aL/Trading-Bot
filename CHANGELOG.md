@@ -9,6 +9,21 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [4.15.0] - 2026-04-03
+
+### Behoben
+- **Bot Builder: 400-Fehler ohne Details** — Fehlermeldung zeigte nur "Request failed with status code 400" statt dem eigentlichen Grund. Ursache: Affiliate-Gate gab ein JSON-Object statt eines Strings als `detail` zurück, das Frontend konnte es nicht parsen. Jetzt werden alle Error-Details korrekt als String zurückgegeben und im Frontend angezeigt.
+- **Frontend `getApiErrorMessage()`** — Unterstützt jetzt auch Object-Details mit `message`-Feld (zusätzlich zu String und Array).
+
+### Verbessert
+- **Sprechende Fehlermeldungen beim Bot-Start** — Jede Fehlermeldung erklärt jetzt den Grund und nennt die nötige Aktion:
+  - CEX (Bitget, Weex, Bitunix, BingX): Affiliate-Link + UID-Hinweis mit Exchange-Name
+  - Hyperliquid: Wallet-Verbindung, Referral-Link, Builder Fee — jeweils mit Navigation zu Einstellungen
+- **Bot Builder: Validierung bei fehlender Exchange-Verbindung** — Step "Exchange & Assets" blockiert jetzt den Wizard wenn keine Exchange-Connection vorhanden ist. Auffällige Warnung (statt grauer Text) mit Handlungsanweisung.
+- **Hyperliquid Setup immer sichtbar** — Referral-Link und Builder Fee Setup werden jetzt im Settings-Accordion sofort angezeigt, nicht erst nach dem Speichern der Wallet-Daten. Neue User sehen den Referral-Link direkt beim Öffnen der Hyperliquid-Sektion.
+
+---
+
 ## [4.14.0] - 2026-04-02
 
 ### Hinzugefügt
