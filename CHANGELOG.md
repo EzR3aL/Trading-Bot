@@ -9,6 +9,18 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [4.15.2] - 2026-04-05
+
+### Behoben
+- **Discord: Trade Entry Notifications wurden nicht gesendet** — `send_trade_entry()` crashte still wenn `take_profit` oder `stop_loss` `None` war (Strategie-Exit ohne TP/SL). Der Format-String `${None:,.2f}` warf einen TypeError, der im Notification-Dispatcher verschluckt wurde. TP/SL sind jetzt Optional und zeigen "—" wenn nicht gesetzt.
+- **Telegram: Parameter-Mismatch bei Trade Entry & Exit** — `position_size` statt `size` verursachte TypeError bei jedem Trade-Notification-Versuch. Parameter-Name auf `size` vereinheitlicht.
+- **WhatsApp: Parameter-Mismatch bei Trade Entry & Exit** — `direction` statt `side` verursachte TypeError. Parameter-Name auf `side` vereinheitlicht (konsistent mit allen anderen Notifiern).
+- **Telegram/WhatsApp: Error-Notifications crashten** — `send_error()` akzeptierte kein `error_type`-Argument, das vom Bot-Worker gesendet wurde. Parameter `error_type` und `details` hinzugefügt.
+- **WhatsApp: Daily Summary zeigte nur Nullwerte** — Parameter-Namen wichen ab (`gross_pnl`/`fees`/`funding` statt `total_pnl`/`total_fees`/`total_funding`). Signatur an Caller-Konvention angepasst.
+- **Discord: Bot-Status zeigte keinen Bot-Namen** — `bot_name` wurde in `**kwargs` verschluckt. Wird jetzt im Titel angezeigt.
+
+---
+
 ## [4.15.1] - 2026-04-03
 
 ### Behoben

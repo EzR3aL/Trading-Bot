@@ -357,7 +357,7 @@ class TestSendTradeEntry:
         # Act
         result = await notifier.send_trade_entry(
             symbol="BTCUSDT", side="long",
-            entry_price=95000.0, position_size=0.01,
+            entry_price=95000.0, size=0.01,
         )
 
         # Assert
@@ -372,7 +372,7 @@ class TestSendTradeEntry:
         # Act
         result = await notifier.send_trade_entry(
             symbol="ETHUSDT", side="short",
-            entry_price=3500.0, position_size=0.5,
+            entry_price=3500.0, size=0.5,
         )
 
         # Assert
@@ -386,7 +386,7 @@ class TestSendTradeEntry:
         # Act
         await notifier.send_trade_entry(
             symbol="BTCUSDT", side="long",
-            entry_price=95000.0, position_size=0.01,
+            entry_price=95000.0, size=0.01,
         )
 
         # Assert
@@ -401,7 +401,7 @@ class TestSendTradeEntry:
         # Act
         await notifier.send_trade_entry(
             symbol="BTCUSDT", side="short",
-            entry_price=95000.0, position_size=0.01,
+            entry_price=95000.0, size=0.01,
         )
 
         # Assert
@@ -416,7 +416,7 @@ class TestSendTradeEntry:
         # Act
         await notifier.send_trade_entry(
             symbol="SOLUSDT", side="long",
-            entry_price=150.0, position_size=1.0,
+            entry_price=150.0, size=1.0,
         )
 
         # Assert
@@ -431,7 +431,7 @@ class TestSendTradeEntry:
         # Act
         await notifier.send_trade_entry(
             symbol="BTCUSDT", side="long",
-            entry_price=95000.0, position_size=0.01,
+            entry_price=95000.0, size=0.01,
         )
 
         # Assert
@@ -446,14 +446,14 @@ class TestSendTradeEntry:
         # Act
         await notifier.send_trade_entry(
             symbol="BTCUSDT", side="long",
-            entry_price=95123.45, position_size=0.01,
+            entry_price=95123.45, size=0.01,
         )
 
         # Assert
         message = notifier._send_message.call_args[0][0]
         assert "95123.45" in message
 
-    async def test_message_contains_position_size(self):
+    async def test_message_contains_size(self):
         # Arrange
         notifier = _make_notifier()
         notifier._send_message = AsyncMock(return_value=True)
@@ -461,7 +461,7 @@ class TestSendTradeEntry:
         # Act
         await notifier.send_trade_entry(
             symbol="BTCUSDT", side="long",
-            entry_price=95000.0, position_size=0.05,
+            entry_price=95000.0, size=0.05,
         )
 
         # Assert
@@ -476,7 +476,7 @@ class TestSendTradeEntry:
         # Act
         await notifier.send_trade_entry(
             symbol="BTCUSDT", side="long",
-            entry_price=95000.0, position_size=0.01,
+            entry_price=95000.0, size=0.01,
             leverage=10,
         )
 
@@ -492,7 +492,7 @@ class TestSendTradeEntry:
         # Act
         await notifier.send_trade_entry(
             symbol="BTCUSDT", side="long",
-            entry_price=95000.0, position_size=0.01,
+            entry_price=95000.0, size=0.01,
         )
 
         # Assert
@@ -507,7 +507,7 @@ class TestSendTradeEntry:
         # Act
         await notifier.send_trade_entry(
             symbol="BTCUSDT", side="long",
-            entry_price=95000.0, position_size=0.01,
+            entry_price=95000.0, size=0.01,
             strategy="LiquidationHunter",
         )
 
@@ -524,7 +524,7 @@ class TestSendTradeEntry:
         # Act
         await notifier.send_trade_entry(
             symbol="BTCUSDT", side="long",
-            entry_price=95000.0, position_size=0.01,
+            entry_price=95000.0, size=0.01,
             strategy="",
         )
 
@@ -540,7 +540,7 @@ class TestSendTradeEntry:
         # Act
         await notifier.send_trade_entry(
             symbol="BTCUSDT", side="long",
-            entry_price=95000.0, position_size=0.01,
+            entry_price=95000.0, size=0.01,
             take_profit=97000.0,
         )
 
@@ -557,7 +557,7 @@ class TestSendTradeEntry:
         # Act
         await notifier.send_trade_entry(
             symbol="BTCUSDT", side="long",
-            entry_price=95000.0, position_size=0.01,
+            entry_price=95000.0, size=0.01,
             take_profit=None,
         )
 
@@ -573,7 +573,7 @@ class TestSendTradeEntry:
         # Act
         await notifier.send_trade_entry(
             symbol="BTCUSDT", side="long",
-            entry_price=95000.0, position_size=0.01,
+            entry_price=95000.0, size=0.01,
             stop_loss=93000.0,
         )
 
@@ -590,7 +590,7 @@ class TestSendTradeEntry:
         # Act
         await notifier.send_trade_entry(
             symbol="BTCUSDT", side="long",
-            entry_price=95000.0, position_size=0.01,
+            entry_price=95000.0, size=0.01,
             stop_loss=None,
         )
 
@@ -606,7 +606,7 @@ class TestSendTradeEntry:
         # Act
         await notifier.send_trade_entry(
             symbol="BTCUSDT", side="long",
-            entry_price=95000.0, position_size=0.01,
+            entry_price=95000.0, size=0.01,
         )
 
         # Assert
@@ -621,7 +621,7 @@ class TestSendTradeEntry:
         # Act
         await notifier.send_trade_entry(
             symbol="BTCUSDT", side="long",
-            entry_price=95000.0, position_size=0.01,
+            entry_price=95000.0, size=0.01,
         )
 
         # Assert
@@ -636,7 +636,7 @@ class TestSendTradeEntry:
         # Act
         result = await notifier.send_trade_entry(
             symbol="BTCUSDT", side="long",
-            entry_price=95000.0, position_size=0.01,
+            entry_price=95000.0, size=0.01,
         )
 
         # Assert
@@ -650,7 +650,7 @@ class TestSendTradeEntry:
         # Act
         await notifier.send_trade_entry(
             symbol="BTCUSDT", side="Long",
-            entry_price=95000.0, position_size=0.01,
+            entry_price=95000.0, size=0.01,
         )
 
         # Assert
@@ -667,7 +667,7 @@ class TestSendTradeEntry:
         # Act / Assert - should not raise
         result = await notifier.send_trade_entry(
             symbol="BTCUSDT", side="long",
-            entry_price=95000.0, position_size=0.01,
+            entry_price=95000.0, size=0.01,
             extra_field="extra_value",
         )
         assert result is True
@@ -680,7 +680,7 @@ class TestSendTradeEntry:
         # Act
         await notifier.send_trade_entry(
             symbol="BTCUSDT", side="short",
-            entry_price=95000.0, position_size=0.01,
+            entry_price=95000.0, size=0.01,
             leverage=20, strategy="RSI_Divergence",
             take_profit=93000.0, stop_loss=96000.0,
         )
@@ -713,7 +713,7 @@ class TestSendTradeExit:
             symbol="BTCUSDT", side="long",
             entry_price=95000.0, exit_price=96000.0,
             pnl=10.0, pnl_percent=1.05,
-            position_size=0.01,
+            size=0.01,
         )
 
         # Assert
@@ -729,7 +729,7 @@ class TestSendTradeExit:
             symbol="BTCUSDT", side="long",
             entry_price=95000.0, exit_price=96000.0,
             pnl=10.0, pnl_percent=1.05,
-            position_size=0.01,
+            size=0.01,
         )
 
         # Assert
@@ -746,7 +746,7 @@ class TestSendTradeExit:
             symbol="BTCUSDT", side="long",
             entry_price=95000.0, exit_price=94000.0,
             pnl=-10.0, pnl_percent=-1.05,
-            position_size=0.01,
+            size=0.01,
         )
 
         # Assert
@@ -764,7 +764,7 @@ class TestSendTradeExit:
             symbol="BTCUSDT", side="long",
             entry_price=95000.0, exit_price=95000.0,
             pnl=0.0, pnl_percent=0.0,
-            position_size=0.01,
+            size=0.01,
         )
 
         # Assert
@@ -781,7 +781,7 @@ class TestSendTradeExit:
             symbol="ETHUSDT", side="short",
             entry_price=3500.0, exit_price=3400.0,
             pnl=10.0, pnl_percent=2.86,
-            position_size=0.1,
+            size=0.1,
         )
 
         # Assert
@@ -799,7 +799,7 @@ class TestSendTradeExit:
             symbol="BTCUSDT", side="long",
             entry_price=95000.0, exit_price=96000.0,
             pnl=10.50, pnl_percent=1.05,
-            position_size=0.01,
+            size=0.01,
         )
 
         # Assert
@@ -817,7 +817,7 @@ class TestSendTradeExit:
             symbol="BTCUSDT", side="long",
             entry_price=95000.0, exit_price=94000.0,
             pnl=-20.00, pnl_percent=-2.10,
-            position_size=0.01,
+            size=0.01,
         )
 
         # Assert
@@ -836,7 +836,7 @@ class TestSendTradeExit:
             symbol="BTCUSDT", side="long",
             entry_price=94000.0, exit_price=96500.0,
             pnl=25.0, pnl_percent=2.66,
-            position_size=0.01,
+            size=0.01,
         )
 
         # Assert
@@ -854,7 +854,7 @@ class TestSendTradeExit:
             symbol="BTCUSDT", side="long",
             entry_price=95000.0, exit_price=96000.0,
             pnl=10.0, pnl_percent=1.05,
-            position_size=0.01, leverage=5,
+            size=0.01, leverage=5,
         )
 
         # Assert
@@ -871,7 +871,7 @@ class TestSendTradeExit:
             symbol="BTCUSDT", side="long",
             entry_price=95000.0, exit_price=96000.0,
             pnl=10.0, pnl_percent=1.05,
-            position_size=0.01, strategy="MyStrategy",
+            size=0.01, strategy="MyStrategy",
         )
 
         # Assert
@@ -889,7 +889,7 @@ class TestSendTradeExit:
             symbol="BTCUSDT", side="long",
             entry_price=95000.0, exit_price=96000.0,
             pnl=10.0, pnl_percent=1.05,
-            position_size=0.01, strategy="",
+            size=0.01, strategy="",
         )
 
         # Assert
@@ -906,7 +906,7 @@ class TestSendTradeExit:
             symbol="BTCUSDT", side="long",
             entry_price=95000.0, exit_price=96000.0,
             pnl=10.0, pnl_percent=1.05,
-            position_size=0.01, duration="2h 30m",
+            size=0.01, duration="2h 30m",
         )
 
         # Assert
@@ -924,7 +924,7 @@ class TestSendTradeExit:
             symbol="BTCUSDT", side="long",
             entry_price=95000.0, exit_price=96000.0,
             pnl=10.0, pnl_percent=1.05,
-            position_size=0.01, duration="",
+            size=0.01, duration="",
         )
 
         # Assert
@@ -941,7 +941,7 @@ class TestSendTradeExit:
             symbol="BTCUSDT", side="long",
             entry_price=95000.0, exit_price=96000.0,
             pnl=10.0, pnl_percent=1.05,
-            position_size=0.01,
+            size=0.01,
         )
 
         # Assert
@@ -958,7 +958,7 @@ class TestSendTradeExit:
             symbol="BTCUSDT", side="long",
             entry_price=95000.0, exit_price=96000.0,
             pnl=10.0, pnl_percent=1.05,
-            position_size=0.01,
+            size=0.01,
         )
 
         # Assert
@@ -975,7 +975,7 @@ class TestSendTradeExit:
             symbol="BTCUSDT", side="long",
             entry_price=95000.0, exit_price=96000.0,
             pnl=10.0, pnl_percent=1.05,
-            position_size=0.01, unknown_param="value",
+            size=0.01, unknown_param="value",
         )
         assert result is True
 
@@ -1381,7 +1381,7 @@ class TestEndToEndWithMockedHttp:
         with patch("src.notifications.telegram_notifier.aiohttp.ClientSession", mock_session_cls):
             result = await notifier.send_trade_entry(
                 symbol="BTCUSDT", side="long",
-                entry_price=95000.0, position_size=0.01,
+                entry_price=95000.0, size=0.01,
             )
 
         # Assert
@@ -1410,7 +1410,7 @@ class TestEndToEndWithMockedHttp:
                 symbol="ETHUSDT", side="short",
                 entry_price=3500.0, exit_price=3400.0,
                 pnl=10.0, pnl_percent=2.86,
-                position_size=0.1,
+                size=0.1,
             )
 
         # Assert
@@ -1455,7 +1455,7 @@ class TestEndToEndWithMockedHttp:
         with patch("src.notifications.telegram_notifier.aiohttp.ClientSession", mock_session_cls):
             result = await notifier.send_trade_entry(
                 symbol="BTCUSDT", side="long",
-                entry_price=95000.0, position_size=0.01,
+                entry_price=95000.0, size=0.01,
             )
 
         # Assert

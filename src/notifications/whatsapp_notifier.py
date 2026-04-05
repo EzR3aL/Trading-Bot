@@ -106,7 +106,7 @@ class WhatsAppNotifier:
     async def send_trade_entry(
         self,
         symbol: str,
-        direction: str,
+        side: str,
         entry_price: float,
         size: float,
         leverage: int = 1,
@@ -120,11 +120,11 @@ class WhatsAppNotifier:
         **kwargs,
     ) -> bool:
         """Send trade entry notification."""
-        emoji = "\U0001f7e2" if direction.upper() == "LONG" else "\U0001f534"
+        emoji = "\U0001f7e2" if side.upper() == "LONG" else "\U0001f534"
         lines = [
             f"{emoji} *Trade Opened -- {symbol}*",
             "",
-            f"Direction: {direction.upper()}",
+            f"Direction: {side.upper()}",
             f"Entry: {entry_price}",
             f"Size: {size}",
             f"Leverage: {leverage}x",
@@ -149,7 +149,7 @@ class WhatsAppNotifier:
     async def send_trade_exit(
         self,
         symbol: str,
-        direction: str,
+        side: str,
         entry_price: float,
         exit_price: float,
         pnl: float,
@@ -170,7 +170,7 @@ class WhatsAppNotifier:
         lines = [
             f"{emoji} *Trade Closed -- {symbol}*",
             "",
-            f"Direction: {direction.upper()}",
+            f"Direction: {side.upper()}",
             f"Entry: {entry_price}",
             f"Exit: {exit_price}",
             f"PnL: {pnl_sign}{pnl:.2f} USDT ({pnl_sign}{pnl_percent:.2f}%)",
@@ -192,30 +192,26 @@ class WhatsAppNotifier:
 
     async def send_daily_summary(
         self,
-        bot_name: str = "",
         date: str = "",
         starting_balance: float = 0.0,
         ending_balance: float = 0.0,
         total_trades: int = 0,
         winning_trades: int = 0,
-        gross_pnl: float = 0.0,
-        fees: float = 0.0,
-        funding: float = 0.0,
-        net_pnl: Optional[float] = None,
+        losing_trades: int = 0,
+        total_pnl: float = 0.0,
+        total_fees: float = 0.0,
+        total_funding: float = 0.0,
         max_drawdown: float = 0.0,
         **kwargs,
     ) -> bool:
         """Send daily trading summary."""
-        # Calculate net PnL if not provided explicitly
-        if net_pnl is None:
-            net_pnl = gross_pnl - fees - funding
-
-        losing_trades = total_trades - winning_trades
+        net_pnl = total_pnl - total_fees - total_funding
         return_pct = (net_pnl / starting_balance * 100) if starting_balance > 0 else 0.0
         win_rate = (winning_trades / total_trades * 100) if total_trades > 0 else 0.0
         pnl_emoji = "\U0001f4c8" if net_pnl >= 0 else "\U0001f4c9"
         pnl_sign = "+" if net_pnl >= 0 else ""
 
+        bot_name = kwargs.get("bot_name", "")
         title = f"\U0001f4cb *Daily Summary -- {bot_name}*" if bot_name else "\U0001f4cb *Daily Summary*"
         lines = [
             title,
@@ -224,9 +220,9 @@ class WhatsAppNotifier:
             f"\U0001f4b0 Balance: {starting_balance:,.2f} -> {ending_balance:,.2f}",
             f"\U0001f4ca Trades: {total_trades} (\u2705 {winning_trades} / \u274c {losing_trades})",
             f"\U0001f3af Win Rate: {win_rate:.1f}%",
-            f"{pnl_emoji} Gross PnL: {pnl_sign}{gross_pnl:,.2f} USDT",
-            f"\U0001f4b3 Fees: {fees:,.2f} USDT",
-            f"\U0001f504 Funding: {funding:+,.2f} USDT",
+            f"{pnl_emoji} Gross PnL: {pnl_sign}{total_pnl:,.2f} USDT",
+            f"\U0001f4b3 Fees: {total_fees:,.2f} USDT",
+            f"\U0001f504 Funding: {total_funding:+,.2f} USDT",
             f"\U0001f4b0 Net PnL: {pnl_sign}{net_pnl:,.2f} USDT ({pnl_sign}{return_pct:.2f}%)",
             f"\U0001f4c9 Max Drawdown: {max_drawdown:.2f}%",
             f"\n\U0001f550 {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}",
@@ -314,17 +310,22 @@ class WhatsAppNotifier:
     async def send_error(
         self,
         error_message: str,
+        error_type: str = "",
         context: str = "",
+        details: str = "",
         **kwargs,
     ) -> bool:
         """Send error notification."""
         lines = [
             "\u26a0\ufe0f *Bot Error*",
             "",
-            error_message,
         ]
-        if context:
-            lines.append(f"\nContext: {context}")
+        if error_type:
+            lines.append(f"Type: {error_type}")
+        lines.append(error_message)
+        ctx = context or details
+        if ctx:
+            lines.append(f"\nContext: {ctx}")
         lines.append(f"\n\U0001f550 {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}")
         return await self._send_message("\n".join(lines))
 

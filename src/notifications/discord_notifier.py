@@ -144,12 +144,13 @@ class DiscordNotifier:
         size: float,
         entry_price: float,
         leverage: int,
-        take_profit: float,
-        stop_loss: float,
-        confidence: int,
-        reason: str,
-        order_id: str,
+        take_profit: Optional[float] = None,
+        stop_loss: Optional[float] = None,
+        confidence: int = 0,
+        reason: str = "",
+        order_id: str = "",
         demo_mode: Optional[bool] = None,
+        **kwargs,
     ) -> bool:
         """
         Send a trade entry notification.
@@ -202,8 +203,8 @@ class DiscordNotifier:
             {"name": "📦 Size", "value": f"`{size:.6f}`", "inline": True},
             {"name": "⚡ Leverage", "value": f"`{leverage}x`", "inline": True},
             {"name": "💵 Value", "value": f"`${position_value:,.2f}`", "inline": True},
-            {"name": "🎯 Take Profit", "value": f"`${take_profit:,.2f}`", "inline": True},
-            {"name": "🛑 Stop Loss", "value": f"`${stop_loss:,.2f}`", "inline": True},
+            {"name": "🎯 Take Profit", "value": f"`${take_profit:,.2f}`" if take_profit is not None else "`—`", "inline": True},
+            {"name": "🛑 Stop Loss", "value": f"`${stop_loss:,.2f}`" if stop_loss is not None else "`—`", "inline": True},
             {"name": "📊 Confidence", "value": f"`{confidence}%`", "inline": True},
             {"name": "📝 Reasoning", "value": f"```{reason[:500]}```", "inline": False},
         ]
@@ -585,7 +586,7 @@ class DiscordNotifier:
 
         return await self._send_webhook(payload)
 
-    async def send_bot_status(self, status: str, message: str, stats: Optional[Dict] = None, **kwargs) -> bool:
+    async def send_bot_status(self, status: str, message: str, stats: Optional[Dict] = None, bot_name: str = "", **kwargs) -> bool:
         """
         Send a bot status update.
 
@@ -617,8 +618,9 @@ class DiscordNotifier:
             for key, value in stats.items():
                 fields.append({"name": f"📈 {key}", "value": f"`{value}`", "inline": True})
 
+        title_suffix = f" — {bot_name}" if bot_name else ""
         embed = self._create_embed(
-            title=f"{emoji} BOT STATUS UPDATE",
+            title=f"{emoji} BOT STATUS UPDATE{title_suffix}",
             description=f"Trading bot status: **{status}**",
             color=color,
             fields=fields,

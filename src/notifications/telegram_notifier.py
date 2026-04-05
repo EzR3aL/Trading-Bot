@@ -55,7 +55,7 @@ class TelegramNotifier:
         symbol: str,
         side: str,
         entry_price: float,
-        position_size: float,
+        size: float = 0,
         leverage: int = 1,
         strategy: str = "",
         take_profit: Optional[float] = None,
@@ -69,7 +69,7 @@ class TelegramNotifier:
             "",
             f"Direction: <b>{side.upper()}</b>",
             f"Entry: <code>{entry_price}</code>",
-            f"Size: <code>{position_size}</code>",
+            f"Size: <code>{size}</code>",
             f"Leverage: <code>{leverage}x</code>",
         ]
         if strategy:
@@ -89,7 +89,7 @@ class TelegramNotifier:
         exit_price: float,
         pnl: float,
         pnl_percent: float,
-        position_size: float,
+        size: float = 0,
         leverage: int = 1,
         strategy: str = "",
         duration: str = "",
@@ -105,7 +105,7 @@ class TelegramNotifier:
             f"Entry: <code>{entry_price}</code>",
             f"Exit: <code>{exit_price}</code>",
             f"PnL: <b>{pnl_sign}{pnl:.2f} USDT ({pnl_sign}{pnl_percent:.2f}%)</b>",
-            f"Size: <code>{position_size}</code>",
+            f"Size: <code>{size}</code>",
             f"Leverage: <code>{leverage}x</code>",
         ]
         if strategy:
@@ -115,15 +115,18 @@ class TelegramNotifier:
         lines.append(f"\n\U0001f550 {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}")
         return await self._send_message("\n".join(lines))
 
-    async def send_error(self, error_message: str, context: str = "", **kwargs) -> bool:
+    async def send_error(self, error_message: str, error_type: str = "", context: str = "", details: str = "", **kwargs) -> bool:
         """Send error notification."""
         lines = [
             "\u26a0\ufe0f <b>Bot Error</b>",
             "",
-            f"<code>{error_message}</code>",
         ]
-        if context:
-            lines.append(f"\nContext: {context}")
+        if error_type:
+            lines.append(f"Type: <b>{error_type}</b>")
+        lines.append(f"<code>{error_message}</code>")
+        ctx = context or details
+        if ctx:
+            lines.append(f"\nContext: {ctx}")
         lines.append(f"\n\U0001f550 {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}")
         return await self._send_message("\n".join(lines))
 

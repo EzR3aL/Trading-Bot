@@ -195,7 +195,7 @@ class TestNotificationMethods:
     async def test_send_trade_entry_long(self):
         result = await self.notifier.send_trade_entry(
             symbol="BTCUSDT",
-            direction="long",
+            side="long",
             entry_price=95000.0,
             size=0.1,
             leverage=10,
@@ -211,7 +211,7 @@ class TestNotificationMethods:
     async def test_send_trade_entry_short(self):
         result = await self.notifier.send_trade_entry(
             symbol="ETHUSDT",
-            direction="short",
+            side="short",
             entry_price=3500.0,
             size=1.0,
         )
@@ -223,7 +223,7 @@ class TestNotificationMethods:
     async def test_send_trade_exit(self):
         result = await self.notifier.send_trade_exit(
             symbol="BTCUSDT",
-            direction="long",
+            side="long",
             entry_price=95000.0,
             exit_price=96000.0,
             pnl=100.0,
