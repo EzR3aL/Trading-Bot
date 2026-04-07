@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { ChevronDown, Search, CheckCircle, Clock, Users, Activity, Wifi, WifiOff, Shield, Zap, BarChart3, TrendingUp, Database, Cpu, DollarSign, ExternalLink, Settings2 } from 'lucide-react'
+import { ChevronDown, Search, CheckCircle, Clock, Users, Activity, Wifi, WifiOff, Shield, Zap, BarChart3, TrendingUp, Database, Cpu, DollarSign, ExternalLink, Settings2, Info } from 'lucide-react'
 import Pagination from '../components/ui/Pagination'
 import api from '../api/client'
 import { getApiErrorMessage } from '../utils/api-error'
@@ -617,6 +617,16 @@ export default function Settings() {
                     {/* Accordion Content */}
                     {isOpen && (
                       <div className="px-5 pb-5 pt-1 space-y-5 border-t border-white/[0.06]">
+                        {/* Header-based-demo hint: Bitget/BingX accept the same key for both
+                            modes via a request header. Users with only a demo key should NOT
+                            also paste it into the live form (#143). */}
+                        {(ex.name === 'bitget' || ex.name === 'bingx') && (
+                          <div className="flex items-start gap-2 p-3 bg-emerald-500/[0.06] border border-emerald-500/20 rounded-lg text-xs text-emerald-200">
+                            <Info size={14} className="shrink-0 mt-0.5 text-emerald-400" />
+                            <span>{t('settings.headerDemoHint', { exchange: ex.display_name })}</span>
+                          </div>
+                        )}
+
                         <KeyForm
                           label={ex.auth_type === 'eth_wallet' ? t('settings.mainnet') : t('common.live')}
                           configured={liveOk}

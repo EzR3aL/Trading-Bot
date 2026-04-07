@@ -14,6 +14,8 @@ from src.api.schemas.config import ExchangeConnectionUpdate
 from src.auth.dependencies import get_current_user
 from src.errors import (
     ERR_CONNECTION_FAILED,
+    ERR_DUPLICATE_DEMO_LIVE_KEY,
+    ERR_DUPLICATE_LIVE_DEMO_KEY,
     ERR_INVALID_ETH_ADDRESS,
     ERR_INVALID_HEX_KEY,
     ERR_NO_API_KEYS,
@@ -121,6 +123,36 @@ async def upsert_exchange_connection(
                 f"Hyperliquid wallet changed for user {user.id} — "
                 f"reset builder_fee_approved and referral_verified"
             )
+
+    # Reject duplicate live/demo cred submissions (#143).
+    # Pattern: user pastes the same key into both forms because the Settings UI
+    # shows them side by side and Bitget/BingX accept the same key for both
+    # modes via a header. The duplicate causes failed live API calls in the
+    # background even though the trade itself works.
+    if data.api_key and conn.demo_api_key_encrypted:
+        existing_demo = decrypt_value(conn.demo_api_key_encrypted)
+        if data.api_key == existing_demo:
+            raise HTTPException(
+                status_code=400,
+                detail=ERR_DUPLICATE_LIVE_DEMO_KEY,
+            )
+    if data.demo_api_key and conn.api_key_encrypted:
+        existing_live = decrypt_value(conn.api_key_encrypted)
+        if data.demo_api_key == existing_live:
+            raise HTTPException(
+                status_code=400,
+                detail=ERR_DUPLICATE_DEMO_LIVE_KEY,
+            )
+    # Same-request duplicate (user submits both fields at once with same value)
+    if (
+        data.api_key
+        and data.demo_api_key
+        and data.api_key == data.demo_api_key
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail=ERR_DUPLICATE_LIVE_DEMO_KEY,
+        )
 
     if data.api_key:
         conn.api_key_encrypted = encrypt_value(data.api_key)

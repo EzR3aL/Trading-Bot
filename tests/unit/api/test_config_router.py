@@ -648,6 +648,82 @@ class TestExchangeConnections:
         )
         assert resp.status_code == 200
 
+    async def test_upsert_rejects_same_key_in_both_fields_same_request(
+        self, client, user_headers, regular_user,
+    ):
+        """Regression for #143: a user submitting the same key in both live
+        and demo fields in a single request must be rejected."""
+        body = {
+            "api_key": "shared-key",
+            "api_secret": "shared-secret",
+            "passphrase": "shared-pass",
+            "demo_api_key": "shared-key",
+            "demo_api_secret": "shared-secret",
+            "demo_passphrase": "shared-pass",
+        }
+        resp = await client.put(
+            "/api/config/exchange-connections/bitget",
+            json=body,
+            headers=user_headers,
+        )
+        assert resp.status_code == 400
+        assert "Demo" in resp.json()["detail"] or "demo" in resp.json()["detail"]
+
+    async def test_upsert_rejects_live_key_matching_existing_demo(
+        self, client, user_headers, regular_user,
+    ):
+        """Regression for #143: user already saved the key as demo, then
+        submits the same key as live in a follow-up request → reject."""
+        # First save as demo only
+        await client.put(
+            "/api/config/exchange-connections/bitget",
+            json={
+                "demo_api_key": "duplicate-key",
+                "demo_api_secret": "duplicate-secret",
+                "demo_passphrase": "duplicate-pass",
+            },
+            headers=user_headers,
+        )
+        # Now try to save the SAME key as live → must be rejected
+        resp = await client.put(
+            "/api/config/exchange-connections/bitget",
+            json={
+                "api_key": "duplicate-key",
+                "api_secret": "live-secret-different",
+                "passphrase": "live-pass-different",
+            },
+            headers=user_headers,
+        )
+        assert resp.status_code == 400
+        # Error mentions that a demo key is already stored
+        assert "Demo" in resp.json()["detail"] or "demo" in resp.json()["detail"]
+
+    async def test_upsert_rejects_demo_key_matching_existing_live(
+        self, client, user_headers, regular_user,
+    ):
+        """Mirror of the previous test: live first, then demo with the
+        same key → reject."""
+        await client.put(
+            "/api/config/exchange-connections/bitget",
+            json={
+                "api_key": "another-duplicate",
+                "api_secret": "live-secret",
+                "passphrase": "live-pass",
+            },
+            headers=user_headers,
+        )
+        resp = await client.put(
+            "/api/config/exchange-connections/bitget",
+            json={
+                "demo_api_key": "another-duplicate",
+                "demo_api_secret": "demo-secret",
+                "demo_passphrase": "demo-pass",
+            },
+            headers=user_headers,
+        )
+        assert resp.status_code == 400
+        assert "Live" in resp.json()["detail"] or "live" in resp.json()["detail"]
+
     async def test_upsert_exchange_connection_hl_demo_valid(self, client, user_headers, regular_user):
         body = {
             "demo_api_key": "0x" + "c" * 40,
