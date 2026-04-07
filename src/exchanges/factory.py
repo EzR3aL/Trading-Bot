@@ -177,39 +177,23 @@ def get_supported_exchanges() -> list:
     return [e.value for e in ExchangeType]
 
 
-#: Exchanges whose demo/paper environment can be accessed with the user's
-#: **live** API credentials via a request header or a separate endpoint URL
-#: (so we don't need separate demo keys to be stored).
-#:
-#: - Bitget: ``paptrading: 1`` header on the live API
-#: - BingX: ``VST`` virtual simulated trading uses the same key on a
-#:   separate base URL
-#:
-#: For exchanges NOT in this set (Hyperliquid, Weex, Bitunix), a demo client
-#: can only be built when dedicated demo credentials are stored in the
-#: connection row.
-_EXCHANGES_WITH_HEADER_BASED_DEMO = {"bitget", "bingx"}
-
-
 async def get_all_user_clients(
     user_id: int, db,
 ) -> list[tuple[str, bool, ExchangeClient]]:
     """Load all ExchangeConnections for a user and create client instances.
 
-    Fix for #141: a user can run a bot in demo mode against a connection
-    that only stores live credentials (on Bitget the same live key activates
-    the paper-trading environment via a header). Previously the factory
-    created exactly one client per exchange — picking live if present —
-    which left demo trades invisible to the portfolio endpoint.
-
-    Now every (connection, mode) combination that can be built from the
-    stored credentials produces a client:
+    Returns one client per (connection, mode) combination that the stored
+    credentials actually cover — strict separation, no auto-mirroring
+    between live and demo. Per #145 the user explicitly wants live and
+    demo to remain independent slots:
 
     - ``conn.api_key_encrypted`` present → live client for this exchange
-    - ``conn.demo_api_key_encrypted`` present → demo client
-    - ``conn.api_key_encrypted`` present **and** exchange is in
-      ``_EXCHANGES_WITH_HEADER_BASED_DEMO`` → also a demo client using the
-      live key (Bitget ``paptrading`` header, BingX VST)
+    - ``conn.demo_api_key_encrypted`` present → demo client for this exchange
+
+    A user who has only live credentials gets only a live client, even on
+    Bitget/BingX where the same key technically works in both environments
+    via a header. If they want the bot to run in demo mode against the
+    same exchange, they must store dedicated demo credentials.
 
     Args:
         user_id: User ID
@@ -272,22 +256,6 @@ async def get_all_user_clients(
             secret_enc=conn.demo_api_secret_encrypted,
             passphrase_enc=conn.demo_passphrase_encrypted,
         )
-
-        # Demo client from LIVE credentials for exchanges that support
-        # header-based paper trading (Bitget, BingX). Only create if no
-        # demo client was built from dedicated demo credentials above.
-        if (
-            conn.exchange_type in _EXCHANGES_WITH_HEADER_BASED_DEMO
-            and conn.api_key_encrypted
-            and not conn.demo_api_key_encrypted
-        ):
-            _try_create(
-                conn,
-                demo_mode=True,
-                key_enc=conn.api_key_encrypted,
-                secret_enc=conn.api_secret_encrypted,
-                passphrase_enc=conn.passphrase_encrypted,
-            )
 
     return clients
 
