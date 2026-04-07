@@ -1,6 +1,5 @@
 """Trade history endpoints (user-scoped)."""
 
-import json
 from collections import defaultdict
 from datetime import datetime, timezone
 from typing import Optional
@@ -15,7 +14,7 @@ from src.data.market_data import MarketDataFetcher
 from src.exchanges.factory import create_exchange_client
 from src.models.database import BotConfig, ExchangeConnection, TradeRecord, User, UserConfig
 from src.models.session import get_db
-from src.strategy.edge_indicator import DEFAULTS as EDGE_DEFAULTS
+from src.strategy.base import resolve_strategy_params
 from src.utils.encryption import decrypt_value
 from src.api.rate_limit import limiter
 from src.errors import (
@@ -37,6 +36,10 @@ from src.utils.logger import get_logger
 logger = get_logger(__name__)
 
 
+#: Strategies that compute an ATR-based trailing stop for the dashboard display.
+TRAILING_STOP_STRATEGIES = ("edge_indicator", "liquidation_hunter")
+
+
 async def _compute_trailing_stop(
     trade: TradeRecord,
     strategy_type: Optional[str],
@@ -46,29 +49,28 @@ async def _compute_trailing_stop(
     """Compute live trailing stop fields for an open trade.
 
     Returns a dict with keys matching TradeResponse trailing stop fields.
-    Only computes for edge_indicator strategy with trailing_stop_enabled.
+    Uses ``resolve_strategy_params`` so the dashboard's view of the trailing
+    stop matches the live strategy exactly (same DEFAULTS → RISK_PROFILE →
+    user_params merge, same ``kline_interval``).
 
     Args:
-        klines_cache: Optional pre-fetched klines keyed by symbol.
-            When provided, avoids per-trade Binance API calls.
+        klines_cache: Optional pre-fetched klines keyed by ``(symbol, interval)``.
+            Must match the resolved strategy interval; otherwise the per-call
+            Binance fetch is used instead.
     """
     if trade.status != "open":
         return {}
 
     # Manual override takes precedence — works without a bot strategy
     has_manual_override = trade.trailing_atr_override is not None
-    has_strategy = strategy_type == "edge_indicator"
+    has_strategy = strategy_type in TRAILING_STOP_STRATEGIES
 
     if not has_manual_override and not has_strategy:
         return {}
 
-    # Merge strategy defaults with custom params
-    params = dict(EDGE_DEFAULTS)
-    if strategy_params_json:
-        try:
-            params.update(json.loads(strategy_params_json))
-        except (json.JSONDecodeError, TypeError):
-            pass
+    # Resolve params identically to how the live strategy merges them.
+    # This is the parity guarantee: dashboard calc === strategy calc.
+    params = resolve_strategy_params(strategy_type, strategy_params_json)
 
     if not has_manual_override and not params.get("trailing_stop_enabled", True):
         return {}
@@ -77,11 +79,12 @@ async def _compute_trailing_stop(
     if highest_price is None:
         return {"trailing_stop_active": False, "can_close_at_loss": True}
 
-    # Fetch klines for ATR calculation (use cache if available)
+    # Fetch klines for ATR calculation (use cache if available, keyed by interval)
     atr_period = params.get("atr_period", 14)
     interval = params.get("kline_interval", "1h")
-    if klines_cache is not None and trade.symbol in klines_cache:
-        klines = klines_cache[trade.symbol]
+    cache_key = (trade.symbol, interval)
+    if klines_cache is not None and cache_key in klines_cache:
+        klines = klines_cache[cache_key]
     else:
         try:
             fetcher = MarketDataFetcher()
@@ -216,18 +219,28 @@ async def list_trades(
     result = await db.execute(query)
     rows = result.all()
 
-    # Pre-fetch klines for all unique symbols with open trades (avoids N+1 API calls)
-    klines_cache: dict = {}
-    open_symbols = {t.symbol for t, _, _, strat_type, _ in rows if t.status == "open" and strat_type == "edge_indicator"}
-    if open_symbols:
+    # Pre-fetch klines for all unique (symbol, interval) pairs with open trades
+    # (avoids N+1 API calls). Interval comes from the resolved strategy params
+    # so each bot's kline_interval (1h / 4h / ...) is honored correctly.
+    klines_cache: dict[tuple[str, str], list] = {}
+    prefetch_keys: set[tuple[str, str]] = set()
+    for t, _, _, strat_type, strat_params in rows:
+        if t.status != "open":
+            continue
+        if strat_type not in TRAILING_STOP_STRATEGIES and t.trailing_atr_override is None:
+            continue
+        resolved = resolve_strategy_params(strat_type, strat_params)
+        interval = resolved.get("kline_interval", "1h")
+        prefetch_keys.add((t.symbol, interval))
+
+    if prefetch_keys:
         fetcher = MarketDataFetcher()
         try:
-            for sym in open_symbols:
+            for sym, interval in prefetch_keys:
                 try:
-                    klines = await fetcher.get_binance_klines(sym, "1h", 14 + 15)
-                    klines_cache[sym] = klines
+                    klines_cache[(sym, interval)] = await fetcher.get_binance_klines(sym, interval, 14 + 15)
                 except Exception as exc:
-                    logger.debug("Batch kline fetch failed for %s: %s", sym, exc)
+                    logger.debug("Batch kline fetch failed for %s %s: %s", sym, interval, exc)
         finally:
             await fetcher.close()
 
