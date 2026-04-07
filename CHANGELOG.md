@@ -9,6 +9,30 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [4.15.8] - 2026-04-07
+
+### Behoben
+- **Doppelt gespeicherte Live-/Demo-Credentials verursachen Background-Errors (#143)** — User eLPresidente speicherte denselben Bitget-Demo-API-Key in BEIDE Felder (Live und Demo) der Settings-Seite. Bitget akzeptiert den Demo-Key nur mit dem `paptrading: 1` Header → Live-Abfragen schlugen mit `exchange environment is incorrect` fehl. Vor #141 war sein Demo-Trade unsichtbar; nach #141 sichtbar, aber jeder Portfolio-Refresh produzierte Fehler-Logs für die Live-Abfrage.
+  
+  Fix in `PUT /api/config/exchange-connections/{exchange_type}`:
+  - **Same-request duplicate**: Wenn `data.api_key == data.demo_api_key` in einem einzelnen Request → 400 mit klarer Meldung
+  - **Cross-request duplicate (live)**: Wenn der neue `api_key` einen existierenden `demo_api_key` matched → 400 mit Hinweis "Demo-Key gilt automatisch für beide Modi"
+  - **Cross-request duplicate (demo)**: Wenn der neue `demo_api_key` einen existierenden `api_key` matched → 400 mit Hinweis "Live-Key gilt automatisch für beide Modi"
+  
+  Frontend-Hinweis: Settings-Seite zeigt für Bitget und BingX einen prominenten Hinweis, dass nur EIN Key-Set nötig ist (Live → automatisch beide Modi via Header). Verhindert dass weitere User in dieselbe Falle laufen.
+  
+  Direkte DB-Reparatur für eLPresidente: seine Live-Spalten wurden geleert (er hatte die DEMO-Credentials in beide Felder kopiert). Sein offener Trade #79 bleibt sichtbar via Demo-Client.
+
+### Hinzugefügt
+- 4 neue Error-Konstanten in `src/errors.py` (de + en) für Duplikats- und Wrong-Environment-Fälle.
+- 3 neue Tests in `test_config_router.py::TestExchangeConnections`:
+  - `test_upsert_rejects_same_key_in_both_fields_same_request`
+  - `test_upsert_rejects_live_key_matching_existing_demo`
+  - `test_upsert_rejects_demo_key_matching_existing_live`
+- i18n Key `settings.headerDemoHint` (de + en) für die Frontend-Erklärung.
+
+---
+
 ## [4.15.7] - 2026-04-07
 
 ### Behoben

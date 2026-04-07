@@ -151,6 +151,7 @@
     "takeProfit": "Take Profit %",
     "stopLoss": "Stop Loss %",
     "hyperliquidTestnetNote": "Wichtig: Das Testnet erfordert eine einmalige Einrichtung. 1) Zahle zuerst mindestens $5 USDC auf dein Mainnet-Hyperliquid-Konto ein. 2) Gehe dann zu app.hyperliquid-testnet.xyz/drip, um 1.000 Test-USDC zu erhalten. Ohne dies ist dein Testnet-Guthaben 0 und Demo-Trades schlagen fehl.",
+    "headerDemoHint": "Bei {{exchange}} brauchst du nur EIN API-Key-Set: trag deinen Live-Key ins Live-Feld ein, dann nutzen wir denselben Key automatisch für Demo-Trading. Wenn du nur einen Demo-Key hast, trag ihn ausschließlich ins Demo-Feld ein — das Live-Feld muss dann LEER bleiben, sonst schlagen Live-Abfragen mit 'environment incorrect' fehl.",
     "hyperliquid": "Hyperliquid",
     "affiliateLinks": "Affiliate-Links",
     "affiliateLinksDesc": "Affiliate-Links pro Exchange konfigurieren. Diese werden in Trade-Screenshots angezeigt.",
