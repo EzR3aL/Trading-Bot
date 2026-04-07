@@ -66,6 +66,8 @@ class BingXClient(ExchangeClient):
     Symbol format: BTC-USDT (hyphenated)
     """
 
+    SUPPORTS_NATIVE_TRAILING_STOP = True
+
     def __init__(
         self,
         api_key: str,
