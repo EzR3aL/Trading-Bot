@@ -592,19 +592,47 @@ class HyperliquidClient(ExchangeClient):
 
     # ── Builder Code & Referral Queries ──────────────────────────────────
 
-    async def check_builder_fee_approval(self, user_address: str = None) -> Optional[int]:
+    async def check_builder_fee_approval(
+        self,
+        user_address: str = None,
+        builder_address: str = None,
+    ) -> Optional[int]:
         """Check if user has approved builder fee for the configured builder.
 
-        Returns the max approved fee rate (int), or None if not approved.
+        Args:
+            user_address: Wallet to check. Defaults to ``self.wallet_address``.
+            builder_address: Builder wallet whose approval to query. Defaults
+                to ``self._builder["b"]`` when the client was initialized
+                with builder kwargs. Callers that construct the client via
+                ``create_hl_mainnet_read_client`` (which does not set
+                ``self._builder``) **must** pass this explicitly, otherwise
+                the method short-circuits to ``None`` without hitting HL.
+
+        Returns:
+            The max approved fee rate (int, tenths of basis points), or
+            ``None`` if no approval exists or the builder address could
+            not be resolved.
         """
-        if not self._builder:
+        resolved_builder = (
+            builder_address
+            or (self._builder["b"] if self._builder else None)
+        )
+        if not resolved_builder:
+            logger.debug(
+                "check_builder_fee_approval called without a builder address — "
+                "client has no self._builder and no explicit parameter",
+            )
             return None
 
         addr = (user_address or self.wallet_address).lower()
         try:
             result = self._info.post(
                 "/info",
-                {"type": "maxBuilderFee", "user": addr, "builder": self._builder["b"]},
+                {
+                    "type": "maxBuilderFee",
+                    "user": addr,
+                    "builder": resolved_builder.lower(),
+                },
             )
             if result is not None and int(result) > 0:
                 return int(result)

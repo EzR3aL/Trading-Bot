@@ -26,7 +26,6 @@ from src.models.database import ExchangeConnection, TradeRecord, User
 from src.models.session import get_db
 from src.services.config_service import (
     async_none,
-    create_hl_client,
     create_hl_mainnet_read_client,
 )
 from src.utils.logger import get_logger
@@ -199,7 +198,22 @@ async def confirm_builder_approval(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """After frontend wallet signing, verify approval on-chain and record in DB."""
+    """After frontend wallet signing, verify approval on-chain and record in DB.
+
+    Two fixes over the original implementation (#138):
+
+    1. The frontend signs with ``hyperliquidChain: 'Mainnet'`` and POSTs the
+       signed approval to ``https://api.hyperliquid.xyz/exchange``. This
+       confirmation check must therefore always hit **mainnet**, regardless
+       of whether the user has only demo credentials — otherwise demo users
+       would be stuck in an infinite sign-loop.
+
+    2. ``HyperliquidClient.check_builder_fee_approval`` short-circuits to
+       ``None`` when ``self._builder`` is not set. Clients constructed via
+       ``create_hl_mainnet_read_client`` do not populate ``self._builder``
+       (the config lives in the ``system_settings`` DB table, not ENV).
+       We must therefore pass the builder address explicitly.
+    """
     result = await db.execute(
         select(ExchangeConnection).where(
             ExchangeConnection.user_id == user.id,
@@ -216,22 +230,44 @@ async def confirm_builder_approval(
     from src.utils.settings import get_hl_config
     hl_cfg = await get_hl_config()
     builder_fee = hl_cfg["builder_fee"] or 10
+    builder_address = hl_cfg["builder_address"]
+    if not builder_address:
+        raise HTTPException(status_code=400, detail=ERR_BUILDER_FEE_NOT_FOUND)
 
-    # Verify approval on-chain via Hyperliquid API
-    use_demo = bool(conn.demo_api_key_encrypted and not conn.api_key_encrypted)
-    client = create_hl_client(conn, use_demo)
+    # Force mainnet and pass the builder address explicitly — see docstring.
+    client = create_hl_mainnet_read_client(conn)
     approved_fee = None
     try:
         # Check with stored wallet address first, then signing wallet if different
-        approved_fee = await client.check_builder_fee_approval()
+        approved_fee = await client.check_builder_fee_approval(
+            builder_address=builder_address,
+        )
         if approved_fee is None and signing_wallet:
-            approved_fee = await client.check_builder_fee_approval(user_address=signing_wallet)
+            approved_fee = await client.check_builder_fee_approval(
+                user_address=signing_wallet,
+                builder_address=builder_address,
+            )
         # Retry once after short delay (propagation)
         if approved_fee is None:
             await asyncio.sleep(2)
-            approved_fee = await client.check_builder_fee_approval()
+            approved_fee = await client.check_builder_fee_approval(
+                builder_address=builder_address,
+            )
             if approved_fee is None and signing_wallet:
-                approved_fee = await client.check_builder_fee_approval(user_address=signing_wallet)
+                approved_fee = await client.check_builder_fee_approval(
+                    user_address=signing_wallet,
+                    builder_address=builder_address,
+                )
+        # Final retry with longer delay for on-chain propagation
+        if approved_fee is None and signing_wallet:
+            await asyncio.sleep(5)
+            try:
+                approved_fee = await client.check_builder_fee_approval(
+                    user_address=signing_wallet,
+                    builder_address=builder_address,
+                )
+            except Exception:
+                pass
     finally:
         await client.close()
 
@@ -241,22 +277,13 @@ async def confirm_builder_approval(
         await db.commit()
         return {"status": "ok", "approved_max_fee": approved_fee}
 
-    # Final retry with longer delay for on-chain propagation
-    if signing_wallet:
-        await asyncio.sleep(5)
-        try:
-            approved_fee = await client.check_builder_fee_approval(user_address=signing_wallet)
-        except Exception:
-            pass
-        if approved_fee is not None and approved_fee >= builder_fee:
-            conn.builder_fee_approved = True
-            conn.builder_fee_approved_at = datetime.now(timezone.utc)
-            await db.commit()
-            return {"status": "ok", "approved_max_fee": approved_fee}
-
     _logger.warning(
-        f"Builder fee check failed: approved_fee={approved_fee}, "
-        f"required={builder_fee}, no signing_wallet provided"
+        "Builder fee check failed: approved_fee=%s required=%s "
+        "signing_wallet=%s stored_wallet=%s",
+        approved_fee,
+        builder_fee,
+        signing_wallet,
+        conn.api_key_encrypted and "live" or "demo",
     )
     raise HTTPException(
         status_code=400,
@@ -521,14 +548,20 @@ async def get_revenue_summary(
     hl_cfg = await get_hl_config()
     builder_address = hl_cfg["builder_address"]
     referral_code = hl_cfg["referral_code"]
-    use_demo = mode == "demo" if mode else bool(conn.demo_api_key_encrypted)
+    # The ``mode`` query parameter is accepted for backwards compatibility
+    # but ignored here — builder fee approvals and referrals live only on
+    # mainnet. See #138.
+    _ = mode  # noqa: F841
 
     try:
-        client = create_hl_client(conn, use_demo)
+        client = create_hl_mainnet_read_client(conn)
 
-        # Gather builder status, referral info, and fee tier in parallel
+        # Gather builder status, referral info, and fee tier in parallel.
+        # Pass builder_address explicitly because mainnet read clients do
+        # not populate self._builder.
         approved_fee, referral_info, user_fees = await asyncio.gather(
-            client.check_builder_fee_approval() if builder_address else async_none(),
+            client.check_builder_fee_approval(builder_address=builder_address)
+            if builder_address else async_none(),
             client.get_referral_info(),
             client.get_user_fees(),
         )

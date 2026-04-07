@@ -1207,6 +1207,125 @@ class TestConfirmBuilderApproval:
         )
         assert resp.status_code == 400
 
+    @pytest.mark.asyncio
+    @patch("src.utils.settings.get_hl_config")
+    @patch("src.exchanges.factory.create_exchange_client")
+    async def test_approval_uses_mainnet_for_demo_user(
+        self, mock_create, mock_hl, client, auth_headers, session_factory, user
+    ):
+        """Regression for #138: confirm-builder-approval must force mainnet.
+
+        The frontend signs with ``hyperliquidChain: 'Mainnet'`` and posts
+        to the mainnet /exchange endpoint. A demo-only user used to get a
+        testnet client here, which always returned None on the confirmation
+        check — leaving them stuck in an infinite sign-loop.
+        """
+        mock_hl.return_value = {"builder_address": "0x" + "aa" * 20, "builder_fee": 10, "referral_code": ""}
+
+        mock_client = AsyncMock()
+        mock_client.check_builder_fee_approval = AsyncMock(return_value=10)
+        mock_client.close = AsyncMock()
+        mock_client.wallet_address = VALID_WALLET
+        mock_create.return_value = mock_client
+
+        async with session_factory() as session:
+            # Demo-only user — no live credentials
+            session.add(ExchangeConnection(
+                user_id=user.id, exchange_type="hyperliquid",
+                demo_api_key_encrypted=encrypt_value(VALID_WALLET),
+                demo_api_secret_encrypted=encrypt_value(VALID_PRIVKEY),
+            ))
+            await session.commit()
+
+        resp = await client.post(
+            "/api/config/hyperliquid/confirm-builder-approval",
+            json={},
+            headers=auth_headers,
+        )
+        assert resp.status_code == 200
+        # Must have created the client with demo_mode=False (mainnet)
+        call_kwargs = mock_create.call_args.kwargs
+        assert call_kwargs.get("demo_mode") is False, (
+            "confirm-builder-approval must hit mainnet, not testnet. "
+            "The frontend signs on mainnet and we must verify on mainnet."
+        )
+
+    @pytest.mark.asyncio
+    @patch("src.utils.settings.get_hl_config")
+    @patch("src.exchanges.factory.create_exchange_client")
+    async def test_approval_passes_explicit_builder_address(
+        self, mock_create, mock_hl, client, auth_headers, session_factory, user
+    ):
+        """Regression for #138: HL clients created via the mainnet read
+        helper do not have ``self._builder`` populated (builder config lives
+        in the DB, not ENV). The router must pass ``builder_address`` as an
+        explicit kwarg to ``check_builder_fee_approval``, otherwise the
+        method short-circuits to None.
+        """
+        builder_addr = "0x67b10bf64b9a6f6f9aa8246139eab1c728d8186b"
+        mock_hl.return_value = {
+            "builder_address": builder_addr,
+            "builder_fee": 10,
+            "referral_code": "",
+        }
+
+        mock_client = AsyncMock()
+        mock_client.check_builder_fee_approval = AsyncMock(return_value=10)
+        mock_client.close = AsyncMock()
+        mock_client.wallet_address = VALID_WALLET
+        mock_create.return_value = mock_client
+
+        async with session_factory() as session:
+            session.add(ExchangeConnection(
+                user_id=user.id, exchange_type="hyperliquid",
+                api_key_encrypted=encrypt_value(VALID_WALLET),
+                api_secret_encrypted=encrypt_value(VALID_PRIVKEY),
+            ))
+            await session.commit()
+
+        resp = await client.post(
+            "/api/config/hyperliquid/confirm-builder-approval",
+            json={},
+            headers=auth_headers,
+        )
+        assert resp.status_code == 200
+
+        # check_builder_fee_approval must have been called with the
+        # builder_address kwarg — otherwise the real method would return
+        # None without hitting HL, leaving the user stuck.
+        all_calls = mock_client.check_builder_fee_approval.call_args_list
+        assert len(all_calls) >= 1
+        first_kwargs = all_calls[0].kwargs
+        assert first_kwargs.get("builder_address") == builder_addr, (
+            f"Expected builder_address={builder_addr} in kwargs, "
+            f"got kwargs={first_kwargs}"
+        )
+
+    @pytest.mark.asyncio
+    @patch("src.utils.settings.get_hl_config")
+    async def test_approval_requires_configured_builder_address(
+        self, mock_hl, client, auth_headers, session_factory, user
+    ):
+        """If the server has no builder address configured, we cannot confirm
+        any approval — return a clear error instead of silently checking
+        against an empty builder."""
+        mock_hl.return_value = {"builder_address": "", "builder_fee": 10, "referral_code": ""}
+
+        async with session_factory() as session:
+            session.add(ExchangeConnection(
+                user_id=user.id, exchange_type="hyperliquid",
+                api_key_encrypted=encrypt_value(VALID_WALLET),
+                api_secret_encrypted=encrypt_value(VALID_PRIVKEY),
+            ))
+            await session.commit()
+
+        resp = await client.post(
+            "/api/config/hyperliquid/confirm-builder-approval",
+            json={},
+            headers=auth_headers,
+        )
+        assert resp.status_code == 400
+
 
 # ===========================================================================
 # 18. POST /api/config/hyperliquid/verify-referral
