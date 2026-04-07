@@ -165,22 +165,36 @@ async def get_portfolio_positions(
             bot_cache[bot.id] = bot
 
     # Batch pre-fetch klines for trailing stop calculation (avoid N+1 Binance API calls).
-    # Cache keys use raw symbol format (t.symbol) — matches lookup in trades.py.
-    klines_cache: dict[str, list] = {}
-    open_symbols = {
-        t.symbol for t in open_trades
-        if t.status == "open" and (
-            t.trailing_atr_override is not None
-            or (bot_cache.get(t.bot_config_id) and bot_cache[t.bot_config_id].strategy_type == "edge_indicator")
-        )
-    }
-    if open_symbols:
+    # Cache is keyed by (symbol, interval) because different bots may use
+    # different kline_intervals (e.g. edge_indicator conservative uses 4h,
+    # standard uses 1h, liquidation_hunter uses 1h). Using the resolved per-bot
+    # interval guarantees the dashboard sees the same data as the live strategy.
+    from src.api.routers.trades import TRAILING_STOP_STRATEGIES
+    from src.strategy.base import resolve_strategy_params
+
+    klines_cache: dict[tuple[str, str], list] = {}
+    prefetch_keys: set[tuple[str, str]] = set()
+    for t in open_trades:
+        if t.status != "open":
+            continue
+        bot = bot_cache.get(t.bot_config_id) if t.bot_config_id else None
+        strat_type = bot.strategy_type if bot else None
+        has_strat_trailing = strat_type in TRAILING_STOP_STRATEGIES
+        has_override = t.trailing_atr_override is not None
+        if not has_strat_trailing and not has_override:
+            continue
+        strat_params_json = bot.strategy_params if bot else None
+        resolved = resolve_strategy_params(strat_type, strat_params_json)
+        interval = resolved.get("kline_interval", "1h")
+        prefetch_keys.add((t.symbol, interval))
+
+    if prefetch_keys:
         try:
             from src.data.market_data import MarketDataFetcher
             fetcher = MarketDataFetcher()
-            for sym in open_symbols:
+            for sym, interval in prefetch_keys:
                 try:
-                    klines_cache[sym] = await fetcher.get_binance_klines(sym, "1h", 30)
+                    klines_cache[(sym, interval)] = await fetcher.get_binance_klines(sym, interval, 30)
                 except Exception:
                     pass
             await fetcher.close()
