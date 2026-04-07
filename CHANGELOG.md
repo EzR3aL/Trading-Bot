@@ -9,6 +9,28 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [4.15.7] - 2026-04-07
+
+### Behoben
+- **Portfolio zeigt keine Demo-Trades wenn Connection nur Live-Keys hat (#141)** — User eLPresidente konfigurierte einen Bitget-Bot im **Demo-Modus**, seine Bitget-ExchangeConnection hatte aber nur **Live-Credentials**. Der Bot funktionierte (Bitget akzeptiert den Live-Key mit `paptrading: 1` Header für Simulated Trading), der Trade wurde korrekt als `demo_mode=true` in der DB gespeichert — aber im Dashboard/Portfolio war er **unsichtbar**.
+  
+  Ursache: `src/exchanges/factory.py::get_all_user_clients` erstellte exakt einen Client pro Exchange und bevorzugte Live-Credentials. Für eLPresidente entstand nur ein Live-Bitget-Client, der Live-Positionen abfragte (leer) — der Demo-Trade wurde nie gematched. Zusätzlich war `trade_lookup` in `portfolio.py` nur auf `(exchange, symbol, side)` gekeyed, ohne `demo_mode` — ein weiterer Punkt an dem Live/Demo-Trades kollidieren können.
+  
+  Fix: Die Factory gibt jetzt `list[tuple[exchange_type, demo_mode, client]]` zurück. Für jede Connection werden alle Modi erstellt, die die gespeicherten Credentials bauen können:
+  - Bitget: Live-Creds → Live + Demo-Client (via `paptrading` Header)
+  - BingX: Live-Creds → Live + Demo-Client (via VST-URL mit demselben Key)
+  - Hyperliquid: Demo = Testnet = separates Wallet → nur erstellt wenn dedizierte Demo-Keys vorhanden
+  - Weex / Bitunix: Keine Demo-Unterstützung → nur Live
+  
+  `portfolio.py::get_portfolio_positions` matched jetzt `(exchange, base_sym, side, demo_mode)` — ein User kann Live- und Demo-Trades auf demselben Symbol+Side unabhängig sehen. `get_portfolio_allocation` dedupliziert auf eine Balance pro Exchange (bevorzugt Live), damit die Pie-Chart nicht doppelt zählt.
+
+  Der Bot-Trading-Pfad war nie betroffen — `bot_worker.py:187-199` baut seine eigenen Clients mit expliziten kwargs.
+
+### Hinzugefügt
+- `tests/unit/exchanges/test_get_all_user_clients.py` — 10 neue Tests inkl. parametrisierter Capability-Matrix (Bitget/BingX Header-Demo, Hyperliquid nur mit dedizierten Keys, Weex/Bitunix nur Live) und einem expliziten Regression-Test für das eLPresidente-Szenario.
+
+---
+
 ## [4.15.6] - 2026-04-07
 
 ### Geändert
