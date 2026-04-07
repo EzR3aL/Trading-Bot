@@ -728,8 +728,16 @@ class BingXClient(ExchangeClient):
     ) -> Optional[dict]:
         """Place a trailing stop order on BingX.
 
-        Uses TRAILING_STOP_MARKET order type with activationPrice and
-        callbackRate (trail percentage).
+        Uses TRAILING_STOP_MARKET order type with ``activationPrice`` (the
+        price at which the trail starts) and ``priceRate`` (callback rate in
+        fractional form, e.g. 0.031 for 3.10%).
+
+        BingX rejects orders that send both ``price`` and ``priceRate`` (error
+        109400) because ``price`` means "trail distance in USDT" — an
+        alternative to ``priceRate`` rather than an activation trigger. The
+        correct field for activation is ``activationPrice``. Refer to
+        https://github.com/BingX-API/BingX-swap-api-doc/issues/28 for the
+        official confirmation.
         """
         # Closing side is opposite of position side
         close_side = SIDE_SELL if hold_side == "long" else SIDE_BUY
@@ -744,7 +752,7 @@ class BingXClient(ExchangeClient):
             "positionSide": position_side,
             "type": ORDER_TYPE_TRAILING_STOP_MARKET,
             "quantity": str(self._round_quantity(size)),
-            "price": str(trigger_price),
+            "activationPrice": str(trigger_price),
             "priceRate": str(round(callback_ratio / 100, 4)),
         }
 
@@ -755,7 +763,7 @@ class BingXClient(ExchangeClient):
             order_id = str(order_data.get("orderId", ""))
 
         logger.info(
-            "Trailing stop placed on BingX: %s %s size=%s callback=%.2f%% trigger=$%.2f (orderId=%s)",
+            "Trailing stop placed on BingX: %s %s size=%s callback=%.2f%% activation=$%.2f (orderId=%s)",
             symbol, hold_side, size, callback_ratio, trigger_price, order_id,
         )
         return {"orderId": order_id}
