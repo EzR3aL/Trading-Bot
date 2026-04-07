@@ -120,6 +120,38 @@ ERR_REFERRAL_NOT_FOUND = "Referral nicht gefunden. Bitte registriere dich zuerst
 ERR_REFERRAL_NOT_FOUND_EN = "Referral not found. Please register first via https://app.hyperliquid.xyz/join/{referral_code}"
 ERR_REFERRAL_CHECK_FAILED = "Referral-Prüfung fehlgeschlagen. Siehe Server-Logs."
 ERR_REFERRAL_CHECK_FAILED_EN = "Referral check failed. See server logs."
+ERR_REFERRAL_DEPOSIT_NEEDED = (
+    "Dein Wallet {wallet_short} hat noch kein Guthaben auf Hyperliquid. "
+    "Zahle mindestens 5 USDC via Arbitrum Bridge ein "
+    "(https://app.hyperliquid.xyz/deposit), dann wird der Referrer {referral_code} "
+    "automatisch gebunden. Wichtig: Weniger als 5 USDC gehen verloren."
+)
+ERR_REFERRAL_DEPOSIT_NEEDED_EN = (
+    "Your wallet {wallet_short} has no balance on Hyperliquid yet. "
+    "Deposit at least 5 USDC via the Arbitrum bridge "
+    "(https://app.hyperliquid.xyz/deposit), the {referral_code} referrer will "
+    "be bound automatically. Warning: Deposits below 5 USDC will be lost."
+)
+ERR_REFERRAL_ENTER_CODE_NEEDED = (
+    "Dein Wallet {wallet_short} existiert auf Hyperliquid (Balance ${account_value:.2f}) "
+    "aber ohne Referrer. Öffne https://app.hyperliquid.xyz/referrals, klicke 'Enter Code' "
+    "und trage {referral_code} ein. Danach hier erneut prüfen."
+)
+ERR_REFERRAL_ENTER_CODE_NEEDED_EN = (
+    "Your wallet {wallet_short} exists on Hyperliquid (balance ${account_value:.2f}) "
+    "but has no referrer set. Open https://app.hyperliquid.xyz/referrals, click 'Enter Code' "
+    "and enter {referral_code}. Then re-check here."
+)
+ERR_REFERRAL_WRONG_CODE = (
+    "Dein Wallet {wallet_short} wurde über einen anderen Referrer registriert "
+    "(gefunden: {found_code}, erwartet: {referral_code}). Referrer-Änderungen sind "
+    "auf Hyperliquid nicht möglich — bitte neues Wallet mit unserem Link verwenden."
+)
+ERR_REFERRAL_WRONG_CODE_EN = (
+    "Your wallet {wallet_short} was registered via a different referrer "
+    "(found: {found_code}, expected: {referral_code}). Hyperliquid does not "
+    "allow changing the referrer — please use a new wallet with our link."
+)
 ERR_REVENUE_SUMMARY_FAILED = "Umsatzübersicht konnte nicht geladen werden. Siehe Server-Logs."
 ERR_REVENUE_SUMMARY_FAILED_EN = "Revenue summary could not be loaded. See server logs."
 
