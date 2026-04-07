@@ -765,6 +765,7 @@
   },
   "hlSetup": {
     "title": "Hyperliquid einrichten",
+    "subtitle": "Schließe alle Schritte ab um mit Hyperliquid zu handeln",
     "ready": "Hyperliquid ist bereit! Du kannst jetzt Bots erstellen und starten.",
     "walletConnected": "Wallet verbunden",
     "affiliateVerified": "Affiliate verifiziert",
