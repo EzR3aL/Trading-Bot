@@ -9,6 +9,28 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [4.15.10] - 2026-04-07
+
+### Behoben
+- **User wurden ständig ausgeloggt — Race Condition bei Refresh-Token-Rotation (#147)** — User auf Mobile (PWA) und Desktop beschwerten sich, dass sie sich praktisch täglich neu anmelden mussten, obwohl Access-TTL=24h und Refresh-TTL=30d eigentlich lang genug waren.
+  
+  Root cause: der Refresh-Endpoint rotierte den Refresh-Token bei jedem Call (klassisches Rotating-Refresh-Pattern). Unter parallelen Refresh-Anfragen — z.B. PWA wake-up `visibilitychange` + gleichzeitig ein API-Call der 401 wirft, oder zwei Browser-Tabs die simultan refreshen — race condition: beide Requests lesen denselben Session-Row, beide erstellen neue Tokens, beide updaten die DB. Browser-Cookie hat Token X, DB-Hash hat Token Y. Nächster Refresh schlägt fehl → Forced Logout.
+  
+  Fix:
+  1. **Refresh-Token-Rotation entfernt**. Der Refresh-Endpoint stellt nur noch ein neues Access-Token aus. Der Refresh-Token-Cookie bleibt unverändert; der DB-Session-Row bekommt nur `last_activity=NOW()`. Trade-off: bei kompromittiertem Refresh-Token ist das Theft-Window jetzt die volle Refresh-TTL — für unser Threat-Model (httpOnly + secure Cookie hinter TLS) akzeptabel.
+  2. **Access-TTL** von 24h → **7 Tage** erhöht (`ACCESS_TOKEN_EXPIRE_MINUTES = 10080`)
+  3. **Refresh-TTL** von 30d → **90 Tage** erhöht (`REFRESH_TOKEN_EXPIRE_DAYS = 90`)
+  4. Frontend `DEFAULT_TOKEN_LIFETIME_S` (authStore.ts) und der Fallback in `client.ts::doRefresh` an die neuen Werte angepasst.
+  
+  Auswirkung: Bei normalem Gebrauch sieht ein User nur dann einen Logout, wenn er explizit ausloggt, sein Passwort ändert (token_version-Bump) oder 90 Tage offline war.
+
+### Tests
+- 2 bestehende `TestRefreshEndpointLogic` Tests aktualisiert (`test_refresh_with_matching_token_version_succeeds`, `test_refresh_new_tokens_contain_updated_user_data`) — Refresh-Endpoint setzt jetzt 1 statt 2 Cookies.
+- `test_refresh_with_valid_refresh_token_returns_new_tokens` umbenannt zu `test_refresh_with_valid_refresh_token_returns_new_access_only`.
+- 18/18 in `TestRefreshEndpointLogic` + `TestJwtHandler` grün.
+
+---
+
 ## [4.15.9] - 2026-04-07
 
 ### Hinzugefügt

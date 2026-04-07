@@ -665,8 +665,9 @@ class TestRefreshEndpointLogic:
     """Unit tests for the refresh token endpoint logic."""
 
     @pytest.mark.asyncio
-    async def test_refresh_with_valid_refresh_token_returns_new_tokens(self):
-        """A valid refresh token should return new access and refresh tokens."""
+    async def test_refresh_with_valid_refresh_token_returns_new_access_only(self):
+        """A valid refresh request returns a new access token but does NOT
+        rotate the refresh token (#147 — rotation race caused logouts)."""
         from src.api.routers.auth import refresh_token as refresh_endpoint
         from src.api.schemas.auth import RefreshRequest
 
@@ -687,8 +688,12 @@ class TestRefreshEndpointLogic:
 
         assert result.access_token is not None
         assert result.token_type == "bearer"
-        # Refresh token + access token are set as httpOnly cookies
-        assert mock_resp.set_cookie.call_count == 2
+        # Only the access cookie is rotated; the refresh cookie stays put
+        # to avoid the multi-tab race that locked out users.
+        assert mock_resp.set_cookie.call_count == 1
+        cookie_call = mock_resp.set_cookie.call_args
+        cookie_key = cookie_call.kwargs.get("key") or cookie_call.args[0]
+        assert "access" in str(cookie_key).lower()
 
     @pytest.mark.asyncio
     async def test_refresh_with_cookie_and_no_body_succeeds(self):
@@ -833,7 +838,12 @@ class TestRefreshEndpointLogic:
 
     @pytest.mark.asyncio
     async def test_refresh_with_matching_token_version_succeeds(self):
-        """A refresh token with tv == user.token_version should succeed."""
+        """A refresh token with tv == user.token_version should succeed.
+
+        Per the no-rotation policy (#147), only the access cookie is set —
+        the refresh cookie stays untouched so multi-tab and PWA wake-up
+        races can't lock the user out.
+        """
         from src.api.routers.auth import refresh_token as refresh_endpoint
         from src.api.schemas.auth import RefreshRequest
 
@@ -852,11 +862,16 @@ class TestRefreshEndpointLogic:
         mock_resp = MagicMock()
         result = await refresh_endpoint(request=mock_request, response=mock_resp, body=body, refresh_token_cookie=None, db=mock_db)
         assert result.access_token is not None
-        assert mock_resp.set_cookie.call_count == 2
+        # Only the access cookie — no rotation
+        assert mock_resp.set_cookie.call_count == 1
 
     @pytest.mark.asyncio
     async def test_refresh_new_tokens_contain_updated_user_data(self):
-        """New tokens from refresh should contain the user's current data."""
+        """New access token from refresh should contain the user's current data.
+
+        Refresh token is NOT rotated (#147), so we only verify the access
+        token contents and that exactly one cookie was set.
+        """
         from src.api.routers.auth import refresh_token as refresh_endpoint
         from src.api.schemas.auth import RefreshRequest
 
@@ -880,18 +895,14 @@ class TestRefreshEndpointLogic:
         access_payload = decode_token(result.access_token)
         assert access_payload["sub"] == "10"
         assert access_payload["role"] == "admin"
-        assert access_payload["tv"] == 7  # unchanged: no rotation on refresh
+        assert access_payload["tv"] == 7
         assert access_payload["type"] == "access"
 
-        # Verify cookies were set (access_token + refresh_token)
-        assert mock_resp.set_cookie.call_count == 2
-        # Get the last set_cookie call (refresh_token cookie)
-        cookie_call = mock_resp.set_cookie.call_args_list[-1]
-        refresh_cookie_value = cookie_call.kwargs.get("value") or cookie_call[1].get("value", "")
-        refresh_payload = decode_token(refresh_cookie_value)
-        assert refresh_payload["sub"] == "10"
-        assert refresh_payload["tv"] == 7  # unchanged: no rotation on refresh
-        assert refresh_payload["type"] == "refresh"
+        # Only the access cookie was set; refresh cookie was NOT rotated
+        assert mock_resp.set_cookie.call_count == 1
+        cookie_call = mock_resp.set_cookie.call_args
+        cookie_key = cookie_call.kwargs.get("key") or cookie_call.args[0]
+        assert "access" in str(cookie_key).lower()
 
 
 # ============================================================================
