@@ -9,6 +9,36 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [4.15.4] - 2026-04-07
+
+### Behoben
+- **Hyperliquid Referral-Verifikation zeigte unbrauchbare Fehlermeldung (#135)** — User (z.B. eLPresidente) sahen beim Klick auf "Bereits registriert? Jetzt prüfen" nur `Referral nicht gefunden. Bitte registriere dich zuerst über https://app.hyperliquid.xyz/join/TRADINGDEPARTMENT`, ohne Hinweis WAS sie tatsächlich tun müssen. Ursache: Der Endpoint meldete einen generischen Fehler, ohne zu unterscheiden zwischen (a) Wallet hat noch kein Guthaben auf HL, (b) Wallet hat Guthaben aber keinen Referrer, (c) Wallet wurde über anderen Referrer registriert. Zusätzlich lief die Abfrage für Demo-User gegen Hyperliquid-Testnet, obwohl Referrals ein reines Mainnet-Konzept sind.
+
+  Fix: `POST /api/config/hyperliquid/verify-referral` gibt jetzt bei Fehler eine strukturierte JSON-Detail-Response zurück mit:
+  - `required_action`: `DEPOSIT_NEEDED` | `ENTER_CODE_MANUALLY` | `WRONG_REFERRER` | `VERIFIED`
+  - `wallet_address` + `wallet_short`: welches Wallet geprüft wurde
+  - `account_value_usd` + `cum_volume_usd`: aktueller HL-Kontostand und Handelsvolumen
+  - `referred_by`: rohe Referrer-Info von HL
+  - `min_deposit_usdc`: 5.0 (Hyperliquids Hard-Minimum)
+  - `deposit_url`, `enter_code_url`: konkrete nächste-Schritte-Links
+  
+  Frontend `HyperliquidSetup.tsx` rendert jetzt pro Action-Typ einen passenden Anleitungs-Block mit nummerierten Schritten:
+  - **DEPOSIT_NEEDED**: "Zahle mindestens 5 USDC via Arbitrum Bridge ein (weniger geht verloren!)"
+  - **ENTER_CODE_MANUALLY**: "Öffne https://app.hyperliquid.xyz/referrals → Enter Code → TRADINGDEPARTMENT"
+  - **WRONG_REFERRER**: Erklärt dass HL keine nachträgliche Referrer-Änderung zulässt
+  
+  Außerdem: `verify-referral` und `referral-status` forcieren jetzt Mainnet (neuer Helper `create_hl_mainnet_read_client` in `src/services/config_service.py`), weil HL-Referrals nur dort existieren. Der `mode`-Query-Parameter auf `referral-status` wird für Rückwärtskompatibilität akzeptiert aber ignoriert.
+
+### Hinzugefügt
+- `src/services/config_service.py::create_hl_mainnet_read_client()` — Mainnet-only HL-Client für read-only Queries (Referral, User-State).
+- `src/exchanges/hyperliquid/client.py::HyperliquidClient.get_user_state()` — direkter `user_state`-Query für Balance-Diagnose.
+- `src/errors.py`: drei neue Fehler-Konstanten mit Platzhaltern für wallet/account/code.
+- `src/api/routers/config_hyperliquid.py`: Konstante `HL_MIN_DEPOSIT_USDC = 5.0` und Action-Enum-Konstanten.
+- i18n-Keys in `frontend/src/i18n/{de,en}.json` für alle Diagnose-Texte (Step-by-Step-Anleitungen).
+- 5 neue Tests in `tests/unit/api/test_config_router_extra.py` für alle Diagnose-Pfade: `test_referral_deposit_needed`, `test_referral_enter_code_needed`, `test_referral_wrong_referrer`, `test_referral_uses_mainnet_regardless_of_demo`, plus aktualisierter `test_referral_found`.
+
+---
+
 ## [4.15.3] - 2026-04-07
 
 ### Behoben
