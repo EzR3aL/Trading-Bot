@@ -9,6 +9,22 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [4.15.6] - 2026-04-07
+
+### Geändert
+- **Hyperliquid Setup UI visuell überarbeitet (#137)** — User-Feedback: "alles ist links zentriert". Die flache, lineare Checkliste ohne visuelle Hierarchie wurde durch ein hierarchisches Layout ersetzt:
+  - Header-Bereich mit prominentem Wallet-Icon-Badge, Titel, Subtitel und farbkodiertem Status-Pill (amber bei pending, emerald bei ready)
+  - Numerierte Schritt-Kacheln (`01`, `02`, `03`) statt Checkbox-Liste, mit farbkodiertem Zustand: emerald (done), amber (active), muted (pending)
+  - Aktive Action-Cards mit Amber-Border und Glow-Effekt heben hervor was der User als nächstes tun muss
+  - Buttons sind jetzt `py-3` mit Emerald-Shadow für mehr Präsenz
+  - Diagnose-Block (bei Referral-Fehler) ist aufgeräumt: Error-Banner oben, 2×2-Grid für Wallet/Balance/Volume/Referrer, darunter der Action-spezifische Schritt-Block mit besserem Step-Styling
+  - Wallet-Adresse und Balance-Werte sind in uppercase labels + large values strukturiert (stärkere Lesbarkeit)
+  - Neue `hlSetup.subtitle` i18n Keys (de + en)
+
+  Keine Funktionsänderung — rein kosmetisch und Layout-strukturierend.
+
+---
+
 ## [4.15.5] - 2026-04-07
 
 ### Behoben
