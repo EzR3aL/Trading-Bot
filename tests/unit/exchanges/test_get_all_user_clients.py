@@ -76,32 +76,31 @@ async def test_returns_list_of_tuples(mock_create):
 
 @pytest.mark.asyncio
 @patch("src.exchanges.factory.create_exchange_client")
-async def test_bitget_live_only_produces_both_modes(mock_create):
-    """Regression for #141: Bitget supports demo via header on the live key,
-    so a user with only live credentials must still get a demo client."""
+async def test_bitget_live_only_produces_only_live(mock_create):
+    """Per #145: live and demo are strictly separate slots. A Bitget
+    connection with only live credentials must NOT auto-spawn a demo
+    client via the paptrading header — that was the #141 behavior the
+    user explicitly asked us to revert."""
     mock_create.return_value = MagicMock(name="client")
     db = await _mock_db_with([_mock_connection("bitget", has_live=True)])
 
     result = await get_all_user_clients(user_id=1, db=db)
 
     modes = {(ex, demo) for ex, demo, _ in result}
-    assert ("bitget", False) in modes
-    assert ("bitget", True) in modes
-    assert len(result) == 2
+    assert modes == {("bitget", False)}
 
 
 @pytest.mark.asyncio
 @patch("src.exchanges.factory.create_exchange_client")
-async def test_bingx_live_only_produces_both_modes(mock_create):
-    """BingX VST uses the same key against a separate URL → both modes."""
+async def test_bingx_live_only_produces_only_live(mock_create):
+    """Same separation rule for BingX (#145)."""
     mock_create.return_value = MagicMock(name="client")
     db = await _mock_db_with([_mock_connection("bingx", has_live=True, has_passphrase=False)])
 
     result = await get_all_user_clients(user_id=1, db=db)
 
     modes = {(ex, demo) for ex, demo, _ in result}
-    assert ("bingx", False) in modes
-    assert ("bingx", True) in modes
+    assert modes == {("bingx", False)}
 
 
 @pytest.mark.asyncio
@@ -167,9 +166,8 @@ async def test_both_live_and_dedicated_demo_credentials(mock_create):
 
 @pytest.mark.asyncio
 @patch("src.exchanges.factory.create_exchange_client")
-async def test_multiple_connections_mixed_modes(mock_create):
-    """Several exchanges at once: Bitget (live-only, produces both),
-    Hyperliquid (demo-only), Weex (live-only, skipped demo)."""
+async def test_multiple_connections_strict_separation(mock_create):
+    """Several exchanges at once with strict live/demo separation (#145)."""
     mock_create.return_value = MagicMock(name="client")
     db = await _mock_db_with([
         _mock_connection("bitget", has_live=True),
@@ -181,10 +179,9 @@ async def test_multiple_connections_mixed_modes(mock_create):
 
     modes = {(ex, demo) for ex, demo, _ in result}
     assert modes == {
-        ("bitget", False),
-        ("bitget", True),  # from paptrading
-        ("hyperliquid", True),
-        ("weex", False),
+        ("bitget", False),       # only live, no auto-demo
+        ("hyperliquid", True),   # demo wallet only
+        ("weex", False),         # weex has no demo
     }
 
 
@@ -204,29 +201,25 @@ async def test_no_credentials_skipped(mock_create):
 @pytest.mark.asyncio
 @patch("src.exchanges.factory.create_exchange_client")
 async def test_elpresidente_scenario(mock_create):
-    """Full regression for the reported #141 scenario.
+    """Regression for eLPresidente's actual final state after the #145 cleanup.
 
-    User eLPresidente has:
-    - Hyperliquid demo connection
-    - Bitget live connection (but no bitget demo creds)
-    - A bot running on bitget in demo mode
+    After the DB cleanup his connection looks like this:
+    - Hyperliquid: demo wallet credentials only
+    - Bitget: demo credentials only (live columns nulled out)
 
-    The factory must produce a bitget demo client that the portfolio
-    endpoint can use to query his simulated trading positions.
+    With strict live/demo separation we expect exactly one demo client per
+    exchange — no auto-mirroring, no live clients.
     """
     mock_create.return_value = MagicMock(name="client")
     db = await _mock_db_with([
         _mock_connection("hyperliquid", has_demo=True, has_passphrase=False),
-        _mock_connection("bitget", has_live=True),
+        _mock_connection("bitget", has_demo=True),
     ])
 
     result = await get_all_user_clients(user_id=11, db=db)
 
     modes = {(ex, demo) for ex, demo, _ in result}
-    # Bitget demo must exist — otherwise the demo trade is invisible.
-    assert ("bitget", True) in modes, (
-        "Bitget demo client missing — demo bot trades on a live connection "
-        "will not appear in the portfolio view."
-    )
-    assert ("bitget", False) in modes
-    assert ("hyperliquid", True) in modes
+    assert modes == {
+        ("hyperliquid", True),
+        ("bitget", True),
+    }

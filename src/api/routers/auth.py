@@ -264,17 +264,19 @@ async def refresh_token(
 
     token_data = {"sub": str(user.id), "role": user.role, "tv": user_tv}
     access_token = create_access_token(token_data)
-    new_refresh = create_refresh_token(token_data)
 
-    # Rotate token cookies and update session hash in DB
+    # Issue a fresh access token but DO NOT rotate the refresh token. Rotating
+    # caused logouts under normal use because two parallel refresh requests
+    # (PWA wake-up + interceptor 401, multi-tab visibility events) raced on
+    # the same session row, leaving the browser with a token whose hash no
+    # longer existed in the DB. The next refresh would then fail and force a
+    # login. With httpOnly + secure cookies the theft window is small enough
+    # that we accept the trade-off.
     set_access_cookie(response, access_token)
-    set_refresh_cookie(response, new_refresh)
-    old_hash = _hash_token(raw_token)
-    new_hash = _hash_token(new_refresh)
     await db.execute(
         update(UserSession)
-        .where(UserSession.session_token_hash == old_hash)
-        .values(session_token_hash=new_hash, last_activity=datetime.now(timezone.utc))
+        .where(UserSession.session_token_hash == _hash_token(raw_token))
+        .values(last_activity=datetime.now(timezone.utc))
     )
     await db.commit()
 

@@ -9,6 +9,48 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [4.15.10] - 2026-04-07
+
+### Behoben
+- **User wurden ständig ausgeloggt — Race Condition bei Refresh-Token-Rotation (#147)** — User auf Mobile (PWA) und Desktop beschwerten sich, dass sie sich praktisch täglich neu anmelden mussten, obwohl Access-TTL=24h und Refresh-TTL=30d eigentlich lang genug waren.
+  
+  Root cause: der Refresh-Endpoint rotierte den Refresh-Token bei jedem Call (klassisches Rotating-Refresh-Pattern). Unter parallelen Refresh-Anfragen — z.B. PWA wake-up `visibilitychange` + gleichzeitig ein API-Call der 401 wirft, oder zwei Browser-Tabs die simultan refreshen — race condition: beide Requests lesen denselben Session-Row, beide erstellen neue Tokens, beide updaten die DB. Browser-Cookie hat Token X, DB-Hash hat Token Y. Nächster Refresh schlägt fehl → Forced Logout.
+  
+  Fix:
+  1. **Refresh-Token-Rotation entfernt**. Der Refresh-Endpoint stellt nur noch ein neues Access-Token aus. Der Refresh-Token-Cookie bleibt unverändert; der DB-Session-Row bekommt nur `last_activity=NOW()`. Trade-off: bei kompromittiertem Refresh-Token ist das Theft-Window jetzt die volle Refresh-TTL — für unser Threat-Model (httpOnly + secure Cookie hinter TLS) akzeptabel.
+  2. **Access-TTL** von 24h → **7 Tage** erhöht (`ACCESS_TOKEN_EXPIRE_MINUTES = 10080`)
+  3. **Refresh-TTL** von 30d → **90 Tage** erhöht (`REFRESH_TOKEN_EXPIRE_DAYS = 90`)
+  4. Frontend `DEFAULT_TOKEN_LIFETIME_S` (authStore.ts) und der Fallback in `client.ts::doRefresh` an die neuen Werte angepasst.
+  
+  Auswirkung: Bei normalem Gebrauch sieht ein User nur dann einen Logout, wenn er explizit ausloggt, sein Passwort ändert (token_version-Bump) oder 90 Tage offline war.
+
+### Tests
+- 2 bestehende `TestRefreshEndpointLogic` Tests aktualisiert (`test_refresh_with_matching_token_version_succeeds`, `test_refresh_new_tokens_contain_updated_user_data`) — Refresh-Endpoint setzt jetzt 1 statt 2 Cookies.
+- `test_refresh_with_valid_refresh_token_returns_new_tokens` umbenannt zu `test_refresh_with_valid_refresh_token_returns_new_access_only`.
+- 18/18 in `TestRefreshEndpointLogic` + `TestJwtHandler` grün.
+
+---
+
+## [4.15.9] - 2026-04-07
+
+### Hinzugefügt
+- **Per-Mode Delete-Funktion für API-Keys (#145)** — User können jetzt ihre Live- oder Demo-API-Keys einzeln löschen, ohne die ganze Exchange-Verbindung zu verlieren. Neuer Endpoint `DELETE /api/config/exchange-connections/{exchange_type}/keys?mode={live|demo}` setzt die drei Spalten des angefragten Modus auf NULL. Wenn nach dem Löschen beide Modi leer sind, wird die Connection-Row komplett gelöscht damit das Frontend keine "configured"-Badge mehr zeigt. Spezialfall Hyperliquid: wenn alle Wallets entfernt sind, werden auch `builder_fee_approved` und `referral_verified` zurückgesetzt (waren an die alte Wallet-Adresse gebunden).
+- Frontend Delete-Button im Settings → API-Keys → KeyForm. Sichtbar nur wenn der Modus konfiguriert ist, mit Browser-Confirm-Dialog vor dem Löschen.
+- 6 neue Tests in `test_config_router.py::TestExchangeConnections`: Live-only, Demo-only, drops-row-when-both-empty, no-connection-404, wrong-mode-404, invalid-mode-422.
+
+### Geändert
+- **Strikte Live/Demo-Trennung wiederhergestellt (#145)** — Der in #141 eingeführte automatische Demo-Client aus Live-Credentials für Bitget/BingX (via `paptrading`-Header bzw. VST-URL) wurde rückgängig gemacht. User-Feedback: Live und Demo sollen unabhängige Slots bleiben. Wer Demo-Trading auf Bitget/BingX möchte, muss explizit Demo-Credentials hinterlegen — kein Auto-Mirroring mehr. Der `_EXCHANGES_WITH_HEADER_BASED_DEMO` Set in `factory.get_all_user_clients` wurde entfernt; die Funktion erstellt jetzt strikt nur Clients für Modi mit gespeicherten Credentials.
+- Frontend Settings-Page: Der in #143 hinzugefügte Banner ("Bei Bitget brauchst du nur EIN API-Key-Set...") wurde entfernt. Die zugehörigen i18n-Keys `headerDemoHint` (de + en) sind weg.
+
+### Anmerkung zu eLPresidente
+Sein offener Trade #79 bleibt mit dieser Änderung sichtbar, weil seine Connection nach dem direkten DB-Cleanup nur noch Demo-Credentials im Demo-Slot hat. Die Factory erstellt einen Demo-Client für Bitget, der den Trade matched.
+
+### Tests
+- 10 Factory-Tests in `test_get_all_user_clients.py` aktualisiert: bitget/bingx live-only ergeben jetzt nur einen Live-Client (keine zwei mehr); `test_elpresidente_scenario` spiegelt seinen tatsächlichen Post-Cleanup-Zustand wider.
+- 25/25 Tests in `TestExchangeConnections` grün.
+
+---
+
 ## [4.15.8] - 2026-04-07
 
 ### Behoben

@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { ChevronDown, Search, CheckCircle, Clock, Users, Activity, Wifi, WifiOff, Shield, Zap, BarChart3, TrendingUp, Database, Cpu, DollarSign, ExternalLink, Settings2, Info } from 'lucide-react'
+import { ChevronDown, Search, CheckCircle, Clock, Users, Activity, Wifi, WifiOff, Shield, Zap, BarChart3, TrendingUp, Database, Cpu, DollarSign, ExternalLink, Settings2 } from 'lucide-react'
 import Pagination from '../components/ui/Pagination'
 import api from '../api/client'
 import { getApiErrorMessage } from '../utils/api-error'
@@ -24,7 +24,7 @@ const ADMIN_TABS = [...BASE_TABS, 'connections', 'affiliateLinks', 'hyperliquid'
 function KeyForm({
   label, configured, keyValue, secretValue, passphraseValue,
   onKeyChange, onSecretChange, onPassphraseChange,
-  onSave, onTest, saving, t, showPassphrase, authType,
+  onSave, onTest, onDelete, saving, t, showPassphrase, authType,
 }: {
   label: string
   configured: boolean
@@ -36,6 +36,7 @@ function KeyForm({
   onPassphraseChange: (v: string) => void
   onSave: () => void
   onTest: () => void
+  onDelete?: () => void
   saving: boolean
   t: (key: string) => string
   showPassphrase?: boolean
@@ -110,7 +111,7 @@ function KeyForm({
           </div>
         )}
       </div>
-      <div className="flex gap-2">
+      <div className="flex flex-wrap gap-2">
         <button onClick={onSave} disabled={saving}
           className="px-3 py-1.5 text-sm bg-primary-600 text-white rounded hover:bg-primary-700 disabled:opacity-50">
           {t('settings.save')}
@@ -119,6 +120,12 @@ function KeyForm({
           className="px-3 py-1.5 text-sm bg-gray-700 text-white rounded hover:bg-gray-600 disabled:opacity-50">
           {t('settings.testConnection')}
         </button>
+        {onDelete && configured && (
+          <button onClick={onDelete} disabled={saving}
+            className="ml-auto px-3 py-1.5 text-sm bg-red-900/40 text-red-300 border border-red-700/40 rounded hover:bg-red-900/60 hover:border-red-600/60 disabled:opacity-50 transition-colors">
+            {t('settings.deleteKeys')}
+          </button>
+        )}
       </div>
     </div>
   )
@@ -286,6 +293,29 @@ export default function Settings() {
       const modeLabel = mode === 'demo' ? t('common.demo') : t('common.live')
       showMessage(t('settings.testConnectionResult', { mode: modeLabel, exchange: exchangeType, balance: res.data.balance }))
     } catch (err) { showMessage(getApiErrorMessage(err, t('settings.connectionFailed'))) }
+  }
+
+  const deleteKeys = async (exchangeType: string, mode: 'live' | 'demo') => {
+    const modeLabel = mode === 'demo' ? t('common.demo') : t('common.live')
+    if (!window.confirm(t('settings.confirmDeleteKeys', { mode: modeLabel, exchange: exchangeType }))) {
+      return
+    }
+    setSaving(true)
+    try {
+      await api.delete(`/config/exchange-connections/${exchangeType}/keys?mode=${mode}`)
+      const res = await api.get('/config/exchange-connections')
+      setConnections(res.data.connections || [])
+      // Clear the corresponding form fields if they had values
+      if (mode === 'live') {
+        updateForm(exchangeType, { apiKey: '', apiSecret: '', passphrase: '' })
+      } else {
+        updateForm(exchangeType, { demoApiKey: '', demoApiSecret: '', demoPassphrase: '' })
+      }
+      showMessage(t('settings.keysDeleted', { mode: modeLabel, exchange: exchangeType }))
+    } catch (err) {
+      showMessage(getApiErrorMessage(err, t('settings.deleteKeysFailed')))
+    }
+    setSaving(false)
   }
 
   const loadConnectionStatus = async () => {
@@ -617,16 +647,6 @@ export default function Settings() {
                     {/* Accordion Content */}
                     {isOpen && (
                       <div className="px-5 pb-5 pt-1 space-y-5 border-t border-white/[0.06]">
-                        {/* Header-based-demo hint: Bitget/BingX accept the same key for both
-                            modes via a request header. Users with only a demo key should NOT
-                            also paste it into the live form (#143). */}
-                        {(ex.name === 'bitget' || ex.name === 'bingx') && (
-                          <div className="flex items-start gap-2 p-3 bg-emerald-500/[0.06] border border-emerald-500/20 rounded-lg text-xs text-emerald-200">
-                            <Info size={14} className="shrink-0 mt-0.5 text-emerald-400" />
-                            <span>{t('settings.headerDemoHint', { exchange: ex.display_name })}</span>
-                          </div>
-                        )}
-
                         <KeyForm
                           label={ex.auth_type === 'eth_wallet' ? t('settings.mainnet') : t('common.live')}
                           configured={liveOk}
@@ -636,6 +656,7 @@ export default function Settings() {
                           onPassphraseChange={(v) => updateForm(ex.name, { passphrase: v })}
                           onSave={() => saveLiveKeys(ex.name)}
                           onTest={() => testConnection(ex.name, 'live')}
+                          onDelete={() => deleteKeys(ex.name, 'live')}
                           saving={saving} t={t} showPassphrase={showPass} authType={ex.auth_type}
                         />
 
@@ -651,6 +672,7 @@ export default function Settings() {
                               onPassphraseChange={(v) => updateForm(ex.name, { demoPassphrase: v })}
                               onSave={() => saveDemoKeys(ex.name)}
                               onTest={() => testConnection(ex.name, 'demo')}
+                              onDelete={() => deleteKeys(ex.name, 'demo')}
                               saving={saving} t={t} showPassphrase={showPass} authType={ex.auth_type}
                             />
                             {ex.auth_type === 'eth_wallet' && (
