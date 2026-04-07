@@ -778,7 +778,21 @@
     "pendingSteps": "{{count}} step(s) pending",
     "gateWarningTitle": "Setup required:",
     "gateWarningText": "Hyperliquid referral or builder fee not yet completed. Please finish the setup in Settings.",
-    "botCardWarning": "Setup required in Settings"
+    "botCardWarning": "Setup required in Settings",
+    "diagWallet": "Checked wallet",
+    "diagBalance": "HL balance",
+    "diagVolume": "Trading volume",
+    "diagReferrer": "Referrer",
+    "diagNoReferrer": "No referrer set",
+    "depositStepTitle": "You need to deposit USDC first",
+    "depositStep1": "Deposit at least {{min}} USDC via the Arbitrum bridge (less will be lost!)",
+    "depositStep2": "The TRADINGDEPARTMENT referrer will be bound automatically on your first deposit",
+    "depositStep3": "Then click 'Verify now' here again",
+    "enterCodeStepTitle": "Enter the referral code manually",
+    "enterCodeStep1": "Open the Hyperliquid referrals page",
+    "enterCodeStep2": "Click 'Enter Code' and enter {{code}}",
+    "enterCodeStep3": "Then click 'Verify now' here again",
+    "wrongReferrerHint": "Hyperliquid does not allow changing the referrer after the fact. You can create a new wallet and register via our link if you want the discount."
   },
   "editPosition": {
     "title": "Edit Position",

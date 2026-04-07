@@ -135,6 +135,37 @@ def create_hl_client(conn: ExchangeConnection, use_demo: bool):
         )
 
 
+def create_hl_mainnet_read_client(conn: ExchangeConnection):
+    """Create a mainnet-only HyperliquidClient for read-only queries.
+
+    Hyperliquid referrals and account state live on mainnet regardless of
+    whether the user is running in demo (testnet) mode. For reads like
+    ``get_referral_info`` / ``get_user_state`` we must always query mainnet.
+
+    Uses whichever credentials the user has (preferring live, falling back
+    to demo wallet address + secret since the EVM address is the same on
+    mainnet and testnet).
+    """
+    from src.errors import ERR_NO_HL_CONNECTION
+    from src.exchanges.factory import create_exchange_client
+
+    if conn.api_key_encrypted:
+        api_key = decrypt_value(conn.api_key_encrypted)
+        api_secret = decrypt_value(conn.api_secret_encrypted)
+    elif conn.demo_api_key_encrypted:
+        api_key = decrypt_value(conn.demo_api_key_encrypted)
+        api_secret = decrypt_value(conn.demo_api_secret_encrypted)
+    else:
+        raise HTTPException(status_code=400, detail=ERR_NO_HL_CONNECTION)
+
+    return create_exchange_client(
+        exchange_type="hyperliquid",
+        api_key=api_key,
+        api_secret=api_secret,
+        demo_mode=False,  # force mainnet — referrals don't exist on testnet
+    )
+
+
 async def async_none():
     """Helper that returns None for asyncio.gather when a task is skipped."""
     return None

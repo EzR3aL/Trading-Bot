@@ -11,7 +11,7 @@ import { RainbowKitProvider, ConnectButton, darkTheme } from '@rainbow-me/rainbo
 import { useAccount, useWalletClient, useChainId } from 'wagmi'
 import '@rainbow-me/rainbowkit/styles.css'
 import { walletConfig } from '../../config/wallet'
-import { CheckCircle, Loader2, ExternalLink, Wallet, AlertTriangle } from 'lucide-react'
+import { CheckCircle, Loader2, ExternalLink, Wallet, AlertTriangle, Info } from 'lucide-react'
 import api from '../../api/client'
 
 const queryClient = new QueryClient()
@@ -31,6 +31,26 @@ interface BuilderConfig {
   needs_referral: boolean
 }
 
+/**
+ * Structured diagnostic returned by the backend's verify-referral endpoint.
+ * Contains everything needed to render concrete "what to do next" instructions
+ * instead of a generic error string. See #135.
+ */
+interface ReferralDiagnostic {
+  error: string
+  required_action: 'DEPOSIT_NEEDED' | 'ENTER_CODE_MANUALLY' | 'WRONG_REFERRER' | 'VERIFIED'
+  wallet_address: string
+  wallet_short: string
+  account_value_usd: number
+  cum_volume_usd: number
+  referred_by: unknown
+  referral_code: string
+  referral_link: string
+  min_deposit_usdc: number
+  deposit_url: string
+  enter_code_url: string
+}
+
 interface HyperliquidSetupProps {
   /** Called when all setup steps are complete */
   onComplete?: () => void
@@ -45,6 +65,7 @@ function HyperliquidSetupInner({ onComplete }: HyperliquidSetupProps) {
   const [config, setConfig] = useState<BuilderConfig | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [referralDiag, setReferralDiag] = useState<ReferralDiagnostic | null>(null)
 
   // Step states
   const [referralVerified, setReferralVerified] = useState(false)
@@ -77,13 +98,21 @@ function HyperliquidSetupInner({ onComplete }: HyperliquidSetupProps) {
 
   const handleVerifyReferral = async () => {
     setError(null)
+    setReferralDiag(null)
     setVerifyingReferral(true)
     try {
       await api.post('/config/hyperliquid/verify-referral')
       setReferralVerified(true)
     } catch (err: unknown) {
-      const e = err as { response?: { data?: { detail?: string } } }
-      setError(e.response?.data?.detail || t('builderFee.referralFailed'))
+      const e = err as { response?: { data?: { detail?: ReferralDiagnostic | string } } }
+      const detail = e.response?.data?.detail
+      if (detail && typeof detail === 'object' && 'required_action' in detail) {
+        // Structured diagnostic from backend — render a rich error block
+        setReferralDiag(detail as ReferralDiagnostic)
+        setError(null)
+      } else {
+        setError((typeof detail === 'string' ? detail : null) || t('builderFee.referralFailed'))
+      }
     } finally {
       setVerifyingReferral(false)
     }
@@ -341,10 +370,103 @@ function HyperliquidSetupInner({ onComplete }: HyperliquidSetupProps) {
         </div>
       )}
 
-      {/* Error display */}
+      {/* Error display — plain string fallback */}
       {error && (
         <div className="mt-3 bg-red-900/30 border border-red-700/50 rounded-lg p-3 text-sm text-red-300">
           {error}
+        </div>
+      )}
+
+      {/* Structured referral diagnostic — rich error with next-step guidance */}
+      {referralDiag && (
+        <div className="mt-3 bg-red-900/20 border border-red-700/40 rounded-lg p-3 space-y-3">
+          <div className="flex items-start gap-2">
+            <AlertTriangle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
+            <p className="text-sm text-red-300 leading-relaxed">{referralDiag.error}</p>
+          </div>
+
+          {/* Wallet + HL account state */}
+          <div className="grid grid-cols-2 gap-2 text-xs bg-black/30 rounded p-2">
+            <div>
+              <div className="text-gray-500">{t('hlSetup.diagWallet')}</div>
+              <div className="text-white font-mono break-all">{referralDiag.wallet_short}</div>
+            </div>
+            <div>
+              <div className="text-gray-500">{t('hlSetup.diagBalance')}</div>
+              <div className={referralDiag.account_value_usd > 0 ? 'text-emerald-400' : 'text-amber-400'}>
+                ${referralDiag.account_value_usd.toFixed(2)}
+              </div>
+            </div>
+            <div>
+              <div className="text-gray-500">{t('hlSetup.diagVolume')}</div>
+              <div className="text-gray-300">${referralDiag.cum_volume_usd.toFixed(2)}</div>
+            </div>
+            <div>
+              <div className="text-gray-500">{t('hlSetup.diagReferrer')}</div>
+              <div className="text-gray-300">
+                {referralDiag.referred_by
+                  ? JSON.stringify(referralDiag.referred_by).slice(0, 24)
+                  : t('hlSetup.diagNoReferrer')}
+              </div>
+            </div>
+          </div>
+
+          {/* Action-specific next steps */}
+          {referralDiag.required_action === 'DEPOSIT_NEEDED' && (
+            <div className="space-y-2 border-t border-red-700/30 pt-3">
+              <div className="flex items-start gap-2 text-xs">
+                <Info className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
+                <div className="text-gray-300">
+                  <div className="font-semibold text-amber-400 mb-1">{t('hlSetup.depositStepTitle')}</div>
+                  <ol className="list-decimal list-inside space-y-1 text-[11px] text-gray-400">
+                    <li>{t('hlSetup.depositStep1', { min: referralDiag.min_deposit_usdc })}</li>
+                    <li>{t('hlSetup.depositStep2')}</li>
+                    <li>{t('hlSetup.depositStep3')}</li>
+                  </ol>
+                </div>
+              </div>
+              <a
+                href={referralDiag.deposit_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md bg-emerald-900/40 border border-emerald-700/30 text-emerald-400 hover:text-emerald-300 hover:bg-emerald-900/60 text-xs font-mono transition-colors"
+              >
+                {referralDiag.deposit_url.replace('https://', '')}
+                <ExternalLink className="w-3 h-3 shrink-0" />
+              </a>
+            </div>
+          )}
+
+          {referralDiag.required_action === 'ENTER_CODE_MANUALLY' && (
+            <div className="space-y-2 border-t border-red-700/30 pt-3">
+              <div className="flex items-start gap-2 text-xs">
+                <Info className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
+                <div className="text-gray-300">
+                  <div className="font-semibold text-amber-400 mb-1">{t('hlSetup.enterCodeStepTitle')}</div>
+                  <ol className="list-decimal list-inside space-y-1 text-[11px] text-gray-400">
+                    <li>{t('hlSetup.enterCodeStep1')}</li>
+                    <li>{t('hlSetup.enterCodeStep2', { code: referralDiag.referral_code })}</li>
+                    <li>{t('hlSetup.enterCodeStep3')}</li>
+                  </ol>
+                </div>
+              </div>
+              <a
+                href={referralDiag.enter_code_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md bg-emerald-900/40 border border-emerald-700/30 text-emerald-400 hover:text-emerald-300 hover:bg-emerald-900/60 text-xs font-mono transition-colors"
+              >
+                {referralDiag.enter_code_url.replace('https://', '')}
+                <ExternalLink className="w-3 h-3 shrink-0" />
+              </a>
+            </div>
+          )}
+
+          {referralDiag.required_action === 'WRONG_REFERRER' && (
+            <div className="border-t border-red-700/30 pt-3 text-xs text-gray-400">
+              {t('hlSetup.wrongReferrerHint')}
+            </div>
+          )}
         </div>
       )}
     </div>

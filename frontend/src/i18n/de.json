@@ -778,7 +778,21 @@
     "pendingSteps": "{{count}} Schritt(e) ausstehend",
     "gateWarningTitle": "Einrichtung erforderlich:",
     "gateWarningText": "Hyperliquid Referral oder Builder Fee sind noch nicht abgeschlossen. Bitte schließe die Einrichtung in den Einstellungen ab.",
-    "botCardWarning": "Einrichtung in Einstellungen erforderlich"
+    "botCardWarning": "Einrichtung in Einstellungen erforderlich",
+    "diagWallet": "Geprüftes Wallet",
+    "diagBalance": "HL-Guthaben",
+    "diagVolume": "Handelsvolumen",
+    "diagReferrer": "Referrer",
+    "diagNoReferrer": "Kein Referrer gesetzt",
+    "depositStepTitle": "Du musst zuerst USDC einzahlen",
+    "depositStep1": "Mindestens {{min}} USDC via Arbitrum Bridge einzahlen (weniger geht verloren!)",
+    "depositStep2": "Der Referrer TRADINGDEPARTMENT wird automatisch beim ersten Deposit gebunden",
+    "depositStep3": "Danach hier erneut auf 'Jetzt prüfen' klicken",
+    "enterCodeStepTitle": "Referral manuell eintragen",
+    "enterCodeStep1": "Öffne die Hyperliquid Referrals-Seite",
+    "enterCodeStep2": "Klicke 'Enter Code' und trage {{code}} ein",
+    "enterCodeStep3": "Danach hier erneut auf 'Jetzt prüfen' klicken",
+    "wrongReferrerHint": "Hyperliquid erlaubt keine nachträgliche Änderung des Referrers. Du kannst ein neues Wallet anlegen und mit unserem Link registrieren, wenn du den Rabatt möchtest."
   },
   "editPosition": {
     "title": "Position bearbeiten",

@@ -650,6 +650,22 @@ class HyperliquidClient(ExchangeClient):
             logger.warning(f"Failed to get referral info: {e}")
             return None
 
+    async def get_user_state(self, user_address: str = None) -> Optional[dict]:
+        """Raw ``user_state`` query — used for deposit / balance diagnostics.
+
+        Returns the full HL response dict with ``marginSummary``,
+        ``withdrawable``, ``assetPositions`` etc. Used by the referral
+        verification flow to distinguish "wallet never deposited" from
+        "wallet deposited but no referrer set".
+        """
+        addr = (user_address or self.wallet_address).lower()
+        try:
+            result = self._info.user_state(addr)
+            return result if isinstance(result, dict) else None
+        except Exception as e:
+            logger.warning(f"Failed to get user state: {e}")
+            return None
+
     async def check_affiliate_uid(self, uid: str) -> bool:
         """Check if a wallet address has been referred via our referral code.
 
