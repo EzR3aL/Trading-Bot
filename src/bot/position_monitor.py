@@ -111,8 +111,20 @@ class PositionMonitorMixin:
                     trade.highest_price = new_highest
                     await session.commit()
 
-            # Auto-place native trailing stop for existing positions (with backoff)
-            if not trade.native_trailing_stop and self._strategy and hasattr(self._strategy, '_p'):
+            # Auto-place native trailing stop for existing positions (with backoff).
+            # Only retry on exchanges that actually support native trailing; for
+            # Weex/Bitunix/Hyperliquid we rely entirely on the software trailing
+            # in strategy.should_exit so there's no point hitting the Binance
+            # klines API + exchange API every 10 minutes for a guaranteed no-op.
+            supports_native_trailing = getattr(
+                type(client), "SUPPORTS_NATIVE_TRAILING_STOP", False,
+            )
+            if (
+                supports_native_trailing
+                and not trade.native_trailing_stop
+                and self._strategy
+                and hasattr(self._strategy, '_p')
+            ):
                 async with self._trailing_stop_lock:
                     last_attempt = self._trailing_stop_backoff.get(trade.id)
                     should_retry = (

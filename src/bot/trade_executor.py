@@ -211,12 +211,22 @@ class TradeExecutorMixin:
                     signal.target_price = None
                     signal.stop_loss = None
 
-            # Place native trailing stop on exchange (if strategy provided params)
+            # Place native trailing stop on exchange (if strategy provided params
+            # and the exchange advertises native support). Exchanges without
+            # native trailing (Weex, Bitunix, Hyperliquid) are skipped entirely
+            # — the software trailing fallback in strategy.should_exit handles
+            # exits for those. The capability flag avoids both wasted API calls
+            # and misleading "placed" log lines for no-op attempts.
             trailing_placed = False
-            if signal.trailing_callback_pct and signal.trailing_trigger_price:
+            supports_native = getattr(type(client), "SUPPORTS_NATIVE_TRAILING_STOP", False)
+            if (
+                supports_native
+                and signal.trailing_callback_pct
+                and signal.trailing_trigger_price
+            ):
                 try:
                     await asyncio.sleep(0.3)
-                    await client.place_trailing_stop(
+                    trailing_result = await client.place_trailing_stop(
                         symbol=signal.symbol,
                         hold_side=side,
                         size=position_size,
@@ -224,12 +234,19 @@ class TradeExecutorMixin:
                         trigger_price=signal.trailing_trigger_price,
                         margin_mode=margin_mode,
                     )
-                    trailing_placed = True
-                    logger.info(
-                        "%s [%s] Native trailing stop placed: %s callback=%.2f%% trigger=$%.2f",
-                        log_prefix, mode_str, signal.symbol,
-                        signal.trailing_callback_pct, signal.trailing_trigger_price,
-                    )
+                    if trailing_result is not None:
+                        trailing_placed = True
+                        logger.info(
+                            "%s [%s] Native trailing stop placed: %s callback=%.2f%% trigger=$%.2f",
+                            log_prefix, mode_str, signal.symbol,
+                            signal.trailing_callback_pct, signal.trailing_trigger_price,
+                        )
+                    else:
+                        logger.debug(
+                            "%s [%s] Native trailing stop returned None for %s — "
+                            "software trailing will handle exit",
+                            log_prefix, mode_str, signal.symbol,
+                        )
                 except Exception as e:
                     logger.warning(
                         "%s [%s] Native trailing stop failed (software backup active): %s",
