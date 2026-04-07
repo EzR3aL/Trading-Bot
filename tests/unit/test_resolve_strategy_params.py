@@ -307,3 +307,209 @@ class TestComputeTrailingStopParity:
         # ATR≈400, threshold=400, gain=1403 >> threshold → active
         assert result.get("trailing_stop_active") is True
         assert result.get("trailing_stop_price") is not None
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Exchange-agnostic dashboard rendering (#133 follow-up)
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+@pytest.mark.asyncio
+class TestDashboardExchangeAgnostic:
+    """The dashboard _compute_trailing_stop must produce identical output for
+    the same trade data regardless of which exchange the trade lives on.
+
+    For Bitget/BingX bots, the computed trailing represents where the NATIVE
+    trailing on the exchange will fire. For Weex/Bitunix/Hyperliquid bots,
+    it represents where the SOFTWARE trailing in strategy.should_exit will
+    fire. In both cases the underlying calculation is identical (same ATR,
+    same profile multipliers, same highest_price) — the dashboard should
+    show matching numbers so users see consistent behavior regardless of
+    which exchange they picked.
+    """
+
+    async def test_trailing_computation_independent_of_exchange(self):
+        """The trailing stop calculation must NOT depend on exchange field.
+
+        _compute_trailing_stop does not receive the exchange — it only uses
+        strategy_type + strategy_params + trade. This test asserts that
+        contract by calling the function many times with different symbols
+        (one per exchange convention) but identical strategy settings, and
+        verifying the output shape is the same.
+        """
+        from src.api.routers.trades import _compute_trailing_stop
+
+        # Each exchange uses a slightly different symbol format, but the
+        # dashboard computation only cares about the strategy + highest_price.
+        symbols_per_exchange = {
+            "bitget": "ETHUSDT",
+            "bingx": "ETH-USDT",
+            "weex": "ETH/USDT:USDT",
+            "bitunix": "ETHUSDT",
+            "hyperliquid": "ETH",
+        }
+        # Shared klines with ATR large enough to activate conservative threshold
+        klines = [
+            _kline(close=2100 + i * 2, high=2100 + i * 2 + 30, low=2100 + i * 2)
+            for i in range(29)
+        ]
+
+        results = {}
+        for exchange, symbol in symbols_per_exchange.items():
+            trade = _FakeTrade(
+                side="long",
+                entry_price=2100.0,
+                highest_price=2200.0,
+                symbol=symbol,
+            )
+            klines_cache = {(symbol, "4h"): klines}
+            result = await _compute_trailing_stop(
+                trade,
+                strategy_type="edge_indicator",
+                strategy_params_json='{"risk_profile": "conservative"}',
+                klines_cache=klines_cache,
+            )
+            results[exchange] = result
+
+        # All exchanges must yield a fully populated, active trailing
+        for exchange, result in results.items():
+            assert result.get("trailing_stop_active") is True, (
+                f"{exchange}: trailing must be active for +100/2100 gain; got {result}"
+            )
+            assert result.get("can_close_at_loss") is False
+            assert result.get("trailing_stop_price") is not None
+            assert result.get("trailing_stop_distance_pct") is not None
+
+        # And the trailing_stop_price must be IDENTICAL across all five —
+        # the calculation only depends on highest_price + ATR + profile.
+        stop_prices = {ex: r["trailing_stop_price"] for ex, r in results.items()}
+        unique_stops = set(stop_prices.values())
+        assert len(unique_stops) == 1, (
+            f"Dashboard trailing stop diverges between exchanges: {stop_prices}. "
+            "The calculation must be exchange-agnostic."
+        )
+
+    async def test_software_trailing_calc_matches_check_atr_trailing_stop(self):
+        """The dashboard's _compute_trailing_stop must return the same stop
+        price that check_atr_trailing_stop (used by strategy.should_exit for
+        software trailing on all exchanges) would trigger on.
+
+        This is the critical invariant that protects Weex/Bitunix/Hyperliquid
+        users: they rely exclusively on software trailing, and the dashboard
+        is the only place they see the stop level. If the two calculations
+        diverge, the displayed stop is misleading.
+        """
+        from src.api.routers.trades import _compute_trailing_stop
+        from src.strategy.base import check_atr_trailing_stop
+
+        # Shared inputs
+        entry = 2100.0
+        highest = 2200.0
+        current_at_stop = 2109.99  # just below the trailing stop
+        atr_target = 30
+        klines = [
+            _kline(close=2100 + i * 2, high=2100 + i * 2 + atr_target, low=2100 + i * 2)
+            for i in range(29)
+        ]
+
+        # Dashboard side: compute displayed trailing stop
+        trade = _FakeTrade(side="long", entry_price=entry, highest_price=highest, symbol="ETHUSDT")
+        klines_cache = {("ETHUSDT", "4h"): klines}
+        dash_result = await _compute_trailing_stop(
+            trade,
+            strategy_type="edge_indicator",
+            strategy_params_json='{"risk_profile": "conservative"}',
+            klines_cache=klines_cache,
+        )
+
+        # Software trailing side: what check_atr_trailing_stop returns at the
+        # same current price — with the same conservative profile multipliers
+        should_exit, reason = check_atr_trailing_stop(
+            side="long",
+            entry_price=entry,
+            current_price=current_at_stop,
+            highest_price=highest,
+            klines=klines,
+            atr_period=14,
+            breakeven_atr=2.0,  # conservative
+            trail_atr=3.0,      # conservative
+        )
+
+        # Both must see the trailing as active/protecting the same zone.
+        assert dash_result.get("trailing_stop_active") is True
+        displayed_stop = dash_result["trailing_stop_price"]
+
+        # If current drops below displayed_stop, software trailing MUST fire.
+        # Test at exactly the displayed stop price to ensure they agree.
+        should_exit_at_stop, _ = check_atr_trailing_stop(
+            side="long",
+            entry_price=entry,
+            current_price=displayed_stop - 0.01,  # 1 cent below
+            highest_price=highest,
+            klines=klines,
+            atr_period=14,
+            breakeven_atr=2.0,
+            trail_atr=3.0,
+        )
+        assert should_exit_at_stop is True, (
+            f"Dashboard says stop at {displayed_stop}, but software trailing "
+            f"did not fire at {displayed_stop - 0.01}. The two calculations "
+            f"diverge — the dashboard display is misleading."
+        )
+
+        # And ABOVE the displayed stop, software trailing must NOT fire
+        should_exit_above, _ = check_atr_trailing_stop(
+            side="long",
+            entry_price=entry,
+            current_price=displayed_stop + 1.0,
+            highest_price=highest,
+            klines=klines,
+            atr_period=14,
+            breakeven_atr=2.0,
+            trail_atr=3.0,
+        )
+        assert should_exit_above is False, (
+            f"Software trailing fired ABOVE the displayed stop {displayed_stop}. "
+            f"The dashboard would show the position as safe while it is not."
+        )
+
+    async def test_short_trailing_exchange_agnostic(self):
+        """Same parity check for SHORT positions.
+
+        highest_price for shorts actually tracks the LOWEST price since entry
+        (see position_monitor.py:108 and check_atr_trailing_stop).
+        """
+        from src.api.routers.trades import _compute_trailing_stop
+
+        trade = _FakeTrade(
+            side="short",
+            entry_price=2100.0,
+            highest_price=2000.0,  # "highest" = lowest for shorts, +100 gain
+            symbol="ETHUSDT",
+        )
+        klines = [
+            _kline(close=2100 + i * 2, high=2100 + i * 2 + 30, low=2100 + i * 2)
+            for i in range(29)
+        ]
+        klines_cache = {("ETHUSDT", "4h"): klines}
+
+        result = await _compute_trailing_stop(
+            trade,
+            strategy_type="edge_indicator",
+            strategy_params_json='{"risk_profile": "conservative"}',
+            klines_cache=klines_cache,
+        )
+
+        # Conservative: breakeven_atr=2.0, trail_atr=3.0, ATR≈32 from the
+        # synthetic klines (True Range includes close-to-close gaps).
+        # entry - highest_price (lowest) = 100 > 2×32 → active.
+        assert result.get("trailing_stop_active") is True
+        # For short: trailing_stop = min(highest_price + trail_distance, entry)
+        # Must be strictly above the current "lowest price" (2000) so it can
+        # act as a ceiling, and strictly below/equal to entry (2100) to
+        # represent a protective breakeven floor.
+        stop = result["trailing_stop_price"]
+        assert 2000.0 < stop <= 2100.0, (
+            f"Short trailing stop must sit between lowest ({2000.0}) and "
+            f"entry ({2100.0}); got {stop}"
+        )
