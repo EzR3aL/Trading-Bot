@@ -145,11 +145,15 @@ async def get_portfolio_positions(
     )
     open_trades = open_trades_result.scalars().all()
 
-    # Build lookup: (exchange, base_symbol, side) -> trade + bot config
+    # Build lookup: (exchange, base_symbol, side, demo_mode) -> trade.
+    # demo_mode is part of the key so a user running both a live and a demo
+    # bot on the same symbol+side can see both positions independently — and
+    # more importantly so a demo trade doesn't collide with a live one when
+    # get_all_user_clients returns both modes for the same connection (#141).
     trade_lookup: dict[tuple, TradeRecord] = {}
     for t in open_trades:
         base_sym = normalize_symbol(t.symbol, t.exchange)
-        key = (t.exchange, base_sym, t.side)
+        key = (t.exchange, base_sym, t.side, bool(t.demo_mode))
         existing = trade_lookup.get(key)
         if existing is None or (t.entry_time and existing.entry_time and t.entry_time > existing.entry_time):
             trade_lookup[key] = t
@@ -203,20 +207,21 @@ async def get_portfolio_positions(
 
     positions: list[PortfolioPosition] = []
 
-    async def fetch_positions(exchange_type: str, client):
+    async def fetch_positions(exchange_type: str, demo_mode: bool, client):
         try:
             open_positions = await asyncio.wait_for(
                 client.get_open_positions(), timeout=10.0
             )
             for pos in open_positions:
-                # Match with DB trade for trailing stop info
+                # Match with DB trade including the client's mode so demo
+                # and live positions can coexist for the same symbol+side (#141)
                 base_sym = normalize_symbol(pos.symbol, exchange_type)
-                key = (exchange_type, base_sym, pos.side)
+                key = (exchange_type, base_sym, pos.side, demo_mode)
                 trade = trade_lookup.get(key)
                 if trade is None:
                     logger.debug(
-                        "No DB trade match: exchange=%s symbol=%s (base=%s) side=%s",
-                        exchange_type, pos.symbol, base_sym, pos.side,
+                        "No DB trade match: exchange=%s demo=%s symbol=%s (base=%s) side=%s",
+                        exchange_type, demo_mode, pos.symbol, base_sym, pos.side,
                     )
                 bot_name = None
                 ts_info: dict = {}
@@ -242,7 +247,7 @@ async def get_portfolio_positions(
                     leverage=pos.leverage,
                     margin=pos.margin,
                     bot_name=bot_name,
-                    demo_mode=trade.demo_mode if trade else False,
+                    demo_mode=trade.demo_mode if trade else demo_mode,
                     take_profit=trade.take_profit if trade else None,
                     stop_loss=trade.stop_loss if trade else None,
                     trailing_stop_active=ts_info.get("trailing_stop_active", False),
@@ -253,12 +258,18 @@ async def get_portfolio_positions(
                     can_close_at_loss=ts_info.get("can_close_at_loss"),
                 ))
         except asyncio.TimeoutError:
-            logger.warning(f"Position fetch timeout for {exchange_type}")
+            logger.warning(
+                f"Position fetch timeout for {exchange_type} "
+                f"({'demo' if demo_mode else 'live'})"
+            )
         except Exception as e:
-            logger.warning(f"Position fetch failed for {exchange_type}: {e}")
+            logger.warning(
+                f"Position fetch failed for {exchange_type} "
+                f"({'demo' if demo_mode else 'live'}): {e}"
+            )
 
     await asyncio.gather(
-        *(fetch_positions(ex, cl) for ex, cl in clients.items())
+        *(fetch_positions(ex, demo, cl) for ex, demo, cl in clients)
     )
 
     _cache_set(cache_key, positions)
@@ -329,6 +340,15 @@ async def get_portfolio_allocation(
     if not clients:
         return []
 
+    # For allocation we only want ONE balance per exchange — summing demo and
+    # live would double-count, and the pie chart is a capital-distribution
+    # view. Prefer the live client; fall back to demo if only demo exists.
+    per_exchange: dict[str, tuple[bool, object]] = {}
+    for exchange_type, demo_mode, client in clients:
+        existing = per_exchange.get(exchange_type)
+        if existing is None or (existing[0] and not demo_mode):
+            per_exchange[exchange_type] = (demo_mode, client)
+
     allocations: list[PortfolioAllocation] = []
 
     async def fetch_balance(exchange_type: str, client):
@@ -347,14 +367,22 @@ async def get_portfolio_allocation(
             logger.warning(f"Balance fetch failed for {exchange_type}: {e}")
 
     await asyncio.gather(
-        *(fetch_balance(ex, cl) for ex, cl in clients.items())
+        *(fetch_balance(ex, client) for ex, (_demo, client) in per_exchange.items())
     )
 
     _cache_set(cache_key, allocations)
     return allocations
 
 
-async def _get_all_user_clients(user_id: int, db: AsyncSession) -> dict:
-    """Load all exchange connections and create clients."""
+async def _get_all_user_clients(
+    user_id: int, db: AsyncSession,
+) -> list[tuple[str, bool, object]]:
+    """Load all exchange connections and create clients.
+
+    Returns a list of ``(exchange_type, demo_mode, client)`` tuples — one
+    entry per mode the user has credentials for. See
+    ``src.exchanges.factory.get_all_user_clients`` for the construction
+    rules, especially around header-based demo for Bitget / BingX.
+    """
     from src.exchanges.factory import get_all_user_clients
     return await get_all_user_clients(user_id, db)
