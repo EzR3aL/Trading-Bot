@@ -469,6 +469,12 @@
     "trailingStop": "Trailing Stop",
     "trailingStopProtecting": "Gewinn abgesichert",
     "builder": {
+      "copyTrading": {
+        "validateButton": "Wallet prüfen",
+        "tradesIn30d": "Trades in 30 Tagen",
+        "available": "Verfügbar",
+        "blockedNoSymbols": "Keines der zuletzt von dieser Wallet gehandelten Symbole ist auf der Ziel-Exchange verfügbar."
+      },
       "title": "Neuen Bot erstellen",
       "editTitle": "Bot bearbeiten",
       "step1": "Name",

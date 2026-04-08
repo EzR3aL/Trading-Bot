@@ -469,6 +469,12 @@
     "trailingStop": "Trailing Stop",
     "trailingStopProtecting": "Profit secured",
     "builder": {
+      "copyTrading": {
+        "validateButton": "Validate wallet",
+        "tradesIn30d": "trades in 30 days",
+        "available": "Available",
+        "blockedNoSymbols": "None of the symbols recently traded by this wallet are available on the target exchange."
+      },
       "title": "Create New Bot",
       "editTitle": "Edit Bot",
       "step1": "Name",

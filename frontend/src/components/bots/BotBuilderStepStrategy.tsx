@@ -5,6 +5,7 @@ import NumInput from '../ui/NumInput'
 import type { Strategy, ParamDef, ParamOption } from './BotBuilderTypes'
 import { STRATEGY_RECOMMENDATIONS } from './BotBuilderTypes'
 import { strategyLabel as getStrategyDisplayName } from '../../constants/strategies'
+import CopyTradingValidator from './CopyTradingValidator'
 
 interface Props {
   strategies: Strategy[]
@@ -12,6 +13,7 @@ interface Props {
   strategyParams: Record<string, any>
   strategyView: 'grid' | 'list'
   proMode: boolean
+  targetExchange?: string
   onStrategyChange: (name: string) => void
   onStrategyParamsChange: (params: Record<string, any>) => void
   onStrategyViewChange: (view: 'grid' | 'list') => void
@@ -20,7 +22,7 @@ interface Props {
 }
 
 export default function BotBuilderStepStrategy({
-  strategies, strategyType, strategyParams, strategyView, proMode,
+  strategies, strategyType, strategyParams, strategyView, proMode, targetExchange,
   onStrategyChange, onStrategyParamsChange, onStrategyViewChange, onToggleProMode,
   b,
 }: Props) {
@@ -134,14 +136,17 @@ export default function BotBuilderStepStrategy({
         const textareaEntries = Object.entries(selectedStrategy.param_schema).filter(
           ([, def]) => (def as ParamDef).type === 'textarea'
         )
-        // All non-select, non-textarea params go behind Pro Mode
+        const textEntries = Object.entries(selectedStrategy.param_schema).filter(
+          ([, def]) => (def as ParamDef).type === 'text'
+        )
+        // All non-select, non-textarea, non-text params go behind Pro Mode
         const proModeEntries = Object.entries(selectedStrategy.param_schema).filter(
           ([, def]) => {
             const d = def as ParamDef
-            return d.type !== 'select' && d.type !== 'dependent_select' && d.type !== 'textarea'
+            return d.type !== 'select' && d.type !== 'dependent_select' && d.type !== 'textarea' && d.type !== 'text'
           }
         )
-        const hasAlwaysVisible = selectEntries.length > 0 || textareaEntries.length > 0
+        const hasAlwaysVisible = selectEntries.length > 0 || textareaEntries.length > 0 || textEntries.length > 0
         const hasProParams = proModeEntries.length > 0
 
         return (
@@ -210,6 +215,32 @@ export default function BotBuilderStepStrategy({
                       return null
                     })}
                   </div>
+                )}
+
+                {textEntries.map(([key, def]) => {
+                  const d = def as ParamDef
+                  const txtLabel = t(`bots.builder.paramLabel_${key}`, '') || d.label
+                  const txtDesc = t(`bots.builder.paramDesc_${key}`, '') || d.description
+                  return (
+                    <div key={key}>
+                      <label className="block text-xs text-gray-300 mb-1">{txtLabel}</label>
+                      <input
+                        type="text"
+                        value={strategyParams[key] ?? ''}
+                        onChange={e => setParam(key, e.target.value)}
+                        className="filter-select w-full text-sm font-mono"
+                      />
+                      {txtDesc && <p className="text-[10px] text-gray-400 mt-1">{txtDesc}</p>}
+                    </div>
+                  )
+                })}
+
+                {strategyType === 'copy_trading' && strategyParams.source_wallet && targetExchange && (
+                  <CopyTradingValidator
+                    wallet={strategyParams.source_wallet}
+                    targetExchange={targetExchange}
+                    onValidated={(r) => onStrategyParamsChange({ ...strategyParams, _validation: r })}
+                  />
                 )}
 
                 {textareaEntries.map(([key, def]) => {

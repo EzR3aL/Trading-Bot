@@ -512,6 +512,7 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
             strategies={strategies} strategyType={strategyType}
             strategyParams={strategyParams} strategyView={strategyView}
             proMode={proMode}
+            targetExchange={exchangeType}
             onStrategyChange={handleStrategyChange}
             onStrategyParamsChange={setStrategyParams}
             onStrategyViewChange={setStrategyView}
