@@ -267,10 +267,11 @@ function SectionStrategies() {
   const strategies = [
     { name: 'Edge Indicator', icon: <Activity size={18} className="text-green-400" />, desc: t('guide.stratEdge'), tf: t('guide.stratEdgeTf'), type: t('guide.stratTypeKline') },
     { name: 'Liquidation Hunter', icon: <Target size={18} className="text-red-400" />, desc: t('guide.stratLiquidation'), tf: t('guide.stratLiquidationTf'), type: t('guide.stratTypeLiq') },
+    { name: 'Copy Trading', icon: <Layers size={18} className="text-blue-400" />, desc: t('guide.stratCopy'), tf: t('guide.stratCopyTf'), type: t('guide.stratTypeOnchain') },
   ]
 
   return (
-    <div data-tour="guide-strategies">
+    <div data-tour="guide-strategies" className="space-y-5">
       <div className="border border-white/10 bg-white/[0.03] rounded-xl p-5">
         <div className="flex items-center gap-2 mb-1">
           <Layers size={20} className="text-blue-400" />
@@ -303,6 +304,135 @@ function SectionStrategies() {
           </table>
         </div>
       </div>
+
+      {/* Detailed strategy cards */}
+      <div>
+        <h3 className="text-base font-semibold text-white mb-3 px-1">{t('guide.stratDetailsHeading')}</h3>
+        <div className="space-y-4">
+          <StrategyCard
+            icon={<Activity size={18} className="text-green-400" />}
+            title={t('guide.stratEdgeFullTitle')}
+            what={t('guide.stratEdgeFullWhat')}
+            signalsHeading={t('guide.stratEdgeFullSignals')}
+            signals={[
+              t('guide.stratEdgeFullSignal1'),
+              t('guide.stratEdgeFullSignal2'),
+              t('guide.stratEdgeFullSignal3'),
+            ]}
+            sections={[
+              { heading: t('guide.stratEdgeFullExit'), text: t('guide.stratEdgeFullExitText') },
+              { text: t('guide.stratEdgeFullProfile') },
+            ]}
+          />
+          <StrategyCard
+            icon={<Target size={18} className="text-red-400" />}
+            title={t('guide.stratLiquidationFullTitle')}
+            what={t('guide.stratLiquidationFullWhat')}
+            signalsHeading={t('guide.stratLiquidationFullSignals')}
+            signals={[
+              t('guide.stratLiquidationFullSignal1'),
+              t('guide.stratLiquidationFullSignal2'),
+              t('guide.stratLiquidationFullSignal3'),
+            ]}
+            sections={[
+              { heading: t('guide.stratLiquidationFullExit'), text: t('guide.stratLiquidationFullExitText') },
+              { text: t('guide.stratLiquidationFullProfile') },
+            ]}
+          />
+          <StrategyCard
+            icon={<Layers size={18} className="text-blue-400" />}
+            title={t('guide.stratCopyFullTitle')}
+            what={t('guide.stratCopyFullWhat')}
+            sections={[
+              { heading: t('guide.stratCopyFullHow'), text: t('guide.stratCopyFullHowText') },
+            ]}
+            signalsHeading={t('guide.stratCopyFullSignals')}
+            signals={[
+              t('guide.stratCopyFullSignal1'),
+              t('guide.stratCopyFullSignal2'),
+              t('guide.stratCopyFullSignal3'),
+            ]}
+            extraSections={[
+              { heading: t('guide.stratCopyFullColdStart'), text: t('guide.stratCopyFullColdStartText') },
+              {
+                heading: t('guide.stratCopyFullOverrides'),
+                bullets: [
+                  t('guide.stratCopyFullOverride1'),
+                  t('guide.stratCopyFullOverride2'),
+                  t('guide.stratCopyFullOverride3'),
+                  t('guide.stratCopyFullOverride4'),
+                ],
+              },
+            ]}
+          />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+interface StrategyCardSection {
+  heading?: string
+  text?: string
+  bullets?: string[]
+}
+
+interface StrategyCardProps {
+  icon: React.ReactNode
+  title: string
+  what: string
+  signalsHeading?: string
+  signals?: string[]
+  sections?: StrategyCardSection[]
+  extraSections?: StrategyCardSection[]
+}
+
+function StrategyCard({ icon, title, what, signalsHeading, signals, sections, extraSections }: StrategyCardProps) {
+  return (
+    <div className="border border-white/10 bg-white/[0.03] rounded-xl p-5">
+      <div className="flex items-center gap-2 mb-2">
+        {icon}
+        <h4 className="text-base font-semibold text-white">{title}</h4>
+      </div>
+      <p className="text-sm text-gray-300 leading-relaxed mb-3">{what}</p>
+
+      {sections?.map((s, i) => (
+        <div key={`s-${i}`} className="mb-3">
+          {s.heading && <p className="text-xs font-semibold text-gray-200 uppercase tracking-wider mb-1">{s.heading}</p>}
+          {s.text && <p className="text-sm text-gray-400 leading-relaxed">{s.text}</p>}
+        </div>
+      ))}
+
+      {signals && signals.length > 0 && (
+        <div className="mb-3">
+          {signalsHeading && <p className="text-xs font-semibold text-gray-200 uppercase tracking-wider mb-1.5">{signalsHeading}</p>}
+          <ul className="space-y-1.5">
+            {signals.map((sig, i) => (
+              <li key={i} className="text-sm text-gray-400 leading-relaxed pl-4 relative">
+                <span className="absolute left-0 top-2 w-1 h-1 rounded-full bg-primary-400" />
+                {sig}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {extraSections?.map((s, i) => (
+        <div key={`e-${i}`} className="mb-3 last:mb-0">
+          {s.heading && <p className="text-xs font-semibold text-gray-200 uppercase tracking-wider mb-1">{s.heading}</p>}
+          {s.text && <p className="text-sm text-gray-400 leading-relaxed">{s.text}</p>}
+          {s.bullets && (
+            <ul className="space-y-1 mt-1">
+              {s.bullets.map((b, j) => (
+                <li key={j} className="text-sm text-gray-400 leading-relaxed pl-4 relative">
+                  <span className="absolute left-0 top-2 w-1 h-1 rounded-full bg-gray-500" />
+                  {b}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      ))}
     </div>
   )
 }
