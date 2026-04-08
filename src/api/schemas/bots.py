@@ -234,6 +234,11 @@ class BotRuntimeStatus(BaseModel):
     # Strategy display info
     risk_profile: Optional[str] = None
 
+    # Copy-trading display info (only set for strategy_type == "copy_trading")
+    copy_source_wallet: Optional[str] = None
+    copy_max_slots: Optional[int] = None
+    copy_budget_usdt: Optional[float] = None
+
     # Schedule info (for card display)
     schedule_type: Optional[str] = None
     schedule_config: Optional[Dict[str, Any]] = None

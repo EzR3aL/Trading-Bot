@@ -672,12 +672,19 @@ async def list_bots(
             except (json.JSONDecodeError, TypeError):
                 pass
 
-        # Extract risk_profile from strategy_params
+        # Extract risk_profile + copy-trading info from strategy_params
         _risk_profile = None
+        _copy_source_wallet = None
+        _copy_max_slots = None
+        _copy_budget_usdt = None
         if config.strategy_params:
             try:
                 _sp = json.loads(config.strategy_params) if isinstance(config.strategy_params, str) else config.strategy_params
                 _risk_profile = _sp.get("risk_profile")
+                if config.strategy_type == "copy_trading":
+                    _copy_source_wallet = _sp.get("source_wallet")
+                    _copy_max_slots = _sp.get("max_slots")
+                    _copy_budget_usdt = _sp.get("budget_usdt")
             except (json.JSONDecodeError, TypeError):
                 pass
 
@@ -690,6 +697,9 @@ async def list_bots(
             margin_mode=getattr(config, "margin_mode", None) or "cross",
             trading_pairs=trading_pairs,
             risk_profile=_risk_profile,
+            copy_source_wallet=_copy_source_wallet,
+            copy_max_slots=_copy_max_slots,
+            copy_budget_usdt=_copy_budget_usdt,
             status=runtime["status"] if runtime else ("idle" if not config.is_enabled else "stopped"),
             error_message=runtime.get("error_message") if runtime else None,
             started_at=runtime.get("started_at") if runtime else None,

@@ -70,6 +70,9 @@ interface BotStatus {
   schedule_type?: string | null
   schedule_config?: { interval_minutes?: number; hours?: number[] } | null
   risk_profile?: string | null
+  copy_source_wallet?: string | null
+  copy_max_slots?: number | null
+  copy_budget_usdt?: number | null
   builder_fee_approved?: boolean | null
   referral_verified?: boolean | null
 }
@@ -148,6 +151,9 @@ const STATUS_STYLES: Record<string, { text: string; card: string; dot: string }>
     dot: 'bg-amber-500',
   },
 }
+
+const shortenWallet = (w?: string | null): string =>
+  w ? `${w.slice(0, 6)}…${w.slice(-4)}` : '—'
 
 function formatPnl(value: number): string {
   const prefix = value >= 0 ? '+' : ''
@@ -437,7 +443,16 @@ function BotTradeHistoryModal({ bot, onClose, t }: { bot: BotStatus; onClose: ()
               <h2 className="text-lg font-bold text-white">{bot.name}</h2>
               <div className="flex items-center gap-2 mt-0.5">
                 <span className="text-xs text-gray-500">{strategyLabel(bot.strategy_type)}</span>
-                {bot.risk_profile && (
+                {bot.strategy_type === 'copy_trading' ? (
+                  <>
+                    <span className="text-gray-700">·</span>
+                    <span className="text-xs text-gray-400">
+                      Source: <span className="font-mono">{shortenWallet(bot.copy_source_wallet)}</span>
+                      {bot.copy_max_slots != null && <> · Slots: {bot.open_trades}/{bot.copy_max_slots}</>}
+                      {bot.copy_budget_usdt != null && <> · Budget: ${bot.copy_budget_usdt}</>}
+                    </span>
+                  </>
+                ) : bot.risk_profile && (
                   <>
                     <span className="text-gray-700">·</span>
                     <span className={`inline-flex items-center gap-0.5 text-xs ${
@@ -1092,7 +1107,13 @@ export default function Bots() {
                       </span>
                       <span className="text-xs text-gray-500 inline-flex items-center gap-1">
                         {strategyLabel(bot.strategy_type)}
-                        {bot.risk_profile && (
+                        {bot.strategy_type === 'copy_trading' ? (
+                          <span className="text-gray-400">
+                            · Source: <span className="font-mono">{shortenWallet(bot.copy_source_wallet)}</span>
+                            {bot.copy_max_slots != null && <> · Slots: {bot.open_trades}/{bot.copy_max_slots}</>}
+                            {bot.copy_budget_usdt != null && <> · Budget: ${bot.copy_budget_usdt}</>}
+                          </span>
+                        ) : bot.risk_profile && (
                           <span className={`inline-flex items-center gap-0.5 ${
                             bot.risk_profile === 'aggressive' ? 'text-red-400' :
                             bot.risk_profile === 'conservative' ? 'text-blue-400' :
