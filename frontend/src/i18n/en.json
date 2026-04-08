@@ -473,7 +473,9 @@
         "validateButton": "Validate wallet",
         "tradesIn30d": "trades in 30 days",
         "available": "Available",
-        "blockedNoSymbols": "None of the symbols recently traded by this wallet are available on the target exchange."
+        "blockedNoSymbols": "None of the symbols recently traded by this wallet are available on the target exchange.",
+        "symbolFormatHint": "Hyperliquid coin names without the USDT suffix, comma-separated (e.g. BTC, ETH, SOL)",
+        "clickToAdd": "Click to add"
       },
       "title": "Create New Bot",
       "editTitle": "Edit Bot",
