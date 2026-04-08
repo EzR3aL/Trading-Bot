@@ -9,6 +9,16 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [Unreleased] - 2026-04-08
+
+### Behoben
+- **Affiliate-UID Auto-Verify: stille Fehler werden jetzt geloggt** — In `src/api/routers/config_affiliate.py` werden zwei bisher stille Fälle als Warnung geloggt: (1) wenn kein Admin-Live-Connection für die Exchange existiert (so sieht der Admin sofort, dass er Live-Keys hinterlegen muss), und (2) wenn die Exchange-API `check_affiliate_uid` mit `False` zurückkommt.
+
+### Hinzugefügt
+- **Periodischer Retry-Job für ausstehende Affiliate-UID-Verifizierungen** — Neuer Service `src/services/affiliate_retry.py::retry_pending_verifications` läuft alle 30 Minuten via APScheduler (im `BotOrchestrator._scheduler`, registriert in `src/api/main_app.py` lifespan startup). Holt alle `ExchangeConnection` Rows mit `affiliate_uid IS NOT NULL AND affiliate_verified = false`, gruppiert nach Exchange, baut pro Exchange einen einzigen Admin-Client und ruft `check_affiliate_uid` für jede Row auf. Erfolgreiche Rows werden auf `verified=True, verified_at=now()` gesetzt. Per-Row-Exceptions werden gefangen und geloggt. Inkl. 4 Unit-Tests in `tests/unit/services/test_affiliate_retry.py`.
+
+---
+
 ## [4.15.12] - 2026-04-08
 
 ### Geändert

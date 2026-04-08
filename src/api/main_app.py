@@ -151,6 +151,21 @@ async def lifespan(app: FastAPI):
     # Restore bots that were running before shutdown
     await orchestrator.restore_on_startup()
 
+    # Periodic background job: retry pending affiliate UID verifications.
+    # Runs every 30 minutes against the orchestrator's shared scheduler so
+    # users whose UID couldn't be verified at submission time (e.g. admin
+    # had no live keys yet, or the API hiccupped) get auto-verified later.
+    from src.services.affiliate_retry import retry_pending_verifications
+    if not orchestrator._scheduler.running:
+        orchestrator._scheduler.start()
+    orchestrator._scheduler.add_job(
+        retry_pending_verifications,
+        "interval",
+        minutes=30,
+        id="affiliate_retry_pending",
+        replace_existing=True,
+    )
+
     # Start auth bridge code cleanup
     from src.auth.auth_code import auth_code_store
     auth_code_store.start_cleanup()
