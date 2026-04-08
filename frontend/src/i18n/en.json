@@ -519,7 +519,7 @@
         "blockOverrides": "Risk Overrides",
         "blockSafety": "Global Safety Limits",
         "overridesHint": "Empty fields = values from the source wallet are used 1:1.",
-        "emptyLikeSource": "empty = like source",
+        "emptyLikeSource": "—",
         "leverage": "Leverage",
         "takeProfit": "Take Profit %",
         "stopLoss": "Stop Loss %",
