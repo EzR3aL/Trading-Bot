@@ -217,23 +217,28 @@ export default function BotBuilderStepStrategy({
                   </div>
                 )}
 
-                {textEntries.map(([key, def]) => {
-                  const d = def as ParamDef
-                  const txtLabel = t(`bots.builder.paramLabel_${key}`, '') || d.label
-                  const txtDesc = t(`bots.builder.paramDesc_${key}`, '') || d.description
-                  return (
-                    <div key={key}>
-                      <label className="block text-xs text-gray-300 mb-1">{txtLabel}</label>
-                      <input
-                        type="text"
-                        value={strategyParams[key] ?? ''}
-                        onChange={e => setParam(key, e.target.value)}
-                        className="filter-select w-full text-sm font-mono"
-                      />
-                      {txtDesc && <p className="text-[10px] text-gray-400 mt-1">{txtDesc}</p>}
-                    </div>
-                  )
-                })}
+                {/* First pass: render source_wallet (and any non-symbol-list text params) */}
+                {textEntries
+                  .filter(([key]) => key !== 'symbol_whitelist' && key !== 'symbol_blacklist')
+                  .map(([key, def]) => {
+                    const d = def as ParamDef
+                    const txtLabel = t(`bots.builder.paramLabel_${key}`, '') || d.label
+                    const txtDesc = t(`bots.builder.paramDesc_${key}`, '') || d.description
+                    const placeholder = key === 'source_wallet' ? '0x…' : ''
+                    return (
+                      <div key={key}>
+                        <label className="block text-xs text-gray-300 mb-1">{txtLabel}</label>
+                        <input
+                          type="text"
+                          value={strategyParams[key] ?? ''}
+                          onChange={e => setParam(key, e.target.value)}
+                          placeholder={placeholder}
+                          className="filter-select w-full text-sm font-mono"
+                        />
+                        {txtDesc && <p className="text-[10px] text-gray-400 mt-1">{txtDesc}</p>}
+                      </div>
+                    )
+                  })}
 
                 {strategyType === 'copy_trading' && strategyParams.source_wallet && targetExchange && (
                   <CopyTradingValidator
@@ -242,6 +247,70 @@ export default function BotBuilderStepStrategy({
                     onValidated={(r) => onStrategyParamsChange({ ...strategyParams, _validation: r })}
                   />
                 )}
+
+                {/* Second pass: symbol_whitelist / symbol_blacklist with chip-pickers */}
+                {textEntries
+                  .filter(([key]) => key === 'symbol_whitelist' || key === 'symbol_blacklist')
+                  .map(([key, def]) => {
+                    const d = def as ParamDef
+                    const txtLabel = t(`bots.builder.paramLabel_${key}`, '') || d.label
+                    const txtDesc = t(`bots.builder.paramDesc_${key}`, '') || d.description
+                    const currentValue: string = strategyParams[key] ?? ''
+                    const currentSet = new Set(
+                      currentValue.split(',').map((s: string) => s.trim().toUpperCase()).filter(Boolean)
+                    )
+                    const validation = strategyParams._validation
+                    const availableCoins: string[] = validation?.available ?? []
+
+                    const toggleCoin = (coin: string) => {
+                      const next = new Set(currentSet)
+                      if (next.has(coin)) next.delete(coin)
+                      else next.add(coin)
+                      setParam(key, Array.from(next).join(', '))
+                    }
+
+                    return (
+                      <div key={key}>
+                        <label className="block text-xs text-gray-300 mb-1">{txtLabel}</label>
+                        <input
+                          type="text"
+                          value={currentValue}
+                          onChange={e => setParam(key, e.target.value)}
+                          placeholder="z.B. BTC, ETH, SOL"
+                          className="filter-select w-full text-sm font-mono"
+                        />
+                        <p className="text-[10px] text-gray-400 mt-1">
+                          {txtDesc} — {t('bots.builder.copyTrading.symbolFormatHint', 'Hyperliquid Coin-Namen ohne USDT-Suffix, kommagetrennt')}
+                        </p>
+                        {availableCoins.length > 0 && (
+                          <div className="mt-2">
+                            <p className="text-[10px] text-gray-500 mb-1">
+                              {t('bots.builder.copyTrading.clickToAdd', 'Klick zum Hinzufügen')}:
+                            </p>
+                            <div className="flex flex-wrap gap-1">
+                              {availableCoins.map((coin) => {
+                                const isActive = currentSet.has(coin.toUpperCase())
+                                return (
+                                  <button
+                                    key={coin}
+                                    type="button"
+                                    onClick={() => toggleCoin(coin.toUpperCase())}
+                                    className={`px-2 py-0.5 rounded text-[10px] font-mono transition-colors ${
+                                      isActive
+                                        ? 'bg-primary-500/25 text-primary-300 ring-1 ring-primary-500/40'
+                                        : 'bg-white/5 text-gray-400 hover:bg-white/10 hover:text-gray-200'
+                                    }`}
+                                  >
+                                    {coin}
+                                  </button>
+                                )
+                              })}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
 
                 {textareaEntries.map(([key, def]) => {
                   const d = def as ParamDef
