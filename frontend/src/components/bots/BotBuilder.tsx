@@ -104,13 +104,18 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
     }
   }
 
-  // Dynamic steps: insert data sources step for strategies without fixed sources
+  // Dynamic steps: insert data sources step for strategies without fixed sources;
+  // skip the schedule step for copy_trading (forced to 1-min interval — anything
+  // longer would lag the source wallet's trades unacceptably).
   const steps = useMemo(() => {
+    if (strategyType === 'copy_trading') {
+      return ['step1', 'step2', 'step3', 'step4', 'step6'] as const
+    }
     if (usesData && !hasFixedSources) {
       return ['step1', 'step2', 'step2b', 'step3', 'step4', 'step5', 'step6'] as const
     }
     return ['step1', 'step2', 'step3', 'step4', 'step5', 'step6'] as const
-  }, [usesData, hasFixedSources])
+  }, [usesData, hasFixedSources, strategyType])
 
   // Group data sources by category (for selectAll / clearCategory)
   const sourcesByCategory = useMemo(() => {
@@ -319,6 +324,12 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
       if (name === 'copy_trading') return []
       return prev.filter(p => p !== '__copy__')
     })
+    // Copy Trading needs fast polling — force 1-min interval and skip the
+    // schedule step. Anything longer would lag the source wallet's trades.
+    if (name === 'copy_trading') {
+      setScheduleType('interval')
+      setIntervalMinutes(1)
+    }
   }
 
   const togglePair = (pair: string) => {
