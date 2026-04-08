@@ -24,28 +24,31 @@ logger = get_logger(__name__)
 
 
 def _save_strategy_state(bot_config, state: dict) -> None:
-    """Persist strategy_state JSON on the BotConfig.
+    """Persist strategy_state JSON on the BotConfig (in-memory only).
 
-    Writes to the in-memory object; the surrounding DB session is expected to
-    commit. Also attempts an explicit commit via a fresh session so that
-    self-managed ticks don't lose the watermark between schedule runs.
+    Writes to the in-memory object. Actual DB persistence happens via the
+    async helper `_save_strategy_state_db` from inside `run_tick` (an async
+    context). This function is kept synchronous so existing tests that
+    monkey-patch it don't need to deal with awaitables.
     """
     bot_config.strategy_state = json.dumps(state)
-    try:
-        from src.models.session import get_session
-        from src.models.bot_config import BotConfig
 
-        bot_id = getattr(bot_config, "id", None)
-        if bot_id is None:
-            return
-        with get_session() as session:  # type: ignore[misc]
-            row = session.get(BotConfig, bot_id)
-            if row is not None:
-                row.strategy_state = bot_config.strategy_state
-                session.commit()
+
+async def _save_strategy_state_db(bot_config_id: int, state_json: str) -> None:
+    """Async DB persist of strategy_state. Best-effort, swallows errors."""
+    try:
+        from sqlalchemy import update
+        from src.models.session import get_session
+        from src.models.database import BotConfig as DBBotConfig
+
+        async with get_session() as session:
+            await session.execute(
+                update(DBBotConfig)
+                .where(DBBotConfig.id == bot_config_id)
+                .values(strategy_state=state_json)
+            )
+            await session.commit()
     except Exception:
-        # Best-effort persistence — tests monkey-patch this function, and
-        # production paths will have the bot worker commit its own session.
         pass
 
 
@@ -184,6 +187,7 @@ class CopyTradingStrategy(BaseStrategy):
         if "last_processed_fill_ms" not in state:
             state["last_processed_fill_ms"] = int(time.time() * 1000)
             _save_strategy_state(ctx.bot_config, state)
+            await _save_strategy_state_db(ctx.bot_config_id, ctx.bot_config.strategy_state)
             return
 
         last_ms = int(state["last_processed_fill_ms"])
@@ -206,6 +210,7 @@ class CopyTradingStrategy(BaseStrategy):
             if new_fills:
                 state["last_processed_fill_ms"] = max(f.time_ms for f in new_fills)
                 _save_strategy_state(ctx.bot_config, state)
+                await _save_strategy_state_db(ctx.bot_config_id, ctx.bot_config.strategy_state)
         finally:
             await tracker.close()
 
@@ -406,44 +411,43 @@ class CopyTradingStrategy(BaseStrategy):
     async def _get_today_realized_pnl(self, ctx: StrategyTickContext) -> float:
         """Sum realized PnL of trades closed by this bot since UTC midnight."""
         try:
+            from sqlalchemy import select, func
             from src.models.session import get_session
             from src.models.database import TradeRecord
         except Exception:
             return 0.0
         start = self._today_start_utc()
         try:
-            with get_session() as session:  # type: ignore[misc]
-                rows = (
-                    session.query(TradeRecord)
-                    .filter(
+            async with get_session() as session:
+                result = await session.execute(
+                    select(func.coalesce(func.sum(TradeRecord.pnl), 0)).where(
                         TradeRecord.bot_config_id == ctx.bot_config_id,
                         TradeRecord.status == "closed",
                         TradeRecord.exit_time >= start,
                     )
-                    .all()
                 )
-                return float(sum((r.pnl or 0) for r in rows))
+                return float(result.scalar_one() or 0)
         except Exception:
             return 0.0
 
     async def _get_today_entry_count(self, ctx: StrategyTickContext) -> int:
         """Count trades this bot has dispatched (entered) since UTC midnight."""
         try:
+            from sqlalchemy import select, func
             from src.models.session import get_session
             from src.models.database import TradeRecord
         except Exception:
             return 0
         start = self._today_start_utc()
         try:
-            with get_session() as session:  # type: ignore[misc]
-                return (
-                    session.query(TradeRecord)
-                    .filter(
+            async with get_session() as session:
+                result = await session.execute(
+                    select(func.count(TradeRecord.id)).where(
                         TradeRecord.bot_config_id == ctx.bot_config_id,
                         TradeRecord.entry_time >= start,
                     )
-                    .count()
                 )
+                return int(result.scalar_one() or 0)
         except Exception:
             return 0
 

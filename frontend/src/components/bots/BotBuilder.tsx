@@ -312,6 +312,13 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
     } else {
       setSelectedSources([])
     }
+    // Clear the copy_trading sentinel when switching to a normal strategy
+    // (and clear normal pairs when switching to copy_trading — Step 3 will
+    // re-set the sentinel on mount).
+    setTradingPairs(prev => {
+      if (name === 'copy_trading') return []
+      return prev.filter(p => p !== '__copy__')
+    })
   }
 
   const togglePair = (pair: string) => {
@@ -583,7 +590,7 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
 
         {currentStepKey === 'step6' && (
           <BotBuilderStepReview
-            name={name} strategyType={strategyType}
+            name={name} strategyType={strategyType} strategyParams={strategyParams}
             exchangeType={exchangeType} mode={mode} marginMode={marginMode}
             tradingPairs={tradingPairs} perAssetConfig={perAssetConfig}
             balancePreview={balancePreview}

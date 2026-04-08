@@ -498,27 +498,27 @@ class TradeExecutorMixin:
 
     async def get_open_trades_count(self, bot_config_id: int) -> int:
         """Return how many open TradeRecords belong to a given bot."""
-        with get_session() as session:
-            return (
-                session.query(TradeRecord)
-                .filter(
+        from sqlalchemy import select, func
+        async with get_session() as session:
+            result = await session.execute(
+                select(func.count(TradeRecord.id)).where(
                     TradeRecord.bot_config_id == bot_config_id,
                     TradeRecord.status == "open",
                 )
-                .count()
             )
+            return int(result.scalar_one() or 0)
 
     async def get_open_trades_for_bot(self, bot_config_id: int) -> list:
         """Return all open TradeRecords for a given bot."""
-        with get_session() as session:
-            return (
-                session.query(TradeRecord)
-                .filter(
+        from sqlalchemy import select
+        async with get_session() as session:
+            result = await session.execute(
+                select(TradeRecord).where(
                     TradeRecord.bot_config_id == bot_config_id,
                     TradeRecord.status == "open",
                 )
-                .all()
             )
+            return list(result.scalars().all())
 
     async def execute_trade(
         self,
