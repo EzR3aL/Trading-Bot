@@ -342,12 +342,21 @@ async def close_position(
             detail=ERR_POSITION_VERIFY_FAILED.format(symbol=symbol),
         )
 
-    # Get current price for PnL
+    # Get exit price — prefer the actual fill price of the close order,
+    # fall back to ticker last_price, then entry_price as last resort.
+    # Using ticker.last_price alone caused incorrect PnL when the ticker
+    # diverged from the real fill (especially in demo mode).
+    exit_price = None
     try:
-        ticker = await client.get_ticker(symbol)
-        exit_price = ticker.last_price
-    except Exception:
-        exit_price = trade.entry_price  # fallback
+        exit_price = await client.get_close_fill_price(symbol)
+    except Exception as e:
+        logger.debug(f"get_close_fill_price failed for {symbol}: {e}")
+    if not exit_price:
+        try:
+            ticker = await client.get_ticker(symbol)
+            exit_price = ticker.last_price
+        except Exception:
+            exit_price = trade.entry_price  # fallback
 
     from src.bot.pnl import calculate_pnl
     pnl, pnl_percent = calculate_pnl(trade.side, trade.entry_price, exit_price, trade.size)

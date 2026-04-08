@@ -203,8 +203,16 @@ class PositionMonitorMixin:
                         if close_order and close_order.order_id:
                             trade.close_order_id = close_order.order_id
 
-                        ticker = await client.get_ticker(trade.symbol)
-                        exit_price = ticker.last_price if ticker else trade.entry_price
+                        # Prefer the actual close-order fill price (matches exchange exactly).
+                        # Ticker can drift from the real fill, which corrupts PnL and tax reports.
+                        exit_price = None
+                        try:
+                            exit_price = await client.get_close_fill_price(trade.symbol)
+                        except Exception:
+                            pass
+                        if not exit_price:
+                            ticker = await client.get_ticker(trade.symbol)
+                            exit_price = ticker.last_price if ticker else trade.entry_price
 
                         fees = trade.fees or 0
                         try:

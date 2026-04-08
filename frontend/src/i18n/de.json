@@ -566,6 +566,7 @@
       "paramDesc_risk_profile": "Konservativ = weniger Trades, weite Stops, 4h. Standard = ausgewogen, 1h.",
       "paramOption_risk_profile_conservative": "Konservativ",
       "paramOption_risk_profile_standard": "Standard",
+      "paramOption_risk_profile_aggressive": "Aggressiv",
       "paramLabel_ema_fast_period": "EMA Schnell-Periode",
       "paramDesc_ema_fast_period": "Schnelle EMA-Periode für das Trend-Ribbon (Standard 8)",
       "paramLabel_ema_slow_period": "EMA Langsam-Periode",
