@@ -9,6 +9,28 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [4.16.1] - 2026-04-08 — Copy-Trading v1.1 (Step 3 redesign + safety limits)
+
+### Geändert
+- **Bot-Builder Step 3 Redesign für Copy-Trading-Bots** — Step 3 (Exchange & Assets) zeigt für Copy-Trading-Bots jetzt ein eigenes Layout statt des Trading-Pair-Pickers und des Per-Asset-Grids. Letztere sind für Copy-Bots konzeptionell falsch, weil Assets von der Source-Wallet bestimmt werden. Neues Component `frontend/src/components/bots/CopyTradingStepExchange.tsx` mit drei Blöcken:
+  - **Block 1 — Wallet & Symbol-Filter:** `CopyTradingValidator` (aus Step 2 hierher verschoben) + Whitelist/Blacklist Chip-Picker, gefüllt aus `strategyParams._validation.available`.
+  - **Block 2 — Risiko-Overrides:** Optionale Felder `leverage`, `take_profit_pct`, `stop_loss_pct`, `min_position_size_usdt`. Leere Felder = Werte der Source-Wallet werden 1:1 übernommen.
+  - **Block 3 — Globale Sicherheits-Limits:** `daily_loss_limit_pct` und `max_trades_per_day`.
+  - `trading_pairs` wird für Copy-Bots auf `['__copy__']`-Sentinel gesetzt, damit die bestehende Backend-Validierung greift.
+- **Step 2 für Copy-Bots verschlankt** — zeigt jetzt nur noch die Kern-Felder `source_wallet`, `budget_usdt`, `max_slots`. Whitelist/Blacklist und Wallet-Validator sind nach Step 3 verschoben.
+
+### Hinzugefügt
+- **Copy-Trading TP/SL Overrides + Safety Limits (Backend)** — Neue Strategie-Parameter `take_profit_pct`, `stop_loss_pct`, `daily_loss_limit_pct`, `max_trades_per_day` in `CopyTradingStrategy`. Der alte `copy_tp_sl`-Toggle wurde entfernt zugunsten eines klareren "leer = wie Source / gesetzt = überschreibt"-Modells.
+  - **TP/SL Override:** Wenn gesetzt, berechnet der Bot absolute TP/SL-Preise aus dem Entry (`entry * (1 ± pct/100)`) und platziert sie an der Exchange. Leer = kein TP/SL (HL-Fills tragen keine TP/SL-Daten).
+  - **Daily Loss Limit:** Realized-PnL der heute geschlossenen Trades wird gegen das Budget gerechnet; bei Erreichen werden weitere Kopien bis Mitternacht UTC pausiert.
+  - **Max Trades per Day:** Begrenzt die pro UTC-Tag dispatched Entries.
+  - Neue Helpers `_get_today_realized_pnl` und `_get_today_entry_count`.
+  - `TradeExecutorMixin.execute_trade` akzeptiert jetzt `take_profit_pct`/`stop_loss_pct` kwargs; `_execute_trade` respektiert Caller-supplied TP/SL, statt sie durch Bot-Level-Config zu überschreiben.
+  - 3 neue Unit-Tests in `tests/unit/strategy/test_copy_trading.py`.
+- de + en i18n-Strings unter `bots.builder.copyTradingStep3` ergänzt.
+
+---
+
 ## [4.16.0] - 2026-04-08
 
 ### Hinzugefügt

@@ -8,6 +8,7 @@ import { strategyLabel as getStrategyDisplayName } from '../../constants/strateg
 interface Props {
   name: string
   strategyType: string
+  strategyParams?: Record<string, any>
   exchangeType: string
   mode: string
   marginMode: 'cross' | 'isolated'
@@ -39,7 +40,7 @@ function ReviewRow({ label, children }: { label: string; children: ReactNode }) 
 }
 
 export default function BotBuilderStepReview({
-  name, strategyType, exchangeType, mode, marginMode,
+  name, strategyType, strategyParams, exchangeType, mode, marginMode,
   tradingPairs, perAssetConfig, balancePreview,
   scheduleType, intervalMinutes, customHours,
   maxTrades, dailyLossLimit,
@@ -86,23 +87,72 @@ export default function BotBuilderStepReview({
         </div>
       </div>
 
-      {/* Trading Pairs */}
-      <div className="rounded-xl border border-white/10 bg-white/[0.02] overflow-hidden">
-        <div className="flex items-center gap-2.5 px-4 py-3 border-b border-white/5 bg-white/[0.02]">
-          <ArrowLeftRight size={16} className="text-primary-400" />
-          <span className="text-sm font-semibold text-white">{b.tradingPairs}</span>
-          <span className="ml-auto text-xs text-gray-500">{tradingPairs.length} {tradingPairs.length === 1 ? 'Pair' : 'Pairs'}</span>
-        </div>
-        <div className="px-4 py-3">
-          <div className="flex flex-wrap gap-1.5">
-            {tradingPairs.map(p => (
-              <span key={p} className="px-2.5 py-1 rounded-lg bg-primary-500/10 text-primary-400 text-xs font-medium border border-primary-500/20">
-                {p}
-              </span>
-            ))}
+      {/* Trading Pairs — hidden for copy_trading (assets are decided by source wallet) */}
+      {strategyType !== 'copy_trading' && (
+        <div className="rounded-xl border border-white/10 bg-white/[0.02] overflow-hidden">
+          <div className="flex items-center gap-2.5 px-4 py-3 border-b border-white/5 bg-white/[0.02]">
+            <ArrowLeftRight size={16} className="text-primary-400" />
+            <span className="text-sm font-semibold text-white">{b.tradingPairs}</span>
+            <span className="ml-auto text-xs text-gray-500">{tradingPairs.length} {tradingPairs.length === 1 ? 'Pair' : 'Pairs'}</span>
+          </div>
+          <div className="px-4 py-3">
+            <div className="flex flex-wrap gap-1.5">
+              {tradingPairs.map(p => (
+                <span key={p} className="px-2.5 py-1 rounded-lg bg-primary-500/10 text-primary-400 text-xs font-medium border border-primary-500/20">
+                  {p}
+                </span>
+              ))}
+            </div>
           </div>
         </div>
-      </div>
+      )}
+
+      {/* Copy Trading config summary */}
+      {strategyType === 'copy_trading' && strategyParams && (
+        <div className="rounded-xl border border-white/10 bg-white/[0.02] overflow-hidden">
+          <div className="flex items-center gap-2.5 px-4 py-3 border-b border-white/5 bg-white/[0.02]">
+            <ArrowLeftRight size={16} className="text-primary-400" />
+            <span className="text-sm font-semibold text-white">Copy Trading</span>
+          </div>
+          <div className="px-4 py-3 space-y-1.5 text-xs">
+            {strategyParams.source_wallet && (
+              <div className="text-gray-300">
+                <span className="text-gray-500">Source:</span>{' '}
+                <span className="font-mono">{`${String(strategyParams.source_wallet).slice(0, 6)}…${String(strategyParams.source_wallet).slice(-4)}`}</span>
+              </div>
+            )}
+            <div className="text-gray-300">
+              <span className="text-gray-500">Budget:</span> ${strategyParams.budget_usdt ?? '—'}{' · '}
+              <span className="text-gray-500">Slots:</span> {strategyParams.max_slots ?? '—'}
+            </div>
+            {strategyParams.symbol_whitelist && (
+              <div className="text-gray-300">
+                <span className="text-gray-500">Whitelist:</span> {strategyParams.symbol_whitelist}
+              </div>
+            )}
+            {strategyParams.symbol_blacklist && (
+              <div className="text-gray-300">
+                <span className="text-gray-500">Blacklist:</span> {strategyParams.symbol_blacklist}
+              </div>
+            )}
+            {(strategyParams.leverage || strategyParams.take_profit_pct || strategyParams.stop_loss_pct) && (
+              <div className="text-gray-300">
+                <span className="text-gray-500">Overrides:</span>{' '}
+                {strategyParams.leverage && `${strategyParams.leverage}x · `}
+                {strategyParams.take_profit_pct && `TP ${strategyParams.take_profit_pct}% · `}
+                {strategyParams.stop_loss_pct && `SL ${strategyParams.stop_loss_pct}%`}
+              </div>
+            )}
+            {(strategyParams.daily_loss_limit_pct || strategyParams.max_trades_per_day) && (
+              <div className="text-gray-300">
+                <span className="text-gray-500">Sicherheits-Limits:</span>{' '}
+                {strategyParams.daily_loss_limit_pct && `Daily Loss ${strategyParams.daily_loss_limit_pct}% · `}
+                {strategyParams.max_trades_per_day && `${strategyParams.max_trades_per_day} Trades/Tag`}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Data Sources (if applicable) */}
       {usesData && (
@@ -170,8 +220,8 @@ export default function BotBuilderStepReview({
         </div>
       )}
 
-      {/* Per-asset config review */}
-      {tradingPairs.length > 0 && (
+      {/* Per-asset config review — hidden for copy_trading */}
+      {strategyType !== 'copy_trading' && tradingPairs.length > 0 && (
         <div className="rounded-xl border border-white/10 bg-white/[0.02] overflow-hidden">
           <div className="flex items-center gap-2.5 px-4 py-3 border-b border-white/5 bg-white/[0.02]">
             <ArrowLeftRight size={16} className="text-primary-400" />

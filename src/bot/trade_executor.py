@@ -45,7 +45,13 @@ class TradeExecutorMixin:
         sl_pct = asset_cfg.get("stop_loss_percent") or getattr(self._config, "stop_loss_percent", None)
 
         is_long = signal.direction.value == "long"
-        if tp_pct and signal.entry_price and signal.entry_price > 0:
+        # Preserve caller-supplied TP/SL (used by self-managed strategies like
+        # copy_trading v1.1 which compute absolute TP/SL upstream).
+        caller_tp = signal.target_price
+        caller_sl = signal.stop_loss
+        if caller_tp is not None:
+            pass  # honor caller override
+        elif tp_pct and signal.entry_price and signal.entry_price > 0:
             signal.target_price = (
                 signal.entry_price * (1 + tp_pct / 100)
                 if is_long
@@ -54,7 +60,9 @@ class TradeExecutorMixin:
         else:
             signal.target_price = None
 
-        if sl_pct and signal.entry_price and signal.entry_price > 0:
+        if caller_sl is not None:
+            pass  # honor caller override
+        elif sl_pct and signal.entry_price and signal.entry_price > 0:
             signal.stop_loss = (
                 signal.entry_price * (1 - sl_pct / 100)
                 if is_long
@@ -490,27 +498,27 @@ class TradeExecutorMixin:
 
     async def get_open_trades_count(self, bot_config_id: int) -> int:
         """Return how many open TradeRecords belong to a given bot."""
-        with get_session() as session:
-            return (
-                session.query(TradeRecord)
-                .filter(
+        from sqlalchemy import select, func
+        async with get_session() as session:
+            result = await session.execute(
+                select(func.count(TradeRecord.id)).where(
                     TradeRecord.bot_config_id == bot_config_id,
                     TradeRecord.status == "open",
                 )
-                .count()
             )
+            return int(result.scalar_one() or 0)
 
     async def get_open_trades_for_bot(self, bot_config_id: int) -> list:
         """Return all open TradeRecords for a given bot."""
-        with get_session() as session:
-            return (
-                session.query(TradeRecord)
-                .filter(
+        from sqlalchemy import select
+        async with get_session() as session:
+            result = await session.execute(
+                select(TradeRecord).where(
                     TradeRecord.bot_config_id == bot_config_id,
                     TradeRecord.status == "open",
                 )
-                .all()
             )
+            return list(result.scalars().all())
 
     async def execute_trade(
         self,
@@ -521,6 +529,8 @@ class TradeExecutorMixin:
         leverage: int,
         reason: str,
         bot_config_id: int,
+        take_profit_pct: Optional[float] = None,
+        stop_loss_pct: Optional[float] = None,
     ) -> None:
         """Thin wrapper for self-managed strategies: build a TradeSignal and
         route through the existing `_execute_trade` pipeline.
@@ -552,13 +562,31 @@ class TradeExecutorMixin:
         direction = (
             SignalDirection.LONG if side.lower() == "long" else SignalDirection.SHORT
         )
+        # Compute absolute TP/SL prices from user-supplied override percentages.
+        # Used by self-managed strategies (copy_trading v1.1) to bypass per-asset
+        # and bot-level TP/SL config.
+        is_long = direction == SignalDirection.LONG
+        target_price = None
+        stop_loss = None
+        if take_profit_pct and price > 0:
+            target_price = (
+                price * (1 + float(take_profit_pct) / 100)
+                if is_long
+                else price * (1 - float(take_profit_pct) / 100)
+            )
+        if stop_loss_pct and price > 0:
+            stop_loss = (
+                price * (1 - float(stop_loss_pct) / 100)
+                if is_long
+                else price * (1 + float(stop_loss_pct) / 100)
+            )
         signal = TradeSignal(
             direction=direction,
             confidence=100,
             symbol=symbol,
             entry_price=price,
-            target_price=None,
-            stop_loss=None,
+            target_price=target_price,
+            stop_loss=stop_loss,
             reason=reason,
             metrics_snapshot={},
             timestamp=datetime.now(timezone.utc),
