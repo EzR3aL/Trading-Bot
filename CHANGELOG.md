@@ -9,6 +9,29 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [4.15.3] - 2026-04-08
+
+### Behoben
+- **Exit-Preis stimmte nicht exakt mit der Börse überein (alle Close-Pfade)** — An vier Stellen wurde der Exit-Preis aus `ticker.last_price` oder dem Order-Objekt abgeleitet statt aus dem tatsächlichen Fill-Preis des Close-Orders. Das führte zu Abweichungen zwischen den im Frontend angezeigten Werten und der Realität auf der Börse — kritisch für PnL-Anzeige und vor allem für den **Steuerreport**, der zwingend mit den Exchange-Daten übereinstimmen muss. Beispiele:
+  - AVAXUSDT Short manueller Close: Frontend -$975.44 / -10.34%, real -9.90 USDT / -0.10%
+  - BNBUSDT Long Strategy-Exit: Frontend +$361.99 / +1.98% (Exit 617.05), real +353.17 / +1.93% (Exit 616.76)
+
+  Alle vier Close-Pfade nutzen jetzt einheitlich `get_close_fill_price()` als primäre Quelle (liefert den `priceAvg` des tatsächlich gefüllten Close-Orders aus der Bitget orders-history) und fallen erst danach auf Ticker / Order-Preis / Entry-Preis zurück:
+  - `src/api/routers/bots_lifecycle.py` — manueller Close via UI-Button
+  - `src/bot/position_monitor.py` — Strategy-Exit (z.B. Edge Indicator, Liquidation Hunter)
+  - `src/bot/rotation_manager.py` — Rotation-Close (beide Branches: aktive Rotation + bereits-geschlossen)
+  - `src/api/routers/trades.py` — `POST /api/trades/sync` (Sync verwaister Trades)
+
+- **Bot-Karte zeigte i18n-Schlüssel statt Risikoprofil-Name** — Bei Bots mit `risk_profile=aggressive` (Liquidation Hunter) wurde in der Bot-Karte der rohe Übersetzungs-Key `bots.builder.paramOption_risk_profile_aggressive` angezeigt, weil nur `conservative` und `standard` in `de.json`/`en.json` definiert waren. Betraf nur User mit aggressivem Risikoprofil. Beide Locales ergänzt.
+
+### Hinzugefügt
+- **Trade-ID immer sichtbar im Trades-Tab** — Die `#ID`-Spalte war bisher nur ab `2xl`-Breakpoint (≥1536px) sichtbar. Sie wird jetzt auf allen Auflösungen in der Desktop-Tabelle angezeigt (monospace, dezent grau, mit `#`-Prefix) und auch im `MobileTradeCard` neben dem Symbol eingeblendet. Erleichtert Support-Anfragen, Fehleranalyse und das eindeutige Referenzieren einzelner Trades (z.B. im Steuerreport-Kontext).
+
+### Datenkorrektur
+- Bestehender AVAXUSDT Short Demo-Trade vom 2026-04-08 09:51 wurde manuell auf die echten Bitget-Werte korrigiert (siehe `scripts/fix_avax_trade.sql`).
+
+---
+
 ## [4.15.2] - 2026-04-05
 
 ### Behoben

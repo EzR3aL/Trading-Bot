@@ -562,6 +562,7 @@
       "paramDesc_risk_profile": "Conservative = fewer trades, wide stops, 4h. Standard = balanced, 1h.",
       "paramOption_risk_profile_conservative": "Conservative",
       "paramOption_risk_profile_standard": "Standard",
+      "paramOption_risk_profile_aggressive": "Aggressive",
       "paramLabel_ema_fast_period": "EMA Fast Period",
       "paramDesc_ema_fast_period": "Fast EMA period for the Trend Ribbon (Default 8)",
       "paramLabel_ema_slow_period": "EMA Slow Period",

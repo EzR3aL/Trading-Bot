@@ -355,9 +355,15 @@ async def sync_trades(
 
                 # Position no longer exists — close the trade
                 try:
-                    # Try to get current price for PnL calculation
-                    ticker = await client.get_ticker(trade.symbol)
-                    exit_price = ticker.last_price
+                    # Prefer the actual close-order fill price (matches exchange exactly).
+                    exit_price = None
+                    try:
+                        exit_price = await client.get_close_fill_price(trade.symbol)
+                    except Exception:
+                        pass
+                    if not exit_price:
+                        ticker = await client.get_ticker(trade.symbol)
+                        exit_price = ticker.last_price
 
                     # Determine exit reason from price proximity
                     if trade.take_profit and abs(exit_price - trade.take_profit) < trade.entry_price * 0.005:

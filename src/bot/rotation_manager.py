@@ -154,14 +154,21 @@ class RotationManagerMixin:
                     f"{log_prefix} [{mode_str}] ROTATION: Trade #{trade.id} {trade.symbol} "
                     f"already closed on exchange (TP/SL hit). Marking as ROTATION_ALREADY_CLOSED."
                 )
-                # Get current price for approximate PnL
-                exit_price = trade.entry_price
+                # Prefer the actual close-order fill price; fall back to ticker, then entry.
+                exit_price = None
                 try:
-                    ticker = await client.get_ticker(trade.symbol)
-                    if ticker:
-                        exit_price = ticker.last_price
-                except Exception as e:
-                    logger.warning("%s Failed to get ticker for %s during rotation: %s", log_prefix, trade.symbol, e)
+                    exit_price = await client.get_close_fill_price(trade.symbol)
+                except Exception:
+                    pass
+                if not exit_price:
+                    try:
+                        ticker = await client.get_ticker(trade.symbol)
+                        if ticker:
+                            exit_price = ticker.last_price
+                    except Exception as e:
+                        logger.warning("%s Failed to get ticker for %s during rotation: %s", log_prefix, trade.symbol, e)
+                if not exit_price:
+                    exit_price = trade.entry_price
 
                 await self._close_and_record_trade(
                     trade, exit_price, "ROTATION_ALREADY_CLOSED",
@@ -169,17 +176,25 @@ class RotationManagerMixin:
                 )
                 return True
 
-            # Get exit price from the close order
-            exit_price = trade.entry_price
-            if order.price and order.price > 0:
+            # Get exit price — prefer the actual fill price from orders-history
+            # (matches the exchange exactly), then the order object's price,
+            # then ticker, then entry price as last resort.
+            exit_price = None
+            try:
+                exit_price = await client.get_close_fill_price(trade.symbol)
+            except Exception:
+                pass
+            if not exit_price and order.price and order.price > 0:
                 exit_price = order.price
-            else:
+            if not exit_price:
                 try:
                     ticker = await client.get_ticker(trade.symbol)
                     if ticker:
                         exit_price = ticker.last_price
                 except Exception as e:
                     logger.warning("Failed to get exit price ticker for %s: %s", trade.symbol, e)
+            if not exit_price:
+                exit_price = trade.entry_price
 
             await self._close_and_record_trade(
                 trade, exit_price, "ROTATION",

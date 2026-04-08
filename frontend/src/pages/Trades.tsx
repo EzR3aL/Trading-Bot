@@ -237,7 +237,7 @@ export default function Trades() {
             <table className="table-premium w-full">
               <thead>
                 <tr>
-                  <th className="text-left hidden 2xl:table-cell">#</th>
+                  <th className="text-left">#</th>
                   <th className="text-left">{t('trades.date')}</th>
                   <th className="text-left hidden xl:table-cell">{t('trades.bot')}</th>
                   <th className="text-center hidden lg:table-cell">{t('trades.exchange')}</th>
@@ -277,7 +277,7 @@ export default function Trades() {
                         onClick={() => setExpandedId(expandedId === trade.id ? null : trade.id)}
                         className="cursor-pointer"
                       >
-                        <td className="text-gray-500 text-xs hidden 2xl:table-cell">{trade.id}</td>
+                        <td className="text-gray-500 text-xs font-mono">#{trade.id}</td>
                         <td className="text-gray-300">
                           <span className="inline-flex items-center">
                             <ChevronRight size={14} className={`expand-chevron ${expandedId === trade.id ? 'open' : ''}`} />
