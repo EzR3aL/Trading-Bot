@@ -9,7 +9,7 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
-## [4.15.3] - 2026-04-08
+## [4.15.11] - 2026-04-08
 
 ### Behoben
 - **Exit-Preis stimmte nicht exakt mit der Börse überein (alle Close-Pfade)** — An vier Stellen wurde der Exit-Preis aus `ticker.last_price` oder dem Order-Objekt abgeleitet statt aus dem tatsächlichen Fill-Preis des Close-Orders. Das führte zu Abweichungen zwischen den im Frontend angezeigten Werten und der Realität auf der Börse — kritisch für PnL-Anzeige und vor allem für den **Steuerreport**, der zwingend mit den Exchange-Daten übereinstimmen muss. Beispiele:
@@ -29,6 +29,185 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ### Datenkorrektur
 - Bestehender AVAXUSDT Short Demo-Trade vom 2026-04-08 09:51 wurde manuell auf die echten Bitget-Werte korrigiert (siehe `scripts/fix_avax_trade.sql`).
+
+---
+
+## [4.15.10] - 2026-04-07
+
+### Behoben
+- **User wurden ständig ausgeloggt — Race Condition bei Refresh-Token-Rotation (#147)** — User auf Mobile (PWA) und Desktop beschwerten sich, dass sie sich praktisch täglich neu anmelden mussten, obwohl Access-TTL=24h und Refresh-TTL=30d eigentlich lang genug waren.
+  
+  Root cause: der Refresh-Endpoint rotierte den Refresh-Token bei jedem Call (klassisches Rotating-Refresh-Pattern). Unter parallelen Refresh-Anfragen — z.B. PWA wake-up `visibilitychange` + gleichzeitig ein API-Call der 401 wirft, oder zwei Browser-Tabs die simultan refreshen — race condition: beide Requests lesen denselben Session-Row, beide erstellen neue Tokens, beide updaten die DB. Browser-Cookie hat Token X, DB-Hash hat Token Y. Nächster Refresh schlägt fehl → Forced Logout.
+  
+  Fix:
+  1. **Refresh-Token-Rotation entfernt**. Der Refresh-Endpoint stellt nur noch ein neues Access-Token aus. Der Refresh-Token-Cookie bleibt unverändert; der DB-Session-Row bekommt nur `last_activity=NOW()`. Trade-off: bei kompromittiertem Refresh-Token ist das Theft-Window jetzt die volle Refresh-TTL — für unser Threat-Model (httpOnly + secure Cookie hinter TLS) akzeptabel.
+  2. **Access-TTL** von 24h → **7 Tage** erhöht (`ACCESS_TOKEN_EXPIRE_MINUTES = 10080`)
+  3. **Refresh-TTL** von 30d → **90 Tage** erhöht (`REFRESH_TOKEN_EXPIRE_DAYS = 90`)
+  4. Frontend `DEFAULT_TOKEN_LIFETIME_S` (authStore.ts) und der Fallback in `client.ts::doRefresh` an die neuen Werte angepasst.
+  
+  Auswirkung: Bei normalem Gebrauch sieht ein User nur dann einen Logout, wenn er explizit ausloggt, sein Passwort ändert (token_version-Bump) oder 90 Tage offline war.
+
+### Tests
+- 2 bestehende `TestRefreshEndpointLogic` Tests aktualisiert (`test_refresh_with_matching_token_version_succeeds`, `test_refresh_new_tokens_contain_updated_user_data`) — Refresh-Endpoint setzt jetzt 1 statt 2 Cookies.
+- `test_refresh_with_valid_refresh_token_returns_new_tokens` umbenannt zu `test_refresh_with_valid_refresh_token_returns_new_access_only`.
+- 18/18 in `TestRefreshEndpointLogic` + `TestJwtHandler` grün.
+
+---
+
+## [4.15.9] - 2026-04-07
+
+### Hinzugefügt
+- **Per-Mode Delete-Funktion für API-Keys (#145)** — User können jetzt ihre Live- oder Demo-API-Keys einzeln löschen, ohne die ganze Exchange-Verbindung zu verlieren. Neuer Endpoint `DELETE /api/config/exchange-connections/{exchange_type}/keys?mode={live|demo}` setzt die drei Spalten des angefragten Modus auf NULL. Wenn nach dem Löschen beide Modi leer sind, wird die Connection-Row komplett gelöscht damit das Frontend keine "configured"-Badge mehr zeigt. Spezialfall Hyperliquid: wenn alle Wallets entfernt sind, werden auch `builder_fee_approved` und `referral_verified` zurückgesetzt (waren an die alte Wallet-Adresse gebunden).
+- Frontend Delete-Button im Settings → API-Keys → KeyForm. Sichtbar nur wenn der Modus konfiguriert ist, mit Browser-Confirm-Dialog vor dem Löschen.
+- 6 neue Tests in `test_config_router.py::TestExchangeConnections`: Live-only, Demo-only, drops-row-when-both-empty, no-connection-404, wrong-mode-404, invalid-mode-422.
+
+### Geändert
+- **Strikte Live/Demo-Trennung wiederhergestellt (#145)** — Der in #141 eingeführte automatische Demo-Client aus Live-Credentials für Bitget/BingX (via `paptrading`-Header bzw. VST-URL) wurde rückgängig gemacht. User-Feedback: Live und Demo sollen unabhängige Slots bleiben. Wer Demo-Trading auf Bitget/BingX möchte, muss explizit Demo-Credentials hinterlegen — kein Auto-Mirroring mehr. Der `_EXCHANGES_WITH_HEADER_BASED_DEMO` Set in `factory.get_all_user_clients` wurde entfernt; die Funktion erstellt jetzt strikt nur Clients für Modi mit gespeicherten Credentials.
+- Frontend Settings-Page: Der in #143 hinzugefügte Banner ("Bei Bitget brauchst du nur EIN API-Key-Set...") wurde entfernt. Die zugehörigen i18n-Keys `headerDemoHint` (de + en) sind weg.
+
+### Anmerkung zu eLPresidente
+Sein offener Trade #79 bleibt mit dieser Änderung sichtbar, weil seine Connection nach dem direkten DB-Cleanup nur noch Demo-Credentials im Demo-Slot hat. Die Factory erstellt einen Demo-Client für Bitget, der den Trade matched.
+
+### Tests
+- 10 Factory-Tests in `test_get_all_user_clients.py` aktualisiert: bitget/bingx live-only ergeben jetzt nur einen Live-Client (keine zwei mehr); `test_elpresidente_scenario` spiegelt seinen tatsächlichen Post-Cleanup-Zustand wider.
+- 25/25 Tests in `TestExchangeConnections` grün.
+
+---
+
+## [4.15.8] - 2026-04-07
+
+### Behoben
+- **Doppelt gespeicherte Live-/Demo-Credentials verursachen Background-Errors (#143)** — User eLPresidente speicherte denselben Bitget-Demo-API-Key in BEIDE Felder (Live und Demo) der Settings-Seite. Bitget akzeptiert den Demo-Key nur mit dem `paptrading: 1` Header → Live-Abfragen schlugen mit `exchange environment is incorrect` fehl. Vor #141 war sein Demo-Trade unsichtbar; nach #141 sichtbar, aber jeder Portfolio-Refresh produzierte Fehler-Logs für die Live-Abfrage.
+  
+  Fix in `PUT /api/config/exchange-connections/{exchange_type}`:
+  - **Same-request duplicate**: Wenn `data.api_key == data.demo_api_key` in einem einzelnen Request → 400 mit klarer Meldung
+  - **Cross-request duplicate (live)**: Wenn der neue `api_key` einen existierenden `demo_api_key` matched → 400 mit Hinweis "Demo-Key gilt automatisch für beide Modi"
+  - **Cross-request duplicate (demo)**: Wenn der neue `demo_api_key` einen existierenden `api_key` matched → 400 mit Hinweis "Live-Key gilt automatisch für beide Modi"
+  
+  Frontend-Hinweis: Settings-Seite zeigt für Bitget und BingX einen prominenten Hinweis, dass nur EIN Key-Set nötig ist (Live → automatisch beide Modi via Header). Verhindert dass weitere User in dieselbe Falle laufen.
+  
+  Direkte DB-Reparatur für eLPresidente: seine Live-Spalten wurden geleert (er hatte die DEMO-Credentials in beide Felder kopiert). Sein offener Trade #79 bleibt sichtbar via Demo-Client.
+
+### Hinzugefügt
+- 4 neue Error-Konstanten in `src/errors.py` (de + en) für Duplikats- und Wrong-Environment-Fälle.
+- 3 neue Tests in `test_config_router.py::TestExchangeConnections`:
+  - `test_upsert_rejects_same_key_in_both_fields_same_request`
+  - `test_upsert_rejects_live_key_matching_existing_demo`
+  - `test_upsert_rejects_demo_key_matching_existing_live`
+- i18n Key `settings.headerDemoHint` (de + en) für die Frontend-Erklärung.
+
+---
+
+## [4.15.7] - 2026-04-07
+
+### Behoben
+- **Portfolio zeigt keine Demo-Trades wenn Connection nur Live-Keys hat (#141)** — User eLPresidente konfigurierte einen Bitget-Bot im **Demo-Modus**, seine Bitget-ExchangeConnection hatte aber nur **Live-Credentials**. Der Bot funktionierte (Bitget akzeptiert den Live-Key mit `paptrading: 1` Header für Simulated Trading), der Trade wurde korrekt als `demo_mode=true` in der DB gespeichert — aber im Dashboard/Portfolio war er **unsichtbar**.
+  
+  Ursache: `src/exchanges/factory.py::get_all_user_clients` erstellte exakt einen Client pro Exchange und bevorzugte Live-Credentials. Für eLPresidente entstand nur ein Live-Bitget-Client, der Live-Positionen abfragte (leer) — der Demo-Trade wurde nie gematched. Zusätzlich war `trade_lookup` in `portfolio.py` nur auf `(exchange, symbol, side)` gekeyed, ohne `demo_mode` — ein weiterer Punkt an dem Live/Demo-Trades kollidieren können.
+  
+  Fix: Die Factory gibt jetzt `list[tuple[exchange_type, demo_mode, client]]` zurück. Für jede Connection werden alle Modi erstellt, die die gespeicherten Credentials bauen können:
+  - Bitget: Live-Creds → Live + Demo-Client (via `paptrading` Header)
+  - BingX: Live-Creds → Live + Demo-Client (via VST-URL mit demselben Key)
+  - Hyperliquid: Demo = Testnet = separates Wallet → nur erstellt wenn dedizierte Demo-Keys vorhanden
+  - Weex / Bitunix: Keine Demo-Unterstützung → nur Live
+  
+  `portfolio.py::get_portfolio_positions` matched jetzt `(exchange, base_sym, side, demo_mode)` — ein User kann Live- und Demo-Trades auf demselben Symbol+Side unabhängig sehen. `get_portfolio_allocation` dedupliziert auf eine Balance pro Exchange (bevorzugt Live), damit die Pie-Chart nicht doppelt zählt.
+
+  Der Bot-Trading-Pfad war nie betroffen — `bot_worker.py:187-199` baut seine eigenen Clients mit expliziten kwargs.
+
+### Hinzugefügt
+- `tests/unit/exchanges/test_get_all_user_clients.py` — 10 neue Tests inkl. parametrisierter Capability-Matrix (Bitget/BingX Header-Demo, Hyperliquid nur mit dedizierten Keys, Weex/Bitunix nur Live) und einem expliziten Regression-Test für das eLPresidente-Szenario.
+
+---
+
+## [4.15.6] - 2026-04-07
+
+### Geändert
+- **Hyperliquid Setup UI visuell überarbeitet (#137)** — User-Feedback: "alles ist links zentriert". Die flache, lineare Checkliste ohne visuelle Hierarchie wurde durch ein hierarchisches Layout ersetzt:
+  - Header-Bereich mit prominentem Wallet-Icon-Badge, Titel, Subtitel und farbkodiertem Status-Pill (amber bei pending, emerald bei ready)
+  - Numerierte Schritt-Kacheln (`01`, `02`, `03`) statt Checkbox-Liste, mit farbkodiertem Zustand: emerald (done), amber (active), muted (pending)
+  - Aktive Action-Cards mit Amber-Border und Glow-Effekt heben hervor was der User als nächstes tun muss
+  - Buttons sind jetzt `py-3` mit Emerald-Shadow für mehr Präsenz
+  - Diagnose-Block (bei Referral-Fehler) ist aufgeräumt: Error-Banner oben, 2×2-Grid für Wallet/Balance/Volume/Referrer, darunter der Action-spezifische Schritt-Block mit besserem Step-Styling
+  - Wallet-Adresse und Balance-Werte sind in uppercase labels + large values strukturiert (stärkere Lesbarkeit)
+  - Neue `hlSetup.subtitle` i18n Keys (de + en)
+
+  Keine Funktionsänderung — rein kosmetisch und Layout-strukturierend.
+
+---
+
+## [4.15.5] - 2026-04-07
+
+### Behoben
+- **Hyperliquid Builder-Fee-Bestätigung schlug immer fehl — User festgefahren in Signatur-Loop (#138)** — User eLPresidente (und jeder andere Demo-User) klickte "Transaktion bestätigen", signierte erfolgreich in seinem Wallet, und bekam dann immer wieder `Builder-Fee-Genehmigung nicht auf Hyperliquid gefunden. Bitte erneut signieren.` Zwei kombinierte Bugs:
+  1. **`HyperliquidClient.check_builder_fee_approval` short-circuitete bei `self._builder is None`**: Der HL-Client liest die Builder-Config nur aus `os.environ`, aber auf der Prod-Instanz liegt sie in der `system_settings` DB-Tabelle (via `get_hl_config()`). Clients die über `create_hl_client()` / `create_hl_mainnet_read_client()` erstellt werden haben daher `self._builder = None`, und die Methode returnt `None` ohne die HL-API überhaupt zu fragen. Der Bot-Trading-Pfad ist nicht betroffen, weil `bot_worker.py:181-184` `builder_address` explizit als kwargs durchreicht.
+  2. **`confirm_builder_approval` nutzte Testnet-Client für Demo-User**: Das Frontend signiert mit `hyperliquidChain: 'Mainnet'` und postet an die Mainnet-API `https://api.hyperliquid.xyz/exchange`. Der Backend-Check lief aber für Demo-only-User gegen Testnet — die Approval gab es dort natürlich nicht.
+  
+  Live-verifiziert: direkte HTTP-Abfrage gegen HL Mainnet für eLPresidente's Wallet `0x5A57D576...` mit dem Builder `0x67B10Bf6...` gibt `maxBuilderFee: 10` zurück. Die Signatur war die ganze Zeit korrekt gespeichert, unser Backend hat sie nur nicht korrekt abgefragt.
+  
+  Fix: `check_builder_fee_approval(user_address, builder_address)` akzeptiert jetzt den Builder explizit. `confirm_builder_approval` und `revenue_summary` nutzen `create_hl_mainnet_read_client` und übergeben den Builder-Address aus `get_hl_config()` explizit. Der `mode`-Query-Parameter auf `revenue_summary` wird für Rückwärtskompatibilität akzeptiert aber ignoriert (Builder-Fees und Referrals existieren nur auf Mainnet).
+
+### Hinzugefügt
+- 5 neue Tests (3 Unit + 2 Router) für die Builder-Fee-Confirmation-Pfade:
+  - `test_check_approval_accepts_explicit_builder_address` — Regression für den self._builder=None Pfad
+  - `test_check_approval_explicit_builder_overrides_self` — Explizites kwarg hat Vorrang
+  - `test_approval_uses_mainnet_for_demo_user` — Mainnet-Zwang auch bei Demo-User
+  - `test_approval_passes_explicit_builder_address` — Router-Seite übergibt Builder korrekt
+  - `test_approval_requires_configured_builder_address` — Klarer Fehler wenn Builder nicht konfiguriert
+
+---
+
+## [4.15.4] - 2026-04-07
+
+### Behoben
+- **Hyperliquid Referral-Verifikation zeigte unbrauchbare Fehlermeldung (#135)** — User (z.B. eLPresidente) sahen beim Klick auf "Bereits registriert? Jetzt prüfen" nur `Referral nicht gefunden. Bitte registriere dich zuerst über https://app.hyperliquid.xyz/join/TRADINGDEPARTMENT`, ohne Hinweis WAS sie tatsächlich tun müssen. Ursache: Der Endpoint meldete einen generischen Fehler, ohne zu unterscheiden zwischen (a) Wallet hat noch kein Guthaben auf HL, (b) Wallet hat Guthaben aber keinen Referrer, (c) Wallet wurde über anderen Referrer registriert. Zusätzlich lief die Abfrage für Demo-User gegen Hyperliquid-Testnet, obwohl Referrals ein reines Mainnet-Konzept sind.
+
+  Fix: `POST /api/config/hyperliquid/verify-referral` gibt jetzt bei Fehler eine strukturierte JSON-Detail-Response zurück mit:
+  - `required_action`: `DEPOSIT_NEEDED` | `ENTER_CODE_MANUALLY` | `WRONG_REFERRER` | `VERIFIED`
+  - `wallet_address` + `wallet_short`: welches Wallet geprüft wurde
+  - `account_value_usd` + `cum_volume_usd`: aktueller HL-Kontostand und Handelsvolumen
+  - `referred_by`: rohe Referrer-Info von HL
+  - `min_deposit_usdc`: 5.0 (Hyperliquids Hard-Minimum)
+  - `deposit_url`, `enter_code_url`: konkrete nächste-Schritte-Links
+  
+  Frontend `HyperliquidSetup.tsx` rendert jetzt pro Action-Typ einen passenden Anleitungs-Block mit nummerierten Schritten:
+  - **DEPOSIT_NEEDED**: "Zahle mindestens 5 USDC via Arbitrum Bridge ein (weniger geht verloren!)"
+  - **ENTER_CODE_MANUALLY**: "Öffne https://app.hyperliquid.xyz/referrals → Enter Code → TRADINGDEPARTMENT"
+  - **WRONG_REFERRER**: Erklärt dass HL keine nachträgliche Referrer-Änderung zulässt
+  
+  Außerdem: `verify-referral` und `referral-status` forcieren jetzt Mainnet (neuer Helper `create_hl_mainnet_read_client` in `src/services/config_service.py`), weil HL-Referrals nur dort existieren. Der `mode`-Query-Parameter auf `referral-status` wird für Rückwärtskompatibilität akzeptiert aber ignoriert.
+
+### Hinzugefügt
+- `src/services/config_service.py::create_hl_mainnet_read_client()` — Mainnet-only HL-Client für read-only Queries (Referral, User-State).
+- `src/exchanges/hyperliquid/client.py::HyperliquidClient.get_user_state()` — direkter `user_state`-Query für Balance-Diagnose.
+- `src/errors.py`: drei neue Fehler-Konstanten mit Platzhaltern für wallet/account/code.
+- `src/api/routers/config_hyperliquid.py`: Konstante `HL_MIN_DEPOSIT_USDC = 5.0` und Action-Enum-Konstanten.
+- i18n-Keys in `frontend/src/i18n/{de,en}.json` für alle Diagnose-Texte (Step-by-Step-Anleitungen).
+- 5 neue Tests in `tests/unit/api/test_config_router_extra.py` für alle Diagnose-Pfade: `test_referral_deposit_needed`, `test_referral_enter_code_needed`, `test_referral_wrong_referrer`, `test_referral_uses_mainnet_regardless_of_demo`, plus aktualisierter `test_referral_found`.
+
+---
+
+## [4.15.3] - 2026-04-07
+
+### Behoben
+- **Dashboard Trailing Stop zeigte falschen Status (#133)** — Die Dashboard-API (`/api/portfolio/positions`, `/api/trades`) berechnete den Trailing-Stop mit anderen Parametern als die Strategie selbst. Zwei unabhängige Bugs:
+  1. `_compute_trailing_stop` in `src/api/routers/trades.py` merged nur `DEFAULTS + strategy_params` und **ignorierte `RISK_PROFILES`**. Für ein `conservative`-Bot (edge_indicator) wurden `trailing_breakeven_atr=2.0` und `trailing_trail_atr=3.0` nicht angewendet — stattdessen griffen die DEFAULTS (1.5, 2.5).
+  2. Der Klines-Prefetch in `src/api/routers/portfolio.py` und `src/api/routers/trades.py` hardcodete `"1h"` statt das konfigurierte `kline_interval` der Strategie zu verwenden. Ein conservative-Bot mit `kline_interval="4h"` bekam für die ATR-Berechnung 1h-Klines.
+  
+  Konsequenz: Das Dashboard zeigte "Trailing aktiv ✓" samt ShieldCheck-Badge (z.B. $69,179.54 bei Trade #71), obwohl die Strategie den Trailing nie aktivierte. User verließen sich auf einen Schutz, den es gar nicht gab. **Der Bot selbst hat immer korrekt auf dem gewählten Intervall gehandelt** — Signalgenerierung, Exit-Checks und native Trailing-Stop-Platzierung nutzen `self._strategy._p` mit korrektem Profil-Merge. Nur die Dashboard-Anzeige war falsch.
+  
+  Fix: Neuer Helper `resolve_strategy_params()` in `src/strategy/base.py` spiegelt die Merge-Logik (`DEFAULTS → RISK_PROFILE → user_params`) der Strategie-`__init__`-Methoden. Dashboard und Strategie sehen jetzt garantiert dieselben Parameter. Unterstützt auch `liquidation_hunter` (vorher nur edge_indicator). Klines-Cache ist jetzt pro `(symbol, interval)` statt nur `symbol`.
+
+- **BingX native Trailing Stop schlug immer fehl (Error 109400)** — `place_trailing_stop` sendete `price` zusammen mit `priceRate` im TRAILING_STOP_MARKET-Request. BingX interpretiert `price` als "USDT-Trail-Distance" (Alternative zu `priceRate`) und lehnt die Kombination mit Error 109400 "cannot provide both the Price and PriceRate fields" ab. Korrektes Feld ist `activationPrice` (laut [BingX-API Issue #28](https://github.com/BingX-API/BingX-swap-api-doc/issues/28)). User Ludwig (Bot 14) und alle BingX-Bots waren betroffen seit Feature-Release. Software-Backup hatte gegriffen, aber der native Trailing war komplett kaputt.
+
+- **Trailing Stop: falsche Erfolgsmeldungen bei Weex/Bitunix/Hyperliquid** — `trade_executor` prüfte den Rückgabewert von `client.place_trailing_stop` nicht. Da die Basis-Klasse für nicht unterstützte Börsen `None` zurückgibt, wurde fälschlicherweise `trailing_placed=True` gesetzt und "Native trailing stop placed" geloggt — obwohl nichts platziert wurde. `trade.native_trailing_stop` in der DB zeigte diesen falschen Status an. Zusätzlich versuchte `position_monitor._try_place_native_trailing_stop` alle 10 Minuten vergeblich Klines zu holen und einen Trailing zu setzen. Fix: neues Class-Level Flag `ExchangeClient.SUPPORTS_NATIVE_TRAILING_STOP` (Bitget/BingX = True, Rest = False). Beide Pfade überspringen unnötige API-Calls, die nicht unterstützten Börsen verlassen sich vollständig auf Software-Trailing in `strategy.should_exit`.
+
+### Hinzugefügt
+- `src/strategy/base.py::resolve_strategy_params()` — zentrale Helfer-Funktion zum Auflösen von Strategie-Parametern außerhalb einer Strategie-Instanz (Dashboard, Background Jobs).
+- `src/exchanges/base.py::SUPPORTS_NATIVE_TRAILING_STOP` — explizite Capability-Deklaration pro Exchange-Client.
+- `tests/unit/test_resolve_strategy_params.py` — 23 Tests inkl. Parametrized Parity-Tests, die garantieren dass `resolve_strategy_params` dasselbe Ergebnis liefert wie `EdgeIndicatorStrategy._p` / `LiquidationHunterStrategy._p` für alle Risk Profiles.
+- `tests/unit/exchanges/test_bingx_trailing_stop.py` — Regression-Tests, die verhindern dass `price` statt `activationPrice` wieder gesendet wird.
+- `tests/unit/exchanges/test_native_trailing_capability.py` — 8 Tests, die die Support-Matrix pro Client absichern (Bitget ✓, BingX ✓, Weex/Bitunix/Hyperliquid ✗) passend zur Frontend-Feature-Matrix.
 
 ---
 

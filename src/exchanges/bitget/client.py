@@ -47,6 +47,8 @@ class BitgetExchangeClient(ExchangeClient):
     Supports demo trading via paptrading header.
     """
 
+    SUPPORTS_NATIVE_TRAILING_STOP = True
+
     def __init__(
         self,
         api_key: str,

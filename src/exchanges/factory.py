@@ -177,15 +177,31 @@ def get_supported_exchanges() -> list:
     return [e.value for e in ExchangeType]
 
 
-async def get_all_user_clients(user_id: int, db) -> dict:
+async def get_all_user_clients(
+    user_id: int, db,
+) -> list[tuple[str, bool, ExchangeClient]]:
     """Load all ExchangeConnections for a user and create client instances.
+
+    Returns one client per (connection, mode) combination that the stored
+    credentials actually cover — strict separation, no auto-mirroring
+    between live and demo. Per #145 the user explicitly wants live and
+    demo to remain independent slots:
+
+    - ``conn.api_key_encrypted`` present → live client for this exchange
+    - ``conn.demo_api_key_encrypted`` present → demo client for this exchange
+
+    A user who has only live credentials gets only a live client, even on
+    Bitget/BingX where the same key technically works in both environments
+    via a header. If they want the bot to run in demo mode against the
+    same exchange, they must store dedicated demo credentials.
 
     Args:
         user_id: User ID
         db: AsyncSession
 
     Returns:
-        Dict[str, ExchangeClient] mapping exchange_type to client instance
+        A list of ``(exchange_type, demo_mode, client)`` tuples. Empty if
+        the user has no usable credentials on any connection.
     """
     from sqlalchemy import select
     from src.models.database import ExchangeConnection
@@ -196,30 +212,50 @@ async def get_all_user_clients(user_id: int, db) -> dict:
     )
     connections = result.scalars().all()
 
-    clients = {}
-    for conn in connections:
+    clients: list[tuple[str, bool, ExchangeClient]] = []
+
+    def _try_create(
+        conn: ExchangeConnection,
+        demo_mode: bool,
+        key_enc: str | None,
+        secret_enc: str | None,
+        passphrase_enc: str | None,
+    ) -> None:
+        if not key_enc or not secret_enc:
+            return
         try:
-            api_key_enc = conn.api_key_encrypted or conn.demo_api_key_encrypted
-            api_secret_enc = conn.api_secret_encrypted or conn.demo_api_secret_encrypted
-            passphrase_enc = conn.passphrase_encrypted or conn.demo_passphrase_encrypted
-
-            if not api_key_enc or not api_secret_enc:
-                continue
-
-            api_key = decrypt_value(api_key_enc)
-            api_secret = decrypt_value(api_secret_enc)
-            passphrase = decrypt_value(passphrase_enc) if passphrase_enc else ""
-            demo_mode = not conn.api_key_encrypted
-
-            clients[conn.exchange_type] = create_exchange_client(
+            client = create_exchange_client(
                 exchange_type=conn.exchange_type,
-                api_key=api_key,
-                api_secret=api_secret,
-                passphrase=passphrase,
+                api_key=decrypt_value(key_enc),
+                api_secret=decrypt_value(secret_enc),
+                passphrase=decrypt_value(passphrase_enc) if passphrase_enc else "",
                 demo_mode=demo_mode,
             )
-        except Exception as e:
-            logger.warning(f"Failed to initialize exchange: {e}")
+            clients.append((conn.exchange_type, demo_mode, client))
+        except Exception as e:  # pragma: no cover — exchange-specific init errors
+            logger.warning(
+                f"Failed to initialize {conn.exchange_type} "
+                f"({'demo' if demo_mode else 'live'}): {e}"
+            )
+
+    for conn in connections:
+        # Live client (one per connection that has live credentials)
+        _try_create(
+            conn,
+            demo_mode=False,
+            key_enc=conn.api_key_encrypted,
+            secret_enc=conn.api_secret_encrypted,
+            passphrase_enc=conn.passphrase_encrypted,
+        )
+
+        # Demo client from dedicated demo credentials (if stored)
+        _try_create(
+            conn,
+            demo_mode=True,
+            key_enc=conn.demo_api_key_encrypted,
+            secret_enc=conn.demo_api_secret_encrypted,
+            passphrase_enc=conn.demo_passphrase_encrypted,
+        )
 
     return clients
 

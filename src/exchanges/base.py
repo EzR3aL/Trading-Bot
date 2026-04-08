@@ -124,6 +124,12 @@ class ExchangeClient(ABC):
         """
         return True
 
+    # Class-level capability flag: set to True in subclasses that implement
+    # a real native trailing stop via the exchange API (Bitget, BingX). Used
+    # by trade_executor and position_monitor to skip unnecessary attempts on
+    # exchanges that fall back to software trailing (Weex, Bitunix, Hyperliquid).
+    SUPPORTS_NATIVE_TRAILING_STOP: bool = False
+
     async def place_trailing_stop(
         self,
         symbol: str,
@@ -133,7 +139,13 @@ class ExchangeClient(ABC):
         trigger_price: float,
         margin_mode: str = "cross",
     ) -> Optional[dict]:
-        """Place a native trailing stop on the exchange. Override in exchange-specific client."""
+        """Place a native trailing stop on the exchange.
+
+        Default implementation returns ``None`` — meaning "not supported",
+        the caller should fall back to software trailing in
+        ``strategy.should_exit``. Subclasses that implement this must also
+        set ``SUPPORTS_NATIVE_TRAILING_STOP = True``.
+        """
         return None
 
     async def get_order_fees(self, symbol: str, order_id: str) -> float:

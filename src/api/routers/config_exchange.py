@@ -14,6 +14,8 @@ from src.api.schemas.config import ExchangeConnectionUpdate
 from src.auth.dependencies import get_current_user
 from src.errors import (
     ERR_CONNECTION_FAILED,
+    ERR_DUPLICATE_DEMO_LIVE_KEY,
+    ERR_DUPLICATE_LIVE_DEMO_KEY,
     ERR_INVALID_ETH_ADDRESS,
     ERR_INVALID_HEX_KEY,
     ERR_NO_API_KEYS,
@@ -122,6 +124,36 @@ async def upsert_exchange_connection(
                 f"reset builder_fee_approved and referral_verified"
             )
 
+    # Reject duplicate live/demo cred submissions (#143).
+    # Pattern: user pastes the same key into both forms because the Settings UI
+    # shows them side by side and Bitget/BingX accept the same key for both
+    # modes via a header. The duplicate causes failed live API calls in the
+    # background even though the trade itself works.
+    if data.api_key and conn.demo_api_key_encrypted:
+        existing_demo = decrypt_value(conn.demo_api_key_encrypted)
+        if data.api_key == existing_demo:
+            raise HTTPException(
+                status_code=400,
+                detail=ERR_DUPLICATE_LIVE_DEMO_KEY,
+            )
+    if data.demo_api_key and conn.api_key_encrypted:
+        existing_live = decrypt_value(conn.api_key_encrypted)
+        if data.demo_api_key == existing_live:
+            raise HTTPException(
+                status_code=400,
+                detail=ERR_DUPLICATE_DEMO_LIVE_KEY,
+            )
+    # Same-request duplicate (user submits both fields at once with same value)
+    if (
+        data.api_key
+        and data.demo_api_key
+        and data.api_key == data.demo_api_key
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail=ERR_DUPLICATE_LIVE_DEMO_KEY,
+        )
+
     if data.api_key:
         conn.api_key_encrypted = encrypt_value(data.api_key)
     if data.api_secret:
@@ -180,6 +212,89 @@ async def delete_exchange_connection(
     )
 
     return {"status": "ok", "message": f"{exchange_type} connection deleted"}
+
+
+@router.delete("/exchange-connections/{exchange_type}/keys")
+@limiter.limit("5/minute")
+async def delete_exchange_keys(
+    request: Request,
+    exchange_type: str = Path(pattern=EXCHANGE_PATTERN),
+    mode: Literal["live", "demo"] = Query(...),
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Clear API credentials for a single mode (live or demo) on an exchange.
+
+    Per #145: users need to remove their stored credentials without nuking
+    the whole connection row. This sets the three columns of the requested
+    mode to ``NULL``. If both modes end up empty, the row is deleted so the
+    UI doesn't show a stale "configured" badge.
+    """
+    result = await db.execute(
+        select(ExchangeConnection).where(
+            ExchangeConnection.user_id == user.id,
+            ExchangeConnection.exchange_type == exchange_type,
+        )
+    )
+    conn = result.scalar_one_or_none()
+    if not conn:
+        raise HTTPException(
+            status_code=404,
+            detail=ERR_NO_CONNECTION_FOR.format(name=exchange_type),
+        )
+
+    if mode == "live":
+        if not conn.api_key_encrypted:
+            raise HTTPException(
+                status_code=404,
+                detail=ERR_NO_LIVE_API_KEYS.format(name=exchange_type),
+            )
+        conn.api_key_encrypted = None
+        conn.api_secret_encrypted = None
+        conn.passphrase_encrypted = None
+    else:  # demo
+        if not conn.demo_api_key_encrypted:
+            raise HTTPException(
+                status_code=404,
+                detail=ERR_NO_DEMO_API_KEYS.format(name=exchange_type),
+            )
+        conn.demo_api_key_encrypted = None
+        conn.demo_api_secret_encrypted = None
+        conn.demo_passphrase_encrypted = None
+
+    # Hyperliquid: clearing the only set of credentials must also clear the
+    # builder/referral approval flags — they were tied to the wallet address
+    # that just got removed.
+    if exchange_type == "hyperliquid":
+        if not conn.api_key_encrypted and not conn.demo_api_key_encrypted:
+            conn.builder_fee_approved = False
+            conn.builder_fee_approved_at = None
+            conn.referral_verified = False
+            conn.referral_verified_at = None
+
+    # If both modes are now empty, drop the connection row entirely so the
+    # frontend doesn't show a half-empty card with a "configured" badge.
+    fully_empty = (
+        not conn.api_key_encrypted and not conn.demo_api_key_encrypted
+    )
+    conn_id = conn.id
+    if fully_empty:
+        await db.delete(conn)
+
+    from src.utils.config_audit import log_config_change
+    await log_config_change(
+        user_id=user.id,
+        entity_type="exchange_connection",
+        entity_id=conn_id,
+        action="delete_keys",
+        old_data={"exchange_type": exchange_type, "mode": mode},
+    )
+
+    return {
+        "status": "ok",
+        "message": f"{mode} keys deleted for {exchange_type}",
+        "fully_empty": fully_empty,
+    }
 
 
 @router.post("/exchange-connections/{exchange_type}/test")

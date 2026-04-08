@@ -1207,6 +1207,125 @@ class TestConfirmBuilderApproval:
         )
         assert resp.status_code == 400
 
+    @pytest.mark.asyncio
+    @patch("src.utils.settings.get_hl_config")
+    @patch("src.exchanges.factory.create_exchange_client")
+    async def test_approval_uses_mainnet_for_demo_user(
+        self, mock_create, mock_hl, client, auth_headers, session_factory, user
+    ):
+        """Regression for #138: confirm-builder-approval must force mainnet.
+
+        The frontend signs with ``hyperliquidChain: 'Mainnet'`` and posts
+        to the mainnet /exchange endpoint. A demo-only user used to get a
+        testnet client here, which always returned None on the confirmation
+        check — leaving them stuck in an infinite sign-loop.
+        """
+        mock_hl.return_value = {"builder_address": "0x" + "aa" * 20, "builder_fee": 10, "referral_code": ""}
+
+        mock_client = AsyncMock()
+        mock_client.check_builder_fee_approval = AsyncMock(return_value=10)
+        mock_client.close = AsyncMock()
+        mock_client.wallet_address = VALID_WALLET
+        mock_create.return_value = mock_client
+
+        async with session_factory() as session:
+            # Demo-only user — no live credentials
+            session.add(ExchangeConnection(
+                user_id=user.id, exchange_type="hyperliquid",
+                demo_api_key_encrypted=encrypt_value(VALID_WALLET),
+                demo_api_secret_encrypted=encrypt_value(VALID_PRIVKEY),
+            ))
+            await session.commit()
+
+        resp = await client.post(
+            "/api/config/hyperliquid/confirm-builder-approval",
+            json={},
+            headers=auth_headers,
+        )
+        assert resp.status_code == 200
+        # Must have created the client with demo_mode=False (mainnet)
+        call_kwargs = mock_create.call_args.kwargs
+        assert call_kwargs.get("demo_mode") is False, (
+            "confirm-builder-approval must hit mainnet, not testnet. "
+            "The frontend signs on mainnet and we must verify on mainnet."
+        )
+
+    @pytest.mark.asyncio
+    @patch("src.utils.settings.get_hl_config")
+    @patch("src.exchanges.factory.create_exchange_client")
+    async def test_approval_passes_explicit_builder_address(
+        self, mock_create, mock_hl, client, auth_headers, session_factory, user
+    ):
+        """Regression for #138: HL clients created via the mainnet read
+        helper do not have ``self._builder`` populated (builder config lives
+        in the DB, not ENV). The router must pass ``builder_address`` as an
+        explicit kwarg to ``check_builder_fee_approval``, otherwise the
+        method short-circuits to None.
+        """
+        builder_addr = "0x67b10bf64b9a6f6f9aa8246139eab1c728d8186b"
+        mock_hl.return_value = {
+            "builder_address": builder_addr,
+            "builder_fee": 10,
+            "referral_code": "",
+        }
+
+        mock_client = AsyncMock()
+        mock_client.check_builder_fee_approval = AsyncMock(return_value=10)
+        mock_client.close = AsyncMock()
+        mock_client.wallet_address = VALID_WALLET
+        mock_create.return_value = mock_client
+
+        async with session_factory() as session:
+            session.add(ExchangeConnection(
+                user_id=user.id, exchange_type="hyperliquid",
+                api_key_encrypted=encrypt_value(VALID_WALLET),
+                api_secret_encrypted=encrypt_value(VALID_PRIVKEY),
+            ))
+            await session.commit()
+
+        resp = await client.post(
+            "/api/config/hyperliquid/confirm-builder-approval",
+            json={},
+            headers=auth_headers,
+        )
+        assert resp.status_code == 200
+
+        # check_builder_fee_approval must have been called with the
+        # builder_address kwarg — otherwise the real method would return
+        # None without hitting HL, leaving the user stuck.
+        all_calls = mock_client.check_builder_fee_approval.call_args_list
+        assert len(all_calls) >= 1
+        first_kwargs = all_calls[0].kwargs
+        assert first_kwargs.get("builder_address") == builder_addr, (
+            f"Expected builder_address={builder_addr} in kwargs, "
+            f"got kwargs={first_kwargs}"
+        )
+
+    @pytest.mark.asyncio
+    @patch("src.utils.settings.get_hl_config")
+    async def test_approval_requires_configured_builder_address(
+        self, mock_hl, client, auth_headers, session_factory, user
+    ):
+        """If the server has no builder address configured, we cannot confirm
+        any approval — return a clear error instead of silently checking
+        against an empty builder."""
+        mock_hl.return_value = {"builder_address": "", "builder_fee": 10, "referral_code": ""}
+
+        async with session_factory() as session:
+            session.add(ExchangeConnection(
+                user_id=user.id, exchange_type="hyperliquid",
+                api_key_encrypted=encrypt_value(VALID_WALLET),
+                api_secret_encrypted=encrypt_value(VALID_PRIVKEY),
+            ))
+            await session.commit()
+
+        resp = await client.post(
+            "/api/config/hyperliquid/confirm-builder-approval",
+            json={},
+            headers=auth_headers,
+        )
+        assert resp.status_code == 400
+
 
 # ===========================================================================
 # 18. POST /api/config/hyperliquid/verify-referral
@@ -1277,10 +1396,18 @@ class TestVerifyReferral:
     async def test_referral_found(
         self, mock_create, mock_hl, client, auth_headers, session_factory, user
     ):
+        """Successful verification: referredBy matches the configured code."""
         mock_hl.return_value = {"builder_address": "", "builder_fee": 0, "referral_code": "REF123"}
 
         mock_client = AsyncMock()
-        mock_client.get_referral_info = AsyncMock(return_value={"referredBy": "someuser"})
+        mock_client.wallet_address = VALID_WALLET
+        mock_client.get_referral_info = AsyncMock(return_value={
+            "referredBy": {"referrer": "0xdead", "code": "REF123"},
+            "cumVlm": "1500.0",
+        })
+        mock_client.get_user_state = AsyncMock(return_value={
+            "marginSummary": {"accountValue": "100.5"},
+        })
         mock_client.close = AsyncMock()
         mock_create.return_value = mock_client
 
@@ -1298,18 +1425,34 @@ class TestVerifyReferral:
             headers=auth_headers,
         )
         assert resp.status_code == 200
-        assert resp.json()["verified"] is True
+        data = resp.json()
+        assert data["verified"] is True
+        assert data["required_action"] == "VERIFIED"
+        assert data["account_value_usd"] == 100.5
 
     @pytest.mark.asyncio
     @patch("src.utils.settings.get_hl_config")
     @patch("src.exchanges.factory.create_exchange_client")
-    async def test_referral_not_found(
+    async def test_referral_deposit_needed(
         self, mock_create, mock_hl, client, auth_headers, session_factory, user
     ):
-        mock_hl.return_value = {"builder_address": "", "builder_fee": 0, "referral_code": "REF123"}
+        """Empty wallet on HL — user must deposit ≥5 USDC before referral can bind.
+
+        Regression for #135: the old code returned a generic "Referral not found"
+        message with no hint about the 5 USDC minimum deposit requirement.
+        """
+        mock_hl.return_value = {"builder_address": "", "builder_fee": 0, "referral_code": "TRADINGDEPARTMENT"}
 
         mock_client = AsyncMock()
-        mock_client.get_referral_info = AsyncMock(return_value=None)
+        mock_client.wallet_address = VALID_WALLET
+        mock_client.get_referral_info = AsyncMock(return_value={
+            "referredBy": None,
+            "cumVlm": "0.0",
+        })
+        mock_client.get_user_state = AsyncMock(return_value={
+            "marginSummary": {"accountValue": "0.0"},
+            "withdrawable": "0.0",
+        })
         mock_client.close = AsyncMock()
         mock_create.return_value = mock_client
 
@@ -1327,27 +1470,130 @@ class TestVerifyReferral:
             headers=auth_headers,
         )
         assert resp.status_code == 400
-        assert resp.json()["detail"] == ERR_REFERRAL_NOT_FOUND.format(referral_code="REF123")
+        detail = resp.json()["detail"]
+        assert isinstance(detail, dict)
+        assert detail["required_action"] == "DEPOSIT_NEEDED"
+        assert detail["account_value_usd"] == 0.0
+        assert detail["min_deposit_usdc"] == 5.0
+        assert "5 USDC" in detail["error"]
+        assert detail["deposit_url"] == "https://app.hyperliquid.xyz/deposit"
 
     @pytest.mark.asyncio
     @patch("src.utils.settings.get_hl_config")
     @patch("src.exchanges.factory.create_exchange_client")
-    async def test_referral_info_empty_referred_by(
+    async def test_referral_enter_code_needed(
         self, mock_create, mock_hl, client, auth_headers, session_factory, user
     ):
-        """referral_info returned but referred_by is None."""
+        """Funded wallet without referrer — user must manually enter the code.
+
+        Regression for #135: a wallet that already has USDC on HL can still be
+        bound to a referrer via the manual "Enter Code" flow on the HL
+        referrals page, but only if we tell the user about it.
+        """
+        mock_hl.return_value = {"builder_address": "", "builder_fee": 0, "referral_code": "TRADINGDEPARTMENT"}
+
+        mock_client = AsyncMock()
+        mock_client.wallet_address = VALID_WALLET
+        mock_client.get_referral_info = AsyncMock(return_value={
+            "referredBy": None,
+            "cumVlm": "250.0",
+        })
+        mock_client.get_user_state = AsyncMock(return_value={
+            "marginSummary": {"accountValue": "123.45"},
+            "withdrawable": "100.0",
+        })
+        mock_client.close = AsyncMock()
+        mock_create.return_value = mock_client
+
+        async with session_factory() as session:
+            session.add(ExchangeConnection(
+                user_id=user.id, exchange_type="hyperliquid",
+                api_key_encrypted=encrypt_value(VALID_WALLET),
+                api_secret_encrypted=encrypt_value(VALID_PRIVKEY),
+            ))
+            await session.commit()
+
+        resp = await client.post(
+            "/api/config/hyperliquid/verify-referral",
+            json={},
+            headers=auth_headers,
+        )
+        assert resp.status_code == 400
+        detail = resp.json()["detail"]
+        assert detail["required_action"] == "ENTER_CODE_MANUALLY"
+        assert detail["account_value_usd"] == 123.45
+        assert detail["cum_volume_usd"] == 250.0
+        assert detail["enter_code_url"] == "https://app.hyperliquid.xyz/referrals"
+        assert "TRADINGDEPARTMENT" in detail["error"]
+
+    @pytest.mark.asyncio
+    @patch("src.utils.settings.get_hl_config")
+    @patch("src.exchanges.factory.create_exchange_client")
+    async def test_referral_wrong_referrer(
+        self, mock_create, mock_hl, client, auth_headers, session_factory, user
+    ):
+        """Wallet was registered via a different referrer — can't be changed."""
+        mock_hl.return_value = {"builder_address": "", "builder_fee": 0, "referral_code": "TRADINGDEPARTMENT"}
+
+        mock_client = AsyncMock()
+        mock_client.wallet_address = VALID_WALLET
+        mock_client.get_referral_info = AsyncMock(return_value={
+            "referredBy": {"referrer": "0xdead", "code": "OTHERCODE"},
+            "cumVlm": "500.0",
+        })
+        mock_client.get_user_state = AsyncMock(return_value={
+            "marginSummary": {"accountValue": "200.0"},
+        })
+        mock_client.close = AsyncMock()
+        mock_create.return_value = mock_client
+
+        async with session_factory() as session:
+            session.add(ExchangeConnection(
+                user_id=user.id, exchange_type="hyperliquid",
+                api_key_encrypted=encrypt_value(VALID_WALLET),
+                api_secret_encrypted=encrypt_value(VALID_PRIVKEY),
+            ))
+            await session.commit()
+
+        resp = await client.post(
+            "/api/config/hyperliquid/verify-referral",
+            json={},
+            headers=auth_headers,
+        )
+        assert resp.status_code == 400
+        detail = resp.json()["detail"]
+        assert detail["required_action"] == "WRONG_REFERRER"
+        assert "OTHERCODE" in detail["error"]
+        assert "TRADINGDEPARTMENT" in detail["error"]
+
+    @pytest.mark.asyncio
+    @patch("src.utils.settings.get_hl_config")
+    @patch("src.exchanges.factory.create_exchange_client")
+    async def test_referral_uses_mainnet_regardless_of_demo(
+        self, mock_create, mock_hl, client, auth_headers, session_factory, user
+    ):
+        """create_hl_mainnet_read_client must pass demo_mode=False even when
+        the user only has demo credentials. Referrals are a mainnet concept."""
         mock_hl.return_value = {"builder_address": "", "builder_fee": 0, "referral_code": "REF"}
 
         mock_client = AsyncMock()
-        mock_client.get_referral_info = AsyncMock(return_value={"referredBy": None})
+        mock_client.wallet_address = VALID_WALLET
+        mock_client.get_referral_info = AsyncMock(return_value={
+            "referredBy": {"code": "REF"},
+            "cumVlm": "0.0",
+        })
+        mock_client.get_user_state = AsyncMock(return_value={
+            "marginSummary": {"accountValue": "50.0"},
+        })
         mock_client.close = AsyncMock()
         mock_create.return_value = mock_client
 
         async with session_factory() as session:
+            # Demo-only user — no live credentials
             session.add(ExchangeConnection(
                 user_id=user.id, exchange_type="hyperliquid",
-                api_key_encrypted=encrypt_value(VALID_WALLET),
-                api_secret_encrypted=encrypt_value(VALID_PRIVKEY),
+                demo_api_key_encrypted=encrypt_value(VALID_WALLET),
+                demo_api_secret_encrypted=encrypt_value(VALID_PRIVKEY),
             ))
             await session.commit()
 
@@ -1356,7 +1602,14 @@ class TestVerifyReferral:
             json={},
             headers=auth_headers,
         )
-        assert resp.status_code == 400
+        assert resp.status_code == 200
+        # Verify create_exchange_client was called with demo_mode=False
+        # (mainnet) even though user only has demo credentials.
+        call_kwargs = mock_create.call_args.kwargs
+        assert call_kwargs.get("demo_mode") is False, (
+            "Referral verification must always hit mainnet — "
+            "user was demo-only but we still need mainnet data"
+        )
 
 
 # ===========================================================================
@@ -1960,11 +2213,20 @@ class TestEdgeCases:
     async def test_verify_referral_with_referred_by_key(
         self, mock_create, mock_hl, client, auth_headers, session_factory, user
     ):
-        """Tests the alternate key 'referred_by' (snake_case)."""
+        """Tests the alternate key 'referred_by' (snake_case) — some older
+        HL API versions use snake_case. When the string value matches the
+        referral code, verification should succeed."""
         mock_hl.return_value = {"builder_address": "", "builder_fee": 0, "referral_code": "REF"}
 
         mock_client = AsyncMock()
-        mock_client.get_referral_info = AsyncMock(return_value={"referred_by": "otheruser"})
+        mock_client.wallet_address = VALID_WALLET
+        mock_client.get_referral_info = AsyncMock(return_value={
+            "referred_by": "REF",
+            "cumVlm": "100.0",
+        })
+        mock_client.get_user_state = AsyncMock(return_value={
+            "marginSummary": {"accountValue": "10.0"},
+        })
         mock_client.close = AsyncMock()
         mock_create.return_value = mock_client
 

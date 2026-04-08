@@ -17,14 +17,38 @@ from src.errors import (
     ERR_NO_HL_CONNECTION,
     ERR_NO_HL_CONNECTION_PLAIN,
     ERR_REFERRAL_CHECK_FAILED,
-    ERR_REFERRAL_NOT_FOUND,
+    ERR_REFERRAL_DEPOSIT_NEEDED,
+    ERR_REFERRAL_ENTER_CODE_NEEDED,
+    ERR_REFERRAL_WRONG_CODE,
     ERR_REVENUE_SUMMARY_FAILED,
 )
 from src.models.database import ExchangeConnection, TradeRecord, User
 from src.models.session import get_db
-from src.services.config_service import async_none, create_hl_client
+from src.services.config_service import (
+    async_none,
+    create_hl_mainnet_read_client,
+)
 from src.utils.logger import get_logger
 from src.api.rate_limit import limiter
+
+#: Hyperliquid's hard minimum deposit via the Arbitrum bridge. Any USDC below
+#: this threshold is lost on deposit — we surface this in the UX so users
+#: don't send dust and then wonder why the referral didn't register.
+HL_MIN_DEPOSIT_USDC = 5.0
+
+#: Required action returned by verify_referral so the frontend can render
+#: concrete next-steps instead of a generic error string.
+REFERRAL_ACTION_VERIFIED = "VERIFIED"
+REFERRAL_ACTION_DEPOSIT_NEEDED = "DEPOSIT_NEEDED"
+REFERRAL_ACTION_ENTER_CODE_MANUALLY = "ENTER_CODE_MANUALLY"
+REFERRAL_ACTION_WRONG_REFERRER = "WRONG_REFERRER"
+
+
+def _shorten_wallet(address: str) -> str:
+    """Return ``0xABCD...1234`` for log/UI display."""
+    if not address or len(address) < 10:
+        return address or ""
+    return f"{address[:6]}...{address[-4:]}"
 
 _logger = get_logger(__name__)
 
@@ -174,7 +198,22 @@ async def confirm_builder_approval(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """After frontend wallet signing, verify approval on-chain and record in DB."""
+    """After frontend wallet signing, verify approval on-chain and record in DB.
+
+    Two fixes over the original implementation (#138):
+
+    1. The frontend signs with ``hyperliquidChain: 'Mainnet'`` and POSTs the
+       signed approval to ``https://api.hyperliquid.xyz/exchange``. This
+       confirmation check must therefore always hit **mainnet**, regardless
+       of whether the user has only demo credentials — otherwise demo users
+       would be stuck in an infinite sign-loop.
+
+    2. ``HyperliquidClient.check_builder_fee_approval`` short-circuits to
+       ``None`` when ``self._builder`` is not set. Clients constructed via
+       ``create_hl_mainnet_read_client`` do not populate ``self._builder``
+       (the config lives in the ``system_settings`` DB table, not ENV).
+       We must therefore pass the builder address explicitly.
+    """
     result = await db.execute(
         select(ExchangeConnection).where(
             ExchangeConnection.user_id == user.id,
@@ -191,22 +230,44 @@ async def confirm_builder_approval(
     from src.utils.settings import get_hl_config
     hl_cfg = await get_hl_config()
     builder_fee = hl_cfg["builder_fee"] or 10
+    builder_address = hl_cfg["builder_address"]
+    if not builder_address:
+        raise HTTPException(status_code=400, detail=ERR_BUILDER_FEE_NOT_FOUND)
 
-    # Verify approval on-chain via Hyperliquid API
-    use_demo = bool(conn.demo_api_key_encrypted and not conn.api_key_encrypted)
-    client = create_hl_client(conn, use_demo)
+    # Force mainnet and pass the builder address explicitly — see docstring.
+    client = create_hl_mainnet_read_client(conn)
     approved_fee = None
     try:
         # Check with stored wallet address first, then signing wallet if different
-        approved_fee = await client.check_builder_fee_approval()
+        approved_fee = await client.check_builder_fee_approval(
+            builder_address=builder_address,
+        )
         if approved_fee is None and signing_wallet:
-            approved_fee = await client.check_builder_fee_approval(user_address=signing_wallet)
+            approved_fee = await client.check_builder_fee_approval(
+                user_address=signing_wallet,
+                builder_address=builder_address,
+            )
         # Retry once after short delay (propagation)
         if approved_fee is None:
             await asyncio.sleep(2)
-            approved_fee = await client.check_builder_fee_approval()
+            approved_fee = await client.check_builder_fee_approval(
+                builder_address=builder_address,
+            )
             if approved_fee is None and signing_wallet:
-                approved_fee = await client.check_builder_fee_approval(user_address=signing_wallet)
+                approved_fee = await client.check_builder_fee_approval(
+                    user_address=signing_wallet,
+                    builder_address=builder_address,
+                )
+        # Final retry with longer delay for on-chain propagation
+        if approved_fee is None and signing_wallet:
+            await asyncio.sleep(5)
+            try:
+                approved_fee = await client.check_builder_fee_approval(
+                    user_address=signing_wallet,
+                    builder_address=builder_address,
+                )
+            except Exception:
+                pass
     finally:
         await client.close()
 
@@ -216,22 +277,13 @@ async def confirm_builder_approval(
         await db.commit()
         return {"status": "ok", "approved_max_fee": approved_fee}
 
-    # Final retry with longer delay for on-chain propagation
-    if signing_wallet:
-        await asyncio.sleep(5)
-        try:
-            approved_fee = await client.check_builder_fee_approval(user_address=signing_wallet)
-        except Exception:
-            pass
-        if approved_fee is not None and approved_fee >= builder_fee:
-            conn.builder_fee_approved = True
-            conn.builder_fee_approved_at = datetime.now(timezone.utc)
-            await db.commit()
-            return {"status": "ok", "approved_max_fee": approved_fee}
-
     _logger.warning(
-        f"Builder fee check failed: approved_fee={approved_fee}, "
-        f"required={builder_fee}, no signing_wallet provided"
+        "Builder fee check failed: approved_fee=%s required=%s "
+        "signing_wallet=%s stored_wallet=%s",
+        approved_fee,
+        builder_fee,
+        signing_wallet,
+        conn.api_key_encrypted and "live" or "demo",
     )
     raise HTTPException(
         status_code=400,
@@ -249,7 +301,30 @@ async def verify_referral(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """User-facing: check referral via HL API and save result to DB."""
+    """User-facing: check referral via HL API and return structured diagnostics.
+
+    Returns a JSON body with enough state for the frontend to render a
+    concrete "what to do next" UI instead of a generic error. On success
+    (``verified=True``), the user's connection is marked verified in DB.
+    On failure, HTTP 400 is raised with a ``detail`` dict containing:
+
+    - ``error``: localized message
+    - ``required_action``: one of VERIFIED / DEPOSIT_NEEDED / ENTER_CODE_MANUALLY / WRONG_REFERRER
+    - ``wallet_address``: the checksummed address that was checked
+    - ``wallet_short``: ``0xABCD...1234`` for display
+    - ``account_value_usd``: HL balance (float)
+    - ``cum_volume_usd``: cumulative trading volume on HL (float)
+    - ``referred_by``: the raw ``referredBy`` field from HL (may be null)
+    - ``referral_code``: our configured code (e.g. TRADINGDEPARTMENT)
+    - ``referral_link``: full https URL
+    - ``min_deposit_usdc``: HL minimum deposit (5.0)
+    - ``deposit_url``: HL Arbitrum bridge URL
+    - ``enter_code_url``: HL referrals page URL
+
+    Referral state always comes from MAINNET because Hyperliquid referrals
+    do not exist on testnet. The user's demo_mode flag only affects the
+    trading endpoint, not read-only referral/account diagnostics.
+    """
     result = await db.execute(
         select(ExchangeConnection).where(
             ExchangeConnection.user_id == user.id,
@@ -264,69 +339,154 @@ async def verify_referral(
     hl_cfg = await get_hl_config()
     referral_code = hl_cfg["referral_code"]
     if not referral_code:
-        return {"verified": True, "message": "Kein Referral erforderlich."}
+        return {
+            "verified": True,
+            "required_action": REFERRAL_ACTION_VERIFIED,
+            "message": "Kein Referral erforderlich.",
+        }
 
     if conn.referral_verified:
-        return {"verified": True, "message": "Bereits verifiziert."}
+        return {
+            "verified": True,
+            "required_action": REFERRAL_ACTION_VERIFIED,
+            "message": "Bereits verifiziert.",
+        }
 
-    use_demo = bool(conn.demo_api_key_encrypted and not conn.api_key_encrypted)
-    client = create_hl_client(conn, use_demo)
+    # Force MAINNET for all referral/account reads — referrals don't exist on testnet
+    client = create_hl_mainnet_read_client(conn)
+    wallet_address = client.wallet_address
+    wallet_short = _shorten_wallet(wallet_address)
     try:
         referral_info = await client.get_referral_info()
+        user_state = await client.get_user_state()
     finally:
         await client.close()
 
+    # Extract wallet metrics
+    account_value = 0.0
+    if user_state and isinstance(user_state, dict):
+        margin = user_state.get("marginSummary", {}) or {}
+        try:
+            account_value = float(margin.get("accountValue", 0) or 0)
+        except (TypeError, ValueError):
+            account_value = 0.0
+
+    cum_volume = 0.0
+    if referral_info and isinstance(referral_info, dict):
+        try:
+            cum_volume = float(referral_info.get("cumVlm", 0) or 0)
+        except (TypeError, ValueError):
+            cum_volume = 0.0
+
     referred_by = None
     if referral_info:
-        referred_by = referral_info.get("referredBy") or referral_info.get("referred_by")
-
-    if not referred_by:
-        raise HTTPException(
-            status_code=400,
-            detail=ERR_REFERRAL_NOT_FOUND.format(referral_code=referral_code),
+        referred_by = (
+            referral_info.get("referredBy")
+            or referral_info.get("referred_by")
         )
 
-    # Verify the referrer matches our configured referral code.
-    # referred_by can be a dict {"referrer": "0x...", "code": "MYCODE"} or a string.
+    # Build the base diagnostic payload that every branch returns
+    diag = {
+        "wallet_address": wallet_address,
+        "wallet_short": wallet_short,
+        "account_value_usd": round(account_value, 2),
+        "cum_volume_usd": round(cum_volume, 2),
+        "referred_by": referred_by,
+        "referral_code": referral_code,
+        "referral_link": f"https://app.hyperliquid.xyz/join/{referral_code}",
+        "min_deposit_usdc": HL_MIN_DEPOSIT_USDC,
+        "deposit_url": "https://app.hyperliquid.xyz/deposit",
+        "enter_code_url": "https://app.hyperliquid.xyz/referrals",
+    }
+
+    # ── Case 1: No referrer set at all ────────────────────────────────
+    if not referred_by:
+        if account_value < HL_MIN_DEPOSIT_USDC:
+            # Wallet has never deposited (or deposited less than minimum).
+            # Without a deposit the referral can't bind via the link flow.
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    **diag,
+                    "required_action": REFERRAL_ACTION_DEPOSIT_NEEDED,
+                    "error": ERR_REFERRAL_DEPOSIT_NEEDED.format(
+                        wallet_short=wallet_short,
+                        referral_code=referral_code,
+                    ),
+                },
+            )
+        # Wallet HAS a balance but no referrer — user must enter the code
+        # manually on the HL referrals page.
+        raise HTTPException(
+            status_code=400,
+            detail={
+                **diag,
+                "required_action": REFERRAL_ACTION_ENTER_CODE_MANUALLY,
+                "error": ERR_REFERRAL_ENTER_CODE_NEEDED.format(
+                    wallet_short=wallet_short,
+                    account_value=account_value,
+                    referral_code=referral_code,
+                ),
+            },
+        )
+
+    # ── Case 2: Has a referrer — verify it matches ours ───────────────
+    # referred_by can be a dict {"referrer": "0x...", "code": "MYCODE"}
+    # or a plain string (older API versions).
     referrer_code = None
     if isinstance(referred_by, dict):
         referrer_code = referred_by.get("code") or referred_by.get("referralCode")
     elif isinstance(referred_by, str):
-        # Some API versions return just the address or code as string
         referrer_code = referred_by
 
-    # Match against configured referral code (case-insensitive)
-    if referrer_code and referral_code:
-        # Accept if referrer code matches OR if referrer address matches builder address
-        builder_address = hl_cfg.get("builder_address", "")
-        code_match = str(referrer_code).lower() == str(referral_code).lower()
-        addr_match = (
-            builder_address
-            and str(referrer_code).lower() == str(builder_address).lower()
-        )
-        if not code_match and not addr_match:
-            raise HTTPException(
-                status_code=400,
-                detail=(
-                    f"Dein Account wurde über einen anderen Referral-Code registriert. "
-                    f"Bitte nutze unseren Link: "
-                    f"https://app.hyperliquid.xyz/join/{referral_code}"
-                ),
-            )
+    # Accept if referrer code matches OR if referrer address matches builder address
+    builder_address = hl_cfg.get("builder_address", "")
+    code_match = bool(
+        referrer_code and str(referrer_code).lower() == str(referral_code).lower()
+    )
+    addr_match = bool(
+        referrer_code
+        and builder_address
+        and str(referrer_code).lower() == str(builder_address).lower()
+    )
 
+    if not code_match and not addr_match:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                **diag,
+                "required_action": REFERRAL_ACTION_WRONG_REFERRER,
+                "error": ERR_REFERRAL_WRONG_CODE.format(
+                    wallet_short=wallet_short,
+                    found_code=referrer_code or "unknown",
+                    referral_code=referral_code,
+                ),
+            },
+        )
+
+    # ── Case 3: Verified successfully ─────────────────────────────────
     conn.referral_verified = True
     conn.referral_verified_at = datetime.now(timezone.utc)
     await db.commit()
-    return {"verified": True, "referred_by": referred_by}
+    return {
+        "verified": True,
+        "required_action": REFERRAL_ACTION_VERIFIED,
+        **diag,
+    }
 
 
 @router.get("/hyperliquid/referral-status")
 async def get_referral_status(
-    mode: Optional[Literal["live", "demo"]] = None,
+    mode: Optional[Literal["live", "demo"]] = None,  # kept for backwards compat
     user: User = Depends(get_current_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    """Check referral status (admin only)."""
+    """Check referral status (admin only).
+
+    Always queries Hyperliquid **mainnet** — the ``mode`` query parameter is
+    accepted for backwards compatibility but ignored, because Hyperliquid
+    referrals do not exist on testnet.
+    """
     result = await db.execute(
         select(ExchangeConnection).where(
             ExchangeConnection.user_id == user.id,
@@ -340,10 +500,9 @@ async def get_referral_status(
     from src.utils.settings import get_hl_config
     hl_cfg = await get_hl_config()
     referral_code = hl_cfg["referral_code"]
-    use_demo = mode == "demo" if mode else bool(conn.demo_api_key_encrypted)
 
     try:
-        client = create_hl_client(conn, use_demo)
+        client = create_hl_mainnet_read_client(conn)
         referral_info = await client.get_referral_info()
         await client.close()
 
@@ -389,14 +548,20 @@ async def get_revenue_summary(
     hl_cfg = await get_hl_config()
     builder_address = hl_cfg["builder_address"]
     referral_code = hl_cfg["referral_code"]
-    use_demo = mode == "demo" if mode else bool(conn.demo_api_key_encrypted)
+    # The ``mode`` query parameter is accepted for backwards compatibility
+    # but ignored here — builder fee approvals and referrals live only on
+    # mainnet. See #138.
+    _ = mode  # noqa: F841
 
     try:
-        client = create_hl_client(conn, use_demo)
+        client = create_hl_mainnet_read_client(conn)
 
-        # Gather builder status, referral info, and fee tier in parallel
+        # Gather builder status, referral info, and fee tier in parallel.
+        # Pass builder_address explicitly because mainnet read clients do
+        # not populate self._builder.
         approved_fee, referral_info, user_fees = await asyncio.gather(
-            client.check_builder_fee_approval() if builder_address else async_none(),
+            client.check_builder_fee_approval(builder_address=builder_address)
+            if builder_address else async_none(),
             client.get_referral_info(),
             client.get_user_fees(),
         )

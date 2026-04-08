@@ -588,9 +588,39 @@ async def test_trailing_stop_null_for_closed_trade(client, auth_headers, closed_
     assert data["can_close_at_loss"] is None
 
 
-async def test_trailing_stop_null_for_non_edge_strategy(client, auth_headers, open_trade):
-    """Trades from non-edge_indicator strategies have null trailing stop fields."""
-    resp = await client.get(f"/api/trades/{open_trade.id}", headers=auth_headers)
+async def test_trailing_stop_null_for_non_edge_strategy(client, auth_headers, session_factory, user):
+    """Trades without a trailing-capable strategy have null trailing stop fields.
+
+    Covers the case where the LEFT JOIN on BotConfig yields NULL for
+    strategy_type (trade has no bot_config or the bot was deleted). The
+    _compute_trailing_stop function should short-circuit and return {},
+    leaving the response fields as None.
+    """
+    async with session_factory() as session:
+        orphan = TradeRecord(
+            user_id=user.id,
+            bot_config_id=None,  # no bot → strategy_type is None after outer join
+            symbol="ETHUSDT",
+            side="short",
+            size=0.1,
+            entry_price=3500.0,
+            take_profit=3300.0,
+            stop_loss=3600.0,
+            leverage=4,
+            confidence=80,
+            reason="Orphan trade",
+            order_id="order_orphan",
+            status="open",
+            entry_time=datetime.now(timezone.utc) - timedelta(hours=6),
+            exchange="bitget",
+            demo_mode=True,
+        )
+        session.add(orphan)
+        await session.commit()
+        await session.refresh(orphan)
+        orphan_id = orphan.id
+
+    resp = await client.get(f"/api/trades/{orphan_id}", headers=auth_headers)
     assert resp.status_code == 200
     data = resp.json()
     assert data["trailing_stop_active"] is None

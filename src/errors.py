@@ -112,6 +112,40 @@ ERR_NO_DEMO_API_KEYS_HL = "Keine Demo-API-Keys für Hyperliquid"
 ERR_NO_DEMO_API_KEYS_HL_EN = "No demo API keys for Hyperliquid"
 ERR_NO_LIVE_API_KEYS_HL = "Keine Live-API-Keys für Hyperliquid"
 ERR_NO_LIVE_API_KEYS_HL_EN = "No live API keys for Hyperliquid"
+ERR_DUPLICATE_LIVE_DEMO_KEY = (
+    "Dieser API-Key ist bereits als Demo-Key gespeichert. "
+    "Wenn der Key nur für Demo-Trading gilt, lass das Live-Feld leer. "
+    "Bei Bitget und BingX nutzen wir den Demo-Key automatisch über einen "
+    "speziellen Header für das Live-Dashboard — du musst nichts ins Live-Feld eintragen."
+)
+ERR_DUPLICATE_LIVE_DEMO_KEY_EN = (
+    "This API key is already stored as a demo key. "
+    "If the key is for demo trading only, leave the live field empty. "
+    "For Bitget and BingX we automatically use the demo key for the simulated "
+    "environment via a header — no need to populate the live field."
+)
+ERR_DUPLICATE_DEMO_LIVE_KEY = (
+    "Dieser API-Key ist bereits als Live-Key gespeichert. "
+    "Wenn der Key sowohl für Live als auch für Demo gilt, lass das Demo-Feld leer "
+    "(wir nutzen den Live-Key automatisch für beide Modi). "
+    "Wenn es ein eigenständiger Demo-Key ist, lösche zuerst die Live-Keys."
+)
+ERR_DUPLICATE_DEMO_LIVE_KEY_EN = (
+    "This API key is already stored as a live key. "
+    "If the key works for both live and demo, leave the demo field empty "
+    "(we automatically use the live key for both modes). "
+    "If it's a separate demo key, please delete the live keys first."
+)
+ERR_WRONG_ENVIRONMENT = (
+    "Die {mode}-API-Keys funktionieren nicht im {mode}-Modus von {exchange}. "
+    "Wenn dies ein {other_mode}-Key ist, trage ihn bitte ins {other_mode}-Feld ein. "
+    "Original-Fehler: {detail}"
+)
+ERR_WRONG_ENVIRONMENT_EN = (
+    "These {mode} API keys do not authenticate against the {mode} environment "
+    "of {exchange}. If this is a {other_mode} key, please save it in the "
+    "{other_mode} field instead. Original error: {detail}"
+)
 ERR_NO_HL_CONNECTION_PLAIN = "Keine Hyperliquid-Verbindung konfiguriert"
 ERR_NO_HL_CONNECTION_PLAIN_EN = "No Hyperliquid connection configured"
 ERR_BUILDER_FEE_NOT_FOUND = "Builder-Fee-Genehmigung nicht auf Hyperliquid gefunden. Bitte erneut signieren."
@@ -120,6 +154,38 @@ ERR_REFERRAL_NOT_FOUND = "Referral nicht gefunden. Bitte registriere dich zuerst
 ERR_REFERRAL_NOT_FOUND_EN = "Referral not found. Please register first via https://app.hyperliquid.xyz/join/{referral_code}"
 ERR_REFERRAL_CHECK_FAILED = "Referral-Prüfung fehlgeschlagen. Siehe Server-Logs."
 ERR_REFERRAL_CHECK_FAILED_EN = "Referral check failed. See server logs."
+ERR_REFERRAL_DEPOSIT_NEEDED = (
+    "Dein Wallet {wallet_short} hat noch kein Guthaben auf Hyperliquid. "
+    "Zahle mindestens 5 USDC via Arbitrum Bridge ein "
+    "(https://app.hyperliquid.xyz/deposit), dann wird der Referrer {referral_code} "
+    "automatisch gebunden. Wichtig: Weniger als 5 USDC gehen verloren."
+)
+ERR_REFERRAL_DEPOSIT_NEEDED_EN = (
+    "Your wallet {wallet_short} has no balance on Hyperliquid yet. "
+    "Deposit at least 5 USDC via the Arbitrum bridge "
+    "(https://app.hyperliquid.xyz/deposit), the {referral_code} referrer will "
+    "be bound automatically. Warning: Deposits below 5 USDC will be lost."
+)
+ERR_REFERRAL_ENTER_CODE_NEEDED = (
+    "Dein Wallet {wallet_short} existiert auf Hyperliquid (Balance ${account_value:.2f}) "
+    "aber ohne Referrer. Öffne https://app.hyperliquid.xyz/referrals, klicke 'Enter Code' "
+    "und trage {referral_code} ein. Danach hier erneut prüfen."
+)
+ERR_REFERRAL_ENTER_CODE_NEEDED_EN = (
+    "Your wallet {wallet_short} exists on Hyperliquid (balance ${account_value:.2f}) "
+    "but has no referrer set. Open https://app.hyperliquid.xyz/referrals, click 'Enter Code' "
+    "and enter {referral_code}. Then re-check here."
+)
+ERR_REFERRAL_WRONG_CODE = (
+    "Dein Wallet {wallet_short} wurde über einen anderen Referrer registriert "
+    "(gefunden: {found_code}, erwartet: {referral_code}). Referrer-Änderungen sind "
+    "auf Hyperliquid nicht möglich — bitte neues Wallet mit unserem Link verwenden."
+)
+ERR_REFERRAL_WRONG_CODE_EN = (
+    "Your wallet {wallet_short} was registered via a different referrer "
+    "(found: {found_code}, expected: {referral_code}). Hyperliquid does not "
+    "allow changing the referrer — please use a new wallet with our link."
+)
 ERR_REVENUE_SUMMARY_FAILED = "Umsatzübersicht konnte nicht geladen werden. Siehe Server-Logs."
 ERR_REVENUE_SUMMARY_FAILED_EN = "Revenue summary could not be loaded. See server logs."
 

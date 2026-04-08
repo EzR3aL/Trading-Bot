@@ -5,6 +5,7 @@ All strategies must implement BaseStrategy. Register them with StrategyRegistry
 so the BotWorker can instantiate them by name.
 """
 
+import json
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import datetime
@@ -216,6 +217,55 @@ def check_atr_trailing_stop(
             )
 
     return False, ""
+
+
+def resolve_strategy_params(
+    strategy_type: Optional[str],
+    strategy_params_json: Optional[str],
+) -> Dict[str, Any]:
+    """Resolve a strategy's effective parameter set (DEFAULTS + RISK_PROFILE + user).
+
+    Mirrors the merge order used inside each strategy's ``__init__`` so that
+    callers outside the strategy (e.g. the dashboard API, background jobs) see
+    exactly the same parameters as the live strategy instance.
+
+    Merge order:
+        1. Strategy ``DEFAULTS``
+        2. User-supplied ``strategy_params`` (from bot_config.strategy_params)
+        3. ``RISK_PROFILES`` overrides — applied only for keys the user did
+           not explicitly set.
+
+    Args:
+        strategy_type: Strategy identifier (e.g. "edge_indicator", "liquidation_hunter").
+        strategy_params_json: JSON string of user params from bot_config.
+
+    Returns:
+        The fully merged parameter dict. Returns the parsed user params (or an
+        empty dict) if ``strategy_type`` is unknown or the JSON is invalid —
+        callers should treat a missing expected key as "strategy unsupported".
+    """
+    try:
+        user_params = json.loads(strategy_params_json) if strategy_params_json else {}
+    except (json.JSONDecodeError, TypeError):
+        user_params = {}
+    if not isinstance(user_params, dict):
+        user_params = {}
+
+    # Lazy imports avoid circular dependencies (strategies import from base)
+    if strategy_type == "edge_indicator":
+        from src.strategy.edge_indicator import DEFAULTS, RISK_PROFILES
+    elif strategy_type == "liquidation_hunter":
+        from src.strategy.liquidation_hunter import DEFAULTS, RISK_PROFILES
+    else:
+        return dict(user_params)
+
+    merged: Dict[str, Any] = {**DEFAULTS, **user_params}
+    profile = merged.get("risk_profile", "standard")
+    profile_overrides = RISK_PROFILES.get(profile, {})
+    for key, val in profile_overrides.items():
+        if key not in user_params:  # explicit user values take precedence
+            merged[key] = val
+    return merged
 
 
 class StrategyRegistry:

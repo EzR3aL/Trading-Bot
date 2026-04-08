@@ -170,7 +170,8 @@ class TestBuilderFeeApproval:
 
     @pytest.mark.asyncio
     async def test_check_approval_returns_none_when_no_builder(self):
-        """check_builder_fee_approval returns None when builder not configured."""
+        """check_builder_fee_approval returns None when builder not configured
+        and no explicit builder_address parameter is passed."""
         from src.exchanges.hyperliquid.client import HyperliquidClient
 
         client = object.__new__(HyperliquidClient)
@@ -178,6 +179,54 @@ class TestBuilderFeeApproval:
 
         result = await client.check_builder_fee_approval()
         assert result is None
+
+    @pytest.mark.asyncio
+    async def test_check_approval_accepts_explicit_builder_address(self):
+        """Regression for #138: when self._builder is None, an explicit
+        builder_address kwarg must be used instead of returning None.
+
+        This path is required by the mainnet read client used in
+        confirm_builder_approval, which does not populate self._builder
+        because the builder config lives in the DB, not ENV."""
+        from src.exchanges.hyperliquid.client import HyperliquidClient
+
+        client = object.__new__(HyperliquidClient)
+        client.wallet_address = "0xuser"
+        client._builder = None  # simulates mainnet read client
+        client._info = MagicMock()
+        client._info.post.return_value = 10
+
+        result = await client.check_builder_fee_approval(
+            builder_address="0xBuilderFromDB",
+        )
+        assert result == 10
+        # Verify the builder address from the kwarg was actually used
+        client._info.post.assert_called_once_with(
+            "/info",
+            {
+                "type": "maxBuilderFee",
+                "user": "0xuser",
+                "builder": "0xbuilderfromdb",  # lowercased
+            },
+        )
+
+    @pytest.mark.asyncio
+    async def test_check_approval_explicit_builder_overrides_self(self):
+        """Explicit builder_address takes precedence over self._builder."""
+        from src.exchanges.hyperliquid.client import HyperliquidClient
+
+        client = object.__new__(HyperliquidClient)
+        client.wallet_address = "0xuser"
+        client._builder = {"b": "0xold_builder", "f": 10}
+        client._info = MagicMock()
+        client._info.post.return_value = 10
+
+        result = await client.check_builder_fee_approval(
+            builder_address="0xNew_Builder",
+        )
+        assert result == 10
+        args = client._info.post.call_args
+        assert args[0][1]["builder"] == "0xnew_builder"
 
     @pytest.mark.asyncio
     async def test_check_approval_handles_api_error(self):

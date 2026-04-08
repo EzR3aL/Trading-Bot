@@ -648,6 +648,245 @@ class TestExchangeConnections:
         )
         assert resp.status_code == 200
 
+    async def test_upsert_rejects_same_key_in_both_fields_same_request(
+        self, client, user_headers, regular_user,
+    ):
+        """Regression for #143: a user submitting the same key in both live
+        and demo fields in a single request must be rejected."""
+        body = {
+            "api_key": "shared-key",
+            "api_secret": "shared-secret",
+            "passphrase": "shared-pass",
+            "demo_api_key": "shared-key",
+            "demo_api_secret": "shared-secret",
+            "demo_passphrase": "shared-pass",
+        }
+        resp = await client.put(
+            "/api/config/exchange-connections/bitget",
+            json=body,
+            headers=user_headers,
+        )
+        assert resp.status_code == 400
+        assert "Demo" in resp.json()["detail"] or "demo" in resp.json()["detail"]
+
+    async def test_upsert_rejects_live_key_matching_existing_demo(
+        self, client, user_headers, regular_user,
+    ):
+        """Regression for #143: user already saved the key as demo, then
+        submits the same key as live in a follow-up request → reject."""
+        # First save as demo only
+        await client.put(
+            "/api/config/exchange-connections/bitget",
+            json={
+                "demo_api_key": "duplicate-key",
+                "demo_api_secret": "duplicate-secret",
+                "demo_passphrase": "duplicate-pass",
+            },
+            headers=user_headers,
+        )
+        # Now try to save the SAME key as live → must be rejected
+        resp = await client.put(
+            "/api/config/exchange-connections/bitget",
+            json={
+                "api_key": "duplicate-key",
+                "api_secret": "live-secret-different",
+                "passphrase": "live-pass-different",
+            },
+            headers=user_headers,
+        )
+        assert resp.status_code == 400
+        # Error mentions that a demo key is already stored
+        assert "Demo" in resp.json()["detail"] or "demo" in resp.json()["detail"]
+
+    async def test_upsert_rejects_demo_key_matching_existing_live(
+        self, client, user_headers, regular_user,
+    ):
+        """Mirror of the previous test: live first, then demo with the
+        same key → reject."""
+        await client.put(
+            "/api/config/exchange-connections/bitget",
+            json={
+                "api_key": "another-duplicate",
+                "api_secret": "live-secret",
+                "passphrase": "live-pass",
+            },
+            headers=user_headers,
+        )
+        resp = await client.put(
+            "/api/config/exchange-connections/bitget",
+            json={
+                "demo_api_key": "another-duplicate",
+                "demo_api_secret": "demo-secret",
+                "demo_passphrase": "demo-pass",
+            },
+            headers=user_headers,
+        )
+        assert resp.status_code == 400
+        assert "Live" in resp.json()["detail"] or "live" in resp.json()["detail"]
+
+    # ─── #145: DELETE per-mode keys endpoint ─────────────────────────
+
+    async def test_delete_keys_live_only(
+        self, client, user_headers, regular_user,
+    ):
+        """DELETE ?mode=live clears only the live columns, demo intact."""
+        # Seed both modes
+        await client.put(
+            "/api/config/exchange-connections/bitget",
+            json={
+                "api_key": "live-key",
+                "api_secret": "live-secret",
+                "passphrase": "live-pass",
+            },
+            headers=user_headers,
+        )
+        await client.put(
+            "/api/config/exchange-connections/bitget",
+            json={
+                "demo_api_key": "demo-key",
+                "demo_api_secret": "demo-secret",
+                "demo_passphrase": "demo-pass",
+            },
+            headers=user_headers,
+        )
+
+        resp = await client.delete(
+            "/api/config/exchange-connections/bitget/keys?mode=live",
+            headers=user_headers,
+        )
+        assert resp.status_code == 200
+        assert resp.json()["fully_empty"] is False
+
+        # Connection still exists with demo creds
+        get_resp = await client.get(
+            "/api/config/exchange-connections", headers=user_headers,
+        )
+        bitget_conn = next(
+            c for c in get_resp.json()["connections"] if c["exchange_type"] == "bitget"
+        )
+        assert bitget_conn["api_keys_configured"] is False
+        assert bitget_conn["demo_api_keys_configured"] is True
+
+    async def test_delete_keys_demo_only(
+        self, client, user_headers, regular_user,
+    ):
+        """DELETE ?mode=demo clears only the demo columns, live intact."""
+        await client.put(
+            "/api/config/exchange-connections/bitget",
+            json={
+                "api_key": "live-key-2",
+                "api_secret": "live-secret-2",
+                "passphrase": "live-pass-2",
+            },
+            headers=user_headers,
+        )
+        await client.put(
+            "/api/config/exchange-connections/bitget",
+            json={
+                "demo_api_key": "demo-key-2",
+                "demo_api_secret": "demo-secret-2",
+                "demo_passphrase": "demo-pass-2",
+            },
+            headers=user_headers,
+        )
+
+        resp = await client.delete(
+            "/api/config/exchange-connections/bitget/keys?mode=demo",
+            headers=user_headers,
+        )
+        assert resp.status_code == 200
+        assert resp.json()["fully_empty"] is False
+
+        get_resp = await client.get(
+            "/api/config/exchange-connections", headers=user_headers,
+        )
+        bitget_conn = next(
+            c for c in get_resp.json()["connections"] if c["exchange_type"] == "bitget"
+        )
+        assert bitget_conn["api_keys_configured"] is True
+        assert bitget_conn["demo_api_keys_configured"] is False
+
+    async def test_delete_keys_drops_row_when_both_empty(
+        self, client, user_headers, regular_user,
+    ):
+        """When the only-stored mode is deleted, the connection row vanishes
+        so the UI doesn't show a stale 'configured' badge."""
+        await client.put(
+            "/api/config/exchange-connections/bitget",
+            json={
+                "demo_api_key": "demo-only",
+                "demo_api_secret": "demo-only-secret",
+                "demo_passphrase": "demo-only-pass",
+            },
+            headers=user_headers,
+        )
+
+        resp = await client.delete(
+            "/api/config/exchange-connections/bitget/keys?mode=demo",
+            headers=user_headers,
+        )
+        assert resp.status_code == 200
+        assert resp.json()["fully_empty"] is True
+
+        get_resp = await client.get(
+            "/api/config/exchange-connections", headers=user_headers,
+        )
+        bitget_present = any(
+            c["exchange_type"] == "bitget"
+            for c in get_resp.json()["connections"]
+        )
+        assert bitget_present is False
+
+    async def test_delete_keys_no_connection_404(
+        self, client, user_headers, regular_user,
+    ):
+        """Deleting keys for an exchange the user never configured returns 404."""
+        resp = await client.delete(
+            "/api/config/exchange-connections/bitget/keys?mode=live",
+            headers=user_headers,
+        )
+        assert resp.status_code == 404
+
+    async def test_delete_keys_wrong_mode_returns_404(
+        self, client, user_headers, regular_user,
+    ):
+        """If the requested mode has no credentials, return 404 instead of
+        silently succeeding (the user should know nothing was deleted)."""
+        await client.put(
+            "/api/config/exchange-connections/bitget",
+            json={
+                "demo_api_key": "demo-only-3",
+                "demo_api_secret": "demo-only-secret-3",
+                "demo_passphrase": "demo-only-pass-3",
+            },
+            headers=user_headers,
+        )
+        # No live keys exist → DELETE ?mode=live should fail
+        resp = await client.delete(
+            "/api/config/exchange-connections/bitget/keys?mode=live",
+            headers=user_headers,
+        )
+        assert resp.status_code == 404
+
+    async def test_delete_keys_invalid_mode_422(
+        self, client, user_headers, regular_user,
+    ):
+        """Invalid mode query param → FastAPI returns 422 (Literal validation)."""
+        await client.put(
+            "/api/config/exchange-connections/bitget",
+            json={
+                "api_key": "key",
+                "api_secret": "secret",
+                "passphrase": "pass",
+            },
+            headers=user_headers,
+        )
+        resp = await client.delete(
+            "/api/config/exchange-connections/bitget/keys?mode=both",
+            headers=user_headers,
+        )
+        assert resp.status_code == 422
+
     async def test_upsert_exchange_connection_hl_demo_valid(self, client, user_headers, regular_user):
         body = {
             "demo_api_key": "0x" + "c" * 40,

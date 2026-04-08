@@ -24,7 +24,7 @@ const ADMIN_TABS = [...BASE_TABS, 'connections', 'affiliateLinks', 'hyperliquid'
 function KeyForm({
   label, configured, keyValue, secretValue, passphraseValue,
   onKeyChange, onSecretChange, onPassphraseChange,
-  onSave, onTest, saving, t, showPassphrase, authType,
+  onSave, onTest, onDelete, saving, t, showPassphrase, authType,
 }: {
   label: string
   configured: boolean
@@ -36,6 +36,7 @@ function KeyForm({
   onPassphraseChange: (v: string) => void
   onSave: () => void
   onTest: () => void
+  onDelete?: () => void
   saving: boolean
   t: (key: string) => string
   showPassphrase?: boolean
@@ -110,7 +111,7 @@ function KeyForm({
           </div>
         )}
       </div>
-      <div className="flex gap-2">
+      <div className="flex flex-wrap gap-2">
         <button onClick={onSave} disabled={saving}
           className="px-3 py-1.5 text-sm bg-primary-600 text-white rounded hover:bg-primary-700 disabled:opacity-50">
           {t('settings.save')}
@@ -119,6 +120,12 @@ function KeyForm({
           className="px-3 py-1.5 text-sm bg-gray-700 text-white rounded hover:bg-gray-600 disabled:opacity-50">
           {t('settings.testConnection')}
         </button>
+        {onDelete && configured && (
+          <button onClick={onDelete} disabled={saving}
+            className="ml-auto px-3 py-1.5 text-sm bg-red-900/40 text-red-300 border border-red-700/40 rounded hover:bg-red-900/60 hover:border-red-600/60 disabled:opacity-50 transition-colors">
+            {t('settings.deleteKeys')}
+          </button>
+        )}
       </div>
     </div>
   )
@@ -286,6 +293,29 @@ export default function Settings() {
       const modeLabel = mode === 'demo' ? t('common.demo') : t('common.live')
       showMessage(t('settings.testConnectionResult', { mode: modeLabel, exchange: exchangeType, balance: res.data.balance }))
     } catch (err) { showMessage(getApiErrorMessage(err, t('settings.connectionFailed'))) }
+  }
+
+  const deleteKeys = async (exchangeType: string, mode: 'live' | 'demo') => {
+    const modeLabel = mode === 'demo' ? t('common.demo') : t('common.live')
+    if (!window.confirm(t('settings.confirmDeleteKeys', { mode: modeLabel, exchange: exchangeType }))) {
+      return
+    }
+    setSaving(true)
+    try {
+      await api.delete(`/config/exchange-connections/${exchangeType}/keys?mode=${mode}`)
+      const res = await api.get('/config/exchange-connections')
+      setConnections(res.data.connections || [])
+      // Clear the corresponding form fields if they had values
+      if (mode === 'live') {
+        updateForm(exchangeType, { apiKey: '', apiSecret: '', passphrase: '' })
+      } else {
+        updateForm(exchangeType, { demoApiKey: '', demoApiSecret: '', demoPassphrase: '' })
+      }
+      showMessage(t('settings.keysDeleted', { mode: modeLabel, exchange: exchangeType }))
+    } catch (err) {
+      showMessage(getApiErrorMessage(err, t('settings.deleteKeysFailed')))
+    }
+    setSaving(false)
   }
 
   const loadConnectionStatus = async () => {
@@ -626,6 +656,7 @@ export default function Settings() {
                           onPassphraseChange={(v) => updateForm(ex.name, { passphrase: v })}
                           onSave={() => saveLiveKeys(ex.name)}
                           onTest={() => testConnection(ex.name, 'live')}
+                          onDelete={() => deleteKeys(ex.name, 'live')}
                           saving={saving} t={t} showPassphrase={showPass} authType={ex.auth_type}
                         />
 
@@ -641,6 +672,7 @@ export default function Settings() {
                               onPassphraseChange={(v) => updateForm(ex.name, { demoPassphrase: v })}
                               onSave={() => saveDemoKeys(ex.name)}
                               onTest={() => testConnection(ex.name, 'demo')}
+                              onDelete={() => deleteKeys(ex.name, 'demo')}
                               saving={saving} t={t} showPassphrase={showPass} authType={ex.auth_type}
                             />
                             {ex.auth_type === 'eth_wallet' && (
