@@ -485,3 +485,111 @@ class TradeExecutorMixin:
             )
         except Exception:
             pass
+
+    # ---------- Public wrappers used by self-managed strategies ----------
+
+    async def get_open_trades_count(self, bot_config_id: int) -> int:
+        """Return how many open TradeRecords belong to a given bot."""
+        with get_session() as session:
+            return (
+                session.query(TradeRecord)
+                .filter(
+                    TradeRecord.bot_config_id == bot_config_id,
+                    TradeRecord.status == "open",
+                )
+                .count()
+            )
+
+    async def get_open_trades_for_bot(self, bot_config_id: int) -> list:
+        """Return all open TradeRecords for a given bot."""
+        with get_session() as session:
+            return (
+                session.query(TradeRecord)
+                .filter(
+                    TradeRecord.bot_config_id == bot_config_id,
+                    TradeRecord.status == "open",
+                )
+                .all()
+            )
+
+    async def execute_trade(
+        self,
+        *,
+        symbol: str,
+        side: str,
+        notional_usdt: float,
+        leverage: int,
+        reason: str,
+        bot_config_id: int,
+    ) -> None:
+        """Thin wrapper for self-managed strategies: build a TradeSignal and
+        route through the existing `_execute_trade` pipeline.
+
+        Converts notional USDT to base-coin size using the current ticker
+        price from the bot's exchange client.
+        """
+        from src.strategy.base import SignalDirection, TradeSignal
+
+        client = getattr(self, "_client", None) or getattr(self, "client", None)
+        if client is None:
+            logger.warning(
+                "[Bot:%s] execute_trade: no exchange client available", bot_config_id
+            )
+            return
+
+        try:
+            ticker = await client.get_ticker(symbol)
+            price = float(getattr(ticker, "last_price", 0) or 0)
+        except Exception as e:
+            logger.warning(
+                "[Bot:%s] execute_trade: ticker lookup failed for %s: %s",
+                bot_config_id, symbol, e,
+            )
+            return
+        if price <= 0:
+            return
+
+        direction = (
+            SignalDirection.LONG if side.lower() == "long" else SignalDirection.SHORT
+        )
+        signal = TradeSignal(
+            direction=direction,
+            confidence=100,
+            symbol=symbol,
+            entry_price=price,
+            target_price=None,
+            stop_loss=None,
+            reason=reason,
+            metrics_snapshot={},
+            timestamp=datetime.now(timezone.utc),
+        )
+        demo_mode = bool(getattr(self._config, "demo_mode", False))
+        await self._execute_trade(
+            signal, client, demo_mode, asset_budget=notional_usdt
+        )
+
+    async def close_trade_by_strategy(self, trade, *, reason: str) -> None:
+        """Thin wrapper so self-managed strategies can close trades.
+
+        Delegates to `_close_and_record_trade` (provided by TradeCloserMixin).
+        Uses the last known price as exit price if a live ticker is unavailable.
+        """
+        client = getattr(self, "_client", None) or getattr(self, "client", None)
+        exit_price = float(getattr(trade, "entry_price", 0) or 0)
+        if client is not None:
+            try:
+                ticker = await client.get_ticker(trade.symbol)
+                px = float(getattr(ticker, "last_price", 0) or 0)
+                if px > 0:
+                    exit_price = px
+            except Exception:
+                pass
+
+        closer = getattr(self, "_close_and_record_trade", None)
+        if closer is None:
+            logger.warning(
+                "[Bot:%s] close_trade_by_strategy: no _close_and_record_trade available",
+                getattr(self, "bot_config_id", "?"),
+            )
+            return
+        await closer(trade, exit_price=exit_price, exit_reason=reason, strategy_reason=reason)

@@ -2,6 +2,7 @@
 export const STRATEGY_DISPLAY: Record<string, string> = {
   liquidation_hunter: 'Liquidation Hunter',
   edge_indicator: 'Edge Indicator',
+  copy_trading: 'Copy Trading',
 }
 
 // Convert a strategy key to a human-readable label

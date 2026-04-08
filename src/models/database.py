@@ -302,6 +302,7 @@ class BotConfig(Base):
 
     # Strategy-specific parameters (JSON)
     strategy_params = Column(Text, nullable=True)  # JSON: strategy-specific thresholds
+    strategy_state = Column(Text, nullable=True)  # JSON, runtime state managed by the strategy
 
     # Schedule
     schedule_type = Column(String(20), nullable=False, default="interval")  # interval | custom_cron

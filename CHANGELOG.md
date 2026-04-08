@@ -9,6 +9,49 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [4.16.0] - 2026-04-08
+
+### Hinzugefügt
+- **Copy-Trading-Strategie (v1)** — Neue Bot-Strategie `copy_trading`, die eine öffentliche Hyperliquid-Wallet trackt und ihre Entries sowie Full-Closes auf eine beliebige Ziel-Exchange (Bitget, BingX, Bitunix, Weex, Hyperliquid) kopiert. Add-Ins, Teil-Closes und nachträgliche TP/SL-Anpassungen der Source werden in v1 bewusst **nicht** gespiegelt.
+  - Implementiert als **self-managed** Strategie `src/strategy/copy_trading.py` mit `run_tick(ctx)`-Hook (Cold-Start-Watermark beim ersten Tick, Whitelist/Blacklist, Slot-Limit, Notional-Sizing via `budget / max_slots`, Leverage-Cap via `get_max_leverage`, Symbol-Mapping Hyperliquid ↔ Ziel-Exchange, Exit-Sync mit `exit_reason=COPY_SOURCE_CLOSED`, 24h-Negativ-Cache für nicht verfügbare Symbole). Registriert in `src/strategy/__init__.py`.
+  - **Cold Start:** Bestehende offene Positionen der Source werden nicht übernommen. Der Bot folgt nur Trades, die nach dem Start eröffnet werden.
+  - **Slot-Logik:** `budget / max_slots` ergibt die feste Notional-Größe pro kopiertem Trade. Wenn alle Slots belegt sind und die Source einen weiteren Trade öffnet, wird dieser mit Notification geskippt.
+  - **Skip-Gründe mit Notification:** Slot voll, Symbol nicht auf Ziel-Exchange, Hebel gecappt, unter `min_position_size_usdt` (default 10), Symbol nicht in Whitelist / in Blacklist.
+  - **Polling:** Default 1 Minute, einstellbar via `schedule_interval_minutes`.
+- **Neue API-Endpunkte** — Router `src/api/routers/copy_trading.py`, registriert in `src/api/main_app.py`:
+  - `POST /api/copy-trading/validate-source` — Validiert eine Hyperliquid-Source-Wallet in vier Stufen (Format → Existenz → 30-Tage-Aktivität → Symbol-Verfügbarkeits-Preview auf der Ziel-Exchange via `HyperliquidWalletTracker`, `get_exchange_symbols`, `to_exchange_symbol`). Das Frontend nutzt das Ergebnis, um die Bot-Erstellung zu blocken, wenn keines der Source-Symbole auf der Ziel-Exchange verfügbar ist.
+  - `GET /api/exchanges/{exchange}/leverage-limits?symbol=...` — Liefert das Max-Leverage via `get_max_leverage` aus der statischen Tabelle `src/exchanges/leverage_limits.py`.
+- **Frontend** — `CopyTradingValidator` Component (ruft `validate-source` auf und zeigt die 4-Stufen-Preview), neuer `text` Param-Type im Bot Builder (für komma-separierte Symbol-Listen Whitelist/Blacklist), eigene Bot-Karten-Variante für Copy-Bots. `strategyDesc_copy_trading` (de + en) und Display-Name `copy_trading: 'Copy Trading'` in `STRATEGY_DISPLAY`.
+- **Neue Anleitung** `Anleitungen/copy-trading.md` — Bilinguales Einsteiger-Tutorial (Deutsch zuerst, dann Englisch) mit Schritt-für-Schritt-Setup, Slot-Mechanik, Cold-Start-Erklärung, optionalen Einstellungen, FAQ und Troubleshooting-Tabelle.
+- **Affiliate-UID Auto-Retry** — Neuer Service `src/services/affiliate_retry.py::retry_pending_verifications` läuft alle 30 Minuten via APScheduler (im `BotOrchestrator._scheduler`, registriert in `src/api/main_app.py` lifespan startup). Holt alle `ExchangeConnection` Rows mit `affiliate_uid IS NOT NULL AND affiliate_verified = false`, gruppiert nach Exchange, baut pro Exchange einen einzigen Admin-Client und ruft `check_affiliate_uid` für jede Row auf. Erfolgreiche Rows werden auf `verified=True, verified_at=now()` gesetzt. User müssen ihre UID nicht neu eingeben, sobald Admin-Live-Keys hinterlegt sind. Per-Row-Exceptions werden gefangen und geloggt. Inkl. 4 Unit-Tests in `tests/unit/services/test_affiliate_retry.py`.
+- **Affiliate-UID Warning-Logs** — `src/api/routers/config_affiliate.py::set_affiliate_uid` loggt jetzt zwei bisher stille Fälle als Warnung: (1) wenn keine Admin-Live-Connection für die Exchange existiert (statt silent failure — Admin sieht sofort, dass er Live-Keys hinterlegen muss), (2) wenn die Exchange-API `check_affiliate_uid` mit `False` zurückkommt.
+
+### Geändert
+- **`BaseStrategy` — `is_self_managed`-Flag und `run_tick(ctx)`-Hook** — Strategien können sich jetzt als self-managed markieren. Der Bot-Worker dispatched in dem Fall zu `run_tick` und überspringt den klassischen Per-Symbol-Loop (`generate_signal` → Risk Check → Trade). Das erlaubt Strategien wie Copy-Trading, die nicht pro Symbol sondern pro Source-Wallet arbeiten.
+- **`_check_symbol_conflicts` ignoriert Copy-Trading-Bots** — Copy-Bots sind budget-isoliert (eigene Slots, eigenes Budget) und dürfen deshalb mit anderen Bots auf demselben Symbol koexistieren, ohne einen Konflikt-Fehler auszulösen.
+- **`TradeExecutorMixin` — neue Wrapper für self-managed Strategien** — In `src/bot/trade_executor.py` neue öffentliche Methoden `execute_trade`, `get_open_trades_count`, `get_open_trades_for_bot`, `close_trade_by_strategy` als dünne Adapter auf die bestehenden internen Pfade (`_execute_trade`, `_close_and_record_trade`), damit self-managed Strategien sauber gegen eine stabile API programmieren können.
+
+### Datenbank
+- **Neue Spalte `bot_configs.strategy_state`** (Text/JSON) — Speichert den Runtime-State einer Strategie (z. B. die Copy-Trading Watermark und den Slot-Counter) persistent, damit Bot-Restarts konsistent bleiben. Migration `018_add_strategy_state_to_bot_configs.py`.
+
+### Tests
+- 9 Unit-Tests in `tests/unit/strategy/test_copy_trading.py`
+- 4 Unit-Tests in `tests/unit/api/test_copy_trading_router.py`
+- 4 Unit-Tests in `tests/unit/services/test_affiliate_retry.py`
+
+---
+
+## [4.15.12] - 2026-04-08
+
+### Geändert
+- **Strategie-Beschreibungen im Bot Builder ausführlicher** — Die Texte für Liquidation Hunter und Edge Indicator wurden von einem Satz auf 5–7 Sätze erweitert und erklären jetzt zusätzlich was die Strategie genau macht, wann und wie der Trailing Stop aktiviert wird (ATR-Trigger und -Abstand pro Risikoprofil) und in welchem Marktumfeld die Strategie am besten funktioniert. Beide Locales (de + en) aktualisiert.
+
+### Hinzugefügt (Design)
+- **Spec für Copy-Trading-Strategie** (`docs/superpowers/specs/2026-04-08-copy-trading-design.md`) — neue Strategie die eine öffentliche Hyperliquid-Wallet trackt und Trades 1:1 (oder mit User-Overrides für Hebel/Symbole/Min-Größe) auf der gewünschten Exchange kopiert. Implementierung als neues Strategie-Plugin im bestehenden Bot-Framework, Polling-basiert, fixe Slot-Größe, nur Entry und Full-Close in v1.
+- Frontend-Beschreibung `strategyDesc_copy_trading` (de + en) und Display-Name `copy_trading: 'Copy Trading'` in `STRATEGY_DISPLAY` als Vorbereitung. Implementierung folgt im nächsten Schritt nach Plan-Approval.
+
+---
+
 ## [4.15.11] - 2026-04-08
 
 ### Behoben

@@ -661,6 +661,26 @@ class BotWorker(
 
         logger.info(f"{log_prefix} Starting analysis...")
 
+        # Self-managed strategies (e.g. copy_trading) handle their own
+        # signal generation and trade dispatch — bypass the per-symbol loop.
+        if self._strategy is not None and self._strategy.is_self_managed:
+            from src.strategy.base import StrategyTickContext
+            ctx = StrategyTickContext(
+                bot_config=self._config,
+                user_id=self._config.user_id,
+                exchange_client=self._client,
+                trade_executor=self,  # BotWorker is also the TradeExecutorMixin
+                send_notification=self._send_notification,
+                logger=logger,
+                bot_config_id=self.bot_config_id,
+            )
+            try:
+                await self._strategy.run_tick(ctx)
+            except Exception as e:
+                logger.error("[Bot:%s] Self-managed run_tick error: %s", self.bot_config_id, e)
+            self.last_analysis = datetime.now(timezone.utc)
+            return  # Skip the per-symbol loop entirely
+
         # Global halt check (e.g. stats not initialized)
         can_trade, reason = self._risk_manager.can_trade()
         if not can_trade:

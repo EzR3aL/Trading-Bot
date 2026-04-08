@@ -110,8 +110,15 @@ async def _check_symbol_conflicts(
     mode: str,
     trading_pairs: list[str],
     exclude_bot_id: int | None = None,
+    strategy_type: str | None = None,
 ) -> list[SymbolConflict]:
-    """Find enabled bots that already trade the same symbols on the same exchange/mode."""
+    """Find enabled bots that already trade the same symbols on the same exchange/mode.
+
+    Copy-trading bots are budget-isolated and may overlap freely with other bots,
+    so we short-circuit when ``strategy_type == "copy_trading"``.
+    """
+    if strategy_type == "copy_trading":
+        return []
     conflicting_modes = _MODE_CONFLICTS.get(mode, set())
     query = (
         select(BotConfig)
@@ -417,6 +424,7 @@ async def check_symbol_conflicts(
     mode: str = Query(..., pattern="^(demo|live|both)$"),
     trading_pairs: str = Query(..., description="Comma-separated list of trading pairs"),
     exclude_bot_id: Optional[int] = Query(None),
+    strategy_type: Optional[str] = Query(None),
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -424,7 +432,9 @@ async def check_symbol_conflicts(
     pairs = [p.strip() for p in trading_pairs.split(",") if p.strip()]
     if not pairs:
         return SymbolConflictResponse()
-    conflicts = await _check_symbol_conflicts(db, user.id, exchange_type, mode, pairs, exclude_bot_id)
+    conflicts = await _check_symbol_conflicts(
+        db, user.id, exchange_type, mode, pairs, exclude_bot_id, strategy_type=strategy_type
+    )
     return SymbolConflictResponse(has_conflicts=len(conflicts) > 0, conflicts=conflicts)
 
 
@@ -662,12 +672,19 @@ async def list_bots(
             except (json.JSONDecodeError, TypeError):
                 pass
 
-        # Extract risk_profile from strategy_params
+        # Extract risk_profile + copy-trading info from strategy_params
         _risk_profile = None
+        _copy_source_wallet = None
+        _copy_max_slots = None
+        _copy_budget_usdt = None
         if config.strategy_params:
             try:
                 _sp = json.loads(config.strategy_params) if isinstance(config.strategy_params, str) else config.strategy_params
                 _risk_profile = _sp.get("risk_profile")
+                if config.strategy_type == "copy_trading":
+                    _copy_source_wallet = _sp.get("source_wallet")
+                    _copy_max_slots = _sp.get("max_slots")
+                    _copy_budget_usdt = _sp.get("budget_usdt")
             except (json.JSONDecodeError, TypeError):
                 pass
 
@@ -680,6 +697,9 @@ async def list_bots(
             margin_mode=getattr(config, "margin_mode", None) or "cross",
             trading_pairs=trading_pairs,
             risk_profile=_risk_profile,
+            copy_source_wallet=_copy_source_wallet,
+            copy_max_slots=_copy_max_slots,
+            copy_budget_usdt=_copy_budget_usdt,
             status=runtime["status"] if runtime else ("idle" if not config.is_enabled else "stopped"),
             error_message=runtime.get("error_message") if runtime else None,
             started_at=runtime.get("started_at") if runtime else None,
