@@ -5,7 +5,6 @@ import NumInput from '../ui/NumInput'
 import type { Strategy, ParamDef, ParamOption } from './BotBuilderTypes'
 import { STRATEGY_RECOMMENDATIONS } from './BotBuilderTypes'
 import { strategyLabel as getStrategyDisplayName } from '../../constants/strategies'
-import CopyTradingValidator from './CopyTradingValidator'
 
 interface Props {
   strategies: Strategy[]
@@ -22,7 +21,7 @@ interface Props {
 }
 
 export default function BotBuilderStepStrategy({
-  strategies, strategyType, strategyParams, strategyView, proMode, targetExchange,
+  strategies, strategyType, strategyParams, strategyView, proMode, targetExchange: _targetExchange,
   onStrategyChange, onStrategyParamsChange, onStrategyViewChange, onToggleProMode,
   b,
 }: Props) {
@@ -130,24 +129,33 @@ export default function BotBuilderStepStrategy({
       )}
 
       {selectedStrategy && Object.keys(selectedStrategy.param_schema).length > 0 && (() => {
-        const selectEntries = Object.entries(selectedStrategy.param_schema).filter(
+        // For copy_trading bots, Step 2 only shows the core fields
+        // (source_wallet, budget_usdt, max_slots). The whitelist/blacklist
+        // pickers and wallet validator live in Step 3.
+        const isCopyTrading = strategyType === 'copy_trading'
+        const copyTradingStep2Keys = new Set(['source_wallet', 'budget_usdt', 'max_slots'])
+        const schemaEntries = Object.entries(selectedStrategy.param_schema).filter(
+          ([key]) => !isCopyTrading || copyTradingStep2Keys.has(key)
+        )
+        const selectEntries = schemaEntries.filter(
           ([, def]) => (def as ParamDef).type === 'select' || (def as ParamDef).type === 'dependent_select'
         )
-        const textareaEntries = Object.entries(selectedStrategy.param_schema).filter(
+        const textareaEntries = schemaEntries.filter(
           ([, def]) => (def as ParamDef).type === 'textarea'
         )
-        const textEntries = Object.entries(selectedStrategy.param_schema).filter(
+        const textEntries = schemaEntries.filter(
           ([, def]) => (def as ParamDef).type === 'text'
         )
         // All non-select, non-textarea, non-text params go behind Pro Mode
-        const proModeEntries = Object.entries(selectedStrategy.param_schema).filter(
+        const proModeEntries = schemaEntries.filter(
           ([, def]) => {
             const d = def as ParamDef
             return d.type !== 'select' && d.type !== 'dependent_select' && d.type !== 'textarea' && d.type !== 'text'
           }
         )
-        const hasAlwaysVisible = selectEntries.length > 0 || textareaEntries.length > 0 || textEntries.length > 0
-        const hasProParams = proModeEntries.length > 0
+        const hasAlwaysVisible = selectEntries.length > 0 || textareaEntries.length > 0 || textEntries.length > 0 || isCopyTrading
+        // For copy_trading, budget_usdt + max_slots are rendered inline; no Pro Mode needed.
+        const hasProParams = !isCopyTrading && proModeEntries.length > 0
 
         return (
           <div>
@@ -240,12 +248,34 @@ export default function BotBuilderStepStrategy({
                     )
                   })}
 
-                {strategyType === 'copy_trading' && strategyParams.source_wallet && targetExchange && (
-                  <CopyTradingValidator
-                    wallet={strategyParams.source_wallet}
-                    targetExchange={targetExchange}
-                    onValidated={(r) => onStrategyParamsChange({ ...strategyParams, _validation: r })}
-                  />
+                {/* Copy-trading wallet validator moved to Step 3 */}
+
+                {/* For copy_trading, render budget_usdt and max_slots as always-visible numeric inputs */}
+                {isCopyTrading && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {proModeEntries
+                      .filter(([key]) => key === 'budget_usdt' || key === 'max_slots')
+                      .map(([key, def]) => {
+                        const d = def as ParamDef
+                        const numLabel = t(`bots.builder.paramLabel_${key}`, '') || d.label
+                        const numDesc = t(`bots.builder.paramDesc_${key}`, '') || d.description
+                        const val = strategyParams[key] ?? d.default ?? ''
+                        return (
+                          <div key={key}>
+                            <label className="block text-xs text-gray-300 mb-1">{numLabel}</label>
+                            <NumInput
+                              value={val}
+                              onChange={e => setParam(key, parseFloat(e.target.value) || 0)}
+                              min={d.min}
+                              max={d.max}
+                              step={d.type === 'float' ? 0.01 : 1}
+                              className="filter-select text-sm w-full"
+                            />
+                            {numDesc && <p className="text-[10px] text-gray-400 mt-1">{numDesc}</p>}
+                          </div>
+                        )
+                      })}
+                  </div>
                 )}
 
                 {/* Second pass: symbol_whitelist / symbol_blacklist with chip-pickers */}

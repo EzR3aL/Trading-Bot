@@ -541,6 +541,10 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
             balancePreview={balancePreview} balanceOverview={balanceOverview}
             overviewLoading={overviewLoading} symbolConflicts={symbolConflicts}
             hlGateStatus={hlGateStatus}
+            strategyType={strategyType}
+            strategyParams={strategyParams}
+            onStrategyParamsChange={setStrategyParams}
+            onTradingPairsChange={setTradingPairs}
             onExchangeTypeChange={handleExchangeTypeChange} onModeChange={setMode}
             onMarginModeChange={setMarginMode} onTogglePair={togglePair}
             onPerAssetConfigChange={setPerAssetConfig}

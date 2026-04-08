@@ -9,6 +9,19 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [Unreleased]
+
+### Geändert
+- **Copy-Trading v1.1 Frontend — Step 3 Redesign** — Der Bot-Builder Step 3 (Exchange & Assets) zeigt fuer Copy-Trading-Bots jetzt ein eigenes Layout statt des Trading-Pair-Pickers und des Per-Asset-Grids (die fuer Copy-Bots konzeptionell falsch sind — Assets werden von der Source-Wallet bestimmt). Neues Component `frontend/src/components/bots/CopyTradingStepExchange.tsx` mit drei Bloecken:
+  - **Block 1 — Wallet & Symbol-Filter:** `CopyTradingValidator` (aus Step 2 hierher verschoben) + Whitelist/Blacklist Chip-Picker, deren Chips aus `strategyParams._validation.available` stammen.
+  - **Block 2 — Risiko-Overrides:** Optionale 2-Spalten-Grid mit `leverage`, `take_profit_pct`, `stop_loss_pct`, `min_position_size_usdt`. Leere Felder = Werte der Source-Wallet werden 1:1 uebernommen.
+  - **Block 3 — Globale Sicherheits-Limits:** `daily_loss_limit_pct` und `max_trades_per_day` inkl. Hilfstexte.
+  - `trading_pairs` wird fuer Copy-Bots auf `['__copy__']` Sentinel gesetzt, damit die bestehende Backend-Validierung greift.
+  - Step 2 zeigt fuer Copy-Bots nur noch die Kern-Felder `source_wallet`, `budget_usdt`, `max_slots` — Whitelist/Blacklist und Wallet-Validator sind nach Step 3 verschoben.
+  - de + en i18n-Strings unter `bots.builder.copyTradingStep3` ergaenzt.
+
+---
+
 ## [4.16.0] - 2026-04-08
 
 ### Hinzugefügt

@@ -5,6 +5,7 @@ import ExchangeLogo from '../ui/ExchangeLogo'
 import NumInput from '../ui/NumInput'
 import type { BalancePreview, SymbolConflict, PerAssetEntry } from './BotBuilderTypes'
 import { EXCHANGES, EXCHANGE_SUPPORTS_DEMO, POPULAR_BASES } from './BotBuilderTypes'
+import CopyTradingStepExchange from './CopyTradingStepExchange'
 
 interface Props {
   exchangeType: string
@@ -19,6 +20,10 @@ interface Props {
   overviewLoading: boolean
   symbolConflicts: SymbolConflict[]
   hlGateStatus?: { needs_approval: boolean; needs_referral: boolean }
+  strategyType?: string
+  strategyParams?: Record<string, any>
+  onStrategyParamsChange?: (params: Record<string, any>) => void
+  onTradingPairsChange?: (pairs: string[]) => void
   onExchangeTypeChange: (val: string) => void
   onModeChange: (val: string) => void
   onMarginModeChange: (val: 'cross' | 'isolated') => void
@@ -31,12 +36,25 @@ export default function BotBuilderStepExchange({
   exchangeType, mode, marginMode, tradingPairs, perAssetConfig,
   exchangeSymbols, symbolsLoading, balancePreview, balanceOverview, overviewLoading,
   symbolConflicts, hlGateStatus,
+  strategyType, strategyParams, onStrategyParamsChange, onTradingPairsChange,
   onExchangeTypeChange, onModeChange, onMarginModeChange, onTogglePair, onPerAssetConfigChange,
   b,
 }: Props) {
   const { t } = useTranslation()
   const isHyperliquid = exchangeType === 'hyperliquid'
   const isBingx = exchangeType === 'bingx'
+
+  if (strategyType === 'copy_trading' && strategyParams && onStrategyParamsChange && onTradingPairsChange) {
+    return (
+      <CopyTradingStepExchange
+        exchangeType={exchangeType}
+        mode={mode as 'live' | 'demo'}
+        strategyParams={strategyParams}
+        onStrategyParamsChange={onStrategyParamsChange}
+        onTradingPairsChange={onTradingPairsChange}
+      />
+    )
+  }
 
   const [symbolSearch, setSymbolSearch] = useState('')
   const [symbolDropdownOpen, setSymbolDropdownOpen] = useState(false)
