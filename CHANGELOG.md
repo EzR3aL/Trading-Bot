@@ -9,6 +9,19 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [Unreleased]
+
+### Hinzugefügt
+- **Copy-Trading v1.1 Backend** — Neue Strategie-Parameter `take_profit_pct`, `stop_loss_pct`, `daily_loss_limit_pct`, `max_trades_per_day` in `CopyTradingStrategy`. Der alte `copy_tp_sl`-Toggle wurde entfernt.
+  - **TP/SL Override:** Wenn gesetzt, berechnet der Bot absolute TP/SL-Preise aus dem Entry (`entry * (1 ± pct/100)`) und platziert sie an der Exchange. Leer = kein TP/SL (HL-Fills tragen keine TP/SL-Daten).
+  - **Daily Loss Limit:** Realized-PnL der heute geschlossenen Trades wird gegen das Budget gerechnet; bei Erreichen werden weitere Kopien bis Mitternacht UTC pausiert.
+  - **Max Trades per Day:** Begrenzt die pro UTC-Tag dispatched Entries.
+  - Neue Helpers `_get_today_realized_pnl` und `_get_today_entry_count` in `src/strategy/copy_trading.py`.
+  - `TradeExecutorMixin.execute_trade` akzeptiert jetzt `take_profit_pct`/`stop_loss_pct` kwargs; `_execute_trade` respektiert Caller-supplied TP/SL, statt sie durch Bot-Level-Config zu überschreiben.
+  - 3 neue Unit-Tests in `tests/unit/strategy/test_copy_trading.py`.
+
+---
+
 ## [4.16.0] - 2026-04-08
 
 ### Hinzugefügt

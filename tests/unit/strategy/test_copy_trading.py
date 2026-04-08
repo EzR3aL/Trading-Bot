@@ -1,6 +1,6 @@
 """Tests for CopyTradingStrategy."""
 import json
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -31,7 +31,10 @@ def _params(**overrides):
         "symbol_whitelist": "",
         "symbol_blacklist": "",
         "min_position_size_usdt": 10.0,
-        "copy_tp_sl": False,
+        "take_profit_pct": None,
+        "stop_loss_pct": None,
+        "daily_loss_limit_pct": None,
+        "max_trades_per_day": None,
     }
     base.update(overrides)
     return base
@@ -55,8 +58,10 @@ def test_param_schema_keys():
     schema = CopyTradingStrategy.get_param_schema()
     for key in ("source_wallet", "budget_usdt", "max_slots", "leverage",
                 "symbol_whitelist", "symbol_blacklist",
-                "min_position_size_usdt", "copy_tp_sl"):
+                "min_position_size_usdt", "take_profit_pct", "stop_loss_pct",
+                "daily_loss_limit_pct", "max_trades_per_day"):
         assert key in schema
+    assert "copy_tp_sl" not in schema
 
 
 @pytest.mark.asyncio
@@ -229,3 +234,82 @@ async def test_run_tick_exits_when_source_closed_position(monkeypatch):
     ctx = _make_ctx(cfg, exchange_client=MagicMock(), executor=executor)
     await s.run_tick(ctx)
     executor.close_trade_by_strategy.assert_called_once_with(open_trade, reason="COPY_SOURCE_CLOSED")
+
+
+@pytest.mark.asyncio
+async def test_run_tick_skips_when_daily_loss_limit_hit(monkeypatch):
+    fills = [SourceFill(coin="BTC", side="long", size=0.5, price=67000,
+                        time_ms=2000, is_entry=True, hash="0xa")]
+    tracker = MagicMock()
+    tracker.get_fills_since = AsyncMock(return_value=fills)
+    tracker.get_open_positions = AsyncMock(return_value=[])
+    tracker.close = AsyncMock()
+    monkeypatch.setattr("src.strategy.copy_trading.HyperliquidWalletTracker", lambda: tracker)
+    monkeypatch.setattr("src.strategy.copy_trading.get_exchange_symbols", AsyncMock(return_value=["BTCUSDT"]))
+    monkeypatch.setattr("src.strategy.copy_trading.to_exchange_symbol", lambda c, e: "BTCUSDT")
+
+    s = CopyTradingStrategy(_params(budget_usdt=1000, daily_loss_limit_pct=5.0))
+    # -60 USDT on a 1000 USDT budget = 6% drawdown > 5% limit
+    monkeypatch.setattr(
+        CopyTradingStrategy, "_get_today_realized_pnl",
+        AsyncMock(return_value=-60.0),
+    )
+    cfg = _bot_config(strategy_state={"last_processed_fill_ms": 1000})
+    executor = MagicMock()
+    executor.execute_trade = AsyncMock()
+    executor.get_open_trades_count = AsyncMock(return_value=0)
+    ctx = _make_ctx(cfg, exchange_client=MagicMock(), executor=executor)
+    await s.run_tick(ctx)
+    executor.execute_trade.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_run_tick_skips_when_max_trades_per_day_hit(monkeypatch):
+    fills = [SourceFill(coin="BTC", side="long", size=0.5, price=67000,
+                        time_ms=2000, is_entry=True, hash="0xa")]
+    tracker = MagicMock()
+    tracker.get_fills_since = AsyncMock(return_value=fills)
+    tracker.get_open_positions = AsyncMock(return_value=[])
+    tracker.close = AsyncMock()
+    monkeypatch.setattr("src.strategy.copy_trading.HyperliquidWalletTracker", lambda: tracker)
+    monkeypatch.setattr("src.strategy.copy_trading.get_exchange_symbols", AsyncMock(return_value=["BTCUSDT"]))
+    monkeypatch.setattr("src.strategy.copy_trading.to_exchange_symbol", lambda c, e: "BTCUSDT")
+
+    s = CopyTradingStrategy(_params(max_trades_per_day=3))
+    monkeypatch.setattr(
+        CopyTradingStrategy, "_get_today_entry_count",
+        AsyncMock(return_value=3),
+    )
+    cfg = _bot_config(strategy_state={"last_processed_fill_ms": 1000})
+    executor = MagicMock()
+    executor.execute_trade = AsyncMock()
+    executor.get_open_trades_count = AsyncMock(return_value=0)
+    ctx = _make_ctx(cfg, exchange_client=MagicMock(), executor=executor)
+    await s.run_tick(ctx)
+    executor.execute_trade.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_tp_sl_override_passed_to_executor(monkeypatch):
+    fills = [SourceFill(coin="BTC", side="long", size=0.5, price=67000,
+                        time_ms=2000, is_entry=True, hash="0xa")]
+    tracker = MagicMock()
+    tracker.get_fills_since = AsyncMock(return_value=fills)
+    tracker.get_open_positions = AsyncMock(return_value=[])
+    tracker.close = AsyncMock()
+    monkeypatch.setattr("src.strategy.copy_trading.HyperliquidWalletTracker", lambda: tracker)
+    monkeypatch.setattr("src.strategy.copy_trading.get_exchange_symbols", AsyncMock(return_value=["BTCUSDT"]))
+    monkeypatch.setattr("src.strategy.copy_trading.to_exchange_symbol", lambda c, e: "BTCUSDT")
+
+    s = CopyTradingStrategy(_params(take_profit_pct=2.5, stop_loss_pct=1.5))
+    cfg = _bot_config(strategy_state={"last_processed_fill_ms": 1000})
+    executor = MagicMock()
+    executor.execute_trade = AsyncMock()
+    executor.get_open_trades_count = AsyncMock(return_value=0)
+    ctx = _make_ctx(cfg, exchange_client=MagicMock(), executor=executor)
+    await s.run_tick(ctx)
+
+    executor.execute_trade.assert_called_once()
+    kwargs = executor.execute_trade.call_args.kwargs
+    assert kwargs["take_profit_pct"] == 2.5
+    assert kwargs["stop_loss_pct"] == 1.5
