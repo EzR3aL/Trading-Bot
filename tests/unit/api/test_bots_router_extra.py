@@ -1626,3 +1626,35 @@ class TestOrchestratorNotInitialized:
         with pytest.raises(HTTPException) as exc_info:
             get_orchestrator(mock_request)
         assert exc_info.value.status_code == 503
+
+
+@pytest.mark.asyncio
+async def test_copy_trading_bot_does_not_conflict(factory, regular_user):
+    """Copy bots may overlap with existing bots on the same symbols."""
+    from src.api.routers.bots import _check_symbol_conflicts
+
+    async with factory() as session:
+        existing = BotConfig(
+            user_id=regular_user.id,
+            exchange_type="bitget",
+            mode="demo",
+            strategy_type="edge_indicator",
+            trading_pairs='["BTCUSDT"]',
+            name="edge",
+            is_enabled=True,
+        )
+        session.add(existing)
+        await session.commit()
+
+        # Without strategy_type, the existing bot conflicts
+        conflicts_normal = await _check_symbol_conflicts(
+            session, regular_user.id, "bitget", "demo", ["BTCUSDT"],
+        )
+        assert len(conflicts_normal) == 1
+
+        # With strategy_type="copy_trading", conflicts are suppressed
+        conflicts_copy = await _check_symbol_conflicts(
+            session, regular_user.id, "bitget", "demo", ["BTCUSDT"],
+            strategy_type="copy_trading",
+        )
+        assert conflicts_copy == []

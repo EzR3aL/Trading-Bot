@@ -110,8 +110,15 @@ async def _check_symbol_conflicts(
     mode: str,
     trading_pairs: list[str],
     exclude_bot_id: int | None = None,
+    strategy_type: str | None = None,
 ) -> list[SymbolConflict]:
-    """Find enabled bots that already trade the same symbols on the same exchange/mode."""
+    """Find enabled bots that already trade the same symbols on the same exchange/mode.
+
+    Copy-trading bots are budget-isolated and may overlap freely with other bots,
+    so we short-circuit when ``strategy_type == "copy_trading"``.
+    """
+    if strategy_type == "copy_trading":
+        return []
     conflicting_modes = _MODE_CONFLICTS.get(mode, set())
     query = (
         select(BotConfig)
@@ -417,6 +424,7 @@ async def check_symbol_conflicts(
     mode: str = Query(..., pattern="^(demo|live|both)$"),
     trading_pairs: str = Query(..., description="Comma-separated list of trading pairs"),
     exclude_bot_id: Optional[int] = Query(None),
+    strategy_type: Optional[str] = Query(None),
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -424,7 +432,9 @@ async def check_symbol_conflicts(
     pairs = [p.strip() for p in trading_pairs.split(",") if p.strip()]
     if not pairs:
         return SymbolConflictResponse()
-    conflicts = await _check_symbol_conflicts(db, user.id, exchange_type, mode, pairs, exclude_bot_id)
+    conflicts = await _check_symbol_conflicts(
+        db, user.id, exchange_type, mode, pairs, exclude_bot_id, strategy_type=strategy_type
+    )
     return SymbolConflictResponse(has_conflicts=len(conflicts) > 0, conflicts=conflicts)
 
 
