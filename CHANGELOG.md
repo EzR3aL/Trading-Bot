@@ -11,6 +11,10 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ## [Unreleased] - 2026-04-08
 
+### Hinzugefügt (Copy-Trading Task 7)
+- **`CopyTradingStrategy`** — Neue self-managed Strategie `src/strategy/copy_trading.py`, die eine öffentliche Hyperliquid-Wallet überwacht und deren Entry-Fills auf der Ziel-Exchange kopiert. Implementiert `run_tick(ctx)` mit Cold-Start-Watermark, Whitelist/Blacklist, Slot-Limit, Notional-Sizing (budget/max_slots), Leverage-Cap via `get_max_leverage`, Symbol-Mapping und Exit-Sync (schließt Kopien, wenn die Source ihre Position geschlossen hat). Registriert in `src/strategy/__init__.py`. 9 Unit-Tests in `tests/unit/strategy/test_copy_trading.py`.
+- **TradeExecutorMixin Wrappers** — Neue Public-Methoden in `src/bot/trade_executor.py` (`get_open_trades_count`, `get_open_trades_for_bot`, `execute_trade`, `close_trade_by_strategy`), die als Adapter für self-managed Strategien dienen und intern an `_execute_trade` bzw. `_close_and_record_trade` delegieren.
+
 ### Hinzugefügt (Copy-Trading Task 6)
 - **Copy-Trading API-Endpunkte** — Neuer Router `src/api/routers/copy_trading.py` mit zwei Endpunkten: `POST /api/copy-trading/validate-source` validiert eine Hyperliquid-Source-Wallet (Format → Existenz → 30-Tage-Aktivität → Symbol-Verfügbarkeit auf der Ziel-Exchange via `HyperliquidWalletTracker`, `get_exchange_symbols` und `to_exchange_symbol`); `GET /api/exchanges/{exchange}/leverage-limits?symbol=...` liefert das Max-Leverage via `get_max_leverage`. Router in `src/api/main_app.py` registriert. Inkl. 4 Unit-Tests in `tests/unit/api/test_copy_trading_router.py`.
 
