@@ -352,6 +352,8 @@ def create_app() -> FastAPI:
     app.include_router(notifications.router)
     app.include_router(config_audit.router)
     app.include_router(admin_logs.router)
+    from src.api.routers.copy_trading import router as copy_trading_router
+    app.include_router(copy_trading_router)
 
     # Store WebSocket manager on app state for access
     from src.api.websocket.manager import ws_manager

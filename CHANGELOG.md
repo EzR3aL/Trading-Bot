@@ -11,6 +11,9 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ## [Unreleased] - 2026-04-08
 
+### Hinzugefügt (Copy-Trading Task 6)
+- **Copy-Trading API-Endpunkte** — Neuer Router `src/api/routers/copy_trading.py` mit zwei Endpunkten: `POST /api/copy-trading/validate-source` validiert eine Hyperliquid-Source-Wallet (Format → Existenz → 30-Tage-Aktivität → Symbol-Verfügbarkeit auf der Ziel-Exchange via `HyperliquidWalletTracker`, `get_exchange_symbols` und `to_exchange_symbol`); `GET /api/exchanges/{exchange}/leverage-limits?symbol=...` liefert das Max-Leverage via `get_max_leverage`. Router in `src/api/main_app.py` registriert. Inkl. 4 Unit-Tests in `tests/unit/api/test_copy_trading_router.py`.
+
 ### Behoben
 - **Affiliate-UID Auto-Verify: stille Fehler werden jetzt geloggt** — In `src/api/routers/config_affiliate.py` werden zwei bisher stille Fälle als Warnung geloggt: (1) wenn kein Admin-Live-Connection für die Exchange existiert (so sieht der Admin sofort, dass er Live-Keys hinterlegen muss), und (2) wenn die Exchange-API `check_affiliate_uid` mit `False` zurückkommt.
 
