@@ -57,7 +57,15 @@ async def set_affiliate_uid(
     verified = False
     try:
         admin_conn = await get_admin_exchange_conn(exchange_type, db)
-        if admin_conn:
+        if admin_conn is None:
+            _logger.warning(
+                "Affiliate auto-verify skipped for user %s: no admin live "
+                "connection configured for %s — verification will be retried "
+                "by the periodic job",
+                user.id,
+                exchange_type,
+            )
+        else:
             from src.exchanges.factory import create_exchange_client
             client = create_exchange_client(
                 exchange_type=exchange_type,
@@ -72,6 +80,14 @@ async def set_affiliate_uid(
             if verified:
                 conn.affiliate_verified = True
                 conn.affiliate_verified_at = datetime.now(timezone.utc)
+            else:
+                _logger.warning(
+                    "Affiliate auto-verify returned False for user %s uid=%s "
+                    "on %s — will retry",
+                    user.id,
+                    uid,
+                    exchange_type,
+                )
     except Exception as e:
         _logger.warning(f"Affiliate UID auto-verify failed for user {user.id}: {type(e).__name__}")
 
