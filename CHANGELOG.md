@@ -9,6 +9,17 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [4.15.12] - 2026-04-08
+
+### Geändert
+- **Strategie-Beschreibungen im Bot Builder ausführlicher** — Die Texte für Liquidation Hunter und Edge Indicator wurden von einem Satz auf 5–7 Sätze erweitert und erklären jetzt zusätzlich was die Strategie genau macht, wann und wie der Trailing Stop aktiviert wird (ATR-Trigger und -Abstand pro Risikoprofil) und in welchem Marktumfeld die Strategie am besten funktioniert. Beide Locales (de + en) aktualisiert.
+
+### Hinzugefügt (Design)
+- **Spec für Copy-Trading-Strategie** (`docs/superpowers/specs/2026-04-08-copy-trading-design.md`) — neue Strategie die eine öffentliche Hyperliquid-Wallet trackt und Trades 1:1 (oder mit User-Overrides für Hebel/Symbole/Min-Größe) auf der gewünschten Exchange kopiert. Implementierung als neues Strategie-Plugin im bestehenden Bot-Framework, Polling-basiert, fixe Slot-Größe, nur Entry und Full-Close in v1.
+- Frontend-Beschreibung `strategyDesc_copy_trading` (de + en) und Display-Name `copy_trading: 'Copy Trading'` in `STRATEGY_DISPLAY` als Vorbereitung. Implementierung folgt im nächsten Schritt nach Plan-Approval.
+
+---
+
 ## [4.15.11] - 2026-04-08
 
 ### Behoben
