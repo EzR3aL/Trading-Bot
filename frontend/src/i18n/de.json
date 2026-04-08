@@ -514,6 +514,21 @@
         "symbolFormatHint": "Hyperliquid Coin-Namen ohne USDT-Suffix, kommagetrennt (z.B. BTC, ETH, SOL)",
         "clickToAdd": "Klick zum Hinzufügen"
       },
+      "copyTradingStep3": {
+        "blockFilter": "Wallet & Symbol-Filter",
+        "blockOverrides": "Risiko-Overrides",
+        "blockSafety": "Globale Sicherheits-Limits",
+        "overridesHint": "Felder leer = die Werte der Source-Wallet werden 1:1 übernommen.",
+        "emptyLikeSource": "leer = wie Source",
+        "leverage": "Hebel",
+        "takeProfit": "Take Profit %",
+        "stopLoss": "Stop Loss %",
+        "minSize": "Min. Trade-Größe (USDT)",
+        "dailyLossLimit": "Tägliches Verlustlimit %",
+        "dailyLossLimitHint": "Bei Erreichen werden alle weiteren Kopien bis Mitternacht UTC pausiert",
+        "maxTradesPerDay": "Max Trades pro Tag",
+        "maxTradesPerDayHint": "Maximale Anzahl kopierter Entries pro UTC-Tag"
+      },
       "title": "Neuen Bot erstellen",
       "editTitle": "Bot bearbeiten",
       "step1": "Name",
