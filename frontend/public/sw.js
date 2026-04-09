@@ -1,4 +1,4 @@
-const CACHE_NAME = 'edge-bots-v2';
+const CACHE_NAME = 'edge-bots-v5';
 
 self.addEventListener('install', (event) => {
   // Skip waiting — activate immediately so new deploys take effect
