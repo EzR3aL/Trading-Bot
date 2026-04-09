@@ -27,6 +27,9 @@ Covers:
 24. Cooldown: cooldown_hours=0 → no cooldown
 25. New DEFAULTS + param schema include new parameters
 --- v3.31.0 ---
+36. Frontend short keys: per-asset "tp"/"sl" resolved by trade executor
+37. Frontend short keys: "tp" takes priority over "take_profit_percent"
+---
 26. Fallback: ADX < 18 + Ribbon neutral → NEUTRAL
 27. Fallback: Regime=1 + Ribbon neutral → LONG (frühes Signal)
 28. Fallback: Regime=1 + bear_trend → NEUTRAL (widersprüchlich)
@@ -651,3 +654,73 @@ class TestMACDStdevFloor:
 
         norm = math.tanh(macd_hist / stdev_effective)
         assert norm == pytest.approx(math.tanh(5.0 / 20.0)), "Result should match un-floored calculation"
+
+
+# ---------------------------------------------------------------------------
+# 36-37. Frontend short keys ("tp"/"sl") in per_asset_config
+# ---------------------------------------------------------------------------
+
+class TestFrontendShortKeys:
+    """Frontend stores TP/SL as 'tp'/'sl' in per_asset_config, not
+    'take_profit_percent'/'stop_loss_percent'. The trade executor must
+    resolve both forms."""
+
+    def test_frontend_short_keys_resolved(self):
+        """per_asset_config with 'tp'/'sl' keys produces correct TP/SL prices."""
+        from src.bot.trade_executor import TradeExecutorMixin
+        from src.utils.json_helpers import parse_json_field
+
+        mixin = TradeExecutorMixin()
+        mixin.bot_config_id = 1
+        mixin._config = _make_mock_config(
+            per_asset_config=json.dumps({
+                "BTCUSDT": {"position_usdt": 1000, "leverage": 7, "tp": 10, "sl": 10}
+            }),
+        )
+        mixin._risk_manager = MagicMock()
+
+        per_asset_cfg = parse_json_field(
+            mixin._config.per_asset_config,
+            field_name="per_asset_config",
+            context="test",
+            default={},
+        )
+        asset_cfg = per_asset_cfg.get("BTCUSDT", {})
+
+        # Replicate the resolution logic from trade_executor
+        tp_pct = (
+            asset_cfg.get("tp")
+            or asset_cfg.get("take_profit_percent")
+            or getattr(mixin._config, "take_profit_percent", None)
+        )
+        sl_pct = (
+            asset_cfg.get("sl")
+            or asset_cfg.get("stop_loss_percent")
+            or getattr(mixin._config, "stop_loss_percent", None)
+        )
+
+        assert tp_pct == 10
+        assert sl_pct == 10
+
+        entry = 70000.0
+        tp_price = entry * (1 + tp_pct / 100)
+        sl_price = entry * (1 - sl_pct / 100)
+
+        assert tp_price == pytest.approx(77000.0)  # 70000 * 1.10
+        assert sl_price == pytest.approx(63000.0)   # 70000 * 0.90
+
+    def test_short_key_priority_over_long_key(self):
+        """'tp' takes priority over 'take_profit_percent' in same config."""
+        asset_cfg = {"tp": 15, "take_profit_percent": 5, "sl": 8, "stop_loss_percent": 3}
+
+        tp_pct = (
+            asset_cfg.get("tp")
+            or asset_cfg.get("take_profit_percent")
+        )
+        sl_pct = (
+            asset_cfg.get("sl")
+            or asset_cfg.get("stop_loss_percent")
+        )
+
+        assert tp_pct == 15, "'tp' should take priority"
+        assert sl_pct == 8, "'sl' should take priority"

@@ -175,8 +175,14 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 ### Hinzugefügt
 - **Trade-ID immer sichtbar im Trades-Tab** — Die `#ID`-Spalte war bisher nur ab `2xl`-Breakpoint (≥1536px) sichtbar. Sie wird jetzt auf allen Auflösungen in der Desktop-Tabelle angezeigt (monospace, dezent grau, mit `#`-Prefix) und auch im `MobileTradeCard` neben dem Symbol eingeblendet. Erleichtert Support-Anfragen, Fehleranalyse und das eindeutige Referenzieren einzelner Trades (z.B. im Steuerreport-Kontext).
 
+### Behoben
+- **KRITISCH: TP/SL wurde nie an die Exchange gesendet — Key-Mismatch in per_asset_config (#154)** — Das Frontend speichert TP/SL als `"tp"` und `"sl"` in `per_asset_config`, aber der Trade Executor suchte nach `"take_profit_percent"` und `"stop_loss_percent"`. Ergebnis: Alle Trades liefen ohne Stop-Loss und Take-Profit auf der Exchange, obwohl User diese im BotBuilder konfiguriert hatten. Betrifft alle Exchanges (Bitget, Hyperliquid, Weex, Bitunix, BingX). Fix: `trade_executor.py` akzeptiert jetzt beide Key-Formen, Frontend-Keys haben Priorität.
+
 ### Datenkorrektur
 - Bestehender AVAXUSDT Short Demo-Trade vom 2026-04-08 09:51 wurde manuell auf die echten Bitget-Werte korrigiert (siehe `scripts/fix_avax_trade.sql`).
+
+### Tests
+- 2 neue Tests in `test_tpsl_passthrough.py`: Frontend-Short-Keys aufgelöst (#36), Short-Key-Priorität (#37).
 
 ---
 
