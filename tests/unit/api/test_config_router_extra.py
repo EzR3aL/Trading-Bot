@@ -43,7 +43,6 @@ from src.errors import (
     ERR_NO_DEMO_API_KEYS,
     ERR_NO_LIVE_API_KEYS,
     ERR_REFERRAL_CHECK_FAILED,
-    ERR_REFERRAL_NOT_FOUND,
     ERR_REVENUE_SUMMARY_FAILED,
 )
 from src.utils.encryption import encrypt_value

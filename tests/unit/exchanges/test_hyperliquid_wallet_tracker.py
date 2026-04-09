@@ -1,12 +1,10 @@
 """Tests for the read-only Hyperliquid wallet tracker."""
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
 from src.exchanges.hyperliquid.wallet_tracker import (
     HyperliquidWalletTracker,
-    SourceFill,
-    SourcePosition,
 )
 
 

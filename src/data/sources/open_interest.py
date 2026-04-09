@@ -1,6 +1,6 @@
 """Open interest, liquidation, and order book data (Binance Futures)."""
 
-from typing import Dict, Any, List, Optional
+from typing import List, Optional
 
 from src.utils.logger import get_logger
 from src.utils.circuit_breaker import CircuitBreakerError

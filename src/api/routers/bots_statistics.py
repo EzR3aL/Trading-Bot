@@ -1,6 +1,5 @@
 """Bot statistics endpoints: per-bot stats and cross-bot comparison."""
 
-import json
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 

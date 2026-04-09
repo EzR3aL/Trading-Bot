@@ -3,7 +3,7 @@
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from sqlalchemy import delete, func, select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.rate_limit import limiter
@@ -11,7 +11,7 @@ from src.api.schemas.user import AdminUserResponse, UserCreate, UserResponse, Us
 from src.errors import ERR_CANNOT_DELETE_SELF, ERR_USERNAME_EXISTS, ERR_USER_NOT_FOUND
 from src.auth.dependencies import get_current_admin
 from src.auth.password import hash_password
-from src.models.database import BotConfig, BotInstance, ExchangeConnection, TradeRecord, User, UserSession
+from src.models.database import BotConfig, ExchangeConnection, TradeRecord, User
 from src.models.session import get_db
 from src.utils.logger import get_logger
 

@@ -1,11 +1,11 @@
 """Tests for CopyTradingStrategy."""
 import json
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
 from src.strategy.copy_trading import CopyTradingStrategy
-from src.exchanges.hyperliquid.wallet_tracker import SourceFill, SourcePosition
+from src.exchanges.hyperliquid.wallet_tracker import SourceFill
 
 
 def _make_ctx(bot_config, exchange_client, executor=None, notifier=None):

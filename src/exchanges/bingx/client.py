@@ -21,7 +21,6 @@ from src.exceptions import ExchangeError
 from src.exchanges.base import ExchangeClient, HTTPExchangeClientMixin
 from src.exchanges.bingx.constants import (
     BASE_URL,
-    CONDITIONAL_ORDER_TYPES,
     DEFAULT_RECV_WINDOW,
     ENDPOINTS,
     ERROR_CODES,

@@ -10,7 +10,6 @@ import os
 import sys
 from pathlib import Path
 
-import pytest
 
 os.environ.setdefault("JWT_SECRET_KEY", "test-secret-key")
 os.environ.setdefault("ENCRYPTION_KEY", "dGVzdC1lbmNyeXB0aW9uLWtleS1mb3ItdGVzdGluZw==")

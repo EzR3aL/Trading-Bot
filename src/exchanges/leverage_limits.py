@@ -8,7 +8,6 @@ real exchange limit is caught and reported.
 Numbers reflect public docs as of 2026-04. Update if the exchanges change them.
 """
 
-from typing import Optional
 
 
 class ExchangeNotSupported(ValueError):

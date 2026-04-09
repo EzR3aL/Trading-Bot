@@ -12,7 +12,9 @@ from contextlib import asynccontextmanager
 from sqlalchemy import event
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
+from src.exceptions import DatabaseUnavailableError
 from src.models.database import Base
+from src.utils.circuit_breaker import CircuitBreaker, CircuitBreakerError
 
 # Database URL - easily switch to PostgreSQL:
 # DATABASE_URL = "postgresql+asyncpg://user:pass@host/db"
@@ -94,9 +96,6 @@ async def close_db() -> None:
     """Dispose engine. Call at application shutdown."""
     await engine.dispose()
 
-
-from src.exceptions import DatabaseUnavailableError
-from src.utils.circuit_breaker import CircuitBreaker, CircuitBreakerError
 
 SESSION_ACQUIRE_TIMEOUT = int(os.getenv("DB_SESSION_TIMEOUT", "10"))
 _SESSION_MAX_RETRIES = int(os.getenv("DB_SESSION_RETRIES", "3"))

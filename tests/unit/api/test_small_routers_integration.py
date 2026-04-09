@@ -11,12 +11,10 @@ Coverage targets:
   - affiliate.py:  58% -> 90%+ (lines 17-79)
 """
 
-import json
 import os
 import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from unittest.mock import patch
 
 import pytest
 import pytest_asyncio

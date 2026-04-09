@@ -8,7 +8,6 @@ from typing import Any, Dict, Optional
 from src.exchanges.hyperliquid.wallet_tracker import (
     HyperliquidWalletTracker,
     SourceFill,
-    SourcePosition,
 )
 from src.exchanges.leverage_limits import ExchangeNotSupported, get_max_leverage
 from src.exchanges.symbol_fetcher import get_exchange_symbols

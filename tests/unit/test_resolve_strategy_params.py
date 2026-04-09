@@ -24,12 +24,9 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from src.strategy.base import resolve_strategy_params
 from src.strategy.edge_indicator import (
     DEFAULTS as EDGE_DEFAULTS,
-    RISK_PROFILES as EDGE_PROFILES,
     EdgeIndicatorStrategy,
 )
 from src.strategy.liquidation_hunter import (
-    DEFAULTS as LIQ_DEFAULTS,
-    RISK_PROFILES as LIQ_PROFILES,
     LiquidationHunterStrategy,
 )
 

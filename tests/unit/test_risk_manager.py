@@ -14,12 +14,10 @@ Tests cover:
 - Error paths and edge cases
 """
 
-import json
 import pytest
 import tempfile
 import shutil
 from pathlib import Path
-from datetime import datetime
 from unittest.mock import MagicMock
 
 import sys
