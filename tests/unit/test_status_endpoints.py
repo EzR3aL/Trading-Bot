@@ -6,6 +6,15 @@ from httpx import ASGITransport, AsyncClient
 from src.api.routers.status import router
 
 
+@pytest.fixture(autouse=True)
+def _reset_breaker():
+    """Reset DB circuit breaker before each test."""
+    from src.models.session import _db_breaker
+    from src.utils.circuit_breaker import CircuitState, CircuitStats
+    _db_breaker._state = CircuitState.CLOSED
+    _db_breaker._stats = CircuitStats()
+
+
 @pytest.fixture
 def app():
     from fastapi import FastAPI

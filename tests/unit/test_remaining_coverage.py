@@ -34,6 +34,10 @@ import pytest
 
 class TestSessionPragma:
 
+    @pytest.mark.skipif(
+        "postgresql" in os.environ.get("DATABASE_URL", ""),
+        reason="SQLite-only test (PRAGMA not available on PostgreSQL)",
+    )
     async def test_sqlite_wal_pragma_is_applied(self):
         """Cover lines 30-33: SQLite WAL mode pragma fires on session.py engine."""
         from sqlalchemy import text

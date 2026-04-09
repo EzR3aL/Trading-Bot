@@ -458,6 +458,12 @@ class TestHealthCheckDbVerification:
         from httpx import ASGITransport, AsyncClient
         from fastapi import FastAPI
         from src.api.routers.status import router
+        from src.models.session import _db_breaker
+        from src.utils.circuit_breaker import CircuitState, CircuitStats
+
+        # Reset DB circuit breaker to prevent cross-test contamination
+        _db_breaker._state = CircuitState.CLOSED
+        _db_breaker._stats = CircuitStats()
 
         app = FastAPI()
         app.include_router(router)
