@@ -41,8 +41,17 @@ class TradeExecutorMixin:
 
         # TP/SL: Use user-configured values from per-asset or bot-level config.
         # Per-asset config takes priority, then bot-level, then None (strategy exit).
-        tp_pct = asset_cfg.get("take_profit_percent") or getattr(self._config, "take_profit_percent", None)
-        sl_pct = asset_cfg.get("stop_loss_percent") or getattr(self._config, "stop_loss_percent", None)
+        # Frontend stores keys as "tp"/"sl", accept both forms.
+        tp_pct = (
+            asset_cfg.get("tp")
+            or asset_cfg.get("take_profit_percent")
+            or getattr(self._config, "take_profit_percent", None)
+        )
+        sl_pct = (
+            asset_cfg.get("sl")
+            or asset_cfg.get("stop_loss_percent")
+            or getattr(self._config, "stop_loss_percent", None)
+        )
 
         is_long = signal.direction.value == "long"
         # Preserve caller-supplied TP/SL (used by self-managed strategies like
