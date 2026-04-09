@@ -305,6 +305,7 @@ async def test_get_daily_stats_empty(client, auth_headers, test_user_obj):
 @pytest.mark.asyncio
 async def test_statistics_requires_auth(client, sample_trades):
     """Statistics endpoint requires authentication."""
+    client.cookies.clear()
     response = await client.get("/api/statistics")
     assert response.status_code == 401
 
@@ -312,6 +313,7 @@ async def test_statistics_requires_auth(client, sample_trades):
 @pytest.mark.asyncio
 async def test_daily_stats_requires_auth(client, sample_trades):
     """Daily stats endpoint requires authentication."""
+    client.cookies.clear()
     response = await client.get("/api/statistics/daily")
     assert response.status_code == 401
 

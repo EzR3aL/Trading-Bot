@@ -16,7 +16,7 @@ from typing import Any, Dict, List, Literal, Optional
 import aiohttp
 
 from src.exceptions import ExchangeError
-from src.exchanges.base import ExchangeClient
+from src.exchanges.base import ExchangeClient, HTTPExchangeClientMixin
 from src.exchanges.bitget.constants import (
     BASE_URL,
     ENDPOINTS,
@@ -25,7 +25,7 @@ from src.exchanges.bitget.constants import (
     TESTNET_URL,
 )
 from src.exchanges.types import Balance, FundingRateInfo, Order, Position, Ticker
-from src.utils.circuit_breaker import CircuitBreakerError, circuit_registry, with_retry
+from src.utils.circuit_breaker import circuit_registry
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -40,14 +40,22 @@ class BitgetClientError(ExchangeError):
         super().__init__("bitget", message, original_error)
 
 
-class BitgetExchangeClient(ExchangeClient):
+class BitgetExchangeClient(HTTPExchangeClientMixin, ExchangeClient):
     """
     Async client for Bitget Futures API implementing ExchangeClient ABC.
 
     Supports demo trading via paptrading header.
+    Uses HTTPExchangeClientMixin for session management, circuit breaker,
+    and the standard REST request flow.
     """
 
     SUPPORTS_NATIVE_TRAILING_STOP = True
+
+    _client_error_class = BitgetClientError
+
+    @property
+    def _circuit_breaker(self):
+        return _bitget_breaker
 
     def __init__(
         self,
@@ -64,21 +72,6 @@ class BitgetExchangeClient(ExchangeClient):
         self._session: Optional[aiohttp.ClientSession] = None
         mode_str = "DEMO" if demo_mode else "LIVE"
         logger.info(f"BitgetExchangeClient initialized in {mode_str} mode")
-
-    async def __aenter__(self):
-        await self._ensure_session()
-        return self
-
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
-        await self.close()
-
-    async def _ensure_session(self):
-        if self._session is None or self._session.closed:
-            self._session = aiohttp.ClientSession()
-
-    async def close(self) -> None:
-        if self._session and not self._session.closed:
-            await self._session.close()
 
     @property
     def exchange_name(self) -> str:
@@ -116,83 +109,19 @@ class BitgetExchangeClient(ExchangeClient):
             headers["paptrading"] = "1"
         return headers
 
-    # ==================== HTTP ====================
+    # ==================== Response parsing ====================
 
-    async def _request(
-        self,
-        method: str,
-        endpoint: str,
-        params: Optional[Dict] = None,
-        data: Optional[Dict] = None,
-        auth: bool = True,
-        use_circuit_breaker: bool = True,
-    ) -> Dict[str, Any]:
-        if use_circuit_breaker:
-            async def _do():
-                return await self._raw_request(method, endpoint, params, data, auth)
-            try:
-                return await _bitget_breaker.call(_do)
-            except CircuitBreakerError as e:
-                raise BitgetClientError(f"API temporarily unavailable: {e}")
-        return await self._raw_request(method, endpoint, params, data, auth)
-
-    @with_retry(max_attempts=3, min_wait=1.0, max_wait=10.0,
-                retry_on=(aiohttp.ClientError, asyncio.TimeoutError))
-    async def _raw_request(
-        self,
-        method: str,
-        endpoint: str,
-        params: Optional[Dict] = None,
-        data: Optional[Dict] = None,
-        auth: bool = True,
-    ) -> Dict[str, Any]:
-        await self._ensure_session()
-        url = f"{self.base_url}{endpoint}"
-        body = json.dumps(data) if data else ""
-
-        if params:
-            query_string = "&".join(f"{k}={v}" for k, v in params.items())
-            request_path = f"{endpoint}?{query_string}"
-            url = f"{url}?{query_string}"
-        else:
-            request_path = endpoint
-
-        headers = (
-            self._get_headers(method, request_path, body)
-            if auth
-            else {"Content-Type": "application/json"}
-        )
-
-        try:
-            async with self._session.request(
-                method=method,
-                url=url,
-                headers=headers,
-                data=body if body else None,
-                timeout=aiohttp.ClientTimeout(total=15),
-            ) as response:
-                result = await response.json()
-
-                if response.status == 429:
-                    raise aiohttp.ClientResponseError(
-                        response.request_info, response.history,
-                        status=429, message="Rate limited",
-                    )
-
-                if response.status != 200:
-                    raise BitgetClientError(
-                        f"API Error: {result.get('msg', 'Unknown error')}"
-                    )
-
-                if result.get("code") != SUCCESS_CODE:
-                    raise BitgetClientError(
-                        f"Bitget Error: {result.get('msg', 'Unknown error')}"
-                    )
-
-                return result.get("data", result)
-
-        except (aiohttp.ClientError, asyncio.TimeoutError):
-            raise
+    def _parse_response(self, result: Any, response: aiohttp.ClientResponse) -> Any:
+        """Parse Bitget API response — checks HTTP status and code field."""
+        if response.status != 200:
+            raise BitgetClientError(
+                f"API Error: {result.get('msg', 'Unknown error')}"
+            )
+        if result.get("code") != SUCCESS_CODE:
+            raise BitgetClientError(
+                f"Bitget Error: {result.get('msg', 'Unknown error')}"
+            )
+        return result.get("data", result)
 
     # ==================== ABC Implementation ====================
 

@@ -1,7 +1,7 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import api from '../api/client'
-import { useToastStore } from '../stores/toastStore'
+import { useQueryClient } from '@tanstack/react-query'
+import { useTrades, useSyncTrades, queryKeys } from '../api/queries'
 import { useFilterStore } from '../stores/filterStore'
 import type { Trade } from '../types'
 import { ExchangeIcon } from '../components/ui/ExchangeLogo'
@@ -26,8 +26,7 @@ export default function Trades() {
   const { toggle: toggleSizeUnit } = useSizeUnitStore()
   const sizeUnit = useSizeUnitStore((s) => s.unit)
   const { demoFilter } = useFilterStore()
-  const [trades, setTrades] = useState<Trade[]>([])
-  const [total, setTotal] = useState(0)
+  const queryClient = useQueryClient()
   const [page, setPage] = useState(1)
   const [statusFilter, setStatusFilter] = useState('')
   const [symbolFilter, setSymbolFilter] = useState('')
@@ -35,26 +34,25 @@ export default function Trades() {
   const [botFilter, setBotFilter] = useState('')
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
   const [expandedId, setExpandedId] = useState<number | null>(null)
   const perPage = 25
 
+  // Sync trades on mount
+  const syncTrades = useSyncTrades()
   const [synced, setSynced] = useState(false)
-  const [allTrades, setAllTrades] = useState<Trade[]>([])
-
   useEffect(() => {
-    api.post('/trades/sync').catch((err) => { console.error('Failed to sync trades:', err) }).finally(() => setSynced(true))
-  }, [])
+    syncTrades.mutate(undefined, {
+      onSettled: () => setSynced(true),
+    })
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Fetch a larger set once to extract unique exchanges/bots
-  useEffect(() => {
-    if (!synced) return
-    const params = new URLSearchParams({ page: '1', per_page: '200' })
-    if (demoFilter === 'demo') params.set('demo_mode', 'true')
-    else if (demoFilter === 'live') params.set('demo_mode', 'false')
-    api.get(`/trades?${params}`).then(res => setAllTrades(res.data.trades)).catch((err) => { console.error('Failed to load trade filters:', err); useToastStore.getState().addToast('error', t('common.loadError', 'Failed to load data')) })
-  }, [synced, demoFilter])
+  // Fetch a larger set once to extract unique exchanges/bots for filter dropdowns
+  const allTradesFilters: Record<string, unknown> = {
+    page: 1, per_page: 200,
+    ...(demoFilter === 'demo' ? { demo_mode: 'true' } : demoFilter === 'live' ? { demo_mode: 'false' } : {}),
+  }
+  const { data: allTradesData } = useTrades(allTradesFilters)
+  const allTrades: Trade[] = synced ? (allTradesData?.trades || []) : []
 
   const uniqueExchanges = useMemo(() => {
     const set = new Set<string>()
@@ -75,45 +73,25 @@ export default function Trades() {
     setPage(1)
   }, [demoFilter])
 
-  const fetchTrades = useCallback(async () => {
-    const params = new URLSearchParams({ page: String(page), per_page: String(perPage) })
-    if (statusFilter) params.set('status', statusFilter)
-    if (symbolFilter) params.set('symbol', symbolFilter)
-    if (exchangeFilter) params.set('exchange', exchangeFilter)
-    if (botFilter) params.set('bot_name', botFilter)
-    if (dateFrom) params.set('date_from', dateFrom)
-    if (dateTo) params.set('date_to', dateTo)
-    if (demoFilter === 'demo') params.set('demo_mode', 'true')
-    else if (demoFilter === 'live') params.set('demo_mode', 'false')
-
-    const res = await api.get(`/trades?${params}`)
-    setTrades(res.data.trades)
-    setTotal(res.data.total)
-  }, [page, perPage, statusFilter, symbolFilter, exchangeFilter, botFilter, dateFrom, dateTo, demoFilter])
-
-  useEffect(() => {
-    if (!synced) return
-    const load = async () => {
-      setLoading(true)
-      setError('')
-      try {
-        await fetchTrades()
-      } catch {
-        setError(t('common.error'))
-      } finally {
-        setLoading(false)
-      }
-    }
-    load()
-  }, [synced, fetchTrades, t])
+  // Main trade list query
+  const tradeFilters: Record<string, unknown> = {
+    page, per_page: perPage,
+    ...(statusFilter ? { status: statusFilter } : {}),
+    ...(symbolFilter ? { symbol: symbolFilter } : {}),
+    ...(exchangeFilter ? { exchange: exchangeFilter } : {}),
+    ...(botFilter ? { bot_name: botFilter } : {}),
+    ...(dateFrom ? { date_from: dateFrom } : {}),
+    ...(dateTo ? { date_to: dateTo } : {}),
+    ...(demoFilter === 'demo' ? { demo_mode: 'true' } : demoFilter === 'live' ? { demo_mode: 'false' } : {}),
+  }
+  const { data: tradeData, isLoading: loading, error: tradeError } = useTrades(tradeFilters)
+  const trades: Trade[] = synced ? (tradeData?.trades || []) : []
+  const total = synced ? (tradeData?.total || 0) : 0
+  const error = tradeError ? t('common.error') : ''
 
   const refreshData = useCallback(async () => {
-    try {
-      await fetchTrades()
-    } catch {
-      setError(t('common.error'))
-    }
-  }, [fetchTrades, t])
+    await queryClient.invalidateQueries({ queryKey: queryKeys.trades.all })
+  }, [queryClient])
 
   const { containerRef, refreshing, pullDistance } = usePullToRefresh({
     onRefresh: refreshData,
@@ -237,13 +215,13 @@ export default function Trades() {
             <table className="table-premium w-full">
               <thead>
                 <tr>
-                  <th className="text-left">#</th>
-                  <th className="text-left">{t('trades.date')}</th>
-                  <th className="text-left hidden xl:table-cell">{t('trades.bot')}</th>
-                  <th className="text-center hidden lg:table-cell">{t('trades.exchange')}</th>
-                  <th className="text-left">{t('trades.symbol')}</th>
-                  <th className="text-center">{t('trades.side')}</th>
-                  <th className="text-right hidden 2xl:table-cell">
+                  <th scope="col" className="text-left">#</th>
+                  <th scope="col" className="text-left">{t('trades.date')}</th>
+                  <th scope="col" className="text-left hidden xl:table-cell">{t('trades.bot')}</th>
+                  <th scope="col" className="text-center hidden lg:table-cell">{t('trades.exchange')}</th>
+                  <th scope="col" className="text-left">{t('trades.symbol')}</th>
+                  <th scope="col" className="text-center">{t('trades.side')}</th>
+                  <th scope="col" className="text-right hidden 2xl:table-cell">
                     <button
                       onClick={() => toggleSizeUnit()}
                       className="inline-flex items-center gap-1 hover:text-white transition-colors ml-auto"
@@ -252,11 +230,11 @@ export default function Trades() {
                       {t('trades.size')} <span className="text-[10px] text-gray-500">{sizeUnit === 'usdt' ? '$' : '#'}</span>
                     </button>
                   </th>
-                  <th className="text-right hidden xl:table-cell">{t('trades.entryPrice')}</th>
-                  <th className="text-right hidden 2xl:table-cell">{t('trades.exitPrice')}</th>
-                  <th className="text-right">{t('trades.pnl')}</th>
-                  <th className="text-center hidden 2xl:table-cell">{t('trades.mode')}</th>
-                  <th className="text-center">{t('trades.status')}</th>
+                  <th scope="col" className="text-right hidden xl:table-cell">{t('trades.entryPrice')}</th>
+                  <th scope="col" className="text-right hidden 2xl:table-cell">{t('trades.exitPrice')}</th>
+                  <th scope="col" className="text-right">{t('trades.pnl')}</th>
+                  <th scope="col" className="text-center hidden 2xl:table-cell">{t('trades.mode')}</th>
+                  <th scope="col" className="text-center">{t('trades.status')}</th>
                 </tr>
               </thead>
               <tbody>

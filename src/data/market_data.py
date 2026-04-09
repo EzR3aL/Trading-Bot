@@ -1,6 +1,10 @@
 """
 Market Data Fetcher for Trading Strategies.
 
+Facade module that aggregates all data sources. The MarketDataFetcher class
+interface is preserved for backward compatibility — all internal logic has
+been extracted into focused modules under src/data/sources/.
+
 Fetches:
 - Fear & Greed Index (Alternative.me)
 - Long/Short Ratio (Binance Futures)
@@ -16,7 +20,7 @@ import asyncio
 import re
 import time
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Optional, Dict, Any, Tuple, List
 
 import aiohttp
@@ -24,44 +28,78 @@ import aiohttp
 from src.exceptions import DataSourceError
 from src.utils.logger import get_logger
 from src.utils.circuit_breaker import (
-    circuit_registry,
     CircuitBreakerError,
     with_retry,
 )
 
+# Import source modules
+from src.data.sources.fear_greed import fetch_fear_greed
+from src.data.sources.long_short_ratios import (
+    fetch_long_short_ratio,
+    fetch_top_trader_long_short_ratio,
+)
+from src.data.sources.funding_rates import (
+    fetch_funding_rate_binance,
+    fetch_predicted_funding_rate,
+    fetch_bitget_funding_rate,
+    fetch_bybit_futures,
+)
+from src.data.sources.klines import (
+    fetch_binance_klines,
+    fetch_price_volatility,
+    fetch_trend_direction,
+    fetch_cme_gap,
+    fetch_cvd,
+    calculate_vwap as _calculate_vwap,
+    calculate_atr as _calculate_atr,
+    calculate_supertrend as _calculate_supertrend,
+    calculate_ema as _calculate_ema,
+    calculate_adx as _calculate_adx,
+    calculate_macd as _calculate_macd,
+    calculate_rsi as _calculate_rsi,
+    detect_rsi_divergence as _detect_rsi_divergence,
+)
+from src.data.sources.open_interest import (
+    fetch_open_interest,
+    fetch_open_interest_history,
+    fetch_recent_liquidations,
+    fetch_order_book_depth,
+    calculate_oiwap as _calculate_oiwap,
+)
+from src.data.sources.options_data import (
+    fetch_options_oi_deribit,
+    fetch_max_pain,
+    fetch_put_call_ratio,
+    fetch_deribit_options_extended,
+    fetch_deribit_dvol,
+    _empty_options_extended,
+)
+from src.data.sources.spot_volume import (
+    get_spot_volume_analysis as _get_spot_volume_analysis,
+    fetch_coinbase_premium,
+)
+from src.data.sources.macro_data import (
+    fetch_fred_series,
+    fetch_coingecko_market,
+    fetch_stablecoin_flows,
+    fetch_btc_hashrate,
+)
+from src.data.sources.social_sentiment import fetch_news_sentiment
+from src.data.sources.base import to_binance_symbol
+
 logger = get_logger(__name__)
 
-# Regex to strip quote suffixes for symbol normalization
+# Regex to strip quote suffixes for symbol normalization (kept for backward compat)
 _QUOTE_SUFFIXES_RE = re.compile(r"[-_/]?(USDT|USDC|USD|PERP|BUSD)$", re.IGNORECASE)
 
 
 def _to_binance_symbol(symbol: str) -> str:
     """Normalize any exchange symbol format to Binance Futures format (e.g. BTCUSDT).
 
-    Handles: "BTC" → "BTCUSDT", "BTC-USDT" → "BTCUSDT",
-             "BTCUSDT" → "BTCUSDT" (no-op).
+    Handles: "BTC" -> "BTCUSDT", "BTC-USDT" -> "BTCUSDT",
+             "BTCUSDT" -> "BTCUSDT" (no-op).
     """
-    s = symbol.upper().strip()
-    # Already in Binance format (ends with USDT without separator)
-    if s.endswith("USDT") and not any(sep in s for sep in ("-", "_", "/")):
-        return s
-    # Strip any quote suffix + separator, then append USDT
-    base = _QUOTE_SUFFIXES_RE.sub("", s)
-    return f"{base}USDT"
-
-
-# Circuit breakers for external APIs
-_binance_breaker = circuit_registry.get("binance_api", fail_threshold=5, reset_timeout=60)
-_alternative_me_breaker = circuit_registry.get("alternative_me_api", fail_threshold=3, reset_timeout=120)
-_gdelt_breaker = circuit_registry.get("gdelt_api", fail_threshold=5, reset_timeout=120)
-_deribit_breaker = circuit_registry.get("deribit_api", fail_threshold=3, reset_timeout=120)
-_coingecko_breaker = circuit_registry.get("coingecko_api", fail_threshold=3, reset_timeout=120)
-_defillama_breaker = circuit_registry.get("defillama_api", fail_threshold=3, reset_timeout=120)
-_blockchain_breaker = circuit_registry.get("blockchain_api", fail_threshold=3, reset_timeout=120)
-_bitget_breaker = circuit_registry.get("bitget_api", fail_threshold=3, reset_timeout=120)
-_fred_breaker = circuit_registry.get("fred_api", fail_threshold=3, reset_timeout=300)
-_coinbase_breaker = circuit_registry.get("coinbase_api", fail_threshold=3, reset_timeout=120)
-_bybit_breaker = circuit_registry.get("bybit_api", fail_threshold=3, reset_timeout=120)
+    return to_binance_symbol(symbol)
 
 
 class DataFetchError(DataSourceError):
@@ -176,13 +214,16 @@ class MarketDataFetcher:
     """
     Fetches market data from various sources for strategy analysis.
 
+    This class acts as a facade, delegating to focused source modules
+    in src/data/sources/ while preserving the original interface.
+
     Sources:
     - Alternative.me: Fear & Greed Index
     - Binance Futures API: Long/Short Ratio, Funding Rates, Open Interest
     - Bitget API: Additional funding rate data
     """
 
-    # API Endpoints
+    # API Endpoints (kept for backward compatibility)
     FEAR_GREED_URL = "https://api.alternative.me/fng/"
     BINANCE_FUTURES_URL = "https://fapi.binance.com"
     COINGLASS_URL = "https://open-api.coinglass.com/public/v2"
@@ -256,188 +297,35 @@ class MarketDataFetcher:
     # ==================== Fear & Greed Index ====================
 
     async def get_fear_greed_index(self) -> Tuple[int, str]:
-        """
-        Fetch the current Fear & Greed Index from Alternative.me.
-
-        Returns:
-            Tuple of (index value 0-100, classification string)
-        """
-        try:
-            # Use circuit breaker for Alternative.me API
-            async def _fetch():
-                return await self._get_with_retry(self.FEAR_GREED_URL, {"limit": "1"})
-
-            data = await _alternative_me_breaker.call(_fetch)
-
-            if data and "data" in data and len(data["data"]) > 0:
-                fng_data = data["data"][0]
-                value = int(fng_data.get("value", 50))
-                classification = fng_data.get("value_classification", "Neutral")
-
-                logger.info(f"Fear & Greed Index: {value} ({classification})")
-                return value, classification
-
-        except CircuitBreakerError as e:
-            logger.warning(f"Fear & Greed API circuit open: {e}")
-        except Exception as e:
-            logger.error(f"Error fetching Fear & Greed Index: {e}")
-
-        # Return neutral on error
-        return 50, "Neutral"
+        """Fetch the current Fear & Greed Index from Alternative.me."""
+        return await fetch_fear_greed(self)
 
     # ==================== Long/Short Ratio ====================
 
     async def get_long_short_ratio(self, symbol: str = "BTCUSDT") -> float:
-        """
-        Fetch the Global Long/Short Account Ratio from Binance Futures.
-
-        This shows the ratio of long positions to short positions among all accounts.
-        Ratio > 1: More accounts are long
-        Ratio < 1: More accounts are short
-
-        Args:
-            symbol: Trading pair (default: BTCUSDT)
-
-        Returns:
-            Long/Short ratio as float
-        """
-        try:
-            url = f"{self.BINANCE_FUTURES_URL}/futures/data/globalLongShortAccountRatio"
-            params = {
-                "symbol": _to_binance_symbol(symbol),
-                "period": "1h",  # 5m, 15m, 30m, 1h, 2h, 4h, 6h, 12h, 1d
-                "limit": 1,
-            }
-
-            async def _fetch():
-                return await self._get_with_retry(url, params)
-
-            data = await _binance_breaker.call(_fetch)
-
-            if data and len(data) > 0:
-                ratio = float(data[0].get("longShortRatio", 1.0))
-                logger.info(f"Long/Short Ratio ({symbol}): {ratio:.4f}")
-                return ratio
-
-        except CircuitBreakerError as e:
-            logger.warning(f"Binance API circuit open for L/S ratio: {e}")
-        except Exception as e:
-            logger.error(f"Error fetching Long/Short Ratio: {e}")
-
-        # Return neutral on error
-        return 1.0
+        """Fetch the Global Long/Short Account Ratio from Binance Futures."""
+        return await fetch_long_short_ratio(self, symbol)
 
     async def get_top_trader_long_short_ratio(self, symbol: str = "BTCUSDT") -> float:
-        """
-        Fetch the Top Trader Long/Short Ratio (Positions) from Binance.
-
-        This shows the ratio among top traders (whales).
-
-        Args:
-            symbol: Trading pair (default: BTCUSDT)
-
-        Returns:
-            Long/Short ratio as float
-        """
-        try:
-            url = f"{self.BINANCE_FUTURES_URL}/futures/data/topLongShortPositionRatio"
-            params = {
-                "symbol": _to_binance_symbol(symbol),
-                "period": "1h",
-                "limit": 1,
-            }
-
-            async def _fetch():
-                return await self._get(url, params)
-
-            data = await _binance_breaker.call(_fetch)
-
-            if data and len(data) > 0:
-                ratio = float(data[0].get("longShortRatio", 1.0))
-                logger.info(f"Top Trader Long/Short Ratio ({symbol}): {ratio:.4f}")
-                return ratio
-
-        except CircuitBreakerError:
-            logger.warning("Circuit breaker open for Binance top trader L/S ratio")
-        except Exception as e:
-            logger.error(f"Error fetching Top Trader Long/Short Ratio: {e}")
-
-        return 1.0
+        """Fetch the Top Trader Long/Short Ratio (Positions) from Binance."""
+        return await fetch_top_trader_long_short_ratio(self, symbol)
 
     # ==================== Funding Rates ====================
 
     async def get_funding_rate_binance(self, symbol: str = "BTCUSDT") -> float:
-        """
-        Fetch the current funding rate from Binance Futures.
-
-        Positive rate: Longs pay shorts (bullish sentiment)
-        Negative rate: Shorts pay longs (bearish sentiment)
-
-        Args:
-            symbol: Trading pair (default: BTCUSDT)
-
-        Returns:
-            Funding rate as decimal (e.g., 0.0001 = 0.01%)
-        """
-        try:
-            url = f"{self.BINANCE_FUTURES_URL}/fapi/v1/premiumIndex"
-            params = {"symbol": _to_binance_symbol(symbol)}
-
-            async def _fetch():
-                return await self._get_with_retry(url, params)
-
-            data = await _binance_breaker.call(_fetch)
-
-            if data:
-                rate = float(data.get("lastFundingRate", 0))
-                logger.info(f"Funding Rate ({symbol}): {rate:.6f} ({rate*100:.4f}%)")
-                return rate
-
-        except CircuitBreakerError as e:
-            logger.warning(f"Binance API circuit open for funding rate: {e}")
-        except Exception as e:
-            logger.error(f"Error fetching Funding Rate: {e}")
-
-        return 0.0
+        """Fetch the current funding rate from Binance Futures."""
+        return await fetch_funding_rate_binance(self, symbol)
 
     async def get_predicted_funding_rate(self, symbol: str = "BTCUSDT") -> float:
-        """
-        Get the predicted next funding rate from Binance.
-
-        Args:
-            symbol: Trading pair
-
-        Returns:
-            Predicted funding rate
-        """
-        try:
-            url = f"{self.BINANCE_FUTURES_URL}/fapi/v1/premiumIndex"
-            params = {"symbol": _to_binance_symbol(symbol)}
-
-            data = await self._get(url, params)
-
-            if data:
-                # Binance provides predicted rate in interestRate field
-                rate = float(data.get("interestRate", 0))
-                return rate
-
-        except Exception as e:
-            logger.error(f"Error fetching predicted funding rate: {e}")
-
-        return 0.0
+        """Get the predicted next funding rate from Binance."""
+        return await fetch_predicted_funding_rate(self, symbol)
 
     # ==================== Price & Ticker Data ====================
 
     async def get_24h_ticker(self, symbol: str = "BTCUSDT") -> Dict[str, Any]:
-        """
-        Fetch 24-hour ticker data from Binance Futures.
-
-        Args:
-            symbol: Trading pair (default: BTCUSDT)
-
-        Returns:
-            Dict with price, change percent, volume, etc.
-        """
+        """Fetch 24-hour ticker data from Binance Futures."""
+        # Ticker stays in the facade since it's a simple Binance call
+        # used directly by fetch_all_metrics
         try:
             url = f"{self.BINANCE_FUTURES_URL}/fapi/v1/ticker/24hr"
             params = {"symbol": _to_binance_symbol(symbol)}
@@ -445,7 +333,8 @@ class MarketDataFetcher:
             async def _fetch():
                 return await self._get_with_retry(url, params)
 
-            data = await _binance_breaker.call(_fetch)
+            from src.data.sources import breakers as _breakers
+            data = await _breakers.binance_breaker.call(_fetch)
 
             if data:
                 result = {
@@ -478,163 +367,24 @@ class MarketDataFetcher:
     # ==================== Open Interest ====================
 
     async def get_open_interest(self, symbol: str = "BTCUSDT") -> float:
-        """
-        Fetch open interest from Binance Futures.
-
-        Args:
-            symbol: Trading pair (default: BTCUSDT)
-
-        Returns:
-            Open interest in base currency
-        """
-        try:
-            url = f"{self.BINANCE_FUTURES_URL}/fapi/v1/openInterest"
-            params = {"symbol": _to_binance_symbol(symbol)}
-
-            async def _fetch():
-                return await self._get_with_retry(url, params)
-
-            data = await _binance_breaker.call(_fetch)
-
-            if data:
-                oi = float(data.get("openInterest", 0))
-                logger.info(f"Open Interest ({symbol}): {oi:.2f}")
-                return oi
-
-        except CircuitBreakerError as e:
-            logger.warning(f"Binance API circuit open for open interest: {e}")
-        except Exception as e:
-            logger.error(f"Error fetching Open Interest: {e}")
-
-        return 0.0
+        """Fetch open interest from Binance Futures."""
+        return await fetch_open_interest(self, symbol)
 
     async def get_open_interest_history(
         self, symbol: str = "BTCUSDT", period: str = "1h", limit: int = 24
     ) -> list:
-        """
-        Fetch open interest history from Binance.
-
-        Args:
-            symbol: Trading pair
-            period: Time period (5m, 15m, 30m, 1h, 2h, 4h, 6h, 12h, 1d)
-            limit: Number of data points
-
-        Returns:
-            List of historical open interest data
-        """
-        try:
-            url = f"{self.BINANCE_FUTURES_URL}/futures/data/openInterestHist"
-            params = {
-                "symbol": _to_binance_symbol(symbol),
-                "period": period,
-                "limit": limit,
-            }
-
-            async def _fetch():
-                return await self._get(url, params)
-
-            data = await _binance_breaker.call(_fetch)
-            return data if data else []
-
-        except CircuitBreakerError:
-            logger.warning("Circuit breaker open for Binance OI history")
-            return []
-        except Exception as e:
-            logger.error(f"Error fetching OI history: {e}")
-            return []
+        """Fetch open interest history from Binance."""
+        return await fetch_open_interest_history(self, symbol, period, limit)
 
     # ==================== Liquidation Data ====================
 
     async def get_recent_liquidations(self, symbol: str = "BTCUSDT", limit: int = 100) -> list:
-        """
-        Fetch recent forced liquidations from Binance.
-
-        Note: This endpoint may have restrictions or require API key.
-
-        Args:
-            symbol: Trading pair
-            limit: Number of records
-
-        Returns:
-            List of recent liquidations
-        """
-        try:
-            url = f"{self.BINANCE_FUTURES_URL}/fapi/v1/forceOrders"
-            params = {
-                "symbol": _to_binance_symbol(symbol),
-                "limit": limit,
-            }
-
-            async def _fetch():
-                return await self._get(url, params)
-
-            data = await _binance_breaker.call(_fetch)
-            return data if data else []
-
-        except CircuitBreakerError:
-            logger.warning("Circuit breaker open for Binance liquidations")
-            return []
-        except Exception as e:
-            logger.error(f"Error fetching liquidations: {e}")
-            return []
+        """Fetch recent forced liquidations from Binance."""
+        return await fetch_recent_liquidations(self, symbol, limit)
 
     async def get_order_book_depth(self, symbol: str = "BTCUSDT", limit: int = 20) -> dict:
-        """
-        Fetch order book depth from Binance Futures.
-
-        Returns:
-            Dict with midPrice, spreadBps, imbalanceTop10, interpretation
-        """
-        try:
-            url = f"{self.BINANCE_FUTURES_URL}/fapi/v1/depth"
-            params = {"symbol": _to_binance_symbol(symbol), "limit": limit}
-
-            async def _fetch():
-                return await self._get(url, params)
-
-            data = await _binance_breaker.call(_fetch)
-            if not data or "bids" not in data or "asks" not in data:
-                return {}
-
-            bids = data["bids"][:10]
-            asks = data["asks"][:10]
-            if not bids or not asks:
-                return {}
-
-            best_bid = float(bids[0][0])
-            best_ask = float(asks[0][0])
-            mid_price = (best_bid + best_ask) / 2
-            spread_bps = ((best_ask - best_bid) / mid_price) * 10000 if mid_price > 0 else 0
-
-            sum_bids = sum(float(b[1]) for b in bids)
-            sum_asks = sum(float(a[1]) for a in asks)
-            total = sum_bids + sum_asks
-            imbalance = (sum_bids - sum_asks) / total if total > 0 else 0
-
-            if abs(imbalance) < 0.1:
-                interpretation = f"Balanced order book ({abs(imbalance)*100:.1f}% imbalance). No clear directional bias."
-            elif imbalance > 0.3:
-                interpretation = f"Strong bid-side imbalance ({imbalance*100:.1f}%). Buyers dominating — bullish pressure."
-            elif imbalance > 0.1:
-                interpretation = f"Moderate bid-side imbalance ({imbalance*100:.1f}%). Slight buy pressure."
-            elif imbalance < -0.3:
-                interpretation = f"Strong ask-side imbalance ({abs(imbalance)*100:.1f}%). Sellers dominating — bearish pressure."
-            else:
-                interpretation = f"Moderate ask-side imbalance ({abs(imbalance)*100:.1f}%). Slight sell pressure."
-
-            return {
-                "midPrice": round(mid_price, 2),
-                "spreadBps": round(spread_bps, 4),
-                "imbalanceTop10": round(imbalance, 4),
-                "interpretation": interpretation,
-            }
-
-        except CircuitBreakerError:
-            logger.warning("Circuit breaker open for Binance order book")
-            return {}
-        except Exception as e:
-            logger.error(f"Error fetching order book depth: {e}")
-            return {}
+        """Fetch order book depth from Binance Futures."""
+        return await fetch_order_book_depth(self, symbol, limit)
 
     # ==================== Aggregate Fetching ====================
 
@@ -793,265 +543,42 @@ class MarketDataFetcher:
     # ==================== Technical Analysis Helpers ====================
 
     async def get_price_volatility(self, symbol: str = "BTCUSDT", period: int = 24) -> float:
-        """
-        Calculate price volatility based on recent candles.
-
-        Args:
-            symbol: Trading pair
-            period: Number of hours to analyze
-
-        Returns:
-            Volatility as percentage
-        """
-        try:
-            url = f"{self.BINANCE_FUTURES_URL}/fapi/v1/klines"
-            params = {
-                "symbol": _to_binance_symbol(symbol),
-                "interval": "1h",
-                "limit": period,
-            }
-
-            data = await self._get(url, params)
-
-            if data:
-                # Extract high and low prices
-                highs = [float(candle[2]) for candle in data]
-                lows = [float(candle[3]) for candle in data]
-
-                # Calculate average true range as percentage
-                ranges = [(h - liq) / liq * 100 for h, liq in zip(highs, lows)]
-                avg_volatility = sum(ranges) / len(ranges)
-
-                logger.info(f"24h Volatility ({symbol}): {avg_volatility:.2f}%")
-                return avg_volatility
-
-        except Exception as e:
-            logger.error(f"Error calculating volatility: {e}")
-
-        return 3.0  # Default 3% volatility
+        """Calculate price volatility based on recent candles."""
+        return await fetch_price_volatility(self, symbol, period)
 
     async def get_trend_direction(self, symbol: str = "BTCUSDT") -> str:
-        """
-        Determine short-term trend direction using simple moving averages.
-
-        Args:
-            symbol: Trading pair
-
-        Returns:
-            'bullish', 'bearish', or 'neutral'
-        """
-        try:
-            url = f"{self.BINANCE_FUTURES_URL}/fapi/v1/klines"
-            params = {
-                "symbol": _to_binance_symbol(symbol),
-                "interval": "1h",
-                "limit": 24,
-            }
-
-            data = await self._get(url, params)
-
-            if data and len(data) >= 24:
-                # Calculate simple moving averages
-                closes = [float(candle[4]) for candle in data]
-
-                sma_8 = sum(closes[-8:]) / 8
-                sma_21 = sum(closes[-21:]) / 21
-
-                current_price = closes[-1]
-
-                # Determine trend
-                if current_price > sma_8 > sma_21:
-                    trend = "bullish"
-                elif current_price < sma_8 < sma_21:
-                    trend = "bearish"
-                else:
-                    trend = "neutral"
-
-                logger.info(f"Trend ({symbol}): {trend} (Price: {current_price:.2f}, SMA8: {sma_8:.2f}, SMA21: {sma_21:.2f})")
-                return trend
-
-        except Exception as e:
-            logger.error(f"Error determining trend: {e}")
-
-        return "neutral"
+        """Determine short-term trend direction using simple moving averages."""
+        return await fetch_trend_direction(self, symbol)
 
     # ==================== News Sentiment (GDELT) ====================
 
     async def get_news_sentiment(
         self, query: str = "bitcoin", lookback_hours: int = 12, max_records: int = 10
     ) -> Dict[str, Any]:
-        """
-        Fetch news sentiment from GDELT Project API.
-
-        Focused query + low maxrecords for faster response times.
-        GDELT scales response time linearly with record count.
-
-        Returns:
-            Dict with average_tone (-10 to +10), article_count
-        """
-        from datetime import timedelta
-
-        try:
-            now = datetime.now(timezone.utc)
-            start = now - timedelta(hours=lookback_hours)
-
-            params = {
-                "query": query,
-                "startdatetime": start.strftime("%Y%m%d%H%M%S"),
-                "enddatetime": now.strftime("%Y%m%d%H%M%S"),
-                "format": "json",
-                "mode": "tonechart",
-                "maxrecords": str(max_records),
-            }
-
-            async def _fetch():
-                return await self._get_with_retry(self.GDELT_API_URL, params, timeout=10)
-
-            data = await _gdelt_breaker.call(_fetch)
-
-            if data and "tonechart" in data:
-                tones = data["tonechart"]
-                if tones:
-                    tone_values = [float(t.get("tone", 0)) for t in tones if "tone" in t]
-                    if tone_values:
-                        avg_tone = sum(tone_values) / len(tone_values)
-                        logger.info(f"News Sentiment ({query[:30]}): tone={avg_tone:.2f}, articles={len(tone_values)}")
-                        return {"average_tone": avg_tone, "article_count": len(tone_values)}
-
-        except CircuitBreakerError as e:
-            logger.warning(f"GDELT API circuit open: {e}")
-        except Exception as e:
-            logger.error(f"Error fetching news sentiment: {e}")
-
-        return {"average_tone": 0.0, "article_count": 0}
+        """Fetch news sentiment from GDELT Project API."""
+        return await fetch_news_sentiment(self, query, lookback_hours, max_records)
 
     # ==================== Kline / Candlestick Data ====================
 
     async def get_binance_klines(
         self, symbol: str = "BTCUSDT", interval: str = "1h", limit: int = 24
     ) -> List[List]:
-        """
-        Fetch kline/candlestick data from Binance Futures.
-
-        Each kline: [open_time, open, high, low, close, volume, close_time,
-                     quote_volume, num_trades, taker_buy_base_vol,
-                     taker_buy_quote_vol, ignore]
-
-        Returns:
-            List of kline arrays, or empty list on failure.
-        """
-        try:
-            binance_sym = _to_binance_symbol(symbol)
-            url = f"{self.BINANCE_FUTURES_URL}/fapi/v1/klines"
-            params = {"symbol": binance_sym, "interval": interval, "limit": limit}
-
-            async def _fetch():
-                return await self._get_with_retry(url, params)
-
-            data = await _binance_breaker.call(_fetch)
-            if data and isinstance(data, list):
-                logger.info(f"Klines ({symbol}, {interval}): fetched {len(data)} candles")
-                return data
-
-        except CircuitBreakerError as e:
-            logger.warning(f"Binance API circuit open for klines: {e}")
-        except Exception as e:
-            logger.error(f"Error fetching klines: {e}")
-
-        return []
+        """Fetch kline/candlestick data from Binance Futures."""
+        return await fetch_binance_klines(self, symbol, interval, limit)
 
     # ==================== VWAP Calculation ====================
 
     @staticmethod
     def calculate_vwap(klines: List[List]) -> float:
-        """
-        Calculate Volume-Weighted Average Price from kline data.
-
-        VWAP = sum(typical_price * volume) / sum(volume)
-        typical_price = (high + low + close) / 3
-
-        Returns:
-            VWAP price, or 0.0 if no data.
-        """
-        if not klines:
-            return 0.0
-
-        total_tp_vol = 0.0
-        total_vol = 0.0
-
-        for k in klines:
-            try:
-                high = float(k[2])
-                low = float(k[3])
-                close = float(k[4])
-                volume = float(k[5])
-                typical_price = (high + low + close) / 3
-                total_tp_vol += typical_price * volume
-                total_vol += volume
-            except (IndexError, ValueError, TypeError):
-                continue
-
-        if total_vol == 0:
-            return 0.0
-
-        return total_tp_vol / total_vol
+        """Calculate Volume-Weighted Average Price from kline data."""
+        return _calculate_vwap(klines)
 
     # ==================== ATR (Average True Range) ====================
 
     @staticmethod
     def calculate_atr(klines: List[List], period: int = 14) -> List[float]:
-        """
-        Calculate Average True Range using Wilder's smoothing.
-
-        TR = max(high-low, |high-prev_close|, |low-prev_close|)
-        ATR[period-1] = SMA(TR, period)
-        ATR[i] = (ATR[i-1] * (period-1) + TR[i]) / period
-
-        Args:
-            klines: OHLCV kline data
-            period: ATR period (default 14)
-
-        Returns:
-            List of ATR values (same length as klines, 0.0 for warmup).
-        """
-        if not klines or len(klines) < period + 1:
-            return [0.0] * len(klines) if klines else []
-
-        highs = []
-        lows = []
-        closes = []
-        for k in klines:
-            try:
-                highs.append(float(k[2]))
-                lows.append(float(k[3]))
-                closes.append(float(k[4]))
-            except (IndexError, ValueError, TypeError):
-                continue
-
-        if len(closes) < period + 1:
-            return [0.0] * len(closes)
-
-        # Calculate True Range
-        true_ranges = [highs[0] - lows[0]]
-        for i in range(1, len(closes)):
-            tr = max(
-                highs[i] - lows[i],
-                abs(highs[i] - closes[i - 1]),
-                abs(lows[i] - closes[i - 1]),
-            )
-            true_ranges.append(tr)
-
-        # Wilder's smoothing
-        atr_values = [0.0] * len(true_ranges)
-        for i in range(len(true_ranges)):
-            if i < period - 1:
-                atr_values[i] = 0.0
-            elif i == period - 1:
-                atr_values[i] = sum(true_ranges[:period]) / period
-            else:
-                atr_values[i] = (atr_values[i - 1] * (period - 1) + true_ranges[i]) / period
-
-        return atr_values
+        """Calculate Average True Range using Wilder's smoothing."""
+        return _calculate_atr(klines, period)
 
     # ==================== Supertrend Indicator ====================
 
@@ -1059,1065 +586,121 @@ class MarketDataFetcher:
     def calculate_supertrend(
         klines: List[List], atr_period: int = 10, multiplier: float = 3.0
     ) -> Dict[str, Any]:
-        """
-        Calculate Supertrend indicator from kline data.
-
-        Uses ATR (Average True Range) for dynamic support/resistance.
-        Green = uptrend (price above lower band), Red = downtrend.
-
-        Returns:
-            {"direction": "bullish"|"bearish", "value": float, "atr": float}
-        """
-        if not klines or len(klines) < atr_period + 1:
-            return {"direction": "neutral", "value": 0.0, "atr": 0.0}
-
-        highs = []
-        lows = []
-        closes = []
-        for k in klines:
-            try:
-                highs.append(float(k[2]))
-                lows.append(float(k[3]))
-                closes.append(float(k[4]))
-            except (IndexError, ValueError, TypeError):
-                continue
-
-        if len(closes) < atr_period + 1:
-            return {"direction": "neutral", "value": 0.0, "atr": 0.0}
-
-        # Reuse calculate_atr for ATR values
-        atr_values = MarketDataFetcher.calculate_atr(klines, atr_period)
-
-        # Calculate Supertrend
-        supertrend = [0.0] * len(closes)
-        direction = [1] * len(closes)  # 1 = bullish, -1 = bearish
-
-        for i in range(atr_period, len(closes)):
-            hl2 = (highs[i] + lows[i]) / 2
-            upper_band = hl2 + multiplier * atr_values[i]
-            lower_band = hl2 - multiplier * atr_values[i]
-
-            if i == atr_period:
-                supertrend[i] = upper_band if closes[i] <= upper_band else lower_band
-                direction[i] = -1 if closes[i] <= upper_band else 1
-            else:
-                prev_st = supertrend[i - 1]
-                prev_dir = direction[i - 1]
-
-                if prev_dir == 1:  # was bullish
-                    lower_band = max(lower_band, prev_st)
-                    if closes[i] >= lower_band:
-                        supertrend[i] = lower_band
-                        direction[i] = 1
-                    else:
-                        supertrend[i] = upper_band
-                        direction[i] = -1
-                else:  # was bearish
-                    upper_band = min(upper_band, prev_st)
-                    if closes[i] <= upper_band:
-                        supertrend[i] = upper_band
-                        direction[i] = -1
-                    else:
-                        supertrend[i] = lower_band
-                        direction[i] = 1
-
-        current_dir = "bullish" if direction[-1] == 1 else "bearish"
-        return {
-            "direction": current_dir,
-            "value": supertrend[-1],
-            "atr": atr_values[-1],
-        }
+        """Calculate Supertrend indicator from kline data."""
+        return _calculate_supertrend(klines, atr_period, multiplier)
 
     # ==================== Spot Volume Analysis ====================
 
     @staticmethod
     def get_spot_volume_analysis(klines: List[List]) -> Dict[str, Any]:
-        """
-        Analyze buy/sell volume split from kline data.
-
-        kline[5] = total volume, kline[9] = taker buy base volume.
-        buy_ratio > 0.55 = accumulation, < 0.45 = distribution.
-
-        Returns:
-            {"buy_ratio": float, "sell_ratio": float, "total_volume": float,
-             "buy_volume": float, "sell_volume": float}
-        """
-        total_volume = 0.0
-        buy_volume = 0.0
-
-        for k in klines:
-            try:
-                vol = float(k[5])
-                buy_vol = float(k[9])
-                total_volume += vol
-                buy_volume += buy_vol
-            except (IndexError, ValueError, TypeError):
-                continue
-
-        if total_volume == 0:
-            return {
-                "buy_ratio": 0.5,
-                "sell_ratio": 0.5,
-                "total_volume": 0.0,
-                "buy_volume": 0.0,
-                "sell_volume": 0.0,
-            }
-
-        sell_volume = total_volume - buy_volume
-        buy_ratio = buy_volume / total_volume
-        return {
-            "buy_ratio": buy_ratio,
-            "sell_ratio": 1.0 - buy_ratio,
-            "total_volume": total_volume,
-            "buy_volume": buy_volume,
-            "sell_volume": sell_volume,
-        }
+        """Analyze buy/sell volume split from kline data."""
+        return _get_spot_volume_analysis(klines)
 
     # ==================== OIWAP Calculation ====================
 
     async def calculate_oiwap(
         self, symbol: str = "BTCUSDT", klines: Optional[List[List]] = None, period_hours: int = 24
     ) -> float:
-        """
-        Approximate OI-Weighted Average Price.
-
-        Uses OI history changes as weights: positions opened/closed at a price
-        contribute more to the weighted average.
-
-        OIWAP = sum(typical_price * abs(OI_change)) / sum(abs(OI_change))
-
-        Returns:
-            OIWAP price, or 0.0 if unavailable.
-        """
-        try:
-            if klines is None:
-                klines = await self.get_binance_klines(symbol, "1h", period_hours)
-            if not klines:
-                return 0.0
-
-            oi_history = await self.get_open_interest_history(symbol, "1h", period_hours)
-            if not oi_history or len(oi_history) < 2:
-                return 0.0
-
-            # Build timestamp -> OI map
-            oi_map = {}
-            for entry in oi_history:
-                ts = int(entry.get("timestamp", 0))
-                oi = float(entry.get("sumOpenInterest", 0))
-                oi_map[ts] = oi
-
-            total_weighted = 0.0
-            total_weight = 0.0
-
-            for i in range(len(klines)):
-                try:
-                    kline_ts = int(klines[i][0])
-                    high = float(klines[i][2])
-                    low = float(klines[i][3])
-                    close = float(klines[i][4])
-                    tp = (high + low + close) / 3
-
-                    # Find matching or closest OI entry
-                    oi_current = oi_map.get(kline_ts, 0)
-                    if i > 0:
-                        prev_ts = int(klines[i - 1][0])
-                        oi_prev = oi_map.get(prev_ts, oi_current)
-                    else:
-                        oi_prev = oi_current
-
-                    oi_change = abs(oi_current - oi_prev)
-                    if oi_change > 0:
-                        total_weighted += tp * oi_change
-                        total_weight += oi_change
-                except (IndexError, ValueError, TypeError):
-                    continue
-
-            if total_weight == 0:
-                return 0.0
-
-            oiwap = total_weighted / total_weight
-            logger.info(f"OIWAP ({symbol}): {oiwap:.2f}")
-            return oiwap
-
-        except Exception as e:
-            logger.error(f"Error calculating OIWAP: {e}")
-            return 0.0
+        """Approximate OI-Weighted Average Price."""
+        return await _calculate_oiwap(self, symbol, klines, period_hours)
 
     # ==================== Deribit Options Data ====================
 
     async def get_options_oi_deribit(self, currency: str = "BTC") -> Dict[str, Any]:
-        """
-        Fetch total options open interest from Deribit (public, no auth).
-
-        Returns:
-            Dict with total_oi, num_instruments
-        """
-        try:
-            url = f"{self.DERIBIT_URL}/public/get_book_summary_by_currency"
-            params = {"currency": currency, "kind": "option"}
-
-            async def _fetch():
-                return await self._get_with_retry(url, params)
-
-            data = await _deribit_breaker.call(_fetch)
-
-            if data and "result" in data:
-                instruments = data["result"]
-                total_oi = sum(float(i.get("open_interest", 0)) for i in instruments)
-                logger.info(f"Deribit Options OI ({currency}): {total_oi:.2f} across {len(instruments)} instruments")
-                return {
-                    "total_oi": total_oi,
-                    "num_instruments": len(instruments),
-                    "currency": currency,
-                }
-
-        except CircuitBreakerError as e:
-            logger.warning(f"Deribit API circuit open: {e}")
-        except Exception as e:
-            logger.error(f"Error fetching Deribit options OI: {e}")
-
-        return {"total_oi": 0.0, "num_instruments": 0, "currency": currency}
+        """Fetch total options open interest from Deribit."""
+        return await fetch_options_oi_deribit(self, currency)
 
     async def get_max_pain(self, currency: str = "BTC") -> Dict[str, Any]:
-        """
-        Calculate the max pain price from Deribit options data.
-
-        Max pain = strike price where the most options expire worthless.
-
-        Returns:
-            Dict with max_pain_price, nearest_expiry
-        """
-        try:
-            # Get active option instruments
-            url = f"{self.DERIBIT_URL}/public/get_instruments"
-            params = {"currency": currency, "kind": "option", "expired": "false"}
-
-            async def _fetch():
-                return await self._get_with_retry(url, params)
-
-            data = await _deribit_breaker.call(_fetch)
-
-            if not data or "result" not in data:
-                return {"max_pain_price": 0.0, "nearest_expiry": ""}
-
-            instruments = data["result"]
-            if not instruments:
-                return {"max_pain_price": 0.0, "nearest_expiry": ""}
-
-            # Find nearest expiry
-            now_ms = datetime.now().timestamp() * 1000
-            expiries = sorted(set(
-                i["expiration_timestamp"] for i in instruments
-                if i["expiration_timestamp"] > now_ms
-            ))
-            if not expiries:
-                return {"max_pain_price": 0.0, "nearest_expiry": ""}
-
-            nearest_exp = expiries[0]
-            nearest_instruments = [
-                i for i in instruments
-                if i["expiration_timestamp"] == nearest_exp
-            ]
-
-            # Group by strike
-            strikes: Dict[float, Dict[str, float]] = {}
-            for inst in nearest_instruments:
-                strike = float(inst["strike"])
-                if strike not in strikes:
-                    strikes[strike] = {"call_oi": 0.0, "put_oi": 0.0}
-                oi = float(inst.get("open_interest", 0) or 0)
-                if inst["option_type"] == "call":
-                    strikes[strike]["call_oi"] += oi
-                else:
-                    strikes[strike]["put_oi"] += oi
-
-            # Calculate pain at each strike
-            if not strikes:  # pragma: no cover — nearest_instruments always non-empty
-                return {"max_pain_price": 0.0, "nearest_expiry": ""}
-
-            strike_list = sorted(strikes.keys())
-            min_pain = float("inf")
-            max_pain_strike = 0.0
-
-            for test_price in strike_list:
-                total_pain = 0.0
-                for strike, oi_data in strikes.items():
-                    # Call holders lose when price < strike
-                    if test_price > strike:
-                        total_pain += (test_price - strike) * oi_data["call_oi"]
-                    # Put holders lose when price > strike
-                    if test_price < strike:
-                        total_pain += (strike - test_price) * oi_data["put_oi"]
-                if total_pain < min_pain:
-                    min_pain = total_pain
-                    max_pain_strike = test_price
-
-            expiry_dt = datetime.fromtimestamp(nearest_exp / 1000)
-            logger.info(f"Max Pain ({currency}): ${max_pain_strike:,.0f} (expiry {expiry_dt.date()})")
-            return {
-                "max_pain_price": max_pain_strike,
-                "nearest_expiry": expiry_dt.isoformat(),
-            }
-
-        except CircuitBreakerError as e:
-            logger.warning(f"Deribit API circuit open for max pain: {e}")
-        except Exception as e:
-            logger.error(f"Error calculating max pain: {e}")
-
-        return {"max_pain_price": 0.0, "nearest_expiry": ""}
+        """Calculate the max pain price from Deribit options data."""
+        return await fetch_max_pain(self, currency)
 
     async def get_put_call_ratio(self, currency: str = "BTC") -> Dict[str, Any]:
-        """
-        Calculate put/call ratio from Deribit options open interest.
-
-        Ratio > 1 = more puts (bearish), < 1 = more calls (bullish).
-
-        Returns:
-            Dict with ratio, total_puts, total_calls
-        """
-        try:
-            url = f"{self.DERIBIT_URL}/public/get_book_summary_by_currency"
-            params = {"currency": currency, "kind": "option"}
-
-            async def _fetch():
-                return await self._get_with_retry(url, params)
-
-            data = await _deribit_breaker.call(_fetch)
-
-            if data and "result" in data:
-                instruments = data["result"]
-                total_puts = 0.0
-                total_calls = 0.0
-                for inst in instruments:
-                    name = inst.get("instrument_name", "")
-                    oi = float(inst.get("open_interest", 0) or 0)
-                    if "-P" in name:
-                        total_puts += oi
-                    elif "-C" in name:
-                        total_calls += oi
-
-                ratio = total_puts / total_calls if total_calls > 0 else 0.0
-                logger.info(f"Put/Call Ratio ({currency}): {ratio:.3f} (puts={total_puts:.0f}, calls={total_calls:.0f})")
-                return {
-                    "ratio": ratio,
-                    "total_puts": total_puts,
-                    "total_calls": total_calls,
-                }
-
-        except CircuitBreakerError as e:
-            logger.warning(f"Deribit API circuit open for P/C ratio: {e}")
-        except Exception as e:
-            logger.error(f"Error fetching put/call ratio: {e}")
-
-        return {"ratio": 0.0, "total_puts": 0.0, "total_calls": 0.0}
+        """Calculate put/call ratio from Deribit options open interest."""
+        return await fetch_put_call_ratio(self, currency)
 
     # ==================== CoinGecko Market Data ====================
 
     async def get_coingecko_market(self) -> Dict[str, Any]:
-        """
-        Fetch global crypto market data from CoinGecko (free tier).
-
-        Returns:
-            Dict with total_market_cap, btc_dominance, active_cryptocurrencies
-        """
-        try:
-            url = f"{self.COINGECKO_URL}/global"
-
-            async def _fetch():
-                return await self._get_with_retry(url)
-
-            data = await _coingecko_breaker.call(_fetch)
-
-            if data and "data" in data:
-                d = data["data"]
-                market_cap = d.get("total_market_cap", {}).get("usd", 0)
-                btc_dom = d.get("market_cap_percentage", {}).get("btc", 0)
-                active = d.get("active_cryptocurrencies", 0)
-                logger.info(f"CoinGecko Global: MCap=${market_cap/1e9:.1f}B, BTC Dom={btc_dom:.1f}%")
-                return {
-                    "total_market_cap_usd": market_cap,
-                    "btc_dominance_pct": btc_dom,
-                    "active_cryptocurrencies": active,
-                    "market_cap_change_24h_pct": d.get("market_cap_change_percentage_24h_usd", 0),
-                }
-
-        except CircuitBreakerError as e:
-            logger.warning(f"CoinGecko API circuit open: {e}")
-        except Exception as e:
-            logger.error(f"Error fetching CoinGecko market data: {e}")
-
-        return {
-            "total_market_cap_usd": 0,
-            "btc_dominance_pct": 0,
-            "active_cryptocurrencies": 0,
-            "market_cap_change_24h_pct": 0,
-        }
+        """Fetch global crypto market data from CoinGecko."""
+        return await fetch_coingecko_market(self)
 
     # ==================== Stablecoin Flows (DefiLlama) ====================
 
     async def get_stablecoin_flows(self) -> Dict[str, Any]:
-        """
-        Fetch stablecoin market cap data from DefiLlama.
-
-        Rising USDT market cap = new capital entering crypto (bullish).
-
-        Returns:
-            Dict with usdt_market_cap, change_7d, change_7d_pct
-        """
-        try:
-            url = f"{self.DEFILLAMA_URL}/stablecoins?includePrices=false"
-
-            async def _fetch():
-                return await self._get_with_retry(url)
-
-            data = await _defillama_breaker.call(_fetch)
-
-            if data and "peggedAssets" in data:
-                for asset in data["peggedAssets"]:
-                    if asset.get("symbol", "").upper() == "USDT":
-                        chains = asset.get("chainCirculating", {})
-                        total_mcap = sum(
-                            c.get("current", {}).get("peggedUSD", 0)
-                            for c in chains.values()
-                        )
-                        if total_mcap == 0:
-                            total_mcap = asset.get("circulating", {}).get("peggedUSD", 0)
-
-                        logger.info(f"Stablecoin USDT MCap: ${total_mcap / 1e9:.1f}B")
-                        return {
-                            "usdt_market_cap": total_mcap,
-                            "symbol": "USDT",
-                        }
-
-        except CircuitBreakerError as e:
-            logger.warning(f"DefiLlama API circuit open: {e}")
-        except Exception as e:
-            logger.error(f"Error fetching stablecoin flows: {e}")
-
-        return {"usdt_market_cap": 0, "symbol": "USDT"}
+        """Fetch stablecoin market cap data from DefiLlama."""
+        return await fetch_stablecoin_flows(self)
 
     # ==================== BTC Hashrate (Blockchain.info) ====================
 
     async def get_btc_hashrate(self) -> Dict[str, Any]:
-        """
-        Fetch Bitcoin network hashrate from Blockchain.info.
-
-        Rising hashrate = miner confidence, network security.
-
-        Returns:
-            Dict with hashrate (TH/s), difficulty
-        """
-        try:
-            url = f"{self.BLOCKCHAIN_URL}/stats"
-
-            async def _fetch():
-                return await self._get_with_retry(url)
-
-            data = await _blockchain_breaker.call(_fetch)
-
-            if data:
-                hashrate = data.get("hash_rate", 0)  # TH/s
-                difficulty = data.get("difficulty", 0)
-                logger.info(f"BTC Hashrate: {hashrate / 1e6:.1f} EH/s")
-                return {
-                    "hashrate_ths": hashrate,
-                    "difficulty": difficulty,
-                }
-
-        except CircuitBreakerError as e:
-            logger.warning(f"Blockchain.info API circuit open: {e}")
-        except Exception as e:
-            logger.error(f"Error fetching BTC hashrate: {e}")
-
-        return {"hashrate_ths": 0, "difficulty": 0}
+        """Fetch Bitcoin network hashrate from Blockchain.info."""
+        return await fetch_btc_hashrate(self)
 
     # ==================== Bitget Funding Rate ====================
 
     async def get_bitget_funding_rate(self, symbol: str = "BTCUSDT") -> Dict[str, Any]:
-        """
-        Fetch current funding rate from Bitget.
-
-        Comparing Binance vs Bitget funding rates reveals cross-exchange divergence.
-
-        Returns:
-            Dict with funding_rate, funding_time
-        """
-        try:
-            url = f"{self.BITGET_URL}/mix/market/current-fund-rate"
-            params = {"symbol": symbol, "productType": "USDT-FUTURES"}
-
-            async def _fetch():
-                return await self._get_with_retry(url, params)
-
-            data = await _bitget_breaker.call(_fetch)
-
-            if data and data.get("code") == "00000" and "data" in data:
-                items = data["data"]
-                if items and len(items) > 0:
-                    rate = float(items[0].get("fundingRate", 0))
-                    logger.info(f"Bitget Funding Rate ({symbol}): {rate:.6f}")
-                    return {"funding_rate": rate, "symbol": symbol}
-
-        except CircuitBreakerError as e:
-            logger.warning(f"Bitget API circuit open: {e}")
-        except Exception as e:
-            logger.error(f"Error fetching Bitget funding rate: {e}")
-
-        return {"funding_rate": 0.0, "symbol": symbol}
+        """Fetch current funding rate from Bitget."""
+        return await fetch_bitget_funding_rate(self, symbol)
 
     # ==================== FRED Macro Data ====================
 
     async def get_fred_series(self, series_id: str) -> Dict[str, Any]:
-        """
-        Fetch latest value of a FRED economic data series.
-
-        Used for DXY (US Dollar Index) and Fed Funds Rate.
-
-        Args:
-            series_id: FRED series ID (e.g. 'DTWEXBGS' for DXY, 'DFF' for Fed Funds)
-
-        Returns:
-            Dict with value, date, series_id
-        """
-        import os
-
-        api_key = os.environ.get("FRED_API_KEY", "")
-        if not api_key:
-            return {"value": 0.0, "date": "", "series_id": series_id}
-
-        try:
-            url = f"{self.FRED_URL}/series/observations"
-            params = {
-                "series_id": series_id,
-                "api_key": api_key,
-                "file_type": "json",
-                "sort_order": "desc",
-                "limit": "1",
-            }
-
-            async def _fetch():
-                return await self._get_with_retry(url, params)
-
-            data = await _fred_breaker.call(_fetch)
-
-            if data and "observations" in data and data["observations"]:
-                obs = data["observations"][0]
-                value_str = obs.get("value", ".")
-                value = float(value_str) if value_str != "." else 0.0
-                date = obs.get("date", "")
-                logger.info(f"FRED {series_id}: {value} ({date})")
-                return {"value": value, "date": date, "series_id": series_id}
-
-        except CircuitBreakerError as e:
-            logger.warning(f"FRED API circuit open: {e}")
-        except Exception as e:
-            logger.error(f"Error fetching FRED {series_id}: {e}")
-
-        return {"value": 0.0, "date": "", "series_id": series_id}
+        """Fetch latest value of a FRED economic data series."""
+        return await fetch_fred_series(self, series_id)
 
     # ==================== CME Gap Detection ====================
 
     async def get_cme_gap(self, symbol: str = "BTCUSDT") -> Dict[str, Any]:
-        """
-        Detect CME gap by comparing Friday 21:00 UTC close with current price.
-
-        CME BTC futures trade Mon-Fri. Weekend gaps often get filled.
-
-        Returns:
-            Dict with gap_pct, friday_close, current_price, gap_direction
-        """
-        try:
-            # Fetch 7 days of 4h candles to find Friday close
-            klines = await self.get_binance_klines(symbol, "4h", 42)
-            if not klines:
-                return {"gap_pct": 0.0, "friday_close": 0.0, "current_price": 0.0, "gap_direction": "none"}
-
-            # Find the last Friday 20:00-00:00 UTC candle (CME close ~21:00 UTC)
-            friday_close = 0.0
-            for k in reversed(klines):
-                ts = datetime.fromtimestamp(int(k[0]) / 1000)
-                if ts.weekday() == 4 and ts.hour >= 20:  # Friday, after 20:00
-                    friday_close = float(k[4])  # close price
-                    break
-
-            if friday_close == 0:
-                return {"gap_pct": 0.0, "friday_close": 0.0, "current_price": 0.0, "gap_direction": "none"}
-
-            current_price = float(klines[-1][4])
-            gap_pct = ((current_price - friday_close) / friday_close) * 100
-            direction = "up" if gap_pct > 0.5 else "down" if gap_pct < -0.5 else "none"
-
-            logger.info(f"CME Gap ({symbol}): {gap_pct:.2f}% (Fri close=${friday_close:,.0f}, now=${current_price:,.0f})")
-            return {
-                "gap_pct": gap_pct,
-                "friday_close": friday_close,
-                "current_price": current_price,
-                "gap_direction": direction,
-            }
-
-        except Exception as e:
-            logger.error(f"Error detecting CME gap: {e}")
-
-        return {"gap_pct": 0.0, "friday_close": 0.0, "current_price": 0.0, "gap_direction": "none"}
+        """Detect CME gap by comparing Friday 21:00 UTC close with current price."""
+        return await fetch_cme_gap(self, symbol)
 
     # ==================== Cumulative Volume Delta (CVD) ====================
 
     async def get_cvd(self, symbol: str = "BTCUSDT", interval: str = "1h", limit: int = 24) -> Dict[str, Any]:
-        """
-        Calculate Cumulative Volume Delta from Binance klines.
-
-        CVD = sum(taker_buy_volume - taker_sell_volume) over the period.
-        Positive CVD = aggressive buying dominance, negative = selling dominance.
-
-        Returns:
-            Dict with cvd_total, cvd_trend, taker_buy_ratio, data_points
-        """
-        try:
-            url = f"{self.BINANCE_FUTURES_URL}/fapi/v1/klines"
-            params = {"symbol": _to_binance_symbol(symbol), "interval": interval, "limit": limit}
-
-            async def _fetch():
-                return await self._get_with_retry(url, params)
-
-            data = await _binance_breaker.call(_fetch)
-
-            if not data or not isinstance(data, list):
-                return {"cvd_total": 0.0, "cvd_trend": "neutral", "taker_buy_ratio": 0.5, "data_points": 0}
-
-            cvd_values = []
-            cumulative = 0.0
-            total_volume = 0.0
-            total_taker_buy = 0.0
-
-            for k in data:
-                _volume = float(k[5])       # total quote volume
-                _taker_buy = float(k[9])    # taker buy base volume
-                _taker_sell = float(k[5]) - float(k[9])  # taker sell = total - buy (base)
-                # Use base volumes for delta
-                taker_buy_base = float(k[9])
-                taker_sell_base = float(k[7]) - float(k[9])  # k[7] = total base vol
-                delta = taker_buy_base - taker_sell_base
-                cumulative += delta
-                cvd_values.append(cumulative)
-                total_volume += float(k[7])
-                total_taker_buy += taker_buy_base
-
-            buy_ratio = total_taker_buy / total_volume if total_volume > 0 else 0.5
-
-            # Determine trend from first half vs second half
-            mid = len(cvd_values) // 2
-            first_half_avg = sum(cvd_values[:mid]) / mid if mid > 0 else 0
-            second_half_avg = sum(cvd_values[mid:]) / len(cvd_values[mid:]) if cvd_values[mid:] else 0
-            trend = "bullish" if second_half_avg > first_half_avg else "bearish" if second_half_avg < first_half_avg else "neutral"
-
-            logger.info(f"CVD ({symbol}): total={cumulative:.2f}, trend={trend}, buy_ratio={buy_ratio:.2%}")
-            return {
-                "cvd_total": cumulative,
-                "cvd_trend": trend,
-                "taker_buy_ratio": round(buy_ratio, 4),
-                "data_points": len(data),
-            }
-
-        except CircuitBreakerError as e:
-            logger.warning(f"Binance API circuit open (CVD): {e}")
-        except Exception as e:
-            logger.error(f"Error fetching CVD: {e}")
-
-        return {"cvd_total": 0.0, "cvd_trend": "neutral", "taker_buy_ratio": 0.5, "data_points": 0}
+        """Calculate Cumulative Volume Delta from Binance klines."""
+        return await fetch_cvd(self, symbol, interval, limit)
 
     # ==================== Coinbase Premium ====================
 
     async def get_coinbase_premium(self, symbol: str = "BTCUSDT") -> Dict[str, Any]:
-        """
-        Calculate Coinbase Premium: price diff between Coinbase and Binance spot.
-
-        Positive premium = US institutional buying pressure.
-        Negative premium = selling pressure or arbitrage flow.
-
-        Returns:
-            Dict with premium_pct, coinbase_price, binance_price, signal
-        """
-        try:
-            # Map Binance symbol to Coinbase product
-            base = symbol.replace("USDT", "").replace("USD", "")
-            cb_product = f"{base}-USD"
-            binance_symbol = f"{base}USDT"
-
-            async def _fetch_coinbase():
-                url = f"{self.COINBASE_URL}/products/{cb_product}/ticker"
-                return await self._get_with_retry(url, timeout=8)
-
-            async def _fetch_binance():
-                url = f"{self.BINANCE_SPOT_URL}/api/v3/ticker/price"
-                return await self._get_with_retry(url, {"symbol": binance_symbol}, timeout=8)
-
-            cb_data, bn_data = await asyncio.gather(
-                _coinbase_breaker.call(_fetch_coinbase),
-                _binance_breaker.call(_fetch_binance),
-                return_exceptions=True,
-            )
-
-            if isinstance(cb_data, Exception) or isinstance(bn_data, Exception):
-                raise ValueError(f"Fetch failed: cb={cb_data}, bn={bn_data}")
-
-            cb_price = float(cb_data.get("price", 0))
-            bn_price = float(bn_data.get("price", 0))
-
-            if cb_price <= 0 or bn_price <= 0:
-                return {"premium_pct": 0.0, "coinbase_price": 0.0, "binance_price": 0.0, "signal": "neutral"}
-
-            premium_pct = ((cb_price - bn_price) / bn_price) * 100
-
-            # Signal interpretation
-            if premium_pct > 0.05:
-                signal = "bullish"
-            elif premium_pct < -0.05:
-                signal = "bearish"
-            else:
-                signal = "neutral"
-
-            logger.info(f"Coinbase Premium ({base}): {premium_pct:.4f}% (CB=${cb_price:,.2f}, BN=${bn_price:,.2f})")
-            return {
-                "premium_pct": round(premium_pct, 4),
-                "coinbase_price": cb_price,
-                "binance_price": bn_price,
-                "signal": signal,
-            }
-
-        except CircuitBreakerError as e:
-            logger.warning(f"Coinbase/Binance API circuit open: {e}")
-        except Exception as e:
-            logger.error(f"Error fetching Coinbase premium: {e}")
-
-        return {"premium_pct": 0.0, "coinbase_price": 0.0, "binance_price": 0.0, "signal": "neutral"}
+        """Calculate Coinbase Premium: price diff between Coinbase and Binance spot."""
+        return await fetch_coinbase_premium(self, symbol)
 
     # ==================== Bybit Futures Data ====================
 
     async def get_bybit_futures(self, symbol: str = "BTCUSDT") -> Dict[str, Any]:
-        """
-        Fetch Bybit futures data: OI, funding rate, volume via Bybit V5 public API.
-
-        Returns:
-            Dict with open_interest, funding_rate, volume_24h, next_funding_time
-        """
-        try:
-            async def _fetch_ticker():
-                url = f"{self.BYBIT_URL}/v5/market/tickers"
-                return await self._get_with_retry(url, {"category": "linear", "symbol": symbol})
-
-            async def _fetch_funding():
-                url = f"{self.BYBIT_URL}/v5/market/funding/history"
-                return await self._get_with_retry(url, {"category": "linear", "symbol": symbol, "limit": "1"})
-
-            ticker_data, funding_data = await asyncio.gather(
-                _bybit_breaker.call(_fetch_ticker),
-                _bybit_breaker.call(_fetch_funding),
-                return_exceptions=True,
-            )
-
-            result = {
-                "open_interest": 0.0,
-                "funding_rate": 0.0,
-                "volume_24h": 0.0,
-                "next_funding_time": "",
-                "price": 0.0,
-            }
-
-            if not isinstance(ticker_data, Exception) and ticker_data:
-                tickers = ticker_data.get("result", {}).get("list", [])
-                if tickers:
-                    t = tickers[0]
-                    result["open_interest"] = float(t.get("openInterest", 0))
-                    result["volume_24h"] = float(t.get("volume24h", 0))
-                    result["price"] = float(t.get("lastPrice", 0))
-                    result["next_funding_time"] = t.get("nextFundingTime", "")
-
-            if not isinstance(funding_data, Exception) and funding_data:
-                funding_list = funding_data.get("result", {}).get("list", [])
-                if funding_list:
-                    result["funding_rate"] = float(funding_list[0].get("fundingRate", 0))
-
-            logger.info(
-                f"Bybit Futures ({symbol}): OI={result['open_interest']:.0f}, "
-                f"FR={result['funding_rate']:.6f}, Vol24h={result['volume_24h']:.0f}"
-            )
-            return result
-
-        except CircuitBreakerError as e:
-            logger.warning(f"Bybit API circuit open: {e}")
-        except Exception as e:
-            logger.error(f"Error fetching Bybit futures data: {e}")
-
-        return {"open_interest": 0.0, "funding_rate": 0.0, "volume_24h": 0.0, "next_funding_time": "", "price": 0.0}
+        """Fetch Bybit futures data: OI, funding rate, volume."""
+        return await fetch_bybit_futures(self, symbol)
 
     # ==================== Deribit Options Extended ====================
 
     async def get_deribit_options_extended(self, currency: str = "BTC") -> Dict[str, Any]:
-        """
-        Full options data from Deribit: IV per tenor, Skew, Put/Call Ratio.
-
-        Returns:
-            Dict with avg_iv, put_call_ratio, put_call_oi_ratio, skew_25delta,
-                  iv_by_tenor, total_call_oi, total_put_oi
-        """
-        try:
-            url = f"{self.DERIBIT_URL}/public/get_book_summary_by_currency"
-            params = {"currency": currency, "kind": "option"}
-
-            async def _fetch():
-                return await self._get_with_retry(url, params)
-
-            data = await _deribit_breaker.call(_fetch)
-
-            if not data or "result" not in data:
-                return self._empty_options_extended(currency)
-
-            instruments = data["result"]
-            if not instruments:
-                return self._empty_options_extended(currency)
-
-            total_call_oi = 0.0
-            total_put_oi = 0.0
-            iv_values = []
-            call_ivs = []
-            put_ivs = []
-
-            for inst in instruments:
-                name = inst.get("instrument_name", "")
-                oi = float(inst.get("open_interest", 0))
-                iv = float(inst.get("mark_iv", 0))
-
-                if iv > 0:
-                    iv_values.append(iv)
-
-                if "-C" in name:
-                    total_call_oi += oi
-                    if iv > 0:
-                        call_ivs.append(iv)
-                elif "-P" in name:
-                    total_put_oi += oi
-                    if iv > 0:
-                        put_ivs.append(iv)
-
-            total_oi = total_call_oi + total_put_oi
-            pc_ratio = total_put_oi / total_call_oi if total_call_oi > 0 else 0.0
-            avg_iv = sum(iv_values) / len(iv_values) if iv_values else 0.0
-
-            # 25-delta skew approximation: avg put IV - avg call IV
-            avg_call_iv = sum(call_ivs) / len(call_ivs) if call_ivs else 0.0
-            avg_put_iv = sum(put_ivs) / len(put_ivs) if put_ivs else 0.0
-            skew = avg_put_iv - avg_call_iv
-
-            logger.info(
-                f"Deribit Options Extended ({currency}): P/C={pc_ratio:.2f}, "
-                f"IV={avg_iv:.1f}%, Skew={skew:.1f}%"
-            )
-            return {
-                "avg_iv": round(avg_iv, 2),
-                "put_call_ratio": round(pc_ratio, 3),
-                "skew_25delta": round(skew, 2),
-                "total_call_oi": total_call_oi,
-                "total_put_oi": total_put_oi,
-                "total_oi": total_oi,
-                "currency": currency,
-            }
-
-        except CircuitBreakerError as e:
-            logger.warning(f"Deribit API circuit open (extended): {e}")
-        except Exception as e:
-            logger.error(f"Error fetching Deribit extended options: {e}")
-
-        return self._empty_options_extended(currency)
+        """Full options data from Deribit: IV per tenor, Skew, Put/Call Ratio."""
+        return await fetch_deribit_options_extended(self, currency)
 
     @staticmethod
     def _empty_options_extended(currency: str) -> Dict[str, Any]:
-        return {
-            "avg_iv": 0.0, "put_call_ratio": 0.0, "skew_25delta": 0.0,
-            "total_call_oi": 0.0, "total_put_oi": 0.0, "total_oi": 0.0,
-            "currency": currency,
-        }
+        return _empty_options_extended(currency)
 
     # ==================== Deribit DVOL (Volatility Index) ====================
 
     async def get_deribit_dvol(self, currency: str = "BTC") -> Dict[str, Any]:
-        """
-        Fetch Deribit Volatility Index (DVOL) — the crypto VIX equivalent.
-
-        Returns:
-            Dict with dvol_current, dvol_24h_ago, dvol_change_pct, signal
-        """
-        try:
-            now_ms = int(time.time() * 1000)
-            day_ago_ms = now_ms - 86_400_000  # 24h ago
-
-            url = f"{self.DERIBIT_URL}/public/get_volatility_index_data"
-            params = {
-                "currency": currency,
-                "resolution": "3600",  # 1h candles
-                "start_timestamp": str(day_ago_ms),
-                "end_timestamp": str(now_ms),
-            }
-
-            async def _fetch():
-                return await self._get_with_retry(url, params)
-
-            data = await _deribit_breaker.call(_fetch)
-
-            if not data or "result" not in data:
-                return {"dvol_current": 0.0, "dvol_24h_ago": 0.0, "dvol_change_pct": 0.0, "signal": "neutral"}
-
-            candles = data["result"].get("data", [])
-            if not candles:
-                return {"dvol_current": 0.0, "dvol_24h_ago": 0.0, "dvol_change_pct": 0.0, "signal": "neutral"}
-
-            # Each candle: [timestamp, open, high, low, close]
-            dvol_current = float(candles[-1][4])  # last close
-            dvol_24h_ago = float(candles[0][1])    # first open
-
-            change_pct = ((dvol_current - dvol_24h_ago) / dvol_24h_ago * 100) if dvol_24h_ago > 0 else 0.0
-
-            # Rising DVOL = increasing fear/uncertainty, falling = complacency
-            if change_pct > 5:
-                signal = "fear_rising"
-            elif change_pct < -5:
-                signal = "complacency"
-            else:
-                signal = "stable"
-
-            logger.info(f"Deribit DVOL ({currency}): {dvol_current:.1f} ({change_pct:+.1f}% 24h)")
-            return {
-                "dvol_current": round(dvol_current, 2),
-                "dvol_24h_ago": round(dvol_24h_ago, 2),
-                "dvol_change_pct": round(change_pct, 2),
-                "signal": signal,
-            }
-
-        except CircuitBreakerError as e:
-            logger.warning(f"Deribit API circuit open (DVOL): {e}")
-        except Exception as e:
-            logger.error(f"Error fetching Deribit DVOL: {e}")
-
-        return {"dvol_current": 0.0, "dvol_24h_ago": 0.0, "dvol_change_pct": 0.0, "signal": "neutral"}
+        """Fetch Deribit Volatility Index (DVOL)."""
+        return await fetch_deribit_dvol(self, currency)
 
     # ==================== EMA Calculation ====================
 
     @staticmethod
     def calculate_ema(values: List[float], period: int) -> List[float]:
-        """
-        Calculate Exponential Moving Average.
-
-        EMA[0] = SMA of first `period` values
-        EMA[i] = value[i] * k + EMA[i-1] * (1 - k), where k = 2 / (period + 1)
-
-        Returns:
-            List of EMA values (same length as input, 0.0 for warmup).
-        """
-        if not values or period < 1 or len(values) < period:
-            return [0.0] * len(values) if values else []
-
-        k = 2.0 / (period + 1)
-        ema = [0.0] * len(values)
-
-        ema[period - 1] = sum(values[:period]) / period
-
-        for i in range(period, len(values)):
-            ema[i] = values[i] * k + ema[i - 1] * (1 - k)
-
-        return ema
+        """Calculate Exponential Moving Average."""
+        return _calculate_ema(values, period)
 
     # ==================== ADX Calculation ====================
 
     @staticmethod
     def calculate_adx(klines: List[List], period: int = 14) -> Dict[str, Any]:
-        """
-        Calculate Average Directional Index (ADX) using Wilder's method.
-
-        ADX measures trend strength (not direction).
-        ADX > 25 = strong trend, ADX < 20 = weak/choppy market.
-
-        Returns:
-            {"adx": float, "plus_di": float, "minus_di": float, "is_trending": bool}
-        """
-        if not klines or len(klines) < period + 1:
-            return {"adx": 0.0, "plus_di": 0.0, "minus_di": 0.0, "is_trending": False}
-
-        highs, lows, closes = [], [], []
-        for k in klines:
-            try:
-                highs.append(float(k[2]))
-                lows.append(float(k[3]))
-                closes.append(float(k[4]))
-            except (IndexError, ValueError, TypeError):
-                continue
-
-        if len(closes) < period + 1:
-            return {"adx": 0.0, "plus_di": 0.0, "minus_di": 0.0, "is_trending": False}
-
-        plus_dm_list = []
-        minus_dm_list = []
-        tr_list = []
-
-        for i in range(1, len(closes)):
-            up_move = highs[i] - highs[i - 1]
-            down_move = lows[i - 1] - lows[i]
-
-            plus_dm = up_move if (up_move > down_move and up_move > 0) else 0.0
-            minus_dm = down_move if (down_move > up_move and down_move > 0) else 0.0
-
-            tr = max(
-                highs[i] - lows[i],
-                abs(highs[i] - closes[i - 1]),
-                abs(lows[i] - closes[i - 1]),
-            )
-
-            plus_dm_list.append(plus_dm)
-            minus_dm_list.append(minus_dm)
-            tr_list.append(tr)
-
-        def wilder_smooth(data: List[float], p: int) -> List[float]:
-            if len(data) < p:
-                return []
-            smoothed = [sum(data[:p])]
-            for i in range(p, len(data)):
-                smoothed.append((smoothed[-1] * (p - 1) + data[i]) / p)
-            return smoothed
-
-        atr_smooth = wilder_smooth(tr_list, period)
-        plus_dm_smooth = wilder_smooth(plus_dm_list, period)
-        minus_dm_smooth = wilder_smooth(minus_dm_list, period)
-
-        if not atr_smooth or not plus_dm_smooth or not minus_dm_smooth:
-            return {"adx": 0.0, "plus_di": 0.0, "minus_di": 0.0, "is_trending": False}
-
-        dx_list = []
-        last_plus_di = 0.0
-        last_minus_di = 0.0
-
-        for i in range(len(atr_smooth)):
-            atr_val = atr_smooth[i]
-            if atr_val == 0:
-                dx_list.append(0.0)
-                continue
-
-            plus_di = 100 * plus_dm_smooth[i] / atr_val
-            minus_di = 100 * minus_dm_smooth[i] / atr_val
-
-            di_sum = plus_di + minus_di
-            dx = 100 * abs(plus_di - minus_di) / di_sum if di_sum != 0 else 0.0
-
-            dx_list.append(dx)
-            last_plus_di = plus_di
-            last_minus_di = minus_di
-
-        adx_smooth = wilder_smooth(dx_list, period)
-        adx_value = adx_smooth[-1] if adx_smooth else 0.0
-
-        return {
-            "adx": round(adx_value, 2),
-            "plus_di": round(last_plus_di, 2),
-            "minus_di": round(last_minus_di, 2),
-            "is_trending": adx_value >= 20.0,
-        }
+        """Calculate Average Directional Index (ADX) using Wilder's method."""
+        return _calculate_adx(klines, period)
 
     # ==================== MACD Calculation ====================
 
@@ -2125,126 +708,15 @@ class MarketDataFetcher:
     def calculate_macd(
         klines: List[List], fast: int = 12, slow: int = 26, signal_period: int = 9
     ) -> Dict[str, Any]:
-        """
-        Calculate MACD (Moving Average Convergence Divergence).
-
-        MACD Line = EMA(fast) - EMA(slow)
-        Signal Line = EMA(MACD Line, signal_period)
-        Histogram = MACD Line - Signal Line
-
-        Returns:
-            {"macd_line": float, "signal_line": float, "histogram": float,
-             "histogram_series": List[float]}
-        """
-        if not klines or len(klines) < slow + signal_period:
-            return {
-                "macd_line": 0.0, "signal_line": 0.0,
-                "histogram": 0.0, "histogram_series": [],
-            }
-
-        closes = []
-        for k in klines:
-            try:
-                closes.append(float(k[4]))
-            except (IndexError, ValueError, TypeError):
-                continue
-
-        if len(closes) < slow + signal_period:
-            return {
-                "macd_line": 0.0, "signal_line": 0.0,
-                "histogram": 0.0, "histogram_series": [],
-            }
-
-        ema_fast = MarketDataFetcher.calculate_ema(closes, fast)
-        ema_slow = MarketDataFetcher.calculate_ema(closes, slow)
-
-        macd_line_series = []
-        for i in range(len(closes)):
-            if i >= slow - 1 and ema_fast[i] != 0 and ema_slow[i] != 0:
-                macd_line_series.append(ema_fast[i] - ema_slow[i])
-            else:
-                macd_line_series.append(0.0)
-
-        valid_macd = [v for v in macd_line_series if v != 0.0 or macd_line_series.index(v) >= slow - 1]
-        if len(valid_macd) < signal_period:
-            valid_macd = macd_line_series[slow - 1:]
-
-        signal_line_series = MarketDataFetcher.calculate_ema(valid_macd, signal_period)
-
-        histogram_series = []
-        for i in range(len(valid_macd)):
-            if i >= signal_period - 1 and signal_line_series[i] != 0:
-                histogram_series.append(valid_macd[i] - signal_line_series[i])
-            else:
-                histogram_series.append(0.0)
-
-        macd_line = valid_macd[-1] if valid_macd else 0.0
-        signal_line = signal_line_series[-1] if signal_line_series else 0.0
-        histogram = macd_line - signal_line
-
-        return {
-            "macd_line": round(macd_line, 6),
-            "signal_line": round(signal_line, 6),
-            "histogram": round(histogram, 6),
-            "histogram_series": histogram_series,
-        }
+        """Calculate MACD (Moving Average Convergence Divergence)."""
+        return _calculate_macd(klines, fast, slow, signal_period)
 
     # ==================== RSI Calculation ====================
 
     @staticmethod
     def calculate_rsi(klines: List[List], period: int = 14) -> List[float]:
-        """
-        Calculate Relative Strength Index (RSI) using Wilder's smoothing.
-
-        RSI = 100 - (100 / (1 + RS)), where RS = avg_gain / avg_loss.
-
-        Returns:
-            List of RSI values (0-100). Warmup values are 50.0.
-        """
-        if not klines or len(klines) < period + 1:
-            return [50.0] * len(klines) if klines else []
-
-        closes = []
-        for k in klines:
-            try:
-                closes.append(float(k[4]))
-            except (IndexError, ValueError, TypeError):
-                continue
-
-        if len(closes) < period + 1:
-            return [50.0] * len(closes)
-
-        changes = [closes[i] - closes[i - 1] for i in range(1, len(closes))]
-
-        gains = [max(c, 0) for c in changes]
-        losses = [abs(min(c, 0)) for c in changes]
-
-        rsi_values = [50.0] * len(closes)
-
-        avg_gain = sum(gains[:period]) / period
-        avg_loss = sum(losses[:period]) / period
-
-        if avg_gain == 0 and avg_loss == 0:
-            rsi_values[period] = 50.0
-        elif avg_loss == 0:
-            rsi_values[period] = 100.0
-        else:
-            rs = avg_gain / avg_loss
-            rsi_values[period] = 100 - (100 / (1 + rs))
-
-        for i in range(period, len(changes)):
-            avg_gain = (avg_gain * (period - 1) + gains[i]) / period
-            avg_loss = (avg_loss * (period - 1) + losses[i]) / period
-
-            if avg_gain == 0 and avg_loss == 0:
-                rsi_values[i + 1] = 50.0
-            elif avg_loss == 0:
-                rsi_values[i + 1] = 100.0
-            else:
-                rs = avg_gain / avg_loss
-                rsi_values[i + 1] = 100 - (100 / (1 + rs))
-
-        return rsi_values
+        """Calculate Relative Strength Index (RSI) using Wilder's smoothing."""
+        return _calculate_rsi(klines, period)
 
     # ==================== RSI Divergence Detection ====================
 
@@ -2252,85 +724,8 @@ class MarketDataFetcher:
     def detect_rsi_divergence(
         klines: List[List], rsi_period: int = 14, lookback: int = 20
     ) -> Dict[str, Any]:
-        """
-        Detect bullish and bearish RSI divergence.
-
-        Bearish divergence: price makes higher high but RSI makes lower high.
-        Bullish divergence: price makes lower low but RSI makes higher low.
-
-        Returns:
-            {
-                "bullish_divergence": bool, "bearish_divergence": bool,
-                "price_high_1": float, "price_high_2": float,
-                "rsi_high_1": float, "rsi_high_2": float,
-                "price_low_1": float, "price_low_2": float,
-                "rsi_low_1": float, "rsi_low_2": float,
-            }
-        """
-        default = {
-            "bullish_divergence": False, "bearish_divergence": False,
-            "price_high_1": 0.0, "price_high_2": 0.0,
-            "rsi_high_1": 0.0, "rsi_high_2": 0.0,
-            "price_low_1": 0.0, "price_low_2": 0.0,
-            "rsi_low_1": 0.0, "rsi_low_2": 0.0,
-        }
-
-        if not klines or len(klines) < rsi_period + lookback:
-            return default
-
-        closes = []
-        highs = []
-        lows = []
-        for k in klines:
-            try:
-                highs.append(float(k[2]))
-                lows.append(float(k[3]))
-                closes.append(float(k[4]))
-            except (IndexError, ValueError, TypeError):
-                continue
-
-        if len(closes) < rsi_period + lookback:
-            return default
-
-        rsi_values = MarketDataFetcher.calculate_rsi(klines, rsi_period)
-        if len(rsi_values) < lookback:
-            return default
-
-        start = len(closes) - lookback
-        end = len(closes) - 1
-
-        swing_highs = []
-        swing_lows = []
-
-        for i in range(max(start, 1), end):
-            if highs[i] > highs[i - 1] and highs[i] > highs[i + 1]:
-                swing_highs.append((i, highs[i], rsi_values[i]))
-            if lows[i] < lows[i - 1] and lows[i] < lows[i + 1]:
-                swing_lows.append((i, lows[i], rsi_values[i]))
-
-        result = dict(default)
-
-        if len(swing_highs) >= 2:
-            prev_h = swing_highs[-2]
-            curr_h = swing_highs[-1]
-            result["price_high_1"] = prev_h[1]
-            result["price_high_2"] = curr_h[1]
-            result["rsi_high_1"] = prev_h[2]
-            result["rsi_high_2"] = curr_h[2]
-            if curr_h[1] > prev_h[1] and curr_h[2] < prev_h[2]:
-                result["bearish_divergence"] = True
-
-        if len(swing_lows) >= 2:
-            prev_l = swing_lows[-2]
-            curr_l = swing_lows[-1]
-            result["price_low_1"] = prev_l[1]
-            result["price_low_2"] = curr_l[1]
-            result["rsi_low_1"] = prev_l[2]
-            result["rsi_low_2"] = curr_l[2]
-            if curr_l[1] < prev_l[1] and curr_l[2] > prev_l[2]:
-                result["bullish_divergence"] = True
-
-        return result
+        """Detect bullish and bearish RSI divergence."""
+        return _detect_rsi_divergence(klines, rsi_period, lookback)
 
     # ==================== Selective Fetching ====================
 
@@ -2351,7 +746,7 @@ class MarketDataFetcher:
 
         # Map source IDs to coroutines
         dispatch: Dict[str, Any] = {}
-        # Technical indicators need klines — track if we need them
+        # Technical indicators need klines -- track if we need them
         needs_klines = any(s in sources for s in ("vwap", "supertrend", "spot_volume", "oiwap"))
 
         for src_id in sources:

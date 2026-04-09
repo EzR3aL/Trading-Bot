@@ -17,6 +17,7 @@ from src.exceptions import (
     BotError,
     BotNotFoundError,
     ConfigError,
+    DatabaseUnavailableError,
     DataSourceError,
     ExchangeError,
     ExchangeRateLimitError,
@@ -33,6 +34,7 @@ logger = get_logger(__name__)
 # Maps exception types to (HTTP status, user-facing message).
 # Order matters: more specific types must come before their parents.
 _EXCEPTION_STATUS_MAP: list[tuple[type, int, str]] = [
+    (DatabaseUnavailableError, 503, "Database temporarily unavailable"),
     (BotNotFoundError, 404, "Bot not found"),
     (ValidationError, 422, "Validation error"),
     (AuthError, 401, "Authentication error"),

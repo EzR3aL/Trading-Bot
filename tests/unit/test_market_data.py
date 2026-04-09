@@ -469,7 +469,7 @@ class TestFearGreedIndex:
             mock_get.return_value = {
                 "data": [{"value": "25", "value_classification": "Extreme Fear"}]
             }
-            with patch("src.data.market_data._alternative_me_breaker") as mock_breaker:
+            with patch("src.data.sources.breakers.alternative_me_breaker") as mock_breaker:
                 mock_breaker.call = AsyncMock(side_effect=_passthrough_call)
                 value, classification = await fetcher.get_fear_greed_index()
         assert value == 25
@@ -479,7 +479,7 @@ class TestFearGreedIndex:
     async def test_empty_data_returns_default(self, fetcher):
         with patch.object(fetcher, "_get_with_retry", new_callable=AsyncMock) as mock_get:
             mock_get.return_value = {"data": []}
-            with patch("src.data.market_data._alternative_me_breaker") as mock_breaker:
+            with patch("src.data.sources.breakers.alternative_me_breaker") as mock_breaker:
                 mock_breaker.call = AsyncMock(side_effect=_passthrough_call)
                 value, classification = await fetcher.get_fear_greed_index()
         assert value == 50
@@ -489,7 +489,7 @@ class TestFearGreedIndex:
     async def test_no_data_key_returns_default(self, fetcher):
         with patch.object(fetcher, "_get_with_retry", new_callable=AsyncMock) as mock_get:
             mock_get.return_value = {}
-            with patch("src.data.market_data._alternative_me_breaker") as mock_breaker:
+            with patch("src.data.sources.breakers.alternative_me_breaker") as mock_breaker:
                 mock_breaker.call = AsyncMock(side_effect=_passthrough_call)
                 value, classification = await fetcher.get_fear_greed_index()
         assert value == 50
@@ -497,7 +497,7 @@ class TestFearGreedIndex:
 
     @pytest.mark.asyncio
     async def test_circuit_breaker_error_returns_default(self, fetcher):
-        with patch("src.data.market_data._alternative_me_breaker") as mock_breaker:
+        with patch("src.data.sources.breakers.alternative_me_breaker") as mock_breaker:
             mock_breaker.call = AsyncMock(side_effect=CircuitBreakerError("alt_me", CircuitState.OPEN))
             value, classification = await fetcher.get_fear_greed_index()
         assert value == 50
@@ -505,7 +505,7 @@ class TestFearGreedIndex:
 
     @pytest.mark.asyncio
     async def test_exception_returns_default(self, fetcher):
-        with patch("src.data.market_data._alternative_me_breaker") as mock_breaker:
+        with patch("src.data.sources.breakers.alternative_me_breaker") as mock_breaker:
             mock_breaker.call = AsyncMock(side_effect=Exception("unknown"))
             value, classification = await fetcher.get_fear_greed_index()
         assert value == 50
@@ -515,7 +515,7 @@ class TestFearGreedIndex:
     async def test_missing_value_defaults_to_50(self, fetcher):
         with patch.object(fetcher, "_get_with_retry", new_callable=AsyncMock) as mock_get:
             mock_get.return_value = {"data": [{"value_classification": "Neutral"}]}
-            with patch("src.data.market_data._alternative_me_breaker") as mock_breaker:
+            with patch("src.data.sources.breakers.alternative_me_breaker") as mock_breaker:
                 mock_breaker.call = AsyncMock(side_effect=_passthrough_call)
                 value, classification = await fetcher.get_fear_greed_index()
         assert value == 50
@@ -532,7 +532,7 @@ class TestLongShortRatio:
     async def test_returns_ratio(self, fetcher):
         with patch.object(fetcher, "_get_with_retry", new_callable=AsyncMock) as mock_get:
             mock_get.return_value = [{"longShortRatio": "1.35"}]
-            with patch("src.data.market_data._binance_breaker") as mock_breaker:
+            with patch("src.data.sources.breakers.binance_breaker") as mock_breaker:
                 mock_breaker.call = AsyncMock(side_effect=_passthrough_call)
                 result = await fetcher.get_long_short_ratio("BTCUSDT")
         assert result == 1.35
@@ -541,14 +541,14 @@ class TestLongShortRatio:
     async def test_empty_response_returns_default(self, fetcher):
         with patch.object(fetcher, "_get_with_retry", new_callable=AsyncMock) as mock_get:
             mock_get.return_value = []
-            with patch("src.data.market_data._binance_breaker") as mock_breaker:
+            with patch("src.data.sources.breakers.binance_breaker") as mock_breaker:
                 mock_breaker.call = AsyncMock(side_effect=_passthrough_call)
                 result = await fetcher.get_long_short_ratio()
         assert result == 1.0
 
     @pytest.mark.asyncio
     async def test_circuit_breaker_error_returns_default(self, fetcher):
-        with patch("src.data.market_data._binance_breaker") as mock_breaker:
+        with patch("src.data.sources.breakers.binance_breaker") as mock_breaker:
             mock_breaker.call = AsyncMock(side_effect=CircuitBreakerError("binance", CircuitState.OPEN))
             result = await fetcher.get_long_short_ratio()
         assert result == 1.0
@@ -557,7 +557,7 @@ class TestLongShortRatio:
     async def test_top_trader_returns_ratio(self, fetcher):
         with patch.object(fetcher, "_get", new_callable=AsyncMock) as mock_get:
             mock_get.return_value = [{"longShortRatio": "2.1"}]
-            with patch("src.data.market_data._binance_breaker") as mock_breaker:
+            with patch("src.data.sources.breakers.binance_breaker") as mock_breaker:
                 mock_breaker.call = AsyncMock(side_effect=_passthrough_call)
                 result = await fetcher.get_top_trader_long_short_ratio("BTCUSDT")
         assert result == 2.1
@@ -566,14 +566,14 @@ class TestLongShortRatio:
     async def test_top_trader_empty_returns_default(self, fetcher):
         with patch.object(fetcher, "_get", new_callable=AsyncMock) as mock_get:
             mock_get.return_value = []
-            with patch("src.data.market_data._binance_breaker") as mock_breaker:
+            with patch("src.data.sources.breakers.binance_breaker") as mock_breaker:
                 mock_breaker.call = AsyncMock(side_effect=_passthrough_call)
                 result = await fetcher.get_top_trader_long_short_ratio()
         assert result == 1.0
 
     @pytest.mark.asyncio
     async def test_top_trader_exception_returns_default(self, fetcher):
-        with patch("src.data.market_data._binance_breaker") as mock_breaker:
+        with patch("src.data.sources.breakers.binance_breaker") as mock_breaker:
             mock_breaker.call = AsyncMock(side_effect=Exception("unexpected"))
             result = await fetcher.get_top_trader_long_short_ratio()
         assert result == 1.0
@@ -590,7 +590,7 @@ class TestFundingRate:
     async def test_binance_funding_rate_success(self, fetcher):
         with patch.object(fetcher, "_get_with_retry", new_callable=AsyncMock) as mock_get:
             mock_get.return_value = {"lastFundingRate": "0.0002"}
-            with patch("src.data.market_data._binance_breaker") as mock_breaker:
+            with patch("src.data.sources.breakers.binance_breaker") as mock_breaker:
                 mock_breaker.call = AsyncMock(side_effect=_passthrough_call)
                 result = await fetcher.get_funding_rate_binance("BTCUSDT")
         assert result == 0.0002
@@ -599,14 +599,14 @@ class TestFundingRate:
     async def test_binance_funding_rate_empty_returns_zero(self, fetcher):
         with patch.object(fetcher, "_get_with_retry", new_callable=AsyncMock) as mock_get:
             mock_get.return_value = {}
-            with patch("src.data.market_data._binance_breaker") as mock_breaker:
+            with patch("src.data.sources.breakers.binance_breaker") as mock_breaker:
                 mock_breaker.call = AsyncMock(side_effect=_passthrough_call)
                 result = await fetcher.get_funding_rate_binance()
         assert result == 0.0
 
     @pytest.mark.asyncio
     async def test_binance_funding_rate_circuit_breaker(self, fetcher):
-        with patch("src.data.market_data._binance_breaker") as mock_breaker:
+        with patch("src.data.sources.breakers.binance_breaker") as mock_breaker:
             mock_breaker.call = AsyncMock(side_effect=CircuitBreakerError("b", CircuitState.OPEN))
             result = await fetcher.get_funding_rate_binance()
         assert result == 0.0
@@ -651,7 +651,7 @@ class TestTicker24h:
                 "volume": "50000",
                 "quoteVolume": "4750000000",
             }
-            with patch("src.data.market_data._binance_breaker") as mock_breaker:
+            with patch("src.data.sources.breakers.binance_breaker") as mock_breaker:
                 mock_breaker.call = AsyncMock(side_effect=_passthrough_call)
                 result = await fetcher.get_24h_ticker("BTCUSDT")
 
@@ -665,7 +665,7 @@ class TestTicker24h:
     async def test_empty_response_returns_defaults(self, fetcher):
         with patch.object(fetcher, "_get_with_retry", new_callable=AsyncMock) as mock_get:
             mock_get.return_value = {}
-            with patch("src.data.market_data._binance_breaker") as mock_breaker:
+            with patch("src.data.sources.breakers.binance_breaker") as mock_breaker:
                 mock_breaker.call = AsyncMock(side_effect=_passthrough_call)
                 result = await fetcher.get_24h_ticker("ETHUSDT")
 
@@ -675,7 +675,7 @@ class TestTicker24h:
 
     @pytest.mark.asyncio
     async def test_circuit_breaker_returns_defaults(self, fetcher):
-        with patch("src.data.market_data._binance_breaker") as mock_breaker:
+        with patch("src.data.sources.breakers.binance_breaker") as mock_breaker:
             mock_breaker.call = AsyncMock(side_effect=CircuitBreakerError("b", CircuitState.OPEN))
             result = await fetcher.get_24h_ticker()
         assert result["price"] == 0
@@ -693,7 +693,7 @@ class TestOpenInterest:
     async def test_open_interest_success(self, fetcher):
         with patch.object(fetcher, "_get_with_retry", new_callable=AsyncMock) as mock_get:
             mock_get.return_value = {"openInterest": "12345.67"}
-            with patch("src.data.market_data._binance_breaker") as mock_breaker:
+            with patch("src.data.sources.breakers.binance_breaker") as mock_breaker:
                 mock_breaker.call = AsyncMock(side_effect=_passthrough_call)
                 result = await fetcher.get_open_interest("BTCUSDT")
         assert result == 12345.67
@@ -702,14 +702,14 @@ class TestOpenInterest:
     async def test_open_interest_empty_returns_zero(self, fetcher):
         with patch.object(fetcher, "_get_with_retry", new_callable=AsyncMock) as mock_get:
             mock_get.return_value = {}
-            with patch("src.data.market_data._binance_breaker") as mock_breaker:
+            with patch("src.data.sources.breakers.binance_breaker") as mock_breaker:
                 mock_breaker.call = AsyncMock(side_effect=_passthrough_call)
                 result = await fetcher.get_open_interest()
         assert result == 0.0
 
     @pytest.mark.asyncio
     async def test_open_interest_circuit_breaker(self, fetcher):
-        with patch("src.data.market_data._binance_breaker") as mock_breaker:
+        with patch("src.data.sources.breakers.binance_breaker") as mock_breaker:
             mock_breaker.call = AsyncMock(side_effect=CircuitBreakerError("b", CircuitState.OPEN))
             result = await fetcher.get_open_interest()
         assert result == 0.0
@@ -722,7 +722,7 @@ class TestOpenInterest:
         ]
         with patch.object(fetcher, "_get", new_callable=AsyncMock) as mock_get:
             mock_get.return_value = history_data
-            with patch("src.data.market_data._binance_breaker") as mock_breaker:
+            with patch("src.data.sources.breakers.binance_breaker") as mock_breaker:
                 mock_breaker.call = AsyncMock(side_effect=_passthrough_call)
                 result = await fetcher.get_open_interest_history("BTCUSDT", "1h", 24)
         assert result == history_data
@@ -731,14 +731,14 @@ class TestOpenInterest:
     async def test_open_interest_history_empty(self, fetcher):
         with patch.object(fetcher, "_get", new_callable=AsyncMock) as mock_get:
             mock_get.return_value = []
-            with patch("src.data.market_data._binance_breaker") as mock_breaker:
+            with patch("src.data.sources.breakers.binance_breaker") as mock_breaker:
                 mock_breaker.call = AsyncMock(side_effect=_passthrough_call)
                 result = await fetcher.get_open_interest_history()
         assert result == []
 
     @pytest.mark.asyncio
     async def test_open_interest_history_circuit_breaker(self, fetcher):
-        with patch("src.data.market_data._binance_breaker") as mock_breaker:
+        with patch("src.data.sources.breakers.binance_breaker") as mock_breaker:
             mock_breaker.call = AsyncMock(side_effect=CircuitBreakerError("b", CircuitState.OPEN))
             result = await fetcher.get_open_interest_history()
         assert result == []
@@ -756,7 +756,7 @@ class TestLiquidations:
         liq_data = [{"symbol": "BTCUSDT", "side": "BUY", "qty": "1.5"}]
         with patch.object(fetcher, "_get", new_callable=AsyncMock) as mock_get:
             mock_get.return_value = liq_data
-            with patch("src.data.market_data._binance_breaker") as mock_breaker:
+            with patch("src.data.sources.breakers.binance_breaker") as mock_breaker:
                 mock_breaker.call = AsyncMock(side_effect=_passthrough_call)
                 result = await fetcher.get_recent_liquidations("BTCUSDT", 50)
         assert result == liq_data
@@ -765,14 +765,14 @@ class TestLiquidations:
     async def test_empty_returns_empty_list(self, fetcher):
         with patch.object(fetcher, "_get", new_callable=AsyncMock) as mock_get:
             mock_get.return_value = []
-            with patch("src.data.market_data._binance_breaker") as mock_breaker:
+            with patch("src.data.sources.breakers.binance_breaker") as mock_breaker:
                 mock_breaker.call = AsyncMock(side_effect=_passthrough_call)
                 result = await fetcher.get_recent_liquidations()
         assert result == []
 
     @pytest.mark.asyncio
     async def test_circuit_breaker_returns_empty(self, fetcher):
-        with patch("src.data.market_data._binance_breaker") as mock_breaker:
+        with patch("src.data.sources.breakers.binance_breaker") as mock_breaker:
             mock_breaker.call = AsyncMock(side_effect=CircuitBreakerError("b", CircuitState.OPEN))
             result = await fetcher.get_recent_liquidations()
         assert result == []
@@ -793,7 +793,7 @@ class TestOrderBookDepth:
         }
         with patch.object(fetcher, "_get", new_callable=AsyncMock) as mock_get:
             mock_get.return_value = data
-            with patch("src.data.market_data._binance_breaker") as mock_breaker:
+            with patch("src.data.sources.breakers.binance_breaker") as mock_breaker:
                 mock_breaker.call = AsyncMock(side_effect=_passthrough_call)
                 result = await fetcher.get_order_book_depth("BTCUSDT")
         assert "midPrice" in result
@@ -811,7 +811,7 @@ class TestOrderBookDepth:
         }
         with patch.object(fetcher, "_get", new_callable=AsyncMock) as mock_get:
             mock_get.return_value = data
-            with patch("src.data.market_data._binance_breaker") as mock_breaker:
+            with patch("src.data.sources.breakers.binance_breaker") as mock_breaker:
                 mock_breaker.call = AsyncMock(side_effect=_passthrough_call)
                 result = await fetcher.get_order_book_depth("BTCUSDT")
         assert result["imbalanceTop10"] > 0.3
@@ -825,7 +825,7 @@ class TestOrderBookDepth:
         }
         with patch.object(fetcher, "_get", new_callable=AsyncMock) as mock_get:
             mock_get.return_value = data
-            with patch("src.data.market_data._binance_breaker") as mock_breaker:
+            with patch("src.data.sources.breakers.binance_breaker") as mock_breaker:
                 mock_breaker.call = AsyncMock(side_effect=_passthrough_call)
                 result = await fetcher.get_order_book_depth("BTCUSDT")
         assert result["imbalanceTop10"] < -0.3
@@ -840,7 +840,7 @@ class TestOrderBookDepth:
         }
         with patch.object(fetcher, "_get", new_callable=AsyncMock) as mock_get:
             mock_get.return_value = data
-            with patch("src.data.market_data._binance_breaker") as mock_breaker:
+            with patch("src.data.sources.breakers.binance_breaker") as mock_breaker:
                 mock_breaker.call = AsyncMock(side_effect=_passthrough_call)
                 result = await fetcher.get_order_book_depth("BTCUSDT")
         assert 0.1 < result["imbalanceTop10"] <= 0.3
@@ -854,7 +854,7 @@ class TestOrderBookDepth:
         }
         with patch.object(fetcher, "_get", new_callable=AsyncMock) as mock_get:
             mock_get.return_value = data
-            with patch("src.data.market_data._binance_breaker") as mock_breaker:
+            with patch("src.data.sources.breakers.binance_breaker") as mock_breaker:
                 mock_breaker.call = AsyncMock(side_effect=_passthrough_call)
                 result = await fetcher.get_order_book_depth("BTCUSDT")
         assert -0.3 <= result["imbalanceTop10"] < -0.1
@@ -864,7 +864,7 @@ class TestOrderBookDepth:
     async def test_empty_data_returns_empty(self, fetcher):
         with patch.object(fetcher, "_get", new_callable=AsyncMock) as mock_get:
             mock_get.return_value = {}
-            with patch("src.data.market_data._binance_breaker") as mock_breaker:
+            with patch("src.data.sources.breakers.binance_breaker") as mock_breaker:
                 mock_breaker.call = AsyncMock(side_effect=_passthrough_call)
                 result = await fetcher.get_order_book_depth()
         assert result == {}
@@ -873,14 +873,14 @@ class TestOrderBookDepth:
     async def test_missing_bids_returns_empty(self, fetcher):
         with patch.object(fetcher, "_get", new_callable=AsyncMock) as mock_get:
             mock_get.return_value = {"bids": [], "asks": [["95001", "1.0"]]}
-            with patch("src.data.market_data._binance_breaker") as mock_breaker:
+            with patch("src.data.sources.breakers.binance_breaker") as mock_breaker:
                 mock_breaker.call = AsyncMock(side_effect=_passthrough_call)
                 result = await fetcher.get_order_book_depth()
         assert result == {}
 
     @pytest.mark.asyncio
     async def test_circuit_breaker_returns_empty(self, fetcher):
-        with patch("src.data.market_data._binance_breaker") as mock_breaker:
+        with patch("src.data.sources.breakers.binance_breaker") as mock_breaker:
             mock_breaker.call = AsyncMock(side_effect=CircuitBreakerError("b", CircuitState.OPEN))
             result = await fetcher.get_order_book_depth()
         assert result == {}
@@ -1134,7 +1134,7 @@ class TestNewsSentiment:
                     {"tone": "1.5"},
                 ]
             }
-            with patch("src.data.market_data._gdelt_breaker") as mock_breaker:
+            with patch("src.data.sources.breakers.gdelt_breaker") as mock_breaker:
                 mock_breaker.call = AsyncMock(side_effect=_passthrough_call)
                 result = await fetcher.get_news_sentiment()
 
@@ -1145,7 +1145,7 @@ class TestNewsSentiment:
     async def test_empty_tonechart_returns_default(self, fetcher):
         with patch.object(fetcher, "_get_with_retry", new_callable=AsyncMock) as mock_get:
             mock_get.return_value = {"tonechart": []}
-            with patch("src.data.market_data._gdelt_breaker") as mock_breaker:
+            with patch("src.data.sources.breakers.gdelt_breaker") as mock_breaker:
                 mock_breaker.call = AsyncMock(side_effect=_passthrough_call)
                 result = await fetcher.get_news_sentiment()
         assert result["average_tone"] == 0.0
@@ -1155,14 +1155,14 @@ class TestNewsSentiment:
     async def test_no_tonechart_key_returns_default(self, fetcher):
         with patch.object(fetcher, "_get_with_retry", new_callable=AsyncMock) as mock_get:
             mock_get.return_value = {}
-            with patch("src.data.market_data._gdelt_breaker") as mock_breaker:
+            with patch("src.data.sources.breakers.gdelt_breaker") as mock_breaker:
                 mock_breaker.call = AsyncMock(side_effect=_passthrough_call)
                 result = await fetcher.get_news_sentiment()
         assert result["average_tone"] == 0.0
 
     @pytest.mark.asyncio
     async def test_circuit_breaker_returns_default(self, fetcher):
-        with patch("src.data.market_data._gdelt_breaker") as mock_breaker:
+        with patch("src.data.sources.breakers.gdelt_breaker") as mock_breaker:
             mock_breaker.call = AsyncMock(side_effect=CircuitBreakerError("gdelt", CircuitState.OPEN))
             result = await fetcher.get_news_sentiment()
         assert result["average_tone"] == 0.0
@@ -1179,7 +1179,7 @@ class TestBinanceKlines:
     async def test_returns_kline_list(self, fetcher, sample_klines):
         with patch.object(fetcher, "_get_with_retry", new_callable=AsyncMock) as mock_get:
             mock_get.return_value = sample_klines
-            with patch("src.data.market_data._binance_breaker") as mock_breaker:
+            with patch("src.data.sources.breakers.binance_breaker") as mock_breaker:
                 mock_breaker.call = AsyncMock(side_effect=_passthrough_call)
                 result = await fetcher.get_binance_klines("BTCUSDT", "1h", 24)
         assert len(result) == 24
@@ -1188,7 +1188,7 @@ class TestBinanceKlines:
     async def test_empty_data_returns_empty_list(self, fetcher):
         with patch.object(fetcher, "_get_with_retry", new_callable=AsyncMock) as mock_get:
             mock_get.return_value = []
-            with patch("src.data.market_data._binance_breaker") as mock_breaker:
+            with patch("src.data.sources.breakers.binance_breaker") as mock_breaker:
                 mock_breaker.call = AsyncMock(side_effect=_passthrough_call)
                 result = await fetcher.get_binance_klines()
         assert result == []
@@ -1197,14 +1197,14 @@ class TestBinanceKlines:
     async def test_non_list_data_returns_empty_list(self, fetcher):
         with patch.object(fetcher, "_get_with_retry", new_callable=AsyncMock) as mock_get:
             mock_get.return_value = {"error": "invalid"}
-            with patch("src.data.market_data._binance_breaker") as mock_breaker:
+            with patch("src.data.sources.breakers.binance_breaker") as mock_breaker:
                 mock_breaker.call = AsyncMock(side_effect=_passthrough_call)
                 result = await fetcher.get_binance_klines()
         assert result == []
 
     @pytest.mark.asyncio
     async def test_circuit_breaker_returns_empty_list(self, fetcher):
-        with patch("src.data.market_data._binance_breaker") as mock_breaker:
+        with patch("src.data.sources.breakers.binance_breaker") as mock_breaker:
             mock_breaker.call = AsyncMock(side_effect=CircuitBreakerError("b", CircuitState.OPEN))
             result = await fetcher.get_binance_klines()
         assert result == []
@@ -1293,7 +1293,7 @@ class TestDeribitOptions:
                     {"open_interest": 300},
                 ]
             }
-            with patch("src.data.market_data._deribit_breaker") as mock_breaker:
+            with patch("src.data.sources.breakers.deribit_breaker") as mock_breaker:
                 mock_breaker.call = AsyncMock(side_effect=_passthrough_call)
                 result = await fetcher.get_options_oi_deribit("BTC")
         assert result["total_oi"] == 600
@@ -1304,14 +1304,14 @@ class TestDeribitOptions:
     async def test_options_oi_empty_returns_default(self, fetcher):
         with patch.object(fetcher, "_get_with_retry", new_callable=AsyncMock) as mock_get:
             mock_get.return_value = {}
-            with patch("src.data.market_data._deribit_breaker") as mock_breaker:
+            with patch("src.data.sources.breakers.deribit_breaker") as mock_breaker:
                 mock_breaker.call = AsyncMock(side_effect=_passthrough_call)
                 result = await fetcher.get_options_oi_deribit("BTC")
         assert result["total_oi"] == 0.0
 
     @pytest.mark.asyncio
     async def test_options_oi_circuit_breaker(self, fetcher):
-        with patch("src.data.market_data._deribit_breaker") as mock_breaker:
+        with patch("src.data.sources.breakers.deribit_breaker") as mock_breaker:
             mock_breaker.call = AsyncMock(side_effect=CircuitBreakerError("d", CircuitState.OPEN))
             result = await fetcher.get_options_oi_deribit()
         assert result["total_oi"] == 0.0
@@ -1327,7 +1327,7 @@ class TestDeribitOptions:
                     {"instrument_name": "BTC-95000-P", "open_interest": 100},
                 ]
             }
-            with patch("src.data.market_data._deribit_breaker") as mock_breaker:
+            with patch("src.data.sources.breakers.deribit_breaker") as mock_breaker:
                 mock_breaker.call = AsyncMock(side_effect=_passthrough_call)
                 result = await fetcher.get_put_call_ratio("BTC")
         assert result["total_calls"] == 700
@@ -1342,7 +1342,7 @@ class TestDeribitOptions:
                     {"instrument_name": "BTC-100000-P", "open_interest": 300},
                 ]
             }
-            with patch("src.data.market_data._deribit_breaker") as mock_breaker:
+            with patch("src.data.sources.breakers.deribit_breaker") as mock_breaker:
                 mock_breaker.call = AsyncMock(side_effect=_passthrough_call)
                 result = await fetcher.get_put_call_ratio("BTC")
         assert result["ratio"] == 0.0
@@ -1351,7 +1351,7 @@ class TestDeribitOptions:
     async def test_put_call_ratio_empty(self, fetcher):
         with patch.object(fetcher, "_get_with_retry", new_callable=AsyncMock) as mock_get:
             mock_get.return_value = {}
-            with patch("src.data.market_data._deribit_breaker") as mock_breaker:
+            with patch("src.data.sources.breakers.deribit_breaker") as mock_breaker:
                 mock_breaker.call = AsyncMock(side_effect=_passthrough_call)
                 result = await fetcher.get_put_call_ratio("BTC")
         assert result == {"ratio": 0.0, "total_puts": 0.0, "total_calls": 0.0}
@@ -1370,7 +1370,7 @@ class TestDeribitOptions:
                     {"strike": 100000, "option_type": "put", "expiration_timestamp": future_ts, "open_interest": 300},
                 ]
             }
-            with patch("src.data.market_data._deribit_breaker") as mock_breaker:
+            with patch("src.data.sources.breakers.deribit_breaker") as mock_breaker:
                 mock_breaker.call = AsyncMock(side_effect=_passthrough_call)
                 result = await fetcher.get_max_pain("BTC")
         assert result["max_pain_price"] > 0
@@ -1380,7 +1380,7 @@ class TestDeribitOptions:
     async def test_max_pain_no_instruments(self, fetcher):
         with patch.object(fetcher, "_get_with_retry", new_callable=AsyncMock) as mock_get:
             mock_get.return_value = {"result": []}
-            with patch("src.data.market_data._deribit_breaker") as mock_breaker:
+            with patch("src.data.sources.breakers.deribit_breaker") as mock_breaker:
                 mock_breaker.call = AsyncMock(side_effect=_passthrough_call)
                 result = await fetcher.get_max_pain("BTC")
         assert result["max_pain_price"] == 0.0
@@ -1389,7 +1389,7 @@ class TestDeribitOptions:
     async def test_max_pain_no_result_key(self, fetcher):
         with patch.object(fetcher, "_get_with_retry", new_callable=AsyncMock) as mock_get:
             mock_get.return_value = {}
-            with patch("src.data.market_data._deribit_breaker") as mock_breaker:
+            with patch("src.data.sources.breakers.deribit_breaker") as mock_breaker:
                 mock_breaker.call = AsyncMock(side_effect=_passthrough_call)
                 result = await fetcher.get_max_pain("BTC")
         assert result["max_pain_price"] == 0.0
@@ -1403,7 +1403,7 @@ class TestDeribitOptions:
                     {"strike": 90000, "option_type": "call", "expiration_timestamp": past_ts, "open_interest": 100},
                 ]
             }
-            with patch("src.data.market_data._deribit_breaker") as mock_breaker:
+            with patch("src.data.sources.breakers.deribit_breaker") as mock_breaker:
                 mock_breaker.call = AsyncMock(side_effect=_passthrough_call)
                 result = await fetcher.get_max_pain("BTC")
         assert result["max_pain_price"] == 0.0
@@ -1427,7 +1427,7 @@ class TestCoinGecko:
                     "market_cap_change_percentage_24h_usd": 1.5,
                 }
             }
-            with patch("src.data.market_data._coingecko_breaker") as mock_breaker:
+            with patch("src.data.sources.breakers.coingecko_breaker") as mock_breaker:
                 mock_breaker.call = AsyncMock(side_effect=_passthrough_call)
                 result = await fetcher.get_coingecko_market()
         assert result["total_market_cap_usd"] == 3e12
@@ -1438,14 +1438,14 @@ class TestCoinGecko:
     async def test_empty_returns_defaults(self, fetcher):
         with patch.object(fetcher, "_get_with_retry", new_callable=AsyncMock) as mock_get:
             mock_get.return_value = {}
-            with patch("src.data.market_data._coingecko_breaker") as mock_breaker:
+            with patch("src.data.sources.breakers.coingecko_breaker") as mock_breaker:
                 mock_breaker.call = AsyncMock(side_effect=_passthrough_call)
                 result = await fetcher.get_coingecko_market()
         assert result["total_market_cap_usd"] == 0
 
     @pytest.mark.asyncio
     async def test_circuit_breaker_returns_defaults(self, fetcher):
-        with patch("src.data.market_data._coingecko_breaker") as mock_breaker:
+        with patch("src.data.sources.breakers.coingecko_breaker") as mock_breaker:
             mock_breaker.call = AsyncMock(side_effect=CircuitBreakerError("cg", CircuitState.OPEN))
             result = await fetcher.get_coingecko_market()
         assert result["total_market_cap_usd"] == 0
@@ -1472,7 +1472,7 @@ class TestStablecoinFlows:
                     }
                 ]
             }
-            with patch("src.data.market_data._defillama_breaker") as mock_breaker:
+            with patch("src.data.sources.breakers.defillama_breaker") as mock_breaker:
                 mock_breaker.call = AsyncMock(side_effect=_passthrough_call)
                 result = await fetcher.get_stablecoin_flows()
         assert result["usdt_market_cap"] == 110e9
@@ -1490,7 +1490,7 @@ class TestStablecoinFlows:
                     }
                 ]
             }
-            with patch("src.data.market_data._defillama_breaker") as mock_breaker:
+            with patch("src.data.sources.breakers.defillama_breaker") as mock_breaker:
                 mock_breaker.call = AsyncMock(side_effect=_passthrough_call)
                 result = await fetcher.get_stablecoin_flows()
         assert result["usdt_market_cap"] == 100e9
@@ -1499,14 +1499,14 @@ class TestStablecoinFlows:
     async def test_empty_returns_default(self, fetcher):
         with patch.object(fetcher, "_get_with_retry", new_callable=AsyncMock) as mock_get:
             mock_get.return_value = {}
-            with patch("src.data.market_data._defillama_breaker") as mock_breaker:
+            with patch("src.data.sources.breakers.defillama_breaker") as mock_breaker:
                 mock_breaker.call = AsyncMock(side_effect=_passthrough_call)
                 result = await fetcher.get_stablecoin_flows()
         assert result["usdt_market_cap"] == 0
 
     @pytest.mark.asyncio
     async def test_circuit_breaker_returns_default(self, fetcher):
-        with patch("src.data.market_data._defillama_breaker") as mock_breaker:
+        with patch("src.data.sources.breakers.defillama_breaker") as mock_breaker:
             mock_breaker.call = AsyncMock(side_effect=CircuitBreakerError("dl", CircuitState.OPEN))
             result = await fetcher.get_stablecoin_flows()
         assert result["usdt_market_cap"] == 0
@@ -1523,7 +1523,7 @@ class TestBTCHashrate:
     async def test_returns_hashrate_and_difficulty(self, fetcher):
         with patch.object(fetcher, "_get_with_retry", new_callable=AsyncMock) as mock_get:
             mock_get.return_value = {"hash_rate": 600000000, "difficulty": 80000000000000}
-            with patch("src.data.market_data._blockchain_breaker") as mock_breaker:
+            with patch("src.data.sources.breakers.blockchain_breaker") as mock_breaker:
                 mock_breaker.call = AsyncMock(side_effect=_passthrough_call)
                 result = await fetcher.get_btc_hashrate()
         assert result["hashrate_ths"] == 600000000
@@ -1533,14 +1533,14 @@ class TestBTCHashrate:
     async def test_empty_returns_defaults(self, fetcher):
         with patch.object(fetcher, "_get_with_retry", new_callable=AsyncMock) as mock_get:
             mock_get.return_value = {}
-            with patch("src.data.market_data._blockchain_breaker") as mock_breaker:
+            with patch("src.data.sources.breakers.blockchain_breaker") as mock_breaker:
                 mock_breaker.call = AsyncMock(side_effect=_passthrough_call)
                 result = await fetcher.get_btc_hashrate()
         assert result["hashrate_ths"] == 0
 
     @pytest.mark.asyncio
     async def test_circuit_breaker_returns_defaults(self, fetcher):
-        with patch("src.data.market_data._blockchain_breaker") as mock_breaker:
+        with patch("src.data.sources.breakers.blockchain_breaker") as mock_breaker:
             mock_breaker.call = AsyncMock(side_effect=CircuitBreakerError("bc", CircuitState.OPEN))
             result = await fetcher.get_btc_hashrate()
         assert result["hashrate_ths"] == 0
@@ -1560,7 +1560,7 @@ class TestBitgetFundingRate:
                 "code": "00000",
                 "data": [{"fundingRate": "0.0003"}],
             }
-            with patch("src.data.market_data._bitget_breaker") as mock_breaker:
+            with patch("src.data.sources.breakers.bitget_breaker") as mock_breaker:
                 mock_breaker.call = AsyncMock(side_effect=_passthrough_call)
                 result = await fetcher.get_bitget_funding_rate("BTCUSDT")
         assert result["funding_rate"] == 0.0003
@@ -1570,7 +1570,7 @@ class TestBitgetFundingRate:
     async def test_non_success_code_returns_default(self, fetcher):
         with patch.object(fetcher, "_get_with_retry", new_callable=AsyncMock) as mock_get:
             mock_get.return_value = {"code": "40001", "data": []}
-            with patch("src.data.market_data._bitget_breaker") as mock_breaker:
+            with patch("src.data.sources.breakers.bitget_breaker") as mock_breaker:
                 mock_breaker.call = AsyncMock(side_effect=_passthrough_call)
                 result = await fetcher.get_bitget_funding_rate()
         assert result["funding_rate"] == 0.0
@@ -1579,14 +1579,14 @@ class TestBitgetFundingRate:
     async def test_empty_data_returns_default(self, fetcher):
         with patch.object(fetcher, "_get_with_retry", new_callable=AsyncMock) as mock_get:
             mock_get.return_value = {"code": "00000", "data": []}
-            with patch("src.data.market_data._bitget_breaker") as mock_breaker:
+            with patch("src.data.sources.breakers.bitget_breaker") as mock_breaker:
                 mock_breaker.call = AsyncMock(side_effect=_passthrough_call)
                 result = await fetcher.get_bitget_funding_rate()
         assert result["funding_rate"] == 0.0
 
     @pytest.mark.asyncio
     async def test_circuit_breaker_returns_default(self, fetcher):
-        with patch("src.data.market_data._bitget_breaker") as mock_breaker:
+        with patch("src.data.sources.breakers.bitget_breaker") as mock_breaker:
             mock_breaker.call = AsyncMock(side_effect=CircuitBreakerError("bg", CircuitState.OPEN))
             result = await fetcher.get_bitget_funding_rate()
         assert result["funding_rate"] == 0.0
@@ -1606,7 +1606,7 @@ class TestFredSeries:
                 mock_get.return_value = {
                     "observations": [{"value": "103.5", "date": "2025-01-10"}]
                 }
-                with patch("src.data.market_data._fred_breaker") as mock_breaker:
+                with patch("src.data.sources.breakers.fred_breaker") as mock_breaker:
                     mock_breaker.call = AsyncMock(side_effect=_passthrough_call)
                     result = await fetcher.get_fred_series("DTWEXBGS")
         assert result["value"] == 103.5
@@ -1636,7 +1636,7 @@ class TestFredSeries:
                 mock_get.return_value = {
                     "observations": [{"value": ".", "date": "2025-01-10"}]
                 }
-                with patch("src.data.market_data._fred_breaker") as mock_breaker:
+                with patch("src.data.sources.breakers.fred_breaker") as mock_breaker:
                     mock_breaker.call = AsyncMock(side_effect=_passthrough_call)
                     result = await fetcher.get_fred_series("DFF")
         assert result["value"] == 0.0
@@ -1644,7 +1644,7 @@ class TestFredSeries:
     @pytest.mark.asyncio
     async def test_circuit_breaker_returns_default(self, fetcher):
         with patch.dict("os.environ", {"FRED_API_KEY": "test-key"}):
-            with patch("src.data.market_data._fred_breaker") as mock_breaker:
+            with patch("src.data.sources.breakers.fred_breaker") as mock_breaker:
                 mock_breaker.call = AsyncMock(side_effect=CircuitBreakerError("fred", CircuitState.OPEN))
                 result = await fetcher.get_fred_series("DTWEXBGS")
         assert result["value"] == 0.0

@@ -681,6 +681,7 @@ async def test_sync_trades_closes_position_not_on_exchange(
 
     # Mock exchange client that returns no open positions
     mock_client = AsyncMock()
+    mock_client.get_close_fill_price = AsyncMock(return_value=None)
     mock_client.get_open_positions = AsyncMock(return_value=[])
     mock_client.get_ticker = AsyncMock(return_value=MagicMock(last_price=96000.0))
     mock_client.get_trade_total_fees = AsyncMock(return_value=0.5)

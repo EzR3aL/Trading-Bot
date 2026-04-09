@@ -26,6 +26,7 @@
     "recharts": "^2.12.0",
     "viem": "^2.45.3",
     "wagmi": "^2.19.5",
+    "zod": "^4.3.6",
     "zustand": "^4.5.0"
   },
   "devDependencies": {

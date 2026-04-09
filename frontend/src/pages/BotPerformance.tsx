@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo, useRef, useCallback, Fragment } from 'react'
+import { useState, useMemo, useRef, useCallback, Fragment } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   XAxis, YAxis, CartesianGrid, Tooltip,
@@ -6,7 +6,7 @@ import {
   AreaChart, Area,
 } from 'recharts'
 import { toBlob } from 'html-to-image'
-import api from '../api/client'
+import { useBotComparePerformance, useBotStatistics, useAffiliateLinks } from '../api/queries'
 import { useToastStore } from '../stores/toastStore'
 import { useFilterStore } from '../stores/filterStore'
 import { useThemeStore } from '../stores/themeStore'
@@ -422,14 +422,19 @@ export default function BotPerformance() {
   const refColor = theme === 'light' ? '#cbd5e1' : '#6b7280'
   const isMobile = useIsMobile()
   const [days, setDays] = useState(30)
-  const [compareData, setCompareData] = useState<BotCompareData[]>([])
   const [selectedBot, setSelectedBot] = useState<number | null>(null)
   const [hoveredBot, setHoveredBot] = useState<number | null>(null)
-  const [botDetail, setBotDetail] = useState<BotDetailStats | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
-  const [detailError, setDetailError] = useState('')
   const [showCosts, setShowCosts] = useState(true)
+
+  // Data fetching via React Query
+  const { data: rawCompareData, isLoading: loading, error: compareError } = useBotComparePerformance(days, demoFilter)
+  const compareData: BotCompareData[] = rawCompareData || []
+  const { data: rawBotDetail, error: detailQueryError } = useBotStatistics(selectedBot || 0, days, demoFilter)
+  const botDetail: BotDetailStats | null = selectedBot ? (rawBotDetail || null) : null
+  const { data: affiliateLinksData = [] } = useAffiliateLinks()
+  const affiliateLinks: { exchange_type: string; affiliate_url: string; label: string | null }[] = affiliateLinksData
+  const error = compareError ? t('performance.loadError') : ''
+  const detailError = detailQueryError ? t('performance.detailError') : ''
   const [viewMode, setViewMode] = useState<'cards' | 'grid'>('cards')
   const [selectedTrade, setSelectedTrade] = useState<BotDetailStats['recent_trades'][0] | null>(null)
   const [expandedTradeId, setExpandedTradeId] = useState<number | null>(null)
@@ -438,8 +443,6 @@ export default function BotPerformance() {
   const swipeTradeModal = useSwipeToClose({ onClose: () => setSelectedTrade(null), enabled: isMobile && selectedTrade !== null })
   const latestCardRef = useRef<HTMLDivElement>(null)
   const mobileShareRefs = useRef<Map<number, HTMLDivElement>>(new Map())
-  const [affiliateLinks, setAffiliateLinks] = useState<{ exchange_type: string; affiliate_url: string; label: string | null }[]>([])
-
   const handleShare = async (ref: React.RefObject<HTMLDivElement | null>, trade: { symbol: string; side: string; pnl_percent: number }, affiliateUrl?: string, copiedSetter?: (v: boolean) => void) => {
     if (!ref.current) return
     const setFlag = copiedSetter || setCopied
@@ -520,40 +523,6 @@ export default function BotPerformance() {
       }
     }
   }, [theme, compareData, selectedBot, affiliateLinks, t])
-
-  const loadCompareData = useCallback(async () => {
-    const dp = demoFilter === 'demo' ? '&demo_mode=true' : demoFilter === 'live' ? '&demo_mode=false' : ''
-    setLoading(true)
-    setError('')
-    try {
-      const res = await api.get(`/bots/compare/performance?days=${days}${dp}`)
-      setCompareData(res.data.bots || [])
-    } catch {
-      setError(t('performance.loadError'))
-    }
-    setLoading(false)
-  }, [days, demoFilter, t])
-
-  const loadBotDetail = useCallback(async (botId: number) => {
-    const dp = demoFilter === 'demo' ? '&demo_mode=true' : demoFilter === 'live' ? '&demo_mode=false' : ''
-    setDetailError('')
-    try {
-      const res = await api.get(`/bots/${botId}/statistics?days=${days}${dp}`)
-      setBotDetail(res.data)
-    } catch {
-      setDetailError(t('performance.detailError'))
-    }
-  }, [days, demoFilter, t])
-
-  useEffect(() => {
-    loadCompareData()
-    api.get('/affiliate-links').then(res => setAffiliateLinks(res.data)).catch((err) => { console.error('Failed to load affiliate links:', err); useToastStore.getState().addToast('error', t('common.loadError', 'Failed to load data')) })
-  }, [loadCompareData])
-
-  useEffect(() => {
-    if (selectedBot) loadBotDetail(selectedBot)
-    else setBotDetail(null)
-  }, [selectedBot, loadBotDetail])
 
   // Build bot detail chart data
   const botChartData = useMemo(() => {

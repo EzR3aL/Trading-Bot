@@ -201,7 +201,7 @@ class TestGetConfig:
     @pytest.mark.asyncio
     async def test_get_config_default(self, client, auth_headers):
         """New user gets default config with no trading/strategy settings."""
-        resp = await client.get("/api/config", headers=auth_headers)
+        resp = await client.get("/api/config/", headers=auth_headers)
         assert resp.status_code == 200
         data = resp.json()
         assert data["trading"] is None
@@ -232,7 +232,7 @@ class TestGetConfig:
             session.add(cfg)
             await session.commit()
 
-        resp = await client.get("/api/config", headers=auth_headers)
+        resp = await client.get("/api/config/", headers=auth_headers)
         assert resp.status_code == 200
         data = resp.json()
         assert data["trading"]["leverage"] == 5
@@ -252,7 +252,7 @@ class TestGetConfig:
             session.add(conn)
             await session.commit()
 
-        resp = await client.get("/api/config", headers=auth_headers)
+        resp = await client.get("/api/config/", headers=auth_headers)
         assert resp.status_code == 200
         data = resp.json()
         assert len(data["connections"]) == 1
@@ -261,7 +261,7 @@ class TestGetConfig:
 
     @pytest.mark.asyncio
     async def test_get_config_unauthorized(self, client):
-        resp = await client.get("/api/config")
+        resp = await client.get("/api/config/")
         assert resp.status_code in (401, 403)
 
 
@@ -289,7 +289,7 @@ class TestUpdateTradingConfig:
         assert resp.json()["status"] == "ok"
 
         # Verify it persisted
-        resp2 = await client.get("/api/config", headers=auth_headers)
+        resp2 = await client.get("/api/config/", headers=auth_headers)
         assert resp2.json()["trading"]["leverage"] == 5
 
 
@@ -688,7 +688,7 @@ class TestSetAffiliateUid:
         assert resp.status_code == 422
 
     @pytest.mark.asyncio
-    @patch("src.api.routers.config._get_admin_exchange_conn", new_callable=AsyncMock, return_value=None)
+    @patch("src.api.routers.config_affiliate.get_admin_exchange_conn", new_callable=AsyncMock, return_value=None)
     async def test_set_uid_no_admin_conn(self, mock_admin, client, auth_headers):
         """UID saved but not verified when no admin connection exists."""
         resp = await client.put(
@@ -703,7 +703,7 @@ class TestSetAffiliateUid:
 
     @pytest.mark.asyncio
     @patch("src.exchanges.factory.create_exchange_client")
-    @patch("src.api.routers.config._get_admin_exchange_conn")
+    @patch("src.api.routers.config_affiliate.get_admin_exchange_conn")
     async def test_set_uid_auto_verify_success(
         self, mock_admin_conn, mock_create, client, auth_headers, session_factory, admin_user
     ):
@@ -731,7 +731,7 @@ class TestSetAffiliateUid:
 
     @pytest.mark.asyncio
     @patch("src.exchanges.factory.create_exchange_client")
-    @patch("src.api.routers.config._get_admin_exchange_conn")
+    @patch("src.api.routers.config_affiliate.get_admin_exchange_conn")
     async def test_set_uid_auto_verify_failure(
         self, mock_admin_conn, mock_create, client, auth_headers, session_factory, admin_user
     ):
@@ -758,7 +758,7 @@ class TestSetAffiliateUid:
         assert data["verified"] is False
 
     @pytest.mark.asyncio
-    @patch("src.api.routers.config._get_admin_exchange_conn")
+    @patch("src.api.routers.config_affiliate.get_admin_exchange_conn")
     async def test_set_uid_verify_exception_silent(
         self, mock_admin_conn, client, auth_headers
     ):
@@ -774,7 +774,7 @@ class TestSetAffiliateUid:
         assert resp.json()["verified"] is False
 
     @pytest.mark.asyncio
-    @patch("src.api.routers.config._get_admin_exchange_conn", new_callable=AsyncMock, return_value=None)
+    @patch("src.api.routers.config_affiliate.get_admin_exchange_conn", new_callable=AsyncMock, return_value=None)
     async def test_set_uid_updates_existing_connection(
         self, mock_admin, client, auth_headers, session_factory, user
     ):
@@ -803,7 +803,7 @@ class TestSetAffiliateUid:
 class TestGetConnectionsStatus:
 
     @pytest.mark.asyncio
-    @patch("src.api.routers.config.aiohttp.ClientSession")
+    @patch("src.api.routers.config_exchange.aiohttp.ClientSession")
     async def test_connections_status(self, mock_session_cls, client, auth_headers):
         """Mocks aiohttp to avoid real HTTP calls; verifies response structure."""
         mock_response = AsyncMock()
@@ -2304,10 +2304,10 @@ class TestEdgeCases:
     @pytest.mark.asyncio
     async def test_get_config_creates_default(self, client, auth_headers):
         """First call to GET /api/config auto-creates a UserConfig."""
-        resp = await client.get("/api/config", headers=auth_headers)
+        resp = await client.get("/api/config/", headers=auth_headers)
         assert resp.status_code == 200
         # Second call should return same config (not create duplicate)
-        resp2 = await client.get("/api/config", headers=auth_headers)
+        resp2 = await client.get("/api/config/", headers=auth_headers)
         assert resp2.status_code == 200
 
     @pytest.mark.asyncio

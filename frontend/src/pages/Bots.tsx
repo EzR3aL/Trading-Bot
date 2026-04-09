@@ -1,7 +1,8 @@
-import { useState, useEffect, useCallback, useRef, Fragment } from 'react'
+import { useState, useEffect, useRef, Fragment } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toBlob } from 'html-to-image'
 import api from '../api/client'
+import { useBots as useBotsQuery, useStartBot, useStopBot, useDeleteBot, useDuplicateBot, useStopAllBots, useClosePosition } from '../api/queries'
 import { getApiErrorMessage } from '../utils/api-error'
 import { useFilterStore } from '../stores/filterStore'
 import { useThemeStore } from '../stores/themeStore'
@@ -847,14 +848,16 @@ export default function Bots() {
       addToast('error', getApiErrorMessage(err, t('bots.failedStart')))
     }
   }
-  const [bots, setBots] = useState<BotStatus[]>([])
-  const [loading, setLoading] = useState(true)
+  // Bot list via React Query (polls every 5s, matching original setInterval)
+  const { data: botsData, isLoading: loading, error: botsError, refetch: refetchBots } = useBotsQuery(demoFilter)
+  const bots: BotStatus[] = (botsData?.bots as BotStatus[]) || []
+  const error = botsError ? t('common.error') : ''
+
   const [showBuilder, setShowBuilder] = useState(false)
   const [editBotId, setEditBotId] = useState<number | null>(null)
   const [expandedBotId, setExpandedBotId] = useState<number | null>(null)
   const [actionLoading, setActionLoading] = useState<number | null>(null)
   const [confirmStopId, setConfirmStopId] = useState<number | null>(null)
-  const [error, setError] = useState('')
   const [historyBot, setHistoryBot] = useState<BotStatus | null>(null)
   const [moreMenuOpen, setMoreMenuOpen] = useState<number | null>(null)
   const [closePositionOpen, setClosePositionOpen] = useState<number | null>(null)
@@ -865,27 +868,15 @@ export default function Bots() {
     symbol?: string
   } | null>(null)
 
-  const fetchBots = useCallback(async () => {
-    try {
-      const demoParam = demoFilter === 'demo' ? '?demo_mode=true' : demoFilter === 'live' ? '?demo_mode=false' : ''
-      const res = await api.get(`/bots${demoParam}`)
-      setBots(res.data.bots)
-      setError('')
-    } catch {
-      setError(t('common.error'))
-    } finally {
-      setLoading(false)
-    }
-  }, [demoFilter])
-
-  useEffect(() => {
-    fetchBots()
-    const interval = setInterval(fetchBots, 5000)
-    return () => clearInterval(interval)
-  }, [fetchBots])
+  const startBot = useStartBot()
+  const stopBot = useStopBot()
+  const deleteBot = useDeleteBot()
+  const duplicateBot = useDuplicateBot()
+  const stopAllBots = useStopAllBots()
+  const closePosition = useClosePosition()
 
   const { containerRef, refreshing, pullDistance } = usePullToRefresh({
-    onRefresh: fetchBots,
+    onRefresh: async () => { await refetchBots() },
     disabled: !isMobile,
   })
 
@@ -901,8 +892,7 @@ export default function Bots() {
 
     setActionLoading(id)
     try {
-      await api.post(`/bots/${id}/start`)
-      await fetchBots()
+      await startBot.mutateAsync(id)
       addToast('success', t('bots.start'))
     } catch (err) {
       handleStartError(err)
@@ -924,8 +914,7 @@ export default function Bots() {
     setConfirmStopId(null)
     setActionLoading(id)
     try {
-      await api.post(`/bots/${id}/stop`)
-      await fetchBots()
+      await stopBot.mutateAsync(id)
       addToast('info', t('bots.stop'))
     } catch (err) {
       addToast('error', getApiErrorMessage(err, t('bots.failedStop')))
@@ -941,8 +930,7 @@ export default function Bots() {
   const confirmDelete = async () => {
     if (!confirmModal) return
     try {
-      await api.delete(`/bots/${confirmModal.id}`)
-      await fetchBots()
+      await deleteBot.mutateAsync(confirmModal.id)
       addToast('success', t('bots.deleted', { name: confirmModal.name }))
     } catch (err) {
       addToast('error', getApiErrorMessage(err, t('bots.failedDelete')))
@@ -953,8 +941,7 @@ export default function Bots() {
   const handleDuplicate = async (id: number) => {
     haptic.light()
     try {
-      await api.post(`/bots/${id}/duplicate`)
-      await fetchBots()
+      await duplicateBot.mutateAsync(id)
       addToast('success', t('bots.duplicated'))
     } catch (err) {
       addToast('error', getApiErrorMessage(err, t('bots.failedDuplicate')))
@@ -970,8 +957,7 @@ export default function Bots() {
     if (!confirmModal || confirmModal.type !== 'close-position') return
     setActionLoading(confirmModal.id)
     try {
-      await api.post(`/bots/${confirmModal.id}/close-position/${confirmModal.symbol}`)
-      await fetchBots()
+      await closePosition.mutateAsync({ botId: confirmModal.id, symbol: confirmModal.symbol! })
       addToast('success', t('bots.positionClosed', { symbol: confirmModal.symbol }))
     } catch (err) {
       addToast('error', getApiErrorMessage(err, t('bots.failedClosePosition')))
@@ -982,8 +968,7 @@ export default function Bots() {
 
   const handleStopAll = async () => {
     try {
-      await api.post('/bots/stop-all')
-      await fetchBots()
+      await stopAllBots.mutateAsync()
       addToast('info', t('bots.stopAll'))
     } catch {
       addToast('error', t('common.error'))
@@ -993,7 +978,7 @@ export default function Bots() {
   const handleBuilderDone = () => {
     setShowBuilder(false)
     setEditBotId(null)
-    fetchBots()
+    refetchBots()
   }
 
   const runningCount = bots.filter(b => b.status === 'running').length

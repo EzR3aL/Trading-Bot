@@ -173,6 +173,9 @@ class BotOrchestrator:
         # Mark any pending trades from a previous crash as orphaned
         await self._mark_orphaned_trades()
 
+        # Check for position discrepancies between exchange and DB
+        await self._reconcile_positions_on_startup()
+
         # Start shared scheduler if not already running
         if not self._scheduler.running:
             self._scheduler.start()
@@ -396,6 +399,136 @@ class BotOrchestrator:
                 )
         except Exception as e:
             logger.error("Orchestrator: Failed to check orphaned trades: %s", e)
+
+    async def _reconcile_positions_on_startup(self):
+        """Compare exchange positions with DB open trades for each enabled bot.
+
+        Logs warnings for any discrepancies but does NOT auto-close or modify
+        anything. This is purely an alerting mechanism on startup so operators
+        notice stale or untracked positions quickly.
+        """
+        from src.exchanges.factory import create_exchange_client
+        from src.models.database import ExchangeConnection, TradeRecord
+        from src.utils.encryption import decrypt_value
+
+        try:
+            async with get_session() as session:
+                result = await session.execute(
+                    select(BotConfig).where(BotConfig.is_enabled.is_(True))
+                )
+                enabled_configs = result.scalars().all()
+
+                if not enabled_configs:
+                    return
+
+                for config in enabled_configs:
+                    try:
+                        # Load exchange connection for the bot owner
+                        conn_result = await session.execute(
+                            select(ExchangeConnection).where(
+                                ExchangeConnection.user_id == config.user_id,
+                                ExchangeConnection.exchange_type == config.exchange_type,
+                            )
+                        )
+                        conn = conn_result.scalar_one_or_none()
+                        if not conn:
+                            continue
+
+                        is_demo = config.mode in ("demo", "both")
+                        api_key_enc = conn.demo_api_key_encrypted if is_demo else conn.api_key_encrypted
+                        api_secret_enc = conn.demo_api_secret_encrypted if is_demo else conn.api_secret_encrypted
+                        passphrase_enc = conn.demo_passphrase_encrypted if is_demo else conn.passphrase_encrypted
+
+                        if not api_key_enc or not api_secret_enc:
+                            continue
+
+                        client = create_exchange_client(
+                            exchange_type=config.exchange_type,
+                            api_key=decrypt_value(api_key_enc),
+                            api_secret=decrypt_value(api_secret_enc),
+                            passphrase=decrypt_value(passphrase_enc) if passphrase_enc else "",
+                            demo_mode=is_demo,
+                        )
+
+                        try:
+                            import asyncio
+                            exchange_positions = await asyncio.wait_for(
+                                client.get_open_positions(),
+                                timeout=15.0,
+                            )
+                        except Exception as e:
+                            logger.warning(
+                                "Reconciliation: could not fetch positions for bot %d (%s): %s",
+                                config.id, config.name, e,
+                            )
+                            continue
+                        finally:
+                            try:
+                                await client.close()
+                            except Exception:
+                                pass
+
+                        # Fetch open trades from DB for this bot
+                        trades_result = await session.execute(
+                            select(TradeRecord).where(
+                                TradeRecord.bot_config_id == config.id,
+                                TradeRecord.status == "open",
+                            )
+                        )
+                        db_trades = list(trades_result.scalars().all())
+
+                        # Build lookup maps by normalized symbol+side
+                        def _normalize(symbol: str) -> str:
+                            s = symbol.strip().lower()
+                            for suffix in ("_umcbl", ":usdt", "-swap"):
+                                s = s.replace(suffix, "")
+                            for sep in ("/", "-", "_"):
+                                s = s.replace(sep, "")
+                            return s
+
+                        exchange_keys = set()
+                        for pos in exchange_positions:
+                            if pos.size > 0:
+                                exchange_keys.add(f"{_normalize(pos.symbol)}:{pos.side.lower()}")
+
+                        db_keys = set()
+                        for trade in db_trades:
+                            db_keys.add(f"{_normalize(trade.symbol)}:{trade.side.lower()}")
+
+                        untracked = exchange_keys - db_keys
+                        phantom = db_keys - exchange_keys
+
+                        if untracked:
+                            logger.warning(
+                                "Reconciliation: bot %d (%s) — %d UNTRACKED position(s) on exchange "
+                                "(not in DB): %s",
+                                config.id, config.name, len(untracked),
+                                ", ".join(sorted(untracked)),
+                            )
+                        if phantom:
+                            logger.warning(
+                                "Reconciliation: bot %d (%s) — %d PHANTOM trade(s) in DB "
+                                "(no matching exchange position): %s",
+                                config.id, config.name, len(phantom),
+                                ", ".join(sorted(phantom)),
+                            )
+
+                        if not untracked and not phantom:
+                            matched = len(exchange_keys & db_keys)
+                            if matched:
+                                logger.info(
+                                    "Reconciliation: bot %d (%s) — %d position(s) consistent",
+                                    config.id, config.name, matched,
+                                )
+
+                    except Exception as e:
+                        logger.error(
+                            "Reconciliation: error checking bot %d (%s): %s",
+                            config.id, config.name, e,
+                        )
+
+        except Exception as e:
+            logger.error("Reconciliation: startup reconciliation failed: %s", e)
 
     async def _update_instance_state(self, bot_config_id: int, is_running: bool, error_msg: Optional[str] = None):
         """Update or create BotInstance record in database."""

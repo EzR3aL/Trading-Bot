@@ -105,3 +105,10 @@ class BotError(TradingBotError):
 class BotNotFoundError(BotError):
     """Requested bot does not exist."""
     pass
+
+
+# --- Database errors ---
+
+class DatabaseUnavailableError(TradingBotError):
+    """Database circuit breaker is open — too many recent failures."""
+    pass

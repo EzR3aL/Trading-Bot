@@ -1,7 +1,9 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { lazy, Suspense, useEffect } from 'react'
+import { QueryClientProvider } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from './stores/authStore'
+import { queryClient } from './api/queryClient'
 import AppLayout from './components/layout/AppLayout'
 import ToastContainer from './components/ui/Toast'
 import ErrorBoundary from './components/ui/ErrorBoundary'
@@ -59,6 +61,7 @@ export default function App() {
   }, [fetchUser])
 
   return (
+    <QueryClientProvider client={queryClient}>
     <ErrorBoundary>
       <ToastContainer />
       <Routes>
@@ -96,5 +99,6 @@ export default function App() {
         />
       </Routes>
     </ErrorBoundary>
+    </QueryClientProvider>
   )
 }

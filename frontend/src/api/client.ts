@@ -150,8 +150,8 @@ async function doRefresh(): Promise<boolean> {
           tokenExpiryMs = payload.exp * 1000
         }
       } catch {
-        // If token parsing fails, fall back to 7 days (matches backend default)
-        tokenExpiryMs = Date.now() + 10080 * 60 * 1000
+        // If token parsing fails, fall back to 4 hours (matches backend default)
+        tokenExpiryMs = Date.now() + 240 * 60 * 1000
       }
       persistTokenExpiry(tokenExpiryMs)
 

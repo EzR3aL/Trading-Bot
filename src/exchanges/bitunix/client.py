@@ -17,7 +17,7 @@ from urllib.parse import urlencode
 import aiohttp
 
 from src.exceptions import ExchangeError
-from src.exchanges.base import ExchangeClient
+from src.exchanges.base import ExchangeClient, HTTPExchangeClientMixin
 from src.exchanges.bitunix.constants import (
     BASE_URL,
     ENDPOINTS,
@@ -25,7 +25,7 @@ from src.exchanges.bitunix.constants import (
     TESTNET_URL,
 )
 from src.exchanges.types import Balance, FundingRateInfo, Order, Position, Ticker
-from src.utils.circuit_breaker import CircuitBreakerError, circuit_registry, with_retry
+from src.utils.circuit_breaker import circuit_registry, with_retry
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -42,7 +42,7 @@ class BitunixClientError(ExchangeError):
         super().__init__("bitunix", message, original_error)
 
 
-class BitunixClient(ExchangeClient):
+class BitunixClient(HTTPExchangeClientMixin, ExchangeClient):
     """
     Async client for Bitunix Futures API implementing ExchangeClient ABC.
 
@@ -50,10 +50,20 @@ class BitunixClient(ExchangeClient):
         digest = SHA256(nonce + timestamp + apiKey + queryParams + body)
         sign   = SHA256(digest + secretKey)
 
+    Uses HTTPExchangeClientMixin for session management and circuit breaker.
+    Overrides _raw_request because Bitunix uses a different signing scheme
+    (nonce-based double-SHA256 with sorted params/body).
+
     Demo mode: Bitunix does not have a dedicated demo domain or header toggle.
     Users must supply separate demo API keys; this flag is tracked for metadata
     purposes and future support if Bitunix introduces a testnet.
     """
+
+    _client_error_class = BitunixClientError
+
+    @property
+    def _circuit_breaker(self):
+        return _bitunix_breaker
 
     def __init__(
         self,
@@ -70,24 +80,6 @@ class BitunixClient(ExchangeClient):
         self._session: Optional[aiohttp.ClientSession] = None
         mode_str = "DEMO" if demo_mode else "LIVE"
         logger.info(f"BitunixClient initialized in {mode_str} mode")
-
-    # ==================== Context Manager ====================
-
-    async def __aenter__(self):
-        await self._ensure_session()
-        return self
-
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
-        await self.close()
-
-    async def _ensure_session(self):
-        if self._session is None or self._session.closed:
-            self._session = aiohttp.ClientSession()
-
-    async def close(self) -> None:
-        """Close HTTP session and clean up resources."""
-        if self._session and not self._session.closed:
-            await self._session.close()
 
     # ==================== Properties ====================
 
@@ -152,25 +144,8 @@ class BitunixClient(ExchangeClient):
         return headers
 
     # ==================== HTTP ====================
-
-    async def _request(
-        self,
-        method: str,
-        endpoint: str,
-        params: Optional[Dict] = None,
-        data: Optional[Dict] = None,
-        auth: bool = True,
-        use_circuit_breaker: bool = True,
-    ) -> Any:
-        """Execute an API request, optionally through the circuit breaker."""
-        if use_circuit_breaker:
-            async def _do():
-                return await self._raw_request(method, endpoint, params, data, auth)
-            try:
-                return await _bitunix_breaker.call(_do)
-            except CircuitBreakerError as e:
-                raise BitunixClientError(f"API temporarily unavailable: {e}")
-        return await self._raw_request(method, endpoint, params, data, auth)
+    # _request is inherited from HTTPExchangeClientMixin (circuit breaker wrapper).
+    # _raw_request is overridden because Bitunix uses a different signing scheme.
 
     @with_retry(
         max_attempts=3,

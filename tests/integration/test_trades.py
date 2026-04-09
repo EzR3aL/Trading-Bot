@@ -345,5 +345,6 @@ async def test_sync_trades_no_open_trades(client, auth_headers, test_user_obj):
 @pytest.mark.asyncio
 async def test_list_trades_requires_auth(client, sample_trades):
     """Accessing trades without auth returns 401."""
+    client.cookies.clear()
     response = await client.get("/api/trades")
     assert response.status_code == 401

@@ -10,6 +10,22 @@ jobs:
   backend-tests:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: test_user
+          POSTGRES_PASSWORD: test_password
+          POSTGRES_DB: test_trading_bot
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
     steps:
       - uses: actions/checkout@v4
 
@@ -22,12 +38,23 @@ jobs:
 
       - run: pip install pytest pytest-asyncio pytest-mock pytest-timeout
 
-      - run: python -m pytest tests/ -q --timeout=120
+      - name: Run tests with SQLite
+        run: python -m pytest tests/ -q --timeout=120
         env:
           CI: true
           ENVIRONMENT: test
           JWT_SECRET_KEY: test-secret-key-for-ci-only-not-production
           DATABASE_URL: sqlite+aiosqlite:///test.db
+
+      - name: Run tests with PostgreSQL
+        run: python -m pytest tests/ -q --timeout=120
+        env:
+          CI: true
+          ENVIRONMENT: test
+          TEST_DATABASE_URL: postgresql+asyncpg://test_user:test_password@localhost:5432/test_trading_bot
+          DATABASE_URL: postgresql+asyncpg://test_user:test_password@localhost:5432/test_trading_bot
+          JWT_SECRET_KEY: test-secret-key-for-ci-only-not-for-production
+          ENCRYPTION_KEY: dGVzdC1lbmNyeXB0aW9uLWtleS1mb3ItdGVzdGluZw==
 
   frontend-tests:
     runs-on: ubuntu-latest

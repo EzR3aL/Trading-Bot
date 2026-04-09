@@ -40,7 +40,7 @@ export default function MobileCollapsibleCard({
   return (
     <div className={`border border-gray-200 dark:border-white/[0.06] rounded-lg bg-white dark:bg-white/[0.02] shadow-sm dark:shadow-none overflow-hidden ${className}`}>
       {/* Header — always visible, clickable */}
-      <div className="cursor-pointer" onClick={toggle}>
+      <div className="cursor-pointer" role="button" tabIndex={0} aria-expanded={isOpen} onClick={toggle} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle() } }}>
         <div className="flex items-center justify-between px-3 pt-2 pb-1">
           <div className="flex items-center gap-1.5 min-w-0 flex-1">
             {header}

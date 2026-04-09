@@ -13,12 +13,17 @@ If the lifespan introduces side effects that interfere with tests (e.g.
 BotManager), those may need additional mocking in the future.
 """
 
+import os
+
+# Prevent SPA catch-all from swallowing API requests during tests
+os.environ["TESTING"] = "1"
+
 import pytest_asyncio
 from httpx import AsyncClient, ASGITransport
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-# Use in-memory SQLite for tests
-TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
+# Use TEST_DATABASE_URL env var if set (e.g. PostgreSQL in CI), otherwise SQLite
+TEST_DATABASE_URL = os.environ.get("TEST_DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
 
 @pytest_asyncio.fixture
@@ -26,10 +31,12 @@ async def test_db():
     """Create a fresh test database for each test."""
     from src.models.database import Base
 
-    engine = create_async_engine(
-        TEST_DATABASE_URL,
-        connect_args={"check_same_thread": False},
-    )
+    is_sqlite = TEST_DATABASE_URL.startswith("sqlite")
+    engine_kwargs = {}
+    if is_sqlite:
+        engine_kwargs["connect_args"] = {"check_same_thread": False}
+
+    engine = create_async_engine(TEST_DATABASE_URL, **engine_kwargs)
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
@@ -57,10 +64,12 @@ async def test_app(test_db, monkeypatch):
     from src.models.database import Base
 
     # Create a dedicated engine for the app (separate from the fixture session)
-    engine = create_async_engine(
-        TEST_DATABASE_URL,
-        connect_args={"check_same_thread": False},
-    )
+    is_sqlite = TEST_DATABASE_URL.startswith("sqlite")
+    engine_kwargs = {}
+    if is_sqlite:
+        engine_kwargs["connect_args"] = {"check_same_thread": False}
+
+    engine = create_async_engine(TEST_DATABASE_URL, **engine_kwargs)
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
@@ -80,6 +89,18 @@ async def test_app(test_db, monkeypatch):
 
     # Disable rate limiting during integration tests
     limiter.enabled = False
+
+    # Provide a mock orchestrator so endpoints that depend on it
+    # do not return 503 "orchestrator not initialized".
+    from unittest.mock import AsyncMock, MagicMock
+    mock_orch = MagicMock()
+    mock_orch.get_bot_status = MagicMock(return_value=None)
+    mock_orch.is_running = MagicMock(return_value=False)
+    mock_orch.start_bot = AsyncMock(return_value=True)
+    mock_orch.stop_bot = AsyncMock(return_value=True)
+    mock_orch.restart_bot = AsyncMock(return_value=True)
+    mock_orch.stop_all_for_user = AsyncMock(return_value=0)
+    app.state.orchestrator = mock_orch
 
     yield app
 

@@ -262,6 +262,7 @@ async def test_sync_trades_closes_missing_position(
 ):
     """Sync detects position no longer on exchange and closes it."""
     mock_client = AsyncMock()
+    mock_client.get_close_fill_price = AsyncMock(return_value=None)
     mock_client.get_open_positions = AsyncMock(return_value=[])
     mock_ticker = MagicMock()
     mock_ticker.last_price = 3400.0

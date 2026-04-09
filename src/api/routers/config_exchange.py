@@ -57,7 +57,7 @@ async def get_exchange_connections(
 
 
 @router.put("/exchange-connections/{exchange_type}")
-@limiter.limit("5/minute")
+@limiter.limit("2/minute")
 async def upsert_exchange_connection(
     request: Request,
     data: ExchangeConnectionUpdate,
@@ -184,7 +184,7 @@ async def upsert_exchange_connection(
 
 
 @router.delete("/exchange-connections/{exchange_type}")
-@limiter.limit("5/minute")
+@limiter.limit("2/minute")
 async def delete_exchange_connection(
     request: Request,
     exchange_type: str = Path(pattern=EXCHANGE_PATTERN),
@@ -215,7 +215,7 @@ async def delete_exchange_connection(
 
 
 @router.delete("/exchange-connections/{exchange_type}/keys")
-@limiter.limit("5/minute")
+@limiter.limit("2/minute")
 async def delete_exchange_keys(
     request: Request,
     exchange_type: str = Path(pattern=EXCHANGE_PATTERN),

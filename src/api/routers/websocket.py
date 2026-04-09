@@ -23,6 +23,7 @@ logger = get_logger(__name__)
 router = APIRouter()
 
 AUTH_TIMEOUT_SECONDS = 10
+WS_INACTIVITY_TIMEOUT = 300  # seconds
 
 
 @router.websocket("/api/ws")
@@ -88,7 +89,11 @@ async def websocket_endpoint(websocket: WebSocket):
 
     try:
         while True:
-            data = await websocket.receive_text()
+            try:
+                data = await asyncio.wait_for(websocket.receive_text(), timeout=WS_INACTIVITY_TIMEOUT)
+            except asyncio.TimeoutError:
+                logger.info("WebSocket: Client %d timed out after 5min inactivity", user_id)
+                break
             if data == "ping":
                 await websocket.send_text("pong")
     except WebSocketDisconnect:

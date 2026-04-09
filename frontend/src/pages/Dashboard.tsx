@@ -1,9 +1,9 @@
 import { useEffect, useState, useRef, useCallback, useMemo, Fragment } from 'react'
 import { useTranslation } from 'react-i18next'
-import api from '../api/client'
-import { useToastStore } from '../stores/toastStore'
+import { useQueryClient } from '@tanstack/react-query'
+import { useDashboardStats, useDashboardDaily, usePortfolioPositions, useUpdateTpSl, useSyncTrades, queryKeys } from '../api/queries'
 import { useFilterStore } from '../stores/filterStore'
-import type { Statistics, DailyStats, PortfolioPosition } from '../types'
+import type { DailyStats, PortfolioPosition } from '../types'
 import PnlChart from '../components/dashboard/PnlChart'
 import WinLossChart from '../components/dashboard/WinLossChart'
 import RevenueChart from '../components/dashboard/RevenueChart'
@@ -82,62 +82,38 @@ export default function Dashboard() {
   const { t } = useTranslation()
   const { demoFilter } = useFilterStore()
   const isMobile = useIsMobile()
-  const [stats, setStats] = useState<Statistics | null>(null)
-  const [dailyStats, setDailyStats] = useState<DailyStats[]>([])
-  const [positions, setPositions] = useState<PortfolioPosition[]>([])
-  const [loadingPositions, setLoadingPositions] = useState(true)
   const [period, setPeriod] = useState<number>(30)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
   const [editingPos, setEditingPos] = useState<PortfolioPosition | null>(null)
+  const queryClient = useQueryClient()
 
-  const fetchData = useCallback(async () => {
-    // Only sync once per session to avoid hammering the API
+  // Sync trades once per session
+  const syncTrades = useSyncTrades()
+  useEffect(() => {
     const syncKey = 'trades_synced'
     if (!sessionStorage.getItem(syncKey)) {
-      await api.post('/trades/sync').catch(() => {})
-      sessionStorage.setItem(syncKey, '1')
+      syncTrades.mutate(undefined, {
+        onSettled: () => sessionStorage.setItem(syncKey, '1'),
+      })
     }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-    const demoParam = demoFilter === 'demo' ? '&demo_mode=true' : demoFilter === 'live' ? '&demo_mode=false' : ''
-    const [statsRes, dailyRes] = await Promise.all([
-      api.get(`/statistics?days=${period}${demoParam}`),
-      api.get(`/statistics/daily?days=${period}${demoParam}`),
-    ])
-    setStats(statsRes.data)
-    setDailyStats(dailyRes.data.days)
-    // Positions loaded separately (exchange API, slower)
-    api.get('/portfolio/positions').then(res => {
-      setPositions(res.data.positions || res.data || [])
-      setLoadingPositions(false)
-    }).catch(() => {
-      setLoadingPositions(false)
-      useToastStore.getState().addToast('error', t('common.error'))
-    })
-  }, [period, demoFilter])
+  // Data fetching via React Query
+  const { data: stats = null, isLoading: loadingStats, error: statsError } = useDashboardStats(period, demoFilter)
+  const { data: dailyData, isLoading: loadingDaily, error: dailyError } = useDashboardDaily(period, demoFilter)
+  const { data: positions = [], isLoading: loadingPositions } = usePortfolioPositions()
+  const updateTpSl = useUpdateTpSl()
 
-  useEffect(() => {
-    const load = async () => {
-      setLoading(true)
-      setError('')
-      try {
-        await fetchData()
-      } catch {
-        setError(t('common.error'))
-      } finally {
-        setLoading(false)
-      }
-    }
-    load()
-  }, [fetchData, t])
+  const dailyStats: DailyStats[] = dailyData?.days || []
+  const loading = loadingStats || loadingDaily
+  const error = statsError || dailyError ? t('common.error') : ''
 
   const refreshData = useCallback(async () => {
-    try {
-      await fetchData()
-    } catch {
-      setError(t('common.error'))
-    }
-  }, [fetchData, t])
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.stats({ period, demoFilter }) }),
+      queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.daily({ period, demoFilter }) }),
+      queryClient.invalidateQueries({ queryKey: queryKeys.portfolio.positions }),
+    ])
+  }, [queryClient, period, demoFilter])
 
   const handleEditPosition = useCallback((pos: PortfolioPosition) => {
     setEditingPos(pos)
@@ -288,18 +264,16 @@ export default function Dashboard() {
           onClose={() => setEditingPos(null)}
           onSave={async (data) => {
             if (!editingPos.trade_id) return
-            await api.put(`/trades/${editingPos.trade_id}/tp-sl`, {
-              take_profit: data.take_profit,
-              stop_loss: data.stop_loss,
-              remove_tp: data.remove_tp,
-              remove_sl: data.remove_sl,
-              trailing_stop: data.trailing_stop,
+            await updateTpSl.mutateAsync({
+              tradeId: editingPos.trade_id,
+              data: {
+                take_profit: data.take_profit,
+                stop_loss: data.stop_loss,
+                remove_tp: data.remove_tp,
+                remove_sl: data.remove_sl,
+                trailing_stop: data.trailing_stop,
+              },
             })
-            // Refresh positions to show updated TP/SL
-            try {
-              const res = await api.get('/portfolio/positions')
-              setPositions(res.data)
-            } catch {}
           }}
         />
       )}

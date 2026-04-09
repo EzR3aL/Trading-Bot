@@ -13,13 +13,8 @@ from src.utils.logger import get_logger
 _jwt_logger = get_logger(__name__)
 
 ALGORITHM = "HS256"
-# Access token: 7 days. Long-lived because:
-# (a) it's stored in an httpOnly+secure cookie (XSS-safe, MITM-safe behind TLS)
-# (b) the proactive frontend refresh runs ~5 min before expiry, so under
-#     normal use the user never sees a logout
-# (c) PWA / mobile cold-launches lose the in-memory timer; a long access TTL
-#     means a returning user is still authenticated when they reopen the app
-ACCESS_TOKEN_EXPIRE_MINUTES = 10080  # 7 days
+# 4 hours — shorter TTL for financial security; refresh token handles session continuity
+ACCESS_TOKEN_EXPIRE_MINUTES = 240
 # Refresh token: 90 days. Bumped from 30 because users complained about
 # being logged out — the previous TTL hit users who only opened the app
 # every couple of weeks.

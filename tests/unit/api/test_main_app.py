@@ -321,16 +321,25 @@ async def test_seed_exchanges_skips_when_data_exists():
 
 def test_frontend_mount_when_directory_exists():
     """When static/frontend exists, assets mount and SPA catch-all are added."""
+    import os
     from src.api.main_app import create_app
 
-    mock_static = MagicMock()
-    with patch("src.api.main_app.Path.exists", return_value=True), \
-         patch("src.api.main_app.Path.is_file", return_value=False), \
-         patch("src.api.main_app.StaticFiles", return_value=mock_static):
-        app = create_app()
-        route_names = [r.name for r in app.routes if hasattr(r, "name")]
-        assert "assets" in route_names
-        assert "serve_spa" in route_names
+    # Temporarily clear TESTING so SPA serving is not disabled
+    old_testing = os.environ.pop("TESTING", None)
+    _real_getenv = os.getenv
+    try:
+        mock_static = MagicMock()
+        with patch("src.api.main_app.os.getenv", side_effect=lambda k, d=None: None if k == "TESTING" else _real_getenv(k, d)), \
+             patch("src.api.main_app.Path.exists", return_value=True), \
+             patch("src.api.main_app.Path.is_file", return_value=False), \
+             patch("src.api.main_app.StaticFiles", return_value=mock_static):
+            app = create_app()
+            route_names = [r.name for r in app.routes if hasattr(r, "name")]
+            assert "assets" in route_names
+            assert "serve_spa" in route_names
+    finally:
+        if old_testing is not None:
+            os.environ["TESTING"] = old_testing
 
 
 def test_frontend_not_mounted_when_directory_missing():

@@ -107,6 +107,16 @@ def mock_orchestrator():
 # FastAPI app + test client
 # ---------------------------------------------------------------------------
 
+@pytest.fixture(autouse=True)
+def _reset_db_circuit_breaker():
+    """Reset the database circuit breaker before each test to prevent
+    cross-test contamination from transient DB errors."""
+    from src.models.session import _db_breaker
+    from src.utils.circuit_breaker import CircuitState, CircuitStats
+    _db_breaker._state = CircuitState.CLOSED
+    _db_breaker._stats = CircuitStats()
+
+
 @pytest_asyncio.fixture
 async def app(test_engine, mock_orchestrator):
     """Create a FastAPI application with test database and mocked services."""

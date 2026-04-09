@@ -62,7 +62,7 @@ class TestAPIErrorPaths:
     @pytest.mark.asyncio
     async def test_long_short_ratio_circuit_breaker_error(self, fetcher):
         """get_long_short_ratio returns 1.0 on CircuitBreakerError."""
-        with patch("src.data.market_data._binance_breaker") as mock_breaker:
+        with patch("src.data.sources.breakers.binance_breaker") as mock_breaker:
             mock_breaker.call = AsyncMock(side_effect=_make_cb_error())
             result = await fetcher.get_long_short_ratio("BTCUSDT")
             assert result == 1.0
@@ -70,7 +70,7 @@ class TestAPIErrorPaths:
     @pytest.mark.asyncio
     async def test_long_short_ratio_generic_exception(self, fetcher):
         """get_long_short_ratio returns 1.0 on generic exception."""
-        with patch("src.data.market_data._binance_breaker") as mock_breaker:
+        with patch("src.data.sources.breakers.binance_breaker") as mock_breaker:
             mock_breaker.call = AsyncMock(side_effect=ValueError("parse error"))
             result = await fetcher.get_long_short_ratio("BTCUSDT")
             assert result == 1.0
@@ -78,7 +78,7 @@ class TestAPIErrorPaths:
     @pytest.mark.asyncio
     async def test_top_trader_ls_circuit_breaker(self, fetcher):
         """get_top_trader_long_short_ratio returns 1.0 on circuit error."""
-        with patch("src.data.market_data._binance_breaker") as mock_breaker:
+        with patch("src.data.sources.breakers.binance_breaker") as mock_breaker:
             mock_breaker.call = AsyncMock(side_effect=_make_cb_error())
             result = await fetcher.get_top_trader_long_short_ratio("BTCUSDT")
             assert result == 1.0
@@ -86,7 +86,7 @@ class TestAPIErrorPaths:
     @pytest.mark.asyncio
     async def test_funding_rate_binance_circuit_breaker(self, fetcher):
         """get_funding_rate_binance returns 0.0 on circuit error."""
-        with patch("src.data.market_data._binance_breaker") as mock_breaker:
+        with patch("src.data.sources.breakers.binance_breaker") as mock_breaker:
             mock_breaker.call = AsyncMock(side_effect=_make_cb_error())
             result = await fetcher.get_funding_rate_binance("BTCUSDT")
             assert result == 0.0
@@ -94,7 +94,7 @@ class TestAPIErrorPaths:
     @pytest.mark.asyncio
     async def test_funding_rate_binance_generic_exception(self, fetcher):
         """get_funding_rate_binance returns 0.0 on generic exception."""
-        with patch("src.data.market_data._binance_breaker") as mock_breaker:
+        with patch("src.data.sources.breakers.binance_breaker") as mock_breaker:
             mock_breaker.call = AsyncMock(side_effect=RuntimeError("unexpected"))
             result = await fetcher.get_funding_rate_binance("BTCUSDT")
             assert result == 0.0
@@ -102,7 +102,7 @@ class TestAPIErrorPaths:
     @pytest.mark.asyncio
     async def test_ticker_24h_circuit_breaker(self, fetcher):
         """get_24h_ticker returns fallback on circuit error."""
-        with patch("src.data.market_data._binance_breaker") as mock_breaker:
+        with patch("src.data.sources.breakers.binance_breaker") as mock_breaker:
             mock_breaker.call = AsyncMock(side_effect=_make_cb_error())
             result = await fetcher.get_24h_ticker("BTCUSDT")
             assert result["price"] == 0
@@ -111,7 +111,7 @@ class TestAPIErrorPaths:
     @pytest.mark.asyncio
     async def test_ticker_24h_generic_exception(self, fetcher):
         """get_24h_ticker returns fallback on generic exception."""
-        with patch("src.data.market_data._binance_breaker") as mock_breaker:
+        with patch("src.data.sources.breakers.binance_breaker") as mock_breaker:
             mock_breaker.call = AsyncMock(side_effect=ValueError("bad data"))
             result = await fetcher.get_24h_ticker("BTCUSDT")
             assert result["price"] == 0
@@ -119,7 +119,7 @@ class TestAPIErrorPaths:
     @pytest.mark.asyncio
     async def test_open_interest_circuit_breaker(self, fetcher):
         """get_open_interest returns 0.0 on circuit error."""
-        with patch("src.data.market_data._binance_breaker") as mock_breaker:
+        with patch("src.data.sources.breakers.binance_breaker") as mock_breaker:
             mock_breaker.call = AsyncMock(side_effect=_make_cb_error())
             result = await fetcher.get_open_interest("BTCUSDT")
             assert result == 0.0
@@ -127,7 +127,7 @@ class TestAPIErrorPaths:
     @pytest.mark.asyncio
     async def test_open_interest_generic_exception(self, fetcher):
         """get_open_interest returns 0.0 on generic exception."""
-        with patch("src.data.market_data._binance_breaker") as mock_breaker:
+        with patch("src.data.sources.breakers.binance_breaker") as mock_breaker:
             mock_breaker.call = AsyncMock(side_effect=RuntimeError("fail"))
             result = await fetcher.get_open_interest("BTCUSDT")
             assert result == 0.0
@@ -135,7 +135,7 @@ class TestAPIErrorPaths:
     @pytest.mark.asyncio
     async def test_oi_history_circuit_breaker(self, fetcher):
         """get_open_interest_history returns [] on circuit error."""
-        with patch("src.data.market_data._binance_breaker") as mock_breaker:
+        with patch("src.data.sources.breakers.binance_breaker") as mock_breaker:
             mock_breaker.call = AsyncMock(side_effect=_make_cb_error())
             result = await fetcher.get_open_interest_history("BTCUSDT")
             assert result == []
@@ -143,7 +143,7 @@ class TestAPIErrorPaths:
     @pytest.mark.asyncio
     async def test_oi_history_generic_exception(self, fetcher):
         """get_open_interest_history returns [] on generic exception."""
-        with patch("src.data.market_data._binance_breaker") as mock_breaker:
+        with patch("src.data.sources.breakers.binance_breaker") as mock_breaker:
             mock_breaker.call = AsyncMock(side_effect=ValueError("fail"))
             result = await fetcher.get_open_interest_history("BTCUSDT")
             assert result == []
@@ -151,7 +151,7 @@ class TestAPIErrorPaths:
     @pytest.mark.asyncio
     async def test_liquidations_circuit_breaker(self, fetcher):
         """get_recent_liquidations returns [] on circuit error."""
-        with patch("src.data.market_data._binance_breaker") as mock_breaker:
+        with patch("src.data.sources.breakers.binance_breaker") as mock_breaker:
             mock_breaker.call = AsyncMock(side_effect=_make_cb_error())
             result = await fetcher.get_recent_liquidations("BTCUSDT")
             assert result == []
@@ -159,7 +159,7 @@ class TestAPIErrorPaths:
     @pytest.mark.asyncio
     async def test_liquidations_generic_exception(self, fetcher):
         """get_recent_liquidations returns [] on generic exception."""
-        with patch("src.data.market_data._binance_breaker") as mock_breaker:
+        with patch("src.data.sources.breakers.binance_breaker") as mock_breaker:
             mock_breaker.call = AsyncMock(side_effect=RuntimeError("fail"))
             result = await fetcher.get_recent_liquidations("BTCUSDT")
             assert result == []
@@ -167,7 +167,7 @@ class TestAPIErrorPaths:
     @pytest.mark.asyncio
     async def test_order_book_circuit_breaker(self, fetcher):
         """get_order_book_depth returns {} on circuit error."""
-        with patch("src.data.market_data._binance_breaker") as mock_breaker:
+        with patch("src.data.sources.breakers.binance_breaker") as mock_breaker:
             mock_breaker.call = AsyncMock(side_effect=_make_cb_error())
             result = await fetcher.get_order_book_depth("BTCUSDT")
             assert result == {}
@@ -175,7 +175,7 @@ class TestAPIErrorPaths:
     @pytest.mark.asyncio
     async def test_order_book_generic_exception(self, fetcher):
         """get_order_book_depth returns {} on generic exception."""
-        with patch("src.data.market_data._binance_breaker") as mock_breaker:
+        with patch("src.data.sources.breakers.binance_breaker") as mock_breaker:
             mock_breaker.call = AsyncMock(side_effect=ValueError("fail"))
             result = await fetcher.get_order_book_depth("BTCUSDT")
             assert result == {}
@@ -183,7 +183,7 @@ class TestAPIErrorPaths:
     @pytest.mark.asyncio
     async def test_news_sentiment_circuit_breaker(self, fetcher):
         """get_news_sentiment returns fallback on circuit error."""
-        with patch("src.data.market_data._gdelt_breaker") as mock_breaker:
+        with patch("src.data.sources.breakers.gdelt_breaker") as mock_breaker:
             mock_breaker.call = AsyncMock(side_effect=_make_cb_error())
             result = await fetcher.get_news_sentiment()
             assert result["average_tone"] == 0.0
@@ -192,7 +192,7 @@ class TestAPIErrorPaths:
     @pytest.mark.asyncio
     async def test_news_sentiment_generic_exception(self, fetcher):
         """get_news_sentiment returns fallback on generic exception."""
-        with patch("src.data.market_data._gdelt_breaker") as mock_breaker:
+        with patch("src.data.sources.breakers.gdelt_breaker") as mock_breaker:
             mock_breaker.call = AsyncMock(side_effect=RuntimeError("fail"))
             result = await fetcher.get_news_sentiment()
             assert result["average_tone"] == 0.0
@@ -200,7 +200,7 @@ class TestAPIErrorPaths:
     @pytest.mark.asyncio
     async def test_put_call_ratio_circuit_breaker(self, fetcher):
         """get_put_call_ratio returns fallback on circuit error."""
-        with patch("src.data.market_data._deribit_breaker") as mock_breaker:
+        with patch("src.data.sources.breakers.deribit_breaker") as mock_breaker:
             mock_breaker.call = AsyncMock(side_effect=_make_cb_error())
             result = await fetcher.get_put_call_ratio("BTC")
             assert result["ratio"] == 0.0
@@ -208,7 +208,7 @@ class TestAPIErrorPaths:
     @pytest.mark.asyncio
     async def test_put_call_ratio_generic_exception(self, fetcher):
         """get_put_call_ratio returns fallback on generic exception."""
-        with patch("src.data.market_data._deribit_breaker") as mock_breaker:
+        with patch("src.data.sources.breakers.deribit_breaker") as mock_breaker:
             mock_breaker.call = AsyncMock(side_effect=ValueError("fail"))
             result = await fetcher.get_put_call_ratio("BTC")
             assert result["ratio"] == 0.0
@@ -216,7 +216,7 @@ class TestAPIErrorPaths:
     @pytest.mark.asyncio
     async def test_max_pain_circuit_breaker(self, fetcher):
         """get_max_pain returns fallback on circuit error."""
-        with patch("src.data.market_data._deribit_breaker") as mock_breaker:
+        with patch("src.data.sources.breakers.deribit_breaker") as mock_breaker:
             mock_breaker.call = AsyncMock(side_effect=_make_cb_error())
             result = await fetcher.get_max_pain("BTC")
             assert result["max_pain_price"] == 0.0
@@ -224,7 +224,7 @@ class TestAPIErrorPaths:
     @pytest.mark.asyncio
     async def test_max_pain_generic_exception(self, fetcher):
         """get_max_pain returns fallback on generic exception."""
-        with patch("src.data.market_data._deribit_breaker") as mock_breaker:
+        with patch("src.data.sources.breakers.deribit_breaker") as mock_breaker:
             mock_breaker.call = AsyncMock(side_effect=ValueError("fail"))
             result = await fetcher.get_max_pain("BTC")
             assert result["max_pain_price"] == 0.0
@@ -232,7 +232,7 @@ class TestAPIErrorPaths:
     @pytest.mark.asyncio
     async def test_coingecko_circuit_breaker(self, fetcher):
         """get_coingecko_market returns fallback on circuit error."""
-        with patch("src.data.market_data._coingecko_breaker") as mock_breaker:
+        with patch("src.data.sources.breakers.coingecko_breaker") as mock_breaker:
             mock_breaker.call = AsyncMock(side_effect=_make_cb_error())
             result = await fetcher.get_coingecko_market()
             assert result["total_market_cap_usd"] == 0
@@ -240,7 +240,7 @@ class TestAPIErrorPaths:
     @pytest.mark.asyncio
     async def test_coingecko_generic_exception(self, fetcher):
         """get_coingecko_market returns fallback on generic exception."""
-        with patch("src.data.market_data._coingecko_breaker") as mock_breaker:
+        with patch("src.data.sources.breakers.coingecko_breaker") as mock_breaker:
             mock_breaker.call = AsyncMock(side_effect=RuntimeError("fail"))
             result = await fetcher.get_coingecko_market()
             assert result["total_market_cap_usd"] == 0
@@ -248,7 +248,7 @@ class TestAPIErrorPaths:
     @pytest.mark.asyncio
     async def test_stablecoin_flows_circuit_breaker(self, fetcher):
         """get_stablecoin_flows returns fallback on circuit error."""
-        with patch("src.data.market_data._defillama_breaker") as mock_breaker:
+        with patch("src.data.sources.breakers.defillama_breaker") as mock_breaker:
             mock_breaker.call = AsyncMock(side_effect=_make_cb_error())
             result = await fetcher.get_stablecoin_flows()
             assert result["usdt_market_cap"] == 0
@@ -256,7 +256,7 @@ class TestAPIErrorPaths:
     @pytest.mark.asyncio
     async def test_stablecoin_flows_generic_exception(self, fetcher):
         """get_stablecoin_flows returns fallback on generic exception."""
-        with patch("src.data.market_data._defillama_breaker") as mock_breaker:
+        with patch("src.data.sources.breakers.defillama_breaker") as mock_breaker:
             mock_breaker.call = AsyncMock(side_effect=RuntimeError("fail"))
             result = await fetcher.get_stablecoin_flows()
             assert result["usdt_market_cap"] == 0
@@ -264,7 +264,7 @@ class TestAPIErrorPaths:
     @pytest.mark.asyncio
     async def test_btc_hashrate_circuit_breaker(self, fetcher):
         """get_btc_hashrate returns fallback on circuit error."""
-        with patch("src.data.market_data._blockchain_breaker") as mock_breaker:
+        with patch("src.data.sources.breakers.blockchain_breaker") as mock_breaker:
             mock_breaker.call = AsyncMock(side_effect=_make_cb_error())
             result = await fetcher.get_btc_hashrate()
             assert result["hashrate_ths"] == 0
@@ -272,7 +272,7 @@ class TestAPIErrorPaths:
     @pytest.mark.asyncio
     async def test_btc_hashrate_generic_exception(self, fetcher):
         """get_btc_hashrate returns fallback on generic exception."""
-        with patch("src.data.market_data._blockchain_breaker") as mock_breaker:
+        with patch("src.data.sources.breakers.blockchain_breaker") as mock_breaker:
             mock_breaker.call = AsyncMock(side_effect=RuntimeError("fail"))
             result = await fetcher.get_btc_hashrate()
             assert result["hashrate_ths"] == 0
@@ -280,7 +280,7 @@ class TestAPIErrorPaths:
     @pytest.mark.asyncio
     async def test_bitget_funding_rate_circuit_breaker(self, fetcher):
         """get_bitget_funding_rate returns fallback on circuit error."""
-        with patch("src.data.market_data._bitget_breaker") as mock_breaker:
+        with patch("src.data.sources.breakers.bitget_breaker") as mock_breaker:
             mock_breaker.call = AsyncMock(side_effect=_make_cb_error())
             result = await fetcher.get_bitget_funding_rate("BTCUSDT")
             assert result["funding_rate"] == 0.0
@@ -288,7 +288,7 @@ class TestAPIErrorPaths:
     @pytest.mark.asyncio
     async def test_bitget_funding_rate_generic_exception(self, fetcher):
         """get_bitget_funding_rate returns fallback on generic exception."""
-        with patch("src.data.market_data._bitget_breaker") as mock_breaker:
+        with patch("src.data.sources.breakers.bitget_breaker") as mock_breaker:
             mock_breaker.call = AsyncMock(side_effect=RuntimeError("fail"))
             result = await fetcher.get_bitget_funding_rate("BTCUSDT")
             assert result["funding_rate"] == 0.0
@@ -296,7 +296,7 @@ class TestAPIErrorPaths:
     @pytest.mark.asyncio
     async def test_fred_series_circuit_breaker(self, fetcher):
         """get_fred_series returns fallback on circuit error."""
-        with patch("src.data.market_data._fred_breaker") as mock_breaker, \
+        with patch("src.data.sources.breakers.fred_breaker") as mock_breaker, \
              patch.dict("os.environ", {"FRED_API_KEY": "test-key"}):
             mock_breaker.call = AsyncMock(side_effect=_make_cb_error())
             result = await fetcher.get_fred_series("DFF")
@@ -305,7 +305,7 @@ class TestAPIErrorPaths:
     @pytest.mark.asyncio
     async def test_fred_series_generic_exception(self, fetcher):
         """get_fred_series returns fallback on generic exception."""
-        with patch("src.data.market_data._fred_breaker") as mock_breaker, \
+        with patch("src.data.sources.breakers.fred_breaker") as mock_breaker, \
              patch.dict("os.environ", {"FRED_API_KEY": "test-key"}):
             mock_breaker.call = AsyncMock(side_effect=RuntimeError("fail"))
             result = await fetcher.get_fred_series("DFF")
@@ -336,7 +336,7 @@ class TestAPIErrorPaths:
                 str(price - 50), str(price + 100), str(price - 100),
                 str(price), "1000", 0, "0", 0, "500", "0", "0",
             ])
-        with patch("src.data.market_data._binance_breaker") as mock_breaker:
+        with patch("src.data.sources.breakers.binance_breaker") as mock_breaker:
             mock_breaker.call = AsyncMock(side_effect=_passthrough_call)
             with patch.object(fetcher, "_get", new_callable=AsyncMock) as mock_get:
                 mock_get.return_value = klines

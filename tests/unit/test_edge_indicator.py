@@ -415,8 +415,8 @@ class TestDetermineDirection:
 
         direction, reason = self.strategy._determine_direction(ribbon, momentum, adx_data)
 
-        # Even in chop, if bull_trend is set, direction should still be determined
-        assert direction in (SignalDirection.LONG, SignalDirection.SHORT)
+        # ADX < chop_threshold → trend_ok=False → NEUTRAL
+        assert direction == SignalDirection.NEUTRAL
 
     def test_neutral_trend_follows_momentum(self):
         """When EMA ribbon is neutral, follow momentum regime."""
@@ -694,7 +694,6 @@ class TestSchemaAndDescription:
             "adx_period", "adx_chop_threshold", "use_adx_filter",
             "momentum_bull_threshold", "momentum_bear_threshold",
             "min_confidence", "kline_interval",
-            "take_profit_percent", "stop_loss_percent",
         ]
 
         for key in expected_keys:
@@ -708,8 +707,7 @@ class TestSchemaAndDescription:
             assert "type" in entry, f"{key} missing 'type'"
             assert "label" in entry, f"{key} missing 'label'"
             assert "description" in entry, f"{key} missing 'description'"
-            if key not in ("take_profit_percent", "stop_loss_percent"):
-                assert "default" in entry, f"{key} missing 'default'"
+            assert "default" in entry, f"{key} missing 'default'"
 
     def test_min_confidence_bounds(self):
         """min_confidence should have min=10, max=90, default=65."""

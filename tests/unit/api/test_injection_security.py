@@ -305,9 +305,14 @@ class TestOversizedInputs:
                 trading_pairs=pairs,
             )
 
-    async def test_max_trading_pairs_list_accepted(self, factory, admin_user, mock_request):
+    async def test_max_trading_pairs_list_accepted(self, factory, admin_user, mock_request, monkeypatch):
         """Trading pairs list within max_length=20 is accepted."""
+        from unittest.mock import AsyncMock
         pairs = [f"TOKEN{i}USDT" for i in range(20)]
+        monkeypatch.setattr(
+            "src.api.routers.bots.get_exchange_symbols",
+            AsyncMock(return_value=pairs),
+        )
         async with factory() as session:
             body = BotConfigCreate(
                 name="Many Pairs Bot",

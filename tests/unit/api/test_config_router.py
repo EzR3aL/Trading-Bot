@@ -282,7 +282,7 @@ VALID_STRATEGY_CONFIG = {
 class TestConnToResponse:
 
     def test_conn_to_response_basic(self):
-        from src.api.routers.config import _conn_to_response
+        from src.services.config_service import conn_to_response as _conn_to_response
 
         conn = MagicMock()
         conn.exchange_type = "bitget"
@@ -298,7 +298,7 @@ class TestConnToResponse:
         assert result.affiliate_uid is None
 
     def test_conn_to_response_with_affiliate(self):
-        from src.api.routers.config import _conn_to_response
+        from src.services.config_service import conn_to_response as _conn_to_response
 
         conn = MagicMock()
         conn.exchange_type = "bitget"
@@ -314,7 +314,7 @@ class TestConnToResponse:
         assert result.affiliate_verified is True
 
     def test_conn_to_response_no_keys(self):
-        from src.api.routers.config import _conn_to_response
+        from src.services.config_service import conn_to_response as _conn_to_response
 
         conn = MagicMock()
         conn.exchange_type = "weex"
@@ -336,7 +336,7 @@ class TestConnToResponse:
 class TestGetOrCreateConfig:
 
     async def test_creates_default_config(self, client, user_headers, regular_user):
-        resp = await client.get("/api/config", headers=user_headers)
+        resp = await client.get("/api/config/", headers=user_headers)
         assert resp.status_code == 200
         data = resp.json()
         assert data["exchange_type"] == "bitget"
@@ -344,11 +344,11 @@ class TestGetOrCreateConfig:
 
     async def test_returns_existing_config(self, client, user_headers, regular_user):
         # First call creates
-        resp1 = await client.get("/api/config", headers=user_headers)
+        resp1 = await client.get("/api/config/", headers=user_headers)
         assert resp1.status_code == 200
 
         # Second call returns existing
-        resp2 = await client.get("/api/config", headers=user_headers)
+        resp2 = await client.get("/api/config/", headers=user_headers)
         assert resp2.status_code == 200
         assert resp2.json()["exchange_type"] == "bitget"
 
@@ -361,7 +361,7 @@ class TestGetOrCreateConfig:
 class TestGetConfig:
 
     async def test_get_config_success(self, client, user_headers, regular_user):
-        resp = await client.get("/api/config", headers=user_headers)
+        resp = await client.get("/api/config/", headers=user_headers)
         assert resp.status_code == 200
         data = resp.json()
         assert "exchange_type" in data
@@ -370,7 +370,7 @@ class TestGetConfig:
         assert "strategy" in data
 
     async def test_get_config_requires_auth(self, client):
-        resp = await client.get("/api/config")
+        resp = await client.get("/api/config/")
         assert resp.status_code == 401
 
     async def test_get_config_with_trading_config(self, client, user_headers, regular_user):
@@ -380,7 +380,7 @@ class TestGetConfig:
             json=VALID_TRADING_CONFIG,
             headers=user_headers,
         )
-        resp = await client.get("/api/config", headers=user_headers)
+        resp = await client.get("/api/config/", headers=user_headers)
         assert resp.status_code == 200
         trading = resp.json()["trading"]
         assert trading is not None
@@ -392,14 +392,14 @@ class TestGetConfig:
             json=VALID_STRATEGY_CONFIG,
             headers=user_headers,
         )
-        resp = await client.get("/api/config", headers=user_headers)
+        resp = await client.get("/api/config/", headers=user_headers)
         assert resp.status_code == 200
         strategy = resp.json()["strategy"]
         assert strategy is not None
         assert strategy["fear_greed_extreme_fear"] == 20
 
     async def test_get_config_includes_connections(self, client, user_headers, regular_user, exchange_conn_bitget):
-        resp = await client.get("/api/config", headers=user_headers)
+        resp = await client.get("/api/config/", headers=user_headers)
         assert resp.status_code == 200
         conns = resp.json()["connections"]
         assert len(conns) >= 1
@@ -1405,7 +1405,7 @@ class TestAdminAffiliateUIDs:
 class TestAsyncNoneHelper:
 
     async def test_async_none_returns_none(self):
-        from src.api.routers.config import _async_none
+        from src.services.config_service import async_none as _async_none
         result = await _async_none()
         assert result is None
 
@@ -1419,7 +1419,7 @@ class TestPingService:
 
     async def test_ping_service_timeout(self):
         import aiohttp
-        from src.api.routers.config import _ping_service
+        from src.services.config_service import ping_service as _ping_service
 
         async with aiohttp.ClientSession() as session:
             result = await _ping_service(
@@ -1431,7 +1431,7 @@ class TestPingService:
 
     async def test_ping_service_invalid_url(self):
         import aiohttp
-        from src.api.routers.config import _ping_service
+        from src.services.config_service import ping_service as _ping_service
 
         async with aiohttp.ClientSession() as session:
             result = await _ping_service(

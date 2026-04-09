@@ -11,6 +11,7 @@ Covers all changes from 2026-02-23 to 2026-02-25:
 6. BaseStrategy should_exit() default
 """
 
+import asyncio
 import json
 import pytest
 from datetime import datetime, timezone
@@ -230,14 +231,16 @@ class TestEdgeIndicatorOptionalTpSl:
         assert "stop_loss_percent" not in DEFAULTS
 
     def test_param_schema_has_no_default_for_tp(self):
+        """TP/SL are no longer strategy params — they are bot-level config."""
         from src.strategy.edge_indicator import EdgeIndicatorStrategy
         schema = EdgeIndicatorStrategy.get_param_schema()
-        assert "default" not in schema["take_profit_percent"]
+        assert "take_profit_percent" not in schema
 
     def test_param_schema_has_no_default_for_sl(self):
+        """TP/SL are no longer strategy params — they are bot-level config."""
         from src.strategy.edge_indicator import EdgeIndicatorStrategy
         schema = EdgeIndicatorStrategy.get_param_schema()
-        assert "default" not in schema["stop_loss_percent"]
+        assert "stop_loss_percent" not in schema
 
 
 class TestEdgeIndicatorShouldExit:
@@ -376,6 +379,10 @@ class TestPositionMonitorStrategyExit:
         monitor._config.name = "TestBot"
         monitor._get_client = MagicMock()
         monitor._close_and_record_trade = AsyncMock()
+        monitor._glitch_counter = {}
+        monitor._trailing_stop_backoff = {}
+        monitor._trailing_stop_lock = asyncio.Lock()
+        monitor._send_notification = AsyncMock()
         return monitor
 
     def _make_trade(self, symbol="BTCUSDT", side="long", entry_price=95000.0,
@@ -395,6 +402,7 @@ class TestPositionMonitorStrategyExit:
         trade.fees = 0
         trade.funding_paid = 0
         trade.entry_time = datetime.now(timezone.utc)
+        trade.native_trailing_stop = False
         return trade
 
     def _make_position(self, size=0.01, side="long"):
@@ -423,7 +431,10 @@ class TestPositionMonitorStrategyExit:
 
         await monitor._check_position(trade, session)
 
-        client.close_position.assert_called_once_with(trade.symbol, trade.side)
+        client.close_position.assert_called_once()
+        close_args = client.close_position.call_args
+        assert close_args[0][0] == trade.symbol
+        assert close_args[0][1] == trade.side
         monitor._close_and_record_trade.assert_called_once()
         call_args = monitor._close_and_record_trade.call_args
         assert call_args[0][2] == "STRATEGY_EXIT"
@@ -466,8 +477,10 @@ class TestPositionMonitorStrategyExit:
     async def test_position_gone_triggers_handle_closed(self):
         """When exchange says position is gone, handle_closed_position is called."""
         monitor = self._make_monitor()
+        monitor._confirm_position_closed = AsyncMock(return_value=True)
         client = AsyncMock()
         client.get_position = AsyncMock(return_value=None)
+        client.get_close_fill_price = AsyncMock(return_value=None)
         client.get_ticker = AsyncMock(return_value=MagicMock(last_price=96000.0))
         client.get_trade_total_fees = AsyncMock(return_value=0.5)
         client.get_funding_fees = AsyncMock(return_value=0.1)
@@ -504,6 +517,7 @@ class TestPositionMonitorStrategyExit:
         """_handle_closed_position works when trade has no TP/SL."""
         monitor = self._make_monitor()
         client = AsyncMock()
+        client.get_close_fill_price = AsyncMock(return_value=None)
         client.get_ticker = AsyncMock(return_value=MagicMock(last_price=96000.0))
         client.get_trade_total_fees = AsyncMock(return_value=0.5)
         client.get_funding_fees = AsyncMock(return_value=0.1)

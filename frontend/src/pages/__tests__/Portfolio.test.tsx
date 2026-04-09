@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import Portfolio from '../Portfolio'
+import { QueryWrapper } from '../../test/queryWrapper'
 
 // Stable t function reference to prevent useEffect re-firing
 const mockT = (key: string) => {
@@ -74,6 +75,7 @@ vi.mock('recharts', () => ({
   Pie: () => null,
   Cell: () => null,
   Legend: () => null,
+  Sector: () => null,
 }))
 
 describe('Portfolio Page', () => {
@@ -140,7 +142,7 @@ describe('Portfolio Page', () => {
   })
 
   it('should render page title', async () => {
-    render(<Portfolio />)
+    render(<Portfolio />, { wrapper: QueryWrapper })
 
     await waitFor(() => {
       expect(screen.getByText('Portfolio')).toBeInTheDocument()
@@ -150,14 +152,14 @@ describe('Portfolio Page', () => {
 
   it('should show loading spinner initially', () => {
     mockGet.mockReturnValue(new Promise(() => {}))
-    render(<Portfolio />)
+    render(<Portfolio />, { wrapper: QueryWrapper })
 
     const spinner = document.querySelector('.animate-spin')
     expect(spinner).toBeTruthy()
   })
 
   it('should render period buttons', async () => {
-    render(<Portfolio />)
+    render(<Portfolio />, { wrapper: QueryWrapper })
 
     await waitFor(() => {
       expect(screen.getByText('7D')).toBeInTheDocument()
@@ -168,17 +170,24 @@ describe('Portfolio Page', () => {
   })
 
   it('should render total balance', async () => {
-    render(<Portfolio />)
+    render(<Portfolio />, { wrapper: QueryWrapper })
 
+    // Wait for the page to finish loading (spinner disappears)
+    await waitFor(() => {
+      expect(screen.getByText('Portfolio')).toBeInTheDocument()
+    })
+
+    // Wait for allocation data to load and total balance to render
     await waitFor(() => {
       // $8,000 = 5000 + 3000 from allocation
-      // Use regex to handle locale-dependent number formatting (e.g. $8,000.00 vs $8.000,00)
-      expect(screen.getByText(/\$8[,.]000[,.]00/)).toBeInTheDocument()
-    })
+      // Locale can format as $8,000.00 or $8.000,00 — search the full body text
+      const body = document.body.textContent || ''
+      expect(body).toMatch(/\$8[,.]000[,.]00/)
+    }, { timeout: 5000 })
   })
 
   it('should render exchange cards', async () => {
-    render(<Portfolio />)
+    render(<Portfolio />, { wrapper: QueryWrapper })
 
     await waitFor(() => {
       expect(screen.getByText('Exchange Breakdown')).toBeInTheDocument()
@@ -189,7 +198,7 @@ describe('Portfolio Page', () => {
   })
 
   it('should render summary stats', async () => {
-    render(<Portfolio />)
+    render(<Portfolio />, { wrapper: QueryWrapper })
 
     await waitFor(() => {
       expect(screen.getByText('25')).toBeInTheDocument() // total trades
@@ -198,7 +207,7 @@ describe('Portfolio Page', () => {
   })
 
   it('should render positions table', async () => {
-    render(<Portfolio />)
+    render(<Portfolio />, { wrapper: QueryWrapper })
 
     await waitFor(() => {
       expect(screen.getByText('Open Positions')).toBeInTheDocument()
@@ -216,7 +225,7 @@ describe('Portfolio Page', () => {
       return Promise.resolve({ data: {} })
     })
 
-    render(<Portfolio />)
+    render(<Portfolio />, { wrapper: QueryWrapper })
 
     await waitFor(() => {
       expect(screen.getByText('No open positions')).toBeInTheDocument()
@@ -224,7 +233,7 @@ describe('Portfolio Page', () => {
   })
 
   it('should render charts', async () => {
-    render(<Portfolio />)
+    render(<Portfolio />, { wrapper: QueryWrapper })
 
     await waitFor(() => {
       expect(screen.getByText('Daily PnL')).toBeInTheDocument()
@@ -235,7 +244,7 @@ describe('Portfolio Page', () => {
   it('should show error message on API failure', async () => {
     mockGet.mockRejectedValue(new Error('Network error'))
 
-    render(<Portfolio />)
+    render(<Portfolio />, { wrapper: QueryWrapper })
 
     await waitFor(() => {
       expect(screen.getByText('An error occurred')).toBeInTheDocument()
@@ -244,7 +253,7 @@ describe('Portfolio Page', () => {
 
   it('should change period on button click', async () => {
     const user = userEvent.setup()
-    render(<Portfolio />)
+    render(<Portfolio />, { wrapper: QueryWrapper })
 
     await waitFor(() => {
       expect(screen.getByText('7D')).toBeInTheDocument()

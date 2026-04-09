@@ -382,11 +382,11 @@ export default function BotBuilderStepExchange({
               <table className="w-full text-xs min-w-[480px]">
                 <thead>
                   <tr className="bg-white/[0.03] text-gray-400 text-xs uppercase tracking-wider">
-                    <th className="text-left px-3 py-1.5 font-medium">{t('bots.builder.exchange')}</th>
-                    <th className="text-left px-2 py-1.5 font-medium">{t('bots.builder.mode')}</th>
-                    <th className="text-right px-2 py-1.5 font-medium">{t('bots.builder.equity')}</th>
-                    <th className="text-right px-2 py-1.5 font-medium">{t('bots.builder.allocated')}</th>
-                    <th className="text-right px-3 py-1.5 font-medium">{t('bots.builder.available')}</th>
+                    <th scope="col" className="text-left px-3 py-1.5 font-medium">{t('bots.builder.exchange')}</th>
+                    <th scope="col" className="text-left px-2 py-1.5 font-medium">{t('bots.builder.mode')}</th>
+                    <th scope="col" className="text-right px-2 py-1.5 font-medium">{t('bots.builder.equity')}</th>
+                    <th scope="col" className="text-right px-2 py-1.5 font-medium">{t('bots.builder.allocated')}</th>
+                    <th scope="col" className="text-right px-3 py-1.5 font-medium">{t('bots.builder.available')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-white/[0.04]">

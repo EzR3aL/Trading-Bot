@@ -56,7 +56,21 @@ class PositionMonitorMixin:
             open_trades = result.scalars().all()
 
             if not open_trades:
+                # No open trades — clear all tracking caches
+                self._trailing_stop_backoff.clear()
+                self._glitch_counter.clear()
                 return
+
+            # Clean up backoff/glitch entries for trades no longer open
+            open_trade_ids = {t.id for t in open_trades}
+            stale_backoff = [tid for tid in self._trailing_stop_backoff if tid not in open_trade_ids]
+            for tid in stale_backoff:
+                del self._trailing_stop_backoff[tid]
+
+            open_glitch_keys = {f"{self.bot_config_id}:{t.symbol}" for t in open_trades}
+            stale_glitch = [k for k in self._glitch_counter if k not in open_glitch_keys]
+            for k in stale_glitch:
+                del self._glitch_counter[k]
 
             for trade in open_trades:
                 await self._check_position(trade, session)
@@ -402,6 +416,9 @@ class PositionMonitorMixin:
     async def _handle_closed_position(self, trade: TradeRecord, client: ExchangeClient, session):
         """Handle a position that was closed externally (TP/SL/manual)."""
         log_prefix = f"[Bot:{self.bot_config_id}]"
+
+        # Clean up backoff tracking for closed trade
+        self._trailing_stop_backoff.pop(trade.id, None)
 
         try:
             # Get actual fill price from the close order (TP/SL/trailing/manual)

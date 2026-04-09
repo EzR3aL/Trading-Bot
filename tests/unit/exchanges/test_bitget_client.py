@@ -1548,25 +1548,15 @@ class TestCheckAffiliateUid:
 
         assert result is False
 
-    async def test_uid_pagination(self, client):
-        """Paginates through multiple pages to find UID."""
-        page_1 = [{"uid": str(i)} for i in range(200)]
-        page_2 = [{"uid": "target_uid"}]
-
-        call_count = 0
-
+    async def test_uid_found_via_direct_filter(self, client):
+        """UID found via direct uid filter on subaccounts endpoint."""
         async def mock_request(method, endpoint, **kwargs):
-            nonlocal call_count
-            call_count += 1
-            if call_count == 1:
-                return page_1
-            return page_2
+            return [{"uid": "target_uid"}]
 
         with patch.object(client, "_request", side_effect=mock_request):
             result = await client.check_affiliate_uid("target_uid")
 
         assert result is True
-        assert call_count == 2
 
 
 # ---------------------------------------------------------------------------

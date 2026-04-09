@@ -95,14 +95,22 @@ async def close_db() -> None:
     await engine.dispose()
 
 
+from src.exceptions import DatabaseUnavailableError
+from src.utils.circuit_breaker import CircuitBreaker, CircuitBreakerError
+
 SESSION_ACQUIRE_TIMEOUT = int(os.getenv("DB_SESSION_TIMEOUT", "10"))
 _SESSION_MAX_RETRIES = int(os.getenv("DB_SESSION_RETRIES", "3"))
 _SESSION_RETRY_DELAY = float(os.getenv("DB_SESSION_RETRY_DELAY", "1.0"))
 
+_db_breaker = CircuitBreaker(
+    name="database",
+    fail_threshold=3,
+    reset_timeout=30.0,
+)
 
-@asynccontextmanager
-async def get_session():
-    """Provide an async session with automatic commit/rollback.
+
+async def _acquire_session() -> AsyncSession:
+    """Acquire a database session with retry logic.
 
     Retries up to ``_SESSION_MAX_RETRIES`` times on pool-exhaustion
     (TimeoutError) with exponential backoff so that transient spikes
@@ -118,7 +126,7 @@ async def get_session():
                 async_session_factory().__aenter__(),
                 timeout=SESSION_ACQUIRE_TIMEOUT,
             )
-            break
+            return session
         except asyncio.TimeoutError:
             last_err = TimeoutError(
                 f"Could not acquire database session within {SESSION_ACQUIRE_TIMEOUT}s "
@@ -133,6 +141,23 @@ async def get_session():
                 await asyncio.sleep(delay)
             else:
                 raise last_err
+    # Unreachable but satisfies type checkers
+    raise last_err  # type: ignore[misc]
+
+
+@asynccontextmanager
+async def get_session():
+    """Provide an async session with automatic commit/rollback.
+
+    Wraps session acquisition in a circuit breaker so that repeated
+    database failures cause fast rejection instead of cascading timeouts.
+    """
+    try:
+        session = await _db_breaker.call(_acquire_session)
+    except CircuitBreakerError:
+        raise DatabaseUnavailableError(
+            "Database circuit breaker open \u2014 too many recent failures"
+        )
 
     try:
         yield session

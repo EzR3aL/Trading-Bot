@@ -448,7 +448,6 @@ class TestConfigToResponse:
         assert result.per_asset_config == {"ETHUSDT": {"leverage": 3}}
         assert result.strategy_params == {"threshold": 0.7}
         assert result.schedule_config == {"interval_minutes": 60}
-        assert result.rotation_enabled is True
 
     def test_config_to_response_invalid_per_asset_json(self):
         from src.api.routers.bots import _config_to_response
@@ -624,23 +623,6 @@ class TestCreateBot:
         assert data["schedule_type"] == "interval"
         assert data["schedule_config"]["interval_minutes"] == 60
 
-    async def test_create_bot_with_rotation(self, client, auth_headers, test_user):
-        body = {
-            "name": "Rotation Bot",
-            "strategy_type": "test_strategy",
-            "exchange_type": "bitget",
-            "mode": "demo",
-            "rotation_enabled": True,
-            "rotation_interval_minutes": 60,
-            "rotation_start_time": "08:00",
-        }
-        resp = await client.post("/api/bots", json=body, headers=auth_headers)
-        assert resp.status_code == 200
-        data = resp.json()
-        assert data["rotation_enabled"] is True
-        assert data["rotation_interval_minutes"] == 60
-        assert data["rotation_start_time"] == "08:00"
-
     async def test_create_bot_with_per_asset_config(self, client, auth_headers, test_user):
         body = {
             "name": "Per Asset Bot",
@@ -686,7 +668,12 @@ class TestCreateBot:
         resp = await client.post("/api/bots", json=body)
         assert resp.status_code == 401
 
-    async def test_create_bot_hyperliquid(self, client, auth_headers, test_user):
+    async def test_create_bot_hyperliquid(self, client, auth_headers, test_user, monkeypatch):
+        from unittest.mock import AsyncMock
+        monkeypatch.setattr(
+            "src.api.routers.bots.get_exchange_symbols",
+            AsyncMock(return_value=["BTCUSDT"]),
+        )
         body = {
             "name": "HL Bot",
             "strategy_type": "test_strategy",

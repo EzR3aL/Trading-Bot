@@ -113,6 +113,7 @@ def _make_mock_trade(**overrides):
     trade.funding_paid = overrides.get("funding_paid", 0)
     trade.entry_time = overrides.get("entry_time", datetime.now(timezone.utc))
     trade.status = overrides.get("status", "open")
+    trade.native_trailing_stop = overrides.get("native_trailing_stop", False)
     return trade
 
 
@@ -361,6 +362,8 @@ class TestHandleClosedPosition:
         mixin._config = MagicMock()
         mixin._config.name = "Test Bot"
         mixin._close_and_record_trade = AsyncMock()
+        mixin._trailing_stop_backoff = {}
+        mixin._send_notification = AsyncMock()
 
         trade = _make_mock_trade(
             entry_price=68200.0,
@@ -369,12 +372,14 @@ class TestHandleClosedPosition:
         )
 
         client = AsyncMock()
+        client.get_close_fill_price = AsyncMock(return_value=None)
         # Price very close to TP
         ticker = MagicMock()
         ticker.last_price = 69560.0
         client.get_ticker = AsyncMock(return_value=ticker)
         client.get_trade_total_fees = AsyncMock(return_value=2.5)
         client.get_funding_fees = AsyncMock(return_value=0.1)
+        del client.calculate_builder_fee
 
         session = AsyncMock()
 

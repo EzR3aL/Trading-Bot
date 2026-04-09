@@ -349,29 +349,6 @@ class TestConfigToResponse:
         assert resp.discord_webhook_configured is True
         assert resp.telegram_configured is True
 
-    async def test_rotation_fields(self, factory, admin_user):
-        """rotation_enabled, rotation_interval_minutes, rotation_start_time (lines 100-102)."""
-        async with factory() as session:
-            config = BotConfig(
-                user_id=admin_user.id,
-                name="Rotation Bot",
-                strategy_type="test_strategy",
-                exchange_type="bitget",
-                mode="demo",
-                trading_pairs=json.dumps(["BTCUSDT"]),
-                rotation_enabled=True,
-                rotation_interval_minutes=120,
-                rotation_start_time="08:00",
-                is_enabled=False,
-            )
-            session.add(config)
-            await session.commit()
-            await session.refresh(config)
-
-        resp = _config_to_response(config)
-        assert resp.rotation_enabled is True
-        assert resp.rotation_interval_minutes == 120
-        assert resp.rotation_start_time == "08:00"
 
 
 # ---------------------------------------------------------------------------
@@ -443,9 +420,6 @@ class TestCreateBot:
                 strategy_params={"window": 14, "threshold": 0.7},
                 schedule_type="interval",
                 schedule_config={"interval_minutes": 60},
-                rotation_enabled=True,
-                rotation_interval_minutes=120,
-                rotation_start_time="08:00",
                 discord_webhook_url="https://discord.com/api/webhooks/test/token",
                 telegram_bot_token="123:ABCdef",
                 telegram_chat_id="999888",
@@ -460,7 +434,6 @@ class TestCreateBot:
         assert result.per_asset_config == {"BTCUSDT": {"leverage": 3}}
         assert result.strategy_params == {"window": 14, "threshold": 0.7}
         assert result.schedule_config == {"interval_minutes": 60}
-        assert result.rotation_enabled is True
 
     async def test_create_bot_invalid_strategy(self, factory, admin_user, mock_request):
         """Invalid strategy returns 400 (lines 152-155)."""
@@ -667,22 +640,26 @@ class TestListBots:
         assert hl.builder_fee_approved is True
         assert hl.referral_verified is True
 
-    async def test_list_bots_with_affiliate_data(self, factory, admin_user, mock_orchestrator):
-        """Affiliate UID data for Bitget/Weex (lines 238-251)."""
+    async def test_list_bots_with_affiliate_data(self, factory, regular_user, mock_orchestrator):
+        """Affiliate UID data for Bitget/Weex (lines 238-251).
+
+        Uses a non-admin user because admins bypass affiliate gates and
+        affiliate_uid is not populated for admins.
+        """
         async with factory() as session:
             session.add(ExchangeConnection(
-                user_id=admin_user.id, exchange_type="bitget",
+                user_id=regular_user.id, exchange_type="bitget",
                 affiliate_uid="BG123456", affiliate_verified=True,
             ))
             session.add(BotConfig(
-                user_id=admin_user.id, name="Affiliate Bot", strategy_type="test_strategy",
+                user_id=regular_user.id, name="Affiliate Bot", strategy_type="test_strategy",
                 exchange_type="bitget", mode="demo",
                 trading_pairs=json.dumps(["BTCUSDT"]), is_enabled=False,
             ))
             await session.commit()
 
         async with factory() as session:
-            result = await list_bots(demo_mode=None, user=admin_user, db=session, orchestrator=mock_orchestrator)
+            result = await list_bots(demo_mode=None, user=regular_user, db=session, orchestrator=mock_orchestrator)
         bg = next((b for b in result.bots if b.name == "Affiliate Bot"), None)
         assert bg is not None
         assert bg.affiliate_uid == "BG123456"
@@ -1138,7 +1115,7 @@ class TestAffiliateGates:
             await _enforce_affiliate_gate(exchange_type="bitget", user=regular_user, db=session)
 
     async def test_affiliate_gate_no_uid(self, factory, regular_user):
-        """Affiliate required but no UID (lines 669-677)."""
+        """Affiliate required but no UID raises 400."""
         from fastapi import HTTPException
 
         async with factory() as session:
@@ -1155,12 +1132,10 @@ class TestAffiliateGates:
             with pytest.raises(HTTPException) as exc_info:
                 await _enforce_affiliate_gate(exchange_type="bitget", user=regular_user, db=session)
             assert exc_info.value.status_code == 400
-            detail = exc_info.value.detail
-            assert detail["type"] == "affiliate_required"
-            assert "affiliate_url" in detail
+            assert "Bitget" in exc_info.value.detail
 
     async def test_affiliate_gate_uid_pending(self, factory, regular_user):
-        """Affiliate UID submitted but not verified (lines 678-685)."""
+        """Affiliate UID submitted but not verified raises 400."""
         from fastapi import HTTPException
 
         async with factory() as session:
@@ -1178,7 +1153,7 @@ class TestAffiliateGates:
             with pytest.raises(HTTPException) as exc_info:
                 await _enforce_affiliate_gate(exchange_type="bitget", user=regular_user, db=session)
             assert exc_info.value.status_code == 400
-            assert exc_info.value.detail["type"] == "affiliate_pending"
+            assert "Bitget" in exc_info.value.detail
 
     async def test_affiliate_gate_verified(self, factory, regular_user):
         """Verified affiliate passes (lines 647-685)."""
@@ -1305,20 +1280,20 @@ class TestTelegram:
 
 class TestStatistics:
 
-    async def test_statistics_not_found(self, factory, admin_user):
+    async def test_statistics_not_found(self, factory, admin_user, mock_request):
         """Statistics for nonexistent bot returns 404 (lines 923-925)."""
         from fastapi import HTTPException
 
         async with factory() as session:
             with pytest.raises(HTTPException) as exc_info:
-                await get_bot_statistics(bot_id=99999, days=30, demo_mode=None, user=admin_user, db=session)
+                await get_bot_statistics(request=mock_request, bot_id=99999, days=30, demo_mode=None, user=admin_user, db=session)
             assert exc_info.value.status_code == 404
 
-    async def test_statistics_no_trades(self, factory, admin_user, sample_bot):
+    async def test_statistics_no_trades(self, factory, admin_user, sample_bot, mock_request):
         """Statistics with no trades (lines 911-1050)."""
         async with factory() as session:
             result = await get_bot_statistics(
-                bot_id=sample_bot.id, days=30, demo_mode=None,
+                request=mock_request, bot_id=sample_bot.id, days=30, demo_mode=None,
                 user=admin_user, db=session,
             )
         assert result["bot_id"] == sample_bot.id
@@ -1327,7 +1302,7 @@ class TestStatistics:
         assert result["daily_series"] == []
         assert result["recent_trades"] == []
 
-    async def test_statistics_with_trades(self, factory, admin_user, sample_bot):
+    async def test_statistics_with_trades(self, factory, admin_user, sample_bot, mock_request):
         """Full statistics with trades (lines 928-1050)."""
         now = datetime.now(timezone.utc)
         async with factory() as session:
@@ -1364,7 +1339,7 @@ class TestStatistics:
 
         async with factory() as session:
             result = await get_bot_statistics(
-                bot_id=sample_bot.id, days=30, demo_mode=None,
+                request=mock_request, bot_id=sample_bot.id, days=30, demo_mode=None,
                 user=admin_user, db=session,
             )
 
@@ -1398,7 +1373,7 @@ class TestStatistics:
             assert "fees" in trade
             assert "funding_paid" in trade
 
-    async def test_statistics_with_demo_filter(self, factory, admin_user, sample_bot):
+    async def test_statistics_with_demo_filter(self, factory, admin_user, sample_bot, mock_request):
         """Statistics with demo_mode filter (lines 935-936, 975-976, 999-1000)."""
         now = datetime.now(timezone.utc)
         async with factory() as session:
@@ -1424,7 +1399,7 @@ class TestStatistics:
 
         async with factory() as session:
             demo_result = await get_bot_statistics(
-                bot_id=sample_bot.id, days=30, demo_mode=True,
+                request=mock_request, bot_id=sample_bot.id, days=30, demo_mode=True,
                 user=admin_user, db=session,
             )
         assert demo_result["summary"]["total_trades"] == 1
@@ -1432,17 +1407,17 @@ class TestStatistics:
 
         async with factory() as session:
             live_result = await get_bot_statistics(
-                bot_id=sample_bot.id, days=30, demo_mode=False,
+                request=mock_request, bot_id=sample_bot.id, days=30, demo_mode=False,
                 user=admin_user, db=session,
             )
         assert live_result["summary"]["total_trades"] == 1
         assert live_result["summary"]["total_pnl"] == 15.0
 
-    async def test_statistics_custom_days(self, factory, admin_user, sample_bot):
+    async def test_statistics_custom_days(self, factory, admin_user, sample_bot, mock_request):
         """Statistics with custom days parameter (line 927)."""
         async with factory() as session:
             result = await get_bot_statistics(
-                bot_id=sample_bot.id, days=7, demo_mode=None,
+                request=mock_request, bot_id=sample_bot.id, days=7, demo_mode=None,
                 user=admin_user, db=session,
             )
         assert result["days"] == 7
@@ -1455,16 +1430,16 @@ class TestStatistics:
 
 class TestComparePerformance:
 
-    async def test_compare_empty(self, factory, admin_user):
+    async def test_compare_empty(self, factory, admin_user, mock_request):
         """Compare with no bots (lines 1061-1069)."""
         async with factory() as session:
-            result = await compare_bots_performance(
+            result = await compare_bots_performance(request=mock_request,
                 days=30, demo_mode=None, user=admin_user, db=session,
             )
         assert result["bots"] == []
         assert result["days"] == 30
 
-    async def test_compare_with_trades(self, factory, admin_user, sample_bot):
+    async def test_compare_with_trades(self, factory, admin_user, sample_bot, mock_request):
         """Compare with trade data (lines 1074-1183)."""
         now = datetime.now(timezone.utc)
         async with factory() as session:
@@ -1491,7 +1466,7 @@ class TestComparePerformance:
             await session.commit()
 
         async with factory() as session:
-            result = await compare_bots_performance(
+            result = await compare_bots_performance(request=mock_request,
                 days=30, demo_mode=None, user=admin_user, db=session,
             )
 
@@ -1509,7 +1484,7 @@ class TestComparePerformance:
         assert bot["last_confidence"] is not None
         assert "series" in bot
 
-    async def test_compare_demo_mode_filter(self, factory, admin_user):
+    async def test_compare_demo_mode_filter(self, factory, admin_user, mock_request):
         """Compare with demo_mode filter (lines 1062-1065)."""
         async with factory() as session:
             session.add(BotConfig(
@@ -1525,23 +1500,23 @@ class TestComparePerformance:
             await session.commit()
 
         async with factory() as session:
-            demo_result = await compare_bots_performance(
+            demo_result = await compare_bots_performance(request=mock_request,
                 days=30, demo_mode=True, user=admin_user, db=session,
             )
         for b in demo_result["bots"]:
             assert b["mode"] in ["demo", "both"]
 
         async with factory() as session:
-            live_result = await compare_bots_performance(
+            live_result = await compare_bots_performance(request=mock_request,
                 days=30, demo_mode=False, user=admin_user, db=session,
             )
         for b in live_result["bots"]:
             assert b["mode"] in ["live", "both"]
 
-    async def test_compare_no_trades(self, factory, admin_user, sample_bot):
+    async def test_compare_no_trades(self, factory, admin_user, sample_bot, mock_request):
         """Compare with bot that has no trades (lines 1122-1124)."""
         async with factory() as session:
-            result = await compare_bots_performance(
+            result = await compare_bots_performance(request=mock_request,
                 days=30, demo_mode=None, user=admin_user, db=session,
             )
         bot = next((b for b in result["bots"] if b["bot_id"] == sample_bot.id), None)
@@ -1551,7 +1526,7 @@ class TestComparePerformance:
         assert bot["win_rate"] == 0.0
         assert bot["series"] == []
 
-    async def test_compare_last_trade_direction(self, factory, admin_user, sample_bot):
+    async def test_compare_last_trade_direction(self, factory, admin_user, sample_bot, mock_request):
         """Compare includes last trade direction and confidence (lines 1127-1136)."""
         now = datetime.now(timezone.utc)
         async with factory() as session:
@@ -1567,7 +1542,7 @@ class TestComparePerformance:
             await session.commit()
 
         async with factory() as session:
-            result = await compare_bots_performance(
+            result = await compare_bots_performance(request=mock_request,
                 days=30, demo_mode=None, user=admin_user, db=session,
             )
         bot = next((b for b in result["bots"] if b["bot_id"] == sample_bot.id), None)
@@ -1575,7 +1550,7 @@ class TestComparePerformance:
         assert bot["last_direction"] == "LONG"
         assert bot["last_confidence"] == 85
 
-    async def test_compare_with_demo_filter_trades(self, factory, admin_user, sample_bot):
+    async def test_compare_with_demo_filter_trades(self, factory, admin_user, sample_bot, mock_request):
         """Compare with demo_mode filters trade stats (lines 1080-1081, 1110-1111, 1129)."""
         now = datetime.now(timezone.utc)
         async with factory() as session:
@@ -1590,7 +1565,7 @@ class TestComparePerformance:
             await session.commit()
 
         async with factory() as session:
-            result = await compare_bots_performance(
+            result = await compare_bots_performance(request=mock_request,
                 days=30, demo_mode=True, user=admin_user, db=session,
             )
         assert len(result["bots"]) >= 1

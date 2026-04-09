@@ -506,7 +506,7 @@ async def test_download_csv_mode_label_all(client, auth_headers, closed_trades):
     """CSV without demo_mode filter shows 'Alle/All' in mode row."""
     resp = await client.get("/api/tax-report/csv", headers=auth_headers)
     content = resp.text
-    assert "Alle/All" in content
+    assert "Alle" in content
 
 
 async def test_download_csv_default_year(client, auth_headers, closed_trades):
@@ -524,7 +524,7 @@ async def test_download_csv_empty_year(client, auth_headers, user):
     assert resp.status_code == 200
     content = resp.text
     assert "STEUERREPORT" in content or "TAX REPORT" in content
-    assert any("0" in line and "Trade Count" in line for line in content.split("\n"))
+    assert any("0" in line and ("Trade Count" in line or "Anzahl Trades" in line) for line in content.split("\n"))
 
 
 async def test_download_csv_requires_auth(client, user):

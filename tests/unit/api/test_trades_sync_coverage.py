@@ -241,6 +241,7 @@ async def test_sync_detects_take_profit_exit(
 ):
     """Sync marks exit_reason as TAKE_PROFIT when price is near TP."""
     mock_client = AsyncMock()
+    mock_client.get_close_fill_price = AsyncMock(return_value=None)
     mock_client.get_open_positions = AsyncMock(return_value=[])
     # Price very close to take_profit (97000), within 0.5% of entry
     mock_client.get_ticker = AsyncMock(return_value=MagicMock(last_price=96950.0))
@@ -267,6 +268,7 @@ async def test_sync_detects_stop_loss_exit(
 ):
     """Sync marks exit_reason as STOP_LOSS when price is near SL."""
     mock_client = AsyncMock()
+    mock_client.get_close_fill_price = AsyncMock(return_value=None)
     mock_client.get_open_positions = AsyncMock(return_value=[])
     # Price very close to stop_loss (3600), within 0.5% of entry
     mock_client.get_ticker = AsyncMock(return_value=MagicMock(last_price=3598.0))
@@ -293,6 +295,7 @@ async def test_sync_handles_fee_fetch_error(
 ):
     """Sync continues even when fee fetching raises an exception."""
     mock_client = AsyncMock()
+    mock_client.get_close_fill_price = AsyncMock(return_value=None)
     mock_client.get_open_positions = AsyncMock(return_value=[])
     mock_client.get_ticker = AsyncMock(return_value=MagicMock(last_price=96000.0))
     mock_client.get_trade_total_fees = AsyncMock(side_effect=Exception("Fee API error"))
@@ -317,6 +320,7 @@ async def test_sync_handles_funding_fee_error(
 ):
     """Sync continues even when funding fee fetching raises an exception."""
     mock_client = AsyncMock()
+    mock_client.get_close_fill_price = AsyncMock(return_value=None)
     mock_client.get_open_positions = AsyncMock(return_value=[])
     mock_client.get_ticker = AsyncMock(return_value=MagicMock(last_price=96000.0))
     mock_client.get_trade_total_fees = AsyncMock(return_value=0.5)
@@ -341,6 +345,7 @@ async def test_sync_handles_individual_trade_close_error(
 ):
     """Sync handles exception when closing individual trade."""
     mock_client = AsyncMock()
+    mock_client.get_close_fill_price = AsyncMock(return_value=None)
     mock_client.get_open_positions = AsyncMock(return_value=[])
     # get_ticker raises for this trade
     mock_client.get_ticker = AsyncMock(side_effect=Exception("Ticker unavailable"))
@@ -365,6 +370,7 @@ async def test_sync_sends_discord_notification(
 ):
     """Sync sends Discord notification when trades are closed and webhook is configured."""
     mock_client = AsyncMock()
+    mock_client.get_close_fill_price = AsyncMock(return_value=None)
     mock_client.get_open_positions = AsyncMock(return_value=[])
     mock_client.get_ticker = AsyncMock(return_value=MagicMock(last_price=96000.0))
     mock_client.get_trade_total_fees = AsyncMock(return_value=0.5)
@@ -393,6 +399,7 @@ async def test_sync_discord_notification_failure_does_not_crash(
 ):
     """Sync handles Discord notification failure gracefully."""
     mock_client = AsyncMock()
+    mock_client.get_close_fill_price = AsyncMock(return_value=None)
     mock_client.get_open_positions = AsyncMock(return_value=[])
     mock_client.get_ticker = AsyncMock(return_value=MagicMock(last_price=96000.0))
     mock_client.get_trade_total_fees = AsyncMock(return_value=0.5)
@@ -419,6 +426,7 @@ async def test_sync_discord_decrypt_error_skips_notification(
 ):
     """Sync skips Discord notification when webhook URL decryption fails."""
     mock_client = AsyncMock()
+    mock_client.get_close_fill_price = AsyncMock(return_value=None)
     mock_client.get_open_positions = AsyncMock(return_value=[])
     mock_client.get_ticker = AsyncMock(return_value=MagicMock(last_price=96000.0))
     mock_client.get_trade_total_fees = AsyncMock(return_value=0.5)

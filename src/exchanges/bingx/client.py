@@ -18,7 +18,7 @@ from urllib.parse import urlencode
 import aiohttp
 
 from src.exceptions import ExchangeError
-from src.exchanges.base import ExchangeClient
+from src.exchanges.base import ExchangeClient, HTTPExchangeClientMixin
 from src.exchanges.bingx.constants import (
     BASE_URL,
     CONDITIONAL_ORDER_TYPES,
@@ -37,7 +37,7 @@ from src.exchanges.bingx.constants import (
     TESTNET_URL,
 )
 from src.exchanges.types import Balance, FundingRateInfo, Order, Position, Ticker
-from src.utils.circuit_breaker import CircuitBreakerError, circuit_registry, with_retry
+from src.utils.circuit_breaker import circuit_registry, with_retry
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -52,7 +52,7 @@ class BingXClientError(ExchangeError):
         super().__init__("bingx", message, original_error)
 
 
-class BingXClient(ExchangeClient):
+class BingXClient(HTTPExchangeClientMixin, ExchangeClient):
     """
     Async client for BingX Perpetual Swap API implementing ExchangeClient ABC.
 
@@ -63,10 +63,20 @@ class BingXClient(ExchangeClient):
     Demo trading is supported via the VST (Virtual Simulated Trading)
     mode, which uses a separate base URL.
 
+    Uses HTTPExchangeClientMixin for session management and circuit breaker.
+    Overrides _raw_request because BingX uses query-string-based auth
+    (signature in query params, not headers).
+
     Symbol format: BTC-USDT (hyphenated)
     """
 
     SUPPORTS_NATIVE_TRAILING_STOP = True
+
+    _client_error_class = BingXClientError
+
+    @property
+    def _circuit_breaker(self):
+        return _bingx_breaker
 
     def __init__(
         self,
@@ -89,21 +99,6 @@ class BingXClient(ExchangeClient):
         self._session: Optional[aiohttp.ClientSession] = None
         mode_str = "DEMO (VST)" if demo_mode else "LIVE"
         logger.info(f"BingXClient initialized in {mode_str} mode")
-
-    async def __aenter__(self):
-        await self._ensure_session()
-        return self
-
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
-        await self.close()
-
-    async def _ensure_session(self):
-        if self._session is None or self._session.closed:
-            self._session = aiohttp.ClientSession()
-
-    async def close(self) -> None:
-        if self._session and not self._session.closed:
-            await self._session.close()
 
     @property
     def exchange_name(self) -> str:
@@ -202,24 +197,8 @@ class BingXClient(ExchangeClient):
         return f"{query_string}&signature={signature}"
 
     # ==================== HTTP ====================
-
-    async def _request(
-        self,
-        method: str,
-        endpoint: str,
-        params: Optional[Dict] = None,
-        data: Optional[Dict] = None,
-        auth: bool = True,
-        use_circuit_breaker: bool = True,
-    ) -> Dict[str, Any]:
-        if use_circuit_breaker:
-            async def _do():
-                return await self._raw_request(method, endpoint, params, data, auth)
-            try:
-                return await _bingx_breaker.call(_do)
-            except CircuitBreakerError as e:
-                raise BingXClientError(f"API temporarily unavailable: {e}")
-        return await self._raw_request(method, endpoint, params, data, auth)
+    # _request is inherited from HTTPExchangeClientMixin (circuit breaker wrapper).
+    # _raw_request is overridden because BingX uses query-string-based signing.
 
     @with_retry(max_attempts=3, min_wait=1.0, max_wait=10.0,
                 retry_on=(aiohttp.ClientError, asyncio.TimeoutError))

@@ -112,12 +112,21 @@ class BotWorker(
 
         # Signal deduplication cache
         self._last_signal_keys: dict[str, datetime] = {}
+        self._last_signal_cleanup: datetime = datetime.now(timezone.utc)
 
         # Risk alert deduplication (reset daily)
         self._risk_alerts_sent: set[str] = set()
+        self._risk_alerts_last_reset: datetime = datetime.now(timezone.utc)
 
         # Initialize per-instance position monitor state
         self._init_monitor_state()
+
+    def _cleanup_stale_signal_keys(self) -> None:
+        """Remove signal dedup entries older than 24 hours."""
+        cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
+        stale = [k for k, v in self._last_signal_keys.items() if v < cutoff]
+        for k in stale:
+            del self._last_signal_keys[k]
 
     def _get_client(self, demo_mode: bool) -> Optional[ExchangeClient]:
         """Return the exchange client for the given mode."""
@@ -658,6 +667,17 @@ class BotWorker(
         if self._shutting_down:
             logger.info(f"{log_prefix} Shutdown in progress, skipping analysis")
             return
+
+        # Periodic cache cleanup to prevent unbounded memory growth
+        now = datetime.now(timezone.utc)
+        if (now - self._last_signal_cleanup).total_seconds() > 3600:
+            self._cleanup_stale_signal_keys()
+            self._last_signal_cleanup = now
+
+        # Reset risk alerts daily
+        if (now - self._risk_alerts_last_reset).total_seconds() > 86400:
+            self._risk_alerts_sent.clear()
+            self._risk_alerts_last_reset = now
 
         logger.info(f"{log_prefix} Starting analysis...")
 

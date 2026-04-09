@@ -536,5 +536,8 @@ async def test_compare_bots_empty(client, auth_headers, mock_orchestrator, test_
 @pytest.mark.asyncio
 async def test_bots_requires_auth(client, test_user_obj):
     """Bots endpoints require authentication."""
+    # Clear cookies so the httpOnly cookie set during admin_token login
+    # does not authenticate this request.
+    client.cookies.clear()
     response = await client.get("/api/bots")
     assert response.status_code == 401

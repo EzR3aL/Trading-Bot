@@ -1,6 +1,7 @@
-import { Fragment, useState, useEffect, useMemo, useCallback } from 'react'
+import { Fragment, useState, useMemo, useCallback } from 'react'
 import { formatChartCurrency } from '../utils/dateUtils'
 import { useTranslation } from 'react-i18next'
+import { useQueryClient } from '@tanstack/react-query'
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, PieChart, Pie, Cell, Legend, Sector,
@@ -9,13 +10,10 @@ import {
   Briefcase, ArrowUpRight, ArrowDownRight, TrendingUp,
   ChevronUp, ChevronDown, ChevronRight, ShieldCheck, Settings,
 } from 'lucide-react'
-import api from '../api/client'
+import { usePortfolioSummary, usePortfolioDaily, usePortfolioPositions, usePortfolioAllocation, useUpdateTpSl, queryKeys } from '../api/queries'
 import { useFilterStore } from '../stores/filterStore'
 import { ExchangeIcon } from '../components/ui/ExchangeLogo'
-import type {
-  PortfolioSummary, PortfolioPosition,
-  PortfolioDaily, PortfolioAllocation,
-} from '../types'
+import type { PortfolioPosition } from '../types'
 import MobilePositionCard from '../components/ui/MobilePositionCard'
 import EditPositionPanel from '../components/ui/EditPositionPanel'
 import SizeValue from '../components/ui/SizeValue'
@@ -72,15 +70,10 @@ export default function Portfolio() {
   const { theme } = useThemeStore()
   const isLight = theme === 'light'
 
+  const queryClient = useQueryClient()
+
   // Data state
-  const [summary, setSummary] = useState<PortfolioSummary | null>(null)
-  const [positions, setPositions] = useState<PortfolioPosition[]>([])
-  const [dailyData, setDailyData] = useState<PortfolioDaily[]>([])
-  const [allocation, setAllocation] = useState<PortfolioAllocation[]>([])
   const [period, setPeriod] = useState<number>(30)
-  const [loading, setLoading] = useState(true)
-  const [loadingExchange, setLoadingExchange] = useState(true)
-  const [error, setError] = useState('')
   const isMobile = useIsMobile()
   const { toggle: toggleSizeUnit } = useSizeUnitStore()
   const sizeUnit = useSizeUnitStore((s) => s.unit)
@@ -89,65 +82,27 @@ export default function Portfolio() {
   const [sortAsc, setSortAsc] = useState(false)
   const [expandedIdx, setExpandedIdx] = useState<number | null>(null)
 
-  /* ── Data Fetching ──────────────────────────────────────── */
-
-  const fetchFastData = useCallback(async () => {
-    const demoParam = demoFilter === 'demo' ? '&demo_mode=true' : demoFilter === 'live' ? '&demo_mode=false' : ''
-    const [sumRes, dailyRes] = await Promise.all([
-      api.get(`/portfolio/summary?days=${period}${demoParam}`),
-      api.get(`/portfolio/daily?days=${period}${demoParam}`),
-    ])
-    setSummary(sumRes.data)
-    setDailyData(dailyRes.data.daily || dailyRes.data || [])
-  }, [period, demoFilter])
-
-  const fetchExchangeData = useCallback(async () => {
-    const [posRes, allocRes] = await Promise.all([
-      api.get('/portfolio/positions'),
-      api.get('/portfolio/allocation'),
-    ])
-    setPositions(posRes.data.positions || posRes.data || [])
-    setAllocation(allocRes.data.allocations || allocRes.data || [])
-  }, [])
+  /* ── Data Fetching via React Query ─────────────────────── */
 
   // Phase 1: Fast DB queries (summary + daily) -- renders page instantly
-  useEffect(() => {
-    const loadFast = async () => {
-      setLoading(true)
-      setError('')
-      try {
-        await fetchFastData()
-      } catch {
-        setError(t('common.error'))
-      } finally {
-        setLoading(false)
-      }
-    }
-    loadFast()
-  }, [fetchFastData, t])
+  const { data: summary = null, isLoading: loading, error: summaryError } = usePortfolioSummary(period, demoFilter)
+  const { data: dailyData = [] } = usePortfolioDaily(period, demoFilter)
 
   // Phase 2: Slow exchange API calls (positions + allocation) -- loads in background
-  useEffect(() => {
-    const loadExchange = async () => {
-      setLoadingExchange(true)
-      try {
-        await fetchExchangeData()
-      } catch {
-        // Exchange data is optional -- don't block the page
-      } finally {
-        setLoadingExchange(false)
-      }
-    }
-    loadExchange()
-  }, [fetchExchangeData])
+  const { data: positions = [], isLoading: loadingExchange } = usePortfolioPositions()
+  const { data: allocation = [] } = usePortfolioAllocation()
+  const updateTpSl = useUpdateTpSl()
+
+  const error = summaryError ? t('common.error') : ''
 
   const refreshData = useCallback(async () => {
-    try {
-      await Promise.all([fetchFastData(), fetchExchangeData()])
-    } catch {
-      setError(t('common.error'))
-    }
-  }, [fetchFastData, fetchExchangeData, t])
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: queryKeys.portfolio.summary({ period, demoFilter }) }),
+      queryClient.invalidateQueries({ queryKey: queryKeys.portfolio.daily({ period, demoFilter }) }),
+      queryClient.invalidateQueries({ queryKey: queryKeys.portfolio.positions }),
+      queryClient.invalidateQueries({ queryKey: queryKeys.portfolio.allocation }),
+    ])
+  }, [queryClient, period, demoFilter])
 
   const { containerRef, refreshing, pullDistance } = usePullToRefresh({
     onRefresh: refreshData,
@@ -731,18 +686,16 @@ export default function Portfolio() {
           onClose={() => setEditingPos(null)}
           onSave={async (data) => {
             if (!editingPos.trade_id) return
-            await api.put(`/trades/${editingPos.trade_id}/tp-sl`, {
-              take_profit: data.take_profit,
-              stop_loss: data.stop_loss,
-              remove_tp: data.remove_tp,
-              remove_sl: data.remove_sl,
-              trailing_stop: data.trailing_stop,
+            await updateTpSl.mutateAsync({
+              tradeId: editingPos.trade_id,
+              data: {
+                take_profit: data.take_profit,
+                stop_loss: data.stop_loss,
+                remove_tp: data.remove_tp,
+                remove_sl: data.remove_sl,
+                trailing_stop: data.trailing_stop,
+              },
             })
-            // Refresh positions to show updated TP/SL
-            try {
-              const res = await api.get('/portfolio/positions')
-              setPositions(res.data.positions || res.data || [])
-            } catch {}
           }}
         />
       )}

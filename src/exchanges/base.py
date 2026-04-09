@@ -1,12 +1,18 @@
 """Abstract base classes for exchange clients and websockets."""
 
+import asyncio
+import json
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Callable, List, Optional
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Type
+
+import aiohttp
 
 from src.exchanges.types import Balance, FundingRateInfo, Order, Position, Ticker
+from src.utils.circuit_breaker import CircuitBreakerError, with_retry
 
 if TYPE_CHECKING:
     from src.exchanges.rate_limiter import ExchangeRateLimiter
+    from src.utils.circuit_breaker import CircuitBreaker
 
 
 class ExchangeClient(ABC):
@@ -201,6 +207,150 @@ class ExchangeClient(ABC):
     def supports_demo(self) -> bool:
         """Whether this exchange supports demo/paper trading."""
         ...
+
+
+class HTTPExchangeClientMixin:
+    """Shared HTTP session management, circuit breaker integration, and request
+    handling for REST-API-based exchange clients (Bitget, Weex, BingX, Bitunix).
+
+    Subclasses must define:
+        _session: Optional[aiohttp.ClientSession]
+        _circuit_breaker: CircuitBreaker  — exchange-specific circuit breaker
+        _client_error_class: Type[Exception]  — e.g. BitgetClientError
+        base_url: str
+
+    Subclasses must implement:
+        _get_headers(...)  -> Dict[str, str]  — exchange-specific auth headers
+        _parse_response(result, response) -> Any  — extract data from response JSON
+    """
+
+    _session: Optional[aiohttp.ClientSession] = None
+    _client_error_class: Type[Exception]
+    base_url: str
+
+    @property
+    def _circuit_breaker(self) -> "CircuitBreaker":
+        """Return the exchange-specific circuit breaker.
+
+        Subclasses must override this to return the module-level breaker
+        instance (e.g. ``_bitget_breaker``).  Using a property ensures
+        that tests patching the module-level variable are respected.
+        """
+        raise NotImplementedError(
+            "Subclass must override _circuit_breaker property"
+        )
+
+    # ── Session management ────────────────────────────────────────
+
+    async def _ensure_session(self) -> None:
+        """Create an aiohttp session if none exists or the current one is closed."""
+        if self._session is None or self._session.closed:
+            self._session = aiohttp.ClientSession()
+
+    async def close(self) -> None:
+        """Close the HTTP session and clean up resources."""
+        if self._session and not self._session.closed:
+            await self._session.close()
+
+    async def __aenter__(self):
+        await self._ensure_session()
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        await self.close()
+
+    # ── Circuit-breaker wrapper ───────────────────────────────────
+
+    async def _request(
+        self,
+        method: str,
+        endpoint: str,
+        params: Optional[Dict] = None,
+        data: Optional[Dict] = None,
+        auth: bool = True,
+        use_circuit_breaker: bool = True,
+    ) -> Any:
+        """Execute an API request, optionally through the circuit breaker."""
+        if use_circuit_breaker:
+            async def _do():
+                return await self._raw_request(method, endpoint, params, data, auth)
+            try:
+                return await self._circuit_breaker.call(_do)
+            except CircuitBreakerError as e:
+                raise self._client_error_class(f"API temporarily unavailable: {e}")
+        return await self._raw_request(method, endpoint, params, data, auth)
+
+    # ── Raw HTTP request (standard REST pattern) ──────────────────
+    # Suitable for exchanges that sign (method + request_path + body).
+    # Exchanges with different signing (BingX, Bitunix) override this.
+
+    @with_retry(
+        max_attempts=3,
+        min_wait=1.0,
+        max_wait=10.0,
+        retry_on=(aiohttp.ClientError, asyncio.TimeoutError),
+    )
+    async def _raw_request(
+        self,
+        method: str,
+        endpoint: str,
+        params: Optional[Dict] = None,
+        data: Optional[Dict] = None,
+        auth: bool = True,
+    ) -> Any:
+        """Perform the actual HTTP request and delegate response parsing."""
+        await self._ensure_session()
+        url = f"{self.base_url}{endpoint}"
+        body = json.dumps(data) if data else ""
+
+        if params:
+            query_string = "&".join(f"{k}={v}" for k, v in params.items())
+            request_path = f"{endpoint}?{query_string}"
+            url = f"{url}?{query_string}"
+        else:
+            request_path = endpoint
+
+        headers = (
+            self._get_headers(method, request_path, body)
+            if auth
+            else {"Content-Type": "application/json"}
+        )
+
+        try:
+            async with self._session.request(
+                method=method,
+                url=url,
+                headers=headers,
+                data=body if body else None,
+                timeout=aiohttp.ClientTimeout(total=15),
+            ) as response:
+                result = await response.json()
+
+                if response.status == 429:
+                    raise aiohttp.ClientResponseError(
+                        response.request_info,
+                        response.history,
+                        status=429,
+                        message="Rate limited",
+                    )
+
+                return self._parse_response(result, response)
+
+        except (aiohttp.ClientError, asyncio.TimeoutError):
+            raise
+        except Exception as e:
+            # Re-raise exchange-specific errors as-is
+            if isinstance(e, self._client_error_class):
+                raise
+            raise self._client_error_class(f"Request failed: {e}") from e
+
+    def _get_headers(self, method: str, request_path: str, body: str = "") -> Dict[str, str]:
+        """Build authenticated request headers. Must be overridden by subclasses."""
+        raise NotImplementedError
+
+    def _parse_response(self, result: Any, response: aiohttp.ClientResponse) -> Any:
+        """Extract data from response JSON. Must be overridden by subclasses."""
+        raise NotImplementedError
 
 
 class ExchangeWebSocket(ABC):

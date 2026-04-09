@@ -354,6 +354,8 @@ def create_app() -> FastAPI:
     app.include_router(admin_logs.router)
     from src.api.routers.copy_trading import router as copy_trading_router
     app.include_router(copy_trading_router)
+    from src.api.routers.reconciliation import reconciliation_router
+    app.include_router(reconciliation_router)
 
     # Store WebSocket manager on app state for access
     from src.api.websocket.manager import ws_manager
@@ -369,7 +371,7 @@ def create_app() -> FastAPI:
         ".txt", ".xml", ".webmanifest",
     }
 
-    if frontend_dir.exists():
+    if frontend_dir.exists() and not os.getenv("TESTING"):
         from fastapi.responses import FileResponse
 
         app.mount("/assets", StaticFiles(directory=str(frontend_dir / "assets")), name="assets")

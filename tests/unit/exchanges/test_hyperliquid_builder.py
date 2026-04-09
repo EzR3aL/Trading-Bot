@@ -259,9 +259,9 @@ class TestApproveBuilderFee:
 
         result = await client.approve_builder_fee()
         assert result is True
-        # SDK expects max_fee_rate as string (EIP-712 signing)
+        # SDK expects max_fee_rate as percentage string (EIP-712 signing)
         client._exchange.approve_builder_fee.assert_called_once_with(
-            builder="0xbuilder", max_fee_rate="10",
+            builder="0xbuilder", max_fee_rate="0.010%",
         )
 
     @pytest.mark.asyncio
@@ -356,11 +356,11 @@ class TestCalculateBuilderFee:
         client._builder = {"b": "0xbuilder", "f": 10}
 
         # entry_value=100000, exit_value=101000, total=201000
-        # fee = 201000 * (10 / 1_000_000) = 2.01
+        # fee = 201000 * (10 / 100_000) = 20.1
         fee = client.calculate_builder_fee(
             entry_price=50000.0, exit_price=50500.0, size=2.0
         )
-        assert fee == 2.01
+        assert fee == 20.1
 
     def test_calculate_fee_returns_zero_without_builder(self):
         """calculate_builder_fee returns 0.0 when builder not configured."""
@@ -382,11 +382,11 @@ class TestCalculateBuilderFee:
         client._builder = {"b": "0xbuilder", "f": 5}
 
         # entry_value=100, exit_value=102, total=202
-        # fee = 202 * (5 / 1_000_000) = 0.00101
+        # fee = 202 * (5 / 100_000) = 0.0101
         fee = client.calculate_builder_fee(
             entry_price=100.0, exit_price=102.0, size=1.0
         )
-        assert fee == 0.00101
+        assert fee == 0.0101
 
 
 # ── Builder Kwargs in Orders ──────────────────────────────────────
@@ -454,7 +454,7 @@ class TestBotWorkerReferralGate:
         worker._config.user_id = 1
 
         mock_client = MagicMock(spec=HyperliquidClient)
-        mock_client.get_referral_info = AsyncMock(return_value={"referredBy": "0xreferrer"})
+        mock_client.get_referral_info = AsyncMock(return_value={"referredBy": "MYCODE"})
 
         mock_db = AsyncMock()
         mock_result = MagicMock()

@@ -7,6 +7,7 @@ Account/position/leverage endpoints remain on V2 (cmt_btcusdt format).
 Auth: HMAC-SHA256 + Base64 (same algorithm as Bitget).
 """
 
+import asyncio
 import base64
 import hashlib
 import hmac
@@ -15,12 +16,10 @@ import time
 import uuid
 from typing import Any, Dict, List, Optional
 
-import asyncio
-
 import aiohttp
 
 from src.exceptions import ExchangeError
-from src.exchanges.base import ExchangeClient
+from src.exchanges.base import ExchangeClient, HTTPExchangeClientMixin
 from src.exchanges.types import Balance, FundingRateInfo, Order, Position, Ticker
 from src.exchanges.weex.constants import (
     BASE_URL,
@@ -29,7 +28,7 @@ from src.exchanges.weex.constants import (
     MARGIN_ISOLATED,
     SUCCESS_CODE,
 )
-from src.utils.circuit_breaker import CircuitBreakerError, circuit_registry, with_retry
+from src.utils.circuit_breaker import circuit_registry
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -44,8 +43,18 @@ class WeexClientError(ExchangeError):
         super().__init__("weex", message, original_error)
 
 
-class WeexClient(ExchangeClient):
-    """Weex Futures exchange client."""
+class WeexClient(HTTPExchangeClientMixin, ExchangeClient):
+    """Weex Futures exchange client.
+
+    Uses HTTPExchangeClientMixin for session management, circuit breaker,
+    and the standard REST request flow.
+    """
+
+    _client_error_class = WeexClientError
+
+    @property
+    def _circuit_breaker(self):
+        return _weex_breaker
 
     def __init__(
         self,
@@ -91,15 +100,7 @@ class WeexClient(ExchangeClient):
             base = s
         return f"{base.upper()}USDT"
 
-    # ── HTTP plumbing ──────────────────────────────────────────────
-
-    async def _ensure_session(self):
-        if self._session is None or self._session.closed:
-            self._session = aiohttp.ClientSession()
-
-    async def close(self) -> None:
-        if self._session and not self._session.closed:
-            await self._session.close()
+    # ── Auth ──────────────────────────────────────────────────────
 
     def _generate_signature(self, timestamp: str, method: str,
                             request_path: str, body: str = "") -> str:
@@ -127,85 +128,31 @@ class WeexClient(ExchangeClient):
             headers["paptrading"] = "1"
         return headers
 
-    async def _request(
-        self,
-        method: str,
-        endpoint: str,
-        params: Optional[Dict] = None,
-        data: Optional[Dict] = None,
-        auth: bool = True,
-        use_circuit_breaker: bool = True,
-    ) -> Dict[str, Any]:
-        if use_circuit_breaker:
-            async def _do():
-                return await self._raw_request(method, endpoint, params, data, auth)
-            try:
-                return await _weex_breaker.call(_do)
-            except CircuitBreakerError as e:
-                raise WeexClientError(f"API temporarily unavailable: {e}")
-        return await self._raw_request(method, endpoint, params, data, auth)
+    # ── Response parsing ──────────────────────────────────────────
 
-    @with_retry(max_attempts=3, min_wait=1.0, max_wait=10.0,
-                retry_on=(aiohttp.ClientError, asyncio.TimeoutError))
-    async def _raw_request(
-        self,
-        method: str,
-        endpoint: str,
-        params: Optional[Dict] = None,
-        data: Optional[Dict] = None,
-        auth: bool = True,
-    ) -> Dict[str, Any]:
-        await self._ensure_session()
-        url = f"{self.base_url}{endpoint}"
-        body = json.dumps(data) if data else ""
+    def _parse_response(self, result: Any, response: aiohttp.ClientResponse) -> Any:
+        """Parse Weex API response — handles non-dict, missing code, and error codes."""
+        # Some endpoints return raw list/data without {code, data} wrapper
+        if not isinstance(result, dict):
+            if response.status == 200:
+                return result
+            raise WeexClientError(
+                f"Weex API Error: unexpected response (status={response.status})"
+            )
 
-        if params:
-            query = "&".join(f"{k}={v}" for k, v in params.items())
-            request_path = f"{endpoint}?{query}"
-            url = f"{url}?{query}"
-        else:
-            request_path = endpoint
+        code = result.get("code")
+        logger.debug(f"Weex response: status={response.status} code={code}")
 
-        headers = self._get_headers(method, request_path, body) if auth else {"Content-Type": "application/json"}
+        # Some endpoints return dict without code wrapper
+        if code is None and response.status == 200:
+            return result
 
-        try:
-            async with self._session.request(
-                method=method, url=url, headers=headers,
-                data=body if body else None,
-                timeout=aiohttp.ClientTimeout(total=15),
-            ) as response:
-                result = await response.json()
-
-                if response.status == 429:
-                    raise aiohttp.ClientResponseError(
-                        response.request_info, response.history,
-                        status=429, message="Rate limited",
-                    )
-
-                # Some endpoints return raw list/data without {code, data} wrapper
-                if not isinstance(result, dict):
-                    if response.status == 200:
-                        return result
-                    raise WeexClientError(
-                        f"Weex API Error: unexpected response (status={response.status})"
-                    )
-
-                code = result.get("code")
-                logger.debug(f"Weex {method} {endpoint}: status={response.status} code={code}")
-
-                # Some endpoints return dict without code wrapper
-                if code is None and response.status == 200:
-                    return result
-
-                if response.status != 200 or str(code) != SUCCESS_CODE:
-                    msg = result.get("msg", result.get("message", "Unknown"))
-                    raise WeexClientError(
-                        f"Weex API Error: {msg} (code={code}, status={response.status})"
-                    )
-                return result.get("data", result)
-
-        except (aiohttp.ClientError, asyncio.TimeoutError):
-            raise
+        if response.status != 200 or str(code) != SUCCESS_CODE:
+            msg = result.get("msg", result.get("message", "Unknown"))
+            raise WeexClientError(
+                f"Weex API Error: {msg} (code={code}, status={response.status})"
+            )
+        return result.get("data", result)
 
     # ── Account ────────────────────────────────────────────────────
 

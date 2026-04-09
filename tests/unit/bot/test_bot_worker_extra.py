@@ -122,6 +122,7 @@ def _make_mock_trade(**overrides):
     trade.exit_reason = overrides.get("exit_reason", None)
     trade.demo_mode = overrides.get("demo_mode", True)
     trade.exchange = overrides.get("exchange", "bitget")
+    trade.native_trailing_stop = overrides.get("native_trailing_stop", False)
     return trade
 
 
@@ -795,10 +796,10 @@ class TestExecuteTradeExtended:
         with patch("src.bot.trade_executor.get_session", return_value=_mock_session_ctx(mock_session)):
             await worker._execute_trade(signal, mock_client, demo_mode=True)
 
-        # Bot-level TP=4%, SL=1.5% → TP/SL sent to exchange (not cleared)
+        # Per-asset TP=5%, SL=2% overrides bot-level TP=4%, SL=1.5%
         call_kwargs = mock_client.place_market_order.call_args[1]
-        assert call_kwargs["take_profit"] == pytest.approx(104000.0)  # 100000 * 1.04
-        assert call_kwargs["stop_loss"] == pytest.approx(98500.0)     # 100000 * 0.985
+        assert call_kwargs["take_profit"] == pytest.approx(105000.0)  # 100000 * 1.05
+        assert call_kwargs["stop_loss"] == pytest.approx(98000.0)     # 100000 * 0.98
 
     async def test_tp_sl_none_when_no_config(self):
         """Without TP/SL in config, None is passed to exchange."""
@@ -1212,8 +1213,8 @@ class TestConfirmPositionClosed:
 
         assert result is False
 
-    async def test_retry_error_still_confirms(self):
-        """If retries raise exceptions, still confirm (conservative)."""
+    async def test_retry_error_does_not_confirm(self):
+        """If all retries raise exceptions, do not confirm closure (Bug 1 fix)."""
         worker = BotWorker(bot_config_id=1)
         mock_client = AsyncMock()
         mock_client.get_position.side_effect = Exception("timeout")
@@ -1221,7 +1222,7 @@ class TestConfirmPositionClosed:
         trade = _make_mock_trade(demo_mode=True)
         result = await worker._confirm_position_closed(trade, mock_client)
 
-        assert result is True
+        assert result is False
 
 
 # ---------------------------------------------------------------------------
@@ -1232,6 +1233,24 @@ class TestConfirmPositionClosed:
 class TestHandleClosedPosition:
     """Tests for _handle_closed_position."""
 
+    def _make_handle_client(self, last_price=97000.0, fees=5.0, funding=1.0, builder_fee=None):
+        """Helper: create a mock exchange client for _handle_closed_position tests."""
+        mock_client = AsyncMock()
+        mock_client.get_close_fill_price.return_value = None
+        if last_price is not None:
+            ticker = MagicMock()
+            ticker.last_price = last_price
+            mock_client.get_ticker.return_value = ticker
+        else:
+            mock_client.get_ticker.return_value = None
+        mock_client.get_trade_total_fees.return_value = fees
+        mock_client.get_funding_fees.return_value = funding
+        if builder_fee is not None:
+            mock_client.calculate_builder_fee = MagicMock(return_value=builder_fee)
+        else:
+            del mock_client.calculate_builder_fee
+        return mock_client
+
     async def test_long_trade_profit_take_profit_hit(self):
         """Long trade closed near take profit is labeled TAKE_PROFIT."""
         worker = BotWorker(bot_config_id=1)
@@ -1241,20 +1260,12 @@ class TestHandleClosedPosition:
         mock_rm = MagicMock()
         worker._risk_manager = mock_rm
 
-        mock_client = AsyncMock()
-        ticker = MagicMock()
-        ticker.last_price = 97000.0
-        mock_client.get_ticker.return_value = ticker
-        mock_client.get_trade_total_fees.return_value = 5.0
-        mock_client.get_funding_fees.return_value = 1.0
+        mock_client = self._make_handle_client(last_price=97000.0, fees=5.0, funding=1.0)
 
         trade = _make_mock_trade(
             side="long", entry_price=95000.0, take_profit=97000.0,
             stop_loss=94000.0, size=0.01, order_id="o1",
         )
-        # Remove calculate_builder_fee from the client mock
-        del mock_client.calculate_builder_fee
-
         session = AsyncMock()
 
         await worker._handle_closed_position(trade, mock_client, session)
@@ -1273,13 +1284,7 @@ class TestHandleClosedPosition:
         mock_rm = MagicMock()
         worker._risk_manager = mock_rm
 
-        mock_client = AsyncMock()
-        ticker = MagicMock()
-        ticker.last_price = 96000.0
-        mock_client.get_ticker.return_value = ticker
-        mock_client.get_trade_total_fees.return_value = 3.0
-        mock_client.get_funding_fees.return_value = 0.5
-        del mock_client.calculate_builder_fee
+        mock_client = self._make_handle_client(last_price=96000.0, fees=3.0, funding=0.5)
 
         trade = _make_mock_trade(
             side="short", entry_price=95000.0, take_profit=93000.0,
@@ -1301,13 +1306,7 @@ class TestHandleClosedPosition:
         mock_rm = MagicMock()
         worker._risk_manager = mock_rm
 
-        mock_client = AsyncMock()
-        ticker = MagicMock()
-        ticker.last_price = 95500.0  # Between TP and SL, far from both
-        mock_client.get_ticker.return_value = ticker
-        mock_client.get_trade_total_fees.return_value = 2.0
-        mock_client.get_funding_fees.return_value = 0.0
-        del mock_client.calculate_builder_fee
+        mock_client = self._make_handle_client(last_price=95500.0, fees=2.0, funding=0.0)
 
         trade = _make_mock_trade(
             side="long", entry_price=95000.0, take_profit=97000.0,
@@ -1328,11 +1327,7 @@ class TestHandleClosedPosition:
         mock_rm = MagicMock()
         worker._risk_manager = mock_rm
 
-        mock_client = AsyncMock()
-        mock_client.get_ticker.return_value = None
-        mock_client.get_trade_total_fees.return_value = 0
-        mock_client.get_funding_fees.return_value = 0
-        del mock_client.calculate_builder_fee
+        mock_client = self._make_handle_client(last_price=None, fees=0, funding=0)
 
         trade = _make_mock_trade(side="long", entry_price=95000.0, size=0.01, order_id="o1")
         session = AsyncMock()
@@ -1351,13 +1346,9 @@ class TestHandleClosedPosition:
         mock_rm = MagicMock()
         worker._risk_manager = mock_rm
 
-        mock_client = AsyncMock()
-        ticker = MagicMock()
-        ticker.last_price = 96000.0
-        mock_client.get_ticker.return_value = ticker
+        mock_client = self._make_handle_client(last_price=96000.0, fees=0, funding=0)
         mock_client.get_trade_total_fees.side_effect = Exception("API error")
         mock_client.get_funding_fees.side_effect = Exception("API error")
-        del mock_client.calculate_builder_fee
 
         trade = _make_mock_trade(side="long", order_id="o1")
         session = AsyncMock()
@@ -1377,13 +1368,7 @@ class TestHandleClosedPosition:
         mock_rm = MagicMock()
         worker._risk_manager = mock_rm
 
-        mock_client = AsyncMock()
-        ticker = MagicMock()
-        ticker.last_price = 96000.0
-        mock_client.get_ticker.return_value = ticker
-        mock_client.get_trade_total_fees.return_value = 5.0
-        mock_client.get_funding_fees.return_value = 1.0
-        mock_client.calculate_builder_fee = MagicMock(return_value=2.5)
+        mock_client = self._make_handle_client(last_price=96000.0, fees=5.0, funding=1.0, builder_fee=2.5)
 
         trade = _make_mock_trade(side="long", order_id="o1")
         session = AsyncMock()
@@ -1398,6 +1383,7 @@ class TestHandleClosedPosition:
         worker._config = _make_mock_config()
 
         mock_client = AsyncMock()
+        mock_client.get_close_fill_price.side_effect = Exception("Network error")
         mock_client.get_ticker.side_effect = Exception("Network error")
 
         trade = _make_mock_trade()
@@ -1419,13 +1405,7 @@ class TestHandleClosedPosition:
         mock_rm = MagicMock()
         worker._risk_manager = mock_rm
 
-        mock_client = AsyncMock()
-        ticker = MagicMock()
-        ticker.last_price = 96000.0
-        mock_client.get_ticker.return_value = ticker
-        mock_client.get_trade_total_fees.return_value = 0
-        mock_client.get_funding_fees.return_value = 0
-        del mock_client.calculate_builder_fee
+        mock_client = self._make_handle_client(last_price=96000.0, fees=0, funding=0)
 
         trade = _make_mock_trade(side="long", order_id="o1")
         session = AsyncMock()
@@ -1459,500 +1439,9 @@ class TestHandleClosedPosition:
 
 
 # ---------------------------------------------------------------------------
-# _check_rotation tests (lines 823-936)
+# _check_rotation and _force_close_trade tests removed
+# (rotation feature removed from BotWorker)
 # ---------------------------------------------------------------------------
-
-@pytest.mark.asyncio
-class TestCheckRotation:
-    """Tests for _check_rotation."""
-
-    async def test_rotation_safe_catches_errors(self):
-        worker = BotWorker(bot_config_id=1)
-        worker._check_rotation = AsyncMock(side_effect=RuntimeError("boom"))
-
-        await worker._check_rotation_safe()
-        # Should not raise
-
-    async def test_no_rotation_when_not_configured(self):
-        worker = BotWorker(bot_config_id=1)
-        worker._config = _make_mock_config(rotation_interval_minutes=None)
-
-        await worker._check_rotation()
-        # Should return early, no error
-
-    async def test_no_open_trades_rotation_only_triggers_analysis(self):
-        """In rotation_only mode with no open trades, triggers new analysis."""
-        worker = BotWorker(bot_config_id=1)
-        worker._config = _make_mock_config(
-            schedule_type="rotation_only",
-            rotation_interval_minutes=60,
-            trading_pairs=json.dumps(["BTCUSDT"]),
-        )
-
-        mock_rm = MagicMock()
-        mock_rm.can_trade.return_value = (True, "")
-        worker._risk_manager = mock_rm
-
-        mock_client = AsyncMock()
-        mock_client.get_account_balance.return_value = _make_mock_balance()
-        worker._client = mock_client
-
-        mock_result = MagicMock()
-        mock_result.scalars.return_value.all.return_value = []
-
-        mock_session = _make_db_session()
-        mock_session.execute = AsyncMock(return_value=mock_result)
-
-        worker._analyze_symbol = AsyncMock()
-
-        with patch("src.bot.rotation_manager.get_session", return_value=_mock_session_ctx(mock_session)):
-            await worker._check_rotation()
-
-        worker._analyze_symbol.assert_awaited_once()
-
-    async def test_no_open_trades_non_rotation_mode_returns(self):
-        """In non-rotation_only mode with no open trades, does nothing."""
-        worker = BotWorker(bot_config_id=1)
-        worker._config = _make_mock_config(
-            schedule_type="interval",
-            rotation_interval_minutes=60,
-        )
-
-        mock_result = MagicMock()
-        mock_result.scalars.return_value.all.return_value = []
-
-        mock_session = _make_db_session()
-        mock_session.execute = AsyncMock(return_value=mock_result)
-
-        with patch("src.bot.rotation_manager.get_session", return_value=_mock_session_ctx(mock_session)):
-            await worker._check_rotation()
-
-    async def test_elapsed_rotation_closes_and_reopens(self):
-        """Trade older than rotation_interval is closed and re-analyzed."""
-        worker = BotWorker(bot_config_id=1)
-        worker._config = _make_mock_config(
-            rotation_interval_minutes=60,
-            rotation_start_time=None,
-            trading_pairs=json.dumps(["BTCUSDT"]),
-        )
-
-        mock_rm = MagicMock()
-        mock_rm.can_trade.return_value = (True, "")
-        worker._risk_manager = mock_rm
-
-        # Trade opened 2 hours ago
-        trade = _make_mock_trade(
-            entry_time=datetime.now(timezone.utc) - timedelta(hours=2),
-            demo_mode=True,
-        )
-
-        mock_result = MagicMock()
-        mock_result.scalars.return_value.all.return_value = [trade]
-
-        mock_session = _make_db_session()
-        mock_session.execute = AsyncMock(return_value=mock_result)
-
-        mock_client = AsyncMock()
-        mock_client.get_account_balance.return_value = _make_mock_balance()
-        worker._demo_client = mock_client
-
-        worker._force_close_trade = AsyncMock(return_value=True)
-        worker._analyze_symbol = AsyncMock()
-
-        with patch("src.bot.rotation_manager.get_session", return_value=_mock_session_ctx(mock_session)):
-            await worker._check_rotation()
-
-        worker._force_close_trade.assert_awaited_once()
-        worker._analyze_symbol.assert_awaited_once()
-
-    async def test_anchored_rotation_should_rotate(self):
-        """Anchored rotation: trade opened before last boundary should rotate."""
-        worker = BotWorker(bot_config_id=1)
-        worker._config = _make_mock_config(
-            rotation_interval_minutes=60,
-            rotation_start_time="00:00",
-            trading_pairs=json.dumps(["BTCUSDT"]),
-        )
-
-        mock_rm = MagicMock()
-        mock_rm.can_trade.return_value = (True, "")
-        worker._risk_manager = mock_rm
-
-        # Trade opened 3 hours ago
-        trade = _make_mock_trade(
-            entry_time=datetime.now(timezone.utc) - timedelta(hours=3),
-            demo_mode=True,
-        )
-
-        mock_result = MagicMock()
-        mock_result.scalars.return_value.all.return_value = [trade]
-
-        mock_session = _make_db_session()
-        mock_session.execute = AsyncMock(return_value=mock_result)
-
-        mock_client = AsyncMock()
-        mock_client.get_account_balance.return_value = _make_mock_balance()
-        worker._demo_client = mock_client
-
-        worker._force_close_trade = AsyncMock(return_value=True)
-        worker._analyze_symbol = AsyncMock()
-
-        with patch("src.bot.rotation_manager.get_session", return_value=_mock_session_ctx(mock_session)):
-            await worker._check_rotation()
-
-        worker._force_close_trade.assert_awaited_once()
-
-    async def test_rotation_risk_blocks_reopen(self):
-        """After rotation close, risk check blocks re-opening."""
-        worker = BotWorker(bot_config_id=1)
-        worker._config = _make_mock_config(
-            rotation_interval_minutes=60,
-            rotation_start_time=None,
-            trading_pairs=json.dumps(["BTCUSDT"]),
-        )
-
-        mock_rm = MagicMock()
-        # First call for the loop check, second for reopen
-        mock_rm.can_trade.side_effect = [(True, ""), (False, "Daily loss limit")]
-        worker._risk_manager = mock_rm
-
-        trade = _make_mock_trade(
-            entry_time=datetime.now(timezone.utc) - timedelta(hours=2),
-            demo_mode=True,
-        )
-
-        mock_result = MagicMock()
-        mock_result.scalars.return_value.all.return_value = [trade]
-
-        mock_session = _make_db_session()
-        mock_session.execute = AsyncMock(return_value=mock_result)
-
-        worker._demo_client = AsyncMock()
-        worker._force_close_trade = AsyncMock(return_value=True)
-        worker._analyze_symbol = AsyncMock()
-
-        with patch("src.bot.rotation_manager.get_session", return_value=_mock_session_ctx(mock_session)):
-            await worker._check_rotation()
-
-        worker._force_close_trade.assert_awaited_once()
-        worker._analyze_symbol.assert_not_awaited()
-
-    async def test_rotation_close_fails_skips_reopen(self):
-        """When force_close_trade returns False, skip re-opening."""
-        worker = BotWorker(bot_config_id=1)
-        worker._config = _make_mock_config(
-            rotation_interval_minutes=60,
-            rotation_start_time=None,
-        )
-
-        mock_rm = MagicMock()
-        worker._risk_manager = mock_rm
-
-        trade = _make_mock_trade(
-            entry_time=datetime.now(timezone.utc) - timedelta(hours=2),
-            demo_mode=True,
-        )
-
-        mock_result = MagicMock()
-        mock_result.scalars.return_value.all.return_value = [trade]
-
-        mock_session = _make_db_session()
-        mock_session.execute = AsyncMock(return_value=mock_result)
-
-        worker._demo_client = AsyncMock()
-        worker._force_close_trade = AsyncMock(return_value=False)
-        worker._analyze_symbol = AsyncMock()
-
-        with patch("src.bot.rotation_manager.get_session", return_value=_mock_session_ctx(mock_session)):
-            await worker._check_rotation()
-
-        worker._analyze_symbol.assert_not_awaited()
-
-    async def test_rotation_trade_no_entry_time_skipped(self):
-        """Trade without entry_time is skipped in rotation check."""
-        worker = BotWorker(bot_config_id=1)
-        worker._config = _make_mock_config(rotation_interval_minutes=60)
-
-        trade = _make_mock_trade(entry_time=None)
-
-        mock_result = MagicMock()
-        mock_result.scalars.return_value.all.return_value = [trade]
-
-        mock_session = _make_db_session()
-        mock_session.execute = AsyncMock(return_value=mock_result)
-
-        worker._force_close_trade = AsyncMock()
-
-        with patch("src.bot.rotation_manager.get_session", return_value=_mock_session_ctx(mock_session)):
-            await worker._check_rotation()
-
-        worker._force_close_trade.assert_not_awaited()
-
-    async def test_rotation_reanalysis_error_caught(self):
-        """Error during re-analysis after rotation is caught."""
-        worker = BotWorker(bot_config_id=1)
-        worker._config = _make_mock_config(
-            rotation_interval_minutes=60,
-            trading_pairs=json.dumps(["BTCUSDT"]),
-        )
-
-        mock_rm = MagicMock()
-        mock_rm.can_trade.return_value = (True, "")
-        worker._risk_manager = mock_rm
-
-        trade = _make_mock_trade(
-            entry_time=datetime.now(timezone.utc) - timedelta(hours=2),
-            demo_mode=True,
-        )
-
-        mock_result = MagicMock()
-        mock_result.scalars.return_value.all.return_value = [trade]
-
-        mock_session = _make_db_session()
-        mock_session.execute = AsyncMock(return_value=mock_result)
-
-        mock_client = AsyncMock()
-        mock_client.get_account_balance.side_effect = Exception("balance error")
-        worker._demo_client = mock_client
-
-        worker._force_close_trade = AsyncMock(return_value=True)
-
-        with patch("src.bot.rotation_manager.get_session", return_value=_mock_session_ctx(mock_session)):
-            await worker._check_rotation()
-
-        # Should not raise despite the error
-
-
-# ---------------------------------------------------------------------------
-# _force_close_trade tests (lines 946-1074)
-# ---------------------------------------------------------------------------
-
-@pytest.mark.asyncio
-class TestForceCloseTrade:
-    """Tests for _force_close_trade."""
-
-    async def test_successful_close_with_order_price(self):
-        """Successful force close uses order price for PnL."""
-        worker = BotWorker(bot_config_id=1)
-        worker._config = _make_mock_config()
-        worker._get_notifiers = AsyncMock(return_value=[])
-
-        mock_rm = MagicMock()
-        worker._risk_manager = mock_rm
-
-        order = _make_mock_order(price=96000.0)
-        mock_client = AsyncMock()
-        mock_client.close_position.return_value = order
-
-        trade = _make_mock_trade(side="long", entry_price=95000.0, size=0.01)
-        session = AsyncMock()
-
-        result = await worker._force_close_trade(trade, mock_client, session)
-
-        assert result is True
-        assert trade.status == "closed"
-        assert trade.exit_reason == "ROTATION"
-        assert trade.exit_price == 96000.0
-        assert trade.pnl > 0
-
-    async def test_close_position_returns_none_already_closed(self):
-        """When close_position returns None, marks as ROTATION_ALREADY_CLOSED."""
-        worker = BotWorker(bot_config_id=1)
-        worker._config = _make_mock_config()
-
-        mock_rm = MagicMock()
-        worker._risk_manager = mock_rm
-
-        mock_client = AsyncMock()
-        mock_client.close_position.return_value = None
-        ticker = MagicMock()
-        ticker.last_price = 96000.0
-        mock_client.get_ticker.return_value = ticker
-
-        trade = _make_mock_trade(side="long", entry_price=95000.0, size=0.01)
-        session = AsyncMock()
-
-        result = await worker._force_close_trade(trade, mock_client, session)
-
-        assert result is True
-        assert trade.exit_reason == "ROTATION_ALREADY_CLOSED"
-        mock_rm.record_trade_exit.assert_called_once()
-
-    async def test_close_position_none_ticker_fails(self):
-        """When close returns None and ticker also fails, uses entry_price."""
-        worker = BotWorker(bot_config_id=1)
-        worker._config = _make_mock_config()
-
-        mock_rm = MagicMock()
-        worker._risk_manager = mock_rm
-
-        mock_client = AsyncMock()
-        mock_client.close_position.return_value = None
-        mock_client.get_ticker.side_effect = Exception("API error")
-
-        trade = _make_mock_trade(side="short", entry_price=95000.0, size=0.01)
-        session = AsyncMock()
-
-        result = await worker._force_close_trade(trade, mock_client, session)
-
-        assert result is True
-        assert trade.exit_price == 95000.0
-        assert trade.pnl == 0.0
-
-    async def test_close_order_zero_price_uses_ticker(self):
-        """When order.price is 0, falls back to ticker."""
-        worker = BotWorker(bot_config_id=1)
-        worker._config = _make_mock_config()
-        worker._get_notifiers = AsyncMock(return_value=[])
-
-        mock_rm = MagicMock()
-        worker._risk_manager = mock_rm
-
-        order = _make_mock_order(price=0)
-        mock_client = AsyncMock()
-        mock_client.close_position.return_value = order
-        ticker = MagicMock()
-        ticker.last_price = 96500.0
-        mock_client.get_ticker.return_value = ticker
-
-        trade = _make_mock_trade(side="long", entry_price=95000.0, size=0.01)
-        session = AsyncMock()
-
-        result = await worker._force_close_trade(trade, mock_client, session)
-
-        assert result is True
-        assert trade.exit_price == 96500.0
-
-    async def test_close_short_trade_pnl(self):
-        """Short trade PnL is calculated correctly."""
-        worker = BotWorker(bot_config_id=1)
-        worker._config = _make_mock_config()
-        worker._get_notifiers = AsyncMock(return_value=[])
-
-        mock_rm = MagicMock()
-        worker._risk_manager = mock_rm
-
-        order = _make_mock_order(price=94000.0)
-        mock_client = AsyncMock()
-        mock_client.close_position.return_value = order
-
-        trade = _make_mock_trade(side="short", entry_price=95000.0, size=0.01)
-        session = AsyncMock()
-
-        result = await worker._force_close_trade(trade, mock_client, session)
-
-        assert result is True
-        # Short PnL: (entry - exit) * size = (95000 - 94000) * 0.01 = 10
-        assert trade.pnl == 10.0
-
-    async def test_no_position_error_marks_already_closed(self):
-        """'no position' exchange error marks trade as ROTATION_ALREADY_CLOSED."""
-        worker = BotWorker(bot_config_id=1)
-        worker._config = _make_mock_config()
-
-        mock_rm = MagicMock()
-        worker._risk_manager = mock_rm
-
-        mock_client = AsyncMock()
-        mock_client.close_position.side_effect = Exception("no position found")
-
-        trade = _make_mock_trade()
-        session = AsyncMock()
-
-        result = await worker._force_close_trade(trade, mock_client, session)
-
-        assert result is True
-        assert trade.exit_reason == "ROTATION_ALREADY_CLOSED"
-        assert trade.pnl == 0
-
-    async def test_position_not_exist_error(self):
-        """'position not exist' exchange error marks as ROTATION_ALREADY_CLOSED."""
-        worker = BotWorker(bot_config_id=1)
-        worker._config = _make_mock_config()
-
-        mock_rm = MagicMock()
-        worker._risk_manager = mock_rm
-
-        mock_client = AsyncMock()
-        mock_client.close_position.side_effect = Exception("position not exist on exchange")
-
-        trade = _make_mock_trade()
-        session = AsyncMock()
-
-        result = await worker._force_close_trade(trade, mock_client, session)
-
-        assert result is True
-        assert trade.exit_reason == "ROTATION_ALREADY_CLOSED"
-
-    async def test_generic_close_error_returns_false(self):
-        """Unknown error during force close returns False."""
-        worker = BotWorker(bot_config_id=1)
-        worker._config = _make_mock_config()
-
-        mock_rm = MagicMock()
-        worker._risk_manager = mock_rm
-
-        mock_client = AsyncMock()
-        mock_client.close_position.side_effect = Exception("Unknown exchange error")
-
-        trade = _make_mock_trade()
-        session = AsyncMock()
-
-        result = await worker._force_close_trade(trade, mock_client, session)
-
-        assert result is False
-
-    async def test_force_close_notification_on_success(self):
-        """Notification is sent after successful rotation close."""
-        worker = BotWorker(bot_config_id=1)
-        worker._config = _make_mock_config()
-
-        mock_notifier = AsyncMock()
-        mock_notifier.__aenter__ = AsyncMock(return_value=mock_notifier)
-        mock_notifier.__aexit__ = AsyncMock(return_value=False)
-        worker._get_notifiers = AsyncMock(return_value=[mock_notifier])
-
-        mock_rm = MagicMock()
-        worker._risk_manager = mock_rm
-
-        order = _make_mock_order(price=96000.0)
-        mock_client = AsyncMock()
-        mock_client.close_position.return_value = order
-
-        trade = _make_mock_trade(side="long", entry_price=95000.0, size=0.01)
-        session = AsyncMock()
-
-        result = await worker._force_close_trade(trade, mock_client, session)
-
-        assert result is True
-        mock_notifier.send_trade_exit.assert_awaited_once()
-
-    async def test_force_close_notification_error_handled(self):
-        """Notification error during force close does not crash."""
-        worker = BotWorker(bot_config_id=1)
-        worker._config = _make_mock_config()
-
-        mock_notifier = AsyncMock()
-        mock_notifier.__aenter__ = AsyncMock(return_value=mock_notifier)
-        mock_notifier.__aexit__ = AsyncMock(return_value=False)
-        mock_notifier.send_trade_exit.side_effect = Exception("notif fail")
-        worker._get_notifiers = AsyncMock(return_value=[mock_notifier])
-
-        mock_rm = MagicMock()
-        worker._risk_manager = mock_rm
-
-        order = _make_mock_order(price=96000.0)
-        mock_client = AsyncMock()
-        mock_client.close_position.return_value = order
-
-        trade = _make_mock_trade(side="long", entry_price=95000.0, size=0.01)
-        session = AsyncMock()
-
-        result = await worker._force_close_trade(trade, mock_client, session)
-
-        assert result is True
-
-
 # ---------------------------------------------------------------------------
 # _get_notifiers and _get_discord_notifier tests (lines 1082-1083, 1091, 1094-1100)
 # ---------------------------------------------------------------------------
@@ -2322,7 +1811,8 @@ class TestHyperliquidInit:
              patch("src.bot.bot_worker.decrypt_value", return_value="decrypted"), \
              patch("src.bot.bot_worker.StrategyRegistry") as mock_registry, \
              patch("src.bot.bot_worker.RiskManager") as mock_rm_cls, \
-             patch("src.utils.settings.get_hl_config", return_value=hl_cfg):
+             patch("src.utils.settings.get_hl_config", return_value=hl_cfg), \
+             patch("src.exchanges.symbol_fetcher.get_exchange_symbols", new_callable=AsyncMock, return_value=["BTCUSDT"]):
             mock_registry.create.return_value = MagicMock()
             mock_rm_cls.return_value = MagicMock()
 
@@ -2399,23 +1889,6 @@ class TestHyperliquidInit:
 
 class TestScheduleSetupEdgeCases:
     """Additional schedule setup tests."""
-
-    def test_rotation_enabled_with_interval(self):
-        """Rotation job is added when rotation_enabled and interval set."""
-        worker = BotWorker(bot_config_id=1)
-        worker._config = _make_mock_config(
-            schedule_type="interval",
-            schedule_config=json.dumps({"interval_minutes": 30}),
-            rotation_enabled=True,
-            rotation_interval_minutes=120,
-            rotation_start_time="08:00",
-        )
-        worker._scheduler = MagicMock()
-
-        worker._setup_schedule()
-
-        # analysis + monitor + rotation + daily_summary = 4
-        assert worker._scheduler.add_job.call_count == 4
 
     def test_schedule_config_json_parsed(self):
         """Schedule config JSON is parsed correctly."""

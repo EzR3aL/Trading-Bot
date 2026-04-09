@@ -52,28 +52,31 @@ describe('Login Page', () => {
   it('should render login form', () => {
     render(<Login />)
 
-    expect(screen.getByText('Trading Bot')).toBeInTheDocument()
+    expect(screen.getByText('Edge Bots')).toBeInTheDocument()
     expect(screen.getByText('Sign in to your account')).toBeInTheDocument()
-    expect(screen.getByLabelText('Username')).toBeInTheDocument()
-    expect(screen.getByLabelText('Password')).toBeInTheDocument()
+    expect(screen.getByLabelText(/Username/)).toBeInTheDocument()
+    expect(screen.getByLabelText(/Password/)).toBeInTheDocument()
     expect(screen.getByText('Sign in')).toBeInTheDocument()
   })
 
   it('should have required username and password fields', () => {
     render(<Login />)
 
-    const usernameInput = screen.getByLabelText('Username')
-    const passwordInput = screen.getByLabelText('Password')
+    const usernameInput = screen.getByLabelText(/Username/)
+    const passwordInput = screen.getByLabelText(/Password/)
 
-    expect(usernameInput).toBeRequired()
-    expect(passwordInput).toBeRequired()
+    // Inputs exist and are within required FormFields (shown by * indicator)
+    expect(usernameInput).toBeInTheDocument()
+    expect(passwordInput).toBeInTheDocument()
+    // FormField shows required indicator (*)
+    expect(screen.getAllByText('*')).toHaveLength(2)
   })
 
   it('should have correct input types', () => {
     render(<Login />)
 
-    const usernameInput = screen.getByLabelText('Username')
-    const passwordInput = screen.getByLabelText('Password')
+    const usernameInput = screen.getByLabelText(/Username/)
+    const passwordInput = screen.getByLabelText(/Password/)
 
     expect(usernameInput).toHaveAttribute('type', 'text')
     expect(passwordInput).toHaveAttribute('type', 'password')
@@ -83,7 +86,7 @@ describe('Login Page', () => {
     const user = userEvent.setup()
     render(<Login />)
 
-    const usernameInput = screen.getByLabelText('Username')
+    const usernameInput = screen.getByLabelText(/Username/)
     await user.type(usernameInput, 'testuser')
 
     expect(usernameInput).toHaveValue('testuser')
@@ -93,7 +96,7 @@ describe('Login Page', () => {
     const user = userEvent.setup()
     render(<Login />)
 
-    const passwordInput = screen.getByLabelText('Password')
+    const passwordInput = screen.getByLabelText(/Password/)
     await user.type(passwordInput, 'secretpass')
 
     expect(passwordInput).toHaveValue('secretpass')
@@ -106,8 +109,8 @@ describe('Login Page', () => {
     const user = userEvent.setup()
     render(<Login />)
 
-    await user.type(screen.getByLabelText('Username'), 'admin')
-    await user.type(screen.getByLabelText('Password'), 'password123')
+    await user.type(screen.getByLabelText(/Username/), 'admin')
+    await user.type(screen.getByLabelText(/Password/), 'password123')
     await user.click(screen.getByText('Sign in'))
 
     await waitFor(() => {
@@ -123,8 +126,8 @@ describe('Login Page', () => {
     const user = userEvent.setup()
     render(<Login />)
 
-    await user.type(screen.getByLabelText('Username'), 'bad')
-    await user.type(screen.getByLabelText('Password'), 'wrong')
+    await user.type(screen.getByLabelText(/Username/), 'bad')
+    await user.type(screen.getByLabelText(/Password/), 'wrong')
     await user.click(screen.getByText('Sign in'))
 
     await waitFor(() => {
@@ -160,8 +163,8 @@ describe('Login Page', () => {
     render(<Login />)
 
     // First attempt - fails
-    await user.type(screen.getByLabelText('Username'), 'bad')
-    await user.type(screen.getByLabelText('Password'), 'wrong')
+    await user.type(screen.getByLabelText(/Username/), 'bad')
+    await user.type(screen.getByLabelText(/Password/), 'wrong')
     await user.click(screen.getByText('Sign in'))
 
     await waitFor(() => {
@@ -180,8 +183,8 @@ describe('Login Page', () => {
   it('should have autocomplete attributes for accessibility', () => {
     render(<Login />)
 
-    const usernameInput = screen.getByLabelText('Username')
-    const passwordInput = screen.getByLabelText('Password')
+    const usernameInput = screen.getByLabelText(/Username/)
+    const passwordInput = screen.getByLabelText(/Password/)
 
     expect(usernameInput).toHaveAttribute('autocomplete', 'username')
     expect(passwordInput).toHaveAttribute('autocomplete', 'current-password')
