@@ -19,7 +19,7 @@ export default defineConfig({
     rollupOptions: {
       output: {
         manualChunks: {
-          wallet: ['wagmi', 'viem', '@rainbow-me/rainbowkit', '@tanstack/react-query'],
+          wallet: ['wagmi', 'viem', '@rainbow-me/rainbowkit'],
           charts: ['recharts'],
         },
       },
