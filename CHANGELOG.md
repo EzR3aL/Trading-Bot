@@ -9,6 +9,18 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [4.13.0] - 2026-04-11
+
+### Added
+- **Wallet-Validierung beim Hyperliquid Bot-Start** — Prüft ob Wallet existiert, min. 100 USDC Guthaben, und API-Wallet autorisiert ist. Blockiert Bot-Start mit klarer Fehlermeldung statt kryptischer Fehler beim ersten Trade
+- **User-freundliche Fehlermeldungen** — 10+ kryptische Exchange-Fehler (Wallet not found, invalid API key, insufficient balance, rate limit, liquidation prevention, etc.) werden in klare deutsche Meldungen mit Handlungsanweisungen übersetzt
+- **Auto-Pause bei fatalen Fehlern** — Bot pausiert automatisch bei Konfigurationsfehlern (ungültiges Wallet, falscher API-Key, gesperrtes Konto) statt alle 4h denselben Fehler zu spammen
+
+### Fixed
+- **Hyperliquid `set_leverage` Error-Handling** — Error-Responses (`{'status': 'err'}`) werden jetzt als ERROR geloggt und als Exception geworfen, statt als INFO geloggt und stillschweigend ignoriert
+- **Discord-Footer kontextabhängig** — Zeigt "Bot wurde gestoppt" bei fatalen Fehlern, "Bot versucht es erneut" bei temporären Fehlern (statt immer "Trading has been paused for safety")
+- **Bot-Scheduler respektiert ERROR-Status** — Überspringt Analyse-Zyklen wenn Bot wegen fatalem Fehler pausiert wurde
+
 ## [Unreleased]
 
 ### Fixed
