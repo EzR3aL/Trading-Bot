@@ -158,6 +158,38 @@ class HyperliquidGatesMixin:
             self.status = "error"
             return False
 
+    async def _check_wallet_gate(self, client: ExchangeClient) -> bool:
+        """HARD gate: block bot start if Hyperliquid wallet is not usable.
+
+        Checks that the wallet exists, is funded, and API wallet is authorized.
+        Returns True if OK to proceed, False if blocked.
+        """
+        log_prefix = f"[Bot:{self.bot_config_id}]"
+        try:
+            from src.exchanges.hyperliquid.client import HyperliquidClient
+
+            if not isinstance(client, HyperliquidClient):
+                return True
+
+            result = await client.validate_wallet()
+
+            if result["valid"]:
+                logger.info(
+                    "%s Wallet validation passed: balance=$%.2f wallet=%s",
+                    log_prefix, result["balance"], result["main_wallet"][:10],
+                )
+                return True
+
+            self.error_message = result["error"]
+            self.status = "error"
+            logger.warning("%s Wallet validation failed: %s", log_prefix, result["error"][:100])
+            return False
+
+        except Exception as e:
+            logger.warning("%s Wallet validation check failed: %s", log_prefix, e)
+            # Fail open on unexpected errors
+            return True
+
     async def _check_affiliate_uid_gate(self, db) -> bool:
         """HARD gate: block bot start if affiliate UID verification is required
         but the user has not verified their UID yet.

@@ -405,6 +405,7 @@ class DiscordNotifier:
         message: str,
         current_value: Optional[float] = None,
         threshold: Optional[float] = None,
+        is_fatal: bool = False,
     ) -> bool:
         """
         Send a risk alert notification.
@@ -414,13 +415,14 @@ class DiscordNotifier:
             message: Alert message
             current_value: Current value that triggered the alert
             threshold: Threshold that was exceeded
+            is_fatal: If True, the bot has been paused and requires user action
 
         Returns:
             True if sent successfully
         """
         fields = [
             {"name": "⚠️ Alert Type", "value": f"`{alert_type}`", "inline": False},
-            {"name": "📝 Message", "value": f"```{message}```", "inline": False},
+            {"name": "📝 Message", "value": f"```{message[:500]}```", "inline": False},
         ]
 
         if current_value is not None:
@@ -429,12 +431,19 @@ class DiscordNotifier:
         if threshold is not None:
             fields.append({"name": "🎯 Threshold", "value": f"`{threshold:.2f}`", "inline": True})
 
+        if is_fatal:
+            footer = "Bot wurde gestoppt — bitte Konfiguration prüfen und Bot neu starten"
+        elif alert_type in ("DAILY_LOSS_LIMIT", "MAX_TRADES", "CONSECUTIVE_ERRORS"):
+            footer = "Trading has been paused for safety"
+        else:
+            footer = "Bot versucht es beim nächsten Zyklus erneut"
+
         embed = self._create_embed(
             title="🚨 RISK ALERT",
             description="A risk management alert has been triggered",
             color=self.COLOR_WARNING,
             fields=fields,
-            footer="Trading has been paused for safety",
+            footer=footer,
         )
 
         payload = {

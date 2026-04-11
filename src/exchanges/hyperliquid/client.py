@@ -216,6 +216,121 @@ class HyperliquidClient(ExchangeClient):
 
     # ── Read Operations ─────────────────────────────────────────────────────
 
+    async def validate_wallet(self) -> dict:
+        """Validate that the configured wallet exists on Hyperliquid and is funded.
+
+        Returns a dict with:
+            - valid: bool — True if wallet is usable for trading
+            - error: str | None — user-friendly error description
+            - balance: float — total account value (perp + spot USDC)
+            - main_wallet: str — the main wallet address
+            - api_wallet: str — the API/signing wallet address
+            - is_agent_wallet: bool — True if API wallet differs from main wallet
+        """
+        main_addr = self.wallet_address or self._wallet.address
+        api_addr = self._wallet.address
+        is_agent = main_addr.lower() != api_addr.lower()
+
+        result = {
+            "valid": False,
+            "error": None,
+            "balance": 0.0,
+            "main_wallet": main_addr,
+            "api_wallet": api_addr,
+            "is_agent_wallet": is_agent,
+        }
+
+        # Check main wallet state
+        try:
+            data = await self._cb_call(self._info.user_state, main_addr)
+        except Exception as e:
+            result["error"] = (
+                f"Konnte dein Hyperliquid-Wallet nicht abfragen. "
+                f"Bitte pruefe deine Internetverbindung und versuche es erneut. ({e})"
+            )
+            return result
+
+        if not isinstance(data, dict) or not data.get("marginSummary"):
+            # Wallet has never interacted with Hyperliquid
+            network = "Testnet" if self._demo_mode else "Mainnet (Arbitrum)"
+            result["error"] = (
+                f"Dein Hyperliquid-Wallet ({main_addr[:8]}...{main_addr[-4:]}) "
+                f"wurde nicht gefunden. Das Wallet muss zuerst auf Hyperliquid "
+                f"aktiviert werden.\n\n"
+                f"So geht's:\n"
+                f"1. Oeffne app.hyperliquid.xyz\n"
+                f"2. Zahle mindestens 100 USDC auf {network} ein\n"
+                f"3. Starte den Bot erneut"
+            )
+            return result
+
+        # Check balance
+        margin = data.get("marginSummary", {})
+        perp_total = float(margin.get("accountValue", 0))
+
+        # Also check spot USDC
+        spot_usdc = 0.0
+        if perp_total == 0:
+            try:
+                spot_data = self._info.spot_user_state(main_addr)
+                for b in spot_data.get("balances", []):
+                    if b.get("coin") == "USDC":
+                        spot_usdc = float(b.get("total", 0))
+                        break
+            except Exception:
+                pass
+
+        total_balance = perp_total + spot_usdc
+        result["balance"] = total_balance
+
+        min_balance = 100.0
+        if total_balance < min_balance:
+            network = "Testnet" if self._demo_mode else "Mainnet (Arbitrum)"
+            if total_balance < 1.0:
+                balance_msg = "hat kein Guthaben"
+            else:
+                balance_msg = f"hat nur ${total_balance:.2f} Guthaben"
+            result["error"] = (
+                f"Dein Hyperliquid-Wallet ({main_addr[:8]}...{main_addr[-4:]}) "
+                f"{balance_msg}. "
+                f"Bitte zahle mindestens {int(min_balance)} USDC auf {network} ein, "
+                f"damit der Bot traden kann."
+            )
+            return result
+
+        # If using API wallet, verify it can sign for the main wallet
+        if is_agent:
+            try:
+                # Try a read-only leverage query to verify API wallet authorization
+                test_result = await self._cb_call(
+                    self._exchange.update_leverage, leverage=1, name="BTC", is_cross=True,
+                )
+                if isinstance(test_result, dict) and test_result.get("status") == "err":
+                    err_msg = test_result.get("response", "")
+                    if "does not exist" in str(err_msg).lower():
+                        result["error"] = (
+                            f"Dein API-Wallet ({api_addr[:8]}...{api_addr[-4:]}) ist nicht autorisiert "
+                            f"fuer dein Haupt-Wallet ({main_addr[:8]}...{main_addr[-4:]}).\n\n"
+                            f"So geht's:\n"
+                            f"1. Oeffne app.hyperliquid.xyz\n"
+                            f"2. Gehe zu 'API Wallet' in den Einstellungen\n"
+                            f"3. Erstelle ein neues API-Wallet oder autorisiere die bestehende Adresse\n"
+                            f"4. Trage den neuen Private Key in den Bot-Einstellungen ein"
+                        )
+                        return result
+            except Exception as e:
+                err_str = str(e).lower()
+                if "does not exist" in err_str:
+                    result["error"] = (
+                        f"Dein API-Wallet ({api_addr[:8]}...{api_addr[-4:]}) ist nicht autorisiert "
+                        f"fuer dein Haupt-Wallet ({main_addr[:8]}...{main_addr[-4:]}).\n\n"
+                        f"Erstelle ein API-Wallet unter app.hyperliquid.xyz > Einstellungen > API Wallet."
+                    )
+                    return result
+
+        result["valid"] = True
+        return result
+
     async def get_account_balance(self) -> Balance:
         address = self.wallet_address or self._wallet.address
         data = await self._cb_call(self._info.user_state, address)
@@ -356,8 +471,15 @@ class HyperliquidClient(ExchangeClient):
         coin = self._normalize_symbol(symbol)
         try:
             result = await self._cb_call(self._exchange.update_leverage, leverage=leverage, name=coin, is_cross=(margin_mode == "cross"))
-            logger.info(f"Hyperliquid leverage set to {leverage}x for {coin}: {result}")
+            # Check for error in response (API returns {'status': 'err', ...} instead of raising)
+            if isinstance(result, dict) and result.get("status") == "err":
+                err_response = result.get("response", str(result))
+                logger.error(f"Hyperliquid set_leverage rejected for {coin}: {err_response}")
+                raise HyperliquidClientError(err_response)
+            logger.info(f"Hyperliquid leverage set to {leverage}x for {coin}")
             return True
+        except HyperliquidClientError:
+            raise  # Re-raise to trade_executor for user-friendly handling
         except Exception as e:
             logger.warning(f"Hyperliquid set_leverage failed for {coin}: {e}")
             return False

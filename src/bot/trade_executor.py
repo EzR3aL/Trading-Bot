@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import re
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -14,6 +15,83 @@ from src.utils.json_helpers import parse_json_field
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
+
+
+# Patterns that indicate a fatal configuration error (bot should pause)
+_FATAL_ERROR_PATTERNS = [
+    "does not exist",
+    "invalid api key",
+    "invalid api-key",
+    "api key expired",
+    "key is disabled",
+    "invalid signature",
+    "not whitelisted",
+    "not allowed",
+    "wallet not found",
+    "account not found",
+    "account suspended",
+    "account frozen",
+    "account disabled",
+    "account locked",
+    "sub-account not found",
+    "unauthorized",
+    "permission denied",
+    "forbidden",
+]
+
+# User-friendly error messages mapped from raw exchange errors
+_USER_FRIENDLY_ERRORS = [
+    # Hyperliquid wallet errors
+    (r"User or API Wallet (0x[a-fA-F0-9]+) does not exist",
+     lambda m: (
+         f"Dein Hyperliquid-Wallet ({m.group(1)[:8]}...{m.group(1)[-4:]}) wurde nicht gefunden. "
+         "Bitte stelle sicher, dass du auf Hyperliquid mindestens eine Einzahlung gemacht hast, "
+         "damit dein Wallet aktiviert ist. Falls du ein API-Wallet nutzt, erstelle es zuerst "
+         "unter app.hyperliquid.xyz > API Wallet."
+     )),
+    # Insufficient balance / margin
+    (r"(?i)(insufficient|not enough).*(balance|margin|fund)",
+     lambda m: "Nicht genügend Guthaben auf deinem Exchange-Konto. Bitte zahle Guthaben ein oder reduziere die Positionsgröße."),
+    # Rate limiting
+    (r"(?i)(rate.?limit|too many requests|429)",
+     lambda m: "Zu viele Anfragen an die Exchange-API. Der Bot wird es beim nächsten Zyklus erneut versuchen."),
+    # API temporarily unavailable / circuit breaker
+    (r"(?i)API temporarily unavailable",
+     lambda m: "Die Exchange-API ist vorübergehend nicht erreichbar. Der Bot versucht es automatisch erneut."),
+    # Invalid API key / auth errors
+    (r"(?i)(invalid api.?key|api.?key.*expired|key is disabled|invalid signature)",
+     lambda m: "Dein API-Key ist ungültig oder abgelaufen. Bitte prüfe deine API-Zugangsdaten in den Einstellungen."),
+    # IP whitelist
+    (r"(?i)ip.*(not|isn).*(whitelist|allowed)",
+     lambda m: "Die Server-IP ist nicht in deiner API-Key Whitelist. Bitte füge sie in deinen Exchange-Einstellungen hinzu."),
+    # Position already exists / leverage conflict
+    (r"(?i)(position.*already|leverage.*conflict|cannot change leverage)",
+     lambda m: "Es existiert bereits eine offene Position mit anderer Konfiguration. Schließe die bestehende Position zuerst."),
+    # Minimum order size
+    (r"(?i)(minimum.*(amount|order|size)|order.*too small)",
+     lambda m: "Die Ordergröße ist unter dem Mindestbetrag der Exchange. Erhöhe dein Budget oder reduziere die Anzahl der Trading-Paare."),
+    # Liquidation prevention
+    (r"(?i)liquidation.?prevention",
+     lambda m: "Die Order wurde abgelehnt, da sie zu einer Liquidation führen könnte. Reduziere den Hebel oder die Positionsgröße."),
+    # Account suspended / frozen
+    (r"(?i)(account.*(suspend|frozen|disabled|locked))",
+     lambda m: "Dein Exchange-Konto ist gesperrt oder eingeschränkt. Bitte prüfe deinen Account direkt bei der Exchange."),
+]
+
+
+def _make_user_friendly(raw_error: str) -> str:
+    """Convert raw exchange error to a user-friendly message."""
+    for pattern, formatter in _USER_FRIENDLY_ERRORS:
+        match = re.search(pattern, raw_error)
+        if match:
+            return formatter(match)
+    return raw_error
+
+
+def _is_fatal_error(error_msg: str) -> bool:
+    """Check if an error indicates a fatal configuration problem that won't self-resolve."""
+    lower = error_msg.lower()
+    return any(p in lower for p in _FATAL_ERROR_PATTERNS)
 
 
 class TradeExecutorMixin:
@@ -470,6 +548,9 @@ class TradeExecutorMixin:
 
     async def _notify_trade_failure(self, signal: TradeSignal, mode_str: str, error: str):
         """Notify user of trade execution failure via WebSocket and notifications."""
+        friendly_error = _make_user_friendly(error)
+        is_fatal = _is_fatal_error(error)
+
         try:
             from src.api.websocket.manager import ws_manager
             task = asyncio.create_task(ws_manager.broadcast_to_user(
@@ -480,7 +561,8 @@ class TradeExecutorMixin:
                     "bot_name": self._config.name,
                     "symbol": signal.symbol,
                     "side": signal.direction.value,
-                    "error": error,
+                    "error": friendly_error,
+                    "fatal": is_fatal,
                     "demo_mode": mode_str == "DEMO",
                 },
             ))
@@ -489,19 +571,32 @@ class TradeExecutorMixin:
             pass
 
         try:
+            alert_type = "TRADE_FAILED_FATAL" if is_fatal else "TRADE_FAILED"
             await self._send_notification(
                 lambda n: n.send_risk_alert(
-                    alert_type="TRADE_FAILED",
+                    alert_type=alert_type,
                     message=(
                         f"[{self._config.name}] {mode_str} order failed for "
-                        f"{signal.symbol} ({signal.direction.value}): {error}"
+                        f"{signal.symbol} ({signal.direction.value}):\n\n{friendly_error}"
                     ),
+                    is_fatal=is_fatal,
                 ),
                 event_type="error",
                 summary=f"TRADE_FAILED {signal.symbol}",
             )
         except Exception:
             pass
+
+        # Fatal errors: pause the bot to prevent spam
+        if is_fatal:
+            logger.warning(
+                "[Bot:%s] Fatal configuration error detected — pausing bot. "
+                "User action required: %s",
+                self.bot_config_id, friendly_error,
+            )
+            from src.bot.bot_worker import BotStatus
+            self.status = BotStatus.ERROR
+            self.error_message = friendly_error
 
     # ---------- Public wrappers used by self-managed strategies ----------
 

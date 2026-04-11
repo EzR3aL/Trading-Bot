@@ -286,6 +286,11 @@ class BotWorker(
                         if not referral_ok:  # pragma: no cover — HL-specific gate
                             return False
 
+                    # Wallet validation (applies to all users including admins)
+                    wallet_ok = await self._check_wallet_gate(self._client)
+                    if not wallet_ok:
+                        return False
+
             # Validate trading pairs exist on exchange
             try:
                 from src.exchanges.symbol_fetcher import get_exchange_symbols
@@ -570,6 +575,14 @@ class BotWorker(
 
     async def _analyze_and_trade_safe(self):
         """Wrapper with error handling and auto-recovery for the scheduler."""
+        # Skip analysis if bot was paused due to fatal error (e.g. invalid wallet/API key)
+        if self.status == BotStatus.ERROR and self.error_message:
+            logger.info(
+                "[Bot:%s] Skipping analysis — bot paused due to fatal error: %s",
+                self.bot_config_id, self.error_message[:100],
+            )
+            return
+
         try:
             await self._analyze_and_trade()
             # Reset error tracking on success
