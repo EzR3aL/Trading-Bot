@@ -202,9 +202,9 @@ export default function Settings() {
     load()
   }, [])
 
-  const showMessage = (msg: string) => {
+  const showMessage = (msg: string, duration = 3000) => {
     setMessage(msg)
-    setTimeout(() => setMessage(''), 3000)
+    setTimeout(() => setMessage(''), duration)
   }
 
   const getForm = (ex: string): ExchangeKeyForm => keyForms[ex] || emptyForm()
@@ -254,7 +254,7 @@ export default function Settings() {
       const res = await api.post(`/config/exchange-connections/${exchangeType}/test?mode=${mode}`)
       const modeLabel = mode === 'demo' ? t('common.demo') : t('common.live')
       showMessage(t('settings.testConnectionResult', { mode: modeLabel, exchange: exchangeType, balance: res.data.balance }))
-    } catch (err) { showMessage(getApiErrorMessage(err, t('settings.connectionFailed'))) }
+    } catch (err) { showMessage(getApiErrorMessage(err, t('settings.connectionFailed')), 10000) }
   }
 
   const deleteKeys = async (exchangeType: string, mode: 'live' | 'demo') => {

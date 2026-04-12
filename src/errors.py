@@ -137,9 +137,9 @@ ERR_DUPLICATE_DEMO_LIVE_KEY_EN = (
     "If it's a separate demo key, please delete the live keys first."
 )
 ERR_WRONG_ENVIRONMENT = (
-    "Die {mode}-API-Keys funktionieren nicht im {mode}-Modus von {exchange}. "
-    "Wenn dies ein {other_mode}-Key ist, trage ihn bitte ins {other_mode}-Feld ein. "
-    "Original-Fehler: {detail}"
+    "Falscher API-Key-Typ: Du hast vermutlich einen {other_mode}-Key im {mode}-Feld eingetragen. "
+    "{exchange} unterscheidet zwischen Live- und Demo-Keys. "
+    "Bitte trage den Key im richtigen Feld ein ({other_mode})."
 )
 ERR_WRONG_ENVIRONMENT_EN = (
     "These {mode} API keys do not authenticate against the {mode} environment "
@@ -316,13 +316,18 @@ _EXCHANGE_ERROR_TRANSLATIONS: list[tuple[str, str]] = [
     ("too many requests", "Zu viele Anfragen — bitte kurz warten"),
     ("rate limit exceeded", "Anfragelimit überschritten — bitte kurz warten"),
     # API key / auth
-    ("invalid api key", "Ungültiger API-Key"),
-    ("api key expired", "API-Key abgelaufen"),
+    ("exchange environment is incorrect",
+     "Falsche Umgebung — du hast vermutlich einen Live-Key im Demo-Feld (oder umgekehrt) eingetragen. "
+     "Prüfe, ob der Key zur gewählten Umgebung passt."),
+    ("invalid api key", "Ungültiger API-Key — prüfe ob der Key korrekt kopiert wurde"),
+    ("api key expired", "API-Key abgelaufen — erstelle einen neuen Key in der Exchange"),
     ("signature error", "Signatur-Fehler — prüfe API-Secret"),
-    ("invalid signature", "Ungültige Signatur — prüfe API-Secret"),
-    ("ip not in whitelist", "IP-Adresse nicht in der Whitelist"),
+    ("invalid signature", "Ungültige Signatur — prüfe API-Secret und Passphrase"),
+    ("ip not in whitelist",
+     "IP-Adresse nicht in der Whitelist — füge die Server-IP in deinen Exchange-API-Einstellungen hinzu"),
     ("permission denied", "Berechtigung verweigert — prüfe API-Key-Berechtigungen"),
-    ("api key does not have permission", "API-Key hat keine Berechtigung für diese Aktion"),
+    ("api key does not have permission",
+     "API-Key hat keine Berechtigung für diese Aktion — aktiviere Futures/Trading-Berechtigung"),
     # Network / timeout
     ("timeout", "Zeitüberschreitung — bitte erneut versuchen"),
     ("connection refused", "Verbindung abgelehnt"),

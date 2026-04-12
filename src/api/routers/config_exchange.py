@@ -362,6 +362,23 @@ async def test_exchange_connection(
         }
     except Exception as e:
         _logger.error("Exchange connection test failed: %s", e, exc_info=True)
+        error_str = str(e).lower()
+        mode_label = "Demo" if use_demo else "Live"
+        other_mode = "Live" if use_demo else "Demo"
+
+        # Erkennung: Live-Key im Demo-Feld (oder umgekehrt)
+        if "environment" in error_str and "incorrect" in error_str:
+            raise HTTPException(status_code=400, detail=ERR_WRONG_ENVIRONMENT.format(
+                mode=mode_label, other_mode=other_mode,
+                exchange=exchange_type.capitalize(), detail=str(e),
+            ))
+
+        # Bekannte Fehler spezifisch übersetzen
+        from src.errors import translate_exchange_error
+        translated = translate_exchange_error(str(e))
+        if translated != str(e):
+            raise HTTPException(status_code=400, detail=translated)
+
         raise HTTPException(status_code=400, detail=ERR_CONNECTION_FAILED)
 
 
