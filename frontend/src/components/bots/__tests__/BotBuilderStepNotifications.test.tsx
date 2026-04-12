@@ -16,10 +16,6 @@ vi.mock('react-i18next', () => ({
         'bots.builder.telegramToken': 'Telegram Bot Token',
         'bots.builder.telegramChatId': 'Telegram Chat ID',
         'bots.builder.telegramHint': 'Create a bot via @BotFather',
-        'bots.builder.whatsappPhoneId': 'WhatsApp Phone ID',
-        'bots.builder.whatsappToken': 'WhatsApp Token',
-        'bots.builder.whatsappRecipient': 'WhatsApp Recipient',
-        'bots.builder.whatsappHint': 'Use the WhatsApp Business API',
       }
       return translations[key] || key
     },
@@ -41,26 +37,19 @@ const defaultProps = {
   discordWebhookUrl: '',
   telegramBotToken: '',
   telegramChatId: '',
-  whatsappPhoneId: '',
-  whatsappToken: '',
-  whatsappRecipient: '',
   openNotif: null as string | null,
   onDiscordWebhookUrlChange: vi.fn(),
   onTelegramBotTokenChange: vi.fn(),
   onTelegramChatIdChange: vi.fn(),
-  onWhatsappPhoneIdChange: vi.fn(),
-  onWhatsappTokenChange: vi.fn(),
-  onWhatsappRecipientChange: vi.fn(),
   onOpenNotifChange: vi.fn(),
 }
 
 describe('BotBuilderStepNotifications', () => {
-  it('renders all notification channel headers (Discord, Telegram, WhatsApp)', () => {
+  it('renders all notification channel headers (Discord, Telegram)', () => {
     render(<BotBuilderStepNotifications {...defaultProps} />)
 
     expect(screen.getByText('Discord')).toBeInTheDocument()
     expect(screen.getByText('Telegram')).toBeInTheDocument()
-    expect(screen.getByText('WhatsApp')).toBeInTheDocument()
   })
 
   it('renders the Notifications label', () => {
@@ -157,37 +146,12 @@ describe('BotBuilderStepNotifications', () => {
     expect(onTelegramChatIdChange).toHaveBeenCalledWith('1')
   })
 
-  it('shows WhatsApp inputs when whatsapp is open', () => {
-    render(<BotBuilderStepNotifications {...defaultProps} openNotif="whatsapp" />)
-
-    expect(screen.getByLabelText('WhatsApp Phone ID')).toBeInTheDocument()
-    expect(screen.getByLabelText('WhatsApp Token')).toBeInTheDocument()
-    expect(screen.getByLabelText('WhatsApp Recipient')).toBeInTheDocument()
-  })
-
-  it('calls onWhatsappPhoneIdChange when typing in phone ID field', async () => {
-    const onWhatsappPhoneIdChange = vi.fn()
-    const user = userEvent.setup()
-
-    render(
-      <BotBuilderStepNotifications
-        {...defaultProps}
-        openNotif="whatsapp"
-        onWhatsappPhoneIdChange={onWhatsappPhoneIdChange}
-      />
-    )
-
-    await user.type(screen.getByLabelText('WhatsApp Phone ID'), '1')
-    expect(onWhatsappPhoneIdChange).toHaveBeenCalledWith('1')
-  })
-
   it('does not show input fields when no notification channel is open', () => {
     render(<BotBuilderStepNotifications {...defaultProps} openNotif={null} />)
 
     // No input fields should be visible
     expect(screen.queryByLabelText('Discord Webhook URL')).not.toBeInTheDocument()
     expect(screen.queryByLabelText('Telegram Bot Token')).not.toBeInTheDocument()
-    expect(screen.queryByLabelText('WhatsApp Phone ID')).not.toBeInTheDocument()
   })
 
   it('shows check icon when Discord webhook URL is filled', () => {

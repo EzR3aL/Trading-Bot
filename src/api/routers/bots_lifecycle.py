@@ -16,6 +16,8 @@ from src.errors import (
     ERR_AFFILIATE_REQUIRED,
     ERR_BOT_NOT_FOUND,
     ERR_BOT_NOT_RUNNING,
+    ERR_DISCORD_NOT_CONFIGURED,
+    ERR_DISCORD_SEND_FAILED,
     ERR_EXCHANGE_CREDENTIALS_MISSING,
     ERR_HL_BUILDER_FEE_NOT_APPROVED,
     ERR_HL_REFERRAL_REQUIRED,
@@ -29,8 +31,6 @@ from src.errors import (
     ERR_TELEGRAM_NOT_CONFIGURED,
     ERR_TELEGRAM_SEND_FAILED,
     ERR_TRADE_ALREADY_RESOLVED,
-    ERR_WHATSAPP_NOT_CONFIGURED,
-    ERR_WHATSAPP_SEND_FAILED,
     translate_exchange_error,
 )
 from src.exceptions import BotError
@@ -115,6 +115,72 @@ async def _enforce_affiliate_gate(exchange_type: str, user: User, db: AsyncSessi
             status_code=400,
             detail=ERR_AFFILIATE_PENDING.format(exchange=exchange_display),
         )
+
+
+# ─── Notification Test (without bot_id, for new bots) ────────
+
+
+@lifecycle_router.post("/test-telegram-direct")
+@limiter.limit("5/minute")
+async def test_telegram_direct(
+    request: Request,
+    user: User = Depends(get_current_user),
+):
+    """Send a test Telegram message with provided credentials (no bot required)."""
+    body = await request.json()
+    bot_token = body.get("bot_token", "").strip()
+    chat_id = body.get("chat_id", "").strip()
+    if not bot_token or not chat_id:
+        raise HTTPException(status_code=400, detail=ERR_TELEGRAM_NOT_CONFIGURED)
+
+    from src.notifications.telegram_notifier import TelegramNotifier
+
+    notifier = TelegramNotifier(bot_token=bot_token, chat_id=chat_id)
+    try:
+        await notifier.send_test_message()
+    except Exception as e:
+        logger.warning(f"Telegram direct test failed: {e}")
+        raise HTTPException(status_code=502, detail=str(e))
+    return {"status": "ok", "message": "Test message sent"}
+
+
+@lifecycle_router.post("/test-discord-direct")
+@limiter.limit("5/minute")
+async def test_discord_direct(
+    request: Request,
+    user: User = Depends(get_current_user),
+):
+    """Send a test Discord message with provided webhook URL (no bot required)."""
+    body = await request.json()
+    webhook_url = body.get("webhook_url", "").strip()
+    if not webhook_url:
+        raise HTTPException(status_code=400, detail=ERR_DISCORD_NOT_CONFIGURED)
+
+    import aiohttp
+
+    try:
+        async with aiohttp.ClientSession() as http_session:
+            payload = {
+                "embeds": [{
+                    "title": "\ud83d\udd14 Verbindungstest",
+                    "description": "Discord-Benachrichtigungen sind korrekt eingerichtet!",
+                    "color": 0x00D166,
+                }]
+            }
+            async with http_session.post(webhook_url, json=payload) as resp:
+                if resp.status not in (200, 204):
+                    error_text = await resp.text()
+                    raise HTTPException(status_code=502, detail=f"Discord error {resp.status}: {error_text}")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.warning(f"Discord direct webhook test failed: {e}")
+        raise HTTPException(status_code=502, detail=str(e))
+
+    return {"status": "ok", "message": "Discord test message sent"}
+
+
+# ─── Bot Lifecycle ───────────────────────────────────────────
 
 
 @lifecycle_router.post("/{bot_id}/start")
@@ -425,36 +491,48 @@ async def test_telegram(
     return {"status": "ok", "message": "Test message sent"}
 
 
-@lifecycle_router.post("/{bot_id}/test-whatsapp")
+@lifecycle_router.post("/{bot_id}/test-discord")
 @limiter.limit("5/minute")
-async def test_whatsapp(
+async def test_discord(
     request: Request,
     bot_id: int,
     user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_db),
 ):
-    """Send a test WhatsApp message."""
+    """Send a test Discord message via webhook."""
     result = await session.execute(
         select(BotConfig).where(BotConfig.id == bot_id, BotConfig.user_id == user.id)
     )
     config = result.scalar_one_or_none()
     if not config:
         raise HTTPException(status_code=404, detail=ERR_BOT_NOT_FOUND)
-    if not config.whatsapp_phone_number_id or not config.whatsapp_access_token or not config.whatsapp_recipient:
-        raise HTTPException(status_code=400, detail=ERR_WHATSAPP_NOT_CONFIGURED)
+    if not config.discord_webhook_url:
+        raise HTTPException(status_code=400, detail=ERR_DISCORD_NOT_CONFIGURED)
 
-    from src.notifications.whatsapp_notifier import WhatsAppNotifier
     from src.utils.encryption import decrypt_value
 
-    notifier = WhatsAppNotifier(
-        phone_number_id=decrypt_value(config.whatsapp_phone_number_id),
-        access_token=decrypt_value(config.whatsapp_access_token),
-        recipient_number=decrypt_value(config.whatsapp_recipient),
-    )
-    success = await notifier.send_test_message()
-    if not success:
-        raise HTTPException(status_code=502, detail=ERR_WHATSAPP_SEND_FAILED)
-    return {"status": "ok", "message": "Test message sent"}
+    import aiohttp
+
+    webhook_url = decrypt_value(config.discord_webhook_url)
+    try:
+        async with aiohttp.ClientSession() as http_session:
+            payload = {
+                "embeds": [{
+                    "title": "\ud83d\udd14 Verbindungstest",
+                    "description": "Discord-Benachrichtigungen sind korrekt eingerichtet!",
+                    "color": 0x00D166,
+                }]
+            }
+            async with http_session.post(webhook_url, json=payload) as resp:
+                if resp.status not in (200, 204):
+                    raise HTTPException(status_code=502, detail=ERR_DISCORD_SEND_FAILED)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.warning(f"Discord webhook test failed for bot {bot_id}: {e}")
+        raise HTTPException(status_code=502, detail=ERR_DISCORD_SEND_FAILED)
+
+    return {"status": "ok", "message": "Discord test message sent"}
 
 
 # ─── Pending Trades (Crash Recovery) ─────────────────────────

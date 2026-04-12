@@ -424,6 +424,8 @@ def create_app() -> FastAPI:
     app.include_router(reconciliation_router)
     from src.api.routers.admin_broadcasts import router as broadcast_router
     app.include_router(broadcast_router)
+    from src.api.routers.revenue import router as revenue_router
+    app.include_router(revenue_router)
 
     # Store WebSocket manager on app state for access
     from src.api.websocket.manager import ws_manager

@@ -11,10 +11,12 @@ import FilterDropdown from '../components/ui/FilterDropdown'
 
 const AdminUsers = lazy(() => import('./AdminUsers'))
 const AdminBroadcasts = lazy(() => import('./AdminBroadcasts'))
+const AdminRevenue = lazy(() => import('./AdminRevenue'))
 
 const TABS = [
   { key: 'users', labelKey: 'admin.users' },
   { key: 'broadcasts', labelKey: 'broadcast.title' },
+  { key: 'revenue', labelKey: 'Einnahmen' },
   { key: 'connections', labelKey: 'settings.connections' },
   { key: 'affiliateLinks', labelKey: 'settings.affiliateLinks' },
   { key: 'hyperliquid', labelKey: 'settings.hyperliquid' },
@@ -271,6 +273,13 @@ export default function Admin() {
       {activeTab === 'broadcasts' && (
         <Suspense fallback={<TabLoader />}>
           <AdminBroadcasts />
+        </Suspense>
+      )}
+
+      {/* Revenue Tab */}
+      {activeTab === 'revenue' && (
+        <Suspense fallback={<TabLoader />}>
+          <AdminRevenue />
         </Suspense>
       )}
 

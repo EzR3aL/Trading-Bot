@@ -25,7 +25,6 @@ logger = get_logger(__name__)
 # Rate estimates (seconds per target) for duration estimation
 RATE_DISCORD = 2.5
 RATE_TELEGRAM = 3.5
-RATE_WHATSAPP = 3.0
 
 # Batch size for processing bot_configs
 _BATCH_SIZE = 100
@@ -59,7 +58,7 @@ async def resolve_targets(
     Returns:
         Dict with ``total`` count and ``by_channel`` breakdown.
     """
-    by_channel: dict[str, int] = {"discord": 0, "telegram": 0, "whatsapp": 0}
+    by_channel: dict[str, int] = {"discord": 0, "telegram": 0}
 
     # Build base query: bot_configs joined to active, non-deleted users
     base_q = (
@@ -127,27 +126,6 @@ async def resolve_targets(
                 except Exception as exc:
                     logger.warning("Failed to decrypt Telegram creds for bot_config=%s: %s", cfg.id, exc)
 
-            # --- WhatsApp ---
-            if cfg.whatsapp_phone_number_id and cfg.whatsapp_access_token and cfg.whatsapp_recipient:
-                try:
-                    decrypted_phone = decrypt_value(cfg.whatsapp_phone_number_id)
-                    decrypted_recipient = decrypt_value(cfg.whatsapp_recipient)
-                    dedup = _sha256(f"{decrypted_phone}:{decrypted_recipient}")
-                    targets_to_insert.append({
-                        "broadcast_id": broadcast_id,
-                        "channel": "whatsapp",
-                        "dedup_key": dedup,
-                        "credentials_encrypted": json.dumps({
-                            "phone_number_id": cfg.whatsapp_phone_number_id,
-                            "access_token": cfg.whatsapp_access_token,
-                            "whatsapp_recipient": cfg.whatsapp_recipient,
-                        }),
-                        "user_id": cfg.user_id,
-                        "bot_config_id": cfg.id,
-                    })
-                except Exception as exc:
-                    logger.warning("Failed to decrypt WhatsApp creds for bot_config=%s: %s", cfg.id, exc)
-
         # Bulk upsert (ON CONFLICT DO NOTHING) for this batch
         if targets_to_insert:
             stmt = pg_insert(BroadcastTarget).values(targets_to_insert)
@@ -178,8 +156,8 @@ async def resolve_targets(
         await db.flush()
 
     logger.info(
-        "Resolved %d targets for broadcast=%d (discord=%d, telegram=%d, whatsapp=%d)",
-        total, broadcast_id, by_channel["discord"], by_channel["telegram"], by_channel["whatsapp"],
+        "Resolved %d targets for broadcast=%d (discord=%d, telegram=%d)",
+        total, broadcast_id, by_channel["discord"], by_channel["telegram"],
     )
 
     return {"total": total, "by_channel": by_channel}
@@ -202,7 +180,7 @@ def render_messages(
         image_url: Optional image URL to attach.
 
     Returns:
-        Dict with keys ``discord``, ``telegram``, ``whatsapp`` containing
+        Dict with keys ``discord``, ``telegram`` containing
         the channel-specific message representation.
     """
     now_iso = datetime.now(timezone.utc).isoformat()
@@ -224,15 +202,9 @@ def render_messages(
     telegram_lines = [f"<b>{_escape_html(title)}</b>", "", telegram_body]
     telegram_text = "\n".join(telegram_lines)
 
-    # --- WhatsApp plain text ---
-    whatsapp_body = _markdown_to_whatsapp(message_markdown)
-    whatsapp_lines = [f"*{title}*", "", whatsapp_body]
-    whatsapp_text = "\n".join(whatsapp_lines)
-
     return {
         "discord": discord_payload,
         "telegram": telegram_text,
-        "whatsapp": whatsapp_text,
         "has_image": image_url is not None,
         "image_url": image_url,
     }
@@ -254,18 +226,6 @@ def _markdown_to_telegram_html(md: str) -> str:
     text = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", text)
     # Italic: *text* -> <i>text</i> (single asterisks not already consumed)
     text = re.sub(r"(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)", r"<i>\1</i>", text)
-    return text
-
-
-def _markdown_to_whatsapp(md: str) -> str:
-    """Convert Markdown to WhatsApp-compatible plain text.
-
-    WhatsApp uses *bold* and _italic_. Links are kept as plain URLs.
-    """
-    # Bold: **text** -> *text* (WhatsApp bold)
-    text = re.sub(r"\*\*(.+?)\*\*", r"*\1*", md)
-    # Links: [text](url) -> text (url)
-    text = re.sub(r"\[([^\]]+)\]\(([^)]+)\)", r"\1 (\2)", text)
     return text
 
 
@@ -318,7 +278,6 @@ def estimate_duration(by_channel: dict) -> int:
     rates = {
         "discord": RATE_DISCORD,
         "telegram": RATE_TELEGRAM,
-        "whatsapp": RATE_WHATSAPP,
     }
     max_duration = 0.0
     for channel, count in by_channel.items():

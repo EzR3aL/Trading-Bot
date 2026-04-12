@@ -59,9 +59,9 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
   const [discordWebhookUrl, setDiscordWebhookUrl] = useState('')
   const [telegramBotToken, setTelegramBotToken] = useState('')
   const [telegramChatId, setTelegramChatId] = useState('')
-  const [whatsappPhoneId, setWhatsappPhoneId] = useState('')
-  const [whatsappToken, setWhatsappToken] = useState('')
-  const [whatsappRecipient, setWhatsappRecipient] = useState('')
+  // Notification configuration status (for edit mode)
+  const [discordConfigured, setDiscordConfigured] = useState(false)
+  const [telegramConfigured, setTelegramConfigured] = useState(false)
 
   // Hyperliquid gate status (referral + builder fee)
   const [hlGateStatus, setHlGateStatus] = useState<{ needs_approval: boolean; needs_referral: boolean }>({ needs_approval: false, needs_referral: false })
@@ -177,6 +177,10 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
           if (d.schedule_config.interval_minutes) setIntervalMinutes(d.schedule_config.interval_minutes)
           if (d.schedule_config.hours) setCustomHours(d.schedule_config.hours.map((h: number) => utcHourToLocal(h)))
         }
+        // Set notification configuration status for edit mode
+        setDiscordConfigured(d.discord_webhook_configured || false)
+        setTelegramConfigured(d.telegram_configured || false)
+
         // Migrate legacy schedule types to supported ones
         if (d.schedule_type === 'rotation_only' || d.schedule_type === 'market_sessions') {
           setScheduleType('interval')
@@ -360,6 +364,38 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
     setSelectedSources(prev => prev.filter(s => !ids.has(s)))
   }
 
+  const handleTestDiscord = async () => {
+    try {
+      if (botId && !discordWebhookUrl) {
+        await api.post(`/bots/${botId}/test-discord`)
+      } else if (discordWebhookUrl) {
+        await api.post('/bots/test-discord-direct', { webhook_url: discordWebhookUrl })
+      } else {
+        addToast('error', 'Bitte Discord Webhook URL eingeben')
+        return
+      }
+      addToast('success', 'Discord-Testnachricht gesendet!')
+    } catch (err) {
+      addToast('error', getApiErrorMessage(err, 'Discord-Test fehlgeschlagen'))
+    }
+  }
+
+  const handleTestTelegram = async () => {
+    try {
+      if (botId && !telegramBotToken) {
+        await api.post(`/bots/${botId}/test-telegram`)
+      } else if (telegramBotToken && telegramChatId) {
+        await api.post('/bots/test-telegram-direct', { bot_token: telegramBotToken, chat_id: telegramChatId })
+      } else {
+        addToast('error', 'Bitte Bot Token und Chat ID eingeben')
+        return
+      }
+      addToast('success', 'Telegram-Testnachricht gesendet!')
+    } catch (err) {
+      addToast('error', getApiErrorMessage(err, 'Telegram-Test fehlgeschlagen'))
+    }
+  }
+
   const buildPayload = () => {
     const scheduleConfig = scheduleType === 'interval'
       ? { interval_minutes: intervalMinutes || 60 }
@@ -398,9 +434,6 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
       discord_webhook_url: discordWebhookUrl || undefined,
       telegram_bot_token: telegramBotToken || undefined,
       telegram_chat_id: telegramChatId || undefined,
-      whatsapp_phone_id: whatsappPhoneId || undefined,
-      whatsapp_token: whatsappToken || undefined,
-      whatsapp_recipient: whatsappRecipient || undefined,
     }
   }
 
@@ -574,15 +607,15 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
           <BotBuilderStepNotifications
             discordWebhookUrl={discordWebhookUrl}
             telegramBotToken={telegramBotToken} telegramChatId={telegramChatId}
-            whatsappPhoneId={whatsappPhoneId} whatsappToken={whatsappToken}
-            whatsappRecipient={whatsappRecipient} openNotif={openNotif}
+            openNotif={openNotif}
+            discordConfigured={discordConfigured}
+            telegramConfigured={telegramConfigured}
             onDiscordWebhookUrlChange={setDiscordWebhookUrl}
             onTelegramBotTokenChange={setTelegramBotToken}
             onTelegramChatIdChange={setTelegramChatId}
-            onWhatsappPhoneIdChange={setWhatsappPhoneId}
-            onWhatsappTokenChange={setWhatsappToken}
-            onWhatsappRecipientChange={setWhatsappRecipient}
             onOpenNotifChange={setOpenNotif}
+            onTestDiscord={handleTestDiscord}
+            onTestTelegram={handleTestTelegram}
           />
         )}
 
@@ -611,6 +644,8 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
             symbolConflicts={symbolConflicts}
             selectedSources={selectedSources} usesData={usesData}
             hasFixedSources={hasFixedSources}
+            discordConfigured={discordConfigured} telegramConfigured={telegramConfigured}
+            discordWebhookUrl={discordWebhookUrl} telegramBotToken={telegramBotToken}
             riskAccepted={riskAccepted} onRiskAcceptedChange={setRiskAccepted}
             b={b}
           />

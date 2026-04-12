@@ -42,13 +42,13 @@ class TelegramNotifier:
             ) as resp:
                 if resp.status == 200:
                     return True
-                elif resp.status == 429 or resp.status >= 500:
-                    error_text = await resp.text()
+                error_text = await resp.text()
+                if resp.status == 429 or resp.status >= 500:
+                    # Retriable errors
                     raise RuntimeError(f"Telegram API error {resp.status}: {error_text}")
-                else:
-                    error_text = await resp.text()
-                    logger.warning("Telegram API error %s: %s", resp.status, error_text)
-                    return False
+                # Client errors (400, 401, 403, 404) — permanent failures
+                logger.warning("Telegram API error %s: %s", resp.status, error_text)
+                raise RuntimeError(f"Telegram API error {resp.status}: {error_text}")
 
     async def send_trade_entry(
         self,
