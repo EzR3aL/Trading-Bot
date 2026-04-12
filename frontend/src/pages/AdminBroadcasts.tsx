@@ -26,8 +26,23 @@ interface Broadcast {
   created_at: string
 }
 
+interface DiscordEmbed {
+  title?: string
+  description?: string
+  color?: number
+  footer?: { text?: string }
+  image?: { url?: string }
+}
+
+interface PreviewApiResponse {
+  total_targets: number
+  by_channel: Record<string, number>
+  estimated_duration_seconds: number
+  preview: Record<string, string>
+}
+
 interface PreviewData {
-  discord: { title?: string; description?: string; color?: number; footer?: { text?: string }; image?: { url?: string } }
+  discord: DiscordEmbed | null
   telegram: string
   whatsapp: string
   target_count: number
@@ -35,6 +50,27 @@ interface PreviewData {
   telegram_count: number
   whatsapp_count: number
   estimated_duration_seconds: number
+}
+
+function mapPreviewResponse(res: PreviewApiResponse): PreviewData {
+  let discord: DiscordEmbed | null = null
+  if (res.preview?.discord) {
+    try {
+      discord = JSON.parse(res.preview.discord)
+    } catch {
+      discord = null
+    }
+  }
+  return {
+    discord,
+    telegram: res.preview?.telegram || '',
+    whatsapp: res.preview?.whatsapp || '',
+    target_count: res.total_targets || 0,
+    discord_count: res.by_channel?.discord || 0,
+    telegram_count: res.by_channel?.telegram || 0,
+    whatsapp_count: res.by_channel?.whatsapp || 0,
+    estimated_duration_seconds: res.estimated_duration_seconds || 0,
+  }
 }
 
 interface BroadcastListResponse {
@@ -177,8 +213,8 @@ export default function AdminBroadcasts() {
     setPreviewBroadcastId(b.id)
     setIsSubmitting(true)
     try {
-      const previewRes = await api.post<PreviewData>(`/admin/broadcasts/${b.id}/preview`)
-      setPreviewData(previewRes.data)
+      const previewRes = await api.post<PreviewApiResponse>(`/admin/broadcasts/${b.id}/preview`)
+      setPreviewData(mapPreviewResponse(previewRes.data))
       setFormTitle(b.title)
       setFormMessage(b.message_markdown)
       setFormImageUrl(b.image_url || '')
@@ -214,8 +250,8 @@ export default function AdminBroadcasts() {
       setPreviewBroadcastId(broadcastId)
 
       // Fetch preview
-      const previewRes = await api.post<PreviewData>(`/admin/broadcasts/${broadcastId}/preview`)
-      setPreviewData(previewRes.data)
+      const previewRes = await api.post<PreviewApiResponse>(`/admin/broadcasts/${broadcastId}/preview`)
+      setPreviewData(mapPreviewResponse(previewRes.data))
       loadBroadcasts()
     } catch (err) {
       addToast('error', getApiErrorMessage(err, t('common.error', 'Fehler')))
