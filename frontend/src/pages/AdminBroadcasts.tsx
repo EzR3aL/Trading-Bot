@@ -102,7 +102,7 @@ export default function AdminBroadcasts() {
 
   const loadBroadcasts = useCallback(async () => {
     try {
-      const res = await api.get<BroadcastListResponse>('/admin/broadcasts', {
+      const res = await api.get<BroadcastListResponse>('/admin/broadcasts/', {
         params: { page, per_page: PER_PAGE },
       })
       setBroadcasts(res.data.items)
@@ -169,7 +169,7 @@ export default function AdminBroadcasts() {
     setIsSubmitting(true)
     try {
       // Create the broadcast as draft
-      const createRes = await api.post<Broadcast>('/admin/broadcasts', {
+      const createRes = await api.post<Broadcast>('/admin/broadcasts/', {
         title: formTitle.trim(),
         message: formMessage.trim(),
         image_url: formImageUrl.trim() || null,
