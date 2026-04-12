@@ -77,8 +77,7 @@ class DiscordNotifier:
             True if sent successfully
         """
         if not self.webhook_url:
-            logger.warning("Discord webhook URL not configured")
-            return False
+            raise RuntimeError("Discord webhook URL not configured")
 
         await self._ensure_session()
 
@@ -87,16 +86,16 @@ class DiscordNotifier:
             json=payload,
             timeout=aiohttp.ClientTimeout(total=10),
         ) as response:
-            if response.status == 204:
+            if response.status in (200, 204):
                 logger.info("Discord notification sent successfully")
                 return True
-            elif response.status == 429 or response.status >= 500:
-                error_text = await response.text()
+            error_text = await response.text()
+            if response.status == 429 or response.status >= 500:
+                # Retriable errors
                 raise RuntimeError(f"Discord webhook error {response.status}: {error_text}")
-            else:
-                error_text = await response.text()
-                logger.error("Discord webhook error: %s - %s", response.status, error_text)
-                return False
+            # Client errors (400, 401, 403, 404) — permanent failures
+            logger.error("Discord webhook error: %s - %s", response.status, error_text)
+            raise RuntimeError(f"Discord webhook error {response.status}: {error_text}")
 
     def _create_embed(
         self,
