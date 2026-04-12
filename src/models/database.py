@@ -9,6 +9,7 @@ trades, funding_payments, bot_instances, exchanges.
 from sqlalchemy import (
     Boolean,
     Column,
+    Date,
     DateTime,
     Float,
     ForeignKey,
@@ -477,3 +478,21 @@ class EventLog(Base):
     message = Column(String(1000), nullable=False)
     details = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+
+
+class RevenueEntry(Base):
+    """Revenue tracking: builder fees, affiliate commissions, referral income per exchange per day."""
+    __tablename__ = "revenue_entries"
+    __table_args__ = (
+        UniqueConstraint("date", "exchange", "revenue_type", name="uq_revenue_date_exchange_type"),
+    )
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    date = Column(Date, nullable=False, index=True)
+    exchange = Column(String(50), nullable=False, index=True)
+    revenue_type = Column(String(50), nullable=False)  # builder_fee | affiliate | referral
+    amount_usd = Column(Float, nullable=False, default=0.0)
+    source = Column(String(20), nullable=False, default="manual", server_default="manual")  # auto | manual
+    notes = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())

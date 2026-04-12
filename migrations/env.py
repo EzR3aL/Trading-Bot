@@ -11,7 +11,7 @@ from alembic import context
 from sqlalchemy import pool
 from sqlalchemy.ext.asyncio import create_async_engine
 
-from src.models.database import Base
+from src.models.database import Base, RevenueEntry  # noqa: F401
 from src.models.broadcast import Broadcast, BroadcastTarget  # noqa: F401
 
 # Use the same DATABASE_URL as the application
