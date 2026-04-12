@@ -365,9 +365,15 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
   }
 
   const handleTestDiscord = async () => {
-    if (!botId) return
     try {
-      await api.post(`/bots/${botId}/test-discord`)
+      if (botId && !discordWebhookUrl) {
+        await api.post(`/bots/${botId}/test-discord`)
+      } else if (discordWebhookUrl) {
+        await api.post('/bots/test-discord-direct', { webhook_url: discordWebhookUrl })
+      } else {
+        addToast('error', 'Bitte Discord Webhook URL eingeben')
+        return
+      }
       addToast('success', 'Discord-Testnachricht gesendet!')
     } catch (err) {
       addToast('error', getApiErrorMessage(err, 'Discord-Test fehlgeschlagen'))
@@ -375,9 +381,15 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
   }
 
   const handleTestTelegram = async () => {
-    if (!botId) return
     try {
-      await api.post(`/bots/${botId}/test-telegram`)
+      if (botId && !telegramBotToken) {
+        await api.post(`/bots/${botId}/test-telegram`)
+      } else if (telegramBotToken && telegramChatId) {
+        await api.post('/bots/test-telegram-direct', { bot_token: telegramBotToken, chat_id: telegramChatId })
+      } else {
+        addToast('error', 'Bitte Bot Token und Chat ID eingeben')
+        return
+      }
       addToast('success', 'Telegram-Testnachricht gesendet!')
     } catch (err) {
       addToast('error', getApiErrorMessage(err, 'Telegram-Test fehlgeschlagen'))
@@ -602,8 +614,8 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
             onTelegramBotTokenChange={setTelegramBotToken}
             onTelegramChatIdChange={setTelegramChatId}
             onOpenNotifChange={setOpenNotif}
-            onTestDiscord={isEdit ? handleTestDiscord : undefined}
-            onTestTelegram={isEdit ? handleTestTelegram : undefined}
+            onTestDiscord={handleTestDiscord}
+            onTestTelegram={handleTestTelegram}
           />
         )}
 

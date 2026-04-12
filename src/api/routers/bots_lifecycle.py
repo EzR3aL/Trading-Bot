@@ -117,6 +117,72 @@ async def _enforce_affiliate_gate(exchange_type: str, user: User, db: AsyncSessi
         )
 
 
+# ─── Notification Test (without bot_id, for new bots) ────────
+
+
+@lifecycle_router.post("/test-telegram-direct")
+@limiter.limit("5/minute")
+async def test_telegram_direct(
+    request: Request,
+    user: User = Depends(get_current_user),
+):
+    """Send a test Telegram message with provided credentials (no bot required)."""
+    body = await request.json()
+    bot_token = body.get("bot_token", "").strip()
+    chat_id = body.get("chat_id", "").strip()
+    if not bot_token or not chat_id:
+        raise HTTPException(status_code=400, detail=ERR_TELEGRAM_NOT_CONFIGURED)
+
+    from src.notifications.telegram_notifier import TelegramNotifier
+
+    notifier = TelegramNotifier(bot_token=bot_token, chat_id=chat_id)
+    try:
+        await notifier.send_test_message()
+    except Exception as e:
+        logger.warning(f"Telegram direct test failed: {e}")
+        raise HTTPException(status_code=502, detail=str(e))
+    return {"status": "ok", "message": "Test message sent"}
+
+
+@lifecycle_router.post("/test-discord-direct")
+@limiter.limit("5/minute")
+async def test_discord_direct(
+    request: Request,
+    user: User = Depends(get_current_user),
+):
+    """Send a test Discord message with provided webhook URL (no bot required)."""
+    body = await request.json()
+    webhook_url = body.get("webhook_url", "").strip()
+    if not webhook_url:
+        raise HTTPException(status_code=400, detail=ERR_DISCORD_NOT_CONFIGURED)
+
+    import aiohttp
+
+    try:
+        async with aiohttp.ClientSession() as http_session:
+            payload = {
+                "embeds": [{
+                    "title": "\ud83d\udd14 Verbindungstest",
+                    "description": "Discord-Benachrichtigungen sind korrekt eingerichtet!",
+                    "color": 0x00D166,
+                }]
+            }
+            async with http_session.post(webhook_url, json=payload) as resp:
+                if resp.status not in (200, 204):
+                    error_text = await resp.text()
+                    raise HTTPException(status_code=502, detail=f"Discord error {resp.status}: {error_text}")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.warning(f"Discord direct webhook test failed: {e}")
+        raise HTTPException(status_code=502, detail=str(e))
+
+    return {"status": "ok", "message": "Discord test message sent"}
+
+
+# ─── Bot Lifecycle ───────────────────────────────────────────
+
+
 @lifecycle_router.post("/{bot_id}/start")
 @limiter.limit("20/minute")
 async def start_bot(
