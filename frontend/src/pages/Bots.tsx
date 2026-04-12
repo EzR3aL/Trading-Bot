@@ -1236,8 +1236,8 @@ export default function Bots() {
                   </div>
                 )}
 
-                {/* Close Position — prominent when trades are open */}
-                {bot.open_trades > 0 && bot.status === 'running' && (
+                {/* Close Position — sichtbar solange Trades offen sind (auch bei gestopptem Bot) */}
+                {bot.open_trades > 0 && (
                   <div className="mb-3">
                     {bot.trading_pairs.length === 1 ? (
                       <button
