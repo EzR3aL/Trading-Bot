@@ -44,11 +44,9 @@ interface PreviewApiResponse {
 interface PreviewData {
   discord: DiscordEmbed | null
   telegram: string
-  whatsapp: string
   target_count: number
   discord_count: number
   telegram_count: number
-  whatsapp_count: number
   estimated_duration_seconds: number
 }
 
@@ -64,11 +62,9 @@ function mapPreviewResponse(res: PreviewApiResponse): PreviewData {
   return {
     discord,
     telegram: res.preview?.telegram || '',
-    whatsapp: res.preview?.whatsapp || '',
     target_count: res.total_targets || 0,
     discord_count: res.by_channel?.discord || 0,
     telegram_count: res.by_channel?.telegram || 0,
-    whatsapp_count: res.by_channel?.whatsapp || 0,
     estimated_duration_seconds: res.estimated_duration_seconds || 0,
   }
 }
@@ -500,7 +496,6 @@ export default function AdminBroadcasts() {
                   {t('broadcast.channelBreakdown', {
                     discord: previewData.discord_count,
                     telegram: previewData.telegram_count,
-                    whatsapp: previewData.whatsapp_count,
                   })}
                 </div>
                 <div className="text-xs text-gray-500">
@@ -511,7 +506,6 @@ export default function AdminBroadcasts() {
               <BroadcastPreview
                 discord={previewData.discord}
                 telegram={previewData.telegram}
-                whatsapp={previewData.whatsapp}
               />
 
               <div className="mt-4 flex gap-2">

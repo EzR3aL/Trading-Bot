@@ -29,8 +29,6 @@ from src.errors import (
     ERR_TELEGRAM_NOT_CONFIGURED,
     ERR_TELEGRAM_SEND_FAILED,
     ERR_TRADE_ALREADY_RESOLVED,
-    ERR_WHATSAPP_NOT_CONFIGURED,
-    ERR_WHATSAPP_SEND_FAILED,
     translate_exchange_error,
 )
 from src.exceptions import BotError
@@ -424,37 +422,6 @@ async def test_telegram(
         raise HTTPException(status_code=502, detail=ERR_TELEGRAM_SEND_FAILED)
     return {"status": "ok", "message": "Test message sent"}
 
-
-@lifecycle_router.post("/{bot_id}/test-whatsapp")
-@limiter.limit("5/minute")
-async def test_whatsapp(
-    request: Request,
-    bot_id: int,
-    user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_db),
-):
-    """Send a test WhatsApp message."""
-    result = await session.execute(
-        select(BotConfig).where(BotConfig.id == bot_id, BotConfig.user_id == user.id)
-    )
-    config = result.scalar_one_or_none()
-    if not config:
-        raise HTTPException(status_code=404, detail=ERR_BOT_NOT_FOUND)
-    if not config.whatsapp_phone_number_id or not config.whatsapp_access_token or not config.whatsapp_recipient:
-        raise HTTPException(status_code=400, detail=ERR_WHATSAPP_NOT_CONFIGURED)
-
-    from src.notifications.whatsapp_notifier import WhatsAppNotifier
-    from src.utils.encryption import decrypt_value
-
-    notifier = WhatsAppNotifier(
-        phone_number_id=decrypt_value(config.whatsapp_phone_number_id),
-        access_token=decrypt_value(config.whatsapp_access_token),
-        recipient_number=decrypt_value(config.whatsapp_recipient),
-    )
-    success = await notifier.send_test_message()
-    if not success:
-        raise HTTPException(status_code=502, detail=ERR_WHATSAPP_SEND_FAILED)
-    return {"status": "ok", "message": "Test message sent"}
 
 
 # ─── Pending Trades (Crash Recovery) ─────────────────────────

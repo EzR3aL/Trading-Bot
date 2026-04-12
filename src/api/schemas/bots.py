@@ -92,11 +92,6 @@ class BotConfigCreate(BaseModel):
     telegram_bot_token: Optional[str] = None
     telegram_chat_id: Optional[str] = None
 
-    # Per-bot WhatsApp notifications (optional)
-    whatsapp_phone_number_id: Optional[str] = None
-    whatsapp_access_token: Optional[str] = None
-    whatsapp_recipient: Optional[str] = None
-
     @field_validator("discord_webhook_url", mode="before")
     @classmethod
     def validate_webhook_domain(cls, v: str | None) -> str | None:
@@ -147,11 +142,6 @@ class BotConfigUpdate(BaseModel):
     telegram_bot_token: Optional[str] = None
     telegram_chat_id: Optional[str] = None
 
-    # Per-bot WhatsApp notifications (optional)
-    whatsapp_phone_number_id: Optional[str] = None
-    whatsapp_access_token: Optional[str] = None
-    whatsapp_recipient: Optional[str] = None
-
     @field_validator("discord_webhook_url", mode="before")
     @classmethod
     def validate_webhook_domain(cls, v: str | None) -> str | None:
@@ -189,7 +179,6 @@ class BotConfigResponse(BaseModel):
     is_enabled: bool
     discord_webhook_configured: bool = False
     telegram_configured: bool = False
-    whatsapp_configured: bool = False
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
 
@@ -218,7 +207,6 @@ class BotRuntimeStatus(BaseModel):
     open_trades: int = 0
     discord_webhook_configured: bool = False
     telegram_configured: bool = False
-    whatsapp_configured: bool = False
 
     # Crash recovery: count of orphaned trades from previous crashes
     orphaned_trades: int = 0

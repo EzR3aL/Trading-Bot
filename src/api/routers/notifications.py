@@ -23,7 +23,7 @@ router = APIRouter(prefix="/api/notifications", tags=["notifications"])
 @limiter.limit("60/minute")
 async def list_notifications(
     request: Request,
-    channel: Optional[str] = Query(None, pattern="^(discord|telegram|whatsapp)$"),
+    channel: Optional[str] = Query(None, pattern="^(discord|telegram)$"),
     status: Optional[str] = Query(None, pattern="^(sent|failed)$"),
     bot_id: Optional[int] = None,
     event_type: Optional[str] = None,

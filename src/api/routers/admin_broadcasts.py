@@ -82,7 +82,6 @@ async def create_broadcast(
         message_markdown=body.message,
         message_discord=rendered.get("discord"),
         message_telegram=rendered.get("telegram"),
-        message_whatsapp=rendered.get("whatsapp"),
         image_url=body.image_url,
         exchange_filter=body.exchange_filter,
         status=status,
@@ -171,7 +170,7 @@ async def list_broadcast_targets(
     page: int = Query(1, ge=1),
     per_page: int = Query(50, ge=1, le=200),
     status: Optional[str] = Query(None, pattern="^(pending|sending|sent|failed)$"),
-    channel: Optional[str] = Query(None, pattern="^(discord|telegram|whatsapp)$"),
+    channel: Optional[str] = Query(None, pattern="^(discord|telegram)$"),
     admin: User = Depends(get_current_admin),
     db: AsyncSession = Depends(get_db),
 ):
@@ -233,9 +232,6 @@ async def preview_broadcast(
         preview["discord"] = broadcast.message_discord
     if broadcast.message_telegram:
         preview["telegram"] = broadcast.message_telegram
-    if broadcast.message_whatsapp:
-        preview["whatsapp"] = broadcast.message_whatsapp
-
     return BroadcastPreviewResponse(
         total_targets=target_result.get("total", 0),
         by_channel=target_result.get("by_channel", {}),

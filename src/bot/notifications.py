@@ -17,8 +17,6 @@ def _channel_name(notifier) -> str:
         return "discord"
     if "telegram" in name:
         return "telegram"
-    if "whatsapp" in name:
-        return "whatsapp"
     return "unknown"
 
 
@@ -36,7 +34,7 @@ class NotificationsMixin:
         return None
 
     async def _get_notifiers(self) -> list:
-        """Return all configured notifiers (Discord + Telegram + WhatsApp)."""
+        """Return all configured notifiers (Discord + Telegram)."""
         notifiers = []
         discord = await self._get_discord_notifier()
         if discord:
@@ -50,19 +48,6 @@ class NotificationsMixin:
                 ))
         except Exception as e:
             logger.warning(f"[Bot:{self.bot_config_id}] Could not load Telegram config: {e}")
-        try:
-            if (self._config
-                    and self._config.whatsapp_phone_number_id
-                    and self._config.whatsapp_access_token
-                    and self._config.whatsapp_recipient):
-                from src.notifications.whatsapp_notifier import WhatsAppNotifier
-                notifiers.append(WhatsAppNotifier(
-                    phone_number_id=decrypt_value(self._config.whatsapp_phone_number_id),
-                    access_token=decrypt_value(self._config.whatsapp_access_token),
-                    recipient_number=decrypt_value(self._config.whatsapp_recipient),
-                ))
-        except Exception as e:
-            logger.warning(f"[Bot:{self.bot_config_id}] Could not load WhatsApp config: {e}")
         return notifiers
 
     async def _send_notification(self, send_fn: Callable, event_type: str = "unknown", summary: str | None = None) -> None:

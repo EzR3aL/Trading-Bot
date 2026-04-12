@@ -2,7 +2,7 @@
 Broadcast Sender — async background send loop.
 
 Sends pre-rendered broadcast messages to all resolved targets,
-grouped by channel (Discord, Telegram, WhatsApp) with per-channel
+grouped by channel (Discord, Telegram) with per-channel
 rate limiting and concurrency control.
 """
 
@@ -24,13 +24,9 @@ logger = get_logger(__name__)
 # Telegram API base URL template
 TELEGRAM_API_BASE = "https://api.telegram.org/bot{token}"
 
-# WhatsApp Business Cloud API base URL template
-WHATSAPP_API_BASE = "https://graph.facebook.com/v21.0/{phone_number_id}/messages"
-
 # Rate-limit delays between sends (seconds)
 DISCORD_DELAY = 2.5
 TELEGRAM_DELAY = 3.5
-WHATSAPP_DELAY = 3.0
 
 # Max concurrent Telegram bot-token groups
 TELEGRAM_MAX_CONCURRENT_GROUPS = 5
@@ -45,7 +41,6 @@ RETRY_BASE_DELAY = 1.0
 # Module-level rate-limit semaphores (shared across concurrent broadcasts)
 _discord_semaphore = asyncio.Semaphore(1)
 _telegram_semaphores: dict[str, asyncio.Semaphore] = {}
-_whatsapp_semaphore = asyncio.Semaphore(1)
 
 
 # ------------------------------------------------------------------
@@ -74,7 +69,6 @@ async def send_broadcast(broadcast_id: int) -> None:
     # Load targets grouped by channel
     discord_targets: list[dict] = []
     telegram_targets: list[dict] = []
-    whatsapp_targets: list[dict] = []
 
     async with get_session() as db:
         broadcast = await db.get(Broadcast, broadcast_id)
@@ -84,7 +78,6 @@ async def send_broadcast(broadcast_id: int) -> None:
         messages = {
             "discord": broadcast.message_discord,
             "telegram": broadcast.message_telegram,
-            "whatsapp": broadcast.message_whatsapp,
             "image_url": broadcast.image_url,
         }
 
@@ -104,8 +97,6 @@ async def send_broadcast(broadcast_id: int) -> None:
                 discord_targets.append(target_data)
             elif target.channel == "telegram":
                 telegram_targets.append(target_data)
-            elif target.channel == "whatsapp":
-                whatsapp_targets.append(target_data)
 
     # Launch channel workers in parallel
     workers = []
@@ -113,9 +104,6 @@ async def send_broadcast(broadcast_id: int) -> None:
         workers.append(_send_discord_targets(broadcast_id, discord_targets, messages))
     if telegram_targets:
         workers.append(_send_telegram_targets(broadcast_id, telegram_targets, messages))
-    if whatsapp_targets:
-        workers.append(_send_whatsapp_targets(broadcast_id, whatsapp_targets, messages))
-
     if workers:
         try:
             await asyncio.gather(*workers, return_exceptions=True)
@@ -330,90 +318,6 @@ async def _send_telegram_targets(
         await asyncio.gather(*group_tasks, return_exceptions=True)
 
     await _send_ws_progress_from_db(broadcast_id)
-
-
-# ------------------------------------------------------------------
-# WhatsApp channel worker
-# ------------------------------------------------------------------
-
-async def _send_whatsapp_targets(
-    broadcast_id: int,
-    targets: list[dict],
-    messages: dict,
-) -> None:
-    """Send broadcast to all WhatsApp targets."""
-    whatsapp_text = messages.get("whatsapp")
-    if not whatsapp_text:
-        logger.warning("No WhatsApp message rendered for broadcast %d", broadcast_id)
-        return
-
-    async with aiohttp.ClientSession() as session:
-        for idx, target in enumerate(targets):
-            if await _is_cancelled(broadcast_id):
-                logger.info("Broadcast %d cancelled, stopping WhatsApp worker", broadcast_id)
-                return
-
-            target_id = target["id"]
-            try:
-                creds = json.loads(target["credentials_encrypted"])
-                phone_number_id = decrypt_value(creds["phone_number_id"])
-                access_token = decrypt_value(creds["access_token"])
-                recipient = decrypt_value(creds["whatsapp_recipient"])
-            except Exception as exc:
-                await _mark_target_failed(broadcast_id, target_id, f"Decrypt error: {exc}")
-                continue
-
-            api_url = WHATSAPP_API_BASE.format(phone_number_id=phone_number_id)
-            headers = {
-                "Authorization": f"Bearer {access_token}",
-                "Content-Type": "application/json",
-            }
-            payload = {
-                "messaging_product": "whatsapp",
-                "recipient_type": "individual",
-                "to": recipient,
-                "type": "text",
-                "text": {"preview_url": False, "body": whatsapp_text},
-            }
-
-            success = False
-            last_error = ""
-            for attempt in range(MAX_RETRIES + 1):
-                try:
-                    async with _whatsapp_semaphore:
-                        async with session.post(
-                            api_url,
-                            json=payload,
-                            headers=headers,
-                            timeout=aiohttp.ClientTimeout(total=10),
-                        ) as resp:
-                            if resp.status == 200:
-                                success = True
-                                break
-                            elif resp.status == 429 or resp.status >= 500:
-                                last_error = f"HTTP {resp.status}: {await resp.text()}"
-                                if attempt < MAX_RETRIES:
-                                    await asyncio.sleep(RETRY_BASE_DELAY * (2 ** attempt))
-                            else:
-                                last_error = f"HTTP {resp.status}: {await resp.text()}"
-                                break
-                except asyncio.CancelledError:
-                    raise
-                except Exception as exc:
-                    last_error = str(exc)
-                    if attempt < MAX_RETRIES:
-                        await asyncio.sleep(RETRY_BASE_DELAY * (2 ** attempt))
-
-            if success:
-                await _mark_target_sent(broadcast_id, target_id)
-            else:
-                await _mark_target_failed(broadcast_id, target_id, last_error)
-
-            if (idx + 1) % PROGRESS_INTERVAL == 0:
-                await _send_ws_progress_from_db(broadcast_id)
-
-            if idx < len(targets) - 1:
-                await asyncio.sleep(WHATSAPP_DELAY)
 
 
 # ------------------------------------------------------------------

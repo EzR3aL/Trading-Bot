@@ -59,10 +59,6 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
   const [discordWebhookUrl, setDiscordWebhookUrl] = useState('')
   const [telegramBotToken, setTelegramBotToken] = useState('')
   const [telegramChatId, setTelegramChatId] = useState('')
-  const [whatsappPhoneId, setWhatsappPhoneId] = useState('')
-  const [whatsappToken, setWhatsappToken] = useState('')
-  const [whatsappRecipient, setWhatsappRecipient] = useState('')
-
   // Hyperliquid gate status (referral + builder fee)
   const [hlGateStatus, setHlGateStatus] = useState<{ needs_approval: boolean; needs_referral: boolean }>({ needs_approval: false, needs_referral: false })
 
@@ -398,9 +394,6 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
       discord_webhook_url: discordWebhookUrl || undefined,
       telegram_bot_token: telegramBotToken || undefined,
       telegram_chat_id: telegramChatId || undefined,
-      whatsapp_phone_id: whatsappPhoneId || undefined,
-      whatsapp_token: whatsappToken || undefined,
-      whatsapp_recipient: whatsappRecipient || undefined,
     }
   }
 
@@ -574,14 +567,10 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
           <BotBuilderStepNotifications
             discordWebhookUrl={discordWebhookUrl}
             telegramBotToken={telegramBotToken} telegramChatId={telegramChatId}
-            whatsappPhoneId={whatsappPhoneId} whatsappToken={whatsappToken}
-            whatsappRecipient={whatsappRecipient} openNotif={openNotif}
+            openNotif={openNotif}
             onDiscordWebhookUrlChange={setDiscordWebhookUrl}
             onTelegramBotTokenChange={setTelegramBotToken}
             onTelegramChatIdChange={setTelegramChatId}
-            onWhatsappPhoneIdChange={setWhatsappPhoneId}
-            onWhatsappTokenChange={setWhatsappToken}
-            onWhatsappRecipientChange={setWhatsappRecipient}
             onOpenNotifChange={setOpenNotif}
           />
         )}

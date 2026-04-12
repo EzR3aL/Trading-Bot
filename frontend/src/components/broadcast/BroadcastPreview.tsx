@@ -12,34 +12,22 @@ interface DiscordEmbed {
 interface BroadcastPreviewProps {
   discord: DiscordEmbed | null | undefined
   telegram: string | null | undefined
-  whatsapp: string | null | undefined
 }
 
-type PreviewTab = 'discord' | 'telegram' | 'whatsapp'
-
-function renderWhatsappBold(text: string) {
-  const parts = text.split(/(\*[^*]+\*)/)
-  return parts.map((part, i) => {
-    if (part.startsWith('*') && part.endsWith('*')) {
-      return <strong key={i}>{part.slice(1, -1)}</strong>
-    }
-    return <span key={i}>{part}</span>
-  })
-}
+type PreviewTab = 'discord' | 'telegram'
 
 function getDiscordColorHex(color?: number): string {
   if (!color) return '#5865f2'
   return `#${color.toString(16).padStart(6, '0')}`
 }
 
-export default function BroadcastPreview({ discord, telegram, whatsapp }: BroadcastPreviewProps) {
+export default function BroadcastPreview({ discord, telegram }: BroadcastPreviewProps) {
   const { t } = useTranslation()
   const [activeTab, setActiveTab] = useState<PreviewTab>('discord')
 
   const tabs: { key: PreviewTab; label: string }[] = [
     { key: 'discord', label: t('broadcast.tabDiscord') },
     { key: 'telegram', label: t('broadcast.tabTelegram') },
-    { key: 'whatsapp', label: t('broadcast.tabWhatsApp') },
   ]
 
   return (
@@ -107,22 +95,6 @@ export default function BroadcastPreview({ discord, telegram, whatsapp }: Broadc
               className="text-sm text-gray-200 break-words [&_b]:font-semibold [&_i]:italic [&_a]:text-blue-400 [&_a]:underline [&_code]:bg-white/10 [&_code]:px-1 [&_code]:rounded"
               dangerouslySetInnerHTML={{ __html: telegram }}
             />
-          </div>
-        ) : (
-          <div className="text-sm text-gray-500 italic p-3">{t('broadcast.noPreview', 'Keine Vorschau verfügbar')}</div>
-        )
-      )}
-
-      {/* WhatsApp preview */}
-      {activeTab === 'whatsapp' && (
-        whatsapp ? (
-          <div
-            className="rounded-lg p-3 max-w-md"
-            style={{ backgroundColor: '#005c4b' }}
-          >
-            <div className="text-sm text-white whitespace-pre-wrap break-words">
-              {renderWhatsappBold(whatsapp)}
-            </div>
           </div>
         ) : (
           <div className="text-sm text-gray-500 italic p-3">{t('broadcast.noPreview', 'Keine Vorschau verfügbar')}</div>
