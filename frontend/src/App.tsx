@@ -20,6 +20,7 @@ const Portfolio = lazy(() => import('./pages/Portfolio'))
 const TaxReport = lazy(() => import('./pages/TaxReport'))
 const GettingStarted = lazy(() => import('./pages/GettingStarted'))
 const AdminUsers = lazy(() => import('./pages/AdminUsers'))
+const AdminBroadcasts = lazy(() => import('./pages/AdminBroadcasts'))
 const NotFound = lazy(() => import('./pages/NotFound'))
 
 function PageLoader() {
@@ -87,6 +88,14 @@ export default function App() {
                       element={
                         <AdminRoute>
                           <AdminUsers />
+                        </AdminRoute>
+                      }
+                    />
+                    <Route
+                      path="/admin/broadcasts"
+                      element={
+                        <AdminRoute>
+                          <AdminBroadcasts />
                         </AdminRoute>
                       }
                     />

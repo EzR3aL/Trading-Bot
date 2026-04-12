@@ -19,6 +19,7 @@ import {
   Sun,
   Moon,
   WifiOff,
+  Radio,
   type LucideIcon,
 } from 'lucide-react'
 import { useThemeStore } from '../../stores/themeStore'
@@ -122,18 +123,32 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           )
         })}
         {user?.role === 'admin' && (
-          <Link
-            to="/admin/users"
-                       aria-label={t('nav.admin')}
-            className={`flex items-center gap-3 px-3 py-2.5 text-sm rounded-xl transition-all duration-200 ${
-              location.pathname === '/admin/users'
-                ? 'nav-item-active text-white font-medium'
-                : 'text-gray-400 hover:text-white hover:bg-white/5'
-            }`}
-          >
-            <Users size={18} className={location.pathname === '/admin/users' ? 'text-primary-400' : ''} />
-            <span>{t('nav.admin')}</span>
-          </Link>
+          <>
+            <Link
+              to="/admin/users"
+              aria-label={t('nav.admin')}
+              className={`flex items-center gap-3 px-3 py-2.5 text-sm rounded-xl transition-all duration-200 ${
+                location.pathname === '/admin/users'
+                  ? 'nav-item-active text-white font-medium'
+                  : 'text-gray-400 hover:text-white hover:bg-white/5'
+              }`}
+            >
+              <Users size={18} className={location.pathname === '/admin/users' ? 'text-primary-400' : ''} />
+              <span>{t('nav.admin')}</span>
+            </Link>
+            <Link
+              to="/admin/broadcasts"
+              aria-label={t('nav.broadcasts')}
+              className={`flex items-center gap-3 px-3 py-2.5 text-sm rounded-xl transition-all duration-200 ${
+                location.pathname === '/admin/broadcasts'
+                  ? 'nav-item-active text-white font-medium'
+                  : 'text-gray-400 hover:text-white hover:bg-white/5'
+              }`}
+            >
+              <Radio size={18} className={location.pathname === '/admin/broadcasts' ? 'text-primary-400' : ''} />
+              <span>{t('nav.broadcasts')}</span>
+            </Link>
+          </>
         )}
       </nav>
 

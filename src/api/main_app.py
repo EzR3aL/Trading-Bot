@@ -166,6 +166,9 @@ async def lifespan(app: FastAPI):
         replace_existing=True,
     )
 
+    # Recover interrupted broadcasts on startup
+    await _recover_broadcasts(orchestrator)
+
     # Start auth bridge code cleanup
     from src.auth.auth_code import auth_code_store
     auth_code_store.start_cleanup()
@@ -210,6 +213,69 @@ async def lifespan(app: FastAPI):
 
     await close_db()
     logger.info("Application shut down")
+
+
+async def _recover_broadcasts(orchestrator) -> None:
+    """Recover broadcasts that were interrupted by a shutdown.
+
+    - status='sending': restart send_broadcast() for each
+    - status='scheduled' with scheduled_at <= now: start immediately
+    - status='scheduled' with scheduled_at > now: re-register APScheduler jobs
+    """
+    from datetime import datetime, timezone
+
+    from sqlalchemy import select
+
+    try:
+        from src.models.broadcast import Broadcast
+        from src.models.session import get_session
+    except ImportError:
+        return
+
+    try:
+        async with get_session() as session:
+            # Restart interrupted sends
+            sending_result = await session.execute(
+                select(Broadcast).where(Broadcast.status == "sending")
+            )
+            for broadcast in sending_result.scalars().all():
+                logger.info("Recovering interrupted broadcast #%d", broadcast.id)
+                from src.services.broadcast_sender import send_broadcast
+                asyncio.create_task(send_broadcast(broadcast.id))
+
+            # Handle scheduled broadcasts
+            scheduled_result = await session.execute(
+                select(Broadcast).where(Broadcast.status == "scheduled")
+            )
+            now = datetime.now(timezone.utc)
+            scheduler = orchestrator._scheduler
+
+            for broadcast in scheduled_result.scalars().all():
+                if broadcast.scheduled_at and broadcast.scheduled_at <= now:
+                    logger.info(
+                        "Starting overdue scheduled broadcast #%d", broadcast.id
+                    )
+                    broadcast.status = "sending"
+                    broadcast.started_at = now
+                    from src.services.broadcast_sender import send_broadcast
+                    asyncio.create_task(send_broadcast(broadcast.id))
+                elif broadcast.scheduled_at and broadcast.scheduled_at > now:
+                    job_id = broadcast.scheduler_job_id or f"broadcast_scheduled_{broadcast.id}"
+                    logger.info(
+                        "Re-registering scheduled broadcast #%d at %s",
+                        broadcast.id, broadcast.scheduled_at,
+                    )
+                    from src.services.broadcast_sender import send_broadcast
+                    scheduler.add_job(
+                        send_broadcast,
+                        "date",
+                        run_date=broadcast.scheduled_at,
+                        id=job_id,
+                        args=[broadcast.id],
+                        replace_existing=True,
+                    )
+    except Exception as e:
+        logger.warning("Broadcast recovery skipped: %s", e)
 
 
 async def _seed_exchanges():
@@ -356,6 +422,8 @@ def create_app() -> FastAPI:
     app.include_router(copy_trading_router)
     from src.api.routers.reconciliation import reconciliation_router
     app.include_router(reconciliation_router)
+    from src.api.routers.admin_broadcasts import router as broadcast_router
+    app.include_router(broadcast_router)
 
     # Store WebSocket manager on app state for access
     from src.api.websocket.manager import ws_manager
