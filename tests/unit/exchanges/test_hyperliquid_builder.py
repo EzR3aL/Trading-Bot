@@ -552,6 +552,7 @@ class TestBotWorkerBuilderCheck:
 
         mock_client = MagicMock(spec=HyperliquidClient)
         mock_client.builder_config = {"b": "0xbuilder", "f": 10}
+        mock_client.demo_mode = False
         mock_client.check_builder_fee_approval = AsyncMock(return_value=None)
 
         mock_db = AsyncMock()
@@ -578,6 +579,7 @@ class TestBotWorkerBuilderCheck:
 
         mock_client = MagicMock(spec=HyperliquidClient)
         mock_client.builder_config = {"b": "0xbuilder", "f": 10}
+        mock_client.demo_mode = False
         mock_client.check_builder_fee_approval = AsyncMock(return_value=10)
 
         mock_db = AsyncMock()
