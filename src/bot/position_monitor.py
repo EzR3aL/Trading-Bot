@@ -252,10 +252,12 @@ class PositionMonitorMixin:
                         except Exception:
                             pass
 
+                        # Use TRAILING_STOP label when the strategy's trailing stop triggered the exit
+                        close_label = "TRAILING_STOP" if "Trailing Stop" in exit_reason else "STRATEGY_EXIT"
                         await self._close_and_record_trade(
                             trade,
                             exit_price,
-                            "STRATEGY_EXIT",
+                            close_label,
                             fees=fees,
                             funding_paid=funding_paid,
                             strategy_reason="[%s] %s" % (self._config.name, exit_reason),
