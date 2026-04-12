@@ -59,6 +59,10 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
   const [discordWebhookUrl, setDiscordWebhookUrl] = useState('')
   const [telegramBotToken, setTelegramBotToken] = useState('')
   const [telegramChatId, setTelegramChatId] = useState('')
+  // Notification configuration status (for edit mode)
+  const [discordConfigured, setDiscordConfigured] = useState(false)
+  const [telegramConfigured, setTelegramConfigured] = useState(false)
+
   // Hyperliquid gate status (referral + builder fee)
   const [hlGateStatus, setHlGateStatus] = useState<{ needs_approval: boolean; needs_referral: boolean }>({ needs_approval: false, needs_referral: false })
 
@@ -173,6 +177,10 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
           if (d.schedule_config.interval_minutes) setIntervalMinutes(d.schedule_config.interval_minutes)
           if (d.schedule_config.hours) setCustomHours(d.schedule_config.hours.map((h: number) => utcHourToLocal(h)))
         }
+        // Set notification configuration status for edit mode
+        setDiscordConfigured(d.discord_webhook_configured || false)
+        setTelegramConfigured(d.telegram_configured || false)
+
         // Migrate legacy schedule types to supported ones
         if (d.schedule_type === 'rotation_only' || d.schedule_type === 'market_sessions') {
           setScheduleType('interval')
@@ -354,6 +362,26 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
   const clearCategory = (category: string) => {
     const ids = new Set((sourcesByCategory[category] || []).map(ds => ds.id))
     setSelectedSources(prev => prev.filter(s => !ids.has(s)))
+  }
+
+  const handleTestDiscord = async () => {
+    if (!botId) return
+    try {
+      await api.post(`/bots/${botId}/test-discord`)
+      addToast('success', 'Discord-Testnachricht gesendet!')
+    } catch (err) {
+      addToast('error', getApiErrorMessage(err, 'Discord-Test fehlgeschlagen'))
+    }
+  }
+
+  const handleTestTelegram = async () => {
+    if (!botId) return
+    try {
+      await api.post(`/bots/${botId}/test-telegram`)
+      addToast('success', 'Telegram-Testnachricht gesendet!')
+    } catch (err) {
+      addToast('error', getApiErrorMessage(err, 'Telegram-Test fehlgeschlagen'))
+    }
   }
 
   const buildPayload = () => {
@@ -568,10 +596,14 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
             discordWebhookUrl={discordWebhookUrl}
             telegramBotToken={telegramBotToken} telegramChatId={telegramChatId}
             openNotif={openNotif}
+            discordConfigured={discordConfigured}
+            telegramConfigured={telegramConfigured}
             onDiscordWebhookUrlChange={setDiscordWebhookUrl}
             onTelegramBotTokenChange={setTelegramBotToken}
             onTelegramChatIdChange={setTelegramChatId}
             onOpenNotifChange={setOpenNotif}
+            onTestDiscord={isEdit ? handleTestDiscord : undefined}
+            onTestTelegram={isEdit ? handleTestTelegram : undefined}
           />
         )}
 

@@ -16,6 +16,8 @@ from src.errors import (
     ERR_AFFILIATE_REQUIRED,
     ERR_BOT_NOT_FOUND,
     ERR_BOT_NOT_RUNNING,
+    ERR_DISCORD_NOT_CONFIGURED,
+    ERR_DISCORD_SEND_FAILED,
     ERR_EXCHANGE_CREDENTIALS_MISSING,
     ERR_HL_BUILDER_FEE_NOT_APPROVED,
     ERR_HL_REFERRAL_REQUIRED,
@@ -422,6 +424,49 @@ async def test_telegram(
         raise HTTPException(status_code=502, detail=ERR_TELEGRAM_SEND_FAILED)
     return {"status": "ok", "message": "Test message sent"}
 
+
+@lifecycle_router.post("/{bot_id}/test-discord")
+@limiter.limit("5/minute")
+async def test_discord(
+    request: Request,
+    bot_id: int,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db),
+):
+    """Send a test Discord message via webhook."""
+    result = await session.execute(
+        select(BotConfig).where(BotConfig.id == bot_id, BotConfig.user_id == user.id)
+    )
+    config = result.scalar_one_or_none()
+    if not config:
+        raise HTTPException(status_code=404, detail=ERR_BOT_NOT_FOUND)
+    if not config.discord_webhook_url:
+        raise HTTPException(status_code=400, detail=ERR_DISCORD_NOT_CONFIGURED)
+
+    from src.utils.encryption import decrypt_value
+
+    import aiohttp
+
+    webhook_url = decrypt_value(config.discord_webhook_url)
+    try:
+        async with aiohttp.ClientSession() as http_session:
+            payload = {
+                "embeds": [{
+                    "title": "\ud83d\udd14 Verbindungstest",
+                    "description": "Discord-Benachrichtigungen sind korrekt eingerichtet!",
+                    "color": 0x00D166,
+                }]
+            }
+            async with http_session.post(webhook_url, json=payload) as resp:
+                if resp.status not in (200, 204):
+                    raise HTTPException(status_code=502, detail=ERR_DISCORD_SEND_FAILED)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.warning(f"Discord webhook test failed for bot {bot_id}: {e}")
+        raise HTTPException(status_code=502, detail=ERR_DISCORD_SEND_FAILED)
+
+    return {"status": "ok", "message": "Discord test message sent"}
 
 
 # ─── Pending Trades (Crash Recovery) ─────────────────────────

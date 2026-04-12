@@ -1,21 +1,26 @@
 import { useTranslation } from 'react-i18next'
-import { Check, ChevronDown } from 'lucide-react'
+import { Check, CheckCircle, ChevronDown } from 'lucide-react'
 
 interface Props {
   discordWebhookUrl: string
   telegramBotToken: string
   telegramChatId: string
   openNotif: string | null
+  discordConfigured: boolean
+  telegramConfigured: boolean
   onDiscordWebhookUrlChange: (val: string) => void
   onTelegramBotTokenChange: (val: string) => void
   onTelegramChatIdChange: (val: string) => void
   onOpenNotifChange: (val: string | null) => void
+  onTestDiscord?: () => void
+  onTestTelegram?: () => void
 }
 
 export default function BotBuilderStepNotifications({
   discordWebhookUrl, telegramBotToken, telegramChatId, openNotif,
+  discordConfigured, telegramConfigured,
   onDiscordWebhookUrlChange, onTelegramBotTokenChange, onTelegramChatIdChange,
-  onOpenNotifChange,
+  onOpenNotifChange, onTestDiscord, onTestTelegram,
 }: Props) {
   const { t } = useTranslation()
 
@@ -40,6 +45,21 @@ export default function BotBuilderStepNotifications({
           </button>
           {openNotif === 'discord' && (
             <div className="px-3.5 pb-3.5 space-y-3">
+              {discordConfigured && !discordWebhookUrl && (
+                <div className="flex items-center gap-2 p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
+                  <CheckCircle size={14} className="text-emerald-400 shrink-0" />
+                  <span className="text-xs text-emerald-400">Discord ist konfiguriert. Leer lassen = bestehende Einstellung beibehalten.</span>
+                  {onTestDiscord && (
+                    <button
+                      type="button"
+                      onClick={onTestDiscord}
+                      className="ml-auto px-2 py-1 text-[10px] bg-white/5 border border-white/10 text-gray-400 rounded hover:text-white hover:bg-white/10 transition-colors shrink-0"
+                    >
+                      Test senden
+                    </button>
+                  )}
+                </div>
+              )}
               <div>
                 <label htmlFor="notif-discord-webhook" className="block text-xs text-gray-300 mb-1.5">{t('bots.builder.discordWebhook')}</label>
                 <input
@@ -74,6 +94,21 @@ export default function BotBuilderStepNotifications({
           </button>
           {openNotif === 'telegram' && (
             <div className="px-3.5 pb-3.5 space-y-3">
+              {telegramConfigured && !telegramBotToken && (
+                <div className="flex items-center gap-2 p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
+                  <CheckCircle size={14} className="text-emerald-400 shrink-0" />
+                  <span className="text-xs text-emerald-400">Telegram ist konfiguriert. Leer lassen = bestehende Einstellung beibehalten.</span>
+                  {onTestTelegram && (
+                    <button
+                      type="button"
+                      onClick={onTestTelegram}
+                      className="ml-auto px-2 py-1 text-[10px] bg-white/5 border border-white/10 text-gray-400 rounded hover:text-white hover:bg-white/10 transition-colors shrink-0"
+                    >
+                      Test senden
+                    </button>
+                  )}
+                </div>
+              )}
               <div>
                 <label htmlFor="notif-telegram-token" className="block text-xs text-gray-300 mb-1.5">{t('bots.builder.telegramToken')}</label>
                 <input
