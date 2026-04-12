@@ -164,10 +164,15 @@ export default function AdminBroadcasts() {
         const sendingIds = broadcasts.filter((b) => b.status === 'sending').map((b) => b.id)
         for (const id of sendingIds) {
           try {
-            const res = await api.get<Broadcast>(`/admin/broadcasts/${id}/progress`)
+            const res = await api.get<{ broadcast_id: number; sent: number; failed: number; total: number; status: string }>(`/admin/broadcasts/${id}/progress`)
+            const progress = res.data
             setBroadcasts((prev) =>
-              prev.map((b) => (b.id === id ? { ...b, ...res.data } : b))
+              prev.map((b) => (b.id === id ? { ...b, status: progress.status as Broadcast['status'], sent_count: progress.sent, failed_count: progress.failed, total_targets: progress.total } : b))
             )
+            // Wenn Broadcast fertig, Liste komplett neu laden
+            if (progress.status !== 'sending') {
+              loadBroadcasts()
+            }
           } catch {
             // Silently ignore polling errors
           }
