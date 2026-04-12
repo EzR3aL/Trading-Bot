@@ -224,9 +224,9 @@ async def preview_broadcast(
         resolve_targets,
     )
 
-    targets = await resolve_targets(broadcast, db)
-    summary = get_target_summary(targets)
-    duration = estimate_duration(len(targets))
+    target_result = await resolve_targets(broadcast.id, broadcast.exchange_filter, db)
+    summary = await get_target_summary(broadcast.id, db)
+    duration = estimate_duration(target_result.get("by_channel", {}))
 
     preview = {}
     if broadcast.message_discord:
@@ -237,8 +237,8 @@ async def preview_broadcast(
         preview["whatsapp"] = broadcast.message_whatsapp
 
     return BroadcastPreviewResponse(
-        total_targets=len(targets),
-        by_channel=summary,
+        total_targets=target_result.get("total", 0),
+        by_channel=target_result.get("by_channel", {}),
         estimated_duration_seconds=duration,
         preview=preview,
     )
