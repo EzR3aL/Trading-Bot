@@ -632,6 +632,8 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
             symbolConflicts={symbolConflicts}
             selectedSources={selectedSources} usesData={usesData}
             hasFixedSources={hasFixedSources}
+            discordConfigured={discordConfigured} telegramConfigured={telegramConfigured}
+            discordWebhookUrl={discordWebhookUrl} telegramBotToken={telegramBotToken}
             riskAccepted={riskAccepted} onRiskAcceptedChange={setRiskAccepted}
             b={b}
           />
