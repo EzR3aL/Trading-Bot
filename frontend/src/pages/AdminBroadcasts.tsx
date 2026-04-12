@@ -26,6 +26,51 @@ interface Broadcast {
   created_at: string
 }
 
+// Detail view for viewing sent broadcast content
+function BroadcastDetailModal({ broadcast, onClose }: { broadcast: Broadcast; onClose: () => void }) {
+  const { t } = useTranslation()
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
+      <div className="bg-[#0f1923] border border-white/10 rounded-xl p-5 max-w-2xl w-full mx-4 max-h-[80vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-semibold text-white">{broadcast.title}</h2>
+          <button onClick={onClose} className="p-1 text-gray-400 hover:text-white transition-colors">
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="space-y-3 text-sm">
+          <div className="flex flex-wrap gap-3 text-xs text-gray-400">
+            <span>{t('broadcast.formExchangeFilter')}: {broadcast.exchange_filter || t('broadcast.allExchanges')}</span>
+            <span>{t('broadcast.targets')}: {broadcast.total_targets}</span>
+            <span className="text-emerald-400">{t('broadcast.successCount')}: {broadcast.sent_count}</span>
+            {broadcast.failed_count > 0 && <span className="text-red-400">{t('broadcast.failureCount')}: {broadcast.failed_count}</span>}
+          </div>
+
+          <div className="border-t border-white/10 pt-3">
+            <label className="block text-xs text-gray-500 mb-1">{t('broadcast.formMessage')}</label>
+            <div className="bg-white/[0.03] border border-white/5 rounded-lg p-3 text-gray-200 whitespace-pre-wrap font-mono text-xs">
+              {broadcast.message_markdown}
+            </div>
+          </div>
+
+          {broadcast.image_url && (
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">{t('broadcast.formImageUrl')}</label>
+              <img src={broadcast.image_url} alt="" className="max-h-48 rounded-lg object-contain" />
+            </div>
+          )}
+
+          <div className="text-[11px] text-gray-600 pt-2 border-t border-white/10">
+            {broadcast.started_at && <span>Gesendet: {new Date(broadcast.started_at).toLocaleString('de-DE')} </span>}
+            {broadcast.completed_at && <span>| Abgeschlossen: {new Date(broadcast.completed_at).toLocaleString('de-DE')}</span>}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 interface DiscordEmbed {
   title?: string
   description?: string
@@ -120,6 +165,9 @@ export default function AdminBroadcasts() {
   const [page, setPage] = useState(1)
   const [totalPages, setTotalPages] = useState(1)
   const [isLoading, setIsLoading] = useState(true)
+
+  // Detail view state
+  const [detailBroadcast, setDetailBroadcast] = useState<Broadcast | null>(null)
 
   // Confirm modal state
   const [confirmModal, setConfirmModal] = useState<{
@@ -561,7 +609,11 @@ export default function AdminBroadcasts() {
                         {getStatusLabel(b.status)}
                       </span>
                     </td>
-                    <td className="py-2.5 pr-3 text-white max-w-[200px] truncate">{b.title}</td>
+                    <td className="py-2.5 pr-3 text-white max-w-[200px] truncate">
+                      <button onClick={() => b.status !== 'draft' ? setDetailBroadcast(b) : handlePreviewDraft(b)} className="hover:text-primary-400 transition-colors text-left truncate max-w-full">
+                        {b.title}
+                      </button>
+                    </td>
                     <td className="py-2.5 pr-3 text-gray-400">{b.exchange_filter || t('broadcast.allExchanges')}</td>
                     <td className="py-2.5 pr-3 text-gray-400">{b.total_targets}</td>
                     <td className="py-2.5 pr-3 text-gray-400 text-xs">
@@ -603,6 +655,15 @@ export default function AdminBroadcasts() {
                               <Eye size={14} />
                             </button>
                           </>
+                        )}
+                        {b.status !== 'draft' && (
+                          <button
+                            onClick={() => setDetailBroadcast(b)}
+                            title={t('broadcast.preview')}
+                            className="p-1 text-gray-400/60 hover:text-white transition-colors"
+                          >
+                            <Eye size={14} />
+                          </button>
                         )}
                         {canCancel(b.status) && (
                           <button
@@ -673,6 +734,15 @@ export default function AdminBroadcasts() {
                   </div>
                 )}
                 <div className="flex gap-1 mt-2 pt-2 border-t border-white/5">
+                  {b.status !== 'draft' && (
+                    <button
+                      onClick={() => setDetailBroadcast(b)}
+                      className="p-1 text-gray-400/60 hover:text-white transition-colors text-xs flex items-center gap-1"
+                    >
+                      <Eye size={13} />
+                      {t('broadcast.preview')}
+                    </button>
+                  )}
                   {canCancel(b.status) && (
                     <button
                       onClick={() => handleCancel(b)}
@@ -701,6 +771,14 @@ export default function AdminBroadcasts() {
             <Pagination page={page} totalPages={totalPages} onPageChange={setPage} />
           </div>
         </>
+      )}
+
+      {/* Detail Modal */}
+      {detailBroadcast && (
+        <BroadcastDetailModal
+          broadcast={detailBroadcast}
+          onClose={() => setDetailBroadcast(null)}
+        />
       )}
 
       {/* Confirm Modal */}
