@@ -20,7 +20,6 @@ import {
   Sun,
   Moon,
   LogOut,
-  Radio,
   type LucideIcon,
 } from 'lucide-react'
 
@@ -60,8 +59,7 @@ export default function MobileBottomNav() {
   }
 
   const isMoreActive = moreItems.some((item) => location.pathname === item.path)
-    || location.pathname === '/admin/users'
-    || location.pathname === '/admin/broadcasts'
+    || location.pathname.startsWith('/admin')
 
   return (
     <>
@@ -124,12 +122,11 @@ export default function MobileBottomNav() {
               )
             })}
             {user?.role === 'admin' && (
-              <>
                 <Link
-                  to="/admin/users"
+                  to="/admin"
                   onClick={() => setSheetOpen(false)}
                   className={`flex flex-col items-center gap-1.5 py-3 px-2 rounded-xl transition-all duration-200 ${
-                    location.pathname === '/admin/users'
+                    location.pathname.startsWith('/admin')
                       ? 'bg-primary-500/15 text-primary-400'
                       : 'text-gray-400 hover:bg-white/5 hover:text-white active:bg-white/10'
                   }`}
@@ -137,19 +134,6 @@ export default function MobileBottomNav() {
                   <Users size={20} />
                   <span className="text-[11px] font-medium">{t('nav.admin')}</span>
                 </Link>
-                <Link
-                  to="/admin/broadcasts"
-                  onClick={() => setSheetOpen(false)}
-                  className={`flex flex-col items-center gap-1.5 py-3 px-2 rounded-xl transition-all duration-200 ${
-                    location.pathname === '/admin/broadcasts'
-                      ? 'bg-primary-500/15 text-primary-400'
-                      : 'text-gray-400 hover:bg-white/5 hover:text-white active:bg-white/10'
-                  }`}
-                >
-                  <Radio size={20} />
-                  <span className="text-[11px] font-medium">{t('nav.broadcasts')}</span>
-                </Link>
-              </>
             )}
           </div>
         </nav>
