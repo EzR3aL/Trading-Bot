@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Radio, Send, Clock, Trash2, X, Eye, XCircle } from 'lucide-react'
+import { Radio, Send, Clock, Trash2, X, Eye, XCircle, Pencil } from 'lucide-react'
 import api from '../api/client'
 import { getApiErrorMessage } from '../utils/api-error'
 import { useToastStore } from '../stores/toastStore'
@@ -13,13 +13,14 @@ import BroadcastProgress from '../components/broadcast/BroadcastProgress'
 interface Broadcast {
   id: number
   title: string
-  message: string
+  message_markdown: string
   image_url?: string
   exchange_filter?: string
   status: 'draft' | 'scheduled' | 'sending' | 'completed' | 'failed' | 'cancelled'
   scheduled_at?: string
-  sent_at?: string
-  total_recipients: number
+  started_at?: string
+  completed_at?: string
+  total_targets: number
   sent_count: number
   failed_count: number
   created_at: string
@@ -155,6 +156,39 @@ export default function AdminBroadcasts() {
     setPreviewData(null)
     setPreviewBroadcastId(null)
     setIsFormOpen(false)
+  }
+
+  const handleEditDraft = (b: Broadcast) => {
+    setFormTitle(b.title)
+    setFormMessage(b.message_markdown)
+    setFormImageUrl(b.image_url || '')
+    setFormExchangeFilter(b.exchange_filter || '')
+    setIsScheduled(!!b.scheduled_at)
+    setScheduledAt(b.scheduled_at ? b.scheduled_at.slice(0, 16) : '')
+    setPreviewBroadcastId(b.id)
+    setPreviewData(null)
+    setIsFormOpen(true)
+    // Delete the old draft — a new one will be created on preview
+    api.delete(`/admin/broadcasts/${b.id}`).catch(() => {})
+    loadBroadcasts()
+  }
+
+  const handlePreviewDraft = async (b: Broadcast) => {
+    setPreviewBroadcastId(b.id)
+    setIsSubmitting(true)
+    try {
+      const previewRes = await api.post<PreviewData>(`/admin/broadcasts/${b.id}/preview`)
+      setPreviewData(previewRes.data)
+      setFormTitle(b.title)
+      setFormMessage(b.message_markdown)
+      setFormImageUrl(b.image_url || '')
+      setFormExchangeFilter(b.exchange_filter || '')
+      setIsFormOpen(true)
+    } catch (err) {
+      addToast('error', getApiErrorMessage(err, t('common.error', 'Fehler')))
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   const handleCreateAndPreview = async () => {
@@ -494,16 +528,16 @@ export default function AdminBroadcasts() {
                     </td>
                     <td className="py-2.5 pr-3 text-white max-w-[200px] truncate">{b.title}</td>
                     <td className="py-2.5 pr-3 text-gray-400">{b.exchange_filter || t('broadcast.allExchanges')}</td>
-                    <td className="py-2.5 pr-3 text-gray-400">{b.total_recipients}</td>
+                    <td className="py-2.5 pr-3 text-gray-400">{b.total_targets}</td>
                     <td className="py-2.5 pr-3 text-gray-400 text-xs">
-                      {formatDateTime(b.scheduled_at || b.sent_at || b.created_at)}
+                      {formatDateTime(b.scheduled_at || b.completed_at || b.created_at)}
                     </td>
                     <td className="py-2.5 pr-3">
                       {b.status === 'sending' ? (
                         <BroadcastProgress
                           sent={b.sent_count}
                           failed={b.failed_count}
-                          total={b.total_recipients}
+                          total={b.total_targets}
                           status={b.status}
                         />
                       ) : (
@@ -517,6 +551,24 @@ export default function AdminBroadcasts() {
                     </td>
                     <td className="py-2.5">
                       <div className="flex gap-1">
+                        {b.status === 'draft' && (
+                          <>
+                            <button
+                              onClick={() => handleEditDraft(b)}
+                              title="Bearbeiten"
+                              className="p-1 text-blue-400/60 hover:text-blue-400 transition-colors"
+                            >
+                              <Pencil size={14} />
+                            </button>
+                            <button
+                              onClick={() => handlePreviewDraft(b)}
+                              title={t('broadcast.preview')}
+                              className="p-1 text-primary-400/60 hover:text-primary-400 transition-colors"
+                            >
+                              <Eye size={14} />
+                            </button>
+                          </>
+                        )}
                         {canCancel(b.status) && (
                           <button
                             onClick={() => handleCancel(b)}
@@ -555,7 +607,7 @@ export default function AdminBroadcasts() {
                     {getStatusLabel(b.status)}
                   </span>
                   <span className="text-[10px] text-gray-500">
-                    {formatDateTime(b.scheduled_at || b.sent_at || b.created_at)}
+                    {formatDateTime(b.scheduled_at || b.completed_at || b.created_at)}
                   </span>
                 </div>
                 <div className="text-sm text-white font-medium truncate mb-1">{b.title}</div>
@@ -566,14 +618,14 @@ export default function AdminBroadcasts() {
                   <BroadcastProgress
                     sent={b.sent_count}
                     failed={b.failed_count}
-                    total={b.total_recipients}
+                    total={b.total_targets}
                     status={b.status}
                   />
                 )}
                 {b.status !== 'sending' && (
                   <div className="flex gap-4 text-xs">
                     <span className="text-gray-400">
-                      {t('broadcast.targets')}: {b.total_recipients}
+                      {t('broadcast.targets')}: {b.total_targets}
                     </span>
                     <span className="text-emerald-400">
                       {t('broadcast.successCount')}: {b.sent_count}
