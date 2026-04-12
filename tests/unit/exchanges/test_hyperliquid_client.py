@@ -705,8 +705,35 @@ class TestPlaceMarketOrder:
             name="ETH", is_buy=False, sz=1.0, slippage=DEFAULT_SLIPPAGE,
         )
 
-    async def test_place_order_with_builder(self):
-        """When builder is configured, should pass builder kwarg."""
+    async def test_place_order_with_builder_mainnet(self):
+        """When builder is configured on mainnet, should pass builder kwarg."""
+        builder = {"b": "0xbuilder", "f": 10}
+        client = _make_client(builder=builder)
+        client.demo_mode = False
+        client._exchange.update_leverage.return_value = {"status": "ok"}
+        client._exchange.market_open.return_value = {
+            "status": "ok",
+            "response": {
+                "data": {
+                    "statuses": [
+                        {"filled": {"oid": 1, "avgPx": "96000", "totalSz": "0.01"}}
+                    ]
+                }
+            },
+        }
+
+        await client.place_market_order(
+            symbol="BTC", side="long", size=0.01, leverage=10
+        )
+
+        client._exchange.market_open.assert_called_once_with(
+            name="BTC", is_buy=True, sz=0.01, slippage=DEFAULT_SLIPPAGE,
+            builder=builder,
+        )
+
+    @pytest.mark.asyncio
+    async def test_place_order_without_builder_on_demo(self):
+        """On demo/testnet, builder kwarg should NOT be sent even if configured."""
         builder = {"b": "0xbuilder", "f": 10}
         client = _make_client(builder=builder)
         client._exchange.update_leverage.return_value = {"status": "ok"}
@@ -727,7 +754,6 @@ class TestPlaceMarketOrder:
 
         client._exchange.market_open.assert_called_once_with(
             name="BTC", is_buy=True, sz=0.01, slippage=DEFAULT_SLIPPAGE,
-            builder=builder,
         )
 
     async def test_place_order_with_tp_sl_triggers(self):
@@ -821,10 +847,11 @@ class TestClosePosition:
         assert result is None
         client._exchange.market_close.assert_not_called()
 
-    async def test_close_position_with_builder(self):
-        """Should pass builder kwarg when configured."""
+    async def test_close_position_with_builder_mainnet(self):
+        """Should pass builder kwarg when configured on mainnet."""
         builder = {"b": "0xbuilder", "f": 10}
         client = _make_client(builder=builder)
+        client.demo_mode = False
         client._info.user_state.return_value = {
             "assetPositions": [
                 {
@@ -995,8 +1022,23 @@ class TestPlaceTriggerOrder:
 
         client._exchange.order.assert_called_once()
 
-    async def test_trigger_order_with_builder(self):
-        """Builder should be passed to trigger orders."""
+    async def test_trigger_order_with_builder_mainnet(self):
+        """Builder should be passed to trigger orders on mainnet."""
+        builder = {"b": "0xbuilder", "f": 10}
+        client = _make_client(builder=builder)
+        client.demo_mode = False
+        client._info.all_mids.return_value = {"BTC": "96000"}
+        client._info.meta.return_value = {"universe": [{"name": "BTC", "szDecimals": 5}]}
+        client._exchange.order.return_value = {"status": "ok"}
+
+        await client._place_trigger_order("BTC", is_buy=False, size=0.01, trigger_px=100000.0, tpsl="tp")
+
+        call_kwargs = client._exchange.order.call_args.kwargs
+        assert call_kwargs["builder"] == builder
+
+    @pytest.mark.asyncio
+    async def test_trigger_order_without_builder_on_demo(self):
+        """Builder should NOT be passed to trigger orders on demo/testnet."""
         builder = {"b": "0xbuilder", "f": 10}
         client = _make_client(builder=builder)
         client._info.all_mids.return_value = {"BTC": "96000"}
@@ -1006,7 +1048,7 @@ class TestPlaceTriggerOrder:
         await client._place_trigger_order("BTC", is_buy=False, size=0.01, trigger_px=100000.0, tpsl="tp")
 
         call_kwargs = client._exchange.order.call_args.kwargs
-        assert call_kwargs["builder"] == builder
+        assert "builder" not in call_kwargs
 
 
 # ===========================================================================

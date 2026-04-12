@@ -510,7 +510,8 @@ class HyperliquidClient(ExchangeClient):
         )
 
         # Place market order via SDK (handles EIP-712 signing + slippage)
-        builder_kwargs = {"builder": self._builder} if self._builder else {}
+        # Builder fee only on mainnet — testnet has no approval state
+        builder_kwargs = {"builder": self._builder} if self._builder and not self.demo_mode else {}
         result = await self._cb_call(
             self._exchange.market_open,
             name=coin,
@@ -646,7 +647,7 @@ class HyperliquidClient(ExchangeClient):
         rounded_px = self._round_price(trigger_px, self._get_tick_size(coin))
 
         try:
-            builder_kwargs = {"builder": self._builder} if self._builder else {}
+            builder_kwargs = {"builder": self._builder} if self._builder and not self.demo_mode else {}
             result = await self._cb_call(
                 self._exchange.order,
                 name=coin,
@@ -687,7 +688,7 @@ class HyperliquidClient(ExchangeClient):
             f"wallet={self._wallet.address[:10]}..."
         )
 
-        builder_kwargs = {"builder": self._builder} if self._builder else {}
+        builder_kwargs = {"builder": self._builder} if self._builder and not self.demo_mode else {}
         result = await self._cb_call(
             self._exchange.market_close,
             coin=coin,
@@ -927,7 +928,7 @@ class HyperliquidClient(ExchangeClient):
         is_buy_close = side != "long"
         tick_size = self._get_tick_size(coin)
         order_req = []
-        builder_kwargs = {"builder": self._builder} if self._builder else {}
+        builder_kwargs = {"builder": self._builder} if self._builder and not self.demo_mode else {}
 
         if take_profit is not None:
             rounded_tp = self._round_price(take_profit, tick_size)

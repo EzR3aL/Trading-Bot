@@ -105,7 +105,11 @@ class HyperliquidGatesMixin:
             return False
 
     async def _check_builder_approval(self, client: ExchangeClient, db) -> bool:
-        """HARD gate: block bot start if builder fee not approved.
+        """HARD gate: block bot start if builder fee not approved on mainnet.
+
+        Builder fee approvals only exist on mainnet. Demo (testnet) bots skip
+        the builder fee in orders, but we still enforce mainnet approval so
+        that switching to live mode works without surprises.
 
         Returns True if OK to proceed, False if blocked.
         """
@@ -133,8 +137,16 @@ class HyperliquidGatesMixin:
                 logger.info(f"{log_prefix} Builder fee approved (DB flag)")
                 return True
 
-            # Fallback: verify on-chain
-            approved = await client.check_builder_fee_approval()
+            # Fallback: verify on-chain (always against mainnet)
+            if client.demo_mode and conn:
+                from src.services.config_service import create_hl_mainnet_read_client
+                mainnet_client = create_hl_mainnet_read_client(conn)
+                approved = await mainnet_client.check_builder_fee_approval(
+                    builder_address=client.builder_config["b"],
+                )
+            else:
+                approved = await client.check_builder_fee_approval()
+
             if approved is not None and approved >= client.builder_config["f"]:
                 if conn:
                     conn.builder_fee_approved = True
