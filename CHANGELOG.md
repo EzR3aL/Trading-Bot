@@ -23,6 +23,15 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ## [Unreleased]
 
+### Added
+- **PnL-Alert Schwellenwert-Benachrichtigungen** — Pro Bot konfigurierbar: Dollar oder Prozent, Gewinn/Verlust/Beides, einmalige Benachrichtigung pro Trade (#163)
+  - Neuer Abschnitt im Bot Builder Step 4 (Notifications) mit Toggle, Modus-Wahl, Schwellenwert und Richtung
+  - Position Monitor prüft bei jedem Zyklus und sendet Alert via Discord/Telegram
+  - DB-Migration: `pnl_alert_settings` JSON-Spalte auf `bot_configs`
+
+### Removed
+- **WhatsApp-Benachrichtigungen komplett entfernt** — WhatsApp-Notifier, DB-Spalten und zugehöriger Code entfernt (#163)
+
 ### Fixed
 - **Letzte Test-Failures behoben (0 Failures, 2875 passing):**
   - Edge Indicator: `test_choppy_bull_trend_still_gives_long` korrigiert — ADX-Filter gibt korrekt NEUTRAL bei choppy market zurück

@@ -1,5 +1,12 @@
 import { useTranslation } from 'react-i18next'
-import { Check, CheckCircle, ChevronDown } from 'lucide-react'
+import { Check, CheckCircle, ChevronDown, Bell } from 'lucide-react'
+
+interface PnlAlertSettings {
+  enabled: boolean
+  mode: 'dollar' | 'percent'
+  threshold: number
+  direction: 'profit' | 'loss' | 'both'
+}
 
 interface Props {
   discordWebhookUrl: string
@@ -8,21 +15,27 @@ interface Props {
   openNotif: string | null
   discordConfigured: boolean
   telegramConfigured: boolean
+  pnlAlertSettings: PnlAlertSettings
   onDiscordWebhookUrlChange: (val: string) => void
   onTelegramBotTokenChange: (val: string) => void
   onTelegramChatIdChange: (val: string) => void
   onOpenNotifChange: (val: string | null) => void
+  onPnlAlertSettingsChange: (val: PnlAlertSettings) => void
   onTestDiscord?: () => void
   onTestTelegram?: () => void
 }
 
 export default function BotBuilderStepNotifications({
   discordWebhookUrl, telegramBotToken, telegramChatId, openNotif,
-  discordConfigured, telegramConfigured,
+  discordConfigured, telegramConfigured, pnlAlertSettings,
   onDiscordWebhookUrlChange, onTelegramBotTokenChange, onTelegramChatIdChange,
-  onOpenNotifChange, onTestDiscord, onTestTelegram,
+  onOpenNotifChange, onPnlAlertSettingsChange, onTestDiscord, onTestTelegram,
 }: Props) {
   const { t } = useTranslation()
+
+  const updateAlert = (patch: Partial<PnlAlertSettings>) => {
+    onPnlAlertSettingsChange({ ...pnlAlertSettings, ...patch })
+  }
 
   return (
     <div className="space-y-6">
@@ -140,6 +153,138 @@ export default function BotBuilderStepNotifications({
               <div className="bg-blue-500/5 dark:bg-blue-900/15 border border-blue-500/20 dark:border-blue-800/40 rounded-lg p-2.5 overflow-hidden">
                 <p className="text-xs text-blue-600 dark:text-blue-300 leading-relaxed break-words [overflow-wrap:anywhere]">{t('bots.builder.telegramHint')}</p>
               </div>
+            </div>
+          )}
+        </div>
+
+        {/* PnL Alerts */}
+        <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] overflow-hidden">
+          <button
+            type="button"
+            onClick={() => onOpenNotifChange(openNotif === 'pnl' ? null : 'pnl')}
+            className="w-full flex items-center gap-3 p-3.5 hover:bg-white/[0.02] transition-colors"
+          >
+            <Bell size={20} className="shrink-0 text-amber-400" />
+            <span className="text-sm font-medium text-white">PnL-Alerts</span>
+            {pnlAlertSettings.enabled && (
+              <span className="flex items-center gap-1 text-[10px] text-emerald-400 font-medium">
+                <Check size={12} /> aktiv
+              </span>
+            )}
+            <span className="text-[10px] text-gray-400 ml-auto mr-2">{t('bots.builder.optional')}</span>
+            <ChevronDown size={16} className={`text-gray-400 transition-transform duration-200 ${openNotif === 'pnl' ? 'rotate-180' : ''}`} />
+          </button>
+          {openNotif === 'pnl' && (
+            <div className="px-3.5 pb-3.5 space-y-4">
+              {/* Toggle */}
+              <label className="flex items-center justify-between cursor-pointer group">
+                <span className="text-xs text-gray-300 group-hover:text-white transition-colors">
+                  Benachrichtigen wenn PnL-Schwelle erreicht
+                </span>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={pnlAlertSettings.enabled}
+                  onClick={() => updateAlert({ enabled: !pnlAlertSettings.enabled })}
+                  className={`relative w-10 h-5 rounded-full transition-colors ${
+                    pnlAlertSettings.enabled ? 'bg-emerald-500' : 'bg-gray-600'
+                  }`}
+                >
+                  <span
+                    className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${
+                      pnlAlertSettings.enabled ? 'translate-x-5' : ''
+                    }`}
+                  />
+                </button>
+              </label>
+
+              {pnlAlertSettings.enabled && (
+                <div className="space-y-4 animate-in fade-in duration-200">
+                  {/* Mode selector: $ or % */}
+                  <div>
+                    <label className="block text-xs text-gray-400 mb-2">Schwellenwert-Typ</label>
+                    <div className="flex gap-1 bg-gray-800/60 p-0.5 rounded-lg w-fit">
+                      {([
+                        { value: 'dollar' as const, label: '$ Betrag' },
+                        { value: 'percent' as const, label: '% Prozent' },
+                      ]).map((opt) => (
+                        <button
+                          key={opt.value}
+                          type="button"
+                          onClick={() => updateAlert({ mode: opt.value })}
+                          className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
+                            pnlAlertSettings.mode === opt.value
+                              ? 'bg-amber-500/20 text-amber-300 ring-1 ring-amber-500/30'
+                              : 'text-gray-500 hover:text-white hover:bg-white/5'
+                          }`}
+                        >
+                          {opt.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Threshold input */}
+                  <div>
+                    <label className="block text-xs text-gray-400 mb-2">Schwellenwert</label>
+                    <div className="relative w-40">
+                      <input
+                        type="number"
+                        min="0.1"
+                        max="1000"
+                        step={pnlAlertSettings.mode === 'percent' ? '0.5' : '1'}
+                        value={pnlAlertSettings.threshold}
+                        onChange={(e) => {
+                          const val = parseFloat(e.target.value)
+                          if (!isNaN(val) && val > 0) updateAlert({ threshold: val })
+                        }}
+                        className="filter-select w-full text-sm pr-8"
+                      />
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-500 pointer-events-none">
+                        {pnlAlertSettings.mode === 'percent' ? '%' : '$'}
+                      </span>
+                    </div>
+                    <p className="text-[10px] text-gray-500 mt-1">
+                      {pnlAlertSettings.mode === 'percent'
+                        ? 'z.B. 5 = Benachrichtigung bei +5% oder -5%'
+                        : 'z.B. 100 = Benachrichtigung bei +$100 oder -$100'}
+                    </p>
+                  </div>
+
+                  {/* Direction selector */}
+                  <div>
+                    <label className="block text-xs text-gray-400 mb-2">Richtung</label>
+                    <div className="flex gap-1 bg-gray-800/60 p-0.5 rounded-lg w-fit">
+                      {([
+                        { value: 'both' as const, label: 'Beides' },
+                        { value: 'profit' as const, label: 'Gewinn' },
+                        { value: 'loss' as const, label: 'Verlust' },
+                      ]).map((opt) => (
+                        <button
+                          key={opt.value}
+                          type="button"
+                          onClick={() => updateAlert({ direction: opt.value })}
+                          className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
+                            pnlAlertSettings.direction === opt.value
+                              ? 'bg-amber-500/20 text-amber-300 ring-1 ring-amber-500/30'
+                              : 'text-gray-500 hover:text-white hover:bg-white/5'
+                          }`}
+                        >
+                          {opt.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Info hint */}
+                  <div className="bg-amber-900/10 border border-amber-800/30 rounded-lg p-2.5">
+                    <p className="text-xs text-amber-300/80 leading-relaxed">
+                      Du wirst <strong>einmalig pro Trade</strong> benachrichtigt, wenn der PnL den Schwellenwert erreicht.
+                      Benachrichtigungen werden über Discord/Telegram gesendet (sofern konfiguriert).
+                    </p>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>
