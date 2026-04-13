@@ -5,7 +5,7 @@ Revises: 020
 Create Date: 2026-04-13
 
 Per-bot PnL threshold alert configuration. Stored as JSON with fields:
-enabled (bool), mode (dollar|percent), threshold (float), direction (profit|loss|both).
+enabled (bool), mode (dollar|percent), thresholds (list[float]), direction (profit|loss|both).
 """
 from typing import Sequence, Union
 

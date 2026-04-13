@@ -78,6 +78,16 @@ class PositionMonitorMixin:
             for tid in stale_alerts:
                 del self._pnl_alerts_sent[tid]
 
+            # Parse PnL alert settings once per cycle (not per trade)
+            self._pnl_alert_parsed = None
+            if self._config and self._config.pnl_alert_settings:
+                try:
+                    parsed = json.loads(self._config.pnl_alert_settings)
+                    if parsed.get("enabled") and parsed.get("thresholds"):
+                        self._pnl_alert_parsed = parsed
+                except (json.JSONDecodeError, TypeError):
+                    pass
+
             for trade in open_trades:
                 await self._check_position(trade, session)
 
@@ -120,11 +130,10 @@ class PositionMonitorMixin:
             except Exception:
                 pass
 
-            # PnL threshold alert check
             if current_price and trade.entry_price:
+                # PnL threshold alert check
                 await self._check_pnl_alert(trade, current_price)
 
-            if current_price and trade.entry_price:
                 if trade.side == "long":
                     new_highest = max(trade.highest_price or trade.entry_price, current_price)
                 else:
@@ -427,13 +436,8 @@ class PositionMonitorMixin:
 
     async def _check_pnl_alert(self, trade: TradeRecord, current_price: float) -> None:
         """Send a one-time notification when a trade's PnL crosses configured thresholds."""
-        if not self._config or not self._config.pnl_alert_settings:
-            return
-        try:
-            settings = json.loads(self._config.pnl_alert_settings)
-        except (json.JSONDecodeError, TypeError):
-            return
-        if not settings.get("enabled"):
+        settings = self._pnl_alert_parsed
+        if not settings:
             return
 
         from src.bot.pnl import calculate_pnl

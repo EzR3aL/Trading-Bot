@@ -124,6 +124,10 @@ export default function BotBuilderStepNotifications({
   const { t } = useTranslation()
 
   const updateAlert = (patch: Partial<PnlAlertSettings>) => {
+    // Clear thresholds when switching mode — percent values don't make sense as dollars and vice versa
+    if (patch.mode && patch.mode !== pnlAlertSettings.mode) {
+      patch.thresholds = []
+    }
     onPnlAlertSettingsChange({ ...pnlAlertSettings, ...patch })
   }
 
@@ -256,7 +260,7 @@ export default function BotBuilderStepNotifications({
           >
             <Bell size={20} className="shrink-0 text-amber-400" />
             <span className="text-sm font-medium text-white">PnL-Alerts</span>
-            {pnlAlertSettings.enabled && (
+            {pnlAlertSettings.enabled && pnlAlertSettings.thresholds.length > 0 && (
               <span className="flex items-center gap-1 text-[10px] text-emerald-400 font-medium">
                 <Check size={12} /> aktiv
               </span>
