@@ -24,6 +24,12 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 ## [Unreleased]
 
 ### Added
+- **Telegram Interactive Bot** — User können im Telegram-Chat aktiv den Bot nach Status, Trades und PnL fragen (#166)
+  - `/status` — Bot-Übersicht, offene Trades, PnL heute
+  - `/trades` — Offene Positionen mit PnL
+  - `/pnl` / `/pnl 7` / `/pnl 90` — PnL-Zusammenfassung nach Zeitraum
+  - Nativer Telegram Command-Menü via `setMyCommands`
+  - Long-Polling Background-Task, automatischer Start beim App-Start
 - **PnL-Alert Schwellenwert-Benachrichtigungen** — Pro Bot konfigurierbar: Dollar oder Prozent, Gewinn/Verlust/Beides, einmalige Benachrichtigung pro Trade (#163)
   - Neuer Abschnitt im Bot Builder Step 4 (Notifications) mit Toggle, Modus-Wahl, Schwellenwert und Richtung
   - Position Monitor prüft bei jedem Zyklus und sendet Alert via Discord/Telegram

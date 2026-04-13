@@ -444,28 +444,34 @@ class PositionMonitorMixin:
             return
 
         pnl_abs, pnl_pct = calculate_pnl(trade.side, trade.entry_price, current_price, trade.size)
-
-        mode = settings.get("mode", "percent")
-        thresholds = settings.get("thresholds", [5.0])
         direction = settings.get("direction", "both")
-        value = pnl_pct if mode == "percent" else pnl_abs
-        unit = "%" if mode == "percent" else "$"
-
         sent = self._pnl_alerts_sent.get(trade.id, set())
 
-        for threshold in thresholds:
-            threshold = float(threshold)
+        for t in settings.get("thresholds", []):
+            # Each threshold has its own mode (dollar or percent)
+            if isinstance(t, dict):
+                threshold = float(t.get("value", 0))
+                mode = t.get("mode", "percent")
+            else:
+                # Backwards compat: plain float = percent
+                threshold = float(t)
+                mode = "percent"
+
+            value = pnl_pct if mode == "percent" else pnl_abs
+            unit = "%" if mode == "percent" else "$"
+            key_base = f"{mode}_{threshold}"
+
             # Check profit direction
             if value >= threshold and direction in ("profit", "both"):
-                key = f"profit_{threshold}"
+                key = f"profit_{key_base}"
                 if key not in sent:
                     msg = (
                         f"{trade.symbol} ({trade.side}): PnL-Schwelle erreicht! "
                         f"Aktuell: {value:+.2f}{unit} (Schwelle: +{threshold}{unit})"
                     )
                     await self._send_notification(
-                        lambda n, m=msg, v=value, t=threshold: n.send_risk_alert(
-                            alert_type="PNL_THRESHOLD", message=m, current_value=v, threshold=t,
+                        lambda n, m=msg, v=value, th=threshold: n.send_risk_alert(
+                            alert_type="PNL_THRESHOLD", message=m, current_value=v, threshold=th,
                         ),
                         event_type="pnl_alert",
                         summary=f"PNL_PROFIT: {trade.symbol} {value:+.2f}{unit}",
@@ -474,15 +480,15 @@ class PositionMonitorMixin:
 
             # Check loss direction
             if value <= -threshold and direction in ("loss", "both"):
-                key = f"loss_{threshold}"
+                key = f"loss_{key_base}"
                 if key not in sent:
                     msg = (
                         f"{trade.symbol} ({trade.side}): PnL-Schwelle erreicht! "
                         f"Aktuell: {value:+.2f}{unit} (Schwelle: -{threshold}{unit})"
                     )
                     await self._send_notification(
-                        lambda n, m=msg, v=value, t=threshold: n.send_risk_alert(
-                            alert_type="PNL_THRESHOLD", message=m, current_value=v, threshold=t,
+                        lambda n, m=msg, v=value, th=threshold: n.send_risk_alert(
+                            alert_type="PNL_THRESHOLD", message=m, current_value=v, threshold=th,
                         ),
                         event_type="pnl_alert",
                         summary=f"PNL_LOSS: {trade.symbol} {value:+.2f}{unit}",

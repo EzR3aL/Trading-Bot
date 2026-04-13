@@ -64,8 +64,8 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
   const [telegramConfigured, setTelegramConfigured] = useState(false)
   // PnL alert threshold settings
   const [pnlAlertSettings, setPnlAlertSettings] = useState<{
-    enabled: boolean; mode: 'dollar' | 'percent'; thresholds: number[]; direction: 'profit' | 'loss' | 'both'
-  }>({ enabled: false, mode: 'percent', thresholds: [], direction: 'both' })
+    enabled: boolean; thresholds: { value: number; mode: 'dollar' | 'percent' }[]; direction: 'profit' | 'loss' | 'both'
+  }>({ enabled: false, thresholds: [], direction: 'both' })
 
   // Hyperliquid gate status (referral + builder fee)
   const [hlGateStatus, setHlGateStatus] = useState<{ needs_approval: boolean; needs_referral: boolean }>({ needs_approval: false, needs_referral: false })

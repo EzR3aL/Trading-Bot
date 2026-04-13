@@ -42,22 +42,32 @@ def _validate_webhook_url(url: str | None) -> str | None:
 _MAX_JSON_FIELD_BYTES = 10240
 
 
+class PnlThreshold(BaseModel):
+    """Single PnL threshold with its own mode."""
+    value: float = Field(..., gt=0, le=10000)
+    mode: str = Field(..., pattern="^(dollar|percent)$")
+
+
 class PnlAlertSettings(BaseModel):
     """PnL threshold alert configuration per bot."""
     enabled: bool = False
-    mode: str = Field(default="percent", pattern="^(dollar|percent)$")
-    thresholds: List[float] = Field(default=[5.0])
+    thresholds: List[PnlThreshold] = Field(default=[])
     direction: str = Field(default="both", pattern="^(profit|loss|both)$")
 
     @field_validator("thresholds")
     @classmethod
-    def validate_thresholds(cls, v: List[float]) -> List[float]:
+    def validate_thresholds(cls, v: List[PnlThreshold]) -> List[PnlThreshold]:
         if len(v) > 10:
             raise ValueError("Maximal 10 Schwellenwerte erlaubt")
-        for val in v:
-            if val <= 0 or val > 10000:
-                raise ValueError(f"Schwellenwert muss zwischen 0 und 10.000 liegen: {val}")
-        return sorted(set(v))
+        # Deduplicate by (value, mode)
+        seen = set()
+        unique = []
+        for t in v:
+            key = (t.value, t.mode)
+            if key not in seen:
+                seen.add(key)
+                unique.append(t)
+        return sorted(unique, key=lambda t: (t.mode, t.value))
 
 
 class BotConfigCreate(BaseModel):
