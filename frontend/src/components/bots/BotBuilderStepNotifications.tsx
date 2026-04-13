@@ -267,7 +267,7 @@ export default function BotBuilderStepNotifications({
                 </button>
               )}
               <div className="bg-blue-500/5 dark:bg-blue-900/15 border border-blue-500/20 dark:border-blue-800/40 rounded-lg p-2.5 overflow-hidden">
-                <p className="text-xs text-blue-600 dark:text-blue-300 leading-relaxed break-words [overflow-wrap:anywhere]">{t('bots.builder.telegramHint')}</p>
+                <p className="text-xs text-blue-600 dark:text-blue-300 leading-relaxed break-words whitespace-pre-wrap">{t('bots.builder.telegramHint')}</p>
               </div>
             </div>
           )}
