@@ -321,10 +321,8 @@ class BotConfig(Base):
     telegram_bot_token = Column(Text, nullable=True)   # Encrypted
     telegram_chat_id = Column(Text, nullable=True)     # Encrypted
 
-    # Per-bot WhatsApp notifications (optional)
-    whatsapp_phone_number_id = Column(Text, nullable=True)   # Encrypted (Meta Business phone number ID)
-    whatsapp_access_token = Column(Text, nullable=True)      # Encrypted (Meta Graph API token)
-    whatsapp_recipient = Column(Text, nullable=True)         # Encrypted (recipient phone number)
+    # PnL alert threshold settings (JSON: enabled, mode, threshold, direction)
+    pnl_alert_settings = Column(Text, nullable=True)
 
     # State
     is_enabled = Column(Boolean, default=False)
