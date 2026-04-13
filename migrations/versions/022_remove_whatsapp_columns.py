@@ -1,12 +1,12 @@
-"""Remove WhatsApp notification columns from bot_configs.
+"""Remove all WhatsApp columns from bot_configs and broadcasts.
 
 Revision ID: 022
 Revises: 021
 Create Date: 2026-04-13
 
 WhatsApp notification support has been removed. Drops the three
-WhatsApp-related columns (whatsapp_phone_number_id, whatsapp_access_token,
-whatsapp_recipient) from bot_configs.
+WhatsApp-related columns from bot_configs and message_whatsapp
+from broadcasts.
 """
 from typing import Sequence, Union
 
@@ -24,9 +24,11 @@ def upgrade() -> None:
     op.drop_column("bot_configs", "whatsapp_phone_number_id")
     op.drop_column("bot_configs", "whatsapp_access_token")
     op.drop_column("bot_configs", "whatsapp_recipient")
+    op.drop_column("broadcasts", "message_whatsapp")
 
 
 def downgrade() -> None:
+    op.add_column("broadcasts", sa.Column("message_whatsapp", sa.Text(), nullable=True))
     op.add_column("bot_configs", sa.Column("whatsapp_recipient", sa.Text(), nullable=True))
     op.add_column("bot_configs", sa.Column("whatsapp_access_token", sa.Text(), nullable=True))
     op.add_column("bot_configs", sa.Column("whatsapp_phone_number_id", sa.Text(), nullable=True))

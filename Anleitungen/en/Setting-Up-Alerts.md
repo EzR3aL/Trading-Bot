@@ -1,6 +1,6 @@
 # Setting Up Alerts
 
-Guide for setting up and managing price, strategy, and portfolio alerts with Discord, Telegram, and WhatsApp notifications.
+Guide for setting up and managing price, strategy, and portfolio alerts with Discord and Telegram notifications.
 
 ---
 
@@ -13,8 +13,7 @@ Guide for setting up and managing price, strategy, and portfolio alerts with Dis
 5. [Cooldown Configuration](#5-cooldown-configuration)
 6. [Discord Notifications](#6-discord-notifications)
 7. [Telegram Notifications](#7-telegram-notifications)
-8. [WhatsApp Notifications](#8-whatsapp-notifications)
-9. [Managing Alerts](#9-managing-alerts)
+8. [Managing Alerts](#8-managing-alerts)
 
 ---
 
@@ -34,7 +33,6 @@ The alert system notifies you about important events in your trading. You can cr
 
 - **Discord** (webhook per bot)
 - **Telegram** (bot token + chat ID per bot)
-- **WhatsApp** (WhatsApp Business Cloud API per bot)
 
 ---
 
@@ -236,45 +234,7 @@ For a detailed guide, see: [Setting-Up-Telegram-Notifications.md](Setting-Up-Tel
 
 ---
 
-## 8. WhatsApp Notifications
-
-Alerts can also be sent via WhatsApp using the **WhatsApp Business Cloud API** from Meta.
-
-### Prerequisites
-
-- Meta Business Account
-- WhatsApp Business API access (via Meta for Developers)
-- Phone Number ID, Access Token, and recipient number
-
-### Setting Up WhatsApp Business API
-
-1. Go to [developers.facebook.com](https://developers.facebook.com/)
-2. Create an app with the **WhatsApp** product
-3. Navigate to **WhatsApp** -> **API Setup**
-4. Note your:
-   - **Phone Number ID**: Your WhatsApp Business number ID
-   - **Access Token**: Your permanent API token
-   - **Recipient Number**: The number to receive messages (with country code, e.g., `4917612345678`)
-
-### Configuring in the Bot
-
-In the **Bot Builder** (Step 4: Exchange & Mode):
-1. Enter the **Phone Number ID**
-2. Enter the **Access Token**
-3. Enter the **Recipient Number**
-4. Click on **"Send Test"** to verify the connection
-
-### Notification Format
-
-WhatsApp alerts contain the same information as Discord/Telegram:
-- **Alert type** and category
-- **Current value** (e.g., current price)
-- **Threshold** that was triggered
-- **Timestamp**
-
----
-
-## 9. Managing Alerts
+## 8. Managing Alerts
 
 ### Alert List
 
