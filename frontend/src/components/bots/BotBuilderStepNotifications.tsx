@@ -2,10 +2,14 @@ import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Check, CheckCircle, ChevronDown, Bell, Plus, X } from 'lucide-react'
 
+interface PnlThreshold {
+  value: number
+  mode: 'dollar' | 'percent'
+}
+
 interface PnlAlertSettings {
   enabled: boolean
-  mode: 'dollar' | 'percent'
-  thresholds: number[]
+  thresholds: PnlThreshold[]
   direction: 'profit' | 'loss' | 'both'
 }
 
@@ -27,26 +31,27 @@ interface Props {
 }
 
 function ThresholdChipInput({
-  thresholds, unit, step, onChange,
+  thresholds, onChange,
 }: {
-  thresholds: number[]
-  unit: string
-  step: number
-  onChange: (vals: number[]) => void
+  thresholds: PnlThreshold[]
+  onChange: (vals: PnlThreshold[]) => void
 }) {
   const [input, setInput] = useState('')
+  const [inputMode, setInputMode] = useState<'dollar' | 'percent'>('percent')
 
   const addThreshold = () => {
     const val = parseFloat(input)
     if (isNaN(val) || val <= 0 || val > 10000) return
-    if (thresholds.includes(val)) { setInput(''); return }
+    if (thresholds.some((t) => t.value === val && t.mode === inputMode)) {
+      setInput(''); return
+    }
     if (thresholds.length >= 10) return
-    onChange([...thresholds, val].sort((a, b) => a - b))
+    onChange([...thresholds, { value: val, mode: inputMode }])
     setInput('')
   }
 
-  const removeThreshold = (val: number) => {
-    onChange(thresholds.filter((t) => t !== val))
+  const removeThreshold = (idx: number) => {
+    onChange(thresholds.filter((_, i) => i !== idx))
   }
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -60,15 +65,15 @@ function ThresholdChipInput({
       {/* Existing chips */}
       {thresholds.length > 0 && (
         <div className="flex flex-wrap gap-1.5 mb-2">
-          {thresholds.map((val) => (
+          {thresholds.map((t, idx) => (
             <span
-              key={val}
+              key={`${t.mode}-${t.value}`}
               className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-amber-500/15 border border-amber-500/25 text-amber-300 text-xs font-medium"
             >
-              {unit === '$' ? `$${val}` : `${val}%`}
+              {t.mode === 'dollar' ? `$${t.value}` : `${t.value}%`}
               <button
                 type="button"
-                onClick={() => removeThreshold(val)}
+                onClick={() => removeThreshold(idx)}
                 className="hover:text-white transition-colors"
               >
                 <X size={12} />
@@ -78,23 +83,44 @@ function ThresholdChipInput({
         </div>
       )}
 
-      {/* Add input */}
+      {/* Add input row: mode toggle + input + add button */}
       {thresholds.length < 10 && (
         <div className="flex items-center gap-2">
-          <div className="relative w-32">
+          {/* Inline mode toggle */}
+          <div className="flex bg-gray-800/60 p-0.5 rounded-md">
+            <button
+              type="button"
+              onClick={() => setInputMode('dollar')}
+              className={`px-2 py-1 text-xs font-medium rounded transition-all ${
+                inputMode === 'dollar'
+                  ? 'bg-amber-500/20 text-amber-300 ring-1 ring-amber-500/30'
+                  : 'text-gray-500 hover:text-white'
+              }`}
+            >$</button>
+            <button
+              type="button"
+              onClick={() => setInputMode('percent')}
+              className={`px-2 py-1 text-xs font-medium rounded transition-all ${
+                inputMode === 'percent'
+                  ? 'bg-amber-500/20 text-amber-300 ring-1 ring-amber-500/30'
+                  : 'text-gray-500 hover:text-white'
+              }`}
+            >%</button>
+          </div>
+          <div className="relative w-28">
             <input
               type="number"
               min="0.1"
               max="10000"
-              step={step}
+              step={inputMode === 'percent' ? 0.5 : 1}
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder={unit === '%' ? '5' : '100'}
+              placeholder={inputMode === 'percent' ? '5' : '100'}
               className="filter-select w-full text-sm pr-7"
             />
             <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-gray-500 pointer-events-none">
-              {unit}
+              {inputMode === 'percent' ? '%' : '$'}
             </span>
           </div>
           <button
@@ -109,7 +135,7 @@ function ThresholdChipInput({
       )}
 
       <p className="text-[10px] text-gray-500 mt-1.5">
-        Wert eingeben und Enter drücken. Maximal 10 Schwellenwerte.
+        Typ wählen ($/%​), Wert eingeben, Enter drücken. Maximal 10 Schwellenwerte.
       </p>
     </div>
   )
@@ -124,10 +150,6 @@ export default function BotBuilderStepNotifications({
   const { t } = useTranslation()
 
   const updateAlert = (patch: Partial<PnlAlertSettings>) => {
-    // Clear thresholds when switching mode — percent values don't make sense as dollars and vice versa
-    if (patch.mode && patch.mode !== pnlAlertSettings.mode) {
-      patch.thresholds = []
-    }
     onPnlAlertSettingsChange({ ...pnlAlertSettings, ...patch })
   }
 
@@ -294,35 +316,9 @@ export default function BotBuilderStepNotifications({
 
               {pnlAlertSettings.enabled && (
                 <div className="space-y-4 animate-in fade-in duration-200">
-                  {/* Mode selector: $ or % */}
-                  <div>
-                    <label className="block text-xs text-gray-400 mb-2">Schwellenwert-Typ</label>
-                    <div className="flex gap-1 bg-gray-800/60 p-0.5 rounded-lg w-fit">
-                      {([
-                        { value: 'dollar' as const, label: '$ Betrag' },
-                        { value: 'percent' as const, label: '% Prozent' },
-                      ]).map((opt) => (
-                        <button
-                          key={opt.value}
-                          type="button"
-                          onClick={() => updateAlert({ mode: opt.value })}
-                          className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
-                            pnlAlertSettings.mode === opt.value
-                              ? 'bg-amber-500/20 text-amber-300 ring-1 ring-amber-500/30'
-                              : 'text-gray-500 hover:text-white hover:bg-white/5'
-                          }`}
-                        >
-                          {opt.label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Threshold chips + input */}
+                  {/* Threshold chips + input (mode toggle is inline) */}
                   <ThresholdChipInput
                     thresholds={pnlAlertSettings.thresholds}
-                    unit={pnlAlertSettings.mode === 'percent' ? '%' : '$'}
-                    step={pnlAlertSettings.mode === 'percent' ? 0.5 : 1}
                     onChange={(thresholds) => updateAlert({ thresholds })}
                   />
 
@@ -331,9 +327,9 @@ export default function BotBuilderStepNotifications({
                     <label className="block text-xs text-gray-400 mb-2">Richtung</label>
                     <div className="flex gap-1 bg-gray-800/60 p-0.5 rounded-lg w-fit">
                       {([
-                        { value: 'both' as const, label: 'Beides' },
-                        { value: 'profit' as const, label: 'Gewinn' },
-                        { value: 'loss' as const, label: 'Verlust' },
+                        { value: 'both' as const, label: 'Beides', activeClass: 'bg-amber-500/20 text-amber-300 ring-1 ring-amber-500/30' },
+                        { value: 'profit' as const, label: 'Gewinn', activeClass: 'bg-emerald-500/20 text-emerald-300 ring-1 ring-emerald-500/30' },
+                        { value: 'loss' as const, label: 'Verlust', activeClass: 'bg-red-500/20 text-red-300 ring-1 ring-red-500/30' },
                       ]).map((opt) => (
                         <button
                           key={opt.value}
@@ -341,7 +337,7 @@ export default function BotBuilderStepNotifications({
                           onClick={() => updateAlert({ direction: opt.value })}
                           className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
                             pnlAlertSettings.direction === opt.value
-                              ? 'bg-amber-500/20 text-amber-300 ring-1 ring-amber-500/30'
+                              ? opt.activeClass
                               : 'text-gray-500 hover:text-white hover:bg-white/5'
                           }`}
                         >
