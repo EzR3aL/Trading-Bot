@@ -6,6 +6,7 @@ from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.rate_limit import limiter
@@ -69,7 +70,7 @@ async def get_revenue(
     seven_days_ago = today - timedelta(days=7)
     thirty_days_ago = today - timedelta(days=30)
 
-    # --- 1. Manual revenue entries ---
+    # --- 1. Manual revenue entries (exclude hyperliquid builder_fee to avoid double-counting) ---
     manual_rows = await db.execute(
         select(
             RevenueEntry.exchange,
@@ -78,7 +79,12 @@ async def get_revenue(
             func.sum(RevenueEntry.amount_usd).label("amount"),
             func.count().label("cnt"),
         )
-        .where(RevenueEntry.date >= since.date())
+        .where(
+            RevenueEntry.date >= since.date(),
+            # Hyperliquid builder fees are aggregated from trade_records (section 2),
+            # so exclude them here to prevent double-counting.
+            ~((RevenueEntry.exchange == "hyperliquid") & (RevenueEntry.revenue_type == "builder_fee")),
+        )
         .group_by(RevenueEntry.exchange, RevenueEntry.revenue_type, func.date(RevenueEntry.date))
         .order_by(func.date(RevenueEntry.date))
     )
@@ -217,7 +223,14 @@ async def create_revenue_entry(
         notes=data.notes,
     )
     db.add(entry)
-    await db.flush()
+    try:
+        await db.flush()
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail="Ein Eintrag für diesen Tag, Exchange und Typ existiert bereits",
+        )
     return _entry_to_response(entry)
 
 
