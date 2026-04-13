@@ -180,11 +180,18 @@ async def lifespan(app: FastAPI):
     APP_INFO.info({"version": "3.0.0", "environment": environment})
     collector_task = asyncio.create_task(collect_bot_metrics(app))
 
+    # Start Telegram interactive bot (long-polling for /status, /trades, /pnl)
+    from src.telegram.poller import TelegramPoller
+    telegram_poller = TelegramPoller()
+    await telegram_poller.start()
+    app.state.telegram_poller = telegram_poller
+
     logger.info("Application started successfully")
     yield
 
     # Shutdown
     logger.info("Shutting down — graceful shutdown initiated...")
+    await telegram_poller.stop()
     auth_code_store.stop_cleanup()
     collector_task.cancel()
 

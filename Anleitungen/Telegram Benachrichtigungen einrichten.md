@@ -11,7 +11,9 @@ Eine Schritt-für-Schritt Anleitung zum Einrichten von Telegram-Benachrichtigung
 3. [Chat-ID herausfinden](#3-chat-id-herausfinden)
 4. [Token & Chat-ID im Bot Builder eintragen](#4-token--chat-id-im-bot-builder-eintragen)
 5. [Test-Nachricht senden](#5-test-nachricht-senden)
-6. [Häufige Probleme & Lösungen](#6-häufige-probleme--lösungen)
+6. [Interaktive Befehle im Chat](#6-interaktive-befehle-im-chat)
+7. [PnL-Alerts konfigurieren](#7-pnl-alerts-konfigurieren)
+8. [Häufige Probleme & Lösungen](#8-häufige-probleme--lösungen)
 
 ---
 
@@ -144,7 +146,87 @@ Wenn die Nachricht ankommt, ist alles korrekt eingerichtet!
 
 ---
 
-## 6. Häufige Probleme & Lösungen
+## 6. Interaktive Befehle im Chat
+
+Neben automatischen Benachrichtigungen kannst du deinen Bot auch **aktiv nach dem aktuellen Stand fragen**. Tippe einfach einen Befehl im Telegram-Chat.
+
+### Verfuegbare Befehle
+
+| Befehl | Was passiert |
+|--------|-------------|
+| `/status` | Zeigt wie viele Bots laufen, offene Trades, und PnL heute |
+| `/trades` | Listet alle offenen Positionen mit aktuellem PnL auf |
+| `/pnl` | PnL-Zusammenfassung: Heute, 7 Tage, 30 Tage |
+| `/pnl 7` | PnL nur fuer die letzten 7 Tage |
+| `/pnl 90` | PnL fuer die letzten 90 Tage |
+| `/help` | Zeigt alle verfuegbaren Befehle |
+
+### So funktioniert es
+
+1. Oeffne den Chat mit deinem Trading-Bot in Telegram
+2. Tippe auf das **"/" Menue** unten links — dort erscheinen alle Befehle
+3. Oder tippe den Befehl direkt ein, z.B. `/trades`
+4. Der Bot antwortet innerhalb von 2-3 Sekunden
+
+### Beispiel: /trades Antwort
+
+```
+Offene Trades
+
+🟢 BTCUSDT long (demo) | PnL: +$142.50
+🔴 ETHUSDT short (live) | PnL: -$28.30
+
+Gesamt: 2 Positionen
+```
+
+### Beispiel: /pnl Antwort
+
+```
+PnL-Uebersicht
+
+Heute: +$114.20 (3 Trades, WR: 67%)
+7 Tage: +$890.50 (18 Trades, WR: 72%)
+30 Tage: +$3,240.00 (62 Trades, WR: 68%)
+```
+
+> **Hinweis:** Die Befehle funktionieren nur im Chat mit dem Bot, den du im Bot Builder konfiguriert hast. Das Command-Menue erscheint automatisch — du musst nichts extra einrichten.
+
+---
+
+## 7. PnL-Alerts konfigurieren
+
+Du kannst dich automatisch benachrichtigen lassen, wenn ein offener Trade einen bestimmten Gewinn oder Verlust erreicht.
+
+### Einrichtung im Bot Builder
+
+1. Gehe zu **Bots** → Bot bearbeiten → **Schritt 4: Benachrichtigungen**
+2. Klappe den Abschnitt **PnL-Alerts** auf
+3. Aktiviere den Toggle
+4. Waehle den **Schwellenwert-Typ**: Dollar ($) oder Prozent (%)
+5. Gib Schwellenwerte ein (z.B. `5`, Enter, `10`, Enter) — sie erscheinen als Chips
+6. Waehle die **Richtung**: Gewinn, Verlust, oder Beides
+7. Speichere den Bot
+
+### Beispiel
+
+Du stellst ein: **Prozent, Schwellenwerte 5% und 10%, Richtung Beides**
+
+- Trade oeffnet bei $100
+- Preis steigt auf $105 → Alert: "PnL-Schwelle erreicht! +5.00%"
+- Preis steigt auf $110 → Alert: "PnL-Schwelle erreicht! +10.00%"
+- Preis faellt auf $90 → Alert: "PnL-Schwelle erreicht! -5.00%"
+
+### Wichtig zu wissen
+
+- Jeder Alert wird **einmalig pro Schwelle pro Trade** gesendet (kein Spam)
+- Alerts werden ueber Discord und/oder Telegram gesendet (je nach Konfiguration)
+- Bis zu **10 Schwellenwerte** pro Bot moeglich
+- Beim Wechsel zwischen Dollar und Prozent werden bestehende Werte zurueckgesetzt
+- Aenderungen greifen beim naechsten Bot-Neustart
+
+---
+
+## 8. Häufige Probleme & Lösungen
 
 ### "Failed to send Telegram message"
 
