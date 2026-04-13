@@ -28,7 +28,7 @@ interface Props {
   telegramConfigured: boolean
   discordWebhookUrl: string
   telegramBotToken: string
-  pnlAlertSettings: { enabled: boolean; mode: 'dollar' | 'percent'; threshold: number; direction: 'profit' | 'loss' | 'both' }
+  pnlAlertSettings: { enabled: boolean; mode: 'dollar' | 'percent'; thresholds: number[]; direction: 'profit' | 'loss' | 'both' }
   riskAccepted: boolean
   onRiskAcceptedChange: (val: boolean) => void
   b: Record<string, string>
@@ -220,10 +220,12 @@ export default function BotBuilderStepReview({
             )}
           </ReviewRow>
           <ReviewRow label="PnL-Alerts">
-            {pnlAlertSettings.enabled ? (
+            {pnlAlertSettings.enabled && pnlAlertSettings.thresholds.length > 0 ? (
               <span className="text-amber-400 text-xs">
                 {pnlAlertSettings.direction === 'both' ? 'Gewinn & Verlust' : pnlAlertSettings.direction === 'profit' ? 'Gewinn' : 'Verlust'}
-                {' '}| {pnlAlertSettings.threshold}{pnlAlertSettings.mode === 'percent' ? '%' : '$'}
+                {' '}| {pnlAlertSettings.thresholds.map(t =>
+                  pnlAlertSettings.mode === 'percent' ? `${t}%` : `$${t}`
+                ).join(', ')}
               </span>
             ) : (
               <span className="text-gray-500">{t('common.inactive', 'Nicht konfiguriert')}</span>

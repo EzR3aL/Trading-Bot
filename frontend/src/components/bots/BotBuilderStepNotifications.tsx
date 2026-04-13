@@ -1,10 +1,11 @@
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Check, CheckCircle, ChevronDown, Bell } from 'lucide-react'
+import { Check, CheckCircle, ChevronDown, Bell, Plus, X } from 'lucide-react'
 
 interface PnlAlertSettings {
   enabled: boolean
   mode: 'dollar' | 'percent'
-  threshold: number
+  thresholds: number[]
   direction: 'profit' | 'loss' | 'both'
 }
 
@@ -23,6 +24,95 @@ interface Props {
   onPnlAlertSettingsChange: (val: PnlAlertSettings) => void
   onTestDiscord?: () => void
   onTestTelegram?: () => void
+}
+
+function ThresholdChipInput({
+  thresholds, unit, step, onChange,
+}: {
+  thresholds: number[]
+  unit: string
+  step: number
+  onChange: (vals: number[]) => void
+}) {
+  const [input, setInput] = useState('')
+
+  const addThreshold = () => {
+    const val = parseFloat(input)
+    if (isNaN(val) || val <= 0 || val > 10000) return
+    if (thresholds.includes(val)) { setInput(''); return }
+    if (thresholds.length >= 10) return
+    onChange([...thresholds, val].sort((a, b) => a - b))
+    setInput('')
+  }
+
+  const removeThreshold = (val: number) => {
+    onChange(thresholds.filter((t) => t !== val))
+  }
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') { e.preventDefault(); addThreshold() }
+  }
+
+  return (
+    <div>
+      <label className="block text-xs text-gray-400 mb-2">Schwellenwerte</label>
+
+      {/* Existing chips */}
+      {thresholds.length > 0 && (
+        <div className="flex flex-wrap gap-1.5 mb-2">
+          {thresholds.map((val) => (
+            <span
+              key={val}
+              className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-amber-500/15 border border-amber-500/25 text-amber-300 text-xs font-medium"
+            >
+              {unit === '$' ? `$${val}` : `${val}%`}
+              <button
+                type="button"
+                onClick={() => removeThreshold(val)}
+                className="hover:text-white transition-colors"
+              >
+                <X size={12} />
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+
+      {/* Add input */}
+      {thresholds.length < 10 && (
+        <div className="flex items-center gap-2">
+          <div className="relative w-32">
+            <input
+              type="number"
+              min="0.1"
+              max="10000"
+              step={step}
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder={unit === '%' ? '5' : '100'}
+              className="filter-select w-full text-sm pr-7"
+            />
+            <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-gray-500 pointer-events-none">
+              {unit}
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={addThreshold}
+            disabled={!input}
+            className="p-1.5 rounded-lg bg-amber-500/15 border border-amber-500/25 text-amber-400 hover:bg-amber-500/25 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+          >
+            <Plus size={16} />
+          </button>
+        </div>
+      )}
+
+      <p className="text-[10px] text-gray-500 mt-1.5">
+        Wert eingeben und Enter drücken. Maximal 10 Schwellenwerte.
+      </p>
+    </div>
+  )
 }
 
 export default function BotBuilderStepNotifications({
@@ -224,32 +314,13 @@ export default function BotBuilderStepNotifications({
                     </div>
                   </div>
 
-                  {/* Threshold input */}
-                  <div>
-                    <label className="block text-xs text-gray-400 mb-2">Schwellenwert</label>
-                    <div className="relative w-40">
-                      <input
-                        type="number"
-                        min="0.1"
-                        max="1000"
-                        step={pnlAlertSettings.mode === 'percent' ? '0.5' : '1'}
-                        value={pnlAlertSettings.threshold}
-                        onChange={(e) => {
-                          const val = parseFloat(e.target.value)
-                          if (!isNaN(val) && val > 0) updateAlert({ threshold: val })
-                        }}
-                        className="filter-select w-full text-sm pr-8"
-                      />
-                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-500 pointer-events-none">
-                        {pnlAlertSettings.mode === 'percent' ? '%' : '$'}
-                      </span>
-                    </div>
-                    <p className="text-[10px] text-gray-500 mt-1">
-                      {pnlAlertSettings.mode === 'percent'
-                        ? 'z.B. 5 = Benachrichtigung bei +5% oder -5%'
-                        : 'z.B. 100 = Benachrichtigung bei +$100 oder -$100'}
-                    </p>
-                  </div>
+                  {/* Threshold chips + input */}
+                  <ThresholdChipInput
+                    thresholds={pnlAlertSettings.thresholds}
+                    unit={pnlAlertSettings.mode === 'percent' ? '%' : '$'}
+                    step={pnlAlertSettings.mode === 'percent' ? 0.5 : 1}
+                    onChange={(thresholds) => updateAlert({ thresholds })}
+                  />
 
                   {/* Direction selector */}
                   <div>
@@ -279,8 +350,8 @@ export default function BotBuilderStepNotifications({
                   {/* Info hint */}
                   <div className="bg-amber-900/10 border border-amber-800/30 rounded-lg p-2.5">
                     <p className="text-xs text-amber-300/80 leading-relaxed">
-                      Du wirst <strong>einmalig pro Trade</strong> benachrichtigt, wenn der PnL den Schwellenwert erreicht.
-                      Benachrichtigungen werden über Discord/Telegram gesendet (sofern konfiguriert).
+                      Du wirst <strong>einmalig pro Schwelle pro Trade</strong> benachrichtigt.
+                      Bei mehreren Schwellenwerten erhältst du stufenweise Alerts (z.B. bei 5%, dann bei 10%).
                     </p>
                   </div>
                 </div>

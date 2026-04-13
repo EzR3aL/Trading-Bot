@@ -46,8 +46,18 @@ class PnlAlertSettings(BaseModel):
     """PnL threshold alert configuration per bot."""
     enabled: bool = False
     mode: str = Field(default="percent", pattern="^(dollar|percent)$")
-    threshold: float = Field(default=5.0, gt=0, le=1000)
+    thresholds: List[float] = Field(default=[5.0])
     direction: str = Field(default="both", pattern="^(profit|loss|both)$")
+
+    @field_validator("thresholds")
+    @classmethod
+    def validate_thresholds(cls, v: List[float]) -> List[float]:
+        if len(v) > 10:
+            raise ValueError("Maximal 10 Schwellenwerte erlaubt")
+        for val in v:
+            if val <= 0 or val > 10000:
+                raise ValueError(f"Schwellenwert muss zwischen 0 und 10.000 liegen: {val}")
+        return sorted(set(v))
 
 
 class BotConfigCreate(BaseModel):

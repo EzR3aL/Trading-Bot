@@ -426,7 +426,7 @@ class PositionMonitorMixin:
         return True
 
     async def _check_pnl_alert(self, trade: TradeRecord, current_price: float) -> None:
-        """Send a one-time notification when a trade's PnL crosses the configured threshold."""
+        """Send a one-time notification when a trade's PnL crosses configured thresholds."""
         if not self._config or not self._config.pnl_alert_settings:
             return
         try:
@@ -440,32 +440,48 @@ class PositionMonitorMixin:
         pnl_abs, pnl_pct = calculate_pnl(trade.side, trade.entry_price, current_price, trade.size)
 
         mode = settings.get("mode", "percent")
-        threshold = float(settings.get("threshold", 5.0))
+        thresholds = settings.get("thresholds", [5.0])
         direction = settings.get("direction", "both")
         value = pnl_pct if mode == "percent" else pnl_abs
+        unit = "%" if mode == "percent" else "$"
 
         sent = self._pnl_alerts_sent.get(trade.id, set())
-        alerts_to_send: list[str] = []
 
-        if value >= threshold and direction in ("profit", "both") and "profit" not in sent:
-            alerts_to_send.append("profit")
-        if value <= -threshold and direction in ("loss", "both") and "loss" not in sent:
-            alerts_to_send.append("loss")
+        for threshold in thresholds:
+            threshold = float(threshold)
+            # Check profit direction
+            if value >= threshold and direction in ("profit", "both"):
+                key = f"profit_{threshold}"
+                if key not in sent:
+                    msg = (
+                        f"{trade.symbol} ({trade.side}): PnL-Schwelle erreicht! "
+                        f"Aktuell: {value:+.2f}{unit} (Schwelle: +{threshold}{unit})"
+                    )
+                    await self._send_notification(
+                        lambda n, m=msg, v=value, t=threshold: n.send_risk_alert(
+                            alert_type="PNL_THRESHOLD", message=m, current_value=v, threshold=t,
+                        ),
+                        event_type="pnl_alert",
+                        summary=f"PNL_PROFIT: {trade.symbol} {value:+.2f}{unit}",
+                    )
+                    sent.add(key)
 
-        for alert_dir in alerts_to_send:
-            unit = "%" if mode == "percent" else "$"
-            msg = (
-                f"{trade.symbol} ({trade.side}): PnL-Schwelle erreicht! "
-                f"Aktuell: {value:+.2f}{unit} (Schwelle: {threshold}{unit})"
-            )
-            await self._send_notification(
-                lambda n, m=msg, v=value, t=threshold: n.send_risk_alert(
-                    alert_type="PNL_THRESHOLD", message=m, current_value=v, threshold=t,
-                ),
-                event_type="pnl_alert",
-                summary=f"PNL_{alert_dir.upper()}: {trade.symbol} {value:+.2f}{unit}",
-            )
-            sent.add(alert_dir)
+            # Check loss direction
+            if value <= -threshold and direction in ("loss", "both"):
+                key = f"loss_{threshold}"
+                if key not in sent:
+                    msg = (
+                        f"{trade.symbol} ({trade.side}): PnL-Schwelle erreicht! "
+                        f"Aktuell: {value:+.2f}{unit} (Schwelle: -{threshold}{unit})"
+                    )
+                    await self._send_notification(
+                        lambda n, m=msg, v=value, t=threshold: n.send_risk_alert(
+                            alert_type="PNL_THRESHOLD", message=m, current_value=v, threshold=t,
+                        ),
+                        event_type="pnl_alert",
+                        summary=f"PNL_LOSS: {trade.symbol} {value:+.2f}{unit}",
+                    )
+                    sent.add(key)
 
         if sent:
             self._pnl_alerts_sent[trade.id] = sent
