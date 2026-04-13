@@ -283,6 +283,22 @@ async def test_create_entry_validates_amount(client, admin_headers, admin_user):
     assert resp.status_code == 422
 
 
+async def test_create_entry_duplicate_returns_409(client, admin_headers, admin_user):
+    """Duplicate date+exchange+type returns 409 instead of 500."""
+    payload = {
+        "date": str(date.today()),
+        "exchange": "bitget",
+        "revenue_type": "affiliate",
+        "amount_usd": 50.00,
+    }
+    resp1 = await client.post("/api/admin/revenue", json=payload, headers=admin_headers)
+    assert resp1.status_code == 201
+
+    resp2 = await client.post("/api/admin/revenue", json=payload, headers=admin_headers)
+    assert resp2.status_code == 409
+    assert "existiert bereits" in resp2.json()["detail"]
+
+
 async def test_create_entry_accepts_type_alias(client, admin_headers, admin_user):
     """Frontend sends 'type' instead of 'revenue_type' — both should work."""
     payload = {

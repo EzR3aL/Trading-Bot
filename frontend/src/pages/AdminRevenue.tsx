@@ -212,7 +212,7 @@ function EntryFormModal({
         date: entry.date,
         exchange: entry.exchange,
         revenue_type: entry.type,
-        amount_usd: String(entry.amount),
+        amount_usd: entry.amount ? String(entry.amount) : '',
         notes: entry.notes || '',
       })
     } else {
