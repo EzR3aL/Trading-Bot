@@ -28,6 +28,10 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
   - Neuer Abschnitt im Bot Builder Step 4 (Notifications) mit Toggle, Modus-Wahl, Schwellenwert und Richtung
   - Position Monitor prüft bei jedem Zyklus und sendet Alert via Discord/Telegram
   - DB-Migration: `pnl_alert_settings` JSON-Spalte auf `bot_configs`
+- **Einnahmen-Tab CRUD** — Admin kann manuelle Revenue-Einträge anlegen, bearbeiten und löschen (Formulare + Delete-Bestätigung) (#162)
+- **Revenue-Zeitverlauf-Chart** — Gestapeltes Balkendiagramm zeigt Einnahmen pro Exchange über Zeit (7d/30d/90d/1y) (#162)
+- **Backend-Tests für Revenue-Endpoints** — 19 Tests für GET/POST/PUT/DELETE, Auth-Guards, Auto-Entry-Schutz (#162)
+- **Frontend-Tests für AdminRevenue** — 15 Tests für KPI-Strip, Exchange Cards, CRUD-Flows, Chart, Error-Handling (#162)
 
 ### Removed
 - **WhatsApp-Benachrichtigungen komplett entfernt** — WhatsApp-Notifier, DB-Spalten und zugehöriger Code entfernt (#163)

@@ -36,6 +36,11 @@ def upgrade() -> None:
     )
     op.create_index("ix_revenue_entries_date", "revenue_entries", ["date"])
     op.create_index("ix_revenue_entries_exchange", "revenue_entries", ["exchange"])
+    op.create_index(
+        "ix_revenue_entries_date_exchange_type",
+        "revenue_entries",
+        ["date", "exchange", "revenue_type"],
+    )
 
 
 def downgrade() -> None:
