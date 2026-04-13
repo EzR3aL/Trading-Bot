@@ -321,10 +321,8 @@ class BotConfig(Base):
     telegram_bot_token = Column(Text, nullable=True)   # Encrypted
     telegram_chat_id = Column(Text, nullable=True)     # Encrypted
 
-    # Per-bot WhatsApp notifications (optional)
-    whatsapp_phone_number_id = Column(Text, nullable=True)   # Encrypted (Meta Business phone number ID)
-    whatsapp_access_token = Column(Text, nullable=True)      # Encrypted (Meta Graph API token)
-    whatsapp_recipient = Column(Text, nullable=True)         # Encrypted (recipient phone number)
+    # PnL alert threshold settings (JSON: enabled, mode, threshold, direction)
+    pnl_alert_settings = Column(Text, nullable=True)
 
     # State
     is_enabled = Column(Boolean, default=False)
@@ -438,7 +436,7 @@ class NotificationLog(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     bot_config_id = Column(Integer, nullable=True)
-    channel = Column(String(20), nullable=False)  # discord | telegram | whatsapp
+    channel = Column(String(20), nullable=False)  # discord | telegram
     event_type = Column(String(50), nullable=False)  # trade_entry | trade_exit | error | status | alert | daily_summary | risk_alert
     status = Column(String(10), nullable=False, default="sent")  # sent | failed
     error_message = Column(Text, nullable=True)

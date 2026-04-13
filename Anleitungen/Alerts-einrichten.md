@@ -1,6 +1,6 @@
 # Alerts einrichten
 
-Anleitung zum Einrichten und Verwalten von Preis-, Strategie- und Portfolio-Alerts mit Discord-, Telegram- und WhatsApp-Benachrichtigungen.
+Anleitung zum Einrichten und Verwalten von Preis-, Strategie- und Portfolio-Alerts mit Discord- und Telegram-Benachrichtigungen.
 
 ---
 
@@ -13,8 +13,7 @@ Anleitung zum Einrichten und Verwalten von Preis-, Strategie- und Portfolio-Aler
 5. [Cooldown konfigurieren](#5-cooldown-konfigurieren)
 6. [Discord-Benachrichtigungen](#6-discord-benachrichtigungen)
 7. [Telegram-Benachrichtigungen](#7-telegram-benachrichtigungen)
-8. [WhatsApp-Benachrichtigungen](#8-whatsapp-benachrichtigungen)
-9. [Alerts verwalten](#9-alerts-verwalten)
+8. [Alerts verwalten](#8-alerts-verwalten)
 
 ---
 
@@ -34,7 +33,6 @@ Das Alert-System benachrichtigt dich ueber wichtige Ereignisse in deinem Trading
 
 - **Discord** (Webhook pro Bot)
 - **Telegram** (Bot Token + Chat ID pro Bot)
-- **WhatsApp** (WhatsApp Business Cloud API pro Bot)
 
 ---
 
@@ -236,47 +234,7 @@ Fuer eine ausfuehrliche Anleitung siehe: [Telegram Benachrichtigungen einrichten
 
 ---
 
-## 8. WhatsApp-Benachrichtigungen
-
-Alerts koennen auch per WhatsApp gesendet werden, ueber die **WhatsApp Business Cloud API** von Meta.
-
-### Voraussetzungen
-
-- Meta Business Account
-- WhatsApp Business API Zugang (ueber Meta for Developers)
-- Phone Number ID, Access Token und Empfaenger-Nummer
-
-### WhatsApp Business API einrichten
-
-1. Gehe zu [developers.facebook.com](https://developers.facebook.com/)
-2. Erstelle eine App mit **WhatsApp** Produkt
-3. Navigiere zu **WhatsApp** -> **API Setup**
-4. Notiere dir:
-   - **Phone Number ID**: Die ID deiner WhatsApp Business Nummer
-   - **Access Token**: Dein permanenter API Token
-   - **Empfaenger-Nummer**: Die Nummer, die Nachrichten empfangen soll (mit Laendervorwahl, z.B. `4917612345678`)
-
-### Im Bot konfigurieren
-
-Im **Bot Builder** (Schritt 4: Exchange & Modus):
-1. Trage die **Phone Number ID** ein
-2. Trage den **Access Token** ein
-3. Trage die **Empfaenger-Nummer** ein
-4. Klicke auf **"Test senden"** um die Verbindung zu pruefen
-
-### Benachrichtigungsformat
-
-WhatsApp-Alerts enthalten dieselben Informationen wie Discord/Telegram:
-- **Alert-Typ** und Kategorie
-- **Aktueller Wert** (z.B. aktueller Preis)
-- **Schwellenwert** der ausgeloest hat
-- **Zeitstempel**
-
-Fuer eine ausfuehrliche Anleitung siehe: [WhatsApp Benachrichtigungen und neue Exchanges.md](WhatsApp%20Benachrichtigungen%20und%20neue%20Exchanges.md)
-
----
-
-## 9. Alerts verwalten
+## 8. Alerts verwalten
 
 ### Alert-Liste
 

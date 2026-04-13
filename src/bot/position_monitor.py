@@ -4,6 +4,7 @@ import asyncio
 import json
 from datetime import datetime, timezone
 
+from src.bot.pnl import calculate_pnl
 from src.data.market_data import MarketDataFetcher
 from src.exchanges.base import ExchangeClient
 from src.models.database import TradeRecord
@@ -35,6 +36,10 @@ class PositionMonitorMixin:
         self._trailing_stop_lock = asyncio.Lock()
         # Track API glitch frequency per symbol: {symbol: count}
         self._glitch_counter: dict[str, int] = {}
+        # Track PnL alert notifications sent per trade: {trade_id: set("profit_5.0","loss_10.0")}
+        self._pnl_alerts_sent: dict[int, set[str]] = {}
+        # Cached parsed PnL alert settings (refreshed each monitor cycle)
+        self._pnl_alert_parsed: dict | None = None
 
     async def _monitor_positions_safe(self):
         """Wrapper with error handling for position monitoring."""
@@ -71,6 +76,20 @@ class PositionMonitorMixin:
             stale_glitch = [k for k in self._glitch_counter if k not in open_glitch_keys]
             for k in stale_glitch:
                 del self._glitch_counter[k]
+
+            stale_alerts = [tid for tid in self._pnl_alerts_sent if tid not in open_trade_ids]
+            for tid in stale_alerts:
+                del self._pnl_alerts_sent[tid]
+
+            # Parse PnL alert settings once per cycle (not per trade)
+            self._pnl_alert_parsed = None
+            if self._config and self._config.pnl_alert_settings:
+                try:
+                    parsed = json.loads(self._config.pnl_alert_settings)
+                    if parsed.get("enabled") and parsed.get("thresholds"):
+                        self._pnl_alert_parsed = parsed
+                except (json.JSONDecodeError, TypeError):
+                    pass
 
             for trade in open_trades:
                 await self._check_position(trade, session)
@@ -115,6 +134,9 @@ class PositionMonitorMixin:
                 pass
 
             if current_price and trade.entry_price:
+                # PnL threshold alert check
+                await self._check_pnl_alert(trade, current_price)
+
                 if trade.side == "long":
                     new_highest = max(trade.highest_price or trade.entry_price, current_price)
                 else:
@@ -414,6 +436,61 @@ class PositionMonitorMixin:
             log_prefix, trade.symbol, _POSITION_GONE_THRESHOLD,
         )
         return True
+
+    async def _check_pnl_alert(self, trade: TradeRecord, current_price: float) -> None:
+        """Send a one-time notification when a trade's PnL crosses configured thresholds."""
+        settings = self._pnl_alert_parsed
+        if not settings:
+            return
+
+        pnl_abs, pnl_pct = calculate_pnl(trade.side, trade.entry_price, current_price, trade.size)
+
+        mode = settings.get("mode", "percent")
+        thresholds = settings.get("thresholds", [5.0])
+        direction = settings.get("direction", "both")
+        value = pnl_pct if mode == "percent" else pnl_abs
+        unit = "%" if mode == "percent" else "$"
+
+        sent = self._pnl_alerts_sent.get(trade.id, set())
+
+        for threshold in thresholds:
+            threshold = float(threshold)
+            # Check profit direction
+            if value >= threshold and direction in ("profit", "both"):
+                key = f"profit_{threshold}"
+                if key not in sent:
+                    msg = (
+                        f"{trade.symbol} ({trade.side}): PnL-Schwelle erreicht! "
+                        f"Aktuell: {value:+.2f}{unit} (Schwelle: +{threshold}{unit})"
+                    )
+                    await self._send_notification(
+                        lambda n, m=msg, v=value, t=threshold: n.send_risk_alert(
+                            alert_type="PNL_THRESHOLD", message=m, current_value=v, threshold=t,
+                        ),
+                        event_type="pnl_alert",
+                        summary=f"PNL_PROFIT: {trade.symbol} {value:+.2f}{unit}",
+                    )
+                    sent.add(key)
+
+            # Check loss direction
+            if value <= -threshold and direction in ("loss", "both"):
+                key = f"loss_{threshold}"
+                if key not in sent:
+                    msg = (
+                        f"{trade.symbol} ({trade.side}): PnL-Schwelle erreicht! "
+                        f"Aktuell: {value:+.2f}{unit} (Schwelle: -{threshold}{unit})"
+                    )
+                    await self._send_notification(
+                        lambda n, m=msg, v=value, t=threshold: n.send_risk_alert(
+                            alert_type="PNL_THRESHOLD", message=m, current_value=v, threshold=t,
+                        ),
+                        event_type="pnl_alert",
+                        summary=f"PNL_LOSS: {trade.symbol} {value:+.2f}{unit}",
+                    )
+                    sent.add(key)
+
+        if sent:
+            self._pnl_alerts_sent[trade.id] = sent
 
     async def _handle_closed_position(self, trade: TradeRecord, client: ExchangeClient, session):
         """Handle a position that was closed externally (TP/SL/manual)."""

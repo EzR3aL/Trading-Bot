@@ -62,6 +62,10 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
   // Notification configuration status (for edit mode)
   const [discordConfigured, setDiscordConfigured] = useState(false)
   const [telegramConfigured, setTelegramConfigured] = useState(false)
+  // PnL alert threshold settings
+  const [pnlAlertSettings, setPnlAlertSettings] = useState<{
+    enabled: boolean; mode: 'dollar' | 'percent'; thresholds: number[]; direction: 'profit' | 'loss' | 'both'
+  }>({ enabled: false, mode: 'percent', thresholds: [], direction: 'both' })
 
   // Hyperliquid gate status (referral + builder fee)
   const [hlGateStatus, setHlGateStatus] = useState<{ needs_approval: boolean; needs_referral: boolean }>({ needs_approval: false, needs_referral: false })
@@ -180,6 +184,7 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
         // Set notification configuration status for edit mode
         setDiscordConfigured(d.discord_webhook_configured || false)
         setTelegramConfigured(d.telegram_configured || false)
+        if (d.pnl_alert_settings) setPnlAlertSettings(d.pnl_alert_settings)
 
         // Migrate legacy schedule types to supported ones
         if (d.schedule_type === 'rotation_only' || d.schedule_type === 'market_sessions') {
@@ -434,6 +439,7 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
       discord_webhook_url: discordWebhookUrl || undefined,
       telegram_bot_token: telegramBotToken || undefined,
       telegram_chat_id: telegramChatId || undefined,
+      pnl_alert_settings: pnlAlertSettings,
     }
   }
 
@@ -610,10 +616,12 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
             openNotif={openNotif}
             discordConfigured={discordConfigured}
             telegramConfigured={telegramConfigured}
+            pnlAlertSettings={pnlAlertSettings}
             onDiscordWebhookUrlChange={setDiscordWebhookUrl}
             onTelegramBotTokenChange={setTelegramBotToken}
             onTelegramChatIdChange={setTelegramChatId}
             onOpenNotifChange={setOpenNotif}
+            onPnlAlertSettingsChange={setPnlAlertSettings}
             onTestDiscord={handleTestDiscord}
             onTestTelegram={handleTestTelegram}
           />
@@ -646,6 +654,7 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
             hasFixedSources={hasFixedSources}
             discordConfigured={discordConfigured} telegramConfigured={telegramConfigured}
             discordWebhookUrl={discordWebhookUrl} telegramBotToken={telegramBotToken}
+            pnlAlertSettings={pnlAlertSettings}
             riskAccepted={riskAccepted} onRiskAcceptedChange={setRiskAccepted}
             b={b}
           />

@@ -42,6 +42,24 @@ def _validate_webhook_url(url: str | None) -> str | None:
 _MAX_JSON_FIELD_BYTES = 10240
 
 
+class PnlAlertSettings(BaseModel):
+    """PnL threshold alert configuration per bot."""
+    enabled: bool = False
+    mode: str = Field(default="percent", pattern="^(dollar|percent)$")
+    thresholds: List[float] = Field(default=[5.0])
+    direction: str = Field(default="both", pattern="^(profit|loss|both)$")
+
+    @field_validator("thresholds")
+    @classmethod
+    def validate_thresholds(cls, v: List[float]) -> List[float]:
+        if len(v) > 10:
+            raise ValueError("Maximal 10 Schwellenwerte erlaubt")
+        for val in v:
+            if val <= 0 or val > 10000:
+                raise ValueError(f"Schwellenwert muss zwischen 0 und 10.000 liegen: {val}")
+        return sorted(set(v))
+
+
 class BotConfigCreate(BaseModel):
     """Request to create a new bot."""
     name: str = Field(..., min_length=1, max_length=100)
@@ -91,6 +109,9 @@ class BotConfigCreate(BaseModel):
     # Per-bot Telegram notifications (optional)
     telegram_bot_token: Optional[str] = None
     telegram_chat_id: Optional[str] = None
+
+    # PnL alert threshold settings (optional)
+    pnl_alert_settings: Optional[PnlAlertSettings] = None
 
     @field_validator("discord_webhook_url", mode="before")
     @classmethod
@@ -142,6 +163,9 @@ class BotConfigUpdate(BaseModel):
     telegram_bot_token: Optional[str] = None
     telegram_chat_id: Optional[str] = None
 
+    # PnL alert threshold settings (optional)
+    pnl_alert_settings: Optional[PnlAlertSettings] = None
+
     @field_validator("discord_webhook_url", mode="before")
     @classmethod
     def validate_webhook_domain(cls, v: str | None) -> str | None:
@@ -179,6 +203,7 @@ class BotConfigResponse(BaseModel):
     is_enabled: bool
     discord_webhook_configured: bool = False
     telegram_configured: bool = False
+    pnl_alert_settings: Optional[Dict[str, Any]] = None
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
 

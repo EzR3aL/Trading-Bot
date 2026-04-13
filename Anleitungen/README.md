@@ -13,7 +13,6 @@
 | [Risikoprofil & Kline Intervall](Risikoprofil-und-Kline-Intervall.md) | Risikoprofile und Zeitrahmen fuer Edge Indicator |
 | [Alerts einrichten](Alerts-einrichten.md) | Preis- und Signal-Alerts konfigurieren |
 | [Telegram Benachrichtigungen](Telegram%20Benachrichtigungen%20einrichten.md) | Telegram-Bot fuer Notifications |
-| [WhatsApp & neue Exchanges](WhatsApp%20Benachrichtigungen%20und%20neue%20Exchanges.md) | WhatsApp-Setup, Bitunix und BingX |
 | [Portfolio-Ansicht](Portfolio-View.md) | Portfolio-Dashboard nutzen |
 | ~~[LLM-Provider Konfiguration](LLM-Provider-Konfiguration.md)~~ | ~~KI-Provider fuer LLM-Strategien~~ (Archiv -- LLM entfernt in v4.6.0) |
 | [Weex Exchange Setup](Weex-Exchange-Setup.md) | Weex-Boerse anbinden |

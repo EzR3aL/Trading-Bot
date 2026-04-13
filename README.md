@@ -38,7 +38,7 @@ A production-grade automated cryptocurrency trading platform with multi-exchange
 
 **Operational Tooling**
 - Prometheus metrics export with Grafana dashboards
-- Discord, Telegram, and WhatsApp trade notifications
+- Discord and Telegram trade notifications
 - Health check endpoint with Docker healthcheck integration
 - Structured logging with configurable levels
 - Tax report generation with CSV export
@@ -67,7 +67,7 @@ Frontend (React/TS)  --->  FastAPI Backend  --->  Exchange Adapters
 | Auth | JWT (PyJWT), bcrypt, Fernet encryption |
 | Scheduling | APScheduler (async) |
 | Monitoring | Prometheus, Grafana |
-| Notifications | Discord webhooks, Telegram Bot API, WhatsApp (Business Cloud API) |
+| Notifications | Discord webhooks, Telegram Bot API |
 | Infrastructure | Docker, Docker Compose, multi-stage builds |
 
 ### Project Structure
@@ -90,7 +90,7 @@ trading-department/
 │   ├── bot/                     # Orchestrator, BotWorker, BotManager
 │   ├── strategy/                # Pluggable strategy engine
 │   ├── risk/                    # Position sizing, daily loss limits
-│   ├── notifications/           # Discord, Telegram, WhatsApp
+│   ├── notifications/           # Discord, Telegram
 │   ├── models/                  # SQLAlchemy ORM, async sessions
 │   └── utils/                   # Encryption, logging, circuit breaker
 ├── tests/
@@ -297,7 +297,6 @@ Returns service status with database connectivity check. Used by Docker healthch
 |---------|--------|
 | Discord | Trade entry/exit with strategy reasoning, daily summaries, risk alerts, bot status changes |
 | Telegram | Trade notifications, error alerts |
-| WhatsApp | Trade notifications via WhatsApp Business Cloud API |
 
 ---
 

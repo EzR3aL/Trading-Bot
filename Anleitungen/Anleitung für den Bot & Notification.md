@@ -29,7 +29,7 @@ Der Bitget Trading Bot ist ein automatisierter Handelsassistent für Kryptowähr
 - **Analysiert den Markt** automatisch (Bitcoin, Ethereum)
 - **Erkennt Handelssignale** basierend auf Marktdaten
 - **Führt Trades aus** auf deinem Bitget-Konto (wenn du möchtest)
-- **Benachrichtigt dich** per Discord, Telegram oder WhatsApp über alle Aktivitäten
+- **Benachrichtigt dich** per Discord oder Telegram über alle Aktivitäten
 
 ### Für wen ist der Bot geeignet?
 
@@ -53,7 +53,7 @@ Bevor du startest, stelle sicher, dass du folgendes hast:
 |-----|-------|---------------|
 | Computer mit Internet | Bot läuft lokal | - |
 | Bitget Account | Hier wird gehandelt | Einfach |
-| Discord, Telegram oder WhatsApp | Für Benachrichtigungen (mind. 1 Kanal) | Einfach |
+| Discord oder Telegram | Für Benachrichtigungen (mind. 1 Kanal) | Einfach |
 | Python 3.10+ | Bot-Software | Mittel |
 
 ### Python installieren (falls noch nicht vorhanden)
@@ -419,7 +419,7 @@ Wenn du das Dashboard von außen erreichbar machen möchtest:
 
 ## 9. Benachrichtigungen verstehen
 
-Der Bot schickt verschiedene Nachrichten an deine konfigurierten Kanaele (Discord, Telegram und/oder WhatsApp):
+Der Bot schickt verschiedene Nachrichten an deine konfigurierten Kanaele (Discord und/oder Telegram):
 
 ### Trade Entry (Neue Position eröffnet)
 
@@ -646,7 +646,7 @@ pip install -r requirements.txt
 - [ ] Kontostand auf Bitget prüfen
 - [ ] Bot-Logs auf Fehler überprüfen
 - [ ] Dashboard regelmäßig ansehen
-- [ ] Benachrichtigungen lesen (Discord/Telegram/WhatsApp)
+- [ ] Benachrichtigungen lesen (Discord/Telegram)
 
 ---
 

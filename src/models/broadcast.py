@@ -30,7 +30,6 @@ class Broadcast(Base):
     message_markdown = Column(Text, nullable=False)  # Source message (Markdown)
     message_discord = Column(Text, nullable=True)  # Pre-rendered Discord embed JSON
     message_telegram = Column(Text, nullable=True)  # Pre-rendered Telegram HTML
-    message_whatsapp = Column(Text, nullable=True)  # Pre-rendered WhatsApp plain text
     image_url = Column(String(500), nullable=True)  # Optional image URL
     exchange_filter = Column(String(50), nullable=True)  # NULL=all, or "hyperliquid","bitget",etc.
     status = Column(String(20), nullable=False, default="draft")  # draft/scheduled/sending/completed/failed/cancelled
@@ -60,7 +59,7 @@ class BroadcastTarget(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     broadcast_id = Column(Integer, ForeignKey("broadcasts.id", ondelete="CASCADE"), nullable=False, index=True)
-    channel = Column(String(20), nullable=False)  # discord/telegram/whatsapp
+    channel = Column(String(20), nullable=False)  # discord/telegram
     dedup_key = Column(String(128), nullable=False)  # SHA256 hash
     credentials_encrypted = Column(Text, nullable=False)  # JSON blob of encrypted creds
     user_id = Column(Integer, nullable=True)

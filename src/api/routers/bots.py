@@ -62,6 +62,7 @@ def _config_to_response(config: BotConfig) -> BotConfigResponse:
     strategy_params = parse_json_field(config.strategy_params, field_name="strategy_params", context=ctx)
     schedule_config = parse_json_field(config.schedule_config, field_name="schedule_config", context=ctx)
     per_asset_config = parse_json_field(config.per_asset_config, field_name="per_asset_config", context=ctx)
+    pnl_alert_settings = parse_json_field(config.pnl_alert_settings, field_name="pnl_alert_settings", context=ctx)
 
     return BotConfigResponse(
         id=config.id,
@@ -85,6 +86,7 @@ def _config_to_response(config: BotConfig) -> BotConfigResponse:
         is_enabled=config.is_enabled,
         discord_webhook_configured=bool(config.discord_webhook_url),
         telegram_configured=bool(config.telegram_bot_token and config.telegram_chat_id),
+        pnl_alert_settings=pnl_alert_settings,
         created_at=config.created_at.isoformat() if config.created_at else None,
         updated_at=config.updated_at.isoformat() if config.updated_at else None,
     )
@@ -501,6 +503,7 @@ async def create_bot(
         discord_webhook_url=encrypted_webhook,
         telegram_bot_token=encrypted_telegram_token,
         telegram_chat_id=encrypt_value(body.telegram_chat_id) if body.telegram_chat_id else None,
+        pnl_alert_settings=json.dumps(body.pnl_alert_settings.model_dump()) if body.pnl_alert_settings else None,
         is_enabled=False,
     )
     db.add(config)
@@ -1011,6 +1014,8 @@ async def update_bot(
                 setattr(config, field, encrypt_value(value))
             else:
                 setattr(config, field, None)
+        elif field == "pnl_alert_settings" and value is not None:
+            setattr(config, field, json.dumps(value))
         elif value is not None:
             setattr(config, field, value)
 
