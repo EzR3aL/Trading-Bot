@@ -439,8 +439,7 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
       discord_webhook_url: discordWebhookUrl || undefined,
       telegram_bot_token: telegramBotToken || undefined,
       telegram_chat_id: telegramChatId || undefined,
-      pnl_alert_settings: pnlAlertSettings.enabled && pnlAlertSettings.thresholds.length > 0
-        ? pnlAlertSettings : undefined,
+      pnl_alert_settings: pnlAlertSettings,
     }
   }
 

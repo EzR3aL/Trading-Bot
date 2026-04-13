@@ -35,8 +35,10 @@ class PositionMonitorMixin:
         self._trailing_stop_lock = asyncio.Lock()
         # Track API glitch frequency per symbol: {symbol: count}
         self._glitch_counter: dict[str, int] = {}
-        # Track PnL alert notifications sent per trade: {trade_id: set("profit","loss")}
+        # Track PnL alert notifications sent per trade: {trade_id: set("profit_5.0","loss_10.0")}
         self._pnl_alerts_sent: dict[int, set[str]] = {}
+        # Cached parsed PnL alert settings (refreshed each monitor cycle)
+        self._pnl_alert_parsed: dict | None = None
 
     async def _monitor_positions_safe(self):
         """Wrapper with error handling for position monitoring."""
