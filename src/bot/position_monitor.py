@@ -4,6 +4,7 @@ import asyncio
 import json
 from datetime import datetime, timezone
 
+from src.bot.pnl import calculate_pnl
 from src.data.market_data import MarketDataFetcher
 from src.exchanges.base import ExchangeClient
 from src.models.database import TradeRecord
@@ -442,7 +443,6 @@ class PositionMonitorMixin:
         if not settings:
             return
 
-        from src.bot.pnl import calculate_pnl
         pnl_abs, pnl_pct = calculate_pnl(trade.side, trade.entry_price, current_price, trade.size)
 
         mode = settings.get("mode", "percent")
