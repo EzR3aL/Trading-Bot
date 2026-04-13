@@ -16,7 +16,7 @@ from src.api.schemas.revenue import (
     RevenueEntryUpdate,
 )
 from src.auth.dependencies import get_current_admin
-from src.models.database import RevenueEntry, TradeRecord, User
+from src.models.database import ExchangeConnection, RevenueEntry, TradeRecord, User
 from src.models.session import get_db
 
 router = APIRouter(prefix="/api/admin/revenue", tags=["revenue"])
@@ -183,6 +183,21 @@ async def get_revenue(
 
     entries = [_entry_to_response(e) for e in all_entries]
 
+    # --- 5. Affiliate signup counts per exchange ---
+    signup_rows = await db.execute(
+        select(
+            ExchangeConnection.exchange_type,
+            func.count().label("cnt"),
+        )
+        .where(
+            (ExchangeConnection.affiliate_verified == True)  # noqa: E712
+            | (ExchangeConnection.referral_verified == True)  # noqa: E712
+        )
+        .group_by(ExchangeConnection.exchange_type)
+    )
+    signups_by_exchange = {row.exchange_type: row.cnt for row in signup_rows.all()}
+    total_signups = sum(signups_by_exchange.values())
+
     return {
         "summary": {
             "today": round(sum_today, 2),
@@ -193,6 +208,10 @@ async def get_revenue(
         "by_exchange": by_exchange,
         "daily": daily,
         "entries": entries,
+        "signups": {
+            "total": total_signups,
+            "by_exchange": signups_by_exchange,
+        },
     }
 
 

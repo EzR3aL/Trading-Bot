@@ -42,11 +42,17 @@ interface RevenueEntry {
   notes?: string
 }
 
+interface SignupData {
+  total: number
+  by_exchange: Record<string, number>
+}
+
 interface RevenueResponse {
   summary: RevenueSummary
   by_exchange: ExchangeBreakdown[]
   daily: DailyRevenue[]
   entries: RevenueEntry[]
+  signups: SignupData
 }
 
 interface EntryFormData {
@@ -497,7 +503,7 @@ export default function AdminRevenue() {
         <div className="space-y-6">
           {/* KPI Strip */}
           {summary && (
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
               {[
                 { label: 'Heute', value: summary.today },
                 { label: '7 Tage', value: summary.last_7d },
@@ -514,6 +520,13 @@ export default function AdminRevenue() {
                   </p>
                 </div>
               ))}
+              {/* Affiliate Signups */}
+              <div className="border border-white/[0.08] bg-white/[0.02] rounded-xl p-4 hover:bg-white/[0.04] transition-colors">
+                <p className="text-[10px] text-gray-400 uppercase tracking-wider mb-1">Affiliate Signups</p>
+                <p className="text-xl font-bold text-primary-400 tabular-nums">
+                  {data?.signups?.total ?? 0}
+                </p>
+              </div>
             </div>
           )}
 
@@ -565,6 +578,11 @@ export default function AdminRevenue() {
                         ? `${ex.count} ${ex.count === 1 ? 'Trade' : 'Trades'} · ${ex.types}`
                         : 'Keine Daten'}
                     </p>
+                    {(data?.signups?.by_exchange?.[ex.exchange] ?? 0) > 0 && (
+                      <p className="text-[10px] text-primary-400 mt-0.5">
+                        {data.signups.by_exchange[ex.exchange]} Signup{data.signups.by_exchange[ex.exchange] !== 1 ? 's' : ''}
+                      </p>
+                    )}
                   </div>
                 )
               })}
