@@ -49,6 +49,7 @@ class BitgetExchangeClient(HTTPExchangeClientMixin, ExchangeClient):
     """
 
     SUPPORTS_NATIVE_TRAILING_STOP = True
+    SUPPORTS_NATIVE_TRAILING_PROBE = True
 
     _client_error_class = BitgetClientError
 
@@ -558,6 +559,39 @@ class BitgetExchangeClient(HTTPExchangeClientMixin, ExchangeClient):
             symbol, hold_side, rounded_size, range_rate, trigger_price,
         )
         return result
+
+    async def has_native_trailing_stop(self, symbol: str, hold_side: str) -> bool:
+        """Query pending plan orders for a live ``moving_plan`` on this side.
+
+        Bitget's plan-order API exposes every active TP/SL/trailing plan; we
+        look for any whose planType is ``moving_plan`` and posSide/holdSide
+        matches. Returns False on any error so callers treat the check as
+        inconclusive and fall through to the normal placement attempt.
+        """
+        try:
+            r = await self._request(
+                "GET",
+                "/api/v2/mix/order/orders-plan-pending",
+                params={
+                    "productType": PRODUCT_TYPE_USDT,
+                    "symbol": symbol,
+                    "planType": "profit_loss",
+                },
+                auth=True,
+            )
+            entries = r.get("entrustedList") if isinstance(r, dict) else None
+            if not entries:
+                return False
+            for p in entries:
+                if p.get("planType") != "moving_plan":
+                    continue
+                side_field = p.get("posSide") or p.get("holdSide") or ""
+                status = p.get("planStatus", "")
+                if side_field.lower() == hold_side.lower() and status == "live":
+                    return True
+        except Exception as e:
+            logger.debug("has_native_trailing_stop(%s,%s) failed: %s", symbol, hold_side, e)
+        return False
 
     # ==================== Additional Bitget-specific methods ====================
 

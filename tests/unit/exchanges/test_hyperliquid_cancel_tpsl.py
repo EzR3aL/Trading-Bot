@@ -21,6 +21,7 @@ def client():
         c = HyperliquidClient.__new__(HyperliquidClient)
         c._exchange = MagicMock()
         c._info = MagicMock()
+        c._info_exec = c._info
         c.wallet_address = "0xTestAddress"
         c._wallet = MagicMock()
         c._wallet.address = "0xTestAddress"

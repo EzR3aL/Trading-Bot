@@ -680,6 +680,7 @@ async def update_trade_tpsl(
 
     # Set TP/SL on exchange
     trailing_placed = False
+    exchange_has_trailing: Optional[bool] = None
     fetcher = None
     try:
         has_tp_change = body.take_profit is not None or body.remove_tp
@@ -746,6 +747,20 @@ async def update_trade_tpsl(
                     "Native trailing stop failed for trade %s on %s: %s — falling back to software trailing",
                     trade_id, trade.exchange, trail_err,
                 )
+
+        # Authoritative probe before closing the client: what does the
+        # exchange really say about the trailing plan right now? This covers
+        # silent cancel-no-ops and partial failures where trailing_placed
+        # disagrees with reality. Skip on exchanges without a meaningful probe
+        # — their default ``False`` return is not authoritative.
+        if getattr(type(client), "SUPPORTS_NATIVE_TRAILING_PROBE", False):
+            try:
+                exchange_has_trailing = await client.has_native_trailing_stop(
+                    trade.symbol, trade.side,
+                )
+            except Exception as probe_err:
+                logger.debug("has_native_trailing_stop probe failed: %s", probe_err)
+                exchange_has_trailing = None
     except NotImplementedError:
         raise HTTPException(
             status_code=400,
@@ -764,16 +779,34 @@ async def update_trade_tpsl(
         if fetcher:
             await fetcher.close()
 
-    # Update DB
+    # Resolve true native_trailing_stop state from the probe taken before the
+    # client was closed. If the probe failed, fall back to local bookkeeping.
+    if exchange_has_trailing is None:
+        native_state = trailing_placed
+    else:
+        native_state = exchange_has_trailing
+        if exchange_has_trailing and not trailing_placed:
+            logger.info(
+                "TP/SL sync: trade %s flagged trailing_placed=False but exchange still "
+                "reports a live moving_plan — keeping native_trailing_stop=True",
+                trade_id,
+            )
+        elif not exchange_has_trailing and trailing_placed:
+            logger.warning(
+                "TP/SL sync: place_trailing_stop returned success for trade %s but the "
+                "exchange shows no live moving_plan — persisting False",
+                trade_id,
+            )
+
     trade.take_profit = effective_tp
     trade.stop_loss = effective_sl
     if body.trailing_stop is not None:
-        trade.native_trailing_stop = trailing_placed
+        trade.native_trailing_stop = native_state
         trade.trailing_atr_override = body.trailing_stop.callback_pct
     else:
-        # User submitted the form but trailing was off — clear any previous override
+        # User submitted the form but trailing was off — reflect real exchange state
         trade.trailing_atr_override = None
-        trade.native_trailing_stop = False
+        trade.native_trailing_stop = native_state
     await db.commit()
 
     logger.info(

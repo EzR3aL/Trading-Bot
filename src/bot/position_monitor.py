@@ -303,6 +303,30 @@ class PositionMonitorMixin:
         """Auto-place a native trailing stop on the exchange for an existing position."""
         log_prefix = f"[Bot:{self.bot_config_id}]"
         try:
+            # Drift check: a plan may already be live on the exchange while the
+            # DB flag is False (e.g. a failed TP/SL edit zeroed the flag but
+            # cancel_position_tpsl did not actually remove the moving_plan).
+            # Reconcile the DB instead of spamming "Insufficient position"
+            # every 10 minutes for the life of the trade.
+            if getattr(type(client), "SUPPORTS_NATIVE_TRAILING_PROBE", False):
+                try:
+                    if await client.has_native_trailing_stop(trade.symbol, trade.side):
+                        trade.native_trailing_stop = True
+                        await session.commit()
+                        async with self._trailing_stop_lock:
+                            self._trailing_stop_backoff.pop(trade.id, None)
+                        logger.info(
+                            "%s Reconciled DB: native trailing stop already live on exchange "
+                            "for %s %s — flag set to true, retry loop stopped.",
+                            log_prefix, trade.symbol, trade.side,
+                        )
+                        return
+                except Exception as e:
+                    logger.debug(
+                        "%s has_native_trailing_stop probe failed for %s (continuing with placement): %s",
+                        log_prefix, trade.symbol, e,
+                    )
+
             params = self._strategy._p
             if not params.get("trailing_stop_enabled"):
                 return

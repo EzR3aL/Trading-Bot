@@ -136,6 +136,12 @@ class ExchangeClient(ABC):
     # exchanges that fall back to software trailing (Weex, Bitunix, Hyperliquid).
     SUPPORTS_NATIVE_TRAILING_STOP: bool = False
 
+    # True when the subclass implements a meaningful ``has_native_trailing_stop``
+    # probe. Callers should only treat a False return as authoritative when
+    # this flag is True — otherwise False means "not probed" rather than
+    # "confirmed absent".
+    SUPPORTS_NATIVE_TRAILING_PROBE: bool = False
+
     async def place_trailing_stop(
         self,
         symbol: str,
@@ -153,6 +159,19 @@ class ExchangeClient(ABC):
         set ``SUPPORTS_NATIVE_TRAILING_STOP = True``.
         """
         return None
+
+    async def has_native_trailing_stop(self, symbol: str, hold_side: str) -> bool:
+        """Return True if a native trailing-stop plan is already live for
+        (symbol, hold_side) on the exchange.
+
+        Used by position_monitor to detect DB/exchange drift — an existing
+        plan on the exchange with ``native_trailing_stop=False`` in the DB
+        means a previous placement succeeded but the flag failed to persist
+        (e.g. a failed TP/SL edit that wrongly zeroed the flag). Default
+        implementation returns False so exchanges without native trailing
+        behave as before.
+        """
+        return False
 
     async def get_order_fees(self, symbol: str, order_id: str) -> float:
         """Get fees for a single order. Override in exchange-specific client."""
