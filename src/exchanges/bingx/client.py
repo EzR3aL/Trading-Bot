@@ -435,6 +435,13 @@ class BingXClient(HTTPExchangeClientMixin, ExchangeClient):
         if isinstance(order_data, dict):
             order_id = str(order_data.get("orderId", ""))
 
+        if not order_id:
+            logger.warning(
+                "BingX close_position for %s returned empty orderId — "
+                "close may not have executed. Response: %s",
+                symbol, result,
+            )
+
         return Order(
             order_id=order_id,
             symbol=symbol,

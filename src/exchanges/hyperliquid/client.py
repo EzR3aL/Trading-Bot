@@ -701,6 +701,13 @@ class HyperliquidClient(ExchangeClient):
         order_id = order_status.get("oid", "hl-close")
         fill_price = float(order_status.get("avgPx", 0))
 
+        if order_id == "hl-close" or not order_status.get("oid"):
+            logger.warning(
+                "Hyperliquid close_position for %s returned no oid — "
+                "close may not have executed. Response: %s",
+                coin, result,
+            )
+
         logger.info(f"Hyperliquid position closed: oid={order_id}, avgPx={fill_price}")
 
         return Order(
