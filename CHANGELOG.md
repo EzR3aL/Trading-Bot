@@ -9,6 +9,13 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [4.14.1] - 2026-04-14
+
+### Fixed
+- **Aggressive Risikoprofil: fehlendes kline_interval Mapping** — Beim Wechsel auf "Aggressiv" im Bot Builder wurde kline_interval nicht aktualisiert. Backend (`liquidation_hunter.py`) und Frontend (`BotBuilderStepStrategy.tsx`) setzen jetzt `15m` für das aggressive Profil (#170)
+
+---
+
 ## [4.14.0] - 2026-04-13
 
 ### Added

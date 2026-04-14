@@ -184,7 +184,7 @@ export default function BotBuilderStepStrategy({
                               onChange={val => {
                                 const updates: Record<string, any> = { [key]: val }
                                 if (key === 'risk_profile') {
-                                  const klineMap: Record<string, string> = { conservative: '4h', standard: '1h' }
+                                  const klineMap: Record<string, string> = { conservative: '4h', standard: '1h', aggressive: '15m' }
                                   if (klineMap[val]) updates.kline_interval = klineMap[val]
                                 }
                                 setParams(updates)

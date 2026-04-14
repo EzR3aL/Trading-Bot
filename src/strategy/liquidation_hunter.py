@@ -81,6 +81,7 @@ RISK_PROFILES = {
         "trailing_trail_atr": 1.0,
         "thesis_cooldown_minutes": 15,
         "max_hold_hours": 12,
+        "kline_interval": "15m",
     },
 }
 
