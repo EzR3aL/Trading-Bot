@@ -5,7 +5,7 @@
  */
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { X, Target, ShieldAlert, TrendingUp, AlertTriangle, Info, Zap, Bot } from 'lucide-react'
+import { X, Target, ShieldAlert, TrendingUp, AlertTriangle, Zap, Bot } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { ExchangeIcon } from './ExchangeLogo'
 import useIsMobile from '../../hooks/useIsMobile'
@@ -475,17 +475,6 @@ export default function EditPositionPanel({ position, onClose, onSave }: EditPos
                 <p className="text-[10px] text-gray-500 leading-relaxed">
                   {t('editPosition.atrExplanation', 'Je höher der ATR-Wert, desto mehr Spielraum hat der Preis bevor der Trailing Stop auslöst. 1.0x = eng (schneller Ausstieg), 3.0x = Standard, 5.0x = weit (mehr Spielraum).')}
                 </p>
-
-                {/* Recommendation hint (placeholder) */}
-                <div className="bg-blue-500/[0.06] border border-blue-500/15 rounded-lg px-3 py-2 flex items-start gap-2">
-                  <Info size={12} className="text-blue-400 shrink-0 mt-0.5" />
-                  <span className="text-xs text-blue-300/80">
-                    {t(
-                      'editPosition.trailingHint',
-                      'Die Empfehlung basiert auf deinen bisherigen Trades und wird berechnet sobald genug Daten vorliegen (min. 10 Trades).'
-                    )}
-                  </span>
-                </div>
 
                 {/* Exchange type indicator */}
                 <div className="flex items-center gap-2 text-xs">

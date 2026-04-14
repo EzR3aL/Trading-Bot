@@ -366,7 +366,14 @@ class PositionMonitorMixin:
                 return
 
             atr_val = atr_series[-1]
-            trail_atr = params.get("trailing_trail_atr", 2.5)
+            # User override (set via frontend TP/SL edit) wins over strategy
+            # default — otherwise an auto-replacement after exchange drift
+            # would silently revert a user's manual trailing customization.
+            user_override = getattr(trade, "trailing_atr_override", None)
+            trail_atr = (
+                float(user_override) if user_override is not None
+                else params.get("trailing_trail_atr", 2.5)
+            )
             breakeven_atr = params.get("trailing_breakeven_atr", 1.5)
 
             callback_pct = round((atr_val * trail_atr) / entry_price * 100, 2)
