@@ -9,6 +9,15 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [4.14.3] - 2026-04-14
+
+### Fixed
+- **Trade wird nicht mehr als "closed" markiert wenn Close-Order fehlschlägt** — Wenn `close_position()` einen leeren `order_id` zurückgibt (Close wurde nicht ausgeführt), wird der Trade in DB nicht mehr als closed markiert. Verhindert Phantom-Closes, bei denen die Position auf der Exchange noch offen ist aber die DB closed anzeigt. Resultat: Neuer Trade wurde auf bestehender Position eröffnet → Position auf Exchange doppelt so groß wie im Frontend angezeigt (#174)
+- **Betroffen:** BingX, Bitget, Bitunix, Weex, Hyperliquid — alle Exchange-Clients loggen jetzt eine Warnung bei leerem orderId
+- **Position Monitor + Rotation Manager** verifizieren jetzt `close_order.order_id` vor DB-Update
+
+---
+
 ## [4.14.2] - 2026-04-14
 
 ### Fixed

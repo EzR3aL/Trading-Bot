@@ -176,6 +176,18 @@ class RotationManagerMixin:
                 )
                 return True
 
+            # Verify close order was actually placed (non-empty order_id)
+            if not order.order_id:
+                logger.error(
+                    f"{log_prefix} [{mode_str}] ROTATION close for trade #{trade.id} {trade.symbol} "
+                    f"returned empty order_id — exchange may not have executed. "
+                    f"NOT marking trade as closed, will retry next cycle."
+                )
+                return False
+
+            if order.order_id:
+                trade.close_order_id = order.order_id
+
             # Get exit price — prefer the actual fill price from orders-history
             # (matches the exchange exactly), then the order object's price,
             # then ticker, then entry price as last resort.

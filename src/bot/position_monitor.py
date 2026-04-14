@@ -235,9 +235,18 @@ class PositionMonitorMixin:
                             )
                             return
 
+                        # Verify close order was actually placed (non-empty order_id)
+                        if not close_order.order_id:
+                            logger.error(
+                                "[Bot:%s] Close order for %s returned empty order_id — "
+                                "exchange may not have executed the close. "
+                                "NOT marking trade as closed, will retry next cycle.",
+                                self.bot_config_id, trade.symbol,
+                            )
+                            return
+
                         # Persist close order ID for fee lookup
-                        if close_order and close_order.order_id:
-                            trade.close_order_id = close_order.order_id
+                        trade.close_order_id = close_order.order_id
 
                         # Prefer the actual close-order fill price (matches exchange exactly).
                         # Ticker can drift from the real fill, which corrupts PnL and tax reports.

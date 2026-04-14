@@ -329,6 +329,13 @@ class BitgetExchangeClient(HTTPExchangeClientMixin, ExchangeClient):
         success_list = result.get("successList", [])
         order_id = success_list[0].get("orderId", "") if success_list else ""
 
+        if not order_id:
+            logger.warning(
+                "Bitget close_position for %s returned empty orderId — "
+                "close may not have executed. Response: %s",
+                symbol, result,
+            )
+
         return Order(
             order_id=str(order_id),
             symbol=symbol,

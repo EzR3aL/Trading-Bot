@@ -356,6 +356,13 @@ class BitunixClient(HTTPExchangeClientMixin, ExchangeClient):
         if isinstance(result, dict):
             order_id = result.get("orderId", "")
 
+        if not order_id:
+            logger.warning(
+                "Bitunix close_position for %s returned empty orderId — "
+                "close may not have executed. Response: %s",
+                symbol, result,
+            )
+
         return Order(
             order_id=str(order_id),
             symbol=symbol,

@@ -236,6 +236,12 @@ class WeexClient(HTTPExchangeClientMixin, ExchangeClient):
                 order_id = str(first.get("successOrderId", first.get("orderId", "")))
         elif isinstance(result, dict):
             order_id = str(result.get("orderId", result.get("order_id", "")))
+        if not order_id:
+            logger.warning(
+                "Weex close_position for %s returned empty orderId — "
+                "close may not have executed. Response: %s",
+                symbol, result,
+            )
         return Order(
             order_id=order_id, symbol=symbol, side=side,
             size=pos.size, price=0.0, status="filled", exchange="weex",
