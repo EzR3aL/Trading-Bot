@@ -9,6 +9,29 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [4.14.4] - 2026-04-14
+
+### Fixed
+- **Hyperliquid Demo-Preise stammen jetzt vom Mainnet** — Im Demo-Modus routete der HL-Client sämtliche Preis-Queries (`get_ticker`, `get_fill_price`, `get_close_fill_price`, `get_funding_rate`) auf das Testnet, wo AAVE stundenlang auf ~$114.94 festhing während das Mainnet bei ~$100.90 lag. Ergebnis: `exit_price` in DB und Frontend zeigte Fantasie-PnL (+80 USD statt tatsächlich +3 USD). Jetzt splittet `HyperliquidClient` seine Info-Clients: `_info` immer auf MAINNET für Marktdaten, `_info_exec` auf dem Execution-Netz für user-spezifische Queries (Fills, Positions, Balance). Demo-User sehen jetzt im Bot-Frontend die gleichen Zahlen wie auf app.hyperliquid.xyz
+- **Backfill-Script korrigiert historische Demo-Trades** — `scripts/backfill_demo_prices.py` nutzt HL-Mainnet-Kline-Daten (1m → 5m → 15m → 1h → 4h Fallback) um `entry_price`, `exit_price` und `pnl` für alle geschlossenen Demo-HL-Trades neu zu berechnen. Angewendet in Prod: 5 Trades korrigiert (#17 PnL -1.95→-3.16, #116 -97.65→-57.18, #134 118.65→154.58, #148 79.70→-0.57, #150 83.13→1.88)
+- **Native Trailing Stop DB-Sync auf Bitget** — Nach einem Frontend-TP/SL-Edit blieb das `moving_plan` auf Bitget teilweise aktiv während die DB auf `native_trailing_stop=False` sprang. Resultat: `position_monitor` versuchte alle 10 Minuten einen neuen Plan zu platzieren und erzeugte Endlos-Warning-Loops ("Insufficient position") bis zum Trade-Close. Root-Cause-Kette:
+  - `cancel_position_tpsl` lief nur bei TP/SL-Änderungen, nicht bei reiner Trailing-Anpassung → alter `moving_plan` blieb alive, neuer Placement-Versuch scheiterte
+  - Fix in `update_trade_tpsl`: neues `cancel_native_trailing_stop(symbol, side)` wird bei jeder Trailing-Änderung vorgeschaltet
+  - Neue Capability `has_native_trailing_stop()` (Bitget + BingX) für Drift-Detection
+  - `position_monitor` probiert pro Cycle bidirektional: bei Exchange=True/DB=False wird Flag korrigiert und Retry-Loop gestoppt; bei Exchange=False/DB=True wird der Plan neu platziert
+  - `/trades/{id}/tpsl` nutzt die Exchange-Realität als Source of Truth statt lokaler Buchhaltung
+- **`trailing_atr_override` wird beim Auto-Replace respektiert** — Bei automatischer Neu-Platzierung nach Drift nutzte `_try_place_native_trailing_stop` den Strategie-Default (`trailing_trail_atr=2.5`) auch wenn der User manuell einen anderen Wert gesetzt hatte. Jetzt gewinnt `trade.trailing_atr_override` wenn gesetzt.
+- **Bitget `place_market_order` rundet Size auf `volumePlace`** — Eine 6-Nachkommastellen-Size (z.B. 11.978866) wurde von Bitget stumm auf 2 Nachkommastellen gekürzt (11.97), die DB behielt aber den vollen Wert → Drift zwischen gebuchter und dokumentierter Position. Neue Orders speichern jetzt den exchange-autoritativen Wert.
+
+### Changed
+- **Frontend-Placeholder entfernt** — Die Box "Die Empfehlung basiert auf deinen bisherigen Trades..." im EditPositionPanel war ein Platzhalter ohne Backend-Implementierung (Quellcode-Kommentar `{/* Recommendation hint (placeholder) */}`). Die Empfehlung wurde nie berechnet. Element inkl. i18n-Keys entfernt, bis die Funktion tatsächlich gebaut wird.
+
+### Added
+- **`scripts/audit_trailing_flags.py`** — Scannt alle offenen Trades auf DB/Exchange-Drift beim `native_trailing_stop`-Flag. Skippt Exchanges ohne Probe-Implementierung (HL, Weex, Bitunix) um False-Positives zu vermeiden. Kann mit `--apply` schreibend reconcilieren.
+- **`SUPPORTS_NATIVE_TRAILING_PROBE` Capability-Flag** auf `ExchangeClient`-Basisklasse für erweiterte Feature-Detection. Bitget + BingX implementieren.
+
+---
+
 ## [4.14.3] - 2026-04-14
 
 ### Fixed
