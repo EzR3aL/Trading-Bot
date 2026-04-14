@@ -9,6 +9,13 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [4.14.2] - 2026-04-14
+
+### Fixed
+- **Zeitplan synchronisiert sich beim Profilwechsel** — Beim Wechsel des Risikoprofils im Bot Builder wird jetzt auch das Schedule-Intervall automatisch angepasst: aggressive→15min, standard→60min, conservative→240min (#172)
+
+---
+
 ## [4.14.1] - 2026-04-14
 
 ### Fixed

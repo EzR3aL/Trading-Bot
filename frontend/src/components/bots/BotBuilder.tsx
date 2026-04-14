@@ -571,7 +571,13 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
             proMode={proMode}
             targetExchange={exchangeType}
             onStrategyChange={handleStrategyChange}
-            onStrategyParamsChange={setStrategyParams}
+            onStrategyParamsChange={(params) => {
+              if (params.risk_profile && params.risk_profile !== strategyParams.risk_profile) {
+                const scheduleMap: Record<string, number> = { aggressive: 15, standard: 60, conservative: 240 }
+                if (scheduleMap[params.risk_profile]) setIntervalMinutes(scheduleMap[params.risk_profile])
+              }
+              setStrategyParams(params)
+            }}
             onStrategyViewChange={setStrategyView}
             onToggleProMode={toggleProMode}
             b={b}
