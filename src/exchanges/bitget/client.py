@@ -165,6 +165,15 @@ class BitgetExchangeClient(HTTPExchangeClientMixin, ExchangeClient):
 
         api_margin = "crossed" if margin_mode == "cross" else "isolated"
         order_side = "buy" if side == "long" else "sell"
+        # Round to the exchange's volumePlace so the DB value matches what
+        # Bitget actually books. Otherwise a 6-decimal caller value (e.g.
+        # 11.978866) gets silently truncated to 11.97 on the exchange,
+        # desyncing trade.size from the real position and breaking later
+        # trailing-stop/close operations that expect an exact match.
+        contract = await self._get_contract_info(symbol)
+        volume_place = contract["volumePlace"]
+        rounded_size = math.floor(size * 10**volume_place) / 10**volume_place
+        size = rounded_size
         data = {
             "symbol": symbol,
             "productType": PRODUCT_TYPE_USDT,
@@ -173,7 +182,7 @@ class BitgetExchangeClient(HTTPExchangeClientMixin, ExchangeClient):
             "side": order_side,
             "tradeSide": "open",
             "orderType": "market",
-            "size": str(size),
+            "size": str(rounded_size),
         }
 
         result = await self._request("POST", ENDPOINTS["place_order"], data=data)
@@ -269,33 +278,79 @@ class BitgetExchangeClient(HTTPExchangeClientMixin, ExchangeClient):
         symbol: str,
         side: str = "long",
     ) -> bool:
-        """Cancel position-level TP/SL on Bitget.
+        """Cancel position-level TP/SL and moving plans on Bitget.
 
-        Bitget position TP/SL (set via place-pos-tpsl) are NOT regular plan orders.
-        They must be cancelled via cancel-plan-order with planType='pos_profit'
-        or 'pos_loss' — using orderId alone does not work.
+        Hedge-mode-safe: first lists all pending plans for the symbol, filters
+        by posSide/holdSide matching ``side``, then cancels each by orderId.
 
-        Also cancels moving_plan (trailing stop) orders.
+        Background: cancel-plan-order with only ``{symbol, planType}`` works in
+        one-way mode but silently no-ops for ``moving_plan`` in hedge mode —
+        Bitget needs an explicit orderIdList there, otherwise the plan
+        survives. The old code assumed one-way semantics and left stale
+        moving_plans alive after a TP/SL edit, which desynced the DB flag
+        and produced endless "Insufficient position" retry warnings.
         """
-        plan_types = ["pos_profit", "pos_loss", "moving_plan"]
+        target_plan_types = {"pos_profit", "pos_loss", "moving_plan", "profit_plan", "loss_plan"}
 
-        for plan_type in plan_types:
-            try:
-                result = await self._request("POST", ENDPOINTS["cancel_order"].replace(
-                    "cancel-order", "cancel-plan-order"
-                ), data={
+        try:
+            r = await self._request(
+                "GET",
+                "/api/v2/mix/order/orders-plan-pending",
+                params={
+                    "productType": PRODUCT_TYPE_USDT,
+                    "symbol": symbol,
+                    "planType": "profit_loss",
+                },
+            )
+        except Exception as e:
+            logger.warning("Failed to list pending plans for %s: %s", symbol, e)
+            return False
+
+        entries = r.get("entrustedList") if isinstance(r, dict) else None
+        if not entries:
+            return True
+
+        cancel_payload = []
+        for p in entries:
+            plan_type = p.get("planType")
+            if plan_type not in target_plan_types:
+                continue
+            plan_side = (p.get("posSide") or p.get("holdSide") or "").lower()
+            if plan_side and plan_side != side.lower():
+                continue
+            oid = p.get("orderId")
+            if oid:
+                cancel_payload.append({"orderId": str(oid), "planType": plan_type})
+
+        if not cancel_payload:
+            return True
+
+        try:
+            result = await self._request(
+                "POST",
+                "/api/v2/mix/order/cancel-plan-order",
+                data={
                     "symbol": symbol,
                     "productType": PRODUCT_TYPE_USDT,
-                    "planType": plan_type,
-                })
-                success = result.get("successList", []) if isinstance(result, dict) else []
-                if success:
-                    logger.info(
-                        "Cancelled Bitget %s for %s: %s",
-                        plan_type, symbol, [s.get("orderId") for s in success],
-                    )
-            except Exception as e:
-                logger.debug("Bitget cancel %s for %s: %s (may not exist)", plan_type, symbol, e)
+                    "marginCoin": "USDT",
+                    "orderIdList": cancel_payload,
+                },
+            )
+            success = result.get("successList", []) if isinstance(result, dict) else []
+            failures = result.get("failureList", []) if isinstance(result, dict) else []
+            if success:
+                logger.info(
+                    "Cancelled Bitget plans for %s (%s): %s",
+                    symbol, side, [s.get("orderId") for s in success],
+                )
+            if failures:
+                logger.warning(
+                    "Bitget partial cancel for %s: %d failures: %s",
+                    symbol, len(failures), failures,
+                )
+        except Exception as e:
+            logger.warning("Bitget batch cancel for %s failed: %s", symbol, e)
+            return False
 
         return True
 

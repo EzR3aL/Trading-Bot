@@ -70,6 +70,7 @@ class BingXClient(HTTPExchangeClientMixin, ExchangeClient):
     """
 
     SUPPORTS_NATIVE_TRAILING_STOP = True
+    SUPPORTS_NATIVE_TRAILING_PROBE = True
 
     _client_error_class = BingXClientError
 
@@ -754,6 +755,39 @@ class BingXClient(HTTPExchangeClientMixin, ExchangeClient):
             symbol, hold_side, size, callback_ratio, trigger_price, order_id,
         )
         return {"orderId": order_id}
+
+    async def has_native_trailing_stop(self, symbol: str, hold_side: str) -> bool:
+        """Return True if a ``TRAILING_STOP_MARKET`` order is live on this side.
+
+        Used by position_monitor and the audit script to detect DB/exchange
+        drift on the ``native_trailing_stop`` flag. Returns False on any
+        error so callers treat the probe as inconclusive.
+        """
+        position_side = POSITION_LONG if hold_side == "long" else POSITION_SHORT
+        try:
+            data = await self._request(
+                "GET", ENDPOINTS["open_orders"], params={"symbol": symbol},
+            )
+        except Exception as e:
+            logger.debug("has_native_trailing_stop(%s,%s) open_orders failed: %s",
+                         symbol, hold_side, e)
+            return False
+
+        orders = (
+            data.get("orders", []) if isinstance(data, dict)
+            else (data if isinstance(data, list) else [])
+        )
+        for o in orders:
+            if not isinstance(o, dict):
+                continue
+            if o.get("type") != ORDER_TYPE_TRAILING_STOP_MARKET:
+                continue
+            if o.get("symbol") != symbol:
+                continue
+            if o.get("positionSide") != position_side:
+                continue
+            return True
+        return False
 
     _TPSL_ORDER_TYPES = frozenset({
         "TAKE_PROFIT_MARKET", "STOP_MARKET", "TAKE_PROFIT", "STOP",

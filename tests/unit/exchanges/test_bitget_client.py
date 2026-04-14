@@ -584,11 +584,15 @@ class TestPlaceMarketOrder:
             call_order.append("place_order")
             return {"orderId": "order-001"}
 
+        async def mock_contract(symbol):
+            return {"volumePlace": 4, "pricePlace": 2, "priceEndStep": 1}
+
         with patch.object(client, "set_leverage", side_effect=mock_set_leverage):
-            with patch.object(client, "_request", side_effect=mock_request):
-                await client.place_market_order(
-                    symbol="BTCUSDT", side="long", size=0.01, leverage=10,
-                )
+            with patch.object(client, "_get_contract_info", side_effect=mock_contract):
+                with patch.object(client, "_request", side_effect=mock_request):
+                    await client.place_market_order(
+                        symbol="BTCUSDT", side="long", size=0.01, leverage=10,
+                    )
 
         assert call_order == ["set_leverage", "place_order"]
 
