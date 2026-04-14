@@ -707,6 +707,20 @@ async def update_trade_tpsl(
 
         # Trailing Stop — compute trigger_price and callback from ATR
         if body.trailing_stop is not None:
+            # Always cancel the existing native trailing before placing a new
+            # one; otherwise Bitget reports "Insufficient position" because
+            # the live moving_plan already reserves the full position size.
+            # The earlier TP/SL cancel block only runs on TP/SL changes, so
+            # a trailing-only edit would leave the old plan alive.
+            if hasattr(client, "cancel_native_trailing_stop"):
+                try:
+                    await client.cancel_native_trailing_stop(trade.symbol, trade.side)
+                except Exception as cancel_err:
+                    logger.debug(
+                        "cancel_native_trailing_stop for trade %s failed: %s",
+                        trade_id, cancel_err,
+                    )
+
             atr_mult = body.trailing_stop.callback_pct
             try:
                 fetcher = MarketDataFetcher()

@@ -280,51 +280,46 @@ class BitgetExchangeClient(HTTPExchangeClientMixin, ExchangeClient):
     ) -> bool:
         """Cancel position-level TP/SL and moving plans on Bitget.
 
-        Hedge-mode-safe: first lists all pending plans for the symbol, filters
-        by posSide/holdSide matching ``side``, then cancels each by orderId.
+        Uses cancel-plan-order with ``{symbol, productType, planType}`` per
+        plan type. Live-verified against Bitget demo (hedge_mode): this form
+        cancels every matching plan for the symbol including ``moving_plan``.
+        The orderIdList-based variant was tried and silently no-ops in demo,
+        so we stay with the simpler per-planType form.
 
-        Background: cancel-plan-order with only ``{symbol, planType}`` works in
-        one-way mode but silently no-ops for ``moving_plan`` in hedge mode —
-        Bitget needs an explicit orderIdList there, otherwise the plan
-        survives. The old code assumed one-way semantics and left stale
-        moving_plans alive after a TP/SL edit, which desynced the DB flag
-        and produced endless "Insufficient position" retry warnings.
+        Note: this cancels every plan of these types on the symbol, not just
+        the ``side``. Bitget plan orders are keyed by symbol+planType; the
+        per-side filter is done by the caller when needed.
         """
-        target_plan_types = {"pos_profit", "pos_loss", "moving_plan", "profit_plan", "loss_plan"}
+        plan_types = ["pos_profit", "pos_loss", "moving_plan", "profit_plan", "loss_plan"]
 
-        try:
-            r = await self._request(
-                "GET",
-                "/api/v2/mix/order/orders-plan-pending",
-                params={
-                    "productType": PRODUCT_TYPE_USDT,
-                    "symbol": symbol,
-                    "planType": "profit_loss",
-                },
-            )
-        except Exception as e:
-            logger.warning("Failed to list pending plans for %s: %s", symbol, e)
-            return False
+        for plan_type in plan_types:
+            try:
+                result = await self._request(
+                    "POST",
+                    "/api/v2/mix/order/cancel-plan-order",
+                    data={
+                        "symbol": symbol,
+                        "productType": PRODUCT_TYPE_USDT,
+                        "planType": plan_type,
+                    },
+                )
+                success = result.get("successList", []) if isinstance(result, dict) else []
+                if success:
+                    logger.info(
+                        "Cancelled Bitget %s for %s: %s",
+                        plan_type, symbol, [s.get("orderId") for s in success],
+                    )
+            except Exception as e:
+                logger.debug("Bitget cancel %s for %s: %s (may not exist)", plan_type, symbol, e)
 
-        entries = r.get("entrustedList") if isinstance(r, dict) else None
-        if not entries:
-            return True
+        return True
 
-        cancel_payload = []
-        for p in entries:
-            plan_type = p.get("planType")
-            if plan_type not in target_plan_types:
-                continue
-            plan_side = (p.get("posSide") or p.get("holdSide") or "").lower()
-            if plan_side and plan_side != side.lower():
-                continue
-            oid = p.get("orderId")
-            if oid:
-                cancel_payload.append({"orderId": str(oid), "planType": plan_type})
+    async def cancel_native_trailing_stop(self, symbol: str, side: str = "long") -> bool:
+        """Cancel only the ``moving_plan`` (native trailing stop) for a symbol.
 
-        if not cancel_payload:
-            return True
-
+        Needed so the TP/SL edit endpoint can replace trailing without
+        touching user-set TP/SL plans.
+        """
         try:
             result = await self._request(
                 "POST",
@@ -332,27 +327,19 @@ class BitgetExchangeClient(HTTPExchangeClientMixin, ExchangeClient):
                 data={
                     "symbol": symbol,
                     "productType": PRODUCT_TYPE_USDT,
-                    "marginCoin": "USDT",
-                    "orderIdList": cancel_payload,
+                    "planType": "moving_plan",
                 },
             )
             success = result.get("successList", []) if isinstance(result, dict) else []
-            failures = result.get("failureList", []) if isinstance(result, dict) else []
             if success:
                 logger.info(
-                    "Cancelled Bitget plans for %s (%s): %s",
-                    symbol, side, [s.get("orderId") for s in success],
+                    "Cancelled Bitget moving_plan for %s: %s",
+                    symbol, [s.get("orderId") for s in success],
                 )
-            if failures:
-                logger.warning(
-                    "Bitget partial cancel for %s: %d failures: %s",
-                    symbol, len(failures), failures,
-                )
+            return True
         except Exception as e:
-            logger.warning("Bitget batch cancel for %s failed: %s", symbol, e)
+            logger.debug("Bitget cancel moving_plan for %s failed: %s", symbol, e)
             return False
-
-        return True
 
     async def cancel_order(self, symbol: str, order_id: str) -> bool:
         data = {
