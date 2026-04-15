@@ -23,6 +23,7 @@ from src.errors import (
     ERR_NO_CONNECTION_FOR,
     ERR_NO_DEMO_API_KEYS,
     ERR_NO_LIVE_API_KEYS,
+    ERR_WRONG_ENVIRONMENT,
 )
 from src.models.database import ExchangeConnection, User
 from src.models.enums import EXCHANGE_PATTERN

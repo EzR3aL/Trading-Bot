@@ -94,6 +94,11 @@ const defaultProps = {
   hasFixedSources: false,
   riskAccepted: false,
   onRiskAcceptedChange: vi.fn(),
+  discordConfigured: false,
+  telegramConfigured: false,
+  discordWebhookUrl: '',
+  telegramBotToken: '',
+  pnlAlertSettings: { enabled: false, thresholds: [], direction: 'both' as const },
   b: defaultB,
 }
 

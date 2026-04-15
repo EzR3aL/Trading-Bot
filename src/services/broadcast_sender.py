@@ -9,7 +9,6 @@ rate limiting and concurrency control.
 import asyncio
 import json
 from datetime import datetime, timezone
-from typing import Optional
 
 import aiohttp
 from sqlalchemy import select, update, and_

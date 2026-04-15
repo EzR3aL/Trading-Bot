@@ -42,6 +42,8 @@ const defaultProps = {
   onTelegramBotTokenChange: vi.fn(),
   onTelegramChatIdChange: vi.fn(),
   onOpenNotifChange: vi.fn(),
+  pnlAlertSettings: { enabled: false, thresholds: [], direction: 'both' as const },
+  onPnlAlertSettingsChange: vi.fn(),
 }
 
 describe('BotBuilderStepNotifications', () => {

@@ -296,8 +296,9 @@ class TestSendMessage:
             with patch("src.notifications.telegram_notifier.logger") as mock_logger:
                 await notifier._send_message("Test")
 
-        # Assert — logger uses %s formatting, so check all positional args
-        mock_logger.warning.assert_called_once()
+        # Assert — _send_message is wrapped in @async_retry(max_retries=3),
+        # so warning is logged on the initial attempt + each retry.
+        assert mock_logger.warning.call_count >= 1
         warning_args = mock_logger.warning.call_args[0]
         full_msg = warning_args[0] % warning_args[1:]
         assert "403" in full_msg

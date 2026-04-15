@@ -12,7 +12,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.api.rate_limit import limiter
 from src.api.schemas.revenue import (
     RevenueEntryCreate,
-    RevenueEntryResponse,
     RevenueEntryUpdate,
 )
 from src.auth.dependencies import get_current_admin

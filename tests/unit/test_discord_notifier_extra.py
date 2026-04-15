@@ -774,7 +774,7 @@ class TestSendRiskAlert:
 
         # Act
         await notifier.send_risk_alert(
-            alert_type="TEST_ALERT",
+            alert_type="DAILY_LOSS_LIMIT",
             message="Test message",
         )
 

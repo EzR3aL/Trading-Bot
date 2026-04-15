@@ -219,12 +219,10 @@ async def preview_broadcast(
 
     from src.services.broadcast_service import (
         estimate_duration,
-        get_target_summary,
         resolve_targets,
     )
 
     target_result = await resolve_targets(broadcast.id, broadcast.exchange_filter, db)
-    summary = await get_target_summary(broadcast.id, db)
     duration = estimate_duration(target_result.get("by_channel", {}))
 
     preview = {}
