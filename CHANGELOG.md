@@ -9,6 +9,24 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [4.14.10] - 2026-04-15
+
+### Changed
+- **Weex V3 API Migration (Phase 2)** — 7 weitere Endpoints von V2 auf V3 migriert nach Weex V3-Erweiterung am 2026-03-09 (#114)
+  - `account_assets`: `/capi/v2/account/assets` → `/capi/v3/account/balance` (neue Felder: `asset`, `balance`, `availableBalance`, `unrealizePnl`)
+  - `all_positions`: V3 `/capi/v3/account/position/allPosition` mit `LONG/SHORT` statt numerischer Side-Codes, `size` statt `hold_amount`
+  - `single_position`: V3 mit Plain-Symbol-Format (BTCUSDT) statt cmt_btcusdt
+  - `funding_rate`: V3 `/capi/v3/market/premiumIndex` mit `lastFundingRate`-Feld (statt v2 Liste)
+  - `candles`: V3 `/capi/v3/market/klines`
+  - `open_interest`: V3 `/capi/v3/market/openInterest`
+  - `cancel_order`: jetzt **DELETE** `/capi/v3/order` (war POST `/capi/v2/order/cancel_order`)
+- Position-Parser akzeptiert jetzt sowohl V3- (`size`/`LONG`) als auch V2-Shape (`hold_amount`/`1`) für rückwärtskompatibles Verhalten
+
+### Pending
+- `ticker`, `set_leverage`, `order/detail`, `order/current`, `order/fills` bleiben auf V2 — Weex hat noch keine V3-Pfade dafür publiziert. Werden migriert, sobald in Changelog erscheint.
+
+---
+
 ## [4.14.9] - 2026-04-15
 
 ### Added (Test Coverage — Issue #176)
