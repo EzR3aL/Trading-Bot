@@ -9,6 +9,18 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [4.14.8] - 2026-04-15
+
+### Added (Issue #176)
+- **`scripts/live_mode_smoke.py`** — Read-only Smoke-Test für Live-Keys aller 5 Exchanges
+  - Probiert pro Exchange: Balance + Positions + Ticker + Funding-Rate
+  - Keine Order-Platzierung, kein Schreiben — null Trading-Risiko
+  - CLI: `--user-id N` (pflicht), `--exchanges bitget,bingx` (optional Filter)
+  - Use-Case: BEVOR ein User von Demo auf Live geschaltet wird, in 30s verifizieren dass alle Live-Pfade laufen
+- 3 Unit-Tests in `tests/unit/scripts/test_live_mode_smoke.py` decken Pfad-Logik ab
+
+---
+
 ## [4.14.5] - 2026-04-15
 
 ### Fixed
