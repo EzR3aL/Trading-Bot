@@ -490,7 +490,23 @@ class RevenueEntry(Base):
     exchange = Column(String(50), nullable=False, index=True)
     revenue_type = Column(String(50), nullable=False)  # builder_fee | affiliate | referral
     amount_usd = Column(Float, nullable=False, default=0.0)
-    source = Column(String(20), nullable=False, default="manual", server_default="manual")  # auto | manual
+    source = Column(String(20), nullable=False, default="manual", server_default="manual")  # auto_import | manual
     notes = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+
+class AffiliateState(Base):
+    """Per-exchange last-sync state for the affiliate revenue fetcher.
+
+    cumulative_amount_usd is only used by adapters whose API returns
+    lifetime totals (currently: Hyperliquid). last_status is one of:
+    "ok" | "error" | "unsupported".
+    """
+    __tablename__ = "affiliate_state"
+
+    exchange = Column(String(50), primary_key=True)
+    cumulative_amount_usd = Column(Float, nullable=False, default=0.0)
+    last_synced_at = Column(DateTime(timezone=True), nullable=True)
+    last_status = Column(String(20), nullable=True)
+    last_error = Column(Text, nullable=True)

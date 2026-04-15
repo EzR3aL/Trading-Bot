@@ -9,6 +9,30 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [4.15.0] - 2026-04-15
+
+### Added
+- **Automatischer Affiliate-Revenue-Fetcher** — Einnahmen werden alle 6h direkt aus den Exchange-APIs gezogen und im Admin-Dashboard pro Exchange + als Gesamtsumme angezeigt (#181)
+  - **Bitget**: `/api/v2/broker/customer-commissions` (HMAC, startTime/endTime)
+  - **Weex**: `/api/v3/rebate/affiliate/getAffiliateCommission` (max 3-Monats-Range, Pagination)
+  - **Hyperliquid**: `/info` `referral` (kumulativ, Delta via neue `affiliate_state` Tabelle)
+  - **BingX**: `/openApi/agent/v1/asset/commissionDataList` (Agent-Tier, optional X-SOURCE-KEY Header)
+  - **Bitunix**: keine öffentliche API — Kachel zeigt "API nicht verfügbar" Badge + Hinweis-Banner
+- Neuer manueller Sync-Button "Jetzt synchronisieren" im Dashboard (Rate-limited 3/min)
+- Sync-Status-Badges pro Kachel (✓ vor Xm | nicht konfiguriert | API nicht verfügbar | Fehler)
+- ENV-Variablen für Affiliate-Credentials in `.env.example` dokumentiert (BITGET_AFFILIATE_*, WEEX_AFFILIATE_*, HL_REFERRER_ADDRESS, BINGX_AGENT_*)
+- Migration `023_add_affiliate_state.py` für HL-Cumulative-Tracking + Last-Sync-State
+
+### Removed
+- **Manueller "Neuer Eintrag" Button** + dazugehöriges Modal entfernt
+- **POST/PUT/DELETE /api/admin/revenue** Endpoints entfernt — alle Daten kommen automatisch
+- Manuelle-Einträge-Tabelle aus dem Frontend entfernt (Daten sind nur noch in Kacheln + Chart)
+
+### Changed
+- `RevenueEntry.source` Default verbleibt auf "manual" für Migrations-Kompatibilität, neue Auto-Imports nutzen "auto_import"
+
+---
+
 ## [4.14.10] - 2026-04-15
 
 ### Changed
