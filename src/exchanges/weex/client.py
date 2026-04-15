@@ -156,23 +156,22 @@ class WeexClient(HTTPExchangeClientMixin, ExchangeClient):
     # ── Account ────────────────────────────────────────────────────
 
     async def get_account_balance(self) -> Balance:
+        """V3: GET /capi/v3/account/balance returns array of {asset, balance,
+        availableBalance, frozen, unrealizePnl}.
+        """
         data = await self._request("GET", ENDPOINTS["account_assets"])
-        if isinstance(data, list):
-            for item in data:
-                coin = item.get("coinName", "").upper()
-                if coin in ("USDT", "SUSDT"):
-                    return Balance(
-                        total=float(item.get("equity", 0)),
-                        available=float(item.get("available", 0)),
-                        unrealized_pnl=float(item.get("unrealizePnl", 0)),
-                    )
-            item = data[0] if data else {}
-        else:
-            item = data
+        items = data if isinstance(data, list) else [data] if data else []
+        usdt_item = None
+        for item in items:
+            asset = (item.get("asset") or item.get("coinName") or "").upper()
+            if asset in ("USDT", "SUSDT"):
+                usdt_item = item
+                break
+        item = usdt_item or (items[0] if items else {})
         return Balance(
-            total=float(item.get("equity", item.get("accountEquity", 0))),
-            available=float(item.get("available", 0)),
-            unrealized_pnl=float(item.get("unrealizePnl", item.get("unrealizedPL", 0))),
+            total=float(item.get("balance") or item.get("equity") or item.get("accountEquity") or 0),
+            available=float(item.get("availableBalance") or item.get("available") or 0),
+            unrealized_pnl=float(item.get("unrealizePnl") or item.get("unrealizedPL") or 0),
         )
 
     # ── Orders ─────────────────────────────────────────────────────
@@ -211,8 +210,9 @@ class WeexClient(HTTPExchangeClientMixin, ExchangeClient):
         )
 
     async def cancel_order(self, symbol: str, order_id: str) -> bool:
+        """V3: DELETE /capi/v3/order?orderId=..."""
         try:
-            await self._request("POST", ENDPOINTS["cancel_order"], data={
+            await self._request("DELETE", ENDPOINTS["cancel_order"], params={
                 "orderId": order_id,
             })
             return True
@@ -250,27 +250,45 @@ class WeexClient(HTTPExchangeClientMixin, ExchangeClient):
     # ── Positions ──────────────────────────────────────────────────
 
     def _parse_position(self, pos: Dict, fallback_symbol: str = "") -> Optional[Position]:
-        """Parse a single position dict from Weex API response."""
-        total = float(pos.get("hold_amount", pos.get("holdAmount", pos.get("total", 0))))
+        """Parse a single position dict (V3 or V2 shape)."""
+        # V3: size, V2: hold_amount/holdAmount/total
+        total = float(
+            pos.get("size") or pos.get("hold_amount")
+            or pos.get("holdAmount") or pos.get("total") or 0
+        )
         if total <= 0:
             return None
-        raw_side = str(pos.get("side", pos.get("holdSide", "long")))
-        hold_side = "long" if raw_side in ("1", "long") else "short"
-        api_sym = pos.get("symbol", "")
-        db_symbol = self._from_api_symbol(api_sym) if api_sym else fallback_symbol
+        # V3: side="LONG"/"SHORT", V2: side="1"/"2" or holdSide
+        raw_side = str(pos.get("side") or pos.get("holdSide") or "long").upper()
+        hold_side = "long" if raw_side in ("1", "LONG") else "short"
+        api_sym = pos.get("symbol") or ""
+        # V3 returns plain BTCUSDT, V2 returns cmt_btcusdt
+        if api_sym.startswith("cmt_"):
+            db_symbol = self._from_api_symbol(api_sym)
+        elif api_sym:
+            db_symbol = api_sym.upper()
+        else:
+            db_symbol = fallback_symbol
         return Position(
             symbol=db_symbol, side=hold_side, size=total,
-            entry_price=float(pos.get("cost_open", pos.get("averageOpenPrice", pos.get("openPriceAvg", 0)))),
-            current_price=float(pos.get("markPrice", pos.get("mark_price", 0))),
-            unrealized_pnl=float(pos.get("profit_unreal", pos.get("unrealizedPnl", pos.get("unrealizedPL", 0)))),
-            leverage=int(float(pos.get("leverage", 1))),
+            entry_price=float(
+                pos.get("cost_open") or pos.get("averageOpenPrice")
+                or pos.get("openPriceAvg") or pos.get("openValue") or 0
+            ),
+            current_price=float(pos.get("markPrice") or pos.get("mark_price") or 0),
+            unrealized_pnl=float(
+                pos.get("unrealizePnl") or pos.get("profit_unreal")
+                or pos.get("unrealizedPnl") or pos.get("unrealizedPL") or 0
+            ),
+            leverage=int(float(pos.get("leverage") or 1)),
             exchange="weex",
         )
 
     async def get_position(self, symbol: str) -> Optional[Position]:
-        api_symbol = self._to_api_symbol(symbol)
+        # V3 single_position takes plain symbol (BTCUSDT)
+        v3_symbol = symbol.upper().replace("-", "")
         data = await self._request("GET", ENDPOINTS["single_position"], params={
-            "symbol": api_symbol,
+            "symbol": v3_symbol,
         })
         positions = data if isinstance(data, list) else [data] if data else []
         for pos in positions:
@@ -323,18 +341,25 @@ class WeexClient(HTTPExchangeClientMixin, ExchangeClient):
         )
 
     async def get_funding_rate(self, symbol: str) -> FundingRateInfo:
-        data = await self._request("GET", ENDPOINTS["funding_rate"], auth=False)
-        # Response is a list of all rates; match by baseCurrency (e.g. "BTC_USDT")
-        base = symbol.replace("USDT", "")
-        target_currency = f"{base}_USDT"
+        """V3: GET /capi/v3/market/premiumIndex?symbol=BTCUSDT
+        Returns {symbol, lastFundingRate, forecastFundingRate, ...}.
+        """
+        v3_symbol = symbol.upper().replace("-", "")
+        data = await self._request("GET", ENDPOINTS["funding_rate"], params={
+            "symbol": v3_symbol,
+        }, auth=False)
         rate = 0.0
-        if isinstance(data, list):
+        if isinstance(data, dict):
+            rate = float(
+                data.get("lastFundingRate")
+                or data.get("fundingRate")
+                or 0
+            )
+        elif isinstance(data, list):
             for item in data:
-                if item.get("baseCurrency", "") == target_currency:
-                    rate = float(item.get("fundingRate", 0))
+                if str(item.get("symbol", "")).upper() == v3_symbol:
+                    rate = float(item.get("lastFundingRate") or item.get("fundingRate") or 0)
                     break
-        elif isinstance(data, dict):
-            rate = float(data.get("fundingRate", 0))
         return FundingRateInfo(symbol=symbol, current_rate=rate)
 
     async def get_close_fill_price(self, symbol: str) -> Optional[float]:

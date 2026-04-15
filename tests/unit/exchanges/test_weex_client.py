@@ -985,37 +985,30 @@ class TestGetTicker:
 
 class TestGetFundingRate:
     async def test_get_funding_rate_finds_matching_currency(self, client, mock_session):
-        # Arrange - Weex returns list of all funding rates with baseCurrency
+        # V3: GET /capi/v3/market/premiumIndex?symbol=BTCUSDT returns single dict
         client._session = mock_session
         mock_session.request = MagicMock(
-            return_value=_make_api_response([
-                {"baseCurrency": "BTC_USDT", "fundingRate": "0.0001"},
-                {"baseCurrency": "ETH_USDT", "fundingRate": "0.0003"},
-            ])
+            return_value=_make_api_response(
+                {"symbol": "BTCUSDT", "lastFundingRate": "0.0001", "markPrice": "60000"}
+            )
         )
 
-        # Act
         rate = await client.get_funding_rate("BTCUSDT")
 
-        # Assert
         assert isinstance(rate, FundingRateInfo)
         assert rate.symbol == "BTCUSDT"
         assert rate.current_rate == 0.0001
 
     async def test_get_funding_rate_matches_eth(self, client, mock_session):
-        # Arrange
         client._session = mock_session
         mock_session.request = MagicMock(
-            return_value=_make_api_response([
-                {"baseCurrency": "BTC_USDT", "fundingRate": "0.0001"},
-                {"baseCurrency": "ETH_USDT", "fundingRate": "-0.0005"},
-            ])
+            return_value=_make_api_response(
+                {"symbol": "ETHUSDT", "lastFundingRate": "-0.0005"}
+            )
         )
 
-        # Act
         rate = await client.get_funding_rate("ETHUSDT")
 
-        # Assert
         assert rate.current_rate == -0.0005
 
     async def test_get_funding_rate_from_empty_list(self, client, mock_session):
@@ -1173,3 +1166,83 @@ class TestWeexClientError:
             raise WeexClientError("test error")
         err = WeexClientError("test error")
         assert err.exchange == "weex"
+
+
+# ---------------------------------------------------------------------------
+# V3 Migration (issue #114)
+# ---------------------------------------------------------------------------
+
+class TestV3Migration:
+    async def test_account_balance_uses_v3_endpoint_and_shape(self, client, mock_session):
+        client._session = mock_session
+        mock_session.request = MagicMock(
+            return_value=_make_api_response([{
+                "asset": "USDT",
+                "balance": "1000.50",
+                "availableBalance": "950.00",
+                "frozen": "50.50",
+                "unrealizePnl": "12.34",
+            }])
+        )
+
+        bal = await client.get_account_balance()
+
+        assert bal.total == 1000.50
+        assert bal.available == 950.00
+        assert bal.unrealized_pnl == 12.34
+        call_url = mock_session.request.call_args.kwargs.get("url") or mock_session.request.call_args[1]["url"]
+        assert "/capi/v3/account/balance" in call_url
+
+    async def test_funding_rate_uses_v3_premium_index(self, client, mock_session):
+        client._session = mock_session
+        mock_session.request = MagicMock(
+            return_value=_make_api_response({
+                "symbol": "BTCUSDT",
+                "lastFundingRate": "0.0002",
+            })
+        )
+
+        rate = await client.get_funding_rate("BTCUSDT")
+
+        assert rate.current_rate == 0.0002
+        call_url = mock_session.request.call_args.kwargs.get("url") or mock_session.request.call_args[1]["url"]
+        assert "/capi/v3/market/premiumIndex" in call_url
+        assert "symbol=BTCUSDT" in call_url
+
+    async def test_cancel_order_uses_delete_method(self, client, mock_session):
+        client._session = mock_session
+        mock_session.request = MagicMock(
+            return_value=_make_api_response({"orderId": "123", "success": True})
+        )
+
+        result = await client.cancel_order("BTCUSDT", "123")
+
+        assert result is True
+        method = mock_session.request.call_args.kwargs.get("method") or mock_session.request.call_args[1]["method"]
+        url = mock_session.request.call_args.kwargs.get("url") or mock_session.request.call_args[1]["url"]
+        assert method == "DELETE"
+        assert "/capi/v3/order" in url
+
+    async def test_get_position_uses_v3_path_and_plain_symbol(self, client, mock_session):
+        client._session = mock_session
+        mock_session.request = MagicMock(
+            return_value=_make_api_response([{
+                "symbol": "BTCUSDT",
+                "side": "LONG",
+                "size": "0.5",
+                "leverage": 10,
+                "openValue": "30000",
+                "markPrice": "61000",
+                "unrealizePnl": "500",
+            }])
+        )
+
+        pos = await client.get_position("BTCUSDT")
+
+        assert pos is not None
+        assert pos.symbol == "BTCUSDT"
+        assert pos.side == "long"
+        assert pos.size == 0.5
+        url = mock_session.request.call_args.kwargs.get("url") or mock_session.request.call_args[1]["url"]
+        assert "/capi/v3/account/position/singlePosition" in url
+        assert "symbol=BTCUSDT" in url
