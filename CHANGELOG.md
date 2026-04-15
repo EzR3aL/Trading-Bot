@@ -9,6 +9,22 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [4.14.9] - 2026-04-15
+
+### Added (Test Coverage — Issue #176)
+- 13 neue Fee-Tracking Tests in `test_fee_tracking_all_exchanges.py` (Weex, Hyperliquid, Bitunix, BingX) — Bitget hatte bereits umfassende Tests
+- 8 neue Margin-Mode-Switch Tests in `test_margin_mode_all_exchanges.py` für alle 5 Exchanges (cross↔isolated)
+
+### Documented (Findings aus Audit)
+- **Bitget set_leverage()** ignoriert den `margin_mode`-Parameter — die Margin-Mode-Konfiguration läuft bei Bitget out-of-band über das Account-UI oder einen separaten `/api/v2/mix/account/set-margin-mode` Endpunkt (nicht implementiert). Test dokumentiert das Accept-and-Noop Verhalten.
+- **Bitunix set_leverage()** macht ebenfalls keinen separaten Margin-Mode-Call — die Mode wird per Trade via `place_order` (changeMargin) gesetzt.
+- BingX, Weex, Hyperliquid wandeln `margin_mode` korrekt in die exchange-spezifische Form um (CROSSED/ISOLATED, marginMode=1/3, is_cross=true/false).
+
+### Verified during audit (no code change needed)
+- `update_tpsl` Endpunkt: 60 parametrisierte Integration-Tests (12 Szenarien × 5 Exchanges) in `test_tpsl_edit_all_exchanges.py` — vollständige Abdeckung
+
+---
+
 ## [4.14.8] - 2026-04-15
 
 ### Added (Issue #176)
