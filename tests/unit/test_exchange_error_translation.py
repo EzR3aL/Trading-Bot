@@ -76,7 +76,7 @@ class TestTranslateExchangeError:
 
     def test_invalid_api_key(self):
         result = translate_exchange_error("Invalid API Key")
-        assert result == "Ungültiger API-Key"
+        assert result == "Ungültiger API-Key — prüfe ob der Key korrekt kopiert wurde"
 
     def test_rate_limit(self):
         result = translate_exchange_error("Too many requests")

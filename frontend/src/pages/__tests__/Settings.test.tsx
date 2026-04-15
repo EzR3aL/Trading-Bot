@@ -120,26 +120,20 @@ describe('Settings Page', () => {
     )
 
     await waitFor(() => {
-      // Multiple "API Keys" elements may exist (tab + heading); check at least one
       expect(screen.getAllByText('API Keys').length).toBeGreaterThanOrEqual(1)
-      expect(screen.getAllByText('Connections').length).toBeGreaterThanOrEqual(1)
-      expect(screen.getAllByText('Affiliate Links').length).toBeGreaterThanOrEqual(1)
       expect(screen.getAllByText('Hyperliquid').length).toBeGreaterThanOrEqual(1)
     })
   })
 
-  it('should show API Keys tab content by default', async () => {
+  it('should show API Keys section by default', async () => {
     render(
       <MemoryRouter>
         <Settings />
       </MemoryRouter>
     )
 
-    // The API Keys tab button should be active (has the active class)
     await waitFor(() => {
-      const apiKeysTabs = screen.getAllByText('API Keys')
-      const tabButton = apiKeysTabs.find(el => el.closest('button'))
-      expect(tabButton?.closest('button')).toHaveClass('bg-primary-600')
+      expect(screen.getAllByText('API Keys').length).toBeGreaterThanOrEqual(1)
     })
   })
 

@@ -3,7 +3,6 @@
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import case, func, select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.models.database import BotConfig, TradeRecord
 from src.models.session import get_session

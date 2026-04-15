@@ -4,10 +4,9 @@ Unit tests for the admin revenue router: GET/POST/PUT/DELETE /api/admin/revenue.
 
 import os
 import sys
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, timedelta
 from pathlib import Path
 
-import pytest
 import pytest_asyncio
 
 os.environ.setdefault("JWT_SECRET_KEY", "test-secret-key-for-testing-only-not-for-production")
@@ -19,7 +18,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-from src.models.database import Base, RevenueEntry, TradeRecord, User
+from src.models.database import Base, RevenueEntry, User
 from src.auth.password import hash_password
 from src.auth.jwt_handler import create_access_token
 

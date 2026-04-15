@@ -1128,7 +1128,7 @@ class TestTradeFailureNotification:
         mock_notifier.send_risk_alert.assert_called_once()
         call_kwargs = mock_notifier.send_risk_alert.call_args
         assert call_kwargs[1]["alert_type"] == "TRADE_FAILED"
-        assert "Rate limit exceeded" in call_kwargs[1]["message"]
+        assert "Zu viele Anfragen" in call_kwargs[1]["message"]
 
     @pytest.mark.asyncio
     async def test_order_error_triggers_notification_for_non_minimum(self):

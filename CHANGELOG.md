@@ -9,6 +9,16 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [4.14.5] - 2026-04-15
+
+### Fixed
+- **CI grün** — Tests an aktuelle Implementation angepasst nach akkumuliertem Test-Drift aus PR #163 (PnL alerts), #166 (Telegram), DE-i18n. Alle Backend-Tests, Frontend-Tests (466) und Lint passieren wieder (#179)
+- 6 Backend-Test-Failures behoben: DE-Übersetzungen, MockMonitor `_pnl_alert_parsed`, Telegram-Retry-Counter, Discord-Footer-Logik
+- 3 Frontend-Test-Files an neue Props angepasst: `pnlAlertSettings`, Notification-Channels in Review/Notifications-Step, entfernte Tab-Struktur in Settings
+- 9 Lint-Errors behoben: ungenutzte Imports, fehlender `ERR_WRONG_ENVIRONMENT` Import, ungenutzte Variable in admin_broadcasts
+
+---
+
 ## [4.14.4] - 2026-04-14
 
 ### Fixed

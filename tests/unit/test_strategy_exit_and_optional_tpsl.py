@@ -383,6 +383,8 @@ class TestPositionMonitorStrategyExit:
         monitor._trailing_stop_backoff = {}
         monitor._trailing_stop_lock = asyncio.Lock()
         monitor._send_notification = AsyncMock()
+        monitor._pnl_alert_parsed = None
+        monitor._pnl_alerts_sent = {}
         return monitor
 
     def _make_trade(self, symbol="BTCUSDT", side="long", entry_price=95000.0,
