@@ -155,6 +155,39 @@ class PositionMonitorMixin:
             supports_native_trailing = getattr(
                 type(client), "SUPPORTS_NATIVE_TRAILING_STOP", False,
             )
+            supports_trailing_probe = getattr(
+                type(client), "SUPPORTS_NATIVE_TRAILING_PROBE", False,
+            )
+
+            # Bidirectional drift check: DB flag may disagree with the
+            # exchange in either direction. A cheap probe per cycle catches
+            # both "DB=False but plan is live" (cancel no-op after edit) and
+            # "DB=True but plan is gone" (exchange cancelled it for reasons
+            # we did not record). The probe is cached inside the client's
+            # HTTP layer for the current cycle so this stays sub-10ms.
+            if supports_native_trailing and supports_trailing_probe:
+                try:
+                    exch_has_trail = await client.has_native_trailing_stop(
+                        trade.symbol, trade.side,
+                    )
+                    if exch_has_trail != bool(trade.native_trailing_stop):
+                        logger.info(
+                            "[Bot:%s] Trailing drift reconciled for %s %s: "
+                            "DB=%s exchange=%s",
+                            self.bot_config_id, trade.symbol, trade.side,
+                            trade.native_trailing_stop, exch_has_trail,
+                        )
+                        trade.native_trailing_stop = exch_has_trail
+                        await session.commit()
+                        if exch_has_trail:
+                            async with self._trailing_stop_lock:
+                                self._trailing_stop_backoff.pop(trade.id, None)
+                except Exception as e:
+                    logger.debug(
+                        "[Bot:%s] Trailing probe failed for %s: %s",
+                        self.bot_config_id, trade.symbol, e,
+                    )
+
             if (
                 supports_native_trailing
                 and not trade.native_trailing_stop
@@ -303,6 +336,9 @@ class PositionMonitorMixin:
         """Auto-place a native trailing stop on the exchange for an existing position."""
         log_prefix = f"[Bot:{self.bot_config_id}]"
         try:
+            # Drift is already reconciled by the outer probe in _check_position
+            # before this method is invoked; we only land here when the probe
+            # confirmed "no live plan" (or no probe exists).
             params = self._strategy._p
             if not params.get("trailing_stop_enabled"):
                 return
@@ -330,7 +366,14 @@ class PositionMonitorMixin:
                 return
 
             atr_val = atr_series[-1]
-            trail_atr = params.get("trailing_trail_atr", 2.5)
+            # User override (set via frontend TP/SL edit) wins over strategy
+            # default — otherwise an auto-replacement after exchange drift
+            # would silently revert a user's manual trailing customization.
+            user_override = getattr(trade, "trailing_atr_override", None)
+            trail_atr = (
+                float(user_override) if user_override is not None
+                else params.get("trailing_trail_atr", 2.5)
+            )
             breakeven_atr = params.get("trailing_breakeven_atr", 1.5)
 
             callback_pct = round((atr_val * trail_atr) / entry_price * 100, 2)

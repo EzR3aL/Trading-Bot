@@ -118,6 +118,7 @@ class HyperliquidClient(ExchangeClient):
     ):
         super().__init__(api_key, api_secret, passphrase, demo_mode)
         self.wallet_address = api_key
+        # Execution network: testnet in demo, mainnet in live
         self.base_url = TESTNET_API_URL if demo_mode else MAINNET_API_URL
 
         # Create eth_account wallet from private key (API wallet)
@@ -153,8 +154,23 @@ class HyperliquidClient(ExchangeClient):
         # Wrap in SafeExchange to block fund-moving operations
         self._exchange = SafeExchange(raw_exchange)
 
-        # Info client for read-only queries
-        self._info: HLInfo = raw_exchange.info
+        # Public price info — ALWAYS mainnet. Testnet mids/funding are
+        # detached from real market and corrupt demo PnL reports.
+        # Why: user expects demo numbers to match HL mainnet UI 1:1.
+        if demo_mode:
+            try:
+                self._info: HLInfo = HLInfo(base_url=MAINNET_API_URL, skip_ws=True)
+            except (IndexError, KeyError):
+                self._info = HLInfo(
+                    base_url=MAINNET_API_URL, skip_ws=True,
+                    spot_meta={"tokens": [], "universe": []},
+                )
+        else:
+            self._info = raw_exchange.info
+
+        # Exec-network info — used for user-specific queries (fills, positions)
+        # that only exist on the network where orders were placed.
+        self._info_exec: HLInfo = raw_exchange.info
 
         # ── Builder Code config ──────────────────────────────────────────
         # Earns a small fee on every order (100% to builder, no cap).
@@ -242,7 +258,7 @@ class HyperliquidClient(ExchangeClient):
 
         # Check main wallet state
         try:
-            data = await self._cb_call(self._info.user_state, main_addr)
+            data = await self._cb_call(self._info_exec.user_state, main_addr)
         except Exception as e:
             result["error"] = (
                 f"Konnte dein Hyperliquid-Wallet nicht abfragen. "
@@ -272,7 +288,7 @@ class HyperliquidClient(ExchangeClient):
         spot_usdc = 0.0
         if perp_total == 0:
             try:
-                spot_data = self._info.spot_user_state(main_addr)
+                spot_data = self._info_exec.spot_user_state(main_addr)
                 for b in spot_data.get("balances", []):
                     if b.get("coin") == "USDC":
                         spot_usdc = float(b.get("total", 0))
@@ -333,7 +349,7 @@ class HyperliquidClient(ExchangeClient):
 
     async def get_account_balance(self) -> Balance:
         address = self.wallet_address or self._wallet.address
-        data = await self._cb_call(self._info.user_state, address)
+        data = await self._cb_call(self._info_exec.user_state, address)
         if not isinstance(data, dict):
             data = {}
         margin = data.get("marginSummary", {})
@@ -344,7 +360,7 @@ class HyperliquidClient(ExchangeClient):
         spot_usdc = 0.0
         if perp_total == 0:
             try:
-                spot_data = self._info.spot_user_state(address)
+                spot_data = self._info_exec.spot_user_state(address)
                 for b in spot_data.get("balances", []):
                     if b.get("coin") == "USDC":
                         spot_usdc = float(b.get("total", 0))
@@ -368,7 +384,7 @@ class HyperliquidClient(ExchangeClient):
     async def get_position(self, symbol: str) -> Optional[Position]:
         coin = self._normalize_symbol(symbol)
         address = self.wallet_address or self._wallet.address
-        data = await self._cb_call(self._info.user_state, address)
+        data = await self._cb_call(self._info_exec.user_state, address)
         for pos in data.get("assetPositions", []):
             pd = pos.get("position", {})
             if pd.get("coin", "") == coin:
@@ -398,7 +414,7 @@ class HyperliquidClient(ExchangeClient):
 
     async def get_open_positions(self) -> List[Position]:
         address = self.wallet_address or self._wallet.address
-        data = await self._cb_call(self._info.user_state, address)
+        data = await self._cb_call(self._info_exec.user_state, address)
 
         # Fetch all mid-prices in a single API call
         try:
@@ -554,7 +570,7 @@ class HyperliquidClient(ExchangeClient):
     def _get_sz_decimals(self, coin: str) -> int:
         """Get size decimal precision for a coin from Hyperliquid meta endpoint."""
         try:
-            meta = self._info.meta()
+            meta = self._info_exec.meta()
             for asset_info in meta.get("universe", []):
                 if asset_info.get("name") == coin:
                     return int(asset_info.get("szDecimals", 0))
@@ -569,7 +585,7 @@ class HyperliquidClient(ExchangeClient):
         from the current mark price to ensure TP/SL trigger prices are valid.
         """
         try:
-            ctx = self._info.meta_and_asset_ctxs()
+            ctx = self._info_exec.meta_and_asset_ctxs()
             if isinstance(ctx, list) and len(ctx) >= 2:
                 meta_universe = ctx[0].get("universe", [])
                 asset_ctxs = ctx[1]
@@ -756,7 +772,7 @@ class HyperliquidClient(ExchangeClient):
 
         addr = (user_address or self.wallet_address).lower()
         try:
-            result = self._info.post(
+            result = self._info_exec.post(
                 "/info",
                 {
                     "type": "maxBuilderFee",
@@ -802,7 +818,7 @@ class HyperliquidClient(ExchangeClient):
         """Get referral state for a user (referred_by, referral_code, etc.)."""
         addr = (user_address or self.wallet_address).lower()
         try:
-            result = self._info.query_referral_state(addr)
+            result = self._info_exec.query_referral_state(addr)
             return result if isinstance(result, dict) else None
         except Exception as e:
             logger.warning(f"Failed to get referral info: {e}")
@@ -818,7 +834,7 @@ class HyperliquidClient(ExchangeClient):
         """
         addr = (user_address or self.wallet_address).lower()
         try:
-            result = self._info.user_state(addr)
+            result = self._info_exec.user_state(addr)
             return result if isinstance(result, dict) else None
         except Exception as e:
             logger.warning(f"Failed to get user state: {e}")
@@ -843,7 +859,7 @@ class HyperliquidClient(ExchangeClient):
         """Get user fee/volume tier info (includes trading volume data)."""
         addr = (user_address or self.wallet_address).lower()
         try:
-            result = self._info.user_fees(addr)
+            result = self._info_exec.user_fees(addr)
             return result if isinstance(result, dict) else None
         except Exception as e:
             logger.warning(f"Failed to get user fees: {e}")
@@ -857,7 +873,7 @@ class HyperliquidClient(ExchangeClient):
         address = (self.wallet_address or self._wallet.address).lower()
         total = 0.0
         try:
-            fills = self._info.user_fills(address)
+            fills = self._info_exec.user_fills(address)
             for fill in fills:
                 if str(fill.get("oid", "")) == str(order_id) and fill.get("coin") == coin:
                     total += abs(float(fill.get("fee", 0)))
@@ -873,7 +889,7 @@ class HyperliquidClient(ExchangeClient):
         address = (self.wallet_address or self._wallet.address).lower()
         total_fees = 0.0
         try:
-            fills = self._info.user_fills(address)
+            fills = self._info_exec.user_fills(address)
             target_oids = {str(entry_order_id)}
             if close_order_id:
                 target_oids.add(str(close_order_id))
@@ -889,13 +905,23 @@ class HyperliquidClient(ExchangeClient):
     ) -> Optional[float]:
         """Get actual fill price for an order from fills history.
 
-        Uses userFills endpoint — each fill has px (price) and sz (size).
-        Calculates weighted average across partial fills.
+        In demo mode the real fill lives on testnet at illiquid prices; returning
+        the mainnet mid instead keeps entry_price consistent with the ticker the
+        user sees on the live Hyperliquid UI.
         """
+        if self.demo_mode:
+            try:
+                ticker = await self.get_ticker(symbol)
+                px = float(getattr(ticker, "last_price", 0) or 0)
+                return px if px > 0 else None
+            except Exception as e:
+                logger.debug(f"Demo fill price fallback failed for {symbol}: {e}")
+                return None
+
         coin = self._normalize_symbol(symbol)
         address = (self.wallet_address or self._wallet.address).lower()
         try:
-            fills = self._info.user_fills(address)
+            fills = self._info_exec.user_fills(address)
             total_value = 0.0
             total_size = 0.0
             for fill in fills:
@@ -1013,7 +1039,7 @@ class HyperliquidClient(ExchangeClient):
 
         # Query all open trigger orders for this coin
         try:
-            open_orders = self._info.frontend_open_orders(address)
+            open_orders = self._info_exec.frontend_open_orders(address)
         except Exception as e:
             logger.warning("Failed to query frontend open orders for %s: %s", coin, e)
             return False
@@ -1044,11 +1070,18 @@ class HyperliquidClient(ExchangeClient):
         return True
 
     async def get_close_fill_price(self, symbol: str) -> Optional[float]:
-        """Get fill price of the most recent close fill from Hyperliquid."""
+        """Get fill price of the most recent close fill from Hyperliquid.
+
+        In demo mode returns None so the caller falls back to the mainnet ticker;
+        testnet close fills would pollute PnL with detached testnet prices.
+        """
+        if self.demo_mode:
+            return None
+
         coin = self._normalize_symbol(symbol)
         address = (self.wallet_address or self._wallet.address).lower()
         try:
-            fills = self._info.user_fills(address)
+            fills = self._info_exec.user_fills(address)
             for fill in reversed(fills):
                 if fill.get("coin") == coin and fill.get("dir", "").startswith("Close"):
                     price = fill.get("px")
@@ -1066,7 +1099,7 @@ class HyperliquidClient(ExchangeClient):
         address = (self.wallet_address or self._wallet.address).lower()
         total_funding = 0.0
         try:
-            history = self._info.user_funding_history(
+            history = self._info_exec.user_funding_history(
                 user=address,
                 startTime=start_time_ms,
                 endTime=end_time_ms,

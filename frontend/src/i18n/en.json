@@ -868,7 +868,6 @@
     "slBelowEntry": "SL must be above entry price (Short)",
     "nativeHint": "works even if the bot is offline",
     "softwareHint": "bot must be online",
-    "trailingHint": "Recommendation based on your past trades will appear once enough data is available (min. 10 trades).",
     "strategyExitNote": "Note: When TP/SL is set, strategy exit is disabled. Exchange orders take priority.",
     "saveError": "Failed to save changes",
     "slAboveCurrentPrice": "SL must be below current price",

@@ -51,6 +51,7 @@ def _make_client(builder=None, wallet_address="0xaaaa", wallet_obj_address="0xbb
 
     client._exchange = MagicMock()
     client._info = MagicMock()
+    client._info_exec = client._info
     client._builder = builder
     return client
 

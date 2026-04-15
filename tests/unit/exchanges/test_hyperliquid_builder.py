@@ -145,6 +145,7 @@ class TestBuilderFeeApproval:
         client.wallet_address = "0xuser"
         client._builder = {"b": "0xbuilder", "f": 10}
         client._info = MagicMock()
+        client._info_exec = client._info
         client._info.post.return_value = 10
 
         result = await client.check_builder_fee_approval()
@@ -163,6 +164,7 @@ class TestBuilderFeeApproval:
         client.wallet_address = "0xuser"
         client._builder = {"b": "0xbuilder", "f": 10}
         client._info = MagicMock()
+        client._info_exec = client._info
         client._info.post.return_value = 0
 
         result = await client.check_builder_fee_approval()
@@ -194,6 +196,7 @@ class TestBuilderFeeApproval:
         client.wallet_address = "0xuser"
         client._builder = None  # simulates mainnet read client
         client._info = MagicMock()
+        client._info_exec = client._info
         client._info.post.return_value = 10
 
         result = await client.check_builder_fee_approval(
@@ -219,6 +222,7 @@ class TestBuilderFeeApproval:
         client.wallet_address = "0xuser"
         client._builder = {"b": "0xold_builder", "f": 10}
         client._info = MagicMock()
+        client._info_exec = client._info
         client._info.post.return_value = 10
 
         result = await client.check_builder_fee_approval(
@@ -237,6 +241,7 @@ class TestBuilderFeeApproval:
         client.wallet_address = "0xuser"
         client._builder = {"b": "0xbuilder", "f": 10}
         client._info = MagicMock()
+        client._info_exec = client._info
         client._info.post.side_effect = Exception("network error")
 
         result = await client.check_builder_fee_approval()
@@ -301,6 +306,7 @@ class TestReferralInfo:
         client = object.__new__(HyperliquidClient)
         client.wallet_address = "0xuser"
         client._info = MagicMock()
+        client._info_exec = client._info
         client._info.query_referral_state.return_value = {
             "referredBy": "0xreferrer",
             "cumVlm": "50000",
@@ -317,6 +323,7 @@ class TestReferralInfo:
         client = object.__new__(HyperliquidClient)
         client.wallet_address = "0xuser"
         client._info = MagicMock()
+        client._info_exec = client._info
         client._info.query_referral_state.side_effect = Exception("fail")
 
         result = await client.get_referral_info()

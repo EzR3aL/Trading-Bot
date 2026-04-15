@@ -49,6 +49,7 @@ class BitgetExchangeClient(HTTPExchangeClientMixin, ExchangeClient):
     """
 
     SUPPORTS_NATIVE_TRAILING_STOP = True
+    SUPPORTS_NATIVE_TRAILING_PROBE = True
 
     _client_error_class = BitgetClientError
 
@@ -164,6 +165,15 @@ class BitgetExchangeClient(HTTPExchangeClientMixin, ExchangeClient):
 
         api_margin = "crossed" if margin_mode == "cross" else "isolated"
         order_side = "buy" if side == "long" else "sell"
+        # Round to the exchange's volumePlace so the DB value matches what
+        # Bitget actually books. Otherwise a 6-decimal caller value (e.g.
+        # 11.978866) gets silently truncated to 11.97 on the exchange,
+        # desyncing trade.size from the real position and breaking later
+        # trailing-stop/close operations that expect an exact match.
+        contract = await self._get_contract_info(symbol)
+        volume_place = contract["volumePlace"]
+        rounded_size = math.floor(size * 10**volume_place) / 10**volume_place
+        size = rounded_size
         data = {
             "symbol": symbol,
             "productType": PRODUCT_TYPE_USDT,
@@ -172,7 +182,7 @@ class BitgetExchangeClient(HTTPExchangeClientMixin, ExchangeClient):
             "side": order_side,
             "tradeSide": "open",
             "orderType": "market",
-            "size": str(size),
+            "size": str(rounded_size),
         }
 
         result = await self._request("POST", ENDPOINTS["place_order"], data=data)
@@ -268,25 +278,31 @@ class BitgetExchangeClient(HTTPExchangeClientMixin, ExchangeClient):
         symbol: str,
         side: str = "long",
     ) -> bool:
-        """Cancel position-level TP/SL on Bitget.
+        """Cancel position-level TP/SL and moving plans on Bitget.
 
-        Bitget position TP/SL (set via place-pos-tpsl) are NOT regular plan orders.
-        They must be cancelled via cancel-plan-order with planType='pos_profit'
-        or 'pos_loss' — using orderId alone does not work.
+        Uses cancel-plan-order with ``{symbol, productType, planType}`` per
+        plan type. Live-verified against Bitget demo (hedge_mode): this form
+        cancels every matching plan for the symbol including ``moving_plan``.
+        The orderIdList-based variant was tried and silently no-ops in demo,
+        so we stay with the simpler per-planType form.
 
-        Also cancels moving_plan (trailing stop) orders.
+        Note: this cancels every plan of these types on the symbol, not just
+        the ``side``. Bitget plan orders are keyed by symbol+planType; the
+        per-side filter is done by the caller when needed.
         """
-        plan_types = ["pos_profit", "pos_loss", "moving_plan"]
+        plan_types = ["pos_profit", "pos_loss", "moving_plan", "profit_plan", "loss_plan"]
 
         for plan_type in plan_types:
             try:
-                result = await self._request("POST", ENDPOINTS["cancel_order"].replace(
-                    "cancel-order", "cancel-plan-order"
-                ), data={
-                    "symbol": symbol,
-                    "productType": PRODUCT_TYPE_USDT,
-                    "planType": plan_type,
-                })
+                result = await self._request(
+                    "POST",
+                    "/api/v2/mix/order/cancel-plan-order",
+                    data={
+                        "symbol": symbol,
+                        "productType": PRODUCT_TYPE_USDT,
+                        "planType": plan_type,
+                    },
+                )
                 success = result.get("successList", []) if isinstance(result, dict) else []
                 if success:
                     logger.info(
@@ -297,6 +313,33 @@ class BitgetExchangeClient(HTTPExchangeClientMixin, ExchangeClient):
                 logger.debug("Bitget cancel %s for %s: %s (may not exist)", plan_type, symbol, e)
 
         return True
+
+    async def cancel_native_trailing_stop(self, symbol: str, side: str = "long") -> bool:
+        """Cancel only the ``moving_plan`` (native trailing stop) for a symbol.
+
+        Needed so the TP/SL edit endpoint can replace trailing without
+        touching user-set TP/SL plans.
+        """
+        try:
+            result = await self._request(
+                "POST",
+                "/api/v2/mix/order/cancel-plan-order",
+                data={
+                    "symbol": symbol,
+                    "productType": PRODUCT_TYPE_USDT,
+                    "planType": "moving_plan",
+                },
+            )
+            success = result.get("successList", []) if isinstance(result, dict) else []
+            if success:
+                logger.info(
+                    "Cancelled Bitget moving_plan for %s: %s",
+                    symbol, [s.get("orderId") for s in success],
+                )
+            return True
+        except Exception as e:
+            logger.debug("Bitget cancel moving_plan for %s failed: %s", symbol, e)
+            return False
 
     async def cancel_order(self, symbol: str, order_id: str) -> bool:
         data = {
@@ -558,6 +601,39 @@ class BitgetExchangeClient(HTTPExchangeClientMixin, ExchangeClient):
             symbol, hold_side, rounded_size, range_rate, trigger_price,
         )
         return result
+
+    async def has_native_trailing_stop(self, symbol: str, hold_side: str) -> bool:
+        """Query pending plan orders for a live ``moving_plan`` on this side.
+
+        Bitget's plan-order API exposes every active TP/SL/trailing plan; we
+        look for any whose planType is ``moving_plan`` and posSide/holdSide
+        matches. Returns False on any error so callers treat the check as
+        inconclusive and fall through to the normal placement attempt.
+        """
+        try:
+            r = await self._request(
+                "GET",
+                "/api/v2/mix/order/orders-plan-pending",
+                params={
+                    "productType": PRODUCT_TYPE_USDT,
+                    "symbol": symbol,
+                    "planType": "profit_loss",
+                },
+                auth=True,
+            )
+            entries = r.get("entrustedList") if isinstance(r, dict) else None
+            if not entries:
+                return False
+            for p in entries:
+                if p.get("planType") != "moving_plan":
+                    continue
+                side_field = p.get("posSide") or p.get("holdSide") or ""
+                status = p.get("planStatus", "")
+                if side_field.lower() == hold_side.lower() and status == "live":
+                    return True
+        except Exception as e:
+            logger.debug("has_native_trailing_stop(%s,%s) failed: %s", symbol, hold_side, e)
+        return False
 
     # ==================== Additional Bitget-specific methods ====================
 
