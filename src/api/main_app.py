@@ -8,6 +8,7 @@ database lifecycle, and static file serving.
 import asyncio
 import os
 from contextlib import asynccontextmanager
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -164,6 +165,20 @@ async def lifespan(app: FastAPI):
         minutes=30,
         id="affiliate_retry_pending",
         replace_existing=True,
+    )
+
+    # Affiliate revenue fetcher: pull commission data from each exchange every 6h.
+    # Bitget/Weex/BingX use signed REST calls; Hyperliquid uses the public
+    # /info referral endpoint with cumulative-delta tracking. Bitunix has no
+    # public API and reports "unsupported".
+    from src.services.affiliate_revenue_fetcher import run_affiliate_fetch
+    orchestrator._scheduler.add_job(
+        run_affiliate_fetch,
+        "interval",
+        hours=6,
+        id="affiliate_revenue_fetch",
+        replace_existing=True,
+        next_run_time=datetime.now(timezone.utc) + timedelta(minutes=2),
     )
 
     # Recover interrupted broadcasts on startup
