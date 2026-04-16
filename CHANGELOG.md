@@ -9,6 +9,18 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [4.15.1] - 2026-04-15
+
+### Changed (Issue #181 follow-up)
+- **Affiliate-Credentials kommen jetzt aus der Admin-DB** — statt aus ENV-Variablen. Der Fetcher lädt automatisch die API-Keys aus den `exchange_connections`-Zeilen des Admin-Users. Keine ENV-Einträge mehr nötig für den Normalbetrieb.
+  - Bitget/Weex/BingX: API-Key/Secret/Passphrase aus Admin-Connection (wenn Account Affiliate/Agent-Status hat)
+  - Hyperliquid: Wallet-Adresse aus `api_key_encrypted` (HL's "API-Key" IST die Adresse)
+  - Bitunix: weiterhin `unsupported` (keine API)
+- ENV-Variablen bleiben als Override verfügbar falls du einen separaten Affiliate-Account nutzt
+- `.env.example` aktualisiert
+
+---
+
 ## [4.15.0] - 2026-04-15
 
 ### Added

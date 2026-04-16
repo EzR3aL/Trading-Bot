@@ -1,19 +1,25 @@
 """Coordinator: runs all configured affiliate adapters every 6h and
 upserts results into revenue_entries.
 
+Credentials come from the admin user's `exchange_connections` rows —
+no environment variables required. Hyperliquid uses the admin's wallet
+address (stored in `api_key_encrypted`). Bitunix has no public API.
+
 Idempotency: the (date, exchange, revenue_type) UNIQUE constraint
-catches duplicates. We update existing rows in place when the new
-amount differs (e.g. a day's commission gets settled in two batches).
+catches duplicates. Existing rows are updated in place when the new
+amount differs (e.g. late-arriving settlements).
 """
 from __future__ import annotations
 
 import logging
 from datetime import date, datetime, timedelta, timezone
+from typing import Optional
 
 from sqlalchemy import select
 
-from src.models.database import AffiliateState, RevenueEntry
+from src.models.database import AffiliateState, ExchangeConnection, RevenueEntry, User
 from src.models.session import get_session
+from src.utils.encryption import decrypt_value
 
 from src.services.affiliate.base import AffiliateAdapter, FetchResult
 from src.services.affiliate.bingx_fetcher import BingxAffiliateAdapter
@@ -24,17 +30,83 @@ from src.services.affiliate.weex_fetcher import WeexAffiliateAdapter
 
 logger = logging.getLogger(__name__)
 
-# Default sync window — covers late-arriving Bitget/Weex settlements
 DEFAULT_LOOKBACK_DAYS = 7
 
 
-def _build_adapters() -> list[AffiliateAdapter]:
+async def _load_admin_credentials() -> dict[str, ExchangeConnection]:
+    """Return {exchange_type: connection} for the first admin user with live keys.
+
+    Falls back to demo keys when live keys are missing — helps during local
+    development where only demo credentials exist.
+    """
+    async with get_session() as db:
+        admin_ids = (await db.execute(
+            select(User.id).where(User.role == "admin").order_by(User.id)
+        )).scalars().all()
+
+        creds: dict[str, ExchangeConnection] = {}
+        for admin_id in admin_ids:
+            rows = (await db.execute(
+                select(ExchangeConnection).where(ExchangeConnection.user_id == admin_id)
+            )).scalars().all()
+            for conn in rows:
+                # prefer live keys; fall back to demo if live missing
+                has_live = bool(conn.api_key_encrypted and conn.api_secret_encrypted)
+                has_demo = bool(conn.demo_api_key_encrypted and conn.demo_api_secret_encrypted)
+                if conn.exchange_type not in creds and (has_live or has_demo):
+                    creds[conn.exchange_type] = conn
+        return creds
+
+
+def _decrypt(value: Optional[str]) -> str:
+    return decrypt_value(value) if value else ""
+
+
+def _build_adapter(exchange_type: str, conn: Optional[ExchangeConnection]) -> AffiliateAdapter:
+    """Build one adapter with credentials sourced from the admin connection."""
+    if exchange_type == "bitunix":
+        return BitunixAffiliateAdapter()
+
+    if conn is None:
+        # No admin connection configured → return unconfigured adapter so the
+        # tile surfaces "nicht konfiguriert" without raising.
+        if exchange_type == "bitget":
+            return BitgetAffiliateAdapter(api_key="", api_secret="", passphrase="")
+        if exchange_type == "weex":
+            return WeexAffiliateAdapter(api_key="", api_secret="", passphrase="")
+        if exchange_type == "hyperliquid":
+            return HyperliquidAffiliateAdapter(referrer_address="")
+        if exchange_type == "bingx":
+            return BingxAffiliateAdapter(api_key="", api_secret="")
+
+    # Prefer live, fall back to demo
+    key = _decrypt(conn.api_key_encrypted) or _decrypt(conn.demo_api_key_encrypted)
+    secret = _decrypt(conn.api_secret_encrypted) or _decrypt(conn.demo_api_secret_encrypted)
+    passphrase = _decrypt(conn.passphrase_encrypted) or _decrypt(conn.demo_passphrase_encrypted)
+
+    if exchange_type == "bitget":
+        return BitgetAffiliateAdapter(api_key=key, api_secret=secret, passphrase=passphrase)
+    if exchange_type == "weex":
+        return WeexAffiliateAdapter(api_key=key, api_secret=secret, passphrase=passphrase)
+    if exchange_type == "hyperliquid":
+        # HL "api_key" is the wallet address (referrer).
+        return HyperliquidAffiliateAdapter(referrer_address=key)
+    if exchange_type == "bingx":
+        # BingX agent API uses the same key/secret pair as trading when the
+        # account has agent-tier activated.
+        return BingxAffiliateAdapter(api_key=key, api_secret=secret)
+
+    raise ValueError(f"Unknown exchange_type: {exchange_type}")
+
+
+async def _build_adapters() -> list[AffiliateAdapter]:
+    creds = await _load_admin_credentials()
     return [
-        BitgetAffiliateAdapter(),
-        WeexAffiliateAdapter(),
-        HyperliquidAffiliateAdapter(),
-        BingxAffiliateAdapter(),
-        BitunixAffiliateAdapter(),
+        _build_adapter("bitget", creds.get("bitget")),
+        _build_adapter("weex", creds.get("weex")),
+        _build_adapter("hyperliquid", creds.get("hyperliquid")),
+        _build_adapter("bingx", creds.get("bingx")),
+        _build_adapter("bitunix", creds.get("bitunix")),
     ]
 
 
@@ -100,8 +172,9 @@ async def run_affiliate_fetch(lookback_days: int = DEFAULT_LOOKBACK_DAYS) -> dic
     until = date.today()
     since = until - timedelta(days=lookback_days)
 
+    adapters = await _build_adapters()
     summary: dict[str, dict] = {}
-    for adapter in _build_adapters():
+    for adapter in adapters:
         try:
             result = await adapter.fetch(since, until)
         except Exception as exc:
