@@ -3,6 +3,10 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import AdminRevenue from '../AdminRevenue'
 
+vi.mock('react-i18next', () => ({
+  useTranslation: () => ({ t: (key: string) => key }),
+}))
+
 const mockGet = vi.fn()
 const mockPost = vi.fn()
 
@@ -72,7 +76,7 @@ describe('AdminRevenue', () => {
   it('loads and displays revenue summary', async () => {
     render(<AdminRevenue />)
     await waitFor(() => expect(screen.getAllByText('150,00 $').length).toBeGreaterThan(0))
-    expect(screen.getByText('Einnahmen')).toBeInTheDocument()
+    expect(screen.getByText('admin.revenueTitle')).toBeInTheDocument()
   })
 
   it('renders all 5 exchange tiles', async () => {
@@ -89,21 +93,21 @@ describe('AdminRevenue', () => {
   it('shows Bitunix unavailable badge and warning', async () => {
     render(<AdminRevenue />)
     await waitFor(() => {
-      const warnings = screen.getAllByText(/API nicht verfügbar|öffentliche Affiliate-API/)
+      const warnings = screen.getAllByText(/admin\.apiNotAvailable|admin\.bitunixNote/)
       expect(warnings.length).toBeGreaterThanOrEqual(1)
     })
   })
 
   it('does not render manual entry button', async () => {
     render(<AdminRevenue />)
-    await waitFor(() => expect(screen.getByText('Einnahmen')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('admin.revenueTitle')).toBeInTheDocument())
     expect(screen.queryByText('Neuer Eintrag')).not.toBeInTheDocument()
   })
 
   it('renders sync button and triggers sync on click', async () => {
     const user = userEvent.setup()
     render(<AdminRevenue />)
-    const syncButton = await screen.findByText('Jetzt synchronisieren')
+    const syncButton = await screen.findByText('admin.syncNow')
     await user.click(syncButton)
     await waitFor(() => expect(mockPost).toHaveBeenCalledWith('/admin/revenue/sync'))
   })
@@ -111,7 +115,7 @@ describe('AdminRevenue', () => {
   it('shows signup count in KPI strip', async () => {
     render(<AdminRevenue />)
     await waitFor(() => {
-      expect(screen.getByText('Affiliate Signups')).toBeInTheDocument()
+      expect(screen.getByText('admin.affiliateSignups')).toBeInTheDocument()
       expect(screen.getByText('6')).toBeInTheDocument()
     })
   })

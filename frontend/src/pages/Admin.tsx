@@ -16,7 +16,7 @@ const AdminRevenue = lazy(() => import('./AdminRevenue'))
 const TABS = [
   { key: 'users', labelKey: 'admin.users' },
   { key: 'broadcasts', labelKey: 'broadcast.title' },
-  { key: 'revenue', labelKey: 'Einnahmen' },
+  { key: 'revenue', labelKey: 'admin.revenue' },
   { key: 'connections', labelKey: 'settings.connections' },
   { key: 'affiliateLinks', labelKey: 'settings.affiliateLinks' },
   { key: 'hyperliquid', labelKey: 'settings.hyperliquid' },

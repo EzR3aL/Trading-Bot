@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { DollarSign, RefreshCw, AlertTriangle, CheckCircle2, XCircle, Clock } from 'lucide-react'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid,
@@ -48,11 +49,11 @@ interface RevenueResponse {
   sync_status: Record<string, SyncStatus>
 }
 
-const PERIODS = [
-  { value: '7d', label: '7 Tage' },
-  { value: '30d', label: '30 Tage' },
-  { value: '90d', label: '90 Tage' },
-  { value: '1y', label: '1 Jahr' },
+const PERIOD_KEYS = [
+  { value: '7d', labelKey: 'admin.period7d' },
+  { value: '30d', labelKey: 'admin.period30d' },
+  { value: '90d', labelKey: 'admin.period90d' },
+  { value: '1y', labelKey: 'admin.period1y' },
 ]
 
 const EXCHANGE_COLORS: Record<string, string> = {
@@ -90,56 +91,56 @@ function getExchangeColor(exchange: string): string {
   return EXCHANGE_COLORS[exchange.toLowerCase()] || '#6B7280'
 }
 
-function formatRelative(iso: string | null): string {
-  if (!iso) return 'noch nie'
+function formatRelative(iso: string | null, t: (key: string) => string): string {
+  if (!iso) return t('admin.neverSynced')
   const diffMs = Date.now() - new Date(iso).getTime()
   const m = Math.round(diffMs / 60_000)
-  if (m < 1) return 'gerade eben'
+  if (m < 1) return t('admin.justNow')
   if (m < 60) return `vor ${m}m`
   const h = Math.round(m / 60)
   if (h < 24) return `vor ${h}h`
   return `vor ${Math.round(h / 24)}d`
 }
 
-function StatusBadge({ status, exchange }: { status: SyncStatus | undefined; exchange: string }) {
+function StatusBadge({ status, exchange, t }: { status: SyncStatus | undefined; exchange: string; t: (key: string) => string }) {
   if (exchange === 'bitunix' || status?.status === 'unsupported') {
     return (
       <span className="inline-flex items-center gap-1 text-[10px] text-amber-400" title={status?.error || ''}>
-        <AlertTriangle size={11} /> API nicht verfügbar
+        <AlertTriangle size={11} /> {t('admin.apiNotAvailable')}
       </span>
     )
   }
   if (!status || status.status === null) {
     return (
       <span className="inline-flex items-center gap-1 text-[10px] text-gray-500">
-        <Clock size={11} /> noch kein Sync
+        <Clock size={11} /> {t('admin.noSyncYet')}
       </span>
     )
   }
   if (status.status === 'not_configured') {
     return (
       <span className="inline-flex items-center gap-1 text-[10px] text-gray-500" title="Credentials in .env nicht hinterlegt">
-        <Clock size={11} /> nicht konfiguriert
+        <Clock size={11} /> {t('admin.notConfigured')}
       </span>
     )
   }
   if (status.status === 'ok') {
     return (
       <span className="inline-flex items-center gap-1 text-[10px] text-emerald-400">
-        <CheckCircle2 size={11} /> {formatRelative(status.last_synced_at)}
+        <CheckCircle2 size={11} /> {formatRelative(status.last_synced_at, t)}
       </span>
     )
   }
   return (
     <span className="inline-flex items-center gap-1 text-[10px] text-red-400" title={status.error || ''}>
-      <XCircle size={11} /> Fehler
+      <XCircle size={11} /> {t('admin.error')}
     </span>
   )
 }
 
-function RevenueTimeChart({ data }: { data: DailyRevenue[] }) {
+function RevenueTimeChart({ data, t }: { data: DailyRevenue[]; t: (key: string) => string }) {
   if (data.length === 0) {
-    return <div className="flex items-center justify-center h-[200px] text-gray-500 text-sm">Keine Daten</div>
+    return <div className="flex items-center justify-center h-[200px] text-gray-500 text-sm">{t('admin.noChartData')}</div>
   }
   const chartData = data.map((d) => ({
     date: formatChartDate(d.date),
@@ -167,6 +168,7 @@ function RevenueTimeChart({ data }: { data: DailyRevenue[] }) {
 }
 
 export default function AdminRevenue() {
+  const { t } = useTranslation()
   const addToast = useToastStore((s) => s.addToast)
   const [period, setPeriod] = useState('30d')
   const [data, setData] = useState<RevenueResponse | null>(null)
@@ -179,7 +181,7 @@ export default function AdminRevenue() {
       const res = await api.get<RevenueResponse>('/admin/revenue', { params: { period } })
       setData(res.data)
     } catch (err) {
-      addToast('error', getApiErrorMessage(err, 'Fehler beim Laden der Einnahmen'))
+      addToast('error', getApiErrorMessage(err, t('admin.loadError')))
     } finally {
       setIsLoading(false)
     }
@@ -195,13 +197,13 @@ export default function AdminRevenue() {
       const res = await api.post<{ summary: Record<string, { status: string }> }>('/admin/revenue/sync')
       const failed = Object.entries(res.data.summary || {}).filter(([, v]) => v.status === 'error')
       if (failed.length === 0) {
-        addToast('success', 'Sync abgeschlossen')
+        addToast('success', t('admin.syncDone'))
       } else {
-        addToast('error', `Sync mit Fehlern: ${failed.map(([k]) => k).join(', ')}`)
+        addToast('error', `${t('admin.syncWithErrors')}: ${failed.map(([k]) => k).join(', ')}`)
       }
       await loadRevenue()
     } catch (err) {
-      addToast('error', getApiErrorMessage(err, 'Sync fehlgeschlagen'))
+      addToast('error', getApiErrorMessage(err, t('admin.syncFailed')))
     } finally {
       setIsSyncing(false)
     }
@@ -221,7 +223,7 @@ export default function AdminRevenue() {
       <div className="flex items-center justify-between mb-5">
         <div className="flex items-center gap-2">
           <DollarSign size={20} className="text-emerald-400" />
-          <h1 className="text-2xl font-bold text-white">Einnahmen</h1>
+          <h1 className="text-2xl font-bold text-white">{t('admin.revenueTitle')}</h1>
         </div>
         <button
           onClick={handleSync}
@@ -229,12 +231,12 @@ export default function AdminRevenue() {
           className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-primary-600 hover:bg-primary-700 text-white transition-colors disabled:opacity-60"
         >
           <RefreshCw size={14} className={isSyncing ? 'animate-spin' : ''} />
-          Jetzt synchronisieren
+          {t('admin.syncNow')}
         </button>
       </div>
 
       <div className="flex gap-1 mb-5 bg-gray-900 p-1 rounded-lg w-fit">
-        {PERIODS.map((p) => (
+        {PERIOD_KEYS.map((p) => (
           <button
             key={p.value}
             onClick={() => setPeriod(p.value)}
@@ -244,7 +246,7 @@ export default function AdminRevenue() {
                 : 'text-gray-500 hover:text-white hover:bg-white/5'
             }`}
           >
-            {p.label}
+            {t(p.labelKey)}
           </button>
         ))}
       </div>
@@ -258,10 +260,10 @@ export default function AdminRevenue() {
           {summary && (
             <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
               {[
-                { label: 'Heute', value: summary.today },
-                { label: '7 Tage', value: summary.last_7d },
-                { label: '30 Tage', value: summary.last_30d },
-                { label: 'Gesamt', value: summary.total },
+                { label: t('admin.revenueToday'), value: summary.today },
+                { label: t('admin.revenue7d'), value: summary.last_7d },
+                { label: t('admin.revenue30d'), value: summary.last_30d },
+                { label: t('admin.revenueTotal'), value: summary.total },
               ].map((kpi) => (
                 <div key={kpi.label} className="border border-white/[0.08] bg-white/[0.02] rounded-xl p-4 hover:bg-white/[0.04] transition-colors">
                   <p className="text-[10px] text-gray-400 uppercase tracking-wider mb-1">{kpi.label}</p>
@@ -269,7 +271,7 @@ export default function AdminRevenue() {
                 </div>
               ))}
               <div className="border border-white/[0.08] bg-white/[0.02] rounded-xl p-4 hover:bg-white/[0.04] transition-colors">
-                <p className="text-[10px] text-gray-400 uppercase tracking-wider mb-1">Affiliate Signups</p>
+                <p className="text-[10px] text-gray-400 uppercase tracking-wider mb-1">{t('admin.affiliateSignups')}</p>
                 <p className="text-xl font-bold text-primary-400 tabular-nums">{data?.signups?.total ?? 0}</p>
               </div>
             </div>
@@ -277,15 +279,15 @@ export default function AdminRevenue() {
 
           {data.daily.length > 0 && (
             <div>
-              <h3 className="text-sm font-semibold text-gray-300 uppercase tracking-wider mb-3">Zeitverlauf</h3>
+              <h3 className="text-sm font-semibold text-gray-300 uppercase tracking-wider mb-3">{t('admin.timeline')}</h3>
               <div className="border border-white/[0.08] bg-white/[0.02] rounded-xl p-4">
-                <RevenueTimeChart data={data.daily} />
+                <RevenueTimeChart data={data.daily} t={t} />
               </div>
             </div>
           )}
 
           <div>
-            <h3 className="text-sm font-semibold text-gray-300 uppercase tracking-wider mb-3">Nach Exchange</h3>
+            <h3 className="text-sm font-semibold text-gray-300 uppercase tracking-wider mb-3">{t('admin.byExchange')}</h3>
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
               {exchangeData.map((ex) => {
                 const color = getExchangeColor(ex.exchange)
@@ -312,11 +314,11 @@ export default function AdminRevenue() {
                       {formatCurrency(ex.total)}
                     </p>
                     <div className="mt-1.5">
-                      <StatusBadge status={status} exchange={ex.exchange} />
+                      <StatusBadge status={status} exchange={ex.exchange} t={t} />
                     </div>
                     {(data?.signups?.by_exchange?.[ex.exchange] ?? 0) > 0 && (
                       <p className="text-[10px] text-primary-400 mt-1">
-                        {data.signups.by_exchange[ex.exchange]} Signup{data.signups.by_exchange[ex.exchange] !== 1 ? 's' : ''}
+                        {data.signups.by_exchange[ex.exchange]} {data.signups.by_exchange[ex.exchange] !== 1 ? t('admin.signups') : t('admin.signup')}
                       </p>
                     )}
                   </div>
@@ -326,13 +328,13 @@ export default function AdminRevenue() {
             <div className="mt-3 flex items-start gap-2 text-[11px] text-amber-400/80 bg-amber-500/[0.04] border border-amber-500/10 rounded-lg p-2.5">
               <AlertTriangle size={13} className="mt-0.5 shrink-0" />
               <span>
-                <strong>Bitunix:</strong> bietet keine öffentliche Affiliate-API. Beträge müssen manuell aus dem Bitunix-Dashboard übernommen werden.
+                <strong>Bitunix:</strong> {t('admin.bitunixNote')}
               </span>
             </div>
           </div>
         </div>
       ) : (
-        <div className="text-center text-gray-500 py-12 text-sm">Keine Daten verfügbar</div>
+        <div className="text-center text-gray-500 py-12 text-sm">{t('admin.noData')}</div>
       )}
     </div>
   )
