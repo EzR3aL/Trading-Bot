@@ -1,4 +1,4 @@
-# Trading Department
+# Trading Bot
 
 A production-grade automated cryptocurrency trading platform with multi-exchange support, pluggable strategy engine, and a real-time React dashboard. Built for serious traders who need reliable execution, strict risk controls, and full operational visibility.
 
@@ -22,6 +22,17 @@ A production-grade automated cryptocurrency trading platform with multi-exchange
 - Multi-language UI (German / English)
 - Dark theme, responsive layout
 
+**Telegram Bot**
+- Command interface for bot control and status queries
+- Long-polling integration (`src/telegram/`)
+
+**Affiliate Revenue Tracking**
+- Per-exchange affiliate revenue fetchers (Bitget, Weex, Hyperliquid, Bitunix, BingX)
+- Automated retry logic for failed fetches
+
+**Broadcast System**
+- Push messages to users via `broadcast_sender` and `broadcast_service`
+
 **Risk Management**
 - Daily loss limits (percentage-based)
 - Configurable position sizing and leverage caps
@@ -38,6 +49,8 @@ A production-grade automated cryptocurrency trading platform with multi-exchange
 
 **Operational Tooling**
 - Prometheus metrics export with Grafana dashboards
+- Alertmanager for alert routing and notification
+- Automated daily PostgreSQL backup (pg-backup container, 7-day retention)
 - Discord and Telegram trade notifications
 - Health check endpoint with Docker healthcheck integration
 - Structured logging with configurable levels
@@ -63,17 +76,18 @@ Frontend (React/TS)  --->  FastAPI Backend  --->  Exchange Adapters
 |-------|------------|
 | Frontend | React 18, TypeScript, Vite, Tailwind CSS, shadcn/ui, Zustand, Recharts |
 | Backend | Python 3.11+, FastAPI, SQLAlchemy 2 (async), Pydantic v2 |
-| Database | SQLite (development), PostgreSQL (production) |
+| Database | SQLite (development), PostgreSQL 16 (production) |
 | Auth | JWT (PyJWT), bcrypt, Fernet encryption |
 | Scheduling | APScheduler (async) |
-| Monitoring | Prometheus, Grafana |
+| Monitoring | Prometheus, Alertmanager, Grafana |
 | Notifications | Discord webhooks, Telegram Bot API |
 | Infrastructure | Docker, Docker Compose, multi-stage builds |
+| CI | GitHub Actions (pytest + Vitest + ruff lint) |
 
 ### Project Structure
 
 ```
-trading-department/
+Trading-Bot/
 ├── main.py                      # Entry point (--dashboard, --create-admin)
 ├── frontend/                    # React + Vite + shadcn/ui
 │   ├── src/
@@ -91,15 +105,29 @@ trading-department/
 │   ├── strategy/                # Pluggable strategy engine
 │   ├── risk/                    # Position sizing, daily loss limits
 │   ├── notifications/           # Discord, Telegram
+│   ├── telegram/                # Telegram bot commands and long-polling
+│   ├── services/                # Affiliate revenue fetchers, broadcast system
+│   │   └── affiliate/           # Per-exchange affiliate fetchers
+│   ├── data/                    # Market data sources, funding tracker
+│   ├── monitoring/              # Prometheus metrics, collectors, middleware
 │   ├── models/                  # SQLAlchemy ORM, async sessions
 │   └── utils/                   # Encryption, logging, circuit breaker
 ├── tests/
 │   ├── unit/                    # Unit tests
 │   ├── integration/             # API integration tests
-│   └── e2e/                     # Playwright E2E tests
-├── monitoring/                  # Prometheus + Grafana config
+│   ├── e2e/                     # E2E tests
+│   └── backtest/                # Backtesting tests
+├── config/                      # Application settings module
+├── scripts/                     # Utility and migration scripts
+├── deploy/                      # nginx config, off-host backup script
+├── monitoring/                  # Prometheus, Alertmanager, Grafana config
+├── migrations/                  # Alembic database migrations
+├── Anleitungen/                 # User guides (German)
+├── docs/                        # Technical documentation (English)
+├── static/                      # Static assets
+├── videos/                      # Remotion video project
 ├── Dockerfile                   # Multi-stage build (Node + Python)
-├── docker-compose.yml           # App + Prometheus + Grafana
+├── docker-compose.yml           # App + PostgreSQL + pg-backup + Prometheus + Alertmanager + Grafana
 └── requirements.txt
 ```
 
@@ -110,15 +138,15 @@ trading-department/
 ### Prerequisites
 
 - Python 3.11 or higher
-- Node.js 18 or higher
+- Node.js 20 or higher
 - Git
 
 ### Local Development
 
 ```bash
 # Clone the repository
-git clone https://github.com/EzR3aL/Bitget-Trading-Bot.git
-cd Bitget-Trading-Bot
+git clone https://github.com/EzR3aL/Trading-Bot.git
+cd Trading-Bot
 
 # Create and activate virtual environment
 python -m venv .venv
@@ -146,15 +174,16 @@ python main.py --dashboard
 ### Docker
 
 ```bash
-git clone https://github.com/EzR3aL/Bitget-Trading-Bot.git
-cd Bitget-Trading-Bot
+git clone https://github.com/EzR3aL/Trading-Bot.git
+cd Trading-Bot
 cp .env.example .env
 # Edit .env with your configuration
 
 docker compose up --build -d
-# Application:  http://localhost:8000
-# Prometheus:   http://localhost:9090
-# Grafana:      http://localhost:3000
+# Application:    http://localhost:8000
+# Prometheus:     http://localhost:9090
+# Alertmanager:   http://localhost:9093
+# Grafana:        http://localhost:3000
 ```
 
 ---
@@ -211,6 +240,13 @@ The strategy engine uses a plugin architecture. All strategies implement `BaseSt
 | **Liquidation Hunter** | Contrarian | Bets against crowded positions using long/short ratio, funding rate, and Fear & Greed Index |
 
 Each strategy can be assigned per bot instance, and users can run multiple bots with different strategies simultaneously (up to 10 per user).
+
+---
+
+## Documentation
+
+- **`Anleitungen/`** -- German-language user guides covering bot setup, exchange configuration, Telegram notifications, strategy explanations, and more
+- **`docs/`** -- Technical documentation: API reference, deployment guide, demo trading, strategy details, and FAQ
 
 ---
 
@@ -273,15 +309,15 @@ Interactive API documentation is available at:
 
 ## Monitoring
 
-### Prometheus Metrics
-
-The application exports metrics at `/api/metrics` in Prometheus format. The Docker Compose stack includes pre-configured Prometheus and Grafana services.
+### Docker Compose Services
 
 | Service | URL | Purpose |
 |---------|-----|---------|
 | Application | `http://localhost:8000` | Trading bot and dashboard |
 | Prometheus | `http://localhost:9090` | Metrics collection and querying |
+| Alertmanager | `http://localhost:9093` | Alert routing and notifications |
 | Grafana | `http://localhost:3000` | Dashboards and alerting |
+| pg-backup | -- | Automated daily PostgreSQL backup (7-day retention) |
 
 ### Health Endpoint
 
@@ -296,7 +332,7 @@ Returns service status with database connectivity check. Used by Docker healthch
 | Channel | Events |
 |---------|--------|
 | Discord | Trade entry/exit with strategy reasoning, daily summaries, risk alerts, bot status changes |
-| Telegram | Trade notifications, error alerts |
+| Telegram | Trade notifications, error alerts, bot commands |
 
 ---
 
@@ -314,6 +350,9 @@ python -m pytest tests/integration -v
 
 # With coverage report
 python -m pytest tests/ --cov=src --cov-report=html
+
+# Frontend tests
+cd frontend && npx vitest run
 ```
 
 ---

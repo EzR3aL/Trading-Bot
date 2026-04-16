@@ -1,6 +1,8 @@
 # API Reference
 
-Complete REST API documentation for the Trading Bot (v3.6.x).
+> **Last updated:** 2026-04-16 (v4.14.x)
+
+Complete REST API documentation for the Trading Bot.
 
 ---
 
@@ -8,12 +10,12 @@ Complete REST API documentation for the Trading Bot (v3.6.x).
 
 The Trading Bot uses a **FastAPI** backend with:
 
-- **Multi-Exchange Support**: Bitget, Weex, Hyperliquid
+- **Multi-Exchange Support**: Bitget, Weex, Hyperliquid, Bitunix, BingX
 - **Multi-User**: JWT-based authentication with role-based access (user / admin)
 - **Multi-Bot**: BotOrchestrator supervises multiple BotWorker instances
-- **Database**: PostgreSQL (production) / SQLite (development), async via SQLAlchemy
+- **Database**: PostgreSQL 16 (async via SQLAlchemy + Alembic migrations)
 - **Real-Time**: WebSocket for live trade and bot status updates
-- **Monitoring**: Prometheus metrics endpoint
+- **Monitoring**: Prometheus + Alertmanager + Grafana
 
 **Base URL**: `http://localhost:8000/api`
 
@@ -71,7 +73,11 @@ curl http://localhost:8000/api/bots \
 |--------|------|-------------|------|
 | `POST` | `/api/auth/login` | Authenticate and receive JWT tokens | No |
 | `POST` | `/api/auth/refresh` | Refresh access token (rate limited: 10/min) | No |
+| `POST` | `/api/auth/logout` | Invalidate current session | Yes |
+| `PUT` | `/api/auth/change-password` | Change user password | Yes |
 | `GET` | `/api/auth/me` | Get current user profile | Yes |
+| `POST` | `/api/auth/bridge/generate` | Generate auth bridge code (mobile/CLI login) | Yes |
+| `POST` | `/api/auth/bridge/exchange` | Exchange bridge code for tokens | No |
 
 #### `POST /api/auth/login`
 
@@ -119,15 +125,27 @@ curl http://localhost:8000/api/bots \
 | `GET` | `/api/bots/{id}` | Get bot details | Yes |
 | `PUT` | `/api/bots/{id}` | Update bot configuration | Yes |
 | `DELETE` | `/api/bots/{id}` | Delete bot (must be stopped) | Yes |
+| `POST` | `/api/bots/{id}/duplicate` | Duplicate a bot configuration | Yes |
 | `POST` | `/api/bots/{id}/start` | Start a bot | Yes |
 | `POST` | `/api/bots/{id}/stop` | Stop a bot | Yes |
 | `POST` | `/api/bots/{id}/restart` | Restart a bot | Yes |
+| `POST` | `/api/bots/{id}/close-position/{symbol}` | Force-close a position | Yes |
 | `POST` | `/api/bots/stop-all` | Stop all running bots | Yes |
 | `GET` | `/api/bots/strategies` | List available strategies with param schemas | Yes |
 | `GET` | `/api/bots/data-sources` | List available data sources | Yes |
+| `GET` | `/api/bots/balance-preview` | Preview exchange balance for bot config | Yes |
+| `GET` | `/api/bots/balance-overview` | Full balance overview across exchanges | Yes |
+| `GET` | `/api/bots/budget-info` | Budget info for all bots | Yes |
+| `GET` | `/api/bots/symbol-conflicts` | Detect symbol conflicts across bots | Yes |
 | `POST` | `/api/bots/{id}/test-discord` | Send test Discord notification | Yes |
 | `POST` | `/api/bots/{id}/test-telegram` | Send test Telegram notification | Yes |
-| `POST` | `/api/bots/{id}/apply-preset/{preset_id}` | Apply preset to stopped bot | Yes |
+| `POST` | `/api/bots/test-telegram-direct` | Test Telegram without a bot | Yes |
+| `POST` | `/api/bots/test-discord-direct` | Test Discord without a bot | Yes |
+| `GET` | `/api/bots/{id}/pending-trades` | List pending/stuck trades | Yes |
+| `POST` | `/api/bots/{id}/pending-trades/{trade_id}/resolve` | Resolve a pending trade | Yes |
+| `GET` | `/api/bots/{id}/statistics` | Per-bot trading statistics | Yes |
+| `GET` | `/api/bots/compare/performance` | Compare performance across bots | Yes |
+| `GET` | `/api/bots/{id}/reconcile` | Reconcile exchange vs DB positions | Yes |
 
 #### `POST /api/bots` (Create Bot)
 
@@ -177,6 +195,8 @@ curl http://localhost:8000/api/bots \
 | Method | Path | Description | Auth |
 |--------|------|-------------|------|
 | `GET` | `/api/trades` | List trades (filtered, paginated) | Yes |
+| `GET` | `/api/trades/{trade_id}` | Get single trade details | Yes |
+| `PUT` | `/api/trades/{trade_id}/tp-sl` | Update TP/SL for an open trade | Yes |
 | `POST` | `/api/trades/sync` | Sync exchange positions with DB | Yes |
 
 #### `GET /api/trades`
@@ -261,26 +281,26 @@ curl http://localhost:8000/api/bots \
 
 ---
 
-### Config
+### Config (General)
 
 | Method | Path | Description | Auth |
 |--------|------|-------------|------|
 | `GET` | `/api/config` | Get user configuration | Yes |
 | `PUT` | `/api/config/trading` | Update trading parameters | Yes |
 | `PUT` | `/api/config/strategy` | Update strategy parameters | Yes |
-| `GET` | `/api/config/exchanges` | List exchange connections | Yes |
-| `PUT` | `/api/config/exchanges/{exchange}` | Add/update exchange connection | Yes |
-| `DELETE` | `/api/config/exchanges/{exchange}` | Remove exchange connection | Yes |
-| `POST` | `/api/config/exchanges/{exchange}/test` | Test exchange connection | Yes |
-| `GET` | `/api/config/llm-connections` | List LLM provider connections | Yes |
-| `PUT` | `/api/config/llm-connections/{provider}` | Add/update LLM connection | Yes |
-| `DELETE` | `/api/config/llm-connections/{provider}` | Remove LLM connection | Yes |
-| `GET` | `/api/config/health` | Detailed system health check | Yes |
-| `GET` | `/api/config/hyperliquid/builder-config` | Get HL builder fee config | Yes |
-| `POST` | `/api/config/hyperliquid/confirm-builder-approval` | Confirm builder fee | Yes |
-| `GET` | `/api/config/hyperliquid/revenue-summary` | HL revenue summary | Yes |
 
-#### `PUT /api/config/exchanges/{exchange}`
+### Config (Exchange Connections)
+
+| Method | Path | Description | Auth |
+|--------|------|-------------|------|
+| `GET` | `/api/config/exchange-connections` | List exchange connections | Yes |
+| `PUT` | `/api/config/exchange-connections/{exchange}` | Add/update exchange connection | Yes |
+| `DELETE` | `/api/config/exchange-connections/{exchange}` | Remove exchange connection | Yes |
+| `DELETE` | `/api/config/exchange-connections/{exchange}/keys` | Remove only API keys | Yes |
+| `POST` | `/api/config/exchange-connections/{exchange}/test` | Test exchange connection | Yes |
+| `GET` | `/api/config/connections` | Overview of all connections | Yes |
+
+#### `PUT /api/config/exchange-connections/{exchange}`
 
 **Request:**
 ```json
@@ -300,9 +320,35 @@ curl http://localhost:8000/api/bots \
 }
 ```
 
+### Config (Hyperliquid)
+
+| Method | Path | Description | Auth |
+|--------|------|-------------|------|
+| `GET` | `/api/config/hyperliquid/admin-settings` | Get HL admin settings | Admin |
+| `PUT` | `/api/config/hyperliquid/admin-settings` | Update HL admin settings | Admin |
+| `GET` | `/api/config/hyperliquid/builder-config` | Get HL builder fee config | Yes |
+| `POST` | `/api/config/hyperliquid/confirm-builder-approval` | Confirm builder fee | Yes |
+| `POST` | `/api/config/hyperliquid/verify-referral` | Verify referral status | Yes |
+| `GET` | `/api/config/hyperliquid/referral-status` | Get referral status | Yes |
+| `GET` | `/api/config/hyperliquid/revenue-summary` | HL revenue summary | Yes |
+
+### Config (Affiliate UIDs)
+
+| Method | Path | Description | Auth |
+|--------|------|-------------|------|
+| `PUT` | `/api/config/exchange-connections/{exchange}/affiliate-uid` | Set affiliate UID | Yes |
+| `GET` | `/api/config/admin/affiliate-uids` | List all affiliate UIDs | Admin |
+| `PUT` | `/api/config/admin/affiliate-uids/{id}/verify` | Verify affiliate UID | Admin |
+
+### Config Changes (Audit)
+
+| Method | Path | Description | Auth |
+|--------|------|-------------|------|
+| `GET` | `/api/config-changes` | List config change history | Yes |
+
 ---
 
-### Portfolio (NEW)
+### Portfolio
 
 | Method | Path | Description | Auth |
 |--------|------|-------------|------|
@@ -372,58 +418,6 @@ curl http://localhost:8000/api/bots \
 
 ---
 
-### Alerts (NEW)
-
-| Method | Path | Description | Auth |
-|--------|------|-------------|------|
-| `GET` | `/api/alerts` | List all alerts (with optional filters) | Yes |
-| `POST` | `/api/alerts` | Create a new alert (max 50 per user) | Yes |
-| `GET` | `/api/alerts/history` | Get alert trigger history | Yes |
-| `GET` | `/api/alerts/{id}` | Get alert details | Yes |
-| `PUT` | `/api/alerts/{id}` | Update an alert | Yes |
-| `DELETE` | `/api/alerts/{id}` | Delete an alert | Yes |
-| `PATCH` | `/api/alerts/{id}/toggle` | Toggle alert on/off | Yes |
-
-#### Alert Types
-
-| Type | Categories | Description |
-|------|------------|-------------|
-| `price` | `price_above`, `price_below` | Price threshold alerts |
-| `strategy` | `signal_missed`, `low_confidence`, `consecutive_losses` | Strategy performance alerts |
-| `portfolio` | `daily_loss`, `drawdown`, `profit_target` | Portfolio-level alerts |
-
-#### `POST /api/alerts`
-
-**Request:**
-```json
-{
-  "alert_type": "price",
-  "category": "price_above",
-  "symbol": "BTCUSDT",
-  "threshold": 100000,
-  "direction": "above",
-  "cooldown_minutes": 60
-}
-```
-
-**Response (201):**
-```json
-{
-  "id": 7,
-  "user_id": 1,
-  "alert_type": "price",
-  "category": "price_above",
-  "symbol": "BTCUSDT",
-  "threshold": 100000.0,
-  "direction": "above",
-  "is_enabled": true,
-  "cooldown_minutes": 60,
-  "trigger_count": 0,
-  "last_triggered_at": null,
-  "created_at": "2026-02-20T12:00:00Z"
-}
-```
-
 ---
 
 ### Funding
@@ -444,72 +438,15 @@ curl http://localhost:8000/api/bots \
 
 ---
 
-### Backtest
-
-| Method | Path | Description | Auth |
-|--------|------|-------------|------|
-| `GET` | `/api/backtest/strategies` | List available strategies | Yes |
-| `POST` | `/api/backtest/run` | Start a backtest (background task) | Yes |
-| `GET` | `/api/backtest/{run_id}` | Get backtest status and results | Yes |
-| `GET` | `/api/backtest/history` | List all past backtests | Yes |
-| `DELETE` | `/api/backtest/{run_id}` | Delete backtest result | Yes |
-
-#### `POST /api/backtest/run`
-
-**Request:**
-```json
-{
-  "strategy": "edge_indicator",
-  "symbol": "BTCUSDT",
-  "timeframe": "1h",
-  "start_date": "2025-11-01",
-  "end_date": "2026-02-01",
-  "initial_capital": 10000,
-  "leverage": 3,
-  "take_profit_percent": 3.5,
-  "stop_loss_percent": 2.0,
-  "strategy_params": {}
-}
-```
-
-**Response (202):**
-```json
-{
-  "run_id": 15,
-  "status": "running"
-}
-```
-
-#### `GET /api/backtest/{run_id}` (completed)
-
-**Response (200):**
-```json
-{
-  "run_id": 15,
-  "status": "completed",
-  "metrics": {
-    "total_return": 26.2,
-    "win_rate": 53.9,
-    "max_drawdown": 4.7,
-    "sharpe_ratio": 5.51,
-    "profit_factor": 1.98,
-    "total_trades": 104
-  },
-  "equity_curve": [...],
-  "trades": [...]
-}
-```
-
----
-
 ### Exchanges
 
 | Method | Path | Description | Auth |
 |--------|------|-------------|------|
 | `GET` | `/api/exchanges` | List all supported exchanges | No |
 | `GET` | `/api/exchanges/{name}/info` | Get exchange details | No |
+| `GET` | `/api/exchanges/{name}/symbols` | List tradeable symbols for exchange | No |
 
-**Response (200):**
+**Response (200) for `GET /api/exchanges`:**
 ```json
 {
   "exchanges": [
@@ -533,21 +470,24 @@ curl http://localhost:8000/api/bots \
       "supports_demo": true,
       "auth_type": "wallet",
       "requires_passphrase": false
+    },
+    {
+      "name": "bitunix",
+      "display_name": "Bitunix",
+      "supports_demo": false,
+      "auth_type": "api_key",
+      "requires_passphrase": true
+    },
+    {
+      "name": "bingx",
+      "display_name": "BingX",
+      "supports_demo": true,
+      "auth_type": "api_key",
+      "requires_passphrase": false
     }
   ]
 }
 ```
-
----
-
-### Presets
-
-| Method | Path | Description | Auth |
-|--------|------|-------------|------|
-| `GET` | `/api/presets` | List all presets | Yes |
-| `POST` | `/api/presets` | Create a new preset | Yes |
-| `PUT` | `/api/presets/{id}` | Update a preset | Yes |
-| `DELETE` | `/api/presets/{id}` | Delete a preset | Yes |
 
 ---
 
@@ -562,15 +502,36 @@ curl http://localhost:8000/api/bots \
 
 ---
 
-### Admin
+### Admin (Logs)
 
 | Method | Path | Description | Auth |
 |--------|------|-------------|------|
 | `GET` | `/api/admin/audit-logs` | List audit logs (paginated) | Admin |
-| `GET` | `/api/admin/event-logs` | List event logs (paginated) | Admin |
-| `GET` | `/api/admin/event-stats` | Event statistics summary | Admin |
-| `DELETE` | `/api/admin/audit-logs/purge` | Purge old audit logs | Admin |
-| `DELETE` | `/api/admin/event-logs/purge` | Purge old event logs | Admin |
+| `DELETE` | `/api/admin/audit-logs` | Purge old audit logs | Admin |
+| `GET` | `/api/admin/events` | List event logs (paginated) | Admin |
+| `GET` | `/api/admin/events/stats` | Event statistics summary | Admin |
+| `DELETE` | `/api/admin/events` | Purge old event logs | Admin |
+
+### Admin (Revenue)
+
+| Method | Path | Description | Auth |
+|--------|------|-------------|------|
+| `GET` | `/api/admin/revenue` | List revenue entries (filtered) | Admin |
+| `POST` | `/api/admin/revenue/sync` | Trigger manual revenue sync | Admin |
+
+### Admin (Broadcasts)
+
+| Method | Path | Description | Auth |
+|--------|------|-------------|------|
+| `POST` | `/api/admin/broadcasts` | Create a broadcast | Admin |
+| `GET` | `/api/admin/broadcasts` | List broadcasts | Admin |
+| `GET` | `/api/admin/broadcasts/{id}` | Get broadcast details | Admin |
+| `GET` | `/api/admin/broadcasts/{id}/targets` | Get broadcast targets | Admin |
+| `POST` | `/api/admin/broadcasts/{id}/preview` | Preview broadcast | Admin |
+| `POST` | `/api/admin/broadcasts/{id}/send` | Send broadcast | Admin |
+| `POST` | `/api/admin/broadcasts/{id}/cancel` | Cancel broadcast | Admin |
+| `DELETE` | `/api/admin/broadcasts/{id}` | Delete broadcast | Admin |
+| `GET` | `/api/admin/broadcasts/{id}/progress` | Get send progress | Admin |
 
 ---
 
@@ -589,9 +550,25 @@ curl http://localhost:8000/api/bots \
 
 | Method | Path | Description | Auth |
 |--------|------|-------------|------|
-| `GET` | `/api/tax-report/years` | List years with trade data | Yes |
-| `GET` | `/api/tax-report/{year}` | Tax report data as JSON | Yes |
-| `GET` | `/api/tax-report/{year}/download` | Download tax report as CSV | Yes |
+| `GET` | `/api/tax-report` | Tax report data as JSON (with query filters) | Yes |
+| `GET` | `/api/tax-report/csv` | Download tax report as CSV | Yes |
+
+---
+
+### Copy Trading
+
+| Method | Path | Description | Auth |
+|--------|------|-------------|------|
+| `POST` | `/api/copy-trading/validate-source` | Validate a Hyperliquid source wallet | Yes |
+| `GET` | `/api/exchanges/{exchange}/leverage-limits` | Get leverage limits for exchange | Yes |
+
+---
+
+### Notifications
+
+| Method | Path | Description | Auth |
+|--------|------|-------------|------|
+| `GET` | `/api/notifications` | List notifications for current user | Yes |
 
 ---
 
@@ -627,8 +604,9 @@ ws.onmessage = (event) => {
 | Method | Path | Description | Auth |
 |--------|------|-------------|------|
 | `GET` | `/metrics` | Prometheus metrics | No |
-| `GET` | `/api/config/health` | Detailed health check | Yes |
+| `GET` | `/api/health` | System health check | No |
 | `GET` | `/api/status` | Basic bot status | Yes |
+| `GET` | `/api/version` | Build version info | No |
 
 ---
 
@@ -638,12 +616,9 @@ Key endpoints are rate-limited:
 
 | Endpoint | Limit |
 |----------|-------|
-| `POST /api/auth/login` | 30/minute |
-| `POST /api/auth/refresh` | 10/minute |
-| `POST /api/backtest/run` | 10/minute |
-| `POST /api/bots` | 10/minute |
-| `POST /api/alerts` | 30/minute |
-| `PUT /api/affiliate-links/*` | 5/minute |
+| `POST /api/auth/login` | 5/minute |
+| `POST /api/auth/refresh` | 5/minute |
+| `PUT /api/auth/change-password` | 3/minute |
 
 ---
 

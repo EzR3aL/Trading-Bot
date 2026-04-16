@@ -1,5 +1,7 @@
 # Hyperliquid Revenue: Builder Code & Referral
 
+> **Last updated:** 2026-04-16 (v4.14.x)
+
 This document explains how the Trading Bot earns revenue from Hyperliquid trades via **Builder Codes** and **Referral/Affiliate** programs.
 
 ---
@@ -153,7 +155,31 @@ Both revenue streams are **independent and complementary**:
 
 ---
 
-## 5. Troubleshooting
+## 5. Automated Revenue Fetching (v4.15.0+)
+
+Since v4.15.0, the bot includes an **automated affiliate revenue fetcher** (`src/services/affiliate_revenue_fetcher.py`) that pulls revenue data from all supported exchanges every 6 hours.
+
+### How It Works
+
+- The fetcher runs as a scheduled background task (APScheduler, every 6h).
+- It loads API credentials from the **admin user's exchange connections** in the database -- no environment variables required.
+- Supported exchanges: **Bitget**, **Weex**, **BingX**, **Hyperliquid** (Bitunix has no public API).
+- Revenue entries are upserted into the `revenue_entries` table with a `(date, exchange, revenue_type)` unique constraint for idempotency.
+- Existing rows are updated when amounts change (e.g., late-arriving settlements).
+
+### Admin Revenue Dashboard
+
+- **API**: `GET /api/admin/revenue` -- list revenue entries with date/exchange filters.
+- **API**: `POST /api/admin/revenue/sync` -- trigger a manual sync (HTTP 202).
+- **Frontend**: Admin panel shows per-exchange revenue breakdown and totals.
+
+### Configuration
+
+No `.env` configuration needed. The fetcher uses the admin's stored exchange connections. Ensure the admin user has valid API keys set up in Settings for each exchange you want revenue tracking for.
+
+---
+
+## 6. Troubleshooting
 
 | Issue | Solution |
 |-------|----------|
@@ -165,14 +191,17 @@ Both revenue streams are **independent and complementary**:
 
 ---
 
-## 6. Files Reference
+## 7. Files Reference
 
 | File | Purpose |
 |------|---------|
 | `src/exchanges/hyperliquid/client.py` | Builder injection into orders, approval check, referral query |
 | `src/exchanges/hyperliquid/constants.py` | `DEFAULT_BUILDER_FEE = 10` |
-| `src/api/routers/config.py` | API endpoints for builder/referral status |
+| `src/api/routers/config_hyperliquid.py` | API endpoints for builder/referral status |
+| `src/api/routers/revenue.py` | Admin revenue dashboard API |
+| `src/services/affiliate_revenue_fetcher.py` | Automated revenue fetcher (coordinator) |
+| `src/services/affiliate/` | Per-exchange fetcher adapters (Bitget, Weex, BingX, Hyperliquid, Bitunix) |
 | `src/bot/bot_worker.py` | Pre-start checks (approval, referral gate) |
 | `frontend/src/pages/Settings.tsx` | Hyperliquid revenue dashboard tab |
 | `.env.example` | Configuration reference |
-| `tests/unit/exchanges/test_hyperliquid_builder.py` | 25 unit tests |
+| `tests/unit/exchanges/test_hyperliquid_builder.py` | Unit tests |

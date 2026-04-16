@@ -1,8 +1,8 @@
-# Cloud Deployment Anleitung (DigitalOcean)
+# Cloud Deployment Anleitung
 
-Diese Anleitung zeigt dir, wie du den Bitget Trading Bot auf einem DigitalOcean Droplet einrichtest, damit er 24/7 laeuft.
+> **Letzte Aktualisierung:** 2026-04-16 (v4.14.x)
 
-**Version:** 2.1.0
+Diese Anleitung zeigt dir, wie du den Trading Bot auf einem VPS (z.B. DigitalOcean, Hetzner) einrichtest, damit er 24/7 laeuft.
 
 ---
 
@@ -24,7 +24,7 @@ Diese Anleitung zeigt dir, wie du den Bitget Trading Bot auf einem DigitalOcean 
 
 ---
 
-## Architektur (v2.0+)
+## Architektur (v4.x)
 
 ```
                     Internet
@@ -34,16 +34,22 @@ Diese Anleitung zeigt dir, wie du den Bitget Trading Bot auf einem DigitalOcean 
                        |
               [FastAPI Backend :8000]
               /        |        \
-         [React UI]  [REST API]  [SQLite DB]
+         [React UI]  [REST API]  [PostgreSQL :5432]
               |        |
          [Recharts]  [JWT Auth]
+              
+    [Prometheus :9090] → [Alertmanager :9093]
+              |
+    [Grafana :3000]        [pg-backup]
 ```
 
-**Komponenten:**
-- **FastAPI Backend** (Port 8000): REST API + statische React-Dateien
-- **React Frontend**: Wird beim Docker-Build kompiliert und vom Backend ausgeliefert
-- **SQLite**: Datenbank fuer Trades, User, Configs (in `data/bot.db`)
-- **Nginx**: Reverse Proxy mit SSL-Terminierung
+**Docker Compose Services (6 Container):**
+- **trading-bot** (Port 8000): FastAPI Backend + React Frontend (kompiliert beim Build)
+- **postgres** (Port 5432): PostgreSQL 16 Datenbank (Trades, User, Configs)
+- **prometheus** (Port 9090): Metriken-Sammlung
+- **alertmanager** (Port 9093): Alert-Routing (Discord, etc.)
+- **grafana** (Port 3000): Dashboards und Visualisierung
+- **pg-backup**: Automatisches taegliches PostgreSQL-Backup (7 Tage Retention)
 
 ---
 
@@ -84,11 +90,11 @@ Diese Anleitung zeigt dir, wie du den Bitget Trading Bot auf einem DigitalOcean 
 
 ## Voraussetzungen
 
-- [ ] DigitalOcean Account ([Anmelden](https://www.digitalocean.com/))
+- [ ] VPS Account (DigitalOcean, Hetzner, etc.)
 - [ ] SSH Key-Pair
 - [ ] Domain (optional, fuer HTTPS)
-- [ ] Bitget API Credentials (Demo und/oder Live)
-- [ ] Discord Webhook URL
+- [ ] Exchange API Credentials (Bitget, Weex, Hyperliquid, Bitunix oder BingX)
+- [ ] Discord Webhook URL (optional)
 
 ---
 
@@ -104,7 +110,7 @@ Diese Anleitung zeigt dir, wie du den Bitget Trading Bot auf einem DigitalOcean 
 
 5. **Authentication:** SSH Key (empfohlen)
 
-6. **Hostname:** `bitget-trading-bot`
+6. **Hostname:** `trading-bot`
 
 7. **Create Droplet** klicken
 
@@ -194,8 +200,8 @@ docker compose version
 
 ```bash
 cd ~
-git clone https://github.com/EzR3aL/Bitget-Trading-Bot.git
-cd Bitget-Trading-Bot
+git clone <REPO_URL> Trading-Bot
+cd Trading-Bot
 ```
 
 ### 4.2 .env Datei erstellen
@@ -211,11 +217,20 @@ nano .env
 # Sicherheit (MUSS gesetzt werden!)
 JWT_SECRET_KEY=<generiere mit: python3 -c "import secrets; print(secrets.token_urlsafe(64))">
 
-# Logging
+# PostgreSQL (MUSS in Production geaendert werden!)
+POSTGRES_PASSWORD=<sicheres_passwort>
+
+# Grafana (MUSS in Production geaendert werden!)
+GF_ADMIN_PASSWORD=<sicheres_passwort>
+
+# Umgebung
+ENVIRONMENT=production
 LOG_LEVEL=INFO
 ```
 
-**Hinweis:** API-Keys, Discord-Webhook und Bitget-Credentials werden ueber die Web-Oberflaeche konfiguriert (Settings-Seite), nicht ueber die .env Datei. Die `ENCRYPTION_KEY` wird beim ersten Start automatisch generiert.
+**Wichtig:** Die App verweigert den Start mit Standard-Passwoertern wenn `ENVIRONMENT=production` gesetzt ist.
+
+**Hinweis:** Exchange API-Keys, Discord-Webhook und Credentials werden ueber die Web-Oberflaeche konfiguriert (Settings-Seite), nicht ueber die .env Datei. Die `ENCRYPTION_KEY` wird beim ersten Start automatisch generiert.
 
 ### 4.3 Admin-User erstellen
 
@@ -239,9 +254,14 @@ docker compose logs -f
 ```bash
 docker compose ps
 
-# Erwartete Ausgabe:
-# NAME                  STATUS       PORTS
-# bitget-trading-bot    Up 2 min     127.0.0.1:8000->8000/tcp
+# Erwartete Ausgabe (6 Container):
+# NAME                       STATUS       PORTS
+# bitget-trading-bot         Up 2 min     127.0.0.1:8000->8000/tcp
+# tradingbot-postgres        Up 2 min     127.0.0.1:5432->5432/tcp
+# tradingbot-prometheus      Up 1 min     127.0.0.1:9090->9090/tcp
+# tradingbot-alertmanager    Up 1 min     127.0.0.1:9093->9093/tcp
+# tradingbot-grafana         Up 1 min     127.0.0.1:3000->3000/tcp
+# tradingbot-pg-backup       Up 1 min
 ```
 
 ### 4.6 Web-UI einrichten
@@ -249,10 +269,10 @@ docker compose ps
 1. Oeffne `http://<IP>:8000` (temporaer, spaeter via HTTPS)
 2. Logge dich mit dem Admin-User ein
 3. Gehe zu **Settings**:
-   - Trage Bitget API-Keys ein (Demo und/oder Live)
-   - Trage Discord Webhook URL ein
+   - Trage Exchange API-Keys ein (Bitget, Weex, Hyperliquid, Bitunix oder BingX)
+   - Trage Discord/Telegram Webhook URL ein (optional)
 4. Gehe zu **Bot Control**:
-   - Waehle Exchange und Modus (Demo/Live)
+   - Erstelle einen neuen Bot (Exchange, Strategie, Parameter)
    - Starte den Bot
 
 ---
@@ -265,7 +285,7 @@ sudo nano /etc/systemd/system/trading-bot.service
 
 ```ini
 [Unit]
-Description=Bitget Trading Bot
+Description=Trading Bot
 Requires=docker.service
 After=docker.service
 
@@ -273,7 +293,7 @@ After=docker.service
 Type=oneshot
 RemainAfterExit=yes
 User=trading
-WorkingDirectory=/home/trading/Bitget-Trading-Bot
+WorkingDirectory=/home/trading/Trading-Bot
 ExecStart=/usr/bin/docker compose up -d
 ExecStop=/usr/bin/docker compose down
 TimeoutStartSec=0
@@ -400,29 +420,24 @@ sudo systemctl start fail2ban
 
 ### Datenbank-Backup
 
-```bash
-nano ~/backup-db.sh
-```
+Das PostgreSQL-Backup wird automatisch vom `pg-backup` Container durchgefuehrt:
+- **Frequenz:** Alle 24 Stunden
+- **Retention:** 7 Tage (aeltere Dumps werden geloescht)
+- **Speicherort:** `./backups/tradingbot_YYYYMMDD_HHMMSS.dump`
+- **Format:** pg_dump custom format (komprimiert)
 
 ```bash
-#!/bin/bash
-BACKUP_DIR="$HOME/backups"
-DB_PATH="$HOME/Bitget-Trading-Bot/data/bot.db"
-DATE=$(date +%Y%m%d_%H%M%S)
+# Backup-Status pruefen
+docker compose logs pg-backup --tail=5
 
-mkdir -p $BACKUP_DIR
-sqlite3 $DB_PATH ".backup '$BACKUP_DIR/bot_$DATE.db'"
-find $BACKUP_DIR -name "bot_*.db" -mtime +30 -delete
-echo "Backup: bot_$DATE.db"
+# Manuelles Backup
+docker compose exec postgres pg_dump -U tradingbot -Fc tradingbot > backups/manual_$(date +%Y%m%d).dump
+
+# Restore
+docker compose exec -T postgres pg_restore -U tradingbot -d tradingbot < backups/tradingbot_YYYYMMDD.dump
 ```
 
-```bash
-chmod +x ~/backup-db.sh
-
-# Cronjob (taeglich 3 Uhr)
-crontab -e
-# 0 3 * * * /home/trading/backup-db.sh >> /home/trading/backup.log 2>&1
-```
+Fuer Off-Host-Backups (z.B. auf S3/Object Storage) siehe `deploy/backup-offhost.sh`.
 
 ### Bot-Status Heartbeat
 
@@ -434,7 +449,7 @@ nano ~/check-bot-status.sh
 #!/bin/bash
 WEBHOOK_URL="https://discord.com/api/webhooks/..."
 
-if ! curl -sf http://localhost:8000/api/health > /dev/null 2>&1; then
+if ! curl -sf http://localhost:8000/api/health 2>&1 | grep -q '"status":"healthy"'; then
     curl -H "Content-Type: application/json" \
          -X POST \
          -d "{\"content\":\"ALERT: Trading Bot ist nicht erreichbar! $(date)\"}" \
@@ -457,12 +472,14 @@ crontab -e
 ### Updates installieren
 
 ```bash
-cd ~/Bitget-Trading-Bot
+cd ~/Trading-Bot
 git pull origin main
 docker compose down
-docker compose up -d --build
+docker compose up -d --build --no-cache
 docker compose logs -f
 ```
+
+**Hinweis:** Bei Frontend-Aenderungen immer `--no-cache` verwenden, damit das React-Frontend neu kompiliert wird.
 
 ### Logs einsehen
 
@@ -482,7 +499,7 @@ docker stats                              # Container-Ressourcen
 ### Datenbank optimieren
 
 ```bash
-sqlite3 data/bot.db "VACUUM;"
+docker compose exec postgres psql -U tradingbot -c "VACUUM ANALYZE;"
 ```
 
 ---
@@ -503,7 +520,7 @@ docker compose down && docker compose up -d --build  # Neu bauen
 sudo systemctl status nginx               # Nginx laeuft?
 sudo tail -f /var/log/nginx/error.log     # Nginx-Fehler
 docker compose ps                         # Container laeuft?
-curl http://localhost:8000/api/health      # Backend erreichbar?
+curl -s http://localhost:8000/api/health    # Backend erreichbar?
 sudo nginx -t && sudo systemctl reload nginx
 ```
 
@@ -514,21 +531,28 @@ sudo nginx -t && sudo systemctl reload nginx
 docker compose exec trading-bot python main.py --create-admin --username admin --password neues_passwort
 ```
 
-### Bitget API "exchange environment is incorrect"
+### Notifications kommen nicht (Discord/Telegram)
 
-- **Ursache:** Demo-Header falsch. Muss `paptrading: 1` sein (NICHT `X-SIMULATED-TRADING`)
-- **Fix:** Ist seit v2.1.0 behoben. Falls alte Version: `git pull && docker compose up -d --build`
-
-### TP/SL wird als "Partial" gesetzt
-
-- **Ursache:** Alte Version nutzte `presetStopSurplusPrice` auf Place-Order (erstellt Partial TP/SL)
-- **Fix:** Seit v2.1.0 wird `/api/v2/mix/order/place-pos-tpsl` fuer Entire TP/SL verwendet
-
-### Discord Notifications kommen nicht
-
-1. Pruefen ob Webhook URL in Settings gesetzt ist
+1. Pruefen ob Webhook URL / Bot Token in Settings gesetzt ist
 2. Pruefen ob Trade ueber die API eroeffnet wurde (direkte Scripts senden keine Notifications)
-3. Logs pruefen: `docker compose logs | grep -i discord`
+3. Logs pruefen: `docker compose logs | grep -i discord` oder `grep -i telegram`
+4. Test-Notification senden: Settings > Notifications > Test
+
+### PostgreSQL startet nicht
+
+```bash
+docker compose logs postgres                      # Fehler pruefen
+docker volume ls                                  # Volume vorhanden?
+docker compose down -v && docker compose up -d    # Nur wenn Datenverlust akzeptabel!
+```
+
+### Grafana nicht erreichbar
+
+```bash
+docker compose logs grafana                       # Fehler pruefen
+# Grafana laeuft auf Port 3000 (nur localhost)
+curl http://localhost:3000/api/health
+```
 
 ---
 
@@ -536,32 +560,33 @@ docker compose exec trading-bot python main.py --create-admin --username admin -
 
 ### Checkliste: Deployment abgeschlossen
 
-- [ ] Droplet erstellt und konfiguriert
+- [ ] VPS erstellt und konfiguriert
 - [ ] Non-root User `trading` eingerichtet
 - [ ] Firewall (UFW) aktiv
 - [ ] Docker installiert
 - [ ] Repository geklont und `.env` konfiguriert
+- [ ] POSTGRES_PASSWORD und GF_ADMIN_PASSWORD geaendert
+- [ ] ENVIRONMENT=production gesetzt
 - [ ] Admin-User erstellt
-- [ ] Container laeuft (`docker compose ps`)
+- [ ] Alle 6 Container laufen (`docker compose ps`)
 - [ ] Systemd-Service aktiviert (Auto-Start)
-- [ ] Bitget API-Keys ueber Settings-Seite eingetragen
-- [ ] Discord Webhook ueber Settings-Seite eingetragen
+- [ ] Exchange API-Keys ueber Settings-Seite eingetragen
+- [ ] Notifications konfiguriert (Discord/Telegram, optional)
 - [ ] Domain + Nginx + SSL konfiguriert (optional)
-- [ ] Backups eingerichtet
+- [ ] pg-backup Container laeuft (automatische Backups)
+- [ ] Grafana-Dashboard erreichbar (Port 3000)
 - [ ] Fail2Ban aktiv
 
 ### Wichtige Befehle
 
 ```bash
-docker compose ps                         # Status
-docker compose logs -f                    # Logs
-docker compose restart                    # Neustarten
-git pull && docker compose up -d --build  # Update
-sudo systemctl status trading-bot         # Systemd-Status
-sudo systemctl reload nginx               # Nginx neu laden
-sudo certbot renew                        # SSL erneuern
+docker compose ps                                 # Status aller 6 Container
+docker compose logs -f trading-bot                # Bot-Logs
+docker compose logs -f postgres                   # DB-Logs
+docker compose logs pg-backup --tail=5            # Backup-Status
+docker compose restart trading-bot                # Bot neustarten
+git pull && docker compose up -d --build --no-cache  # Update
+sudo systemctl status trading-bot                 # Systemd-Status
+sudo systemctl reload nginx                       # Nginx neu laden
+sudo certbot renew                                # SSL erneuern
 ```
-
----
-
-**Version:** 2.1.0 | **Letzte Aktualisierung:** 2026-02-04
