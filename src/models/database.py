@@ -8,6 +8,7 @@ trades, funding_payments, bot_instances, exchanges.
 
 from sqlalchemy import (
     Boolean,
+    CheckConstraint,
     Column,
     Date,
     DateTime,
@@ -129,6 +130,11 @@ class TradeRecord(Base):
         Index("ix_trade_entry_time", "entry_time"),
         Index("ix_trade_exit_time", "exit_time"),
         Index("ix_trade_user_demo", "user_id", "demo_mode"),
+        Index("ix_trade_records_status_synced", "status", "last_synced_at"),
+        CheckConstraint(
+            "risk_source IN ('native_exchange', 'software_bot', 'manual_user', 'unknown')",
+            name="ck_trade_records_risk_source",
+        ),
     )
 
     id = Column(Integer, primary_key=True, autoincrement=True)
@@ -162,6 +168,42 @@ class TradeRecord(Base):
     native_trailing_stop = Column(Boolean, default=False, nullable=False, server_default=text("false"))
     trailing_atr_override = Column(Float, nullable=True)  # Manual ATR multiplier override (from edit panel)
     demo_mode = Column(Boolean, default=False, nullable=False, server_default=text("false"))
+
+    # Risk-State fields (#189, Epic #188): per-leg native exchange order IDs
+    # tracked so the upcoming risk_state_manager can reconcile what is
+    # actually live on the exchange against the bot's intent.
+    tp_order_id = Column(String(100), nullable=True)
+    sl_order_id = Column(String(100), nullable=True)
+    trailing_order_id = Column(String(100), nullable=True)
+
+    # Trailing-stop parameters captured at placement time so they survive
+    # restarts without having to re-derive them from the strategy.
+    trailing_callback_rate = Column(Float, nullable=True)
+    trailing_activation_price = Column(Float, nullable=True)
+    trailing_trigger_price = Column(Float, nullable=True)
+
+    # Source-of-truth marker for the risk decision. CHECK constraint above
+    # restricts to: native_exchange | software_bot | manual_user | unknown.
+    risk_source = Column(
+        String(20),
+        nullable=False,
+        default="unknown",
+        server_default="unknown",
+    )
+
+    # 2-Phase-Commit bookkeeping per leg. ``*_intent`` is the price/value
+    # the bot *wants*; ``*_status`` reflects the exchange-side state:
+    # pending | confirmed | rejected | cleared | cancel_failed.
+    tp_intent = Column(Float, nullable=True)
+    tp_status = Column(String(20), nullable=True)
+    sl_intent = Column(Float, nullable=True)
+    sl_status = Column(String(20), nullable=True)
+    trailing_intent_callback = Column(Float, nullable=True)
+    trailing_status = Column(String(20), nullable=True)
+
+    # Reconciler timestamp — set by risk_state_manager after a successful
+    # exchange-side sync. Indexed via ix_trade_records_status_synced.
+    last_synced_at = Column(DateTime(timezone=True), nullable=True)
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
