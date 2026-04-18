@@ -21,6 +21,9 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 ### Changed
 - Klassifizierer für exit_reason refactored (#193, Epic #188): liest jetzt Bitgets orders-plan-history (via #191 readback) als Source of Truth für was die Position geschlossen hat. 9 neue präzise Reason-Codes (TRAILING_STOP_NATIVE/SOFTWARE, TAKE_PROFIT/STOP_LOSS_NATIVE, MANUAL_CLOSE_UI/EXCHANGE, STRATEGY_EXIT, LIQUIDATION, FUNDING_EXPIRY, EXTERNAL_CLOSE_UNKNOWN). `RiskStateManager.classify_close()` ersetzt den heuristischen Klassifizierer in `position_monitor._handle_closed_position`; Heuristik nur noch als Fallback bei API-Fail. Verhindert Anti-Pattern B (heuristischer Klassifizierer ohne Exchange-Probe). Strategy-Exit-Hinweise via `note_strategy_exit()` überschreiben Exchange-Readback (interne Signale gewinnen).
 
+### Changed
+- PUT /api/trades/{id}/tp-sl refactored auf RiskStateManager (#192, Epic #188): 2-Phase-Commit pro Leg (TP/SL/Trailing einzeln), Response enthält post-readback State je Leg, Partial-Success möglich, Idempotency-Key support. Alter Pfad bleibt parallel über Feature-Flag risk_state_manager_enabled (default off). Anti-Pattern A (probe-but-don't-write) und C (cancel-DEBUG) endgültig verhindert.
+
 ### Fixed
 - i18n-Kollision aufgelöst: MANUAL_CLOSE und EXTERNAL_CLOSE hatten beide das Label "Manuell geschlossen" (#194, Epic #188). Plus 10 neue präzise Reason-Codes (TRAILING_STOP_NATIVE/SOFTWARE, TAKE_PROFIT/STOP_LOSS_NATIVE, MANUAL_CLOSE_UI/EXCHANGE, STRATEGY_EXIT, LIQUIDATION, FUNDING_EXPIRY, EXTERNAL_CLOSE_UNKNOWN). Uniqueness-Test verhindert künftige Kollisionen.
 

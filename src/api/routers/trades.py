@@ -2,14 +2,20 @@
 
 from collections import defaultdict
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Any, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from config.settings import settings
+from src.api.dependencies.risk_state import (
+    get_idempotency_cache,
+    get_risk_state_manager,
+)
 from src.api.schemas.trade import TradeListResponse, TradeResponse
 from src.auth.dependencies import get_current_user
+from src.bot.risk_state_manager import RiskLeg, RiskOpResult, RiskOpStatus
 from src.data.market_data import MarketDataFetcher
 from src.exchanges.factory import create_exchange_client
 from src.models.database import BotConfig, ExchangeConnection, TradeRecord, User, UserConfig
@@ -588,6 +594,257 @@ class UpdateTpSlRequest(PydanticBaseModel):
     trailing_stop: Optional[TrailingStopParams] = None
 
 
+# ── Response schemas (RiskStateManager path, #192) ─────────────────
+
+
+class RiskLegStatus(PydanticBaseModel):
+    """Per-leg outcome surfaced from a RiskStateManager apply_intent call."""
+
+    value: Optional[Any] = None
+    status: str  # pending | confirmed | rejected | cleared | cancel_failed
+    order_id: Optional[str] = None
+    error: Optional[str] = None
+    latency_ms: int = 0
+
+
+class TpSlResponse(PydanticBaseModel):
+    """Aggregate response for the new RiskStateManager-backed endpoint."""
+
+    trade_id: int
+    tp: Optional[RiskLegStatus] = None
+    sl: Optional[RiskLegStatus] = None
+    trailing: Optional[RiskLegStatus] = None
+    applied_at: datetime
+    overall_status: str  # all_confirmed | partial_success | all_rejected | no_change
+
+
+# ── Helpers for the new endpoint ───────────────────────────────────
+
+
+# Status codes returned by the RiskStateManager — used to derive the
+# aggregate ``overall_status`` and the HTTP response code.
+_RISK_OK_STATUSES = {RiskOpStatus.CONFIRMED.value, RiskOpStatus.CLEARED.value}
+_RISK_FAIL_STATUSES = {
+    RiskOpStatus.REJECTED.value,
+    RiskOpStatus.CANCEL_FAILED.value,
+}
+
+
+def _risk_result_to_status(result: RiskOpResult) -> RiskLegStatus:
+    """Convert a :class:`RiskOpResult` into the API response shape."""
+    return RiskLegStatus(
+        value=result.value,
+        status=result.status.value,
+        order_id=result.order_id,
+        error=result.error,
+        latency_ms=result.latency_ms,
+    )
+
+
+def _derive_overall_status(legs: list[RiskLegStatus]) -> str:
+    """Aggregate per-leg statuses into a single overall outcome label."""
+    if not legs:
+        return "no_change"
+    statuses = [leg.status for leg in legs]
+    has_ok = any(s in _RISK_OK_STATUSES for s in statuses)
+    has_fail = any(s in _RISK_FAIL_STATUSES for s in statuses)
+    if has_ok and not has_fail:
+        return "all_confirmed"
+    if has_fail and not has_ok:
+        return "all_rejected"
+    if has_ok and has_fail:
+        return "partial_success"
+    return "no_change"
+
+
+async def _compute_atr_for_trailing(
+    symbol: str, entry_price: float
+) -> float:
+    """Fetch ATR for the trailing-stop endpoint.
+
+    Returns the live 1h/14-period ATR if available, otherwise a 1.5%
+    fallback based on the trade's entry price. The computation lives in
+    the endpoint (not the manager) because ATR depends on a strategy-
+    specific kline interval that the manager has no business knowing.
+    """
+    fetcher = MarketDataFetcher()
+    try:
+        klines = await fetcher.get_binance_klines(symbol, "1h", 30)
+        atr_series = MarketDataFetcher.calculate_atr(klines, 14)
+        if atr_series:
+            return atr_series[-1]
+    except Exception as atr_err:  # noqa: BLE001 — fallback to estimate
+        logger.warning(
+            "ATR fetch failed for %s, using 1.5%% estimate: %s", symbol, atr_err,
+        )
+    finally:
+        await fetcher.close()
+    return entry_price * 0.015
+
+
+async def _build_trailing_intent(
+    trade: TradeRecord, params: TrailingStopParams,
+) -> dict:
+    """Translate a UI ``TrailingStopParams`` into the manager's payload.
+
+    The manager expects a dict with ``callback_rate``,
+    ``activation_price`` and ``trigger_price`` keys (plus an
+    ``atr_override`` so we can persist the user's chosen multiplier on
+    the trade row through Phase D).
+    """
+    atr_val = await _compute_atr_for_trailing(trade.symbol, trade.entry_price)
+    atr_mult = params.callback_pct
+    trail_distance = atr_val * atr_mult
+    callback_rate = (trail_distance / trade.entry_price) * 100
+    breakeven_atr = 1.5
+    if trade.side == "long":
+        trigger = trade.entry_price + atr_val * breakeven_atr
+    else:
+        trigger = trade.entry_price - atr_val * breakeven_atr
+    return {
+        "callback_rate": round(callback_rate, 2),
+        "activation_price": None,
+        "trigger_price": round(trigger, 2),
+        "atr_override": atr_mult,
+    }
+
+
+def _validate_tp_sl_values(body: UpdateTpSlRequest, trade: TradeRecord) -> None:
+    """Run the side/entry-price validation that's shared by both paths.
+
+    Raises :class:`HTTPException` (400/422) on a violation. The legacy
+    endpoint runs the same checks inline; we extract them so the new
+    path can reuse them without duplicating the validation logic.
+    """
+    if body.remove_tp and body.take_profit is not None:
+        raise HTTPException(status_code=422, detail=ERR_TP_SL_CONFLICT_TP)
+    if body.remove_sl and body.stop_loss is not None:
+        raise HTTPException(status_code=422, detail=ERR_TP_SL_CONFLICT_SL)
+    if trade.entry_price <= 0:
+        raise HTTPException(status_code=400, detail="Trade has invalid entry price")
+    is_long = trade.side == "long"
+    if body.take_profit is not None:
+        if body.take_profit <= 0:
+            raise HTTPException(status_code=400, detail=ERR_TP_POSITIVE)
+        if is_long and body.take_profit <= trade.entry_price:
+            raise HTTPException(status_code=400, detail=ERR_TP_ABOVE_ENTRY_LONG)
+        if not is_long and body.take_profit >= trade.entry_price:
+            raise HTTPException(status_code=400, detail=ERR_TP_BELOW_ENTRY_SHORT)
+    if body.stop_loss is not None:
+        if body.stop_loss <= 0:
+            raise HTTPException(status_code=400, detail=ERR_SL_POSITIVE)
+        if is_long and body.stop_loss >= trade.entry_price:
+            raise HTTPException(status_code=400, detail=ERR_SL_BELOW_ENTRY_LONG)
+        if not is_long and body.stop_loss <= trade.entry_price:
+            raise HTTPException(status_code=400, detail=ERR_SL_ABOVE_ENTRY_SHORT)
+
+
+async def _handle_tp_sl_via_manager(
+    trade_id: int,
+    body: UpdateTpSlRequest,
+    trade: TradeRecord,
+    idempotency_key: Optional[str],
+) -> TpSlResponse:
+    """Dispatch the request through :class:`RiskStateManager`.
+
+    Each leg is applied independently — a rejection on one leg does not
+    block the others. Per-leg results are collected and the response
+    aggregates them. No direct exchange calls happen here (Pattern A
+    guard) — everything goes through the manager.
+    """
+    cache = get_idempotency_cache()
+    cache_key: Optional[str] = None
+    if idempotency_key:
+        cache_key = f"tp_sl:{trade_id}:{idempotency_key}"
+        cached = await cache.get(cache_key)
+        if cached is not None:
+            return cached
+
+    manager = get_risk_state_manager()
+    legs: list[tuple[RiskLeg, RiskLegStatus]] = []
+
+    async def _apply(leg: RiskLeg, value: Any) -> RiskLegStatus:
+        # Per-leg try/except: a single leg failure must not break the others
+        try:
+            result = await manager.apply_intent(trade_id, leg, value)
+            status = _risk_result_to_status(result)
+        except Exception as exc:  # noqa: BLE001 — surface as REJECTED
+            logger.exception(
+                "tp_sl_endpoint manager.apply_intent crashed",
+                extra={
+                    "event_type": "tp_sl_endpoint",
+                    "trade_id": trade_id,
+                    "leg": leg.value,
+                    "status": "rejected",
+                },
+            )
+            status = RiskLegStatus(
+                value=value,
+                status=RiskOpStatus.REJECTED.value,
+                order_id=None,
+                error=str(exc),
+                latency_ms=0,
+            )
+        logger.info(
+            "tp_sl_endpoint leg=%s status=%s latency_ms=%s",
+            leg.value, status.status, status.latency_ms,
+            extra={
+                "event_type": "tp_sl_endpoint",
+                "trade_id": trade_id,
+                "leg": leg.value,
+                "status": status.status,
+                "latency_ms": status.latency_ms,
+            },
+        )
+        return status
+
+    # ── TP leg ─────────────────────────────────────────────────────
+    if body.remove_tp:
+        legs.append((RiskLeg.TP, await _apply(RiskLeg.TP, None)))
+    elif body.take_profit is not None:
+        legs.append((RiskLeg.TP, await _apply(RiskLeg.TP, body.take_profit)))
+
+    # ── SL leg ─────────────────────────────────────────────────────
+    if body.remove_sl:
+        legs.append((RiskLeg.SL, await _apply(RiskLeg.SL, None)))
+    elif body.stop_loss is not None:
+        legs.append((RiskLeg.SL, await _apply(RiskLeg.SL, body.stop_loss)))
+
+    # ── Trailing leg ───────────────────────────────────────────────
+    if body.trailing_stop is not None:
+        trailing_value = await _build_trailing_intent(trade, body.trailing_stop)
+        legs.append((RiskLeg.TRAILING, await _apply(RiskLeg.TRAILING, trailing_value)))
+
+    leg_dict: dict[RiskLeg, RiskLegStatus] = dict(legs)
+    overall = _derive_overall_status(list(leg_dict.values()))
+
+    if overall == "partial_success":
+        logger.warning(
+            "tp_sl_endpoint partial_success trade=%s legs=%s",
+            trade_id,
+            {leg.value: status.status for leg, status in legs},
+            extra={
+                "event_type": "tp_sl_endpoint",
+                "trade_id": trade_id,
+                "status": overall,
+            },
+        )
+
+    response = TpSlResponse(
+        trade_id=trade_id,
+        tp=leg_dict.get(RiskLeg.TP),
+        sl=leg_dict.get(RiskLeg.SL),
+        trailing=leg_dict.get(RiskLeg.TRAILING),
+        applied_at=datetime.now(timezone.utc),
+        overall_status=overall,
+    )
+
+    if cache_key is not None:
+        await cache.set(cache_key, response)
+
+    return response
+
+
 @router.put("/{trade_id}/tp-sl")
 @limiter.limit("10/minute")
 async def update_trade_tpsl(
@@ -596,8 +853,45 @@ async def update_trade_tpsl(
     request: Request,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
+    idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key"),
 ):
-    """Update TP/SL on an open position — sets on exchange + updates DB."""
+    """Update TP/SL on an open position — sets on exchange + updates DB.
+
+    When ``Settings.risk.risk_state_manager_enabled`` is True the request
+    is delegated to :class:`RiskStateManager` which guarantees
+    2-Phase-Commit per leg. The legacy direct-exchange path runs
+    unchanged when the flag is off.
+    """
+
+    # ── Feature flag: route through RiskStateManager (#192) ─────────
+    if settings.risk.risk_state_manager_enabled:
+        # Reject contradictory flags before doing any DB work
+        if body.remove_tp and body.take_profit is not None:
+            raise HTTPException(status_code=422, detail=ERR_TP_SL_CONFLICT_TP)
+        if body.remove_sl and body.stop_loss is not None:
+            raise HTTPException(status_code=422, detail=ERR_TP_SL_CONFLICT_SL)
+
+        trade_result = await db.execute(
+            select(TradeRecord).where(
+                TradeRecord.id == trade_id,
+                TradeRecord.user_id == user.id,
+            )
+        )
+        trade = trade_result.scalar_one_or_none()
+        if not trade:
+            raise HTTPException(status_code=404, detail=ERR_TRADE_NOT_FOUND)
+        if trade.status != "open":
+            raise HTTPException(status_code=400, detail="Trade is not open")
+        _validate_tp_sl_values(body, trade)
+
+        return await _handle_tp_sl_via_manager(
+            trade_id=trade_id,
+            body=body,
+            trade=trade,
+            idempotency_key=idempotency_key,
+        )
+
+    # ── Legacy path (flag off) — UNTOUCHED below ───────────────────
 
     # Reject contradictory flags
     if body.remove_tp and body.take_profit is not None:
