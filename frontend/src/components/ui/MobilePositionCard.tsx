@@ -6,6 +6,8 @@ import MobileCollapsibleCard from './MobileCollapsibleCard'
 import { DetailGrid } from './DetailGrid'
 import SizeValue from './SizeValue'
 import EditPositionPanel from './EditPositionPanel'
+import RiskStateBadge from './RiskStateBadge'
+import { deriveRiskStateFromPosition } from '../../utils/riskState'
 import api from '../../api/client'
 
 interface Position {
@@ -80,25 +82,24 @@ function MobilePositionCardInner({ pos }: { pos: Position }) {
     { label: t('portfolio.leverage'), value: `${pos.leverage}x` },
     { label: t('portfolio.size'), value: <SizeValue size={pos.size} price={pos.current_price || pos.entry_price} symbol={pos.symbol} /> },
     { label: t('portfolio.margin', 'Margin'), value: <span className="tabular-nums">${pos.margin?.toFixed(2)}</span>, hidden: !pos.margin || pos.margin <= 0 },
-    {
-      label: t('bots.trailingStop'),
-      value: (
-        <span className="text-emerald-400 tabular-nums inline-flex items-center gap-1">
-          ${pos.trailing_stop_price?.toLocaleString()}
-          {pos.trailing_stop_distance_pct != null && (
-            <span className="text-gray-400">({pos.trailing_stop_distance_pct.toFixed(2)}%)</span>
-          )}
-          {pos.can_close_at_loss === false && (
-            <span title={t('bots.trailingStopProtecting')}>
-              <ShieldCheck size={12} className="text-emerald-400" />
-            </span>
-          )}
-        </span>
-      ),
-      hidden: !pos.trailing_stop_active || pos.trailing_stop_price == null,
-    },
-    { label: 'Take Profit', value: <span className="tabular-nums text-emerald-400">${pos.take_profit?.toLocaleString()}</span>, hidden: pos.take_profit == null },
-    { label: 'Stop Loss', value: <span className="tabular-nums text-red-400">${pos.stop_loss?.toLocaleString()}</span>, hidden: pos.stop_loss == null },
+    (() => {
+      const risk = deriveRiskStateFromPosition(pos)
+      const hasAny = risk.tp != null || risk.sl != null || risk.trailing != null
+      return {
+        label: t('trades.riskBadges.tp') + '/' + t('trades.riskBadges.sl'),
+        colSpan: 2 as const,
+        value: hasAny ? (
+          <RiskStateBadge
+            tp={risk.tp}
+            sl={risk.sl}
+            trailing={risk.trailing}
+            riskSource={risk.risk_source}
+            compact={false}
+          />
+        ) : null,
+        hidden: !hasAny,
+      }
+    })(),
     { label: 'Bot', value: pos.bot_name ?? '', hidden: !pos.bot_name },
     {
       label: 'Exchange',

@@ -106,6 +106,24 @@
       "EXTERNAL_CLOSE": "Externally closed",
       "MANUAL_CLOSE": "Manually closed (legacy)",
       "unknown": "Closed"
+    },
+    "riskBadges": {
+      "tp": "TP",
+      "sl": "SL",
+      "trail": "Trail",
+      "source": {
+        "native_exchange": "Placed on exchange",
+        "software_bot": "Monitored by bot",
+        "manual_user": "User-set",
+        "unknown": "Unknown source"
+      },
+      "status": {
+        "pending": "Applying…",
+        "confirmed": "Active",
+        "rejected": "Rejected",
+        "cleared": "Cleared",
+        "cancel_failed": "Cancel failed"
+      }
     }
   },
   "settings": {
