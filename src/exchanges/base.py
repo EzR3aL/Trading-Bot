@@ -3,12 +3,35 @@
 import asyncio
 import json
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Type
 
 import aiohttp
 
 from src.exchanges.types import Balance, FundingRateInfo, Order, Position, Ticker
 from src.utils.circuit_breaker import CircuitBreakerError, with_retry
+
+
+# ── Risk-state readback snapshots (Issue #190 / #191) ────────────────
+# Returned by get_position_tpsl() and get_trailing_stop() so the
+# RiskStateManager can compare exchange truth against DB intent.
+
+@dataclass
+class PositionTpSlSnapshot:
+    """Live TP/SL state for an open position as reported by the exchange."""
+    tp_price: Optional[float]
+    tp_order_id: Optional[str]
+    sl_price: Optional[float]
+    sl_order_id: Optional[str]
+
+
+@dataclass
+class TrailingStopSnapshot:
+    """Live trailing-stop state for an open position as reported by the exchange."""
+    callback_rate: Optional[float]
+    activation_price: Optional[float]
+    trigger_price: Optional[float]
+    order_id: Optional[str]
 
 if TYPE_CHECKING:
     from src.exchanges.rate_limiter import ExchangeRateLimiter
@@ -159,6 +182,32 @@ class ExchangeClient(ABC):
         set ``SUPPORTS_NATIVE_TRAILING_STOP = True``.
         """
         return None
+
+    async def get_position_tpsl(
+        self, symbol: str, hold_side: str
+    ) -> "PositionTpSlSnapshot":
+        """Read back the live TP/SL state for (symbol, hold_side).
+
+        Implemented in #191 by exchange adapters. The default raises
+        ``NotImplementedError`` so the RiskStateManager (#190) treats the
+        readback as best-effort and falls back to the intended value.
+        """
+        raise NotImplementedError(
+            f"{self.exchange_name} does not implement get_position_tpsl yet"
+        )
+
+    async def get_trailing_stop(
+        self, symbol: str, hold_side: str
+    ) -> "TrailingStopSnapshot":
+        """Read back the live trailing-stop state for (symbol, hold_side).
+
+        Implemented in #191 by exchange adapters. The default raises
+        ``NotImplementedError`` so the RiskStateManager (#190) treats the
+        readback as best-effort and falls back to the intended value.
+        """
+        raise NotImplementedError(
+            f"{self.exchange_name} does not implement get_trailing_stop yet"
+        )
 
     async def has_native_trailing_stop(self, symbol: str, hold_side: str) -> bool:
         """Return True if a native trailing-stop plan is already live for

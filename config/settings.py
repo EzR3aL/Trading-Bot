@@ -206,6 +206,18 @@ class LoggingConfig:
 
 
 @dataclass
+class RiskConfig:
+    """Risk-management feature flags (Epic #188).
+
+    ``risk_state_manager_enabled`` gates the new 2-Phase-Commit
+    RiskStateManager (#190). Default off so the rollout is opt-in.
+    """
+    risk_state_manager_enabled: bool = field(
+        default_factory=lambda: get_env("RISK_STATE_MANAGER_ENABLED", "false", bool)
+    )
+
+
+@dataclass
 class Settings:
     """Main settings container."""
     bitget: BitgetConfig = field(default_factory=BitgetConfig)
@@ -213,6 +225,7 @@ class Settings:
     trading: TradingConfig = field(default_factory=TradingConfig)
     strategy: StrategyConfig = field(default_factory=StrategyConfig)
     logging: LoggingConfig = field(default_factory=LoggingConfig)
+    risk: RiskConfig = field(default_factory=RiskConfig)
 
     def validate(self) -> dict:
         """Validate all configurations and return status."""

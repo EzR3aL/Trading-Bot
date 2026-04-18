@@ -12,6 +12,7 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 ## [Unreleased]
 
 ### Added
+- Modul `src/bot/risk_state_manager.py` mit 2-Phase-Commit für TP/SL/Trailing (#190, Epic #188): apply_intent() schreibt Intent → Exchange → Readback → DB; reconcile() heilt Drift; classify_close() Stub für #193. Feature-Flag RISK_STATE_MANAGER_ENABLED (default off). Verhindert Anti-Pattern A (probe-but-don't-write) und C (DEBUG cancel errors).
 - DB-Migration für Risk-State-Felder auf trade_records (#189, Epic #188): tp_order_id, sl_order_id, trailing_order_id, trailing_callback_rate, trailing_activation_price, trailing_trigger_price, risk_source ENUM, *_intent/*_status pro Leg, last_synced_at. Vorbereitung für 2-Phase-Commit Risk-State-Manager.
 
 ### Fixed
