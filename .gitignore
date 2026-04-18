@@ -74,6 +74,7 @@ Thumbs.db
 # Project specific
 logs/
 /data/
+/reports/
 *.db
 *.log
 

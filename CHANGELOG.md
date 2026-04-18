@@ -12,6 +12,7 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 ## [Unreleased]
 
 ### Added
+- Drift-Backfill-Script `scripts/reconcile_open_trades.py` (#198, Epic #188): scannt alle offenen Trades, vergleicht DB mit Exchange-State via RiskStateManager.reconcile(), erzeugt Markdown-Report. Default Dry-Run, --apply zum Korrigieren. Filter --user-id und --exchange. Skip-Verhalten für Weex/Bitunix (kein Probe-Support).
 - Modul `src/bot/risk_state_manager.py` mit 2-Phase-Commit für TP/SL/Trailing (#190, Epic #188): apply_intent() schreibt Intent → Exchange → Readback → DB; reconcile() heilt Drift; classify_close() Stub für #193. Feature-Flag RISK_STATE_MANAGER_ENABLED (default off). Verhindert Anti-Pattern A (probe-but-don't-write) und C (DEBUG cancel errors).
 - DB-Migration für Risk-State-Felder auf trade_records (#189, Epic #188): tp_order_id, sl_order_id, trailing_order_id, trailing_callback_rate, trailing_activation_price, trailing_trigger_price, risk_source ENUM, *_intent/*_status pro Leg, last_synced_at. Vorbereitung für 2-Phase-Commit Risk-State-Manager.
 - Exchange-Client Readback-Methoden für Bitget/BingX/Hyperliquid (#191, Epic #188): `get_position_tpsl()`, `get_trailing_stop()`, `get_close_reason_from_history()`. Normalisierte Snapshot-Dataclasses in `base.py`. Voraussetzung für RiskStateManager (#190) der die Methoden als Source of Truth nutzt.
