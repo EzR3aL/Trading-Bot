@@ -320,8 +320,155 @@ async def run_smoke() -> bool:
         record("All DB legs cleared",
                db["take_profit"] is None and db["stop_loss"] is None)
 
-        # ── Step 12: close position ────────────────────────────────
-        print("\nSTEP 12: close position")
+        # ── Step 12: always-sweep against drift ────────────────────
+        # Regression: a stray moving_plan placed behind the manager's back
+        # (e.g. by a prior bot tick or manual exchange edit) used to survive
+        # an apply_intent call. The manager now ALWAYS sweeps before placing,
+        # so after an intent only the new plan should remain.
+        print("\nSTEP 12: always-sweep — manager must clear stray plan")
+        # Re-arm a position-level trailing baseline 2.5 % via the manager.
+        cur_ticker = await client.get_ticker(SYMBOL)
+        trigger_long = round(cur_ticker.last_price * 1.01, 1)
+        baseline = {"callback_rate": 2.5, "activation_price": None,
+                    "trigger_price": trigger_long, "atr_override": 2.5}
+        await manager.apply_intent(trade_id, RiskLeg.TRAILING, baseline)
+        await asyncio.sleep(1.0)
+        # Now place a SECOND moving_plan directly on the exchange behind the
+        # manager's back. This simulates drift (concurrent bot tick / manual
+        # placement) — both plans now coexist on Bitget.
+        pos = await client.get_position(SYMBOL)
+        stray_size = pos.size if pos else round((MARGIN_USDT * LEVERAGE) / cur_ticker.last_price, 6)
+        cur_ticker = await client.get_ticker(SYMBOL)
+        stray_trigger = round(cur_ticker.last_price * 1.01, 1)
+        await client.place_trailing_stop(
+            symbol=SYMBOL, hold_side=SIDE, size=stray_size,
+            callback_ratio=4.0, trigger_price=stray_trigger,
+            margin_mode="cross",
+        )
+        await asyncio.sleep(1.5)
+        # Apply a NEW intent (1.8 %) — manager must sweep BOTH stale plans
+        # (its own previous one + the stray) and leave exactly the new one.
+        cur_ticker = await client.get_ticker(SYMBOL)
+        trigger_long = round(cur_ticker.last_price * 1.01, 1)
+        new_trail = {"callback_rate": 1.8, "activation_price": None,
+                     "trigger_price": trigger_long, "atr_override": 1.8}
+        await manager.apply_intent(trade_id, RiskLeg.TRAILING, new_trail)
+        ex = await _read_exchange(client); db = await _read_db(trade_id)
+        # Count live moving_plan entries on the exchange — must be exactly 1.
+        raw = await client._request(
+            "GET", "/api/v2/mix/order/orders-plan-pending",
+            params={"productType": "USDT-FUTURES", "symbol": SYMBOL,
+                    "planType": "profit_loss"},
+            auth=True,
+        )
+        entries = raw.get("entrustedList") if isinstance(raw, dict) else None
+        moving_plans = [
+            p for p in (entries or [])
+            if (p.get("planType") or "").lower() == "moving_plan"
+            and (p.get("posSide") or p.get("holdSide") or "").lower()
+                in ("", SIDE.lower())
+        ]
+        record(
+            "Exactly ONE moving_plan after sweep",
+            len(moving_plans) == 1,
+            f"found {len(moving_plans)} moving_plan entries",
+        )
+        record(
+            "Exchange callback matches new value (1.8%)",
+            ex["trailing_callback"] is not None and abs(ex["trailing_callback"] - 1.8) < 0.5,
+            f"callback={ex['trailing_callback']}%",
+        )
+        record(
+            "DB row confirmed with new order_id",
+            db["trailing_status"] == "confirmed"
+            and db["trailing_order_id"] is not None
+            and ex["trailing_order_id"] is not None
+            and db["trailing_order_id"] == ex["trailing_order_id"],
+            f"db_oid={db['trailing_order_id']} ex_oid={ex['trailing_order_id']}",
+        )
+
+        # ── Step 13: user_cleared guard data-state proxy ───────────
+        # Regression: the bot monitor must NOT auto-place a trailing after
+        # the user explicitly cleared it. The behavioral test (mock the
+        # monitor) is brittle, so we assert the data-state proxy that the
+        # guard reads: trailing_status='cleared', native_trailing_stop=False,
+        # trailing_atr_override=None. If any of these drifts, the guard
+        # silently fails and the bot replaces the trailing on next tick.
+        print("\nSTEP 13: user-clear data-state proxy for monitor guard")
+        await manager.apply_intent(trade_id, RiskLeg.TRAILING, None)
+        ex = await _read_exchange(client); db = await _read_db(trade_id)
+        record(
+            "trailing_status == 'cleared' (guard reads this)",
+            db["trailing_status"] == "cleared",
+            f"trailing_status={db['trailing_status']}",
+        )
+        record(
+            "native_trailing_stop is False (legacy guard flag)",
+            db["native_trailing_stop"] is False,
+            f"native_trailing_stop={db['native_trailing_stop']}",
+        )
+        record(
+            "trailing_atr_override is None (slider seed cleared)",
+            db["trailing_atr_override"] is None,
+            f"trailing_atr_override={db['trailing_atr_override']}",
+        )
+        record(
+            "Exchange trailing actually gone after user-clear",
+            ex["trailing_callback"] is None,
+            f"callback={ex['trailing_callback']}",
+        )
+
+        # ── Step 14: Insufficient-position recovery ────────────────
+        # Regression: placing a fresh trailing then immediately changing the
+        # slider used to fail with "Insufficient position" because the
+        # previous moving_plan still owned the size. Always-sweep clears it
+        # before re-placing, so the slider change must succeed.
+        print("\nSTEP 14: place 2.5%% then immediately change to 1.8%%")
+        cur_ticker = await client.get_ticker(SYMBOL)
+        trigger_long = round(cur_ticker.last_price * 1.01, 1)
+        place_trail = {"callback_rate": 2.5, "activation_price": None,
+                       "trigger_price": trigger_long, "atr_override": 2.5}
+        await manager.apply_intent(trade_id, RiskLeg.TRAILING, place_trail)
+        ex_after_place = await _read_exchange(client)
+        record(
+            "Initial 2.5%% trailing placed",
+            ex_after_place["trailing_callback"] is not None
+            and abs(ex_after_place["trailing_callback"] - 2.5) < 0.5,
+            f"callback={ex_after_place['trailing_callback']}%",
+        )
+        # Immediate slider change — no sleep, this is the regression scenario.
+        cur_ticker = await client.get_ticker(SYMBOL)
+        trigger_long = round(cur_ticker.last_price * 1.01, 1)
+        change_trail = {"callback_rate": 1.8, "activation_price": None,
+                        "trigger_price": trigger_long, "atr_override": 1.8}
+        change_ok = True
+        change_err = ""
+        try:
+            await manager.apply_intent(trade_id, RiskLeg.TRAILING, change_trail)
+        except Exception as e:
+            change_ok = False
+            change_err = str(e)
+        ex = await _read_exchange(client); db = await _read_db(trade_id)
+        record(
+            "Slider change accepted (no Insufficient-position reject)",
+            change_ok and "insufficient" not in change_err.lower(),
+            change_err or "ok",
+        )
+        record(
+            "Trailing now reflects 1.8% on exchange",
+            ex["trailing_callback"] is not None and abs(ex["trailing_callback"] - 1.8) < 0.5,
+            f"callback={ex['trailing_callback']}%",
+        )
+        record(
+            "Trailing DB confirmed at 1.8%",
+            db["trailing_status"] == "confirmed"
+            and db["trailing_callback_rate"] is not None
+            and abs(db["trailing_callback_rate"] - 1.8) < 0.2,
+            f"db={db['trailing_status']} callback={db['trailing_callback_rate']}",
+        )
+
+        # ── Step 15: close position ────────────────────────────────
+        print("\nSTEP 15: close position")
         closed = await client.close_position(SYMBOL, SIDE)
         await asyncio.sleep(1.5)
         pos = await client.get_position(SYMBOL)
