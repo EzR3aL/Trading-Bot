@@ -1056,8 +1056,12 @@ class BitgetExchangeClient(HTTPExchangeClientMixin, ExchangeClient):
 
         plan = plans[0]
         callback_ratio = _parse_float(plan.get("callbackRatio"))
-        # Bitget returns callbackRatio as a decimal (0.014 = 1.4%) — normalize to percent.
-        callback_rate = round(callback_ratio * 100, 4) if callback_ratio is not None else None
+        # Bitget returns ``callbackRatio`` as an already-percent string
+        # ("2.5" = 2.5 %). A previous comment claimed it was a decimal
+        # and the code multiplied by 100 — verified live against Bitget
+        # demo it returns the same percent value that we sent in via
+        # ``rangeRate``, so no scaling is needed.
+        callback_rate = round(callback_ratio, 4) if callback_ratio is not None else None
 
         # Bitget exposes activation via ``triggerPrice``. The running trail
         # level is not reliably surfaced in the plan endpoint, so
