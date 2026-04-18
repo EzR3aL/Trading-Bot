@@ -137,6 +137,39 @@ describe('guide section parity', () => {
   });
 });
 
+// ── trades.exitReasons label uniqueness ──────────────────────────────
+// Guards against bug #194: MANUAL_CLOSE and EXTERNAL_CLOSE both mapped
+// to the same German label "Manuell geschlossen", making it impossible
+// to tell them apart in the UI.
+
+describe('trades.exitReasons label uniqueness', () => {
+  const locales = { de, en } as const;
+  for (const lang of ['de', 'en'] as const) {
+    it(`${lang}: every exit reason has a unique label`, () => {
+      const reasons = (locales[lang] as any).trades.exitReasons as Record<string, string>;
+      const values = Object.values(reasons);
+      const unique = new Set(values);
+
+      if (values.length !== unique.size) {
+        // Surface the duplicates for fast debugging.
+        const counts = new Map<string, string[]>();
+        for (const [code, label] of Object.entries(reasons)) {
+          const list = counts.get(label) ?? [];
+          list.push(code);
+          counts.set(label, list);
+        }
+        const duplicates = [...counts.entries()].filter(([, codes]) => codes.length > 1);
+        throw new Error(
+          `Duplicate exit reason labels in ${lang}: ` +
+            duplicates.map(([label, codes]) => `"${label}" used by ${codes.join(', ')}`).join('; ')
+        );
+      }
+
+      expect(values.length).toBe(unique.size);
+    });
+  }
+});
+
 // ── overall parity ───────────────────────────────────────────────────
 
 describe('overall parity', () => {

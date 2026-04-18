@@ -9,6 +9,13 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [Unreleased]
+
+### Fixed
+- i18n-Kollision aufgelöst: MANUAL_CLOSE und EXTERNAL_CLOSE hatten beide das Label "Manuell geschlossen" (#194, Epic #188). Plus 10 neue präzise Reason-Codes (TRAILING_STOP_NATIVE/SOFTWARE, TAKE_PROFIT/STOP_LOSS_NATIVE, MANUAL_CLOSE_UI/EXCHANGE, STRATEGY_EXIT, LIQUIDATION, FUNDING_EXPIRY, EXTERNAL_CLOSE_UNKNOWN). Uniqueness-Test verhindert künftige Kollisionen.
+
+---
+
 ## [4.15.1] - 2026-04-15
 
 ### Changed (Issue #181 follow-up)
