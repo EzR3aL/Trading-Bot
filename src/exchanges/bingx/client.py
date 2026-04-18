@@ -738,8 +738,9 @@ class BingXClient(HTTPExchangeClientMixin, ExchangeClient):
         close_side = SIDE_SELL if hold_side == "long" else SIDE_BUY
         position_side = POSITION_LONG if hold_side == "long" else POSITION_SHORT
 
-        # Cancel existing TP/SL and trailing stops to prevent orphan duplicates
-        await self._cancel_existing_tpsl(symbol)
+        # Sweep ONLY existing trailing orders — the user's TP/SL must
+        # survive a trailing change (leg-isolation invariant).
+        await self._cancel_existing_tpsl(symbol, target_types=self._TRAILING_ORDER_TYPES)
 
         order_params = {
             "symbol": symbol,
@@ -843,6 +844,24 @@ class BingXClient(HTTPExchangeClientMixin, ExchangeClient):
             symbol, side, self._SL_ORDER_TYPES,
         )
 
+    async def cancel_native_trailing_stop(
+        self, symbol: str, side: str = "long",
+    ) -> bool:
+        """Cancel only ``TRAILING_STOP_MARKET`` orders for ``(symbol, side)``.
+
+        BingX exposes native trailing as a ``TRAILING_STOP_MARKET`` order
+        type (price-driven, server-side trailing). Without a leg-scoped
+        cancel here the RiskStateManager would either fall back to
+        ``cancel_order(symbol, existing_order_id)`` — which silently no-ops
+        when the DB doesn't know an order_id (the bot's auto-placement
+        path doesn't write it back) — or to ``cancel_position_tpsl`` which
+        wipes TP+SL too. Both break the leg-isolation invariant the rest
+        of Epic #188 is built on.
+        """
+        return await self._cancel_orders_by_type(
+            symbol, side, self._TRAILING_ORDER_TYPES,
+        )
+
     async def _cancel_orders_by_type(
         self,
         symbol: str,
@@ -908,17 +927,34 @@ class BingXClient(HTTPExchangeClientMixin, ExchangeClient):
 
         return True
 
-    async def _cancel_existing_tpsl(self, symbol: str) -> None:
-        """Cancel existing TP/SL conditional orders for a symbol before placing new ones."""
+    async def _cancel_existing_tpsl(
+        self,
+        symbol: str,
+        target_types: Optional[frozenset] = None,
+    ) -> None:
+        """Cancel existing TP/SL/Trailing conditional orders for a symbol.
+
+        ``target_types`` scopes the sweep to a subset (e.g. only TP, only SL,
+        only trailing). When ``None`` the sweep wipes every TP/SL/trailing
+        order — the legacy default kept for callers that rely on a full reset.
+
+        Internal callers MUST scope to their own leg so they don't collateral-
+        cancel the user's other live legs (Epic #188 leg-isolation invariant).
+        Without scoping, ``place_trailing_stop`` would silently delete the
+        user's TP+SL every time it runs, even when the RSM upstream had
+        already cleaned only the trailing leg.
+        """
+        types = target_types if target_types is not None else self._TPSL_ORDER_TYPES
         try:
             data = await self._request("GET", ENDPOINTS["open_orders"], params={"symbol": symbol})
             orders = data if isinstance(data, list) else data.get("orders", []) if isinstance(data, dict) else []
             if not orders:
                 return
-            logger.debug("BingX open_orders for %s: %d orders found", symbol, len(orders))
+            logger.debug("BingX open_orders for %s: %d orders found (sweep types=%s)",
+                         symbol, len(orders), sorted(types))
             for order in orders:
                 order_type = str(order.get("type") or order.get("orderType", "")).upper()
-                if order_type in self._TPSL_ORDER_TYPES:
+                if order_type in types:
                     oid = str(order.get("orderId", ""))
                     if oid:
                         try:
@@ -954,8 +990,17 @@ class BingXClient(HTTPExchangeClientMixin, ExchangeClient):
             size = pos.size
             side = pos.side
 
-        # Cancel existing TP/SL orders to prevent orphan duplicates
-        await self._cancel_existing_tpsl(symbol)
+        # Sweep only the leg(s) being placed so the user's other live legs
+        # stay intact. A naked TP set must not collateral-cancel the SL or
+        # trailing — the RiskStateManager already cleared the targeted leg
+        # upstream, this is just defence-in-depth against mid-call drift.
+        sweep_types: set[str] = set()
+        if take_profit is not None:
+            sweep_types |= self._TP_ORDER_TYPES
+        if stop_loss is not None:
+            sweep_types |= self._SL_ORDER_TYPES
+        if sweep_types:
+            await self._cancel_existing_tpsl(symbol, target_types=frozenset(sweep_types))
 
         # Closing side is opposite of position
         close_side = SIDE_SELL if side == "long" else SIDE_BUY
