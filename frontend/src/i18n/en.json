@@ -90,13 +90,48 @@
     "leverage": "Leverage",
     "exitReason": "Exit Reason",
     "exitReasons": {
+      "TRAILING_STOP_NATIVE": "Trailing Stop (Exchange)",
+      "TRAILING_STOP_SOFTWARE": "Trailing Stop (Bot)",
+      "TAKE_PROFIT_NATIVE": "Take Profit (Exchange)",
+      "STOP_LOSS_NATIVE": "Stop Loss (Exchange)",
+      "MANUAL_CLOSE_UI": "Manually closed (Dashboard)",
+      "MANUAL_CLOSE_EXCHANGE": "Manually closed (Exchange)",
+      "STRATEGY_EXIT": "Strategy exit",
+      "LIQUIDATION": "Liquidation",
+      "FUNDING_EXPIRY": "Funding expiry",
+      "EXTERNAL_CLOSE_UNKNOWN": "Externally closed (unknown)",
       "TRAILING_STOP": "Trailing Stop",
-      "STRATEGY_EXIT": "Strategy Exit",
       "TAKE_PROFIT": "Take Profit",
       "STOP_LOSS": "Stop Loss",
-      "EXTERNAL_CLOSE": "Manual Close",
-      "MANUAL_CLOSE": "Manual Close",
+      "EXTERNAL_CLOSE": "Externally closed",
+      "MANUAL_CLOSE": "Manually closed (legacy)",
       "unknown": "Closed"
+    },
+    "riskBadges": {
+      "tp": "TP",
+      "sl": "SL",
+      "trail": "Trail",
+      "source": {
+        "native_exchange": "Placed on exchange",
+        "software_bot": "Monitored by bot",
+        "manual_user": "User-set",
+        "unknown": "Unknown source"
+      },
+      "status": {
+        "pending": "Applying…",
+        "confirmed": "Active",
+        "rejected": "Rejected",
+        "cleared": "Cleared",
+        "cancel_failed": "Cancel failed"
+      }
+    },
+    "riskState": {
+      "updated": "TP/SL/Trailing updated",
+      "partialSuccess": "Partial success: {{failed}}",
+      "updateFailed": "Update failed",
+      "pending": "Applying…",
+      "rejected": "Rejected: {{error}}",
+      "cancel_failed": "Cancel failed — old value still active"
     }
   },
   "settings": {

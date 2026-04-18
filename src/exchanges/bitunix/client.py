@@ -867,6 +867,48 @@ class BitunixClient(HTTPExchangeClientMixin, ExchangeClient):
 
         return True
 
+    async def cancel_tp_only(self, symbol: str, side: str = "long") -> bool:
+        """Not supported on Bitunix — TP and SL share one pending order row.
+
+        Epic #188 follow-up: the dashboard must be able to clear only TP
+        without collateral-cancelling the SL leg. On Bitunix this is
+        genuinely impossible via the public API:
+
+        - ``/api/v1/futures/tpsl/place_order`` accepts ``tpPrice`` and
+          ``slPrice`` in the same call and stores the pair as a single
+          order row in ``/tpsl/get_pending_orders`` (verified via Bitunix
+          OpenAPI docs, 2026-04-18).
+        - ``/api/v1/futures/tpsl/cancel_order`` takes only ``orderId`` —
+          there is no field to target just the TP or SL leg.
+        - ``/api/v1/futures/tpsl/modify_order`` requires "at least one of
+          tpPrice or slPrice"; the semantic of omitting a field (clear vs
+          keep) is undocumented and testing on live would risk clearing
+          the SL leg we want to preserve.
+
+        Raising ``NotImplementedError`` surfaces as :class:`CancelFailed`
+        in :class:`RiskStateManager`, marking the leg as ``cancel_failed``
+        in the DB and returning a clear error to the UI. That is strictly
+        safer than guessing at partial-modify semantics that could silently
+        drop the user's stop-loss.
+        """
+        raise NotImplementedError(
+            "Bitunix stores TP+SL as a single combined order; its cancel API "
+            "has no leg selector. Cancelling TP alone is not possible without "
+            "risking collateral cancel of SL."
+        )
+
+    async def cancel_sl_only(self, symbol: str, side: str = "long") -> bool:
+        """Not supported on Bitunix — see :meth:`cancel_tp_only` for rationale.
+
+        Same limitation applies symmetrically: cancelling only SL while
+        preserving TP cannot be expressed in Bitunix's pending-TP/SL API.
+        """
+        raise NotImplementedError(
+            "Bitunix stores TP+SL as a single combined order; its cancel API "
+            "has no leg selector. Cancelling SL alone is not possible without "
+            "risking collateral cancel of TP."
+        )
+
     # ── Affiliate ──────────────────────────────────────────────────
 
     async def check_affiliate_uid(self, uid: str) -> bool:

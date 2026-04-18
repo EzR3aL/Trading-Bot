@@ -12,6 +12,7 @@ fund-moving operations. The ALLOWED_METHODS whitelist enforces this.
 import asyncio
 import os
 import re
+from datetime import datetime, timezone
 from functools import partial
 from typing import Any, Dict, List, Optional
 
@@ -21,7 +22,12 @@ from hyperliquid.info import Info as HLInfo
 from hyperliquid.utils.constants import MAINNET_API_URL, TESTNET_API_URL
 
 from src.exceptions import ExchangeError
-from src.exchanges.base import ExchangeClient
+from src.exchanges.base import (
+    CloseReasonSnapshot,
+    ExchangeClient,
+    PositionTpSlSnapshot,
+    TrailingStopSnapshot,
+)
 from src.exchanges.hyperliquid.constants import DEFAULT_BUILDER_FEE
 from src.exchanges.types import Balance, FundingRateInfo, Order, Position, Ticker
 from src.utils.circuit_breaker import CircuitBreaker, CircuitBreakerError
@@ -1034,10 +1040,41 @@ class HyperliquidClient(ExchangeClient):
         Attempts to clear via empty positionTpsl bulk_orders first.
         Falls back to querying open orders and cancelling trigger orders.
         """
+        return await self._cancel_triggers_by_tpsl(symbol, side, target_tpsl=None)
+
+    async def cancel_tp_only(self, symbol: str, side: str = "long") -> bool:
+        """Cancel only TP trigger orders for an open position.
+
+        Queries ``frontendOpenOrders``, filters to position-linked triggers
+        classified as TP by ``_classify_tpsl`` (``orderType`` / ``tpsl`` /
+        ``triggerCondition`` fields), then cancels each by ``oid``. SL and
+        any non-trigger orders remain untouched. Epic #188 follow-up to the
+        Bitget leg-cancel pair on dashboard edits.
+        """
+        return await self._cancel_triggers_by_tpsl(symbol, side, target_tpsl="tp")
+
+    async def cancel_sl_only(self, symbol: str, side: str = "long") -> bool:
+        """Cancel only SL trigger orders for an open position.
+
+        Mirror of :meth:`cancel_tp_only`. HL has no native trailing primitive,
+        so software-emulated trailing (rewritten as an SL trigger) is also
+        cleared by this method — callers that want to keep a trailing leg
+        must re-place it after calling this.
+        """
+        return await self._cancel_triggers_by_tpsl(symbol, side, target_tpsl="sl")
+
+    async def _cancel_triggers_by_tpsl(
+        self, symbol: str, side: str, target_tpsl: Optional[str],
+    ) -> bool:
+        """Shared helper: query open orders, filter, cancel by ``oid``.
+
+        :param target_tpsl: ``"tp"`` or ``"sl"`` for leg-specific cancel,
+            ``None`` to cancel every trigger order on the coin (legacy
+            ``cancel_position_tpsl`` behaviour).
+        """
         coin = self._normalize_symbol(symbol)
         address = (self.wallet_address or self._wallet.address).lower()
 
-        # Query all open trigger orders for this coin
         try:
             open_orders = self._info_exec.frontend_open_orders(address)
         except Exception as e:
@@ -1047,27 +1084,74 @@ class HyperliquidClient(ExchangeClient):
         if not isinstance(open_orders, list):
             return True
 
-        to_cancel = [
-            o for o in open_orders
-            if isinstance(o, dict)
-            and o.get("coin") == coin
-            and (o.get("isTrigger") or o.get("isPositionTpsl"))
-        ]
+        to_cancel: List[Dict[str, Any]] = []
+        for order in open_orders:
+            if not isinstance(order, dict):
+                continue
+            if order.get("coin") != coin:
+                continue
+            if not (order.get("isTrigger") or order.get("isPositionTpsl")):
+                continue
+            if target_tpsl is None:
+                to_cancel.append(order)
+                continue
+            if self._classify_tpsl(order, side) == target_tpsl:
+                to_cancel.append(order)
 
         if not to_cancel:
-            logger.debug("No trigger orders to cancel for %s", coin)
+            logger.debug(
+                "No %s trigger orders to cancel for %s",
+                target_tpsl or "tpsl", coin,
+            )
             return True
 
         for order in to_cancel:
             oid = order.get("oid")
-            if oid:
-                try:
-                    self._exchange.cancel(coin, oid)
-                    logger.info("Cancelled Hyperliquid trigger order %s for %s", oid, coin)
-                except Exception as e:
-                    logger.warning("Failed to cancel Hyperliquid order %s: %s", oid, e)
+            if oid is None:
+                continue
+            try:
+                self._exchange.cancel(coin, oid)
+                logger.info(
+                    "Cancelled Hyperliquid %s trigger %s for %s",
+                    target_tpsl or "tpsl", oid, coin,
+                )
+            except Exception as e:
+                logger.warning("Failed to cancel Hyperliquid order %s: %s", oid, e)
 
         return True
+
+    @staticmethod
+    def _classify_tpsl(order: Dict[str, Any], side: str) -> Optional[str]:
+        """Classify a HL trigger order as ``"tp"`` or ``"sl"``.
+
+        HL's ``frontendOpenOrders`` response does not expose the original
+        ``tpsl`` field from the order spec, so we derive it from
+        ``orderType`` (e.g. ``"Take Profit Market"`` vs ``"Stop Market"``)
+        — the same heuristic used by :meth:`get_position_tpsl` (#191) so
+        both methods stay in lockstep. Falls back to ``triggerCondition``
+        + position side when ``orderType`` is missing or ambiguous:
+
+        - Long position: TP triggers above entry (``Price >=``),
+          SL triggers below entry (``Price <=``).
+        - Short position: inverse.
+
+        Returns ``None`` when classification is not possible; callers
+        treat this as "do not touch" to avoid false cancels.
+        """
+        order_type = str(order.get("orderType") or "").lower()
+        if "tp" in order_type or "take" in order_type:
+            return "tp"
+        if "sl" in order_type or "stop" in order_type:
+            return "sl"
+
+        # Fallback: infer from triggerCondition + position side.
+        condition = str(order.get("triggerCondition") or "").lower()
+        is_long = side.lower() == "long"
+        if ">=" in condition or "above" in condition:
+            return "tp" if is_long else "sl"
+        if "<=" in condition or "below" in condition:
+            return "sl" if is_long else "tp"
+        return None
 
     async def get_close_fill_price(self, symbol: str) -> Optional[float]:
         """Get fill price of the most recent close fill from Hyperliquid.
@@ -1144,6 +1228,181 @@ class HyperliquidClient(ExchangeClient):
         except Exception as e:
             logger.warning(f"Hyperliquid cancel failed: {e}")
             return False
+
+    # ── Risk-state readback (#191) ──────────────────────────────────────
+    # HL exposes position-level TP/SL as isPositionTpsl triggers on
+    # frontendOpenOrders. There is NO native trailing-stop primitive on
+    # HL, so get_trailing_stop always returns None — callers should rely
+    # on software trailing instead.
+
+    async def get_position_tpsl(
+        self, symbol: str, side: str
+    ) -> PositionTpSlSnapshot:
+        """Read live position-level TP/SL triggers from Hyperliquid.
+
+        Queries frontendOpenOrders for the user, filters entries where
+        ``isTrigger=true`` (or ``isPositionTpsl=true``) and the coin
+        matches. Classifies into TP vs SL by ``orderType`` string.
+        """
+        coin = self._normalize_symbol(symbol)
+        empty = PositionTpSlSnapshot(
+            symbol=coin,
+            side=side,
+            tp_price=None,
+            tp_order_id=None,
+            tp_trigger_type=None,
+            sl_price=None,
+            sl_order_id=None,
+            sl_trigger_type=None,
+        )
+
+        address = (self.wallet_address or self._wallet.address).lower()
+        raw = await self._cb_call(self._info_exec.frontend_open_orders, address)
+        if not isinstance(raw, list):
+            return empty
+
+        # Closing direction is opposite of position side.
+        # long position → close via sell (is_buy=False on HL)
+        close_is_buy = side.lower() != "long"
+
+        tp_order: Optional[Dict[str, Any]] = None
+        sl_order: Optional[Dict[str, Any]] = None
+        for order in raw:
+            if not isinstance(order, dict):
+                continue
+            if order.get("coin") != coin:
+                continue
+            is_trigger = bool(order.get("isTrigger") or order.get("isPositionTpsl"))
+            if not is_trigger:
+                continue
+            # Side filter: TP/SL for a LONG position are SELL orders on HL.
+            side_field = str(order.get("side", "")).upper()
+            if side_field == "B":
+                order_is_buy = True
+            elif side_field == "A":
+                order_is_buy = False
+            else:
+                # Unknown side format — don't filter it out, accept all.
+                order_is_buy = close_is_buy
+
+            if order_is_buy != close_is_buy:
+                continue
+
+            order_type = str(order.get("orderType") or "").lower()
+            if ("tp" in order_type or "take" in order_type) and tp_order is None:
+                tp_order = order
+            elif ("sl" in order_type or "stop" in order_type) and sl_order is None:
+                sl_order = order
+
+        trigger_type = "mark_price"  # HL trigger prices are mark-price based
+        return PositionTpSlSnapshot(
+            symbol=coin,
+            side=side,
+            tp_price=_hl_float(tp_order.get("triggerPx") or tp_order.get("limitPx")) if tp_order else None,
+            tp_order_id=str(tp_order.get("oid")) if tp_order and tp_order.get("oid") is not None else None,
+            tp_trigger_type=trigger_type if tp_order else None,
+            sl_price=_hl_float(sl_order.get("triggerPx") or sl_order.get("limitPx")) if sl_order else None,
+            sl_order_id=str(sl_order.get("oid")) if sl_order and sl_order.get("oid") is not None else None,
+            sl_trigger_type=trigger_type if sl_order else None,
+        )
+
+    async def get_trailing_stop(
+        self, symbol: str, side: str
+    ) -> Optional[TrailingStopSnapshot]:
+        """Hyperliquid has no native trailing-stop primitive.
+
+        Returns ``None`` unconditionally. Callers fall back to the
+        software trailing loop in ``strategy.should_exit``.
+        """
+        logger.debug(
+            "Hyperliquid has no native trailing stop — get_trailing_stop returns None"
+        )
+        return None
+
+    async def get_close_reason_from_history(
+        self, symbol: str, since_ts_ms: int
+    ) -> Optional[CloseReasonSnapshot]:
+        """Find the most recent close fill for ``symbol`` since ``since_ts_ms``.
+
+        Inspects ``user_fills`` and picks the newest reduce-only close fill.
+        Hyperliquid encodes the close reason in the fill's ``dir`` field
+        (e.g. "Close Long", "Close Short") plus a ``liquidation`` flag.
+        """
+        coin = self._normalize_symbol(symbol)
+        address = (self.wallet_address or self._wallet.address).lower()
+        fills = await self._cb_call(self._info_exec.user_fills, address)
+        if not isinstance(fills, list):
+            return None
+
+        qualifying: List[Dict[str, Any]] = []
+        for fill in fills:
+            if not isinstance(fill, dict):
+                continue
+            if fill.get("coin") != coin:
+                continue
+            ts = _hl_int(fill.get("time"))
+            if ts is not None and ts < since_ts_ms:
+                continue
+            direction = str(fill.get("dir") or "")
+            # Close fills: "Close Long", "Close Short", "Liquidated Long", etc.
+            if direction.startswith("Close") or "Liquidat" in direction:
+                qualifying.append(fill)
+
+        if not qualifying:
+            return None
+
+        qualifying.sort(key=lambda f: _hl_int(f.get("time")) or 0, reverse=True)
+        fill = qualifying[0]
+
+        if fill.get("liquidation") or "Liquidat" in str(fill.get("dir", "")):
+            plan_type = "liquidation"
+        elif fill.get("isTpsl") or fill.get("isPositionTpsl"):
+            # HL marks TP/SL fills but doesn't distinguish TP vs SL at the
+            # fill level; callers must cross-reference the pre-close TP/SL
+            # snapshot to attribute which one triggered.
+            plan_type = "pos_profit"  # best-effort default — RiskStateManager can refine
+        else:
+            plan_type = "manual"
+
+        ts_ms = _hl_int(fill.get("time"))
+        return CloseReasonSnapshot(
+            symbol=coin,
+            closed_by_order_id=str(fill.get("oid")) if fill.get("oid") is not None else None,
+            closed_by_plan_type=plan_type,
+            closed_by_trigger_type="mark_price" if plan_type in ("pos_profit", "pos_loss") else None,
+            closed_at=_hl_ts_to_datetime(ts_ms),
+            fill_price=_hl_float(fill.get("px")),
+        )
+
+
+def _hl_float(value: Any) -> Optional[float]:
+    """Parse a HL value to float; preserve 0.0, return None on missing."""
+    if value is None or value == "":
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _hl_int(value: Any) -> Optional[int]:
+    """Parse a HL value to int; return None on missing / unparseable."""
+    if value is None or value == "":
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _hl_ts_to_datetime(ts_ms: Optional[int]) -> Optional[datetime]:
+    """Convert a HL millisecond timestamp to a UTC datetime."""
+    if ts_ms is None or ts_ms <= 0:
+        return None
+    try:
+        return datetime.fromtimestamp(ts_ms / 1000, tz=timezone.utc)
+    except (OverflowError, OSError, ValueError):
+        return None
 
 
 def _parse_order_response(result: Any) -> Dict[str, Any]:

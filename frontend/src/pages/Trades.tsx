@@ -13,6 +13,8 @@ import Pagination from '../components/ui/Pagination'
 import DatePicker from '../components/ui/DatePicker'
 import FilterDropdown from '../components/ui/FilterDropdown'
 import ExitReasonBadge from '../components/ui/ExitReasonBadge'
+import RiskStateBadge from '../components/ui/RiskStateBadge'
+import { deriveRiskStateFromPosition } from '../utils/riskState'
 import MobileTradeCard from '../components/ui/MobileTradeCard'
 import SizeValue from '../components/ui/SizeValue'
 import { useSizeUnitStore } from '../stores/sizeUnitStore'
@@ -359,6 +361,32 @@ export default function Trades() {
                                   <dd><ExitReasonBadge reason={trade.exit_reason} /></dd>
                                 </div>
                               )}
+                              {trade.status === 'open' && (() => {
+                                const risk = deriveRiskStateFromPosition({
+                                  trade_id: trade.id,
+                                  symbol: trade.symbol,
+                                  take_profit: trade.take_profit,
+                                  stop_loss: trade.stop_loss,
+                                  trailing_stop_active: trade.trailing_stop_active ?? false,
+                                  trailing_stop_price: trade.trailing_stop_price,
+                                  trailing_stop_distance_pct: trade.trailing_stop_distance_pct,
+                                })
+                                const hasAny = risk.tp != null || risk.sl != null || risk.trailing != null
+                                if (!hasAny) return null
+                                return (
+                                  <div className="col-span-full">
+                                    <dt>{t('trades.riskBadges.tp')}/{t('trades.riskBadges.sl')}/{t('trades.riskBadges.trail')}</dt>
+                                    <dd>
+                                      <RiskStateBadge
+                                        tp={risk.tp}
+                                        sl={risk.sl}
+                                        trailing={risk.trailing}
+                                        riskSource={risk.risk_source}
+                                      />
+                                    </dd>
+                                  </div>
+                                )
+                              })()}
                             </dl>
                           </td>
                         </tr>

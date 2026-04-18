@@ -385,6 +385,8 @@ class TestPositionMonitorStrategyExit:
         monitor._send_notification = AsyncMock()
         monitor._pnl_alert_parsed = None
         monitor._pnl_alerts_sent = {}
+        # #193: feature flag off → classifier uses the legacy heuristic.
+        monitor._risk_state_manager = None
         return monitor
 
     def _make_trade(self, symbol="BTCUSDT", side="long", entry_price=95000.0,
@@ -531,7 +533,8 @@ class TestPositionMonitorStrategyExit:
 
         monitor._close_and_record_trade.assert_called_once()
         call_args = monitor._close_and_record_trade.call_args
-        assert call_args[0][2] == "EXTERNAL_CLOSE"
+        # #193 taxonomy: legacy EXTERNAL_CLOSE → EXTERNAL_CLOSE_UNKNOWN.
+        assert call_args[0][2] == "EXTERNAL_CLOSE_UNKNOWN"
 
     @pytest.mark.asyncio
     async def test_metrics_snapshot_parsed(self):

@@ -3,12 +3,75 @@
 import asyncio
 import json
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
+from datetime import datetime
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Type
 
 import aiohttp
 
 from src.exchanges.types import Balance, FundingRateInfo, Order, Position, Ticker
 from src.utils.circuit_breaker import CircuitBreakerError, with_retry
+
+
+# ── Risk-state readback snapshots (#190 / #191) ────────────────────────────
+# These dataclasses are returned by the per-exchange readback methods on
+# ``ExchangeClient`` and consumed by RiskStateManager (#190) as the source
+# of truth — the exchange always wins over the local DB state.
+
+
+@dataclass
+class PositionTpSlSnapshot:
+    """Normalized snapshot of an exchange-side position TP/SL pair.
+
+    All fields are optional except symbol+side because each exchange may
+    expose only one (TP-only, SL-only, neither) for a given position.
+    """
+
+    symbol: str
+    side: str  # "long" or "short"
+    tp_price: Optional[float]
+    tp_order_id: Optional[str]
+    tp_trigger_type: Optional[str]  # "mark_price" / "fill_price" / exchange-specific
+    sl_price: Optional[float]
+    sl_order_id: Optional[str]
+    sl_trigger_type: Optional[str]
+
+
+@dataclass
+class TrailingStopSnapshot:
+    """Normalized snapshot of an exchange-side trailing stop plan.
+
+    callback_rate is normalized to percent (e.g. 1.4 means 1.4%) regardless
+    of how the source exchange encodes it (Bitget=decimal, BingX=decimal).
+    """
+
+    symbol: str
+    side: str  # "long" or "short"
+    callback_rate: Optional[float]  # in percent
+    activation_price: Optional[float]
+    trigger_price: Optional[float]  # current trigger if exchange exposes it
+    order_id: Optional[str]
+
+
+@dataclass
+class CloseReasonSnapshot:
+    """Normalized snapshot of the most recent close event for a position.
+
+    closed_by_plan_type is one of:
+        "track_plan"   — trailing stop triggered
+        "pos_profit"   — take-profit triggered
+        "pos_loss"     — stop-loss triggered
+        "manual"       — operator/script close (reduce-only market order)
+        "liquidation"  — forced close by exchange
+    """
+
+    symbol: str
+    closed_by_order_id: Optional[str]
+    closed_by_plan_type: Optional[str]
+    closed_by_trigger_type: Optional[str]
+    closed_at: Optional[datetime]
+    fill_price: Optional[float]
+
 
 if TYPE_CHECKING:
     from src.exchanges.rate_limiter import ExchangeRateLimiter
@@ -130,6 +193,20 @@ class ExchangeClient(ABC):
         """
         return True
 
+    async def cancel_tp_only(self, symbol: str, side: str = "long") -> bool:
+        """Cancel only the TP leg, leaving SL and trailing untouched.
+
+        Default falls back to :meth:`cancel_position_tpsl` for exchanges
+        that can't distinguish legs — that's the pre-#188 behaviour.
+        Bitget (the only exchange where the distinction matters today)
+        overrides this to target ``pos_profit``/``profit_plan`` only.
+        """
+        return await self.cancel_position_tpsl(symbol, side)
+
+    async def cancel_sl_only(self, symbol: str, side: str = "long") -> bool:
+        """Cancel only the SL leg, leaving TP and trailing untouched."""
+        return await self.cancel_position_tpsl(symbol, side)
+
     # Class-level capability flag: set to True in subclasses that implement
     # a real native trailing stop via the exchange API (Bitget, BingX). Used
     # by trade_executor and position_monitor to skip unnecessary attempts on
@@ -214,6 +291,52 @@ class ExchangeClient(ABC):
             return ticker is not None and ticker.last_price > 0
         except Exception:
             return False
+
+    # ── Risk-state readback (#191) ───────────────────────────────────
+    # These three methods are the "source of truth" hook for
+    # RiskStateManager (#190). Each exchange that supports the relevant
+    # surface must override; the base class raises so omissions show up
+    # immediately rather than silently returning empty snapshots.
+    # Weex and Bitunix intentionally inherit the NotImplementedError —
+    # there is NO automatic fallback. RiskStateManager handles those
+    # exchanges by skipping the corresponding probe.
+
+    async def get_position_tpsl(
+        self, symbol: str, side: str
+    ) -> "PositionTpSlSnapshot":
+        """Return the live position TP/SL snapshot from the exchange.
+
+        Implementations MUST return an empty snapshot (all order/price
+        fields ``None``) when no plan exists — never raise on "not found".
+        Genuine API errors must propagate.
+        """
+        raise NotImplementedError(
+            f"{self.__class__.__name__} does not implement get_position_tpsl"
+        )
+
+    async def get_trailing_stop(
+        self, symbol: str, side: str
+    ) -> Optional["TrailingStopSnapshot"]:
+        """Return the live trailing-stop snapshot from the exchange.
+
+        Returns ``None`` when no native trailing plan exists or the exchange
+        does not support native trailing at all (e.g. Hyperliquid).
+        """
+        raise NotImplementedError(
+            f"{self.__class__.__name__} does not implement get_trailing_stop"
+        )
+
+    async def get_close_reason_from_history(
+        self, symbol: str, since_ts_ms: int
+    ) -> Optional["CloseReasonSnapshot"]:
+        """Return the most recent close event for ``symbol`` since ``since_ts_ms``.
+
+        Returns ``None`` when no qualifying close was found. Used by
+        RiskStateManager to attribute closes to TP/SL/trailing/manual.
+        """
+        raise NotImplementedError(
+            f"{self.__class__.__name__} does not implement get_close_reason_from_history"
+        )
 
     @property
     @abstractmethod

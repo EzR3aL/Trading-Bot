@@ -3,8 +3,11 @@
 import asyncio
 import json
 from datetime import datetime, timezone
+from typing import Optional
 
 from src.bot.pnl import calculate_pnl
+from src.bot.risk_reasons import ExitReason
+from src.bot.risk_state_manager import RiskStateManager
 from src.data.market_data import MarketDataFetcher
 from src.exchanges.base import ExchangeClient
 from src.models.database import TradeRecord
@@ -40,6 +43,10 @@ class PositionMonitorMixin:
         self._pnl_alerts_sent: dict[int, set[str]] = {}
         # Cached parsed PnL alert settings (refreshed each monitor cycle)
         self._pnl_alert_parsed: dict | None = None
+        # Optional RiskStateManager (#193). When set, _handle_closed_position
+        # routes exit-reason classification through it. Default None keeps
+        # the legacy heuristic path active when the feature flag is off.
+        self._risk_state_manager: Optional[RiskStateManager] = None
 
     async def _monitor_positions_safe(self):
         """Wrapper with error handling for position monitoring."""
@@ -252,6 +259,17 @@ class PositionMonitorMixin:
                             "[Bot:%s] Strategy exit for %s (%s): %s",
                             self.bot_config_id, trade.symbol, trade.side, exit_reason,
                         )
+                        # Mark the strategy-exit BEFORE the close call so a
+                        # late-arriving _handle_closed_position on the next
+                        # cycle still sees the signal in the manager cache.
+                        if self._risk_state_manager is not None:
+                            try:
+                                self._risk_state_manager.note_strategy_exit(trade.id)
+                            except Exception as note_err:
+                                logger.debug(
+                                    "[Bot:%s] note_strategy_exit failed for #%s: %s",
+                                    self.bot_config_id, trade.id, note_err,
+                                )
                         try:
                             margin_mode = getattr(self._config, "margin_mode", "cross")
                             close_order = await client.close_position(trade.symbol, trade.side, margin_mode=margin_mode)
@@ -316,8 +334,15 @@ class PositionMonitorMixin:
                         except Exception:
                             pass
 
-                        # Use TRAILING_STOP label when the strategy's trailing stop triggered the exit
-                        close_label = "TRAILING_STOP" if "Trailing Stop" in exit_reason else "STRATEGY_EXIT"
+                        # Use the software-trailing reason when the strategy's
+                        # software trailing stop triggered the exit; otherwise
+                        # tag it as a plain strategy exit. Both are distinct
+                        # from native_trailing because they came from our
+                        # should_exit(), not an exchange-side plan.
+                        if "Trailing Stop" in exit_reason:
+                            close_label = ExitReason.TRAILING_STOP_SOFTWARE.value
+                        else:
+                            close_label = ExitReason.STRATEGY_EXIT.value
                         await self._close_and_record_trade(
                             trade,
                             exit_price,
@@ -550,6 +575,34 @@ class PositionMonitorMixin:
         if sent:
             self._pnl_alerts_sent[trade.id] = sent
 
+    @staticmethod
+    def _classify_close_heuristic(trade: TradeRecord, exit_price: float) -> str:
+        """Legacy proximity-based exit classification.
+
+        Used when the RiskStateManager is not wired in (feature flag off)
+        or its probe failed. Mirrors the original behaviour but emits the
+        new precise reason codes so downstream consumers (UI, notifications)
+        see a consistent vocabulary regardless of which path produced them.
+        """
+        entry_price = trade.entry_price or 0.0
+        proximity = entry_price * 0.002 if entry_price > 0 else 0.0
+
+        if trade.native_trailing_stop:
+            return ExitReason.TRAILING_STOP_NATIVE.value
+        if (
+            trade.take_profit is not None
+            and entry_price > 0
+            and abs(exit_price - trade.take_profit) < proximity
+        ):
+            return ExitReason.TAKE_PROFIT_NATIVE.value
+        if (
+            trade.stop_loss is not None
+            and entry_price > 0
+            and abs(exit_price - trade.stop_loss) < proximity
+        ):
+            return ExitReason.STOP_LOSS_NATIVE.value
+        return ExitReason.EXTERNAL_CLOSE_UNKNOWN.value
+
     async def _handle_closed_position(self, trade: TradeRecord, client: ExchangeClient, session):
         """Handle a position that was closed externally (TP/SL/manual)."""
         log_prefix = f"[Bot:{self.bot_config_id}]"
@@ -578,16 +631,26 @@ class PositionMonitorMixin:
                 ticker = await client.get_ticker(trade.symbol)
                 exit_price = ticker.last_price if ticker else trade.entry_price
 
-            # Determine exit reason
-            exit_reason = "EXTERNAL_CLOSE"
-            if trade.native_trailing_stop:
-                exit_reason = "TRAILING_STOP"
-            if trade.take_profit is not None and trade.entry_price > 0:
-                if abs(exit_price - trade.take_profit) < trade.entry_price * 0.002:
-                    exit_reason = "TAKE_PROFIT"
-            if trade.stop_loss is not None and trade.entry_price > 0:
-                if abs(exit_price - trade.stop_loss) < trade.entry_price * 0.002:
-                    exit_reason = "STOP_LOSS"
+            # Determine exit reason. When the RiskStateManager is wired in
+            # (feature flag risk_state_manager_enabled), defer to its
+            # exchange-readback classifier; otherwise fall back to the
+            # legacy heuristic so behaviour is unchanged when the flag is
+            # off. Pattern B guard: the heuristic block below is *only*
+            # reached when the manager is absent or its probe failed.
+            if self._risk_state_manager is not None:
+                try:
+                    exit_reason = await self._risk_state_manager.classify_close(
+                        trade.id, exit_price, datetime.now(timezone.utc),
+                    )
+                except Exception as cls_err:
+                    logger.warning(
+                        "%s classify_close failed for trade #%s, "
+                        "falling back to heuristic: %s",
+                        log_prefix, trade.id, cls_err,
+                    )
+                    exit_reason = self._classify_close_heuristic(trade, exit_price)
+            else:
+                exit_reason = self._classify_close_heuristic(trade, exit_price)
 
             # Fetch trading fees from exchange (entry + exit via orders-history)
             fees = trade.fees

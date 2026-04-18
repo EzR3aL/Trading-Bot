@@ -42,6 +42,7 @@ vi.mock('react-i18next', () => ({
   useTranslation: () => ({
     t: mockT,
   }),
+  initReactI18next: { type: '3rdParty', init: () => {} },
 }))
 
 // Mock API client

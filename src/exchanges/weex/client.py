@@ -486,6 +486,43 @@ class WeexClient(HTTPExchangeClientMixin, ExchangeClient):
         then cancels each via /capi/v3/cancelTpSlOrder.
         Best-effort: partial failures are logged but don't fail the operation.
         """
+        return await self._cancel_pending_tpsl_by_role(symbol, side, target_role=None)
+
+    async def cancel_tp_only(self, symbol: str, side: str = "long") -> bool:
+        """Cancel only pending TAKE_PROFIT orders for a position, leave SL intact.
+
+        Epic #188 follow-up to #192: a dashboard edit that clears only TP must
+        not collateral-cancel the SL leg. Weex V3 persists TP and SL as
+        separate conditional orders with distinct ``planType`` values
+        (``TAKE_PROFIT`` vs ``STOP_LOSS``), so role-based filtering is clean.
+
+        Best-effort: partial failures are logged but don't fail the operation.
+        Returns True if no matching orders or all cancels succeeded; False if
+        the initial query fails (caller should treat as cancel failure).
+        """
+        return await self._cancel_pending_tpsl_by_role(symbol, side, target_role="tp")
+
+    async def cancel_sl_only(self, symbol: str, side: str = "long") -> bool:
+        """Cancel only pending STOP_LOSS orders for a position, leave TP intact.
+
+        Mirror of :meth:`cancel_tp_only`. Filters Weex pending conditional
+        orders by ``planType == "STOP_LOSS"`` so the TP leg and any other
+        plan (trigger, algo) remain untouched.
+        """
+        return await self._cancel_pending_tpsl_by_role(symbol, side, target_role="sl")
+
+    async def _cancel_pending_tpsl_by_role(
+        self,
+        symbol: str,
+        side: str,
+        target_role: Optional[str],
+    ) -> bool:
+        """Shared helper: query pending TP/SL, filter by positionSide + role.
+
+        :param target_role: ``"tp"`` to cancel only TAKE_PROFIT plans,
+            ``"sl"`` for STOP_LOSS, or ``None`` to cancel both (legacy
+            ``cancel_position_tpsl`` behaviour).
+        """
         v3_symbol = symbol.upper().replace("-", "")
         position_side = "LONG" if side == "long" else "SHORT"
 
@@ -499,14 +536,21 @@ class WeexClient(HTTPExchangeClientMixin, ExchangeClient):
 
         orders = data if isinstance(data, list) else (data.get("orders", []) if isinstance(data, dict) else [])
 
-        to_cancel = [
-            o for o in orders
-            if isinstance(o, dict)
-            and o.get("positionSide") == position_side
-        ]
+        to_cancel: List[Dict[str, Any]] = []
+        for o in orders:
+            if not isinstance(o, dict):
+                continue
+            if o.get("positionSide") != position_side:
+                continue
+            if target_role is not None and self._classify_plan_type(o) != target_role:
+                continue
+            to_cancel.append(o)
 
         if not to_cancel:
-            logger.debug("No pending TP/SL orders to cancel for %s %s", symbol, side)
+            logger.debug(
+                "No %s pending TP/SL orders to cancel for %s %s",
+                target_role or "tpsl", symbol, side,
+            )
             return True
 
         for order in to_cancel:
@@ -516,11 +560,35 @@ class WeexClient(HTTPExchangeClientMixin, ExchangeClient):
                     "symbol": v3_symbol,
                     "orderId": oid,
                 })
-                logger.info("Cancelled Weex TP/SL order %s for %s", oid, symbol)
+                logger.info(
+                    "Cancelled Weex %s order %s for %s",
+                    target_role or "TP/SL", oid, symbol,
+                )
             except Exception as e:
-                logger.warning("Failed to cancel Weex TP/SL order %s for %s: %s", oid, symbol, e)
+                logger.warning(
+                    "Failed to cancel Weex %s order %s for %s: %s",
+                    target_role or "TP/SL", oid, symbol, e,
+                )
 
         return True
+
+    @staticmethod
+    def _classify_plan_type(order: Dict[str, Any]) -> Optional[str]:
+        """Classify a Weex pending order as ``"tp"`` or ``"sl"`` by planType.
+
+        Weex V3 stores the role explicitly in ``planType``:
+        - ``"TAKE_PROFIT"`` -> ``"tp"``
+        - ``"STOP_LOSS"``   -> ``"sl"``
+
+        Returns ``None`` for unrecognised planTypes (e.g. trigger/algo plans)
+        so callers can safely ignore them in leg-specific cancels.
+        """
+        plan_type = str(order.get("planType") or "").upper()
+        if plan_type == "TAKE_PROFIT":
+            return "tp"
+        if plan_type == "STOP_LOSS":
+            return "sl"
+        return None
 
     async def _cancel_existing_tpsl(self, symbol: str) -> None:
         """Cancel existing TP/SL plan orders for a symbol before placing new ones."""

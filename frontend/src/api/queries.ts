@@ -1,5 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import i18n from '../i18n/config'
 import api from './client'
+import { useToastStore } from '../stores/toastStore'
 import type {
   Statistics,
   DailyStats,
@@ -8,6 +10,9 @@ import type {
   PortfolioPosition,
   PortfolioDaily,
   PortfolioAllocation,
+  RiskLegStatus,
+  RiskStateResponse,
+  UpdateTpSlPayload,
 } from '../types'
 
 // ── Query Key Factory ─────────────────────────────────────────
@@ -24,6 +29,8 @@ export const queryKeys = {
   trades: {
     all: ['trades'] as const,
     list: (filters: Record<string, unknown>) => ['trades', filters] as const,
+    detail: (id: number) => ['trades', 'detail', id] as const,
+    riskState: (id: number) => ['trades', 'riskState', id] as const,
   },
   portfolio: {
     all: ['portfolio'] as const,
@@ -223,13 +230,194 @@ export function useClosePosition() {
   })
 }
 
+// ── Risk-State Queries (Epic #188, Issue #195) ───────────────────
+// Readback snapshot from GET /trades/{id}/risk-state. Source of truth:
+// RiskStateManager.reconcile() — probes the exchange and writes the
+// aligned state back to the DB. Fresh for 10 seconds so rapid re-renders
+// don't spam the backend; use queryClient.invalidateQueries to force
+// a refetch after mutations.
+const RISK_STATE_STALE_MS = 10_000
+
+export function useRiskState(tradeId: number | null) {
+  return useQuery<RiskStateResponse>({
+    queryKey: queryKeys.trades.riskState(tradeId ?? -1),
+    queryFn: async () => {
+      const { data } = await api.get<RiskStateResponse>(
+        `/trades/${tradeId}/risk-state`,
+      )
+      return data
+    },
+    enabled: tradeId !== null,
+    staleTime: RISK_STATE_STALE_MS,
+  })
+}
+
+// ── TP/SL Mutation with Optimistic Updates (Issue #195) ──────────
+// Each leg (tp/sl/trailing) is applied independently on the backend and
+// its outcome surfaces via the RiskStateResponse. Optimistic updates
+// populate the trade-detail cache with a PENDING entry so the UI shows
+// immediate feedback; onError rolls back on HTTP failure; onSuccess
+// replaces the cache with the server-confirmed readback. Concurrent
+// mutations are serialized by TanStack Query's default single-mutation
+// behavior when using mutate() off the same hook instance.
+
+export interface UpdateTpSlVars {
+  tradeId: number
+  data: UpdateTpSlPayload
+  idempotencyKey?: string
+}
+
+interface TpSlMutationContext {
+  previous: RiskStateResponse | undefined
+}
+
+function makePendingLeg(value: RiskLegStatus['value']): RiskLegStatus {
+  return {
+    value,
+    status: 'pending',
+    order_id: null,
+    error: null,
+    latency_ms: 0,
+  }
+}
+
+function clearedLeg(): RiskLegStatus {
+  return {
+    value: null,
+    status: 'pending',
+    order_id: null,
+    error: null,
+    latency_ms: 0,
+  }
+}
+
+function buildOptimisticSnapshot(
+  existing: RiskStateResponse | undefined,
+  tradeId: number,
+  vars: UpdateTpSlVars,
+): RiskStateResponse {
+  const base: RiskStateResponse = existing ?? {
+    trade_id: tradeId,
+    tp: null,
+    sl: null,
+    trailing: null,
+    applied_at: new Date().toISOString(),
+    overall_status: 'no_change',
+  }
+
+  const next: RiskStateResponse = { ...base, trade_id: tradeId }
+
+  if (vars.data.remove_tp) {
+    next.tp = clearedLeg()
+  } else if (vars.data.take_profit !== undefined && vars.data.take_profit !== null) {
+    next.tp = makePendingLeg(vars.data.take_profit)
+  }
+
+  if (vars.data.remove_sl) {
+    next.sl = clearedLeg()
+  } else if (vars.data.stop_loss !== undefined && vars.data.stop_loss !== null) {
+    next.sl = makePendingLeg(vars.data.stop_loss)
+  }
+
+  if (vars.data.trailing_stop) {
+    next.trailing = makePendingLeg(vars.data.trailing_stop)
+  }
+
+  return next
+}
+
+function describeRejectedLegs(response: RiskStateResponse): string {
+  const legs: Array<RiskLegStatus | null> = [response.tp, response.sl, response.trailing]
+  const errors = legs
+    .filter((leg): leg is RiskLegStatus =>
+      leg !== null && (leg.status === 'rejected' || leg.status === 'cancel_failed'),
+    )
+    .map((leg) => leg.error ?? leg.status)
+  return errors.join(', ')
+}
+
 export function useUpdateTpSl() {
   const qc = useQueryClient()
-  return useMutation({
-    mutationFn: ({ tradeId, data }: { tradeId: number; data: Record<string, unknown> }) =>
-      api.put(`/trades/${tradeId}/tp-sl`, data),
-    onSuccess: () => {
+  const addToast = useToastStore.getState().addToast
+
+  return useMutation<RiskStateResponse, Error, UpdateTpSlVars, TpSlMutationContext>({
+    mutationFn: async ({ tradeId, data, idempotencyKey }) => {
+      const headers: Record<string, string> = {}
+      if (idempotencyKey) {
+        headers['Idempotency-Key'] = idempotencyKey
+      }
+      const { data: response } = await api.put<RiskStateResponse>(
+        `/trades/${tradeId}/tp-sl`,
+        data,
+        { headers },
+      )
+      return response
+    },
+
+    onMutate: async (vars) => {
+      // Cancel in-flight risk-state reads so we don't clobber the
+      // optimistic snapshot with stale server data
+      await qc.cancelQueries({
+        queryKey: queryKeys.trades.riskState(vars.tradeId),
+      })
+      const previous = qc.getQueryData<RiskStateResponse>(
+        queryKeys.trades.riskState(vars.tradeId),
+      )
+      const optimistic = buildOptimisticSnapshot(previous, vars.tradeId, vars)
+      qc.setQueryData(
+        queryKeys.trades.riskState(vars.tradeId),
+        optimistic,
+      )
+      return { previous }
+    },
+
+    onError: (_err, vars, ctx) => {
+      // Roll back to pre-mutation snapshot
+      if (ctx?.previous !== undefined) {
+        qc.setQueryData(
+          queryKeys.trades.riskState(vars.tradeId),
+          ctx.previous,
+        )
+      } else {
+        qc.removeQueries({ queryKey: queryKeys.trades.riskState(vars.tradeId) })
+      }
+      addToast('error', i18n.t('trades.riskState.updateFailed'))
+    },
+
+    onSuccess: (data, vars) => {
+      // Replace optimistic snapshot with server-confirmed readback
+      qc.setQueryData(queryKeys.trades.riskState(vars.tradeId), data)
+
+      if (data.overall_status === 'partial_success') {
+        addToast(
+          'warning',
+          i18n.t('trades.riskState.partialSuccess', {
+            failed: describeRejectedLegs(data),
+          }),
+        )
+      } else if (data.overall_status === 'all_rejected') {
+        addToast(
+          'error',
+          i18n.t('trades.riskState.partialSuccess', {
+            failed: describeRejectedLegs(data),
+          }),
+        )
+      } else if (data.overall_status === 'all_confirmed') {
+        addToast('success', i18n.t('trades.riskState.updated'))
+      }
+    },
+
+    onSettled: (_data, _err, vars) => {
+      // Full cache invalidation — list, detail, risk-state, positions, summary.
+      // Each trade row on the positions page reads from portfolio.positions;
+      // the trades page reads from trades.list; the edit panel reads from
+      // trades.riskState. All three must refresh after a mutation.
+      qc.invalidateQueries({ queryKey: queryKeys.trades.all })
       qc.invalidateQueries({ queryKey: queryKeys.portfolio.positions })
+      qc.invalidateQueries({ queryKey: queryKeys.portfolio.all })
+      qc.invalidateQueries({
+        queryKey: queryKeys.trades.riskState(vars.tradeId),
+      })
     },
   })
 }

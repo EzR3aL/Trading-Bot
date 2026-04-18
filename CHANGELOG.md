@@ -9,6 +9,30 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [Unreleased]
+
+### Added
+- Weex: leg-spezifischer Cancel (Epic #188 Follow-Up) — `cancel_tp_only` und `cancel_sl_only` filtern Pending-Conditional-Orders über `planType` (`TAKE_PROFIT` vs `STOP_LOSS`) plus `positionSide`, so dass ein Dashboard-Clear von nur TP die SL-Order unberührt lässt. Shared-Helper `_cancel_pending_tpsl_by_role` hält `cancel_position_tpsl` als dünnen Wrapper. Weex V3 unterstützt kein natives Trailing, daher nur 2 Legs.
+- Bitunix: leg-spezifischer Cancel NICHT implementiert (Epic #188 Follow-Up) — `cancel_tp_only`/`cancel_sl_only` raisen `NotImplementedError` mit expliziter Begründung. Bitunix speichert TP+SL in EINEM Pending-Order-Row (sowohl `tpPrice` als auch `slPrice` in einem Objekt); `/tpsl/cancel_order` akzeptiert nur `orderId` ohne Leg-Selektor; `modify_order`-Semantik für Partial-Clear ist undokumentiert. RiskStateManager fängt das als `CancelFailed` auf und markiert den Leg als `cancel_failed` statt SL collateral zu canceln — UI zeigt den Fehler klar an.
+- Drift-Backfill-Script `scripts/reconcile_open_trades.py` (#198, Epic #188): scannt alle offenen Trades, vergleicht DB mit Exchange-State via RiskStateManager.reconcile(), erzeugt Markdown-Report. Default Dry-Run, --apply zum Korrigieren. Filter --user-id und --exchange. Skip-Verhalten für Weex/Bitunix (kein Probe-Support).
+- Modul `src/bot/risk_state_manager.py` mit 2-Phase-Commit für TP/SL/Trailing (#190, Epic #188): apply_intent() schreibt Intent → Exchange → Readback → DB; reconcile() heilt Drift; classify_close() Stub für #193. Feature-Flag RISK_STATE_MANAGER_ENABLED (default off). Verhindert Anti-Pattern A (probe-but-don't-write) und C (DEBUG cancel errors).
+- DB-Migration für Risk-State-Felder auf trade_records (#189, Epic #188): tp_order_id, sl_order_id, trailing_order_id, trailing_callback_rate, trailing_activation_price, trailing_trigger_price, risk_source ENUM, *_intent/*_status pro Leg, last_synced_at. Vorbereitung für 2-Phase-Commit Risk-State-Manager.
+- Exchange-Client Readback-Methoden für Bitget/BingX/Hyperliquid (#191, Epic #188): `get_position_tpsl()`, `get_trailing_stop()`, `get_close_reason_from_history()`. Normalisierte Snapshot-Dataclasses in `base.py`. Voraussetzung für RiskStateManager (#190) der die Methoden als Source of Truth nutzt.
+- Modul `src/bot/risk_reasons.py` mit `ExitReason` Enum + Helpers `is_native_exit`/`is_software_exit`/`is_manual_exit` (#193, Epic #188). Zentralisiert die 10 neuen Reason-Codes plus 5 Legacy-Aliase für historische Trades.
+- Neue Komponente RiskStateBadge für kompakte TP/SL/Trailing-Anzeige (#196, Epic #188): zeigt aktiven Wert + Quelle (Exchange/Bot) + Status (aktiv/pending/rejected/cancel_failed) mit Icon und Farbcodierung. Eingebaut in MobilePositionCard und Trades-Detail-Drawer. Tooltips mit order_id, latency, error. i18n DE+EN komplett.
+- Live-Integration-Test-Suite gegen Bitget-Demo (#197, Epic #188): 19 Tests für TP/SL/Trailing-Roundtrip gegen admin user_id=1 Bitget-Demo-Account. Deckt TEST_MATRIX.md Sektion A+B+Teil-C ab. Cleanup-Garantie: jede Test-Position wird in finally geräumt. Marker `bitget_live` + env var `BITGET_LIVE_TEST_USER_ID` für selektive Ausführung.
+- Frontend useRiskState + useUpdateTpSl mit Optimistic Updates + vollständiger Cache-Invalidation (#195, Epic #188): sofortiges UI-Feedback, Rollback bei Fehler, Warning-Toast bei Partial-Success. Neuer Backend-Endpoint GET /trades/{id}/risk-state für Readback. i18n DE+EN für Status-Meldungen. Behebt dass gelöschte TP bis Page-Reload sichtbar blieben.
+
+### Changed
+- Klassifizierer für exit_reason refactored (#193, Epic #188): liest jetzt Bitgets orders-plan-history (via #191 readback) als Source of Truth für was die Position geschlossen hat. 9 neue präzise Reason-Codes (TRAILING_STOP_NATIVE/SOFTWARE, TAKE_PROFIT/STOP_LOSS_NATIVE, MANUAL_CLOSE_UI/EXCHANGE, STRATEGY_EXIT, LIQUIDATION, FUNDING_EXPIRY, EXTERNAL_CLOSE_UNKNOWN). `RiskStateManager.classify_close()` ersetzt den heuristischen Klassifizierer in `position_monitor._handle_closed_position`; Heuristik nur noch als Fallback bei API-Fail. Verhindert Anti-Pattern B (heuristischer Klassifizierer ohne Exchange-Probe). Strategy-Exit-Hinweise via `note_strategy_exit()` überschreiben Exchange-Readback (interne Signale gewinnen).
+- PUT /api/trades/{id}/tp-sl refactored auf RiskStateManager (#192, Epic #188): 2-Phase-Commit pro Leg (TP/SL/Trailing einzeln), Response enthält post-readback State je Leg, Partial-Success möglich, Idempotency-Key support. Alter Pfad bleibt parallel über Feature-Flag risk_state_manager_enabled (default off). Anti-Pattern A (probe-but-don't-write) und C (cancel-DEBUG) endgültig verhindert.
+
+### Fixed
+- BingX: `cancel_tp_only` + `cancel_sl_only` Methoden (Epic #188 Follow-Up): clear TP löscht jetzt nur die TAKE_PROFIT_MARKET/TAKE_PROFIT Orders; SL und Trailing bleiben aktiv. Vorher cancelte der Default-Fallback alle Orders gleichzeitig.
+- i18n-Kollision aufgelöst: MANUAL_CLOSE und EXTERNAL_CLOSE hatten beide das Label "Manuell geschlossen" (#194, Epic #188). Plus 10 neue präzise Reason-Codes (TRAILING_STOP_NATIVE/SOFTWARE, TAKE_PROFIT/STOP_LOSS_NATIVE, MANUAL_CLOSE_UI/EXCHANGE, STRATEGY_EXIT, LIQUIDATION, FUNDING_EXPIRY, EXTERNAL_CLOSE_UNKNOWN). Uniqueness-Test verhindert künftige Kollisionen.
+
+---
+
 ## [4.15.1] - 2026-04-15
 
 ### Changed (Issue #181 follow-up)

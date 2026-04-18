@@ -367,6 +367,9 @@ class TestHandleClosedPosition:
         mixin._close_and_record_trade = AsyncMock()
         mixin._trailing_stop_backoff = {}
         mixin._send_notification = AsyncMock()
+        # #193: _handle_closed_position now consults the risk state manager.
+        # This test checks the legacy heuristic path → leave the slot None.
+        mixin._risk_state_manager = None
 
         trade = _make_mock_trade(
             entry_price=68200.0,
@@ -391,7 +394,8 @@ class TestHandleClosedPosition:
         mixin._close_and_record_trade.assert_called_once()
         call_args = mixin._close_and_record_trade.call_args
         assert call_args[0][1] == 69560.0  # exit_price
-        assert call_args[0][2] == "TAKE_PROFIT"
+        # #193 taxonomy: legacy TAKE_PROFIT → TAKE_PROFIT_NATIVE.
+        assert call_args[0][2] == "TAKE_PROFIT_NATIVE"
 
 
 # ---------------------------------------------------------------------------
