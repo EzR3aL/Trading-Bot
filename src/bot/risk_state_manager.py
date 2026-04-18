@@ -939,6 +939,12 @@ class RiskStateManager:
                     return snap.tp_price, snap.tp_order_id
                 return snap.sl_price, snap.sl_order_id
             trailing_snap = await client.get_trailing_stop(symbol, side)
+            # Adapters return ``None`` when no trailing plan exists on the
+            # exchange. That is the correct readback signal for a cleared
+            # trailing leg; accessing ``.callback_rate`` here would crash
+            # the whole apply_intent flow (regression seen on trade #246).
+            if trailing_snap is None:
+                return None, None
             confirmed_dict = {
                 "callback_rate": trailing_snap.callback_rate,
                 "activation_price": trailing_snap.activation_price,

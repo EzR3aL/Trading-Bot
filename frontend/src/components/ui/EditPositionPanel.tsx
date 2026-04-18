@@ -36,11 +36,12 @@ interface EditPositionPanelProps {
   position: PositionData
   onClose: () => void
   onSave: (data: {
-    take_profit: number | null
-    stop_loss: number | null
-    remove_tp: boolean
-    remove_sl: boolean
-    trailing_stop: { callback_pct: number } | null
+    take_profit?: number | null
+    stop_loss?: number | null
+    remove_tp?: boolean
+    remove_sl?: boolean
+    trailing_stop?: { callback_pct: number } | null
+    remove_trailing?: boolean
   }) => Promise<void>
 }
 
@@ -214,14 +215,44 @@ export default function EditPositionPanel({ position, onClose, onSave }: EditPos
     setSaving(true)
     setError(null)
     try {
+      // Dirty tracking: only include legs the user actually touched. Sending
+      // every field every time causes unnecessary cancel-replace cycles on
+      // the exchange and lets stale cached values leak back after the user
+      // cleared them (root cause of the "SL keeps coming back" regression).
       const tp = tpPrice ? parseFloat(tpPrice) : null
       const sl = slPrice ? parseFloat(slPrice) : null
-      const removeTp = position.take_profit != null && tp == null
-      const removeSl = position.stop_loss != null && sl == null
-      const trailing = trailingEnabled ? {
-        callback_pct: trailingAtr,
-      } : null
-      await onSave({ take_profit: tp, stop_loss: sl, remove_tp: removeTp, remove_sl: removeSl, trailing_stop: trailing })
+      const currentTp = position.take_profit ?? null
+      const currentSl = position.stop_loss ?? null
+      const currentTrailingEnabled =
+        position.trailing_atr_override != null ||
+        position.native_trailing_stop === true ||
+        position.trailing_stop_active === true
+      const currentTrailingAtr = position.trailing_atr_override ?? null
+
+      const payload: Parameters<typeof onSave>[0] = {}
+
+      if (tp !== currentTp) {
+        if (tp == null) payload.remove_tp = true
+        else payload.take_profit = tp
+      }
+      if (sl !== currentSl) {
+        if (sl == null) payload.remove_sl = true
+        else payload.stop_loss = sl
+      }
+      if (trailingEnabled !== currentTrailingEnabled) {
+        if (trailingEnabled) payload.trailing_stop = { callback_pct: trailingAtr }
+        else payload.remove_trailing = true
+      } else if (trailingEnabled && trailingAtr !== currentTrailingAtr) {
+        payload.trailing_stop = { callback_pct: trailingAtr }
+      }
+
+      // Nothing changed — skip the round-trip.
+      if (Object.keys(payload).length === 0) {
+        onClose()
+        return
+      }
+
+      await onSave(payload)
       onClose()
     } catch (err: unknown) {
       // Extract error detail from API response if available

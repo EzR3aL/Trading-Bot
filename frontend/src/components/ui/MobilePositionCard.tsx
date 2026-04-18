@@ -112,15 +112,16 @@ function MobilePositionCardInner({ pos }: { pos: Position }) {
     },
   ]
 
-  const handleSave = async (data: { take_profit: number | null; stop_loss: number | null; remove_tp: boolean; remove_sl: boolean; trailing_stop: unknown }) => {
+  const handleSave = async (data: {
+    take_profit?: number | null
+    stop_loss?: number | null
+    remove_tp?: boolean
+    remove_sl?: boolean
+    trailing_stop?: { callback_pct: number } | null
+    remove_trailing?: boolean
+  }) => {
     if (!pos.trade_id) throw new Error('No trade ID')
-    await api.put(`/trades/${pos.trade_id}/tp-sl`, {
-      take_profit: data.take_profit,
-      stop_loss: data.stop_loss,
-      remove_tp: data.remove_tp,
-      remove_sl: data.remove_sl,
-      trailing_stop: data.trailing_stop,
-    })
+    await api.put(`/trades/${pos.trade_id}/tp-sl`, data)
     // Parent component handles state refresh via positions re-fetch
   }
 

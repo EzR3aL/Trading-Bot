@@ -319,7 +319,9 @@ function buildOptimisticSnapshot(
     next.sl = makePendingLeg(vars.data.stop_loss)
   }
 
-  if (vars.data.trailing_stop) {
+  if (vars.data.remove_trailing) {
+    next.trailing = clearedLeg()
+  } else if (vars.data.trailing_stop) {
     next.trailing = makePendingLeg(vars.data.trailing_stop)
   }
 

@@ -1013,7 +1013,13 @@ class BitgetExchangeClient(HTTPExchangeClientMixin, ExchangeClient):
     async def get_trailing_stop(
         self, symbol: str, side: str
     ) -> Optional[TrailingStopSnapshot]:
-        """Read the live ``track_plan`` (trailing stop) from Bitget plan orders.
+        """Read the live ``moving_plan`` (trailing stop) from Bitget plan orders.
+
+        Bitget groups position-level trailing stops under ``planType=moving_plan``
+        and exposes them via the TPSL plan list (``planType=profit_loss``).
+        Querying ``planType=moving_plan`` directly returns HTTP 400 ``planType
+        is not met``, so we fetch the umbrella ``profit_loss`` list and filter
+        locally — same pattern as :meth:`has_native_trailing_stop`.
 
         Returns ``None`` if no trailing plan exists. If multiple plans exist
         (should not happen in practice), warns and returns the newest by
@@ -1025,7 +1031,7 @@ class BitgetExchangeClient(HTTPExchangeClientMixin, ExchangeClient):
             params={
                 "productType": PRODUCT_TYPE_USDT,
                 "symbol": symbol,
-                "planType": "track_plan",
+                "planType": "profit_loss",
             },
             auth=True,
         )
@@ -1033,7 +1039,10 @@ class BitgetExchangeClient(HTTPExchangeClientMixin, ExchangeClient):
         side_norm = side.lower()
         plans = [
             p for p in self._bitget_plans(payload)
-            if (p.get("holdSide") or p.get("posSide") or "").lower() == side_norm
+            if (p.get("planType") or "").lower() == "moving_plan"
+            and (
+                (p.get("holdSide") or p.get("posSide") or "").lower() in ("", side_norm)
+            )
         ]
         if not plans:
             return None
