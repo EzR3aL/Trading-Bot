@@ -266,13 +266,7 @@ export default function Dashboard() {
             if (!editingPos.trade_id) return
             await updateTpSl.mutateAsync({
               tradeId: editingPos.trade_id,
-              data: {
-                take_profit: data.take_profit,
-                stop_loss: data.stop_loss,
-                remove_tp: data.remove_tp,
-                remove_sl: data.remove_sl,
-                trailing_stop: data.trailing_stop,
-              },
+              data,
             })
           }}
         />

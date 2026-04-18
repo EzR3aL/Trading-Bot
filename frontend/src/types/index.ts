@@ -296,4 +296,5 @@ export interface UpdateTpSlPayload {
   trailing_stop?: TrailingValue | null
   remove_tp?: boolean
   remove_sl?: boolean
+  remove_trailing?: boolean
 }

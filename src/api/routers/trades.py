@@ -592,6 +592,7 @@ class UpdateTpSlRequest(PydanticBaseModel):
     remove_tp: bool = False
     remove_sl: bool = False
     trailing_stop: Optional[TrailingStopParams] = None
+    remove_trailing: bool = False
 
 
 # ── Response schemas (RiskStateManager path, #192) ─────────────────
@@ -895,7 +896,14 @@ async def _handle_tp_sl_via_manager(
         legs.append((RiskLeg.SL, await _apply(RiskLeg.SL, body.stop_loss)))
 
     # ── Trailing leg ───────────────────────────────────────────────
-    if body.trailing_stop is not None:
+    # Without an explicit ``remove_trailing`` flag the endpoint has no way to
+    # communicate "toggle trailing off" — a naked ``trailing_stop: None`` body
+    # is indistinguishable from "leave trailing alone". The flag lets the UI
+    # clear a trailing leg without touching TP/SL, matching the remove_tp /
+    # remove_sl semantics.
+    if body.remove_trailing:
+        legs.append((RiskLeg.TRAILING, await _apply(RiskLeg.TRAILING, None)))
+    elif body.trailing_stop is not None:
         trailing_value = await _build_trailing_intent(trade, body.trailing_stop)
         legs.append((RiskLeg.TRAILING, await _apply(RiskLeg.TRAILING, trailing_value)))
 
@@ -954,6 +962,11 @@ async def update_trade_tpsl(
             raise HTTPException(status_code=422, detail=ERR_TP_SL_CONFLICT_TP)
         if body.remove_sl and body.stop_loss is not None:
             raise HTTPException(status_code=422, detail=ERR_TP_SL_CONFLICT_SL)
+        if body.remove_trailing and body.trailing_stop is not None:
+            raise HTTPException(
+                status_code=422,
+                detail="Cannot both set and remove trailing stop",
+            )
 
         trade_result = await db.execute(
             select(TradeRecord).where(
