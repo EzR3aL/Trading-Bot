@@ -228,10 +228,14 @@ class FakeExchangeClient:
         if self.raise_not_impl_readback:
             raise NotImplementedError("fake adapter has no probe yet")
         return PositionTpSlSnapshot(
+            symbol=symbol,
+            side=hold_side,
             tp_price=self.readback_tp,
             tp_order_id=self.readback_tp_id,
+            tp_trigger_type="mark_price",
             sl_price=self.readback_sl,
             sl_order_id=self.readback_sl_id,
+            sl_trigger_type="mark_price",
         )
 
     async def get_trailing_stop(self, symbol: str, hold_side: str) -> TrailingStopSnapshot:
@@ -239,6 +243,8 @@ class FakeExchangeClient:
         if self.raise_not_impl_readback:
             raise NotImplementedError("fake adapter has no probe yet")
         return TrailingStopSnapshot(
+            symbol=symbol,
+            side=hold_side,
             callback_rate=self.readback_trailing_callback,
             activation_price=self.readback_trailing_activation,
             trigger_price=self.readback_trailing_trigger,
