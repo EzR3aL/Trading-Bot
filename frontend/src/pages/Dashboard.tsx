@@ -119,6 +119,14 @@ export default function Dashboard() {
     setEditingPos(pos)
   }, [])
 
+  // editingPos is a snapshot taken at click-time. Re-resolve against the
+  // live positions cache so the modal reflects any updates (e.g. a cleared
+  // SL from the previous Übernehmen). Without this the form fields show
+  // stale values until the user reloads the whole page.
+  const livePosition = editingPos?.trade_id
+    ? positions.find(p => p.trade_id === editingPos.trade_id) ?? editingPos
+    : null
+
   const { containerRef, refreshing, pullDistance } = usePullToRefresh({
     onRefresh: refreshData,
     disabled: !isMobile,
@@ -241,31 +249,31 @@ export default function Dashboard() {
       <GuidedTour tourId="dashboard" steps={dashboardTourSteps} />
 
       {/* Edit TP/SL Panel — rendered at top level for correct z-index */}
-      {editingPos && editingPos.trade_id && (
+      {livePosition && livePosition.trade_id && (
         <EditPositionPanel
           position={{
-            trade_id: editingPos.trade_id,
-            symbol: editingPos.symbol,
-            side: editingPos.side,
-            entry_price: editingPos.entry_price,
-            current_price: editingPos.current_price,
-            leverage: editingPos.leverage,
-            exchange: editingPos.exchange,
-            bot_name: editingPos.bot_name,
-            demo_mode: editingPos.demo_mode,
-            take_profit: editingPos.take_profit,
-            stop_loss: editingPos.stop_loss,
-            trailing_stop_active: editingPos.trailing_stop_active,
-            trailing_stop_price: editingPos.trailing_stop_price,
-            trailing_stop_distance_pct: editingPos.trailing_stop_distance_pct,
-            trailing_atr_override: editingPos.trailing_atr_override,
-            native_trailing_stop: editingPos.native_trailing_stop,
+            trade_id: livePosition.trade_id,
+            symbol: livePosition.symbol,
+            side: livePosition.side,
+            entry_price: livePosition.entry_price,
+            current_price: livePosition.current_price,
+            leverage: livePosition.leverage,
+            exchange: livePosition.exchange,
+            bot_name: livePosition.bot_name,
+            demo_mode: livePosition.demo_mode,
+            take_profit: livePosition.take_profit,
+            stop_loss: livePosition.stop_loss,
+            trailing_stop_active: livePosition.trailing_stop_active,
+            trailing_stop_price: livePosition.trailing_stop_price,
+            trailing_stop_distance_pct: livePosition.trailing_stop_distance_pct,
+            trailing_atr_override: livePosition.trailing_atr_override,
+            native_trailing_stop: livePosition.native_trailing_stop,
           }}
           onClose={() => setEditingPos(null)}
           onSave={async (data) => {
-            if (!editingPos.trade_id) return
+            if (!livePosition.trade_id) return
             await updateTpSl.mutateAsync({
-              tradeId: editingPos.trade_id,
+              tradeId: livePosition.trade_id,
               data,
             })
           }}
