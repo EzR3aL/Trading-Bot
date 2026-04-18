@@ -227,25 +227,40 @@ async def run_smoke() -> bool:
         record("SL cleared in DB", db["stop_loss"] is None and db["sl_status"] == "cleared")
 
         # ── Step 7: re-apply TP+SL, then add trailing 2.5% ──────────
+        # Bitget requires trigger_price ≥ current market for long trailing.
+        # Use a 1 % activation buffer above the most recent ticker so the
+        # placement isn't rejected by price-drift during the smoke run.
         print("\nSTEP 7: TP=%s + SL=%s, then trailing 2.5%%" % (tp1, sl1))
         await manager.apply_intent(trade_id, RiskLeg.TP, tp1)
         await manager.apply_intent(trade_id, RiskLeg.SL, sl1)
+        cur_ticker = await client.get_ticker(SYMBOL)
+        trigger_long = round(cur_ticker.last_price * 1.01, 1)
         trail_v1 = {"callback_rate": 2.5, "activation_price": None,
-                    "trigger_price": price, "atr_override": 2.5}
+                    "trigger_price": trigger_long, "atr_override": 2.5}
         await manager.apply_intent(trade_id, RiskLeg.TRAILING, trail_v1)
         ex = await _read_exchange(client); db = await _read_db(trade_id)
         record("TP present", _approx(ex["tp_price"], tp1))
         record("SL present", _approx(ex["sl_price"], sl1))
-        record("Trailing present on exchange", ex["trailing_callback"] is not None,
-               f"callback={ex['trailing_callback']}%")
-        record("Trailing in DB", db["trailing_status"] in ("confirmed", "pending"),
-               f"db={db['trailing_status']} callback={db['trailing_callback_rate']}")
+        record(
+            "Trailing placed with callback ≈ 2.5 %",
+            ex["trailing_callback"] is not None and abs(ex["trailing_callback"] - 2.5) < 0.2,
+            f"callback={ex['trailing_callback']}%",
+        )
+        record(
+            "Trailing DB row confirmed",
+            db["trailing_status"] == "confirmed"
+            and db["trailing_callback_rate"] is not None
+            and abs(db["trailing_callback_rate"] - 2.5) < 0.2,
+            f"db={db['trailing_status']} callback={db['trailing_callback_rate']}",
+        )
         t1_oid = ex["trailing_order_id"]
 
         # ── Step 8: change trailing 2.5 -> 1.5 ──────────────────────
         print("\nSTEP 8: change trailing 2.5%% -> 1.5%% (TP+SL must survive)")
+        cur_ticker = await client.get_ticker(SYMBOL)
+        trigger_long = round(cur_ticker.last_price * 1.01, 1)
         trail_v2 = {"callback_rate": 1.5, "activation_price": None,
-                    "trigger_price": price, "atr_override": 1.5}
+                    "trigger_price": trigger_long, "atr_override": 1.5}
         await manager.apply_intent(trade_id, RiskLeg.TRAILING, trail_v2)
         ex = await _read_exchange(client); db = await _read_db(trade_id)
         record("Trailing updated", ex["trailing_callback"] is not None and
@@ -258,8 +273,10 @@ async def run_smoke() -> bool:
 
         # ── Step 9: change trailing 1.5 -> 3.5 ──────────────────────
         print("\nSTEP 9: change trailing 1.5%% -> 3.5%% (TP+SL must survive)")
+        cur_ticker = await client.get_ticker(SYMBOL)
+        trigger_long = round(cur_ticker.last_price * 1.01, 1)
         trail_v3 = {"callback_rate": 3.5, "activation_price": None,
-                    "trigger_price": price, "atr_override": 3.5}
+                    "trigger_price": trigger_long, "atr_override": 3.5}
         await manager.apply_intent(trade_id, RiskLeg.TRAILING, trail_v3)
         ex = await _read_exchange(client); db = await _read_db(trade_id)
         record("Trailing updated to 3.5%", ex["trailing_callback"] is not None and
