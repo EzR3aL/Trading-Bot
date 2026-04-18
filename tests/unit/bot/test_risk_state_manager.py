@@ -168,7 +168,25 @@ class FakeExchangeClient:
     readback_calls: List[tuple] = field(default_factory=list)
 
     async def cancel_position_tpsl(self, symbol: str, side: str = "long") -> bool:
-        self.cancel_calls.append((symbol, side))
+        self.cancel_calls.append((symbol, side, "all"))
+        if self.cancel_raises is not None:
+            raise self.cancel_raises
+        return True
+
+    async def cancel_tp_only(self, symbol: str, side: str = "long") -> bool:
+        self.cancel_calls.append((symbol, side, "tp_only"))
+        if self.cancel_raises is not None:
+            raise self.cancel_raises
+        return True
+
+    async def cancel_sl_only(self, symbol: str, side: str = "long") -> bool:
+        self.cancel_calls.append((symbol, side, "sl_only"))
+        if self.cancel_raises is not None:
+            raise self.cancel_raises
+        return True
+
+    async def cancel_native_trailing_stop(self, symbol: str, side: str = "long") -> bool:
+        self.cancel_calls.append((symbol, side, "trailing_only"))
         if self.cancel_raises is not None:
             raise self.cancel_raises
         return True
@@ -353,10 +371,77 @@ async def test_apply_intent_tp_clear_none_clears_dbfields(
     assert trade.tp_status == RiskOpStatus.CLEARED.value
     assert trade.risk_source == "software_bot"
 
-    # Cancel was invoked; place was NOT.
+    # Cancel was invoked (TP-only, not all legs); place was NOT.
     assert len(client.cancel_calls) == 1
-    assert client.cancel_calls[0] == ("BTCUSDT", "long")
+    assert client.cancel_calls[0] == ("BTCUSDT", "long", "tp_only")
     assert len(client.place_calls) == 0
+
+
+@pytest.mark.asyncio
+async def test_clear_tp_leaves_sl_and_trailing_untouched_on_exchange(
+    open_trade: int, session_factory_cb
+) -> None:
+    """Regression A05: clearing TP must never collateral-cancel SL or trailing.
+
+    Before the Epic #188 follow-up fix, clearing the TP leg called the
+    broad ``cancel_position_tpsl`` on the client, which on Bitget wipes
+    ``pos_profit`` + ``pos_loss`` + ``moving_plan`` in one call. That
+    silently collapsed any active SL or trailing leg on the exchange
+    while the DB still showed them as ``confirmed``.
+
+    After the fix, clearing TP goes through ``cancel_tp_only`` which
+    only touches the TP plan types. This test asserts the routing.
+    """
+    async with session_factory_cb() as session:
+        trade = await session.get(TradeRecord, open_trade)
+        trade.tp_order_id = "tp_plan_1"
+        trade.take_profit = 80000.0
+        trade.sl_order_id = "sl_plan_1"
+        trade.stop_loss = 72000.0
+        trade.trailing_order_id = "trail_plan_1"
+        trade.trailing_callback_rate = 2.0
+        trade.native_trailing_stop = True
+        await session.commit()
+
+    client = FakeExchangeClient(raise_not_impl_readback=True)
+    manager = RiskStateManager(_factory_returning(client), session_factory_cb)
+
+    result = await manager.apply_intent(open_trade, RiskLeg.TP, None)
+
+    assert result.status is RiskOpStatus.CLEARED
+
+    # Exactly one cancel, targeting ONLY the TP plan-types.
+    assert client.cancel_calls == [("BTCUSDT", "long", "tp_only")]
+
+    # DB: only tp-* fields touched. sl and trailing remain exactly as seeded.
+    trade = await _fetch_trade(session_factory_cb, open_trade)
+    assert trade.take_profit is None
+    assert trade.tp_order_id is None
+    assert trade.tp_status == RiskOpStatus.CLEARED.value
+    assert trade.stop_loss == 72000.0
+    assert trade.sl_order_id == "sl_plan_1"
+    assert trade.trailing_order_id == "trail_plan_1"
+    assert trade.trailing_callback_rate == 2.0
+
+
+@pytest.mark.asyncio
+async def test_clear_sl_routes_to_cancel_sl_only(
+    open_trade: int, session_factory_cb
+) -> None:
+    """Analog to the TP test — clearing SL must use cancel_sl_only."""
+    async with session_factory_cb() as session:
+        trade = await session.get(TradeRecord, open_trade)
+        trade.sl_order_id = "sl_plan_x"
+        trade.stop_loss = 72000.0
+        await session.commit()
+
+    client = FakeExchangeClient(raise_not_impl_readback=True)
+    manager = RiskStateManager(_factory_returning(client), session_factory_cb)
+
+    result = await manager.apply_intent(open_trade, RiskLeg.SL, None)
+
+    assert result.status is RiskOpStatus.CLEARED
+    assert client.cancel_calls == [("BTCUSDT", "long", "sl_only")]
 
 
 @pytest.mark.asyncio
@@ -806,8 +891,10 @@ async def test_apply_intent_trailing_cancel_old_uses_cancel_order(
 
     assert result.status is RiskOpStatus.CONFIRMED
     assert result.order_id == "new_trailing_id"
-    # cancel_order was invoked for the trailing leg.
-    assert client.cancel_order_calls == [("BTCUSDT", "old_trailing_id")]
+    # Cancel was invoked via the trailing-only path (cancel_native_trailing_stop
+    # preferred over cancel_order so other legs can never be collateral damage).
+    assert client.cancel_calls == [("BTCUSDT", "long", "trailing_only")]
+    assert client.cancel_order_calls == []
 
 
 @pytest.mark.asyncio

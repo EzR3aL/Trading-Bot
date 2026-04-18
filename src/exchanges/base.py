@@ -193,6 +193,20 @@ class ExchangeClient(ABC):
         """
         return True
 
+    async def cancel_tp_only(self, symbol: str, side: str = "long") -> bool:
+        """Cancel only the TP leg, leaving SL and trailing untouched.
+
+        Default falls back to :meth:`cancel_position_tpsl` for exchanges
+        that can't distinguish legs — that's the pre-#188 behaviour.
+        Bitget (the only exchange where the distinction matters today)
+        overrides this to target ``pos_profit``/``profit_plan`` only.
+        """
+        return await self.cancel_position_tpsl(symbol, side)
+
+    async def cancel_sl_only(self, symbol: str, side: str = "long") -> bool:
+        """Cancel only the SL leg, leaving TP and trailing untouched."""
+        return await self.cancel_position_tpsl(symbol, side)
+
     # Class-level capability flag: set to True in subclasses that implement
     # a real native trailing stop via the exchange API (Bitget, BingX). Used
     # by trade_executor and position_monitor to skip unnecessary attempts on

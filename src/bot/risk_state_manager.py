@@ -837,19 +837,27 @@ class RiskStateManager:
         :class:`ExchangeError` or subclasses on place failures.
         """
         # Cancel-old step — only if there was something there and
-        # we're either clearing (value is None) or replacing (leg.TP/SL).
+        # we're either clearing (value is None) or replacing.
+        # CRITICAL: cancel ONLY the leg we're touching. Before Epic #188
+        # follow-up, this called cancel_position_tpsl() which wipes TP+SL+
+        # trailing simultaneously on Bitget, silently collapsing other
+        # active legs. Each leg now has a dedicated cancel path.
         if existing_order_id is not None:
             try:
-                if leg in (RiskLeg.TP, RiskLeg.SL):
-                    await client.cancel_position_tpsl(symbol=symbol, side=side)
+                if leg is RiskLeg.TP:
+                    await client.cancel_tp_only(symbol=symbol, side=side)
+                elif leg is RiskLeg.SL:
+                    await client.cancel_sl_only(symbol=symbol, side=side)
                 else:
-                    # Trailing uses cancel_order(order_id) on order-based
-                    # exchanges, cancel_position_tpsl on position-based.
-                    # Delegate to the adapter's best-effort cancel.
-                    try:
-                        await client.cancel_order(symbol, existing_order_id)
-                    except NotImplementedError:
-                        await client.cancel_position_tpsl(symbol=symbol, side=side)
+                    # Trailing: prefer native dedicated cancel if adapter
+                    # exposes it; otherwise fall back to cancel_order by id.
+                    if hasattr(client, "cancel_native_trailing_stop"):
+                        await client.cancel_native_trailing_stop(symbol=symbol, side=side)
+                    else:
+                        try:
+                            await client.cancel_order(symbol, existing_order_id)
+                        except NotImplementedError:
+                            await client.cancel_position_tpsl(symbol=symbol, side=side)
             except (ExchangeError, Exception) as e:
                 if isinstance(e, (ExchangeError, NotImplementedError)):
                     # NotImplementedError here means the exchange genuinely

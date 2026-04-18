@@ -82,7 +82,25 @@ class _FakeExchangeClient:
     readback_calls: List[tuple] = field(default_factory=list)
 
     async def cancel_position_tpsl(self, symbol: str, side: str = "long") -> bool:
-        self.cancel_calls.append((symbol, side))
+        self.cancel_calls.append((symbol, side, "all"))
+        if self.cancel_raises is not None:
+            raise self.cancel_raises
+        return True
+
+    async def cancel_tp_only(self, symbol: str, side: str = "long") -> bool:
+        self.cancel_calls.append((symbol, side, "tp_only"))
+        if self.cancel_raises is not None:
+            raise self.cancel_raises
+        return True
+
+    async def cancel_sl_only(self, symbol: str, side: str = "long") -> bool:
+        self.cancel_calls.append((symbol, side, "sl_only"))
+        if self.cancel_raises is not None:
+            raise self.cancel_raises
+        return True
+
+    async def cancel_native_trailing_stop(self, symbol: str, side: str = "long") -> bool:
+        self.cancel_calls.append((symbol, side, "trailing_only"))
         if self.cancel_raises is not None:
             raise self.cancel_raises
         return True

@@ -327,26 +327,51 @@ class BitgetExchangeClient(HTTPExchangeClientMixin, ExchangeClient):
         Needed so the TP/SL edit endpoint can replace trailing without
         touching user-set TP/SL plans.
         """
-        try:
-            result = await self._request(
-                "POST",
-                "/api/v2/mix/order/cancel-plan-order",
-                data={
-                    "symbol": symbol,
-                    "productType": PRODUCT_TYPE_USDT,
-                    "planType": "moving_plan",
-                },
-            )
-            success = result.get("successList", []) if isinstance(result, dict) else []
-            if success:
-                logger.info(
-                    "Cancelled Bitget moving_plan for %s: %s",
-                    symbol, [s.get("orderId") for s in success],
+        return await self._cancel_plan_types(symbol, ["moving_plan"])
+
+    async def cancel_tp_only(self, symbol: str, side: str = "long") -> bool:
+        """Cancel only take-profit plans (``pos_profit`` + ``profit_plan``).
+
+        Leaves ``pos_loss`` (SL) and ``moving_plan`` (trailing) alive.
+        Used by :class:`RiskStateManager` so that clearing one leg via the
+        dashboard never collapses the other legs — see Epic #188 follow-up
+        to #192.
+        """
+        return await self._cancel_plan_types(symbol, ["pos_profit", "profit_plan"])
+
+    async def cancel_sl_only(self, symbol: str, side: str = "long") -> bool:
+        """Cancel only stop-loss plans (``pos_loss`` + ``loss_plan``)."""
+        return await self._cancel_plan_types(symbol, ["pos_loss", "loss_plan"])
+
+    async def _cancel_plan_types(self, symbol: str, plan_types: list[str]) -> bool:
+        """Shared helper: cancel every plan of the given types on ``symbol``.
+
+        Per-plan-type failures are logged at DEBUG because absence is a
+        legitimate no-op; network/auth errors bubble up through ``_request``.
+        """
+        for plan_type in plan_types:
+            try:
+                result = await self._request(
+                    "POST",
+                    "/api/v2/mix/order/cancel-plan-order",
+                    data={
+                        "symbol": symbol,
+                        "productType": PRODUCT_TYPE_USDT,
+                        "planType": plan_type,
+                    },
                 )
-            return True
-        except Exception as e:
-            logger.debug("Bitget cancel moving_plan for %s failed: %s", symbol, e)
-            return False
+                success = result.get("successList", []) if isinstance(result, dict) else []
+                if success:
+                    logger.info(
+                        "Cancelled Bitget %s for %s: %s",
+                        plan_type, symbol, [s.get("orderId") for s in success],
+                    )
+            except Exception as e:
+                logger.debug(
+                    "Bitget cancel %s for %s failed: %s (may not exist)",
+                    plan_type, symbol, e,
+                )
+        return True
 
     async def cancel_order(self, symbol: str, order_id: str) -> bool:
         data = {
