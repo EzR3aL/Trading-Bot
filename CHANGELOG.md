@@ -9,6 +9,13 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [Unreleased]
+
+### Added
+- Neue Komponente RiskStateBadge für kompakte TP/SL/Trailing-Anzeige (#196, Epic #188): zeigt aktiven Wert + Quelle (Exchange/Bot) + Status (aktiv/pending/rejected/cancel_failed) mit Icon und Farbcodierung. Eingebaut in MobilePositionCard und Trades-Detail-Drawer. Tooltips mit order_id, latency, error. i18n DE+EN komplett.
+
+---
+
 ## [4.15.1] - 2026-04-15
 
 ### Changed (Issue #181 follow-up)
