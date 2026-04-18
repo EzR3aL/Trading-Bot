@@ -13,7 +13,7 @@ from src.exchanges.types import Balance, FundingRateInfo, Order, Position, Ticke
 from src.utils.circuit_breaker import CircuitBreakerError, with_retry
 
 
-# ── Risk-state readback snapshots (#191) ────────────────────────────────────
+# ── Risk-state readback snapshots (#190 / #191) ────────────────────────────
 # These dataclasses are returned by the per-exchange readback methods on
 # ``ExchangeClient`` and consumed by RiskStateManager (#190) as the source
 # of truth — the exchange always wins over the local DB state.

@@ -43,6 +43,17 @@ class OrderError(ExchangeError):
     pass
 
 
+class CancelFailed(ExchangeError):
+    """Exchange refused (or returned an error for) a cancel request.
+
+    Raised by the RiskStateManager when an attempt to cancel an
+    existing TP/SL/trailing order fails. The caller MUST NOT attempt
+    to place a replacement order, since the previous one may still
+    be live on the exchange (Anti-Pattern C from Issue #190).
+    """
+    pass
+
+
 # --- Data source errors ---
 
 class DataSourceError(TradingBotError):
