@@ -26,6 +26,7 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 - PUT /api/trades/{id}/tp-sl refactored auf RiskStateManager (#192, Epic #188): 2-Phase-Commit pro Leg (TP/SL/Trailing einzeln), Response enthält post-readback State je Leg, Partial-Success möglich, Idempotency-Key support. Alter Pfad bleibt parallel über Feature-Flag risk_state_manager_enabled (default off). Anti-Pattern A (probe-but-don't-write) und C (cancel-DEBUG) endgültig verhindert.
 
 ### Fixed
+- BingX: `cancel_tp_only` + `cancel_sl_only` Methoden (Epic #188 Follow-Up): clear TP löscht jetzt nur die TAKE_PROFIT_MARKET/TAKE_PROFIT Orders; SL und Trailing bleiben aktiv. Vorher cancelte der Default-Fallback alle Orders gleichzeitig.
 - i18n-Kollision aufgelöst: MANUAL_CLOSE und EXTERNAL_CLOSE hatten beide das Label "Manuell geschlossen" (#194, Epic #188). Plus 10 neue präzise Reason-Codes (TRAILING_STOP_NATIVE/SOFTWARE, TAKE_PROFIT/STOP_LOSS_NATIVE, MANUAL_CLOSE_UI/EXCHANGE, STRATEGY_EXIT, LIQUIDATION, FUNDING_EXPIRY, EXTERNAL_CLOSE_UNKNOWN). Uniqueness-Test verhindert künftige Kollisionen.
 
 ---
