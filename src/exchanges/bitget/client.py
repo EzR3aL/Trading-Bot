@@ -10,12 +10,19 @@ import hashlib
 import hmac
 import math
 import time
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Literal, Optional
 
 import aiohttp
 
 from src.exceptions import ExchangeError
-from src.exchanges.base import ExchangeClient, HTTPExchangeClientMixin
+from src.exchanges.base import (
+    CloseReasonSnapshot,
+    ExchangeClient,
+    HTTPExchangeClientMixin,
+    PositionTpSlSnapshot,
+    TrailingStopSnapshot,
+)
 from src.exchanges.bitget.constants import (
     BASE_URL,
     ENDPOINTS,
@@ -898,3 +905,277 @@ class BitgetExchangeClient(HTTPExchangeClientMixin, ExchangeClient):
         risk_amount = balance * (risk_percent / 100)
         position_value = risk_amount * leverage
         return round(position_value / price, 6)
+
+    # ==================== Risk-state readback (#191) ====================
+    # These methods are the source-of-truth probe used by RiskStateManager
+    # to reconcile DB state against the exchange. Conventions:
+    #   - "no plan found" returns an empty snapshot / None, NOT an error.
+    #   - genuine API errors propagate (no try/except → return None).
+    # Bitget V2 plan-order endpoints return ``entrustedList`` on success;
+    # the bare list form is also tolerated for forward compatibility.
+
+    @staticmethod
+    def _bitget_plans(payload: Any) -> List[Dict[str, Any]]:
+        """Extract the list of plan dicts from a Bitget plan-order response."""
+        if isinstance(payload, dict):
+            entries = payload.get("entrustedList")
+            if isinstance(entries, list):
+                return entries
+            return []
+        if isinstance(payload, list):
+            return payload
+        return []
+
+    async def get_position_tpsl(
+        self, symbol: str, side: str
+    ) -> PositionTpSlSnapshot:
+        """Read live position-level TP/SL from Bitget plan orders.
+
+        Queries plan-orders with ``planType=profit_loss`` (returns both
+        ``pos_profit`` and ``pos_loss`` plans), then filters by ``holdSide``.
+        Empty snapshot when no plans match the position.
+        """
+        empty = PositionTpSlSnapshot(
+            symbol=symbol,
+            side=side,
+            tp_price=None,
+            tp_order_id=None,
+            tp_trigger_type=None,
+            sl_price=None,
+            sl_order_id=None,
+            sl_trigger_type=None,
+        )
+
+        payload = await self._request(
+            "GET",
+            "/api/v2/mix/order/orders-plan-pending",
+            params={
+                "productType": PRODUCT_TYPE_USDT,
+                "symbol": symbol,
+                "planType": "profit_loss",
+            },
+            auth=True,
+        )
+
+        plans = self._bitget_plans(payload)
+        if not plans:
+            return empty
+
+        side_norm = side.lower()
+        tp_plan: Optional[Dict[str, Any]] = None
+        sl_plan: Optional[Dict[str, Any]] = None
+        for plan in plans:
+            hold_side = (plan.get("holdSide") or plan.get("posSide") or "").lower()
+            if hold_side and hold_side != side_norm:
+                continue
+            plan_type = (plan.get("planType") or "").lower()
+            if plan_type == "pos_profit" and tp_plan is None:
+                tp_plan = plan
+            elif plan_type == "pos_loss" and sl_plan is None:
+                sl_plan = plan
+
+        return PositionTpSlSnapshot(
+            symbol=symbol,
+            side=side,
+            tp_price=_parse_float(tp_plan.get("executePrice") or tp_plan.get("triggerPrice")) if tp_plan else None,
+            tp_order_id=str(tp_plan.get("orderId")) if tp_plan and tp_plan.get("orderId") else None,
+            tp_trigger_type=tp_plan.get("triggerType") if tp_plan else None,
+            sl_price=_parse_float(sl_plan.get("executePrice") or sl_plan.get("triggerPrice")) if sl_plan else None,
+            sl_order_id=str(sl_plan.get("orderId")) if sl_plan and sl_plan.get("orderId") else None,
+            sl_trigger_type=sl_plan.get("triggerType") if sl_plan else None,
+        )
+
+    async def get_trailing_stop(
+        self, symbol: str, side: str
+    ) -> Optional[TrailingStopSnapshot]:
+        """Read the live ``track_plan`` (trailing stop) from Bitget plan orders.
+
+        Returns ``None`` if no trailing plan exists. If multiple plans exist
+        (should not happen in practice), warns and returns the newest by
+        creation time.
+        """
+        payload = await self._request(
+            "GET",
+            "/api/v2/mix/order/orders-plan-pending",
+            params={
+                "productType": PRODUCT_TYPE_USDT,
+                "symbol": symbol,
+                "planType": "track_plan",
+            },
+            auth=True,
+        )
+
+        side_norm = side.lower()
+        plans = [
+            p for p in self._bitget_plans(payload)
+            if (p.get("holdSide") or p.get("posSide") or "").lower() == side_norm
+        ]
+        if not plans:
+            return None
+
+        if len(plans) > 1:
+            logger.warning(
+                "Bitget %s %s has %d active track_plan entries; using newest",
+                symbol, side, len(plans),
+            )
+            plans.sort(key=lambda p: int(p.get("cTime") or p.get("createTime") or 0), reverse=True)
+
+        plan = plans[0]
+        callback_ratio = _parse_float(plan.get("callbackRatio"))
+        # Bitget returns callbackRatio as a decimal (0.014 = 1.4%) — normalize to percent.
+        callback_rate = round(callback_ratio * 100, 4) if callback_ratio is not None else None
+
+        # Bitget exposes activation via ``triggerPrice``. The running trail
+        # level is not reliably surfaced in the plan endpoint, so
+        # trigger_price stays None unless the plan dict explicitly carries
+        # a ``presetStopPrice`` / ``executePrice`` field (rare).
+        return TrailingStopSnapshot(
+            symbol=symbol,
+            side=side,
+            callback_rate=callback_rate,
+            activation_price=_parse_float(plan.get("triggerPrice")),
+            trigger_price=_parse_float(plan.get("presetStopPrice") or plan.get("executePrice")),
+            order_id=str(plan.get("orderId")) if plan.get("orderId") else None,
+        )
+
+    async def get_close_reason_from_history(
+        self, symbol: str, since_ts_ms: int
+    ) -> Optional[CloseReasonSnapshot]:
+        """Find the most recent close event for ``symbol`` since ``since_ts_ms``.
+
+        Searches:
+          1. orders-plan-history for triggered TP/SL/trailing plans
+             (planType in pos_profit/pos_loss/track_plan).
+          2. orders-history for reduce-only manual market closes.
+
+        Returns the newest event across both sources, or ``None`` when nothing
+        qualifies.
+        """
+        plan_event = await self._fetch_bitget_plan_close(symbol, since_ts_ms)
+        manual_event = await self._fetch_bitget_manual_close(symbol, since_ts_ms)
+
+        candidates = [e for e in (plan_event, manual_event) if e is not None]
+        if not candidates:
+            return None
+
+        # Pick newest by closed_at (fall back to None-as-oldest)
+        candidates.sort(
+            key=lambda e: e.closed_at or datetime.fromtimestamp(0, tz=timezone.utc),
+            reverse=True,
+        )
+        return candidates[0]
+
+    async def _fetch_bitget_plan_close(
+        self, symbol: str, since_ts_ms: int
+    ) -> Optional[CloseReasonSnapshot]:
+        """Find the newest triggered TP/SL/trailing plan since ``since_ts_ms``."""
+        payload = await self._request(
+            "GET",
+            "/api/v2/mix/order/orders-plan-history",
+            params={
+                "productType": PRODUCT_TYPE_USDT,
+                "symbol": symbol,
+                "startTime": str(since_ts_ms),
+            },
+            auth=True,
+        )
+        plans = self._bitget_plans(payload)
+        triggered = [
+            p for p in plans
+            if (p.get("planStatus") or p.get("state") or "").lower() == "triggered"
+        ]
+        if not triggered:
+            return None
+
+        triggered.sort(
+            key=lambda p: int(p.get("uTime") or p.get("updateTime") or p.get("cTime") or 0),
+            reverse=True,
+        )
+        plan = triggered[0]
+        plan_type = (plan.get("planType") or "").lower() or None
+        ts_ms = _parse_int(plan.get("uTime") or plan.get("updateTime") or plan.get("cTime"))
+        return CloseReasonSnapshot(
+            symbol=symbol,
+            closed_by_order_id=str(plan.get("orderId")) if plan.get("orderId") else None,
+            closed_by_plan_type=plan_type,
+            closed_by_trigger_type=plan.get("triggerType"),
+            closed_at=_ts_to_datetime(ts_ms),
+            fill_price=_parse_float(plan.get("executePrice") or plan.get("priceAvg")),
+        )
+
+    async def _fetch_bitget_manual_close(
+        self, symbol: str, since_ts_ms: int
+    ) -> Optional[CloseReasonSnapshot]:
+        """Find the newest filled reduce-only market close since ``since_ts_ms``."""
+        payload = await self._request(
+            "GET",
+            ENDPOINTS["orders_history"],
+            params={
+                "productType": PRODUCT_TYPE_USDT,
+                "symbol": symbol,
+                "startTime": str(since_ts_ms),
+            },
+            auth=True,
+        )
+        orders = (
+            payload.get("entrustedList") or payload.get("orderList") or payload
+            if isinstance(payload, dict) else payload
+        )
+        if not isinstance(orders, list):
+            return None
+
+        for order in orders:
+            if not isinstance(order, dict):
+                continue
+            trade_side = (order.get("tradeSide") or "").lower()
+            order_type = (order.get("orderType") or "").lower()
+            status = (order.get("state") or order.get("status") or "").lower()
+            if "close" not in trade_side:
+                continue
+            if status != "filled":
+                continue
+            if order_type and order_type != "market":
+                continue
+            ts_ms = _parse_int(order.get("uTime") or order.get("cTime"))
+            return CloseReasonSnapshot(
+                symbol=symbol,
+                closed_by_order_id=str(order.get("orderId")) if order.get("orderId") else None,
+                closed_by_plan_type="manual",
+                closed_by_trigger_type=None,
+                closed_at=_ts_to_datetime(ts_ms),
+                fill_price=_parse_float(order.get("priceAvg") or order.get("fillPrice")),
+            )
+        return None
+
+
+# ==================== Module-level helpers ====================
+
+
+def _parse_float(value: Any) -> Optional[float]:
+    """Parse a value to float; return None on missing / unparseable input."""
+    if value is None or value == "":
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _parse_int(value: Any) -> Optional[int]:
+    """Parse a value to int; return None on missing / unparseable input."""
+    if value is None or value == "":
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _ts_to_datetime(ts_ms: Optional[int]) -> Optional[datetime]:
+    """Convert a Bitget millisecond timestamp to a UTC datetime."""
+    if ts_ms is None or ts_ms <= 0:
+        return None
+    try:
+        return datetime.fromtimestamp(ts_ms / 1000, tz=timezone.utc)
+    except (OverflowError, OSError, ValueError):
+        return None

@@ -18,7 +18,13 @@ from urllib.parse import urlencode
 import aiohttp
 
 from src.exceptions import ExchangeError
-from src.exchanges.base import ExchangeClient, HTTPExchangeClientMixin
+from src.exchanges.base import (
+    CloseReasonSnapshot,
+    ExchangeClient,
+    HTTPExchangeClientMixin,
+    PositionTpSlSnapshot,
+    TrailingStopSnapshot,
+)
 from src.exchanges.bingx.constants import (
     BASE_URL,
     DEFAULT_RECV_WINDOW,
@@ -26,6 +32,7 @@ from src.exchanges.bingx.constants import (
     ERROR_CODES,
     MARGIN_CROSSED,
     MARGIN_ISOLATED,
+    ORDER_STATUS_FILLED,
     ORDER_TYPE_MARKET,
     ORDER_TYPE_TRAILING_STOP_MARKET,
     POSITION_LONG,
@@ -1017,6 +1024,182 @@ class BingXClient(HTTPExchangeClientMixin, ExchangeClient):
         """
         return round(size, 4)
 
+    # ==================== Risk-state readback (#191) ====================
+    # Source-of-truth probe for RiskStateManager. BingX has no
+    # position-level TP/SL endpoint — TPs/SLs are separate
+    # TAKE_PROFIT_MARKET/STOP_MARKET reduce-only orders on the position
+    # side. We read them back via openOrders.
+
+    _TP_ORDER_TYPES = frozenset({"TAKE_PROFIT_MARKET", "TAKE_PROFIT"})
+    _SL_ORDER_TYPES = frozenset({"STOP_MARKET", "STOP"})
+
+    async def get_position_tpsl(
+        self, symbol: str, side: str
+    ) -> PositionTpSlSnapshot:
+        """Read live TP/SL orders for ``(symbol, side)`` on BingX.
+
+        Queries openOrders, filters for TAKE_PROFIT_MARKET / STOP_MARKET
+        matching the positionSide. Empty snapshot when no matching
+        reduce-only orders exist.
+        """
+        empty = PositionTpSlSnapshot(
+            symbol=symbol,
+            side=side,
+            tp_price=None,
+            tp_order_id=None,
+            tp_trigger_type=None,
+            sl_price=None,
+            sl_order_id=None,
+            sl_trigger_type=None,
+        )
+
+        data = await self._request(
+            "GET", ENDPOINTS["open_orders"], params={"symbol": symbol},
+        )
+        orders = self._extract_bingx_orders(data)
+        if not orders:
+            return empty
+
+        position_side = POSITION_LONG if side == "long" else POSITION_SHORT
+        tp_order: Optional[Dict[str, Any]] = None
+        sl_order: Optional[Dict[str, Any]] = None
+
+        for order in orders:
+            if order.get("positionSide") != position_side:
+                continue
+            if order.get("symbol") != symbol:
+                continue
+            order_type = (order.get("type") or "").upper()
+            if order_type in self._TP_ORDER_TYPES and tp_order is None:
+                tp_order = order
+            elif order_type in self._SL_ORDER_TYPES and sl_order is None:
+                sl_order = order
+
+        return PositionTpSlSnapshot(
+            symbol=symbol,
+            side=side,
+            tp_price=_safe_float_strict(tp_order.get("stopPrice") if tp_order else None),
+            tp_order_id=str(tp_order.get("orderId")) if tp_order and tp_order.get("orderId") else None,
+            tp_trigger_type=tp_order.get("workingType") if tp_order else None,
+            sl_price=_safe_float_strict(sl_order.get("stopPrice") if sl_order else None),
+            sl_order_id=str(sl_order.get("orderId")) if sl_order and sl_order.get("orderId") else None,
+            sl_trigger_type=sl_order.get("workingType") if sl_order else None,
+        )
+
+    async def get_trailing_stop(
+        self, symbol: str, side: str
+    ) -> Optional[TrailingStopSnapshot]:
+        """Read the live TRAILING_STOP_MARKET order for ``(symbol, side)``.
+
+        Returns ``None`` if no trailing stop is live.
+        """
+        data = await self._request(
+            "GET", ENDPOINTS["open_orders"], params={"symbol": symbol},
+        )
+        orders = self._extract_bingx_orders(data)
+        if not orders:
+            return None
+
+        position_side = POSITION_LONG if side == "long" else POSITION_SHORT
+        for order in orders:
+            if order.get("type") != ORDER_TYPE_TRAILING_STOP_MARKET:
+                continue
+            if order.get("symbol") != symbol:
+                continue
+            if order.get("positionSide") != position_side:
+                continue
+
+            # BingX ``priceRate`` is a fractional decimal (0.014 = 1.4%);
+            # normalize to percent.
+            price_rate = _safe_float_strict(order.get("priceRate"))
+            callback_rate = round(price_rate * 100, 4) if price_rate is not None else None
+
+            return TrailingStopSnapshot(
+                symbol=symbol,
+                side=side,
+                callback_rate=callback_rate,
+                activation_price=_safe_float_strict(order.get("activationPrice")),
+                trigger_price=_safe_float_strict(order.get("stopPrice")),
+                order_id=str(order.get("orderId")) if order.get("orderId") else None,
+            )
+        return None
+
+    async def get_close_reason_from_history(
+        self, symbol: str, since_ts_ms: int
+    ) -> Optional[CloseReasonSnapshot]:
+        """Find the most recent close event for ``symbol`` since ``since_ts_ms``.
+
+        Queries allOrders filtered by startTime, picks the newest FILLED
+        order that is either:
+          * a triggered TP/SL/trailing conditional (TAKE_PROFIT_MARKET /
+            STOP_MARKET / TRAILING_STOP_MARKET), or
+          * a regular MARKET reduceOnly close.
+        """
+        data = await self._request(
+            "GET", ENDPOINTS["all_orders"],
+            params={"symbol": symbol, "startTime": str(since_ts_ms)},
+        )
+        orders = self._extract_bingx_orders(data)
+        if not orders:
+            return None
+
+        qualifying: List[Dict[str, Any]] = []
+        for order in orders:
+            if order.get("symbol") != symbol:
+                continue
+            status = (order.get("status") or "").upper()
+            if status != ORDER_STATUS_FILLED:
+                continue
+            order_type = (order.get("type") or "").upper()
+            reduce_only = str(order.get("reduceOnly", "")).lower() == "true"
+            if order_type in {"TRAILING_STOP_MARKET", "TAKE_PROFIT_MARKET",
+                              "STOP_MARKET", "TAKE_PROFIT", "STOP"}:
+                qualifying.append(order)
+            elif order_type == "MARKET" and reduce_only:
+                qualifying.append(order)
+            elif order_type == "MARKET" and self._is_close_fill(order):
+                qualifying.append(order)
+
+        if not qualifying:
+            return None
+
+        qualifying.sort(
+            key=lambda o: int(o.get("updateTime") or o.get("time") or 0),
+            reverse=True,
+        )
+        order = qualifying[0]
+
+        order_type = (order.get("type") or "").upper()
+        if order_type == "TRAILING_STOP_MARKET":
+            plan_type = "track_plan"
+        elif order_type in self._TP_ORDER_TYPES:
+            plan_type = "pos_profit"
+        elif order_type in self._SL_ORDER_TYPES:
+            plan_type = "pos_loss"
+        else:
+            plan_type = "manual"
+
+        ts_ms = _safe_int(order.get("updateTime") or order.get("time"))
+        return CloseReasonSnapshot(
+            symbol=symbol,
+            closed_by_order_id=str(order.get("orderId")) if order.get("orderId") else None,
+            closed_by_plan_type=plan_type,
+            closed_by_trigger_type=order.get("workingType"),
+            closed_at=_ts_to_datetime_bingx(ts_ms),
+            fill_price=_safe_float_strict(order.get("avgPrice") or order.get("price")),
+        )
+
+    @staticmethod
+    def _extract_bingx_orders(data: Any) -> List[Dict[str, Any]]:
+        """Extract a list of order dicts from a BingX openOrders/allOrders response."""
+        if isinstance(data, list):
+            return [o for o in data if isinstance(o, dict)]
+        if isinstance(data, dict):
+            orders = data.get("orders")
+            if isinstance(orders, list):
+                return [o for o in orders if isinstance(o, dict)]
+        return []
+
     def _normalize_position(self, pos: Dict[str, Any]) -> Optional[Position]:
         """Convert a BingX position dict to a normalized Position object."""
         try:
@@ -1064,4 +1247,38 @@ def _safe_float(value: Any) -> Optional[float]:
         result = float(value)
         return result if result != 0 else None
     except (ValueError, TypeError):
+        return None
+
+
+def _safe_float_strict(value: Any) -> Optional[float]:
+    """Convert a value to float; return None on failure but keep zero as-is.
+
+    Unlike ``_safe_float``, this preserves 0.0 which matters for readback
+    snapshots — a missing field must be distinguishable from a zero value.
+    """
+    if value is None or value == "":
+        return None
+    try:
+        return float(value)
+    except (ValueError, TypeError):
+        return None
+
+
+def _safe_int(value: Any) -> Optional[int]:
+    """Convert a value to int; return None on failure."""
+    if value is None or value == "":
+        return None
+    try:
+        return int(value)
+    except (ValueError, TypeError):
+        return None
+
+
+def _ts_to_datetime_bingx(ts_ms: Optional[int]) -> Optional[datetime]:
+    """Convert a BingX millisecond timestamp to a UTC datetime."""
+    if ts_ms is None or ts_ms <= 0:
+        return None
+    try:
+        return datetime.fromtimestamp(ts_ms / 1000, tz=timezone.utc)
+    except (OverflowError, OSError, ValueError):
         return None
