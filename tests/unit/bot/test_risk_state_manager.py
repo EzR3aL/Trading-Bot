@@ -702,17 +702,26 @@ async def test_apply_intent_clears_software_bot_when_no_order_id(
 
 
 @pytest.mark.asyncio
-async def test_classify_close_is_stub_returning_unknown(
+async def test_classify_close_without_probe_support_falls_back(
     open_trade: int, session_factory_cb
 ) -> None:
-    """classify_close is a stub for #193 — must return 'unknown' for now."""
+    """classify_close falls back to the heuristic when the adapter has no probe.
+
+    Detailed probe/match/snapshot behaviour is covered in
+    tests/unit/bot/test_classify_close.py; this test just guards the contract
+    that a classic FakeExchangeClient without ``get_close_reason_from_history``
+    still produces a valid ExitReason string instead of raising.
+    """
+    from src.bot.risk_reasons import ExitReason
+
     manager = RiskStateManager(
         _factory_returning(FakeExchangeClient()), session_factory_cb
     )
     reason = await manager.classify_close(
         open_trade, exit_price=70246.0, exit_time=datetime.now(timezone.utc),
     )
-    assert reason == "unknown"
+    # No TP/SL/trailing on the fixture → heuristic lands on EXTERNAL_CLOSE_UNKNOWN.
+    assert reason == ExitReason.EXTERNAL_CLOSE_UNKNOWN.value
 
 
 @pytest.mark.asyncio

@@ -1249,7 +1249,7 @@ class TestHandleClosedPosition:
         return mock_client
 
     async def test_long_trade_profit_take_profit_hit(self):
-        """Long trade closed near take profit is labeled TAKE_PROFIT."""
+        """Long trade closed near take profit is labeled TAKE_PROFIT_NATIVE (#193)."""
         worker = BotWorker(bot_config_id=1)
         worker._config = _make_mock_config()
         worker._get_notifiers = AsyncMock(return_value=[])
@@ -1268,12 +1268,14 @@ class TestHandleClosedPosition:
         await worker._handle_closed_position(trade, mock_client, session)
 
         assert trade.status == "closed"
-        assert trade.exit_reason == "TAKE_PROFIT"
+        # Legacy literal "TAKE_PROFIT" was replaced in #193 by the precise
+        # TAKE_PROFIT_NATIVE code (exchange-side TP trigger).
+        assert trade.exit_reason == "TAKE_PROFIT_NATIVE"
         assert trade.pnl > 0
         mock_rm.record_trade_exit.assert_called_once()
 
     async def test_short_trade_stop_loss_hit(self):
-        """Short trade closed near stop loss is labeled STOP_LOSS."""
+        """Short trade closed near stop loss is labeled STOP_LOSS_NATIVE (#193)."""
         worker = BotWorker(bot_config_id=1)
         worker._config = _make_mock_config()
         worker._get_notifiers = AsyncMock(return_value=[])
@@ -1291,11 +1293,11 @@ class TestHandleClosedPosition:
 
         await worker._handle_closed_position(trade, mock_client, session)
 
-        assert trade.exit_reason == "STOP_LOSS"
+        assert trade.exit_reason == "STOP_LOSS_NATIVE"
         assert trade.pnl < 0
 
     async def test_external_close(self):
-        """Trade closed at price far from TP/SL is labeled EXTERNAL_CLOSE."""
+        """Trade closed at price far from TP/SL is labeled EXTERNAL_CLOSE_UNKNOWN (#193)."""
         worker = BotWorker(bot_config_id=1)
         worker._config = _make_mock_config()
         worker._get_notifiers = AsyncMock(return_value=[])
@@ -1313,7 +1315,7 @@ class TestHandleClosedPosition:
 
         await worker._handle_closed_position(trade, mock_client, session)
 
-        assert trade.exit_reason == "EXTERNAL_CLOSE"
+        assert trade.exit_reason == "EXTERNAL_CLOSE_UNKNOWN"
 
     async def test_no_ticker_uses_entry_price(self):
         """When ticker is None, uses entry_price as exit_price."""

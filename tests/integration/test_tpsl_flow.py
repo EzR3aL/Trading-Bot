@@ -530,14 +530,15 @@ class TestTPSLIntegrationFlow:
         exit_reason = call_args[0][2]
 
         assert exit_price == pytest.approx(tp_price, rel=1e-6)
-        assert exit_reason == "TAKE_PROFIT"
+        # #193 taxonomy: TAKE_PROFIT → TAKE_PROFIT_NATIVE (exchange-side TP trigger).
+        assert exit_reason == "TAKE_PROFIT_NATIVE"
 
     # -----------------------------------------------------------------------
-    # 7. Exchange closes at SL → STOP_LOSS exit
+    # 7. Exchange closes at SL → STOP_LOSS_NATIVE exit
     # -----------------------------------------------------------------------
 
     async def test_exchange_sl_hit_detected_as_stop_loss(self):
-        """Position closed by exchange at SL → _handle_closed_position → STOP_LOSS."""
+        """Position closed by exchange at SL → _handle_closed_position → STOP_LOSS_NATIVE."""
         tp_price = 70246.0
         sl_price = 67177.0
 
@@ -559,7 +560,8 @@ class TestTPSLIntegrationFlow:
 
         call_args = worker._close_and_record_trade.call_args
         exit_reason = call_args[0][2]
-        assert exit_reason == "STOP_LOSS"
+        # #193 taxonomy: STOP_LOSS → STOP_LOSS_NATIVE (exchange-side SL trigger).
+        assert exit_reason == "STOP_LOSS_NATIVE"
 
     # -----------------------------------------------------------------------
     # 8. Only TP set → monitor still skips should_exit()
@@ -788,4 +790,5 @@ class TestTPSLExampleTrades:
         exit_reason = call_args[0][2]
 
         assert exit_price == pytest.approx(70246.0, rel=1e-6)
-        assert exit_reason == "TAKE_PROFIT"
+        # #193 taxonomy: legacy TAKE_PROFIT → TAKE_PROFIT_NATIVE.
+        assert exit_reason == "TAKE_PROFIT_NATIVE"

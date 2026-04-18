@@ -47,8 +47,10 @@ from typing import Any, Callable, Dict, Optional, Tuple
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.bot.risk_reasons import ExitReason
 from src.exceptions import CancelFailed, ExchangeError
 from src.exchanges.base import (
+    CloseReasonSnapshot,
     ExchangeClient,
     PositionTpSlSnapshot,
     TrailingStopSnapshot,
@@ -57,6 +59,22 @@ from src.models.database import TradeRecord
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
+
+# Window in which a strategy-exit signal beats any exchange-side reason.
+# Tuned to be longer than one monitor cycle but short enough that an unrelated
+# native trigger 5 minutes later is not misattributed.
+_STRATEGY_EXIT_WINDOW_SECONDS = 60
+
+# Bitget-style plan_type → ExitReason mapping. Other exchanges normalize to
+# the same vocabulary in CloseReasonSnapshot.closed_by_plan_type so this map
+# is exchange-agnostic.
+_PLAN_TYPE_TO_REASON: Dict[str, str] = {
+    "track_plan": ExitReason.TRAILING_STOP_NATIVE.value,
+    "pos_profit": ExitReason.TAKE_PROFIT_NATIVE.value,
+    "pos_loss": ExitReason.STOP_LOSS_NATIVE.value,
+    "liquidation": ExitReason.LIQUIDATION.value,
+    "manual": ExitReason.MANUAL_CLOSE_EXCHANGE.value,
+}
 
 
 # ── Enums & DTOs ────────────────────────────────────────────────────
@@ -139,6 +157,11 @@ class RiskStateManager:
         self._session_factory = session_factory
         self._locks: Dict[Tuple[int, RiskLeg], asyncio.Lock] = {}
         self._locks_guard = asyncio.Lock()
+        # Strategy-exit cache: {trade_id: monotonic timestamp the position
+        # monitor signalled "strategy wants to close this".} Consumed by
+        # classify_close so a strategy-driven exit beats whatever the
+        # exchange recorded in its order/plan history.
+        self._strategy_exit_marks: Dict[int, float] = {}
 
     # ── Lock management ────────────────────────────────────────────
 
@@ -450,21 +473,299 @@ class RiskStateManager:
             },
         )
 
+    def note_strategy_exit(self, trade_id: int) -> None:
+        """Record that ``trade_id`` was just closed by an internal strategy signal.
+
+        Called by the position-monitor *before* it issues the close so that a
+        subsequent :meth:`classify_close` can attribute the exit to the bot's
+        own logic rather than to whatever native plan happened to fire at the
+        same moment. Uses a monotonic clock so wall-clock changes don't poison
+        the window.
+        """
+        self._strategy_exit_marks[trade_id] = time.monotonic()
+
     async def classify_close(
         self,
         trade_id: int,
         exit_price: float,
         exit_time: datetime,
     ) -> str:
-        """Stub for #193 — returns ``"unknown"`` until the order-history
-        lookup is implemented. Kept as an explicit method so callers can
-        wire it now and the replacement is drop-in.
+        """Attribute a close to its true cause via exchange-side readback.
+
+        Resolution order:
+
+        1. Strategy-exit signal recorded within the last
+           ``_STRATEGY_EXIT_WINDOW_SECONDS``: returns ``STRATEGY_EXIT``
+           regardless of what the exchange thinks. Internal signals always
+           win over external triggers because the bot deliberately initiated
+           the close.
+        2. Exchange ``orders-plan-history`` / ``orders-history`` probe (via
+           :meth:`ExchangeClient.get_close_reason_from_history`): match the
+           closing order id against ``trade.{trailing,tp,sl}_order_id``;
+           failing that, fall back to the normalized ``closed_by_plan_type``.
+        3. Software-trail: when the trade was opened with ``risk_source =
+           software_bot`` and the trailing leg is confirmed, attribute to
+           ``TRAILING_STOP_SOFTWARE``.
+        4. Heuristic fallback (legacy behaviour) when the probe is
+           unavailable (``NotImplementedError``) or fails (any other
+           exception): use price proximity and ``native_trailing_stop``.
+
+        Pattern B guard: the heuristic is *only* taken when the exchange
+        probe could not deliver an answer. Never short-circuit a probe with
+        a heuristic guess.
         """
-        logger.debug(
-            "risk_state.classify_close stub trade=%s exit_price=%s",
-            trade_id, exit_price,
+        trade = await self._load_trade_for_classification(trade_id)
+        if trade is None:
+            logger.info(
+                "risk_state.classify_close trade=%s reason=%s method=%s",
+                trade_id, ExitReason.EXTERNAL_CLOSE_UNKNOWN.value, "no_trade",
+                extra={
+                    "event_type": "risk_state",
+                    "trade_id": trade_id,
+                    "method": "no_trade",
+                    "reason": ExitReason.EXTERNAL_CLOSE_UNKNOWN.value,
+                    "snap_plan_type": None,
+                },
+            )
+            return ExitReason.EXTERNAL_CLOSE_UNKNOWN.value
+
+        # 1) Strategy-exit signal beats everything — we initiated the close.
+        if self._was_strategy_exit_recent(trade_id):
+            logger.info(
+                "risk_state.classify_close trade=%s reason=%s method=%s",
+                trade_id, ExitReason.STRATEGY_EXIT.value, "strategy_signal",
+                extra={
+                    "event_type": "risk_state",
+                    "trade_id": trade_id,
+                    "method": "strategy_signal",
+                    "reason": ExitReason.STRATEGY_EXIT.value,
+                    "snap_plan_type": None,
+                },
+            )
+            self._strategy_exit_marks.pop(trade_id, None)
+            return ExitReason.STRATEGY_EXIT.value
+
+        # 2) Probe the exchange for the actual close event.
+        snap, probe_method = await self._probe_close_reason(trade)
+
+        if probe_method == "heuristic_fallback":
+            reason = self._classify_heuristic(trade, exit_price)
+            logger.info(
+                "risk_state.classify_close trade=%s reason=%s method=%s",
+                trade_id, reason, probe_method,
+                extra={
+                    "event_type": "risk_state",
+                    "trade_id": trade_id,
+                    "method": probe_method,
+                    "reason": reason,
+                    "snap_plan_type": None,
+                },
+            )
+            return reason
+
+        if snap is None:
+            # Probe ran fine but found no qualifying close event — this can
+            # happen when the exchange's history is delayed. Fall back to the
+            # heuristic so we still emit a sensible label.
+            reason = self._classify_heuristic(trade, exit_price)
+            logger.info(
+                "risk_state.classify_close trade=%s reason=%s method=%s",
+                trade_id, reason, "history_empty",
+                extra={
+                    "event_type": "risk_state",
+                    "trade_id": trade_id,
+                    "method": "history_empty",
+                    "reason": reason,
+                    "snap_plan_type": None,
+                },
+            )
+            return reason
+
+        reason = self._classify_from_snapshot(trade, snap)
+        logger.info(
+            "risk_state.classify_close trade=%s reason=%s method=%s",
+            trade_id, reason, "history_match",
+            extra={
+                "event_type": "risk_state",
+                "trade_id": trade_id,
+                "method": "history_match",
+                "reason": reason,
+                "snap_plan_type": snap.closed_by_plan_type,
+            },
         )
-        return "unknown"
+        return reason
+
+    # ── classify_close helpers ─────────────────────────────────────
+
+    def _was_strategy_exit_recent(self, trade_id: int) -> bool:
+        """True if note_strategy_exit fired within the strategy-exit window.
+
+        Uses a monotonic clock so that wall-clock skew (NTP jumps) does not
+        accidentally extend or shrink the window.
+        """
+        marker = self._strategy_exit_marks.get(trade_id)
+        if marker is None:
+            return False
+        elapsed = time.monotonic() - marker
+        if elapsed > _STRATEGY_EXIT_WINDOW_SECONDS:
+            # Stale — drop it so the cache stays bounded.
+            self._strategy_exit_marks.pop(trade_id, None)
+            return False
+        return True
+
+    async def _load_trade_for_classification(
+        self, trade_id: int,
+    ) -> Optional[dict]:
+        """Snapshot the trade fields the classifier inspects.
+
+        We deliberately copy into a plain dict so the SQLAlchemy session can
+        be released before the (potentially slow) exchange probe runs.
+        """
+        async with self._session_factory() as session:
+            trade = await session.get(TradeRecord, trade_id)
+            if trade is None:
+                return None
+            entry_time = trade.entry_time
+            if entry_time is not None and entry_time.tzinfo is None:
+                entry_time = entry_time.replace(tzinfo=timezone.utc)
+            return {
+                "id": trade.id,
+                "user_id": trade.user_id,
+                "exchange": trade.exchange,
+                "demo_mode": bool(trade.demo_mode),
+                "symbol": trade.symbol,
+                "side": trade.side,
+                "entry_time": entry_time,
+                "entry_price": float(trade.entry_price or 0.0),
+                "take_profit": trade.take_profit,
+                "stop_loss": trade.stop_loss,
+                "tp_order_id": trade.tp_order_id,
+                "sl_order_id": trade.sl_order_id,
+                "trailing_order_id": trade.trailing_order_id,
+                "native_trailing_stop": bool(trade.native_trailing_stop),
+                "risk_source": trade.risk_source or "unknown",
+                "trailing_status": trade.trailing_status,
+            }
+
+    async def _probe_close_reason(
+        self, trade: dict,
+    ) -> Tuple[Optional[CloseReasonSnapshot], str]:
+        """Ask the exchange for the most recent close event.
+
+        Returns ``(snapshot, method)`` where ``method`` is one of:
+
+        * ``"history_match"`` — probe ran and returned a (possibly None) snapshot.
+        * ``"heuristic_fallback"`` — adapter doesn't implement the probe, or
+          the probe raised an :class:`ExchangeError` / unexpected exception.
+          Caller MUST then run :meth:`_classify_heuristic`.
+        """
+        client = None
+        entry_time = trade.get("entry_time") or datetime.now(timezone.utc)
+        # Pull a small window before entry to make sure we catch any close
+        # event whose timestamp is slightly before entry_time + 1 cycle.
+        since_ms = int(entry_time.timestamp() * 1000) - 1000
+        try:
+            client = await self._acquire_client(
+                trade["user_id"], trade["exchange"], trade["demo_mode"],
+            )
+        except Exception as e:  # noqa: BLE001
+            logger.warning(
+                "risk_state.classify_close.client_error trade=%s exchange=%s error=%s",
+                trade["id"], trade["exchange"], e,
+            )
+            return None, "heuristic_fallback"
+
+        try:
+            snap = await client.get_close_reason_from_history(
+                trade["symbol"], since_ms,
+            )
+            return snap, "history_match"
+        except NotImplementedError:
+            logger.debug(
+                "risk_state.classify_close.no_probe trade=%s exchange=%s",
+                trade["id"], trade["exchange"],
+            )
+            return None, "heuristic_fallback"
+        except ExchangeError as e:
+            logger.warning(
+                "risk_state.classify_close.exchange_error trade=%s exchange=%s error=%s",
+                trade["id"], trade["exchange"], e,
+            )
+            return None, "heuristic_fallback"
+        except Exception as e:  # noqa: BLE001 — defensive: any probe fault → fallback
+            logger.warning(
+                "risk_state.classify_close.unexpected_error trade=%s exchange=%s error=%s",
+                trade["id"], trade["exchange"], e,
+            )
+            return None, "heuristic_fallback"
+        finally:
+            if client is not None:
+                close_fn = getattr(client, "close", None)
+                if close_fn is not None:
+                    try:
+                        result = close_fn()
+                        if asyncio.iscoroutine(result):
+                            await result
+                    except Exception:  # noqa: BLE001 — never let cleanup hide the result
+                        pass
+
+    def _classify_from_snapshot(
+        self, trade: dict, snap: CloseReasonSnapshot,
+    ) -> str:
+        """Resolve a snapshot to an ExitReason value.
+
+        Order:
+        1. Match ``closed_by_order_id`` against the per-leg order IDs in the
+           trade — this is the most precise attribution available.
+        2. Fall back to ``closed_by_plan_type`` (works even after a
+           plan-id rotation caused by an edit).
+        3. Software trailing detection when the trade was opened in
+           ``software_bot`` mode and the trailing leg was confirmed.
+        4. ``EXTERNAL_CLOSE_UNKNOWN`` as a last resort.
+        """
+        closing_oid = snap.closed_by_order_id
+        if closing_oid:
+            if trade["trailing_order_id"] and closing_oid == trade["trailing_order_id"]:
+                return ExitReason.TRAILING_STOP_NATIVE.value
+            if trade["tp_order_id"] and closing_oid == trade["tp_order_id"]:
+                return ExitReason.TAKE_PROFIT_NATIVE.value
+            if trade["sl_order_id"] and closing_oid == trade["sl_order_id"]:
+                return ExitReason.STOP_LOSS_NATIVE.value
+
+        plan_type = (snap.closed_by_plan_type or "").lower() or None
+        if plan_type and plan_type in _PLAN_TYPE_TO_REASON:
+            return _PLAN_TYPE_TO_REASON[plan_type]
+
+        if (
+            trade["risk_source"] == _RISK_SOURCE_SOFTWARE
+            and trade["trailing_status"] == RiskOpStatus.CONFIRMED.value
+        ):
+            return ExitReason.TRAILING_STOP_SOFTWARE.value
+
+        return ExitReason.EXTERNAL_CLOSE_UNKNOWN.value
+
+    def _classify_heuristic(self, trade: dict, exit_price: float) -> str:
+        """Legacy proximity heuristic — used only when the probe is unavailable.
+
+        Pattern B guard: callers must only reach this when the exchange-side
+        probe genuinely failed (``NotImplementedError`` or
+        :class:`ExchangeError`). Never call this in lieu of probing.
+        """
+        if trade["native_trailing_stop"]:
+            return ExitReason.TRAILING_STOP_NATIVE.value
+
+        entry_price = trade["entry_price"]
+        proximity = entry_price * 0.002 if entry_price > 0 else 0.0
+
+        tp = trade["take_profit"]
+        if tp is not None and entry_price > 0 and abs(exit_price - tp) < proximity:
+            return ExitReason.TAKE_PROFIT_NATIVE.value
+
+        sl = trade["stop_loss"]
+        if sl is not None and entry_price > 0 and abs(exit_price - sl) < proximity:
+            return ExitReason.STOP_LOSS_NATIVE.value
+
+        return ExitReason.EXTERNAL_CLOSE_UNKNOWN.value
 
     # ── Phase A — DB intent write ──────────────────────────────────
 
@@ -791,6 +1092,7 @@ def _extract_order_id(exchange_result: Any) -> Optional[str]:
 
 
 __all__ = [
+    "ExitReason",
     "RiskLeg",
     "RiskOpStatus",
     "RiskOpResult",
