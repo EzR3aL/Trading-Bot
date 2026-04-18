@@ -248,3 +248,52 @@ export interface PortfolioAllocation {
   balance: number
   currency: string
 }
+
+// Risk-State types (Epic #188, Issue #195)
+// Mirrors the Pydantic schemas in src/api/routers/trades.py and
+// src/bot/risk_state_manager.py. Surfaced by useRiskState/useUpdateTpSl so
+// the UI can render per-leg status (pending/confirmed/rejected/cleared/cancel_failed)
+// instead of the legacy "status + message" envelope.
+export type RiskLegStatusCode =
+  | 'pending'
+  | 'confirmed'
+  | 'rejected'
+  | 'cleared'
+  | 'cancel_failed'
+
+export interface TrailingValue {
+  callback_pct: number
+  trigger_price?: number
+  atr_override?: number
+}
+
+export interface RiskLegStatus {
+  value: number | TrailingValue | null
+  status: RiskLegStatusCode
+  order_id: string | null
+  error: string | null
+  latency_ms: number
+}
+
+export type RiskOverallStatus =
+  | 'all_confirmed'
+  | 'partial_success'
+  | 'all_rejected'
+  | 'no_change'
+
+export interface RiskStateResponse {
+  trade_id: number
+  tp: RiskLegStatus | null
+  sl: RiskLegStatus | null
+  trailing: RiskLegStatus | null
+  applied_at: string
+  overall_status: RiskOverallStatus
+}
+
+export interface UpdateTpSlPayload {
+  take_profit?: number | null
+  stop_loss?: number | null
+  trailing_stop?: TrailingValue | null
+  remove_tp?: boolean
+  remove_sl?: boolean
+}

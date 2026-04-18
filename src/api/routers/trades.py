@@ -739,6 +739,90 @@ def _validate_tp_sl_values(body: UpdateTpSlRequest, trade: TradeRecord) -> None:
             raise HTTPException(status_code=400, detail=ERR_SL_ABOVE_ENTRY_SHORT)
 
 
+# ---------------------------------------------------------------------------
+# Read-only risk-state snapshot (Issue #195)
+# ---------------------------------------------------------------------------
+
+
+@router.get("/{trade_id}/risk-state", response_model=TpSlResponse)
+@limiter.limit("60/minute")
+async def get_trade_risk_state(
+    trade_id: int,
+    request: Request,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Return the current post-readback risk-state snapshot for a trade.
+
+    The response shape matches ``PUT /trades/{trade_id}/tp-sl`` so the
+    frontend ``useRiskState`` hook and ``useUpdateTpSl`` mutation share one
+    TypeScript type. Only active while ``risk_state_manager_enabled`` is on;
+    the legacy path has no concept of a per-leg snapshot and returns 404.
+
+    Delegates to :meth:`RiskStateManager.reconcile` which probes the
+    exchange and heals DB drift in one call — same primitive the periodic
+    reconciler uses.
+    """
+
+    if not settings.risk.risk_state_manager_enabled:
+        raise HTTPException(
+            status_code=404,
+            detail="Risk-state endpoint is disabled (feature flag off)",
+        )
+
+    # Ownership check — never leak another user's trade through reconcile
+    trade_result = await db.execute(
+        select(TradeRecord).where(
+            TradeRecord.id == trade_id,
+            TradeRecord.user_id == user.id,
+        )
+    )
+    trade = trade_result.scalar_one_or_none()
+    if trade is None:
+        raise HTTPException(status_code=404, detail=ERR_TRADE_NOT_FOUND)
+
+    manager = get_risk_state_manager()
+    try:
+        snapshot = await manager.reconcile(trade_id)
+    except ValueError as exc:
+        # reconcile() raises ValueError when the row vanishes mid-flight;
+        # the ownership check above already covers "not yours", so this is
+        # a genuine 404.
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    def _leg_dict_to_status(leg: Optional[dict]) -> Optional[RiskLegStatus]:
+        if leg is None:
+            return None
+        return RiskLegStatus(
+            value=leg.get("value"),
+            status=leg.get("status", RiskOpStatus.CLEARED.value),
+            order_id=leg.get("order_id"),
+            error=leg.get("error"),
+            latency_ms=int(leg.get("latency_ms", 0)),
+        )
+
+    tp_status = _leg_dict_to_status(snapshot.tp)
+    sl_status = _leg_dict_to_status(snapshot.sl)
+    trailing_status = _leg_dict_to_status(snapshot.trailing)
+
+    # A pure readback never writes, so overall is "all_confirmed" (native
+    # orders are in place) or "no_change" (exchange has nothing attached).
+    any_confirmed = any(
+        s is not None and s.status == RiskOpStatus.CONFIRMED.value
+        for s in (tp_status, sl_status, trailing_status)
+    )
+    overall = "all_confirmed" if any_confirmed else "no_change"
+
+    return TpSlResponse(
+        trade_id=trade_id,
+        tp=tp_status,
+        sl=sl_status,
+        trailing=trailing_status,
+        applied_at=snapshot.last_synced_at,
+        overall_status=overall,
+    )
+
+
 async def _handle_tp_sl_via_manager(
     trade_id: int,
     body: UpdateTpSlRequest,

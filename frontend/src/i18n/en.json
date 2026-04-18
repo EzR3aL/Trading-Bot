@@ -124,6 +124,14 @@
         "cleared": "Cleared",
         "cancel_failed": "Cancel failed"
       }
+    },
+    "riskState": {
+      "updated": "TP/SL/Trailing updated",
+      "partialSuccess": "Partial success: {{failed}}",
+      "updateFailed": "Update failed",
+      "pending": "Applying…",
+      "rejected": "Rejected: {{error}}",
+      "cancel_failed": "Cancel failed — old value still active"
     }
   },
   "settings": {

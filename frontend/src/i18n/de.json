@@ -124,6 +124,14 @@
         "cleared": "Entfernt",
         "cancel_failed": "Cancel fehlgeschlagen"
       }
+    },
+    "riskState": {
+      "updated": "TP/SL/Trailing aktualisiert",
+      "partialSuccess": "Nur teilweise erfolgreich: {{failed}}",
+      "updateFailed": "Aktualisierung fehlgeschlagen",
+      "pending": "Wird übernommen…",
+      "rejected": "Abgelehnt: {{error}}",
+      "cancel_failed": "Cancel fehlgeschlagen — alter Wert bleibt aktiv"
     }
   },
   "settings": {
