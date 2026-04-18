@@ -796,54 +796,115 @@ class BingXClient(HTTPExchangeClientMixin, ExchangeClient):
             return True
         return False
 
-    _TPSL_ORDER_TYPES = frozenset({
-        "TAKE_PROFIT_MARKET", "STOP_MARKET", "TAKE_PROFIT", "STOP",
-        "TRAILING_STOP_MARKET",
-    })
+    _TP_ORDER_TYPES = frozenset({"TAKE_PROFIT_MARKET", "TAKE_PROFIT"})
+    _SL_ORDER_TYPES = frozenset({"STOP_MARKET", "STOP"})
+    _TRAILING_ORDER_TYPES = frozenset({"TRAILING_STOP_MARKET"})
+    _TPSL_ORDER_TYPES = (
+        _TP_ORDER_TYPES | _SL_ORDER_TYPES | _TRAILING_ORDER_TYPES
+    )
 
     async def cancel_position_tpsl(
         self,
         symbol: str,
         side: str = "long",
     ) -> bool:
-        """Cancel all conditional TP/SL orders for a position on BingX.
+        """Cancel all conditional TP/SL + trailing orders for a position on BingX.
 
-        Queries open orders, filters for TAKE_PROFIT_MARKET / STOP_MARKET
-        matching the symbol and position side, then cancels each one.
-        Best-effort: partial cancel failures are logged but don't fail the operation.
+        Queries open orders, filters for TAKE_PROFIT_MARKET / STOP_MARKET /
+        TRAILING_STOP_MARKET matching the symbol and position side, then
+        cancels each one. Best-effort: partial cancel failures are logged
+        but don't fail the operation.
+        """
+        return await self._cancel_orders_by_type(
+            symbol, side, self._TPSL_ORDER_TYPES,
+        )
+
+    async def cancel_tp_only(self, symbol: str, side: str = "long") -> bool:
+        """Cancel only take-profit orders for ``(symbol, side)``.
+
+        Queries open orders, filters to TP types (``TAKE_PROFIT_MARKET`` +
+        ``TAKE_PROFIT``) and cancels each by ``orderId``. SL and trailing
+        orders are left untouched — used by :class:`RiskStateManager` so
+        that clearing one leg via the dashboard never collapses the other
+        legs (Epic #188 follow-up to #192). Mirrors Bitget's leg-scoped
+        cancel introduced in the same epic.
+        """
+        return await self._cancel_orders_by_type(
+            symbol, side, self._TP_ORDER_TYPES,
+        )
+
+    async def cancel_sl_only(self, symbol: str, side: str = "long") -> bool:
+        """Cancel only stop-loss orders for ``(symbol, side)``.
+
+        Filters to ``STOP_MARKET`` + ``STOP`` types and cancels each by
+        ``orderId``. TP and trailing orders are left untouched.
+        """
+        return await self._cancel_orders_by_type(
+            symbol, side, self._SL_ORDER_TYPES,
+        )
+
+    async def _cancel_orders_by_type(
+        self,
+        symbol: str,
+        side: str,
+        target_types: frozenset,
+    ) -> bool:
+        """Fetch open orders, filter by type AND positionSide, cancel each.
+
+        Shared helper backing :meth:`cancel_position_tpsl`,
+        :meth:`cancel_tp_only`, and :meth:`cancel_sl_only`. Matches
+        ``positionSide == LONG/SHORT`` for hedge mode and also accepts
+        ``BOTH`` (one-way / VST mode) so we still cancel when BingX doesn't
+        emit a direction on the order. Best-effort: per-order cancel
+        failures are logged at WARN but don't abort the loop.
         """
         position_side = POSITION_LONG if side == "long" else POSITION_SHORT
 
         try:
-            data = await self._request("GET", ENDPOINTS["open_orders"], params={"symbol": symbol})
+            data = await self._request(
+                "GET", ENDPOINTS["open_orders"], params={"symbol": symbol},
+            )
         except Exception as e:
             logger.warning("Failed to query open orders for %s: %s", symbol, e)
             return False
 
-        orders = data.get("orders", []) if isinstance(data, dict) else (data if isinstance(data, list) else [])
+        orders = (
+            data.get("orders", []) if isinstance(data, dict)
+            else (data if isinstance(data, list) else [])
+        )
 
         to_cancel = [
             o for o in orders
             if isinstance(o, dict)
-            and o.get("type") in self._TPSL_ORDER_TYPES
+            and o.get("type") in target_types
             and o.get("symbol") == symbol
-            and o.get("positionSide") == position_side
+            and o.get("positionSide") in (position_side, "BOTH")
         ]
 
         if not to_cancel:
-            logger.debug("No conditional TP/SL orders to cancel for %s %s", symbol, side)
+            logger.debug(
+                "No matching orders (%s) to cancel for %s %s",
+                sorted(target_types), symbol, side,
+            )
             return True
 
         for order in to_cancel:
             oid = str(order.get("orderId", ""))
             try:
-                await self._request("DELETE", ENDPOINTS["cancel_order"], params={
-                    "symbol": symbol,
-                    "orderId": oid,
-                })
-                logger.info("Cancelled BingX TP/SL order %s for %s", oid, symbol)
+                await self._request(
+                    "DELETE",
+                    ENDPOINTS["cancel_order"],
+                    params={"symbol": symbol, "orderId": oid},
+                )
+                logger.info(
+                    "Cancelled BingX %s order %s for %s",
+                    order.get("type"), oid, symbol,
+                )
             except Exception as e:
-                logger.warning("Failed to cancel BingX order %s for %s: %s", oid, symbol, e)
+                logger.warning(
+                    "Failed to cancel BingX order %s (%s) for %s: %s",
+                    oid, order.get("type"), symbol, e,
+                )
 
         return True
 
