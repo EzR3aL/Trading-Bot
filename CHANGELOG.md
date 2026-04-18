@@ -9,6 +9,13 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [Unreleased]
+
+### Added
+- Exchange-Client Readback-Methoden für Bitget/BingX/Hyperliquid (#191, Epic #188): `get_position_tpsl()`, `get_trailing_stop()`, `get_close_reason_from_history()`. Normalisierte Snapshot-Dataclasses in `base.py`. Voraussetzung für RiskStateManager (#190) der die Methoden als Source of Truth nutzt.
+
+---
+
 ## [4.15.1] - 2026-04-15
 
 ### Changed (Issue #181 follow-up)
