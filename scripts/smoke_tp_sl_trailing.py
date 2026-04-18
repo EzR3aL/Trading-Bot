@@ -129,6 +129,8 @@ async def _read_db(trade_id: int) -> dict:
             "sl_status": t.sl_status,
             "trailing_status": t.trailing_status,
             "trailing_callback_rate": t.trailing_callback_rate,
+            "trailing_atr_override": t.trailing_atr_override,
+            "native_trailing_stop": t.native_trailing_stop,
             "risk_source": t.risk_source,
             "tp_order_id": t.tp_order_id,
             "sl_order_id": t.sl_order_id,
@@ -253,6 +255,18 @@ async def run_smoke() -> bool:
             and abs(db["trailing_callback_rate"] - 2.5) < 0.2,
             f"db={db['trailing_status']} callback={db['trailing_callback_rate']}",
         )
+        # Frontend edit-modal reads these legacy flags to seed its toggle +
+        # slider. A successful trailing set MUST populate them.
+        record(
+            "DB native_trailing_stop flag set",
+            db["native_trailing_stop"] is True,
+            f"native_trailing_stop={db['native_trailing_stop']}",
+        )
+        record(
+            "DB trailing_atr_override persisted",
+            db["trailing_atr_override"] is not None and abs(db["trailing_atr_override"] - 2.5) < 0.01,
+            f"trailing_atr_override={db['trailing_atr_override']}",
+        )
         t1_oid = ex["trailing_order_id"]
 
         # ── Step 8: change trailing 2.5 -> 1.5 ──────────────────────
@@ -290,7 +304,9 @@ async def run_smoke() -> bool:
         await manager.apply_intent(trade_id, RiskLeg.TRAILING, None)
         ex = await _read_exchange(client); db = await _read_db(trade_id)
         record("Trailing cleared on exchange", ex["trailing_callback"] is None)
-        record("Trailing cleared in DB", db["trailing_status"] == "cleared"),
+        record("Trailing cleared in DB", db["trailing_status"] == "cleared")
+        record("native_trailing_stop reset to False", db["native_trailing_stop"] is False)
+        record("trailing_atr_override cleared", db["trailing_atr_override"] is None)
         record("TP survived trailing clear", _approx(ex["tp_price"], tp1))
         record("SL survived trailing clear", _approx(ex["sl_price"], sl1))
 

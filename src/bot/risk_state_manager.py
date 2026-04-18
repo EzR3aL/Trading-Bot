@@ -292,6 +292,17 @@ class RiskStateManager:
                 client, leg, value, new_order_id, symbol, side,
             )
 
+            # The ATR multiplier is purely a UI concept — neither the exchange
+            # nor the readback carry it. Preserve it from the original intent
+            # so the frontend can seed its toggle + slider correctly.
+            if (
+                leg is RiskLeg.TRAILING
+                and isinstance(value, dict)
+                and isinstance(confirmed_value, dict)
+                and value.get("atr_override") is not None
+            ):
+                confirmed_value = {**confirmed_value, "atr_override": value.get("atr_override")}
+
             # Phase D: write confirmation — MUST use readback values.
             final_status = (
                 RiskOpStatus.CLEARED if value is None else RiskOpStatus.CONFIRMED
@@ -987,12 +998,26 @@ class RiskStateManager:
                     trade.trailing_callback_rate = confirmed_value.get("callback_rate")
                     trade.trailing_activation_price = confirmed_value.get("activation_price")
                     trade.trailing_trigger_price = confirmed_value.get("trigger_price")
+                    # atr_override is threaded through from the intent so the
+                    # frontend's edit-modal toggle/slider can seed from the
+                    # persisted ATR multiplier. Without this both the legacy
+                    # ``native_trailing_stop`` flag and the override value
+                    # stay at their defaults after a successful set — the UI
+                    # toggle then shows OFF even though a native order is
+                    # active on the exchange.
+                    override = confirmed_value.get("atr_override")
+                    if override is not None:
+                        trade.trailing_atr_override = float(override)
                 else:
                     trade.trailing_callback_rate = None
                     trade.trailing_activation_price = None
                     trade.trailing_trigger_price = None
+                    trade.trailing_atr_override = None
                 trade.trailing_order_id = confirmed_order_id
                 trade.trailing_status = status.value
+                # A confirmed order_id means a native plan lives on the
+                # exchange; a cleared trailing leg means no native plan.
+                trade.native_trailing_stop = confirmed_order_id is not None
 
             trade.risk_source = (
                 _RISK_SOURCE_NATIVE if confirmed_order_id else _RISK_SOURCE_SOFTWARE
