@@ -195,9 +195,18 @@ class PositionMonitorMixin:
                         self.bot_config_id, trade.symbol, e,
                     )
 
+            # User-cleared trailing wins over the bot's auto-placement
+            # logic — once the dashboard signals ``remove_trailing``, the
+            # RSM writes ``trailing_status='cleared'``. Without this guard
+            # the next monitor tick would happily re-place a fresh native
+            # trailing 30-60 s after the user removed it, looking like
+            # "the toggle did nothing" from the UI's perspective.
+            user_cleared_trailing = getattr(trade, "trailing_status", None) == "cleared"
+
             if (
                 supports_native_trailing
                 and not trade.native_trailing_stop
+                and not user_cleared_trailing
                 and self._strategy
                 and hasattr(self._strategy, '_p')
             ):

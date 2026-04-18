@@ -409,17 +409,25 @@ export function useUpdateTpSl() {
       }
     },
 
-    onSettled: (_data, _err, vars) => {
+    onSettled: async (_data, _err, vars) => {
       // Full cache invalidation — list, detail, risk-state, positions, summary.
       // Each trade row on the positions page reads from portfolio.positions;
       // the trades page reads from trades.list; the edit panel reads from
       // trades.riskState. All three must refresh after a mutation.
-      qc.invalidateQueries({ queryKey: queryKeys.trades.all })
-      qc.invalidateQueries({ queryKey: queryKeys.portfolio.positions })
-      qc.invalidateQueries({ queryKey: queryKeys.portfolio.all })
-      qc.invalidateQueries({
-        queryKey: queryKeys.trades.riskState(vars.tradeId),
-      })
+      //
+      // CRITICAL: we await the invalidations so mutateAsync() resolves only
+      // after the caches have been refreshed. Without the await, the modal's
+      // handleSave returns immediately and onClose() unmounts before the
+      // refetch lands — the next open then renders the previous (stale)
+      // position snapshot until the user reloads the page.
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: queryKeys.trades.all }),
+        qc.invalidateQueries({ queryKey: queryKeys.portfolio.positions }),
+        qc.invalidateQueries({ queryKey: queryKeys.portfolio.all }),
+        qc.invalidateQueries({
+          queryKey: queryKeys.trades.riskState(vars.tradeId),
+        }),
+      ])
     },
   })
 }

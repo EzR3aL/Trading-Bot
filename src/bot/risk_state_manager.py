@@ -847,43 +847,46 @@ class RiskStateManager:
         case the caller must NOT attempt the place. Raises
         :class:`ExchangeError` or subclasses on place failures.
         """
-        # Cancel-old step — only if there was something there and
-        # we're either clearing (value is None) or replacing.
-        # CRITICAL: cancel ONLY the leg we're touching. Before Epic #188
-        # follow-up, this called cancel_position_tpsl() which wipes TP+SL+
-        # trailing simultaneously on Bitget, silently collapsing other
-        # active legs. Each leg now has a dedicated cancel path.
-        if existing_order_id is not None:
-            try:
-                if leg is RiskLeg.TP:
-                    await client.cancel_tp_only(symbol=symbol, side=side)
-                elif leg is RiskLeg.SL:
-                    await client.cancel_sl_only(symbol=symbol, side=side)
-                else:
-                    # Trailing: prefer native dedicated cancel if adapter
-                    # exposes it; otherwise fall back to cancel_order by id.
-                    if hasattr(client, "cancel_native_trailing_stop"):
-                        await client.cancel_native_trailing_stop(symbol=symbol, side=side)
-                    else:
-                        try:
-                            await client.cancel_order(symbol, existing_order_id)
-                        except NotImplementedError:
-                            await client.cancel_position_tpsl(symbol=symbol, side=side)
-            except (ExchangeError, Exception) as e:
-                if isinstance(e, (ExchangeError, NotImplementedError)):
-                    # NotImplementedError here means the exchange genuinely
-                    # can't cancel — surface as CancelFailed so caller won't place.
-                    raise CancelFailed(
-                        getattr(client, "exchange_name", "unknown"),
-                        f"cancel {leg.value} for {symbol} failed: {e}",
-                        original_error=e,
-                    ) from e
-                # Any other Exception → treat as cancel failure too
+        # Cancel-old step. We ALWAYS sweep the leg on the exchange instead
+        # of trusting the DB's ``existing_order_id`` — the bot, the strategy
+        # auto-placement, and external Bitget-app edits all create plans
+        # the DB never learns about. Without this sweep, a stale-NULL DB
+        # row caused the next user place to be rejected because Bitget
+        # already had a moving_plan it considered the "current" one.
+        # Cancel methods filter by ``planType`` so they're idempotent —
+        # a no-op when nothing matches, and never collateral-damage
+        # neighbouring legs (Epic #188 leg-isolation invariant).
+        try:
+            if leg is RiskLeg.TP:
+                await client.cancel_tp_only(symbol=symbol, side=side)
+            elif leg is RiskLeg.SL:
+                await client.cancel_sl_only(symbol=symbol, side=side)
+            else:
+                # Trailing: prefer native dedicated cancel if adapter
+                # exposes it; otherwise fall back to cancel_order by id
+                # (only useful when DB happens to know the order).
+                if hasattr(client, "cancel_native_trailing_stop"):
+                    await client.cancel_native_trailing_stop(symbol=symbol, side=side)
+                elif existing_order_id is not None:
+                    try:
+                        await client.cancel_order(symbol, existing_order_id)
+                    except NotImplementedError:
+                        await client.cancel_position_tpsl(symbol=symbol, side=side)
+        except (ExchangeError, Exception) as e:
+            if isinstance(e, (ExchangeError, NotImplementedError)):
+                # NotImplementedError here means the exchange genuinely
+                # can't cancel — surface as CancelFailed so caller won't place.
                 raise CancelFailed(
                     getattr(client, "exchange_name", "unknown"),
                     f"cancel {leg.value} for {symbol} failed: {e}",
                     original_error=e,
                 ) from e
+            # Any other Exception → treat as cancel failure too
+            raise CancelFailed(
+                getattr(client, "exchange_name", "unknown"),
+                f"cancel {leg.value} for {symbol} failed: {e}",
+                original_error=e,
+            ) from e
 
         # Pure clear: nothing more to do.
         if value is None:
