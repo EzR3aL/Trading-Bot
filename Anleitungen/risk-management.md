@@ -6,6 +6,11 @@ Trigger **nativ auf der Exchange** läuft und wann **im Bot** emuliert wird,
 was die Badges im Dashboard bedeuten, und wie du Trigger manuell setzt,
 änderst oder entfernst.
 
+> **Hinweis (#216):** Echtzeit-Updates auf Dashboard und Portfolio laufen
+> jetzt über Server-Sent Events (`/api/trades/stream`) statt über 5-Sekunden-
+> Polling. Fällt die SSE-Verbindung aus, wechselt die UI automatisch auf
+> Polling zurück — keine Konfiguration nötig.
+
 ---
 
 ## Die drei Risk-Legs

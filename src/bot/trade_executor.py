@@ -6,6 +6,11 @@ import re
 from datetime import datetime, timezone
 from typing import Optional
 
+from src.bot.event_bus import (
+    EVENT_TRADE_OPENED,
+    build_trade_snapshot,
+    publish_trade_event,
+)
 from src.exceptions import ExchangeError, OrderError
 from src.exchanges.base import ExchangeClient
 from src.models.database import PendingTrade, TradeRecord
@@ -465,6 +470,19 @@ class TradeExecutorMixin:
                 task.add_done_callback(lambda t: t.exception() if not t.cancelled() and t.exception() else None)
             except Exception as e:
                 logger.debug("WS broadcast failed: %s", e)
+
+            # Publish trade_opened on the SSE event bus (Issue #216 §2.2).
+            # Separate from the WS broadcast: the SSE stream powers the
+            # trades-list real-time updates that replaced 5s polling.
+            try:
+                publish_trade_event(
+                    EVENT_TRADE_OPENED,
+                    user_id=self._config.user_id,
+                    trade_id=getattr(trade, "id", None),
+                    data=build_trade_snapshot(trade),
+                )
+            except Exception as e:
+                logger.debug("SSE publish failed (trade_opened): %s", e)
 
             # Send notifications (Discord + Telegram)
             trade_reason = f"[{self._config.name}] {signal.reason}"

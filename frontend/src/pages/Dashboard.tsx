@@ -17,6 +17,7 @@ import MobilePositionCard from '../components/ui/MobilePositionCard'
 import EditPositionPanel from '../components/ui/EditPositionPanel'
 import useIsMobile from '../hooks/useIsMobile'
 import usePullToRefresh from '../hooks/usePullToRefresh'
+import { useTradesSSE } from '../hooks/useTradesSSE'
 import PullToRefreshIndicator from '../components/ui/PullToRefreshIndicator'
 
 /* ── Animated Number ─────────────────────────────────────── */
@@ -102,6 +103,11 @@ export default function Dashboard() {
   const { data: dailyData, isLoading: loadingDaily, error: dailyError } = useDashboardDaily(period, demoFilter)
   const { data: positions = [], isLoading: loadingPositions } = usePortfolioPositions()
   const updateTpSl = useUpdateTpSl()
+
+  // Real-time trade updates via SSE (Issue #216 §2.2). Replaces the previous
+  // 5-second polling loop; falls back to polling automatically if the
+  // EventSource connection fails.
+  useTradesSSE()
 
   const dailyStats: DailyStats[] = dailyData?.days || []
   const loading = loadingStats || loadingDaily
