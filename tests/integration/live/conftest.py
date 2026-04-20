@@ -75,6 +75,15 @@ BITGET_LIVE_MARKER = pytest.mark.skipif(
 )
 
 
+BINGX_LIVE_MARKER = pytest.mark.skipif(
+    not os.getenv("BINGX_LIVE_TEST_USER_ID"),
+    reason=(
+        "Requires BINGX_LIVE_TEST_USER_ID env var. These tests hit BingX "
+        "VST Demo — use sparingly."
+    ),
+)
+
+
 # ── Helpers ────────────────────────────────────────────────────────────
 
 
