@@ -45,6 +45,7 @@ from src.exchanges.bingx.constants import (
 from src.exchanges.types import Balance, FundingRateInfo, Order, Position, Ticker
 from src.utils.circuit_breaker import circuit_registry, with_retry
 from src.utils.logger import get_logger
+from src.utils.metrics import record_reject
 
 logger = get_logger(__name__)
 
@@ -264,12 +265,14 @@ class BingXClient(HTTPExchangeClientMixin, ExchangeClient):
                 result = await response.json()
 
                 if response.status == 429:
+                    record_reject("bingx", "rate_limited")
                     raise aiohttp.ClientResponseError(
                         response.request_info, response.history,
                         status=429, message="Rate limited",
                     )
 
                 if response.status != 200:
+                    record_reject("bingx", "http_status")
                     error_msg = result.get("msg", "Unknown error")
                     raise BingXClientError(
                         f"HTTP {response.status}: {error_msg}"
@@ -279,6 +282,7 @@ class BingXClient(HTTPExchangeClientMixin, ExchangeClient):
                 # Code 0 means success
                 code = result.get("code", -1)
                 if code != SUCCESS_CODE:
+                    record_reject("bingx", "error_code")
                     error_msg = result.get("msg", "Unknown error")
                     error_desc = ERROR_CODES.get(code, "")
                     full_msg = f"BingX Error {code}: {error_msg}"

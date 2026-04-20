@@ -29,6 +29,7 @@ from src.exchanges.weex.constants import (
 )
 from src.utils.circuit_breaker import circuit_registry
 from src.utils.logger import get_logger
+from src.utils.metrics import record_reject
 
 logger = get_logger(__name__)
 
@@ -135,6 +136,7 @@ class WeexClient(HTTPExchangeClientMixin, ExchangeClient):
         if not isinstance(result, dict):
             if response.status == 200:
                 return result
+            record_reject("weex", "unexpected_shape")
             raise WeexClientError(
                 f"Weex API Error: unexpected response (status={response.status})"
             )
@@ -147,6 +149,8 @@ class WeexClient(HTTPExchangeClientMixin, ExchangeClient):
             return result
 
         if response.status != 200 or str(code) != SUCCESS_CODE:
+            reason = "http_status" if response.status != 200 else "error_code"
+            record_reject("weex", reason)
             msg = result.get("msg", result.get("message", "Unknown"))
             raise WeexClientError(
                 f"Weex API Error: {msg} (code={code}, status={response.status})"
