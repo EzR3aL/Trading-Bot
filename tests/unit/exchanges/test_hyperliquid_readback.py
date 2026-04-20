@@ -154,3 +154,55 @@ async def test_get_close_reason_from_history_returns_manual_close(client):
     assert snap.closed_by_order_id == "9999"
     assert snap.fill_price == 70000.0
     assert snap.closed_at is not None
+
+
+@pytest.mark.asyncio
+async def test_close_reason_returns_tpsl_ambiguous_for_isTpsl_fill(client):
+    """isTpsl fills cannot be split TP-vs-SL at the fill level on HL (issue #224).
+
+    The adapter now emits ``tpsl_ambiguous`` so RiskStateManager can
+    disambiguate via order-id match or price crossover instead of the
+    previous blind ``pos_profit`` default.
+    """
+    client._info.user_fills = MagicMock(return_value=[
+        {
+            "coin": "BTC",
+            "oid": 7777,
+            "dir": "Close Long",
+            "isTpsl": True,
+            "px": "68000",
+            "time": 1710001000000,
+        },
+    ])
+
+    snap = await client.get_close_reason_from_history("BTC", since_ts_ms=1700000000000)
+    assert snap is not None
+    assert snap.closed_by_plan_type == "tpsl_ambiguous"
+    assert snap.closed_by_order_id == "7777"
+
+
+@pytest.mark.asyncio
+async def test_close_reason_filters_by_until_ts_ms(client):
+    """Fills past until_ts_ms are filtered client-side (issue #224, backfill)."""
+    client._info.user_fills = MagicMock(return_value=[
+        # Past the window — must be skipped.
+        {"coin": "BTC", "oid": 1, "dir": "Close Long", "px": "70000", "time": 1720000000000},
+        # Inside the window — must be picked.
+        {"coin": "BTC", "oid": 2, "dir": "Close Long", "px": "68000", "time": 1710001000000},
+    ])
+
+    snap = await client.get_close_reason_from_history(
+        "BTC", since_ts_ms=1700000000000, until_ts_ms=1715000000000,
+    )
+    assert snap is not None
+    assert snap.closed_by_order_id == "2"
+    assert snap.fill_price == 68000.0
+
+
+@pytest.mark.asyncio
+async def test_close_reason_isolates_sdk_probe_failure(client):
+    """SDK failure on user_fills must not bubble — returns None (issue #224)."""
+    client._info.user_fills = MagicMock(side_effect=RuntimeError("HL SDK transient"))
+
+    snap = await client.get_close_reason_from_history("BTC", since_ts_ms=1700000000000)
+    assert snap is None

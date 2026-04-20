@@ -225,3 +225,37 @@ async def test_get_close_reason_from_history_returns_triggered_trailing(client):
     assert snap.closed_by_order_id == "trail-filled"
     assert snap.fill_price == 71500.0
     assert snap.closed_at is not None
+
+
+@pytest.mark.asyncio
+async def test_close_reason_query_includes_endtime_and_limit(client):
+    """allOrders request must pass endTime + limit=1000 (issue #224)."""
+    captured = {}
+
+    async def mock_request(method, endpoint, **kwargs):
+        captured["params"] = kwargs.get("params", {})
+        return {"orders": []}
+
+    client._request = AsyncMock(side_effect=mock_request)
+    await client.get_close_reason_from_history("BTC-USDT", since_ts_ms=1700000000000)
+
+    assert captured["params"].get("startTime") == "1700000000000"
+    assert "endTime" in captured["params"]
+    assert int(captured["params"]["endTime"]) >= 1700000000000
+    assert captured["params"].get("limit") == "1000"
+
+
+@pytest.mark.asyncio
+async def test_close_reason_query_honors_until_ts_ms(client):
+    """until_ts_ms overrides the endTime default (issue #224, backfill support)."""
+    captured = {}
+
+    async def mock_request(method, endpoint, **kwargs):
+        captured["params"] = kwargs.get("params", {})
+        return {"orders": []}
+
+    client._request = AsyncMock(side_effect=mock_request)
+    await client.get_close_reason_from_history(
+        "BTC-USDT", since_ts_ms=1700000000000, until_ts_ms=1710000000000,
+    )
+    assert captured["params"].get("endTime") == "1710000000000"

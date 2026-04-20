@@ -496,6 +496,117 @@ async def test_scenario_12_missing_trade_returns_external_close_unknown(
 
 
 # ===========================================================================
+# Issue #224 — TP/SL crossover disambiguation
+# (Hyperliquid tpsl_ambiguous + oid-unmatched pos_profit/pos_loss)
+# ===========================================================================
+
+
+@pytest.mark.asyncio
+async def test_tpsl_ambiguous_long_fill_above_tp_yields_take_profit(
+    seed_trade, session_factory_cb,
+):
+    """LONG, fill_price >= take_profit, ambiguous plan_type → TAKE_PROFIT_NATIVE."""
+    trade_id, maker = seed_trade
+    await _patch_trade(maker, trade_id, take_profit=70000.0, stop_loss=66000.0)
+
+    client = FakeClassifierClient(
+        snapshot=_snap(plan_type="tpsl_ambiguous", order_id="hl-fill-no-match", fill_price=70123.0),
+    )
+    manager = RiskStateManager(_factory_returning(client), session_factory_cb)
+
+    reason = await manager.classify_close(
+        trade_id, exit_price=70123.0, exit_time=datetime.now(timezone.utc),
+    )
+    assert reason == ExitReason.TAKE_PROFIT_NATIVE.value
+
+
+@pytest.mark.asyncio
+async def test_tpsl_ambiguous_long_fill_below_sl_yields_stop_loss(
+    seed_trade, session_factory_cb,
+):
+    """LONG, fill_price <= stop_loss, ambiguous plan_type → STOP_LOSS_NATIVE."""
+    trade_id, maker = seed_trade
+    await _patch_trade(maker, trade_id, take_profit=70000.0, stop_loss=66000.0)
+
+    client = FakeClassifierClient(
+        snapshot=_snap(plan_type="tpsl_ambiguous", order_id="hl-fill-no-match", fill_price=65800.0),
+    )
+    manager = RiskStateManager(_factory_returning(client), session_factory_cb)
+
+    reason = await manager.classify_close(
+        trade_id, exit_price=65800.0, exit_time=datetime.now(timezone.utc),
+    )
+    assert reason == ExitReason.STOP_LOSS_NATIVE.value
+
+
+@pytest.mark.asyncio
+async def test_tpsl_ambiguous_short_fill_below_tp_yields_take_profit(
+    seed_trade, session_factory_cb,
+):
+    """SHORT inverts: fill_price <= take_profit → TAKE_PROFIT_NATIVE."""
+    trade_id, maker = seed_trade
+    await _patch_trade(
+        maker, trade_id, side="short", take_profit=66000.0, stop_loss=70000.0,
+    )
+
+    client = FakeClassifierClient(
+        snapshot=_snap(plan_type="tpsl_ambiguous", order_id="hl-fill", fill_price=65500.0),
+    )
+    manager = RiskStateManager(_factory_returning(client), session_factory_cb)
+
+    reason = await manager.classify_close(
+        trade_id, exit_price=65500.0, exit_time=datetime.now(timezone.utc),
+    )
+    assert reason == ExitReason.TAKE_PROFIT_NATIVE.value
+
+
+@pytest.mark.asyncio
+async def test_pos_loss_without_oid_match_crossover_disambiguates(
+    seed_trade, session_factory_cb,
+):
+    """pos_loss from adapter but oid doesn't match — crossover still returns SL."""
+    trade_id, maker = seed_trade
+    await _patch_trade(
+        maker, trade_id, stop_loss=66000.0, sl_order_id="stored-sl-oid",
+    )
+
+    # Snap's closed_by_order_id is "different-fill-oid" → fails oid match.
+    # plan_type pos_loss is authoritative but crossover should confirm.
+    client = FakeClassifierClient(
+        snapshot=_snap(plan_type="pos_loss", order_id="different-fill-oid", fill_price=65900.0),
+    )
+    manager = RiskStateManager(_factory_returning(client), session_factory_cb)
+
+    reason = await manager.classify_close(
+        trade_id, exit_price=65900.0, exit_time=datetime.now(timezone.utc),
+    )
+    assert reason == ExitReason.STOP_LOSS_NATIVE.value
+
+
+@pytest.mark.asyncio
+async def test_tpsl_ambiguous_without_targets_falls_through(
+    seed_trade, session_factory_cb,
+):
+    """Ambiguous plan_type + no TP/SL targets → falls through to UNKNOWN.
+
+    Guards against crossover silently returning a wrong answer when the
+    trade row has no stored targets to compare against.
+    """
+    trade_id, maker = seed_trade
+    # Leave take_profit / stop_loss at seed default (None)
+
+    client = FakeClassifierClient(
+        snapshot=_snap(plan_type="tpsl_ambiguous", order_id="no-match", fill_price=70000.0),
+    )
+    manager = RiskStateManager(_factory_returning(client), session_factory_cb)
+
+    reason = await manager.classify_close(
+        trade_id, exit_price=70000.0, exit_time=datetime.now(timezone.utc),
+    )
+    assert reason == ExitReason.EXTERNAL_CLOSE_UNKNOWN.value
+
+
+# ===========================================================================
 # Additional guards for the classifier contract
 # ===========================================================================
 

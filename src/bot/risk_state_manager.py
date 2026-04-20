@@ -737,11 +737,16 @@ class RiskStateManager:
         Order:
         1. Match ``closed_by_order_id`` against the per-leg order IDs in the
            trade — this is the most precise attribution available.
-        2. Fall back to ``closed_by_plan_type`` (works even after a
+        2. Price-crossover disambiguation when the adapter reported
+           ``tpsl_ambiguous`` or when ``pos_profit``/``pos_loss`` came back
+           without an order-id match (e.g. Hyperliquid, where fills don't
+           distinguish TP vs SL). Uses the stored ``take_profit`` /
+           ``stop_loss`` targets + side as authority.
+        3. Fall back to ``closed_by_plan_type`` (works even after a
            plan-id rotation caused by an edit).
-        3. Software trailing detection when the trade was opened in
+        4. Software trailing detection when the trade was opened in
            ``software_bot`` mode and the trailing leg was confirmed.
-        4. ``EXTERNAL_CLOSE_UNKNOWN`` as a last resort.
+        5. ``EXTERNAL_CLOSE_UNKNOWN`` as a last resort.
         """
         closing_oid = snap.closed_by_order_id
         if closing_oid:
@@ -753,6 +758,17 @@ class RiskStateManager:
                 return ExitReason.STOP_LOSS_NATIVE.value
 
         plan_type = (snap.closed_by_plan_type or "").lower() or None
+
+        # Price-crossover disambiguation for adapters that can't distinguish
+        # TP vs SL at the fill level (HL's tpsl_ambiguous sentinel) OR for
+        # precise plan_types where the order_id didn't match (rare — trade
+        # row may have stale / missing oid). Uses the stored TP/SL targets
+        # plus position side as authority. Requires both the fill price and
+        # at least one target to be present.
+        crossover = self._classify_tpsl_crossover(trade, snap, plan_type)
+        if crossover is not None:
+            return crossover
+
         if plan_type and plan_type in _PLAN_TYPE_TO_REASON:
             return _PLAN_TYPE_TO_REASON[plan_type]
 
@@ -763,6 +779,63 @@ class RiskStateManager:
             return ExitReason.TRAILING_STOP_SOFTWARE.value
 
         return ExitReason.EXTERNAL_CLOSE_UNKNOWN.value
+
+    def _classify_tpsl_crossover(
+        self,
+        trade: dict,
+        snap: CloseReasonSnapshot,
+        plan_type: Optional[str],
+    ) -> Optional[str]:
+        """Disambiguate TP vs SL via stored targets and fill-price crossover.
+
+        Only runs when:
+        * plan_type is ``tpsl_ambiguous`` (HL sentinel for isTpsl fills), OR
+        * plan_type is ``pos_profit`` / ``pos_loss`` AND the order-id match
+          against ``trade.tp_order_id`` / ``trade.sl_order_id`` already
+          failed (caller confirmed by reaching this function).
+
+        Semantics (for a LONG position):
+        * fill_price >= take_profit  → ``TAKE_PROFIT_NATIVE``
+        * fill_price <= stop_loss    → ``STOP_LOSS_NATIVE``
+        * For SHORT, both comparisons flip.
+
+        Returns ``None`` when the inputs are insufficient (no fill price,
+        or neither TP nor SL configured) — caller then falls through to
+        the plan_type lookup. A tolerant 0.1% slack is NOT applied here
+        because fills can have real slippage of several tenths of a
+        percent on volatile assets; we trust the trade's own boundaries
+        as the classification edge.
+        """
+        if plan_type not in {"tpsl_ambiguous", "pos_profit", "pos_loss"}:
+            return None
+
+        fill_price = snap.fill_price
+        if fill_price is None or fill_price <= 0:
+            return None
+
+        tp = trade.get("take_profit")
+        sl = trade.get("stop_loss")
+        if tp is None and sl is None:
+            return None
+
+        side = (trade.get("side") or "").lower()
+        if side not in {"long", "short"}:
+            return None
+
+        # LONG closes above TP are profit, below SL are loss.
+        # SHORT closes below TP are profit, above SL are loss.
+        if side == "long":
+            if tp is not None and fill_price >= tp:
+                return ExitReason.TAKE_PROFIT_NATIVE.value
+            if sl is not None and fill_price <= sl:
+                return ExitReason.STOP_LOSS_NATIVE.value
+        else:  # short
+            if tp is not None and fill_price <= tp:
+                return ExitReason.TAKE_PROFIT_NATIVE.value
+            if sl is not None and fill_price >= sl:
+                return ExitReason.STOP_LOSS_NATIVE.value
+
+        return None
 
     def _classify_heuristic(self, trade: dict, exit_price: float) -> str:
         """Legacy proximity heuristic — used only when the probe is unavailable.
