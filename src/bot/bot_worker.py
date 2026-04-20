@@ -131,6 +131,22 @@ class BotWorker(
             from src.api.dependencies.risk_state import get_risk_state_manager
             self._risk_state_manager = get_risk_state_manager()
 
+        # Start the Hyperliquid software trailing emulator (#216 Section 3.1).
+        # HL has no native trailing primitive. The emulator is a process-wide
+        # singleton (one watchdog services every HL trade regardless of which
+        # bot opened it) so attempting to start it from each BotWorker is a
+        # no-op on duplicate starts. Gated by HL_SOFTWARE_TRAILING_ENABLED.
+        if settings.risk.hl_software_trailing_enabled:
+            from src.api.dependencies.hl_trailing import get_hl_trailing_emulator
+            self._hl_trailing_emulator = get_hl_trailing_emulator()
+            try:
+                self._hl_trailing_emulator.start(enabled=True)
+            except RuntimeError:
+                # No running event loop yet — orchestrator will start the
+                # emulator explicitly once its loop is alive. Tolerate here
+                # so unit tests that construct BotWorker synchronously pass.
+                pass
+
     def _cleanup_stale_signal_keys(self) -> None:
         """Remove signal dedup entries older than 24 hours."""
         cutoff = datetime.now(timezone.utc) - timedelta(hours=24)

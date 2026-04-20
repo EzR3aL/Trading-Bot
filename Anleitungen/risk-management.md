@@ -46,6 +46,41 @@ Welche Quelle aktuell hält, siehst du am Badge neben dem Leg.
 
 ---
 
+## Hyperliquid-Trailing: Software-Emulator (#216)
+
+Hyperliquid stellt **keinen nativen Trailing-Stop** zur Verfügung — weder
+über die App noch über die API. Damit HL-Trades trotzdem einen Trailing
+bekommen, betreibt der Bot seit Version 4.15.x einen internen Emulator
+(`src/bot/hl_trailing_emulator.py`):
+
+- Ein einziger Watchdog pro Bot-Prozess prüft **alle 5 Sekunden** alle
+  offenen HL-Trades, bei denen der Trailing-Toggle aktiv ist.
+- Pro Tick ein `all_mids()`-Call an HL — deckt alle offenen HL-Trades
+  gleichzeitig ab, kein Per-Trade-Poll. Das hält uns unter dem HL-Read-
+  Rate-Limit auch wenn viele Trades offen sind.
+- Der höchste (bei Long) bzw. niedrigste (bei Short) Mark-Preis seit
+  Eröffnung wird fortlaufend in `highest_price` fortgeschrieben.
+- Sobald `highest_price × (1 − callback%/100)` **enger** als der aktuelle
+  SL ist, schreibt der Bot einen neuen SL auf die Exchange — über den
+  gleichen 2-Phase-Commit wie jeder andere TP/SL-Edit (`apply_intent`).
+- Der Exit-Reason der späteren Schließung bleibt `TRAILING_STOP_SOFTWARE`
+  (nicht `STOP_LOSS_NATIVE`) — der Emulator stempelt `risk_source =
+  software_bot` nach jedem Update.
+
+**Wichtig:** Der Emulator ist über das Feature-Flag
+`HL_SOFTWARE_TRAILING_ENABLED` geschaltet (default `false`). Admins
+aktivieren es in der `.env`. **Der Bot muss online sein, sonst wandert
+der SL nicht mit.** Fällt der Bot aus, bleibt der zuletzt geschriebene
+SL auf der Exchange aktiv — die Position ist also weiterhin gegen die
+"worst case"-Richtung abgesichert, aber neue Hochs werden nicht mehr
+eingefangen. Nach einem Neustart liest der Emulator `highest_price` aus
+der DB und ratcheted ab dem dort gespeicherten Extremum weiter.
+
+Für andere Exchanges (Bitget, BingX) bleibt das native Trailing
+bevorzugt — der Emulator rührt diese Trades nicht an.
+
+---
+
 ## Badge-Legende
 
 Im Dashboard (Portfolio + Trade-Detail) zeigt jedes Leg ein Badge:
