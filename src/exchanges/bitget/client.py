@@ -1087,10 +1087,28 @@ class BitgetExchangeClient(HTTPExchangeClientMixin, ExchangeClient):
           2. orders-history for reduce-only manual market closes.
 
         Returns the newest event across both sources, or ``None`` when nothing
-        qualifies.
+        qualifies. A failure on one source does not suppress the other — a
+        triggered SL found via plan-history must not be hidden because the
+        manual-close endpoint returned an error (or vice versa).
         """
-        plan_event = await self._fetch_bitget_plan_close(symbol, since_ts_ms)
-        manual_event = await self._fetch_bitget_manual_close(symbol, since_ts_ms)
+        plan_event: Optional[CloseReasonSnapshot] = None
+        manual_event: Optional[CloseReasonSnapshot] = None
+
+        try:
+            plan_event = await self._fetch_bitget_plan_close(symbol, since_ts_ms)
+        except ExchangeError as e:
+            logger.warning(
+                "bitget.plan_close_probe_failed symbol=%s error=%s",
+                symbol, e,
+            )
+
+        try:
+            manual_event = await self._fetch_bitget_manual_close(symbol, since_ts_ms)
+        except ExchangeError as e:
+            logger.warning(
+                "bitget.manual_close_probe_failed symbol=%s error=%s",
+                symbol, e,
+            )
 
         candidates = [e for e in (plan_event, manual_event) if e is not None]
         if not candidates:
@@ -1106,35 +1124,54 @@ class BitgetExchangeClient(HTTPExchangeClientMixin, ExchangeClient):
     async def _fetch_bitget_plan_close(
         self, symbol: str, since_ts_ms: int
     ) -> Optional[CloseReasonSnapshot]:
-        """Find the newest triggered TP/SL/trailing plan since ``since_ts_ms``."""
+        """Find the newest triggered TP/SL/trailing plan since ``since_ts_ms``.
+
+        Bitget v2 ``/api/v2/mix/order/orders-plan-history`` requires both
+        ``planType`` and a closed ``startTime``/``endTime`` range. We use
+        ``planType=profit_loss`` — the umbrella that returns plans whose
+        concrete type is ``pos_profit`` (TP), ``pos_loss`` (SL) or
+        ``track_plan`` (trailing) in the response. Triggered plans come
+        back with ``planStatus=executed``; cancelled ones with
+        ``cancelled``. The legacy ``triggered`` string is kept as a fallback
+        in case Bitget re-labels a subset of plan types later.
+        """
+        end_ts_ms = int(time.time() * 1000)
         payload = await self._request(
             "GET",
             "/api/v2/mix/order/orders-plan-history",
             params={
                 "productType": PRODUCT_TYPE_USDT,
                 "symbol": symbol,
+                "planType": "profit_loss",
                 "startTime": str(since_ts_ms),
+                "endTime": str(end_ts_ms),
             },
             auth=True,
         )
         plans = self._bitget_plans(payload)
-        triggered = [
+        executed = [
             p for p in plans
-            if (p.get("planStatus") or p.get("state") or "").lower() == "triggered"
+            if (p.get("planStatus") or p.get("state") or "").lower()
+            in {"executed", "triggered"}
         ]
-        if not triggered:
+        if not executed:
             return None
 
-        triggered.sort(
+        executed.sort(
             key=lambda p: int(p.get("uTime") or p.get("updateTime") or p.get("cTime") or 0),
             reverse=True,
         )
-        plan = triggered[0]
+        plan = executed[0]
         plan_type = (plan.get("planType") or "").lower() or None
         ts_ms = _parse_int(plan.get("uTime") or plan.get("updateTime") or plan.get("cTime"))
+        # Triggered plans produce a child execute order — that id is the
+        # one that appears as the fill in orders-history and is what
+        # TradeRecord.close_order_id should end up storing. Prefer it over
+        # the plan's own orderId (which is the plan definition, not the fill).
+        execute_oid = plan.get("executeOrderId") or plan.get("orderId")
         return CloseReasonSnapshot(
             symbol=symbol,
-            closed_by_order_id=str(plan.get("orderId")) if plan.get("orderId") else None,
+            closed_by_order_id=str(execute_oid) if execute_oid else None,
             closed_by_plan_type=plan_type,
             closed_by_trigger_type=plan.get("triggerType"),
             closed_at=_ts_to_datetime(ts_ms),
@@ -1144,7 +1181,17 @@ class BitgetExchangeClient(HTTPExchangeClientMixin, ExchangeClient):
     async def _fetch_bitget_manual_close(
         self, symbol: str, since_ts_ms: int
     ) -> Optional[CloseReasonSnapshot]:
-        """Find the newest filled reduce-only market close since ``since_ts_ms``."""
+        """Find the newest filled reduce-only market close since ``since_ts_ms``.
+
+        Bitget's ``orders-history`` response encodes the trigger source in
+        ``orderSource`` — e.g. ``pos_loss_market``, ``pos_profit_market``,
+        ``track_plan_market`` for plan-triggered closes, or bare ``market``
+        for a plain reduce-only market close. We use this to distinguish
+        user-driven manual closes from plan-triggered ones when
+        ``orders-plan-history`` missed the row (edge cases such as
+        plans that execute but get GC'd from the plan-history before we probe).
+        """
+        end_ts_ms = int(time.time() * 1000)
         payload = await self._request(
             "GET",
             ENDPOINTS["orders_history"],
@@ -1152,6 +1199,7 @@ class BitgetExchangeClient(HTTPExchangeClientMixin, ExchangeClient):
                 "productType": PRODUCT_TYPE_USDT,
                 "symbol": symbol,
                 "startTime": str(since_ts_ms),
+                "endTime": str(end_ts_ms),
             },
             auth=True,
         )
@@ -1162,9 +1210,15 @@ class BitgetExchangeClient(HTTPExchangeClientMixin, ExchangeClient):
         if not isinstance(orders, list):
             return None
 
-        for order in orders:
-            if not isinstance(order, dict):
-                continue
+        # Order history is returned newest-first, but be explicit: sort by
+        # uTime descending so the first match wins regardless of upstream order.
+        sorted_orders = sorted(
+            (o for o in orders if isinstance(o, dict)),
+            key=lambda o: int(o.get("uTime") or o.get("cTime") or 0),
+            reverse=True,
+        )
+
+        for order in sorted_orders:
             trade_side = (order.get("tradeSide") or "").lower()
             order_type = (order.get("orderType") or "").lower()
             status = (order.get("state") or order.get("status") or "").lower()
@@ -1175,10 +1229,20 @@ class BitgetExchangeClient(HTTPExchangeClientMixin, ExchangeClient):
             if order_type and order_type != "market":
                 continue
             ts_ms = _parse_int(order.get("uTime") or order.get("cTime"))
+            # Bitget encodes the trigger origin in ``orderSource``. A close
+            # originating from a triggered TP/SL/trailing plan comes back as
+            # ``pos_profit_market`` / ``pos_loss_market`` / ``track_plan_market``
+            # — even if plan-history has already rotated the plan row out. A
+            # bare ``market`` source means a user- or bot-driven reduce-only
+            # market close. Mapping this back to the canonical plan_type keys
+            # lets the classifier route to the correct ExitReason without a
+            # second round-trip.
+            order_source = (order.get("orderSource") or "").lower()
+            plan_type = _bitget_order_source_to_plan_type(order_source)
             return CloseReasonSnapshot(
                 symbol=symbol,
                 closed_by_order_id=str(order.get("orderId")) if order.get("orderId") else None,
-                closed_by_plan_type="manual",
+                closed_by_plan_type=plan_type,
                 closed_by_trigger_type=None,
                 closed_at=_ts_to_datetime(ts_ms),
                 fill_price=_parse_float(order.get("priceAvg") or order.get("fillPrice")),
@@ -1217,3 +1281,28 @@ def _ts_to_datetime(ts_ms: Optional[int]) -> Optional[datetime]:
         return datetime.fromtimestamp(ts_ms / 1000, tz=timezone.utc)
     except (OverflowError, OSError, ValueError):
         return None
+
+
+_BITGET_ORDER_SOURCE_PREFIXES: tuple[tuple[str, str], ...] = (
+    ("pos_loss", "pos_loss"),
+    ("pos_profit", "pos_profit"),
+    ("track_plan", "track_plan"),
+    ("normal_plan", "normal_plan"),
+    ("liquidation", "liquidation"),
+)
+
+
+def _bitget_order_source_to_plan_type(order_source: str) -> str:
+    """Map a Bitget ``orderSource`` to the canonical plan_type key.
+
+    Bitget suffixes the source with the execution type (``_market`` /
+    ``_limit``). We match by prefix so future variants don't silently
+    reclassify a triggered close as ``manual``. Any unknown / absent
+    source defaults to ``manual`` so downstream classification still
+    produces a sensible ExitReason.
+    """
+    src = (order_source or "").lower()
+    for prefix, plan_type in _BITGET_ORDER_SOURCE_PREFIXES:
+        if src.startswith(prefix):
+            return plan_type
+    return "manual"

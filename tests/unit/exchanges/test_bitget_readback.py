@@ -149,14 +149,17 @@ async def test_get_trailing_stop_returns_snapshot_for_active_track_plan(client):
     """Active track_plan → populated TrailingStopSnapshot with % callback rate."""
 
     async def mock_request(method, endpoint, **kwargs):
-        assert kwargs.get("params", {}).get("planType") == "track_plan"
+        # get_trailing_stop queries the umbrella planType=profit_loss and
+        # filters for moving_plan locally (Bitget rejects direct queries for
+        # planType=moving_plan; see the #174 trailing-readback-crash fix).
+        assert kwargs.get("params", {}).get("planType") == "profit_loss"
         return {
             "entrustedList": [
                 {
                     "orderId": "trail-1",
-                    "planType": "track_plan",
+                    "planType": "moving_plan",
                     "holdSide": "long",
-                    "callbackRatio": "0.014",  # decimal form → 1.4%
+                    "callbackRatio": "1.4",  # Bitget returns percent (#188 callbackRatio scaling fix)
                     "triggerPrice": "70000.0",
                     "cTime": "1710000000000",
                 },
@@ -192,11 +195,11 @@ async def test_get_trailing_stop_returns_newest_when_multiple_plans(client):
     async def mock_request(method, endpoint, **kwargs):
         return {
             "entrustedList": [
-                {"orderId": "old", "planType": "track_plan",
-                 "holdSide": "long", "callbackRatio": "0.02",
+                {"orderId": "old", "planType": "moving_plan",
+                 "holdSide": "long", "callbackRatio": "2.0",
                  "triggerPrice": "69000", "cTime": "1710000000000"},
-                {"orderId": "newest", "planType": "track_plan",
-                 "holdSide": "long", "callbackRatio": "0.03",
+                {"orderId": "newest", "planType": "moving_plan",
+                 "holdSide": "long", "callbackRatio": "3.0",
                  "triggerPrice": "70000", "cTime": "1710000999000"},
             ],
         }
@@ -284,3 +287,120 @@ async def test_get_close_reason_from_history_returns_none_when_nothing(client):
 
     result = await client.get_close_reason_from_history("BTCUSDT", since_ts_ms=1700000000000)
     assert result is None
+
+
+@pytest.mark.asyncio
+async def test_plan_close_query_uses_required_params(client):
+    """orders-plan-history call includes planType=profit_loss + endTime (issue #221)."""
+    captured = {}
+
+    async def mock_request(method, endpoint, **kwargs):
+        if "orders-plan-history" in endpoint:
+            captured["params"] = kwargs.get("params", {})
+            return {"entrustedList": []}
+        return {"entrustedList": []}
+
+    client._request = AsyncMock(side_effect=mock_request)
+
+    await client.get_close_reason_from_history("ETHUSDT", since_ts_ms=1710000000000)
+
+    assert captured["params"].get("planType") == "profit_loss"
+    assert captured["params"].get("symbol") == "ETHUSDT"
+    assert captured["params"].get("startTime") == "1710000000000"
+    assert "endTime" in captured["params"]
+    assert int(captured["params"]["endTime"]) > 1710000000000
+
+
+@pytest.mark.asyncio
+async def test_plan_close_accepts_executed_status(client):
+    """Bitget v2 returns planStatus=executed for fired plans (issue #221)."""
+
+    async def mock_request(method, endpoint, **kwargs):
+        if "orders-plan-history" in endpoint:
+            return {
+                "entrustedList": [
+                    {
+                        "orderId": "sl-plan",
+                        "executeOrderId": "sl-fill",
+                        "planType": "pos_loss",
+                        "planStatus": "executed",
+                        "executePrice": "2311.9",
+                        "triggerType": "fill_price",
+                        "uTime": "1710002000000",
+                    },
+                ],
+            }
+        return {"entrustedList": []}
+
+    client._request = AsyncMock(side_effect=mock_request)
+
+    snap = await client.get_close_reason_from_history("ETHUSDT", since_ts_ms=1700000000000)
+
+    assert snap is not None
+    assert snap.closed_by_plan_type == "pos_loss"
+    # executeOrderId is preferred over plan's orderId — that is the fill
+    # id referenced by TradeRecord.sl_order_id.
+    assert snap.closed_by_order_id == "sl-fill"
+    assert snap.fill_price == 2311.9
+
+
+@pytest.mark.asyncio
+async def test_plan_close_failure_does_not_hide_manual_close(client):
+    """Plan-history ExchangeError must not suppress manual-close probe (issue #221)."""
+    from src.exceptions import ExchangeError
+
+    async def mock_request(method, endpoint, **kwargs):
+        if "orders-plan-history" in endpoint:
+            raise ExchangeError("bitget", "Parameter verification failed")
+        # orders-history returns a market close
+        return {
+            "entrustedList": [
+                {
+                    "orderId": "close-fill",
+                    "tradeSide": "close",
+                    "orderType": "market",
+                    "status": "filled",
+                    "priceAvg": "2277.0",
+                    "orderSource": "market",
+                    "uTime": "1710002000000",
+                },
+            ],
+        }
+
+    client._request = AsyncMock(side_effect=mock_request)
+
+    snap = await client.get_close_reason_from_history("ETHUSDT", since_ts_ms=1700000000000)
+
+    assert snap is not None
+    assert snap.closed_by_plan_type == "manual"
+    assert snap.closed_by_order_id == "close-fill"
+
+
+@pytest.mark.asyncio
+async def test_manual_close_maps_order_source_to_plan_type(client):
+    """orderSource=pos_loss_market → plan_type=pos_loss (not manual) (issue #221)."""
+
+    async def mock_request(method, endpoint, **kwargs):
+        if "orders-plan-history" in endpoint:
+            return {"entrustedList": []}
+        return {
+            "entrustedList": [
+                {
+                    "orderId": "sl-fill",
+                    "tradeSide": "close",
+                    "orderType": "market",
+                    "status": "filled",
+                    "priceAvg": "2311.9",
+                    "orderSource": "pos_loss_market",
+                    "uTime": "1710002000000",
+                },
+            ],
+        }
+
+    client._request = AsyncMock(side_effect=mock_request)
+
+    snap = await client.get_close_reason_from_history("ETHUSDT", since_ts_ms=1700000000000)
+
+    assert snap is not None
+    assert snap.closed_by_plan_type == "pos_loss"
+    assert snap.closed_by_order_id == "sl-fill"
