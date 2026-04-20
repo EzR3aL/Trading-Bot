@@ -111,3 +111,45 @@ async def test_cancel_native_trailing_stop_only(client):
     client._request = AsyncMock(side_effect=mock_request)
     assert await client.cancel_native_trailing_stop("ETHUSDT", "long") is True
     assert cancelled == ["moving_plan"]
+
+
+# ==================== Pattern C log-level classification (issue #225) ====================
+
+
+@pytest.mark.asyncio
+async def test_cancel_benign_no_match_stays_at_debug(client, caplog):
+    """A 'no matching plan' error must log at DEBUG (legitimate no-op)."""
+    import logging
+    caplog.set_level(logging.DEBUG, logger="src.exchanges.bitget.client")
+
+    async def mock_request(method, endpoint, **kwargs):
+        raise Exception("40768 order does not exist")
+
+    client._request = AsyncMock(side_effect=mock_request)
+    result = await client.cancel_position_tpsl("ETHUSDT", side="long")
+
+    assert result is True
+    warn_records = [r for r in caplog.records if r.levelno >= logging.WARNING
+                    and "cancel" in r.getMessage().lower()]
+    assert warn_records == [], (
+        f"Benign 'order does not exist' must not escalate to WARN; got: "
+        f"{[r.getMessage() for r in warn_records]}"
+    )
+
+
+@pytest.mark.asyncio
+async def test_cancel_real_error_escalates_to_warn(client, caplog):
+    """A network/auth failure must log at WARN so a real stale plan is visible."""
+    import logging
+    caplog.set_level(logging.DEBUG, logger="src.exchanges.bitget.client")
+
+    async def mock_request(method, endpoint, **kwargs):
+        raise Exception("HTTP 500 Internal Server Error")
+
+    client._request = AsyncMock(side_effect=mock_request)
+    await client.cancel_position_tpsl("ETHUSDT", side="long")
+
+    warn_records = [r for r in caplog.records if r.levelno >= logging.WARNING
+                    and "cancel" in r.getMessage().lower()]
+    assert warn_records, "Real cancel failure must escalate to WARN (Pattern C)"
+    assert any("FAILED" in r.getMessage() for r in warn_records)

@@ -611,7 +611,21 @@ class WeexClient(HTTPExchangeClientMixin, ExchangeClient):
                     except Exception as e:
                         logger.warning("Weex: failed to cancel %s order %s: %s", plan_type, oid, e)
         except Exception as e:
-            logger.debug("Weex: pending TP/SL query not available for %s: %s", symbol, e)
+            # Classify: "pending TP/SL query not available" used to swallow
+            # every failure at DEBUG, hiding auth/network errors (Pattern C
+            # per #225). Benign "no such order" messages stay at DEBUG;
+            # everything else escalates to WARN so a real cancel failure
+            # does not mask a stale exchange-side TP/SL.
+            msg = str(e).lower()
+            benign = ("no plan", "no order", "not found", "does not exist")
+            if any(tok in msg for tok in benign):
+                logger.debug(
+                    "Weex: no pending TP/SL to cancel for %s: %s", symbol, e,
+                )
+            else:
+                logger.warning(
+                    "Weex: pending TP/SL query FAILED for %s: %s", symbol, e,
+                )
 
     async def set_position_tpsl(
         self,
