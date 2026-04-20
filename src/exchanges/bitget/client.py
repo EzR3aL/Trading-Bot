@@ -317,7 +317,9 @@ class BitgetExchangeClient(HTTPExchangeClientMixin, ExchangeClient):
                         plan_type, symbol, [s.get("orderId") for s in success],
                     )
             except Exception as e:
-                logger.debug("Bitget cancel %s for %s: %s (may not exist)", plan_type, symbol, e)
+                _log_bitget_cancel_outcome(
+                    "cancel_position_tpsl", plan_type, symbol, e,
+                )
 
         return True
 
@@ -346,8 +348,10 @@ class BitgetExchangeClient(HTTPExchangeClientMixin, ExchangeClient):
     async def _cancel_plan_types(self, symbol: str, plan_types: list[str]) -> bool:
         """Shared helper: cancel every plan of the given types on ``symbol``.
 
-        Per-plan-type failures are logged at DEBUG because absence is a
-        legitimate no-op; network/auth errors bubble up through ``_request``.
+        Per-plan-type failures are classified via
+        :func:`_log_bitget_cancel_outcome` — benign "no matching plan"
+        errors stay at DEBUG, genuine network/auth/contract errors
+        escalate to WARN (Pattern C mitigation per #225).
         """
         for plan_type in plan_types:
             try:
@@ -367,9 +371,8 @@ class BitgetExchangeClient(HTTPExchangeClientMixin, ExchangeClient):
                         plan_type, symbol, [s.get("orderId") for s in success],
                     )
             except Exception as e:
-                logger.debug(
-                    "Bitget cancel %s for %s failed: %s (may not exist)",
-                    plan_type, symbol, e,
+                _log_bitget_cancel_outcome(
+                    "_cancel_plan_types", plan_type, symbol, e,
                 )
         return True
 
@@ -724,11 +727,16 @@ class BitgetExchangeClient(HTTPExchangeClientMixin, ExchangeClient):
             # Direct lookup — we know the close order ID
             total_fees += await self.get_order_fees(symbol, close_order_id)
         else:
-            # Search orders-history for the most recent close order on this symbol
+            # Search orders-history for the most recent close order on this symbol.
+            # Pass an explicit ~90-day window so Bitget does not silently apply
+            # the 7-day default and drop older closes (Pattern F per #225).
             try:
+                now_ms = int(time.time() * 1000)
                 params = {
                     "symbol": symbol,
                     "productType": PRODUCT_TYPE_USDT,
+                    "startTime": str(now_ms - 90 * 24 * 60 * 60 * 1000),
+                    "endTime": str(now_ms),
                     "limit": "20",
                 }
                 data = await self._request("GET", ENDPOINTS["orders_history"], params=params)
@@ -755,11 +763,17 @@ class BitgetExchangeClient(HTTPExchangeClientMixin, ExchangeClient):
 
         Searches for the latest filled close order (TP/SL/trailing/manual) and
         returns its average fill price. Returns None if not found.
+
+        Uses an explicit ~90-day window so Bitget's silent 7-day default
+        does not drop older close orders (Pattern F per #225).
         """
         try:
+            now_ms = int(time.time() * 1000)
             params = {
                 "symbol": symbol,
                 "productType": PRODUCT_TYPE_USDT,
+                "startTime": str(now_ms - 90 * 24 * 60 * 60 * 1000),
+                "endTime": str(now_ms),
                 "limit": "20",
             }
             data = await self._request("GET", ENDPOINTS["orders_history"], params=params)
@@ -1310,6 +1324,44 @@ def _ts_to_datetime(ts_ms: Optional[int]) -> Optional[datetime]:
         return datetime.fromtimestamp(ts_ms / 1000, tz=timezone.utc)
     except (OverflowError, OSError, ValueError):
         return None
+
+
+# Bitget error tokens that mean "nothing to cancel" — benign no-ops.
+# Rendered on message body, not status code, since the SDK surfaces the
+# message string. Kept conservative: only substrings we have seen return
+# for "plan does not exist"; anything else escalates to WARN per #225.
+_BITGET_BENIGN_CANCEL_TOKENS: tuple[str, ...] = (
+    "no plan",
+    "no order",
+    "not found",
+    "no matching",
+    "does not exist",
+    "40768",  # Bitget "Order not exists" code
+)
+
+
+def _log_bitget_cancel_outcome(
+    caller: str, plan_type: str, symbol: str, exc: Exception,
+) -> None:
+    """Classify a Bitget cancel-plan failure and log at the right level.
+
+    Benign "no matching plan" responses stay at DEBUG (legitimate no-op
+    when the leg was never placed or was already cancelled). Anything
+    else — network, auth, contract errors — escalates to WARN so a real
+    cancel failure is visible and does not mask a stale exchange-side
+    plan (Pattern C mitigation per #225).
+    """
+    msg = str(exc).lower()
+    if any(tok in msg for tok in _BITGET_BENIGN_CANCEL_TOKENS):
+        logger.debug(
+            "bitget.%s cancel %s for %s: %s (no matching plan)",
+            caller, plan_type, symbol, exc,
+        )
+    else:
+        logger.warning(
+            "bitget.%s cancel %s for %s FAILED: %s",
+            caller, plan_type, symbol, exc,
+        )
 
 
 _BITGET_ORDER_SOURCE_PREFIXES: tuple[tuple[str, str], ...] = (
