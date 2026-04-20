@@ -60,12 +60,26 @@ async def health_check(request: Request):
     if audit_failures > 0:
         checks["audit_log_failures"] = audit_failures
 
+    # Exchange WS listener health (#216). Always emitted — zero counts
+    # are the expected default when the feature flag is off, and make
+    # it easy for monitoring to alert if a listener drops mid-session.
+    ws_connections = {"bitget": 0, "hyperliquid": 0}
+    try:
+        exchange_ws_manager = getattr(
+            request.app.state, "exchange_ws_manager", None
+        )
+        if exchange_ws_manager is not None:
+            ws_connections.update(exchange_ws_manager.connected_counts())
+    except Exception as e:  # noqa: BLE001 — health must never itself fail
+        logger.debug("Health check: exchange_ws_manager read failed: %s", e)
+
     is_healthy = checks["database"] == "ok"
     status = "healthy" if is_healthy else "unhealthy"
 
     result = {
         "status": status,
         "checks": checks,
+        "ws_connections": ws_connections,
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
 

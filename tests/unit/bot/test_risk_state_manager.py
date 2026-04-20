@@ -809,26 +809,34 @@ async def test_classify_close_without_probe_support_falls_back(
 
 
 @pytest.mark.asyncio
-async def test_on_exchange_event_is_logging_only_stub(
+async def test_on_exchange_event_no_matching_trade_is_noop(
     open_trade: int, session_factory_cb, caplog
 ) -> None:
-    """on_exchange_event logs the event but does not touch the DB."""
+    """on_exchange_event with no matching (user, exchange, symbol) logs + no-ops."""
     import logging
 
     manager = RiskStateManager(
         _factory_returning(FakeExchangeClient()), session_factory_cb
     )
 
+    trade = await _fetch_trade(session_factory_cb, open_trade)
+
     caplog.set_level(logging.INFO, logger="src.bot.risk_state_manager")
-    await manager.on_exchange_event({"foo": "bar"})
+    # Known event_type but on a symbol that isn't in the DB.
+    await manager.on_exchange_event(
+        user_id=trade.user_id,
+        exchange=trade.exchange,
+        event_type="plan_triggered",
+        payload={"symbol": "NOPECOINUSDT"},
+    )
 
     messages = [r.getMessage() for r in caplog.records]
-    assert any("ws_event_received" in m for m in messages), messages
+    assert any("ws_event_no_match" in m for m in messages), messages
 
-    # Stub must not have touched the DB.
-    trade = await _fetch_trade(session_factory_cb, open_trade)
-    assert trade.take_profit is None
-    assert trade.tp_order_id is None
+    # Nothing was written.
+    refreshed = await _fetch_trade(session_factory_cb, open_trade)
+    assert refreshed.take_profit is None
+    assert refreshed.tp_order_id is None
 
 
 @pytest.mark.asyncio
@@ -938,3 +946,71 @@ def test_extract_order_id_accepts_string_and_object() -> None:
         pass
 
     assert _extract_order_id(_Empty()) is None
+
+
+# ===========================================================================
+# on_exchange_event (#216)
+# ===========================================================================
+
+
+@pytest.mark.asyncio
+async def test_on_exchange_event_known_type_matches_trade_and_reconciles(
+    open_trade: int, session_factory_cb,
+) -> None:
+    """A plan_triggered event for a matching (user, exchange, symbol) reconciles the trade."""
+    fake_client = FakeExchangeClient(
+        readback_tp=70246.0,
+        readback_tp_id="tp_id_1",
+    )
+    manager = RiskStateManager(
+        exchange_client_factory=_factory_returning(fake_client),
+        session_factory=session_factory_cb,
+    )
+
+    # Resolve the user_id that the fixture seeded for our open trade.
+    trade = await _fetch_trade(session_factory_cb, open_trade)
+    user_id = trade.user_id
+    exchange = trade.exchange
+    symbol = trade.symbol
+
+    await manager.on_exchange_event(
+        user_id=user_id,
+        exchange=exchange,
+        event_type="plan_triggered",
+        payload={"symbol": symbol, "raw": {"note": "test"}},
+    )
+
+    # reconcile() probes the exchange — at least one readback was issued.
+    readback_kinds = {call[0] for call in fake_client.readback_calls}
+    assert "tpsl" in readback_kinds
+    # reconcile writes take_profit back from the snapshot.
+    refreshed = await _fetch_trade(session_factory_cb, open_trade)
+    assert refreshed.take_profit == 70246.0
+    assert refreshed.tp_order_id == "tp_id_1"
+
+
+@pytest.mark.asyncio
+async def test_on_exchange_event_unknown_type_logs_and_noops(
+    open_trade: int, session_factory_cb, caplog,
+) -> None:
+    """An unknown event type is logged at INFO and does NOT trigger reconcile."""
+    fake_client = FakeExchangeClient()
+    manager = RiskStateManager(
+        exchange_client_factory=_factory_returning(fake_client),
+        session_factory=session_factory_cb,
+    )
+    trade = await _fetch_trade(session_factory_cb, open_trade)
+
+    import logging
+    with caplog.at_level(logging.INFO, logger="src.bot.risk_state_manager"):
+        await manager.on_exchange_event(
+            user_id=trade.user_id,
+            exchange=trade.exchange,
+            event_type="something_weird",
+            payload={"symbol": trade.symbol},
+        )
+
+    # No probe issued → no reconcile path traversed.
+    assert fake_client.readback_calls == []
+    # An unknown_event log is emitted for observability.
+    assert any("ws_event_unknown" in record.message for record in caplog.records)
