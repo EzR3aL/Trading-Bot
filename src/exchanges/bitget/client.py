@@ -1323,8 +1323,15 @@ _BITGET_ORDER_SOURCE_PREFIXES: tuple[tuple[str, str], ...] = (
     ("track_plan", "moving_plan"),
     ("moving_plan", "moving_plan"),
     ("move_", "moving_plan"),
-    ("normal_plan", "normal_plan"),
     ("liquidation", "liquidation"),
+    # NOTE: a ``normal_plan_*`` source is intentionally NOT mapped here.
+    # ``normal_plan`` is not a key in ``_PLAN_TYPE_TO_REASON``, so emitting
+    # it would silently fall through to EXTERNAL_CLOSE_UNKNOWN — exactly
+    # the bug backfill #220 had to clean up. Falling through to the
+    # function's default of ``"manual"`` produces MANUAL_CLOSE_EXCHANGE,
+    # which is the closest semantic match for an operator/script-driven
+    # conditional. If Bitget ever exposes a distinct normal-plan trigger
+    # in the response, add both sides (prefix + ExitReason) at once.
 )
 
 
