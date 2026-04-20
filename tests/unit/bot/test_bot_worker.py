@@ -126,6 +126,27 @@ class TestBotWorkerInit:
         worker = BotWorker(bot_config_id=1)
         assert worker.config is None
 
+    def test_risk_state_manager_wired_when_flag_on(self, monkeypatch):
+        """Flag on → BotWorker receives the shared RSM singleton (issue #218)."""
+        from config.settings import settings as _settings
+        from src.api.dependencies import risk_state as rs_dep
+
+        monkeypatch.setattr(_settings.risk, "risk_state_manager_enabled", True)
+        sentinel = MagicMock(name="RiskStateManagerSingleton")
+        monkeypatch.setattr(rs_dep, "get_risk_state_manager", lambda: sentinel)
+
+        worker = BotWorker(bot_config_id=1)
+        assert worker._risk_state_manager is sentinel
+
+    def test_risk_state_manager_none_when_flag_off(self, monkeypatch):
+        """Flag off → BotWorker keeps the legacy heuristic path (issue #218)."""
+        from config.settings import settings as _settings
+
+        monkeypatch.setattr(_settings.risk, "risk_state_manager_enabled", False)
+
+        worker = BotWorker(bot_config_id=1)
+        assert worker._risk_state_manager is None
+
 
 # ---------------------------------------------------------------------------
 # Initialize tests

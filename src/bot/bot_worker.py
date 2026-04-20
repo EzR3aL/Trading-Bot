@@ -21,6 +21,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 
+from config.settings import settings
 from src.bot.hyperliquid_gates import HyperliquidGatesMixin
 from src.bot.notifications import NotificationsMixin
 from src.bot.position_monitor import PositionMonitorMixin
@@ -120,6 +121,15 @@ class BotWorker(
 
         # Initialize per-instance position monitor state
         self._init_monitor_state()
+
+        # Wire the shared RiskStateManager singleton into the close-detection
+        # path so `_handle_closed_position` uses exchange-readback classify_close
+        # instead of the legacy proximity heuristic. Singleton is intentional —
+        # the per-(trade, leg) lock map must be shared with the API path.
+        # See issue #218, Epic #188.
+        if settings.risk.risk_state_manager_enabled:
+            from src.api.dependencies.risk_state import get_risk_state_manager
+            self._risk_state_manager = get_risk_state_manager()
 
     def _cleanup_stale_signal_keys(self) -> None:
         """Remove signal dedup entries older than 24 hours."""
