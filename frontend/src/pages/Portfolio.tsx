@@ -21,6 +21,7 @@ import { useSizeUnitStore } from '../stores/sizeUnitStore'
 import { useThemeStore } from '../stores/themeStore'
 import useIsMobile from '../hooks/useIsMobile'
 import usePullToRefresh from '../hooks/usePullToRefresh'
+import { useTradesSSE } from '../hooks/useTradesSSE'
 import PullToRefreshIndicator from '../components/ui/PullToRefreshIndicator'
 import GuidedTour, { TourHelpButton, type TourStep } from '../components/ui/GuidedTour'
 
@@ -92,6 +93,11 @@ export default function Portfolio() {
   const { data: positions = [], isLoading: loadingExchange } = usePortfolioPositions()
   const { data: allocation = [] } = usePortfolioAllocation()
   const updateTpSl = useUpdateTpSl()
+
+  // Real-time trade updates via SSE (Issue #216 §2.2). Replaces the previous
+  // 5-second polling loop; falls back to polling automatically if the
+  // EventSource connection fails.
+  useTradesSSE()
 
   const error = summaryError ? t('common.error') : ''
 

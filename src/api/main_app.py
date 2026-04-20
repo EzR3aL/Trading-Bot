@@ -42,6 +42,7 @@ from src.api.routers import (  # noqa: E402
     status,
     tax_report,
     trades,
+    trades_stream,
     users,
     websocket,
 )
@@ -428,6 +429,7 @@ def create_app() -> FastAPI:
     app.include_router(auth_bridge.router)
     app.include_router(users.router)
     app.include_router(trades.router)
+    app.include_router(trades_stream.router)
     app.include_router(statistics.router)
     app.include_router(funding.router)
     app.include_router(config.router)

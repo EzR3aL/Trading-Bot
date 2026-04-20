@@ -4,6 +4,11 @@ import asyncio
 from datetime import datetime, timezone
 from typing import Optional
 
+from src.bot.event_bus import (
+    EVENT_TRADE_CLOSED,
+    build_trade_snapshot,
+    publish_trade_event,
+)
 from src.bot.pnl import calculate_pnl
 from src.models.database import TradeRecord
 from src.models.session import get_session
@@ -140,6 +145,19 @@ class TradeCloserMixin:
             task.add_done_callback(lambda t: t.exception() if not t.cancelled() and t.exception() else None)
         except Exception as e:
             logger.debug("WS broadcast failed: %s", e)
+
+        # Publish trade_closed on the SSE event bus (Issue #216 §2.2).
+        # Kept distinct from the WS broadcast so the SSE trades stream stays
+        # the single source of truth for the real-time trades-list view.
+        try:
+            publish_trade_event(
+                EVENT_TRADE_CLOSED,
+                user_id=self._config.user_id,
+                trade_id=trade.id,
+                data=build_trade_snapshot(trade),
+            )
+        except Exception as e:
+            logger.debug("SSE publish failed (trade_closed): %s", e)
 
         # Send notifications (Discord + Telegram)
         duration_minutes = None

@@ -47,6 +47,11 @@ from typing import Any, Callable, Dict, Optional, Tuple
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.bot.event_bus import (
+    EVENT_TRADE_UPDATED,
+    build_trade_snapshot,
+    publish_trade_event,
+)
 from src.bot.risk_reasons import ExitReason
 from src.exceptions import CancelFailed, ExchangeError
 from src.exchanges.base import (
@@ -351,6 +356,11 @@ class RiskStateManager:
             await self._write_confirmation(
                 trade_id, leg, confirmed_value, confirmed_order_id, final_status,
             )
+
+            # Notify SSE subscribers that this trade's risk legs changed.
+            # Runs after the DB commit so the next GET /api/trades reflects
+            # the new state. Failures are swallowed by the helper.
+            await self._publish_trade_updated(trade_id, user_id, leg)
 
             latency_ms = int((time.perf_counter() - start) * 1000)
             logger.info(
@@ -1192,6 +1202,35 @@ class RiskStateManager:
             )
 
     # ── Helpers ────────────────────────────────────────────────────
+
+    async def _publish_trade_updated(
+        self,
+        trade_id: int,
+        user_id: int,
+        leg: RiskLeg,
+    ) -> None:
+        """Emit a ``trade_updated`` event on the process-local event bus.
+
+        Called post-Phase-D so the snapshot reflects the just-committed
+        risk legs. Failures are swallowed — the event bus is strictly
+        best-effort and must never block the 2PC flow.
+        """
+        try:
+            async with self._session_factory() as session:
+                trade = await session.get(TradeRecord, trade_id)
+                snapshot = build_trade_snapshot(trade) if trade is not None else {}
+                snapshot["leg"] = leg.value
+            publish_trade_event(
+                EVENT_TRADE_UPDATED,
+                user_id=user_id,
+                trade_id=trade_id,
+                data=snapshot,
+            )
+        except Exception as exc:  # noqa: BLE001 — best-effort publish
+            logger.debug(
+                "risk_state.publish_failed trade=%s leg=%s error=%s",
+                trade_id, leg.value, exc,
+            )
 
     async def _load_trade(self, trade_id: int) -> Optional[dict]:
         """Load minimal fields for reconcile."""
