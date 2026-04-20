@@ -590,8 +590,30 @@ class WeexClient(HTTPExchangeClientMixin, ExchangeClient):
             return "sl"
         return None
 
-    async def _cancel_existing_tpsl(self, symbol: str) -> None:
-        """Cancel existing TP/SL plan orders for a symbol before placing new ones."""
+    # planType tokens Weex emits per leg. Kept as frozensets so callers
+    # can combine them when scoping the pre-place sweep.
+    _TP_PLAN_TYPES = frozenset({"TAKE_PROFIT"})
+    _SL_PLAN_TYPES = frozenset({"STOP_LOSS"})
+    _TPSL_PLAN_TYPES = _TP_PLAN_TYPES | _SL_PLAN_TYPES
+
+    async def _cancel_existing_tpsl(
+        self,
+        symbol: str,
+        target_types: Optional[frozenset] = None,
+    ) -> None:
+        """Cancel existing TP/SL plan orders for a symbol before placing new ones.
+
+        ``target_types`` scopes the sweep to a subset of planType values
+        (e.g. ``{"TAKE_PROFIT"}`` to clear only the TP leg). When ``None``
+        the sweep wipes every TAKE_PROFIT + STOP_LOSS order for the symbol —
+        the legacy default kept for callers that rely on a full reset.
+
+        Internal callers in :meth:`set_position_tpsl` MUST scope to the leg
+        they are about to replace so they don't collateral-cancel the user's
+        other live leg (Epic #188 / #216 S2 leg-isolation invariant). Without
+        scoping, setting only TP would silently delete the SL every time.
+        """
+        types = target_types if target_types is not None else self._TPSL_PLAN_TYPES
         v3_symbol = symbol.upper().replace("-", "")
         try:
             data = await self._request("GET", ENDPOINTS["pending_tpsl_orders"], params={
@@ -600,7 +622,9 @@ class WeexClient(HTTPExchangeClientMixin, ExchangeClient):
             orders = data if isinstance(data, list) else []
             for order in orders:
                 oid = str(order.get("orderId", order.get("id", "")))
-                plan_type = order.get("planType", "")
+                plan_type = str(order.get("planType", "")).upper()
+                if plan_type not in types:
+                    continue
                 if oid:
                     try:
                         await self._request("POST", ENDPOINTS["cancel_tpsl_order"], data={
@@ -645,8 +669,18 @@ class WeexClient(HTTPExchangeClientMixin, ExchangeClient):
         position_side = "LONG" if side == "long" else "SHORT"
         order_ids = []
 
-        # Cancel existing TP/SL orders to prevent orphan duplicates
-        await self._cancel_existing_tpsl(symbol)
+        # Sweep only the leg(s) being placed so the user's other live leg
+        # stays intact. A naked TP set must not collateral-cancel the SL
+        # (and vice versa) — the RiskStateManager already cleared the
+        # targeted leg upstream, this is just defence-in-depth against
+        # mid-call drift. Epic #188 / #216 S2 leg-isolation invariant.
+        sweep_types: set[str] = set()
+        if take_profit is not None:
+            sweep_types |= self._TP_PLAN_TYPES
+        if stop_loss is not None:
+            sweep_types |= self._SL_PLAN_TYPES
+        if sweep_types:
+            await self._cancel_existing_tpsl(symbol, target_types=frozenset(sweep_types))
 
         # Get position size if not provided
         if size is None:
