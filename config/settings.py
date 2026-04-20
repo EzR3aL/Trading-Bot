@@ -211,9 +211,19 @@ class RiskConfig:
 
     ``risk_state_manager_enabled`` gates the new 2-Phase-Commit
     RiskStateManager (#190). Default off so the rollout is opt-in.
+
+    ``hl_software_trailing_enabled`` gates the Hyperliquid software
+    trailing-stop emulator (#216 Section 3.1). HL has no native trailing
+    primitive — when the flag is on, ``HLTrailingEmulator`` runs a
+    per-process watchdog that ratchets highest_price and rewrites SL.
+    Default off because the emulator requires the bot to be online for
+    trailing to fire at all.
     """
     risk_state_manager_enabled: bool = field(
         default_factory=lambda: get_env("RISK_STATE_MANAGER_ENABLED", "false", bool)
+    )
+    hl_software_trailing_enabled: bool = field(
+        default_factory=lambda: get_env("HL_SOFTWARE_TRAILING_ENABLED", "false", bool)
     )
 
 
