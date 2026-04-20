@@ -525,6 +525,16 @@ export default function EditPositionPanel({ position, onClose, onSave }: EditPos
                     </>
                   )}
                 </div>
+
+                {/* Bitget callback-ratio rounding hint (issue #216) */}
+                {position.exchange.toLowerCase() === 'bitget' && (
+                  <p className="text-[10px] text-gray-500 italic leading-relaxed">
+                    {t(
+                      'editPosition.bitgetCallbackRounding',
+                      'Hinweis: Bitget rundet den resultierenden Callback auf 0,01 %. Der tatsächlich aktive Callback kann minimal von deinem ATR-Wert abweichen.'
+                    )}
+                  </p>
+                )}
               </div>
             )}
           </div>

@@ -23,6 +23,13 @@ _POSITION_GONE_DELAY_S = 2.0
 _GLITCH_WARN_THRESHOLD = 3  # warn after N glitches in a row
 _GLITCH_ALERT_THRESHOLD = 10  # send notification after N glitches
 
+# Trailing leg states where the monitor must NOT auto-place a native
+# trailing on top. ``cleared`` = user removed it via dashboard.
+# ``pending`` = the API's RiskStateManager.apply_intent is mid-2PC and
+# will write the outcome itself — auto-placing here would race Phase B
+# (issue #216 Phase A→B race window).
+_TRAILING_SKIP_STATES: frozenset[str] = frozenset({"cleared", "pending"})
+
 
 class PositionMonitorMixin:
     """Mixin providing position monitoring methods for BotWorker."""
@@ -195,18 +202,29 @@ class PositionMonitorMixin:
                         self.bot_config_id, trade.symbol, e,
                     )
 
-            # User-cleared trailing wins over the bot's auto-placement
-            # logic — once the dashboard signals ``remove_trailing``, the
-            # RSM writes ``trailing_status='cleared'``. Without this guard
-            # the next monitor tick would happily re-place a fresh native
-            # trailing 30-60 s after the user removed it, looking like
-            # "the toggle did nothing" from the UI's perspective.
-            user_cleared_trailing = getattr(trade, "trailing_status", None) == "cleared"
+            # Skip the monitor's auto-placement when another actor is
+            # actively working on the trailing leg. Two states matter:
+            #
+            # * ``cleared``: user removed the trailing via dashboard —
+            #   the RSM wrote ``trailing_status='cleared'``. Auto-place
+            #   would silently resurrect the user's just-removed plan.
+            # * ``pending``: a concurrent ``apply_intent(TRAILING)`` from
+            #   the API path is mid-2PC (Phase A wrote PENDING, Phase B
+            #   is calling the exchange). Auto-place would race the API
+            #   and potentially place a duplicate trailing on the exchange
+            #   before the API's place call completes. Skipping lets the
+            #   API finish; if it rejects, status flips away from pending
+            #   and the next monitor tick can re-attempt.
+            #
+            # Issue #216 Phase A→B race window — see the
+            # `_TRAILING_SKIP_STATES` set below.
+            trailing_status = getattr(trade, "trailing_status", None)
+            trailing_is_busy = trailing_status in _TRAILING_SKIP_STATES
 
             if (
                 supports_native_trailing
                 and not trade.native_trailing_stop
-                and not user_cleared_trailing
+                and not trailing_is_busy
                 and self._strategy
                 and hasattr(self._strategy, '_p')
             ):
@@ -252,6 +270,16 @@ class PositionMonitorMixin:
                         except (json.JSONDecodeError, TypeError):
                             pass
 
+                    # Pass the user's trailing_atr_override straight into
+                    # should_exit so the software trailing loss path
+                    # computes the trigger from the override and not the
+                    # strategy default. Tight overrides (e.g. 1.0x) MUST
+                    # be honored on the loss side — if the position is
+                    # tight-trailing and the price drops past the override
+                    # trigger, we exit at loss. Reverting to the default
+                    # 2.5x would give back user-declared protection and
+                    # count as a Pattern A "probe-but-don't-write" on the
+                    # override. See #216 hotfix list + _try_place_native_trailing_stop.
                     should_close, exit_reason = await self._strategy.should_exit(
                         symbol=trade.symbol,
                         side=trade.side,

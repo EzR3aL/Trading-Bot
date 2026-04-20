@@ -909,7 +909,8 @@
     "slBelowCurrentPrice": "SL must be above current price",
     "tpBelowCurrentPrice": "TP must be above current price",
     "tpAboveCurrentPrice": "TP must be below current price",
-    "atrExplanation": "Higher ATR values give more room before the trailing stop triggers. 1.0x = tight (quick exit), 3.0x = standard, 5.0x = wide (more room)."
+    "atrExplanation": "Higher ATR values give more room before the trailing stop triggers. 1.0x = tight (quick exit), 3.0x = standard, 5.0x = wide (more room).",
+    "bitgetCallbackRounding": "Note: Bitget rounds the resulting callback to 0.01%. The actual active callback may differ slightly from your ATR value."
   },
   "common": {
     "loading": "Loading...",
