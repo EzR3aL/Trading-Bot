@@ -34,12 +34,11 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
 from src.bot.risk_state_manager import (
     RiskLeg,
-    RiskOpResult,
     RiskOpStatus,
     RiskStateManager,
     RiskStateSnapshot,
 )
-from src.exceptions import CancelFailed, OrderError
+from src.exceptions import OrderError
 from src.exchanges.base import PositionTpSlSnapshot, TrailingStopSnapshot
 from src.models.database import Base, TradeRecord, User
 

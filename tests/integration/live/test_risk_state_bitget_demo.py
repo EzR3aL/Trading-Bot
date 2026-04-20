@@ -26,10 +26,8 @@ See ``tests/integration/live/README.md`` for the full execution guide.
 from __future__ import annotations
 
 import asyncio
-import os
 import sys
 from pathlib import Path
-from unittest.mock import AsyncMock
 
 import pytest
 
@@ -45,7 +43,6 @@ from src.models.database import TradeRecord
 from src.models.session import get_session
 from tests.integration.live.conftest import (
     BITGET_LIVE_MARKER,
-    LIVE_TEST_SYMBOL,
     PRICE_TOLERANCE,
     READBACK_DELAY_SECONDS,
 )
@@ -704,7 +701,6 @@ async def test_B04_modify_tp_with_bad_price_preserves_original(
 
     first = await risk_manager.apply_intent(trade["trade_id"], RiskLeg.TP, tp_initial)
     assert first.status == RiskOpStatus.CONFIRMED
-    original_order_id = first.order_id
 
     second = await risk_manager.apply_intent(trade["trade_id"], RiskLeg.TP, bad_tp)
 

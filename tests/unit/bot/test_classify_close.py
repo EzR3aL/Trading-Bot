@@ -145,9 +145,12 @@ class FakeClassifierClient:
     close_calls: int = 0
 
     async def get_close_reason_from_history(
-        self, symbol: str, since_ts_ms: int,
+        self,
+        symbol: str,
+        since_ts_ms: int,
+        until_ts_ms: Optional[int] = None,
     ) -> Optional[CloseReasonSnapshot]:
-        self.probe_calls.append((symbol, since_ts_ms))
+        self.probe_calls.append((symbol, since_ts_ms, until_ts_ms))
         if self.probe_not_implemented:
             raise NotImplementedError(
                 "FakeClassifierClient simulates adapter without probe support",
