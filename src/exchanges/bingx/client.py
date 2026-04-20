@@ -1231,19 +1231,32 @@ class BingXClient(HTTPExchangeClientMixin, ExchangeClient):
         return None
 
     async def get_close_reason_from_history(
-        self, symbol: str, since_ts_ms: int
+        self,
+        symbol: str,
+        since_ts_ms: int,
+        until_ts_ms: Optional[int] = None,
     ) -> Optional[CloseReasonSnapshot]:
-        """Find the most recent close event for ``symbol`` since ``since_ts_ms``.
+        """Find the most recent close event for ``symbol`` in the time window.
 
-        Queries allOrders filtered by startTime, picks the newest FILLED
+        Queries allOrders filtered by startTime/endTime, picks the newest FILLED
         order that is either:
           * a triggered TP/SL/trailing conditional (TAKE_PROFIT_MARKET /
             STOP_MARKET / TRAILING_STOP_MARKET), or
           * a regular MARKET reduceOnly close.
+
+        ``endTime`` is required to avoid BingX silently truncating to the
+        default 7-day window, and ``limit=1000`` ensures we receive enough
+        rows even for very active accounts (was missing per issue #224).
         """
+        end_ts_ms = until_ts_ms if until_ts_ms is not None else int(time.time() * 1000)
         data = await self._request(
             "GET", ENDPOINTS["all_orders"],
-            params={"symbol": symbol, "startTime": str(since_ts_ms)},
+            params={
+                "symbol": symbol,
+                "startTime": str(since_ts_ms),
+                "endTime": str(end_ts_ms),
+                "limit": "1000",
+            },
         )
         orders = self._extract_bingx_orders(data)
         if not orders:

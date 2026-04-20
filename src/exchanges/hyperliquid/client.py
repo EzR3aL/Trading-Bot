@@ -1320,17 +1320,36 @@ class HyperliquidClient(ExchangeClient):
         return None
 
     async def get_close_reason_from_history(
-        self, symbol: str, since_ts_ms: int
+        self,
+        symbol: str,
+        since_ts_ms: int,
+        until_ts_ms: Optional[int] = None,
     ) -> Optional[CloseReasonSnapshot]:
-        """Find the most recent close fill for ``symbol`` since ``since_ts_ms``.
+        """Find the most recent close fill for ``symbol`` in the time window.
 
         Inspects ``user_fills`` and picks the newest reduce-only close fill.
         Hyperliquid encodes the close reason in the fill's ``dir`` field
         (e.g. "Close Long", "Close Short") plus a ``liquidation`` flag.
+
+        A transient SDK failure in ``user_fills`` is isolated so the outer
+        ``get_close_reason_from_history`` surface still returns ``None``
+        rather than bubbling — caller's heuristic fallback then runs
+        (Pattern C mitigation per #224).
+
+        ``until_ts_ms`` bounds the right end of the window for backfill
+        use; HL's ``user_fills`` has no server-side time filter, so the
+        bound is enforced client-side (per #221 pattern).
         """
         coin = self._normalize_symbol(symbol)
         address = (self.wallet_address or self._wallet.address).lower()
-        fills = await self._cb_call(self._info_exec.user_fills, address)
+        try:
+            fills = await self._cb_call(self._info_exec.user_fills, address)
+        except Exception as e:  # noqa: BLE001 — isolate probe failures per anti-pattern C
+            logger.warning(
+                "hyperliquid.close_reason_probe_failed coin=%s error=%s",
+                coin, e,
+            )
+            return None
         if not isinstance(fills, list):
             return None
 
@@ -1342,6 +1361,8 @@ class HyperliquidClient(ExchangeClient):
                 continue
             ts = _hl_int(fill.get("time"))
             if ts is not None and ts < since_ts_ms:
+                continue
+            if ts is not None and until_ts_ms is not None and ts > until_ts_ms:
                 continue
             direction = str(fill.get("dir") or "")
             # Close fills: "Close Long", "Close Short", "Liquidated Long", etc.
@@ -1358,9 +1379,12 @@ class HyperliquidClient(ExchangeClient):
             plan_type = "liquidation"
         elif fill.get("isTpsl") or fill.get("isPositionTpsl"):
             # HL marks TP/SL fills but doesn't distinguish TP vs SL at the
-            # fill level; callers must cross-reference the pre-close TP/SL
-            # snapshot to attribute which one triggered.
-            plan_type = "pos_profit"  # best-effort default — RiskStateManager can refine
+            # fill level. ``tpsl_ambiguous`` is a sentinel plan_type that
+            # tells RiskStateManager._classify_from_snapshot to try order-id
+            # matching (authoritative) first, then price-crossover against
+            # trade.take_profit / trade.stop_loss as a tiebreaker. See
+            # _PLAN_TYPE_TO_REASON for the mapping.
+            plan_type = "tpsl_ambiguous"
         else:
             plan_type = "manual"
 
@@ -1369,7 +1393,7 @@ class HyperliquidClient(ExchangeClient):
             symbol=coin,
             closed_by_order_id=str(fill.get("oid")) if fill.get("oid") is not None else None,
             closed_by_plan_type=plan_type,
-            closed_by_trigger_type="mark_price" if plan_type in ("pos_profit", "pos_loss") else None,
+            closed_by_trigger_type="mark_price" if plan_type in ("pos_profit", "pos_loss", "tpsl_ambiguous") else None,
             closed_at=_hl_ts_to_datetime(ts_ms),
             fill_price=_hl_float(fill.get("px")),
         )
