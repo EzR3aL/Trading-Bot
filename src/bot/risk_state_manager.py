@@ -75,6 +75,12 @@ logger = get_logger(__name__)
 # native trigger 5 minutes later is not misattributed.
 _STRATEGY_EXIT_WINDOW_SECONDS = 60
 
+# WS event types the RSM dispatches through :meth:`on_exchange_event` (#216).
+# Unknown strings are logged + no-op; never treated as a bug.
+_WS_RECOGNISED_EVENT_TYPES = frozenset(
+    {"plan_triggered", "order_filled", "position_closed"},
+)
+
 # Bitget-style plan_type → ExitReason mapping. Other exchanges normalize to
 # the same vocabulary in CloseReasonSnapshot.closed_by_plan_type so this map
 # is exchange-agnostic.
@@ -540,17 +546,109 @@ class RiskStateManager:
             last_synced_at=now,
         )
 
-    async def on_exchange_event(self, event: dict) -> None:
-        """Stub for Phase 2 WS push (#192). Currently logging-only."""
-        logger.info(
-            "risk_state.ws_event_received event=%s",
-            event,
-            extra={
-                "event_type": "risk_state",
-                "phase": "ws",
-                "outcome": "stub",
-            },
-        )
+    async def on_exchange_event(
+        self,
+        user_id: int,
+        exchange: str,
+        event_type: str,
+        payload: dict,
+    ) -> None:
+        """Push-mode entrypoint — dispatches a WS event to :meth:`reconcile` (#216).
+
+        Called by the :class:`WebSocketManager` each time an exchange WS
+        frame describes a trade-state change. For recognised event
+        types we look up every open trade matching
+        ``(user_id, exchange, symbol)`` and run a reconcile on each —
+        this is idempotent and keeps the DB aligned with whatever the
+        exchange just told us happened.
+
+        Recognised ``event_type`` values:
+
+        * ``"plan_triggered"`` — a TP/SL/trailing plan fired.
+        * ``"order_filled"``  — the trigger's child order executed.
+        * ``"position_closed"`` — the position the trade owned is now
+          flat on the exchange.
+
+        Unknown event types are logged at INFO level and otherwise
+        no-op; we never treat an unexpected frame as a bug.
+        """
+        symbol = (payload or {}).get("symbol")
+        if event_type not in _WS_RECOGNISED_EVENT_TYPES:
+            logger.info(
+                "risk_state.ws_event_unknown user=%s exchange=%s event=%s symbol=%s",
+                user_id, exchange, event_type, symbol,
+                extra={
+                    "event_type": "risk_state",
+                    "phase": "ws",
+                    "outcome": "unknown_event",
+                    "user_id": user_id,
+                    "exchange": exchange,
+                    "ws_event": event_type,
+                    "symbol": symbol,
+                },
+            )
+            return
+
+        if not symbol:
+            logger.info(
+                "risk_state.ws_event_no_symbol user=%s exchange=%s event=%s",
+                user_id, exchange, event_type,
+                extra={
+                    "event_type": "risk_state",
+                    "phase": "ws",
+                    "outcome": "no_symbol",
+                    "user_id": user_id,
+                    "exchange": exchange,
+                    "ws_event": event_type,
+                },
+            )
+            return
+
+        trade_ids = await self._open_trade_ids_for(user_id, exchange, symbol)
+        if not trade_ids:
+            logger.info(
+                "risk_state.ws_event_no_match user=%s exchange=%s symbol=%s event=%s",
+                user_id, exchange, symbol, event_type,
+                extra={
+                    "event_type": "risk_state",
+                    "phase": "ws",
+                    "outcome": "no_match",
+                    "user_id": user_id,
+                    "exchange": exchange,
+                    "symbol": symbol,
+                    "ws_event": event_type,
+                },
+            )
+            return
+
+        for trade_id in trade_ids:
+            try:
+                await self.reconcile(trade_id)
+            except Exception as e:  # noqa: BLE001 — never let one bad trade kill dispatch
+                logger.warning(
+                    "risk_state.ws_reconcile_failed trade=%s event=%s error=%s",
+                    trade_id, event_type, e,
+                )
+
+    async def _open_trade_ids_for(
+        self,
+        user_id: int,
+        exchange: str,
+        symbol: str,
+    ) -> list[int]:
+        """Return every open trade id for the ``(user, exchange, symbol)`` triple."""
+        from sqlalchemy import select  # local import — keeps module top clean
+
+        async with self._session_factory() as session:
+            result = await session.execute(
+                select(TradeRecord.id).where(
+                    TradeRecord.user_id == user_id,
+                    TradeRecord.exchange == exchange,
+                    TradeRecord.symbol == symbol,
+                    TradeRecord.status == "open",
+                )
+            )
+            return [row[0] for row in result.all()]
 
     def note_strategy_exit(self, trade_id: int) -> None:
         """Record that ``trade_id`` was just closed by an internal strategy signal.
