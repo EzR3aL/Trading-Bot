@@ -404,3 +404,78 @@ async def test_manual_close_maps_order_source_to_plan_type(client):
     assert snap is not None
     assert snap.closed_by_plan_type == "pos_loss"
     assert snap.closed_by_order_id == "sl-fill"
+
+
+@pytest.mark.asyncio
+async def test_manual_close_maps_move_market_to_moving_plan(client):
+    """orderSource=move_market (Bitget demo trailing spelling) → moving_plan (issue #221)."""
+
+    async def mock_request(method, endpoint, **kwargs):
+        if "orders-plan-history" in endpoint:
+            return {"entrustedList": []}
+        return {
+            "entrustedList": [
+                {
+                    "orderId": "trail-fill",
+                    "tradeSide": "close",
+                    "orderType": "market",
+                    "status": "filled",
+                    "priceAvg": "2277.0",
+                    "orderSource": "move_market",
+                    "uTime": "1710002000000",
+                },
+            ],
+        }
+
+    client._request = AsyncMock(side_effect=mock_request)
+
+    snap = await client.get_close_reason_from_history("ETHUSDT", since_ts_ms=1700000000000)
+
+    assert snap is not None
+    assert snap.closed_by_plan_type == "moving_plan"
+
+
+@pytest.mark.asyncio
+async def test_plan_close_filters_by_until_ts_ms(client):
+    """Rows with uTime past until_ts_ms are filtered client-side (issue #221).
+
+    Bitget v2 orders-plan-history ignores the endTime param in the response —
+    without client-side filtering, a newer close on the same symbol leaks
+    into an older trade's backfill lookup.
+    """
+
+    async def mock_request(method, endpoint, **kwargs):
+        if "orders-plan-history" in endpoint:
+            return {
+                "entrustedList": [
+                    # Past the until window — must be filtered out.
+                    {
+                        "orderId": "too-new",
+                        "executeOrderId": "too-new-fill",
+                        "planType": "pos_loss",
+                        "planStatus": "executed",
+                        "executePrice": "9999",
+                        "uTime": "1710099999999",
+                    },
+                    # Inside the until window — must be picked.
+                    {
+                        "orderId": "in-window",
+                        "executeOrderId": "in-window-fill",
+                        "planType": "moving_plan",
+                        "planStatus": "executed",
+                        "executePrice": "2277",
+                        "uTime": "1710002000000",
+                    },
+                ],
+            }
+        return {"entrustedList": []}
+
+    client._request = AsyncMock(side_effect=mock_request)
+
+    snap = await client.get_close_reason_from_history(
+        "ETHUSDT", since_ts_ms=1700000000000, until_ts_ms=1710005000000,
+    )
+
+    assert snap is not None
+    assert snap.closed_by_plan_type == "moving_plan"
+    assert snap.closed_by_order_id == "in-window-fill"

@@ -69,7 +69,12 @@ _STRATEGY_EXIT_WINDOW_SECONDS = 60
 # the same vocabulary in CloseReasonSnapshot.closed_by_plan_type so this map
 # is exchange-agnostic.
 _PLAN_TYPE_TO_REASON: Dict[str, str] = {
+    # Bitget's orders-plan-history responds with ``moving_plan`` for native
+    # trailing stops; older docs and some adapters use ``track_plan`` for
+    # the same concept. Accept both so every source speaks one classifier
+    # vocabulary.
     "track_plan": ExitReason.TRAILING_STOP_NATIVE.value,
+    "moving_plan": ExitReason.TRAILING_STOP_NATIVE.value,
     "pos_profit": ExitReason.TAKE_PROFIT_NATIVE.value,
     "pos_loss": ExitReason.STOP_LOSS_NATIVE.value,
     "liquidation": ExitReason.LIQUIDATION.value,
@@ -556,8 +561,12 @@ class RiskStateManager:
             self._strategy_exit_marks.pop(trade_id, None)
             return ExitReason.STRATEGY_EXIT.value
 
-        # 2) Probe the exchange for the actual close event.
-        snap, probe_method = await self._probe_close_reason(trade)
+        # 2) Probe the exchange for the actual close event. Bound the
+        # right end of the lookup window by exit_time + a small grace
+        # window so backfilled reclassification of historical trades does
+        # not pick up a newer close on the same symbol.
+        until_ms = int(exit_time.timestamp() * 1000) + 60_000
+        snap, probe_method = await self._probe_close_reason(trade, until_ms=until_ms)
 
         if probe_method == "heuristic_fallback":
             reason = self._classify_heuristic(trade, exit_price)
@@ -659,7 +668,7 @@ class RiskStateManager:
             }
 
     async def _probe_close_reason(
-        self, trade: dict,
+        self, trade: dict, until_ms: Optional[int] = None,
     ) -> Tuple[Optional[CloseReasonSnapshot], str]:
         """Ask the exchange for the most recent close event.
 
@@ -688,7 +697,7 @@ class RiskStateManager:
 
         try:
             snap = await client.get_close_reason_from_history(
-                trade["symbol"], since_ms,
+                trade["symbol"], since_ms, until_ms,
             )
             return snap, "history_match"
         except NotImplementedError:

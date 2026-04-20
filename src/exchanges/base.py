@@ -327,9 +327,17 @@ class ExchangeClient(ABC):
         )
 
     async def get_close_reason_from_history(
-        self, symbol: str, since_ts_ms: int
+        self,
+        symbol: str,
+        since_ts_ms: int,
+        until_ts_ms: Optional[int] = None,
     ) -> Optional["CloseReasonSnapshot"]:
-        """Return the most recent close event for ``symbol`` since ``since_ts_ms``.
+        """Return the most recent close event for ``symbol`` in ``[since_ts_ms, until_ts_ms]``.
+
+        When ``until_ts_ms`` is ``None``, implementations default to "now".
+        A bounded upper end is important for backfilling historical trades,
+        where newer closes on the same symbol would otherwise leak into an
+        older trade's lookup and produce a misattribution.
 
         Returns ``None`` when no qualifying close was found. Used by
         RiskStateManager to attribute closes to TP/SL/trailing/manual.

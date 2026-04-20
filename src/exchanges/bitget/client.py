@@ -1077,9 +1077,12 @@ class BitgetExchangeClient(HTTPExchangeClientMixin, ExchangeClient):
         )
 
     async def get_close_reason_from_history(
-        self, symbol: str, since_ts_ms: int
+        self,
+        symbol: str,
+        since_ts_ms: int,
+        until_ts_ms: Optional[int] = None,
     ) -> Optional[CloseReasonSnapshot]:
-        """Find the most recent close event for ``symbol`` since ``since_ts_ms``.
+        """Find the most recent close event for ``symbol`` in the time window.
 
         Searches:
           1. orders-plan-history for triggered TP/SL/trailing plans
@@ -1090,12 +1093,19 @@ class BitgetExchangeClient(HTTPExchangeClientMixin, ExchangeClient):
         qualifies. A failure on one source does not suppress the other — a
         triggered SL found via plan-history must not be hidden because the
         manual-close endpoint returned an error (or vice versa).
+
+        ``until_ts_ms`` bounds the window on the right; when absent we look
+        up to "now". Bounding is essential for backfilling historical trades
+        so that a newer close on the same symbol does not leak into an older
+        trade's lookup.
         """
         plan_event: Optional[CloseReasonSnapshot] = None
         manual_event: Optional[CloseReasonSnapshot] = None
 
         try:
-            plan_event = await self._fetch_bitget_plan_close(symbol, since_ts_ms)
+            plan_event = await self._fetch_bitget_plan_close(
+                symbol, since_ts_ms, until_ts_ms,
+            )
         except ExchangeError as e:
             logger.warning(
                 "bitget.plan_close_probe_failed symbol=%s error=%s",
@@ -1103,7 +1113,9 @@ class BitgetExchangeClient(HTTPExchangeClientMixin, ExchangeClient):
             )
 
         try:
-            manual_event = await self._fetch_bitget_manual_close(symbol, since_ts_ms)
+            manual_event = await self._fetch_bitget_manual_close(
+                symbol, since_ts_ms, until_ts_ms,
+            )
         except ExchangeError as e:
             logger.warning(
                 "bitget.manual_close_probe_failed symbol=%s error=%s",
@@ -1122,9 +1134,12 @@ class BitgetExchangeClient(HTTPExchangeClientMixin, ExchangeClient):
         return candidates[0]
 
     async def _fetch_bitget_plan_close(
-        self, symbol: str, since_ts_ms: int
+        self,
+        symbol: str,
+        since_ts_ms: int,
+        until_ts_ms: Optional[int] = None,
     ) -> Optional[CloseReasonSnapshot]:
-        """Find the newest triggered TP/SL/trailing plan since ``since_ts_ms``.
+        """Find the newest triggered TP/SL/trailing plan in the time window.
 
         Bitget v2 ``/api/v2/mix/order/orders-plan-history`` requires both
         ``planType`` and a closed ``startTime``/``endTime`` range. We use
@@ -1135,7 +1150,7 @@ class BitgetExchangeClient(HTTPExchangeClientMixin, ExchangeClient):
         ``cancelled``. The legacy ``triggered`` string is kept as a fallback
         in case Bitget re-labels a subset of plan types later.
         """
-        end_ts_ms = int(time.time() * 1000)
+        end_ts_ms = until_ts_ms if until_ts_ms is not None else int(time.time() * 1000)
         payload = await self._request(
             "GET",
             "/api/v2/mix/order/orders-plan-history",
@@ -1149,10 +1164,15 @@ class BitgetExchangeClient(HTTPExchangeClientMixin, ExchangeClient):
             auth=True,
         )
         plans = self._bitget_plans(payload)
+        # Bitget v2 orders-plan-history honors startTime for filtering but
+        # not endTime — rows with uTime > endTime still appear in the
+        # response. Filter client-side so backfilling an old trade does not
+        # pick up a newer close on the same symbol.
         executed = [
             p for p in plans
             if (p.get("planStatus") or p.get("state") or "").lower()
             in {"executed", "triggered"}
+            and int(p.get("uTime") or p.get("updateTime") or p.get("cTime") or 0) <= end_ts_ms
         ]
         if not executed:
             return None
@@ -1179,9 +1199,12 @@ class BitgetExchangeClient(HTTPExchangeClientMixin, ExchangeClient):
         )
 
     async def _fetch_bitget_manual_close(
-        self, symbol: str, since_ts_ms: int
+        self,
+        symbol: str,
+        since_ts_ms: int,
+        until_ts_ms: Optional[int] = None,
     ) -> Optional[CloseReasonSnapshot]:
-        """Find the newest filled reduce-only market close since ``since_ts_ms``.
+        """Find the newest filled reduce-only market close in the time window.
 
         Bitget's ``orders-history`` response encodes the trigger source in
         ``orderSource`` — e.g. ``pos_loss_market``, ``pos_profit_market``,
@@ -1191,7 +1214,7 @@ class BitgetExchangeClient(HTTPExchangeClientMixin, ExchangeClient):
         ``orders-plan-history`` missed the row (edge cases such as
         plans that execute but get GC'd from the plan-history before we probe).
         """
-        end_ts_ms = int(time.time() * 1000)
+        end_ts_ms = until_ts_ms if until_ts_ms is not None else int(time.time() * 1000)
         payload = await self._request(
             "GET",
             ENDPOINTS["orders_history"],
@@ -1212,8 +1235,14 @@ class BitgetExchangeClient(HTTPExchangeClientMixin, ExchangeClient):
 
         # Order history is returned newest-first, but be explicit: sort by
         # uTime descending so the first match wins regardless of upstream order.
+        # Also enforce end-of-window client-side — Bitget's endTime param is
+        # advisory and the response may include rows past it.
         sorted_orders = sorted(
-            (o for o in orders if isinstance(o, dict)),
+            (
+                o for o in orders
+                if isinstance(o, dict)
+                and int(o.get("uTime") or o.get("cTime") or 0) <= end_ts_ms
+            ),
             key=lambda o: int(o.get("uTime") or o.get("cTime") or 0),
             reverse=True,
         )
@@ -1286,7 +1315,14 @@ def _ts_to_datetime(ts_ms: Optional[int]) -> Optional[datetime]:
 _BITGET_ORDER_SOURCE_PREFIXES: tuple[tuple[str, str], ...] = (
     ("pos_loss", "pos_loss"),
     ("pos_profit", "pos_profit"),
-    ("track_plan", "track_plan"),
+    # Bitget emits the trigger origin for native trailings as one of
+    # ``track_plan_*`` (docs), ``moving_plan_*``, or the abbreviated
+    # ``move_*`` (observed on demo accounts — e.g. ``move_market``).
+    # Map all three to the same canonical plan_type so the classifier
+    # produces TRAILING_STOP_NATIVE regardless of Bitget's spelling.
+    ("track_plan", "moving_plan"),
+    ("moving_plan", "moving_plan"),
+    ("move_", "moving_plan"),
     ("normal_plan", "normal_plan"),
     ("liquidation", "liquidation"),
 )
