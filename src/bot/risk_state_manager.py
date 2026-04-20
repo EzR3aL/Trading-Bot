@@ -57,6 +57,11 @@ from src.exchanges.base import (
 )
 from src.models.database import TradeRecord
 from src.utils.logger import get_logger
+from src.utils.metrics import (
+    DRIFT_FIELDS,
+    record_drift,
+    record_intent_duration,
+)
 
 logger = get_logger(__name__)
 
@@ -201,6 +206,36 @@ class RiskStateManager:
         programmer errors (e.g. unknown ``leg`` value).
         """
         start = time.perf_counter()
+        # Label slot mutated by the impl as soon as we know the exchange.
+        # Using a single-element list keeps it thread-safe across tasks
+        # (we never share the list — each call gets its own).
+        exchange_label: list[str] = ["unknown"]
+        result: Optional[RiskOpResult] = None
+        try:
+            result = await self._apply_intent_impl(
+                trade_id, leg, value, start, exchange_label,
+            )
+            return result
+        finally:
+            outcome = (
+                result.status.value if result is not None else "error"
+            )
+            record_intent_duration(
+                exchange=exchange_label[0],
+                leg=leg.value,
+                outcome=outcome,
+                duration_seconds=time.perf_counter() - start,
+            )
+
+    async def _apply_intent_impl(
+        self,
+        trade_id: int,
+        leg: RiskLeg,
+        value: Any,
+        start: float,
+        exchange_label: list[str],
+    ) -> RiskOpResult:
+        """Original 2PC body — split out so ``apply_intent`` can time it."""
         lock = self._get_lock(trade_id, leg)
         async with lock:
             # Phase A: write intent → PENDING
@@ -215,6 +250,7 @@ class RiskStateManager:
 
             user_id = trade["user_id"]
             exchange = trade["exchange"]
+            exchange_label[0] = exchange
             demo_mode = trade["demo_mode"]
             symbol = trade["symbol"]
             side = trade["side"]
@@ -385,6 +421,12 @@ class RiskStateManager:
             if db_trade is None:  # pragma: no cover — row vanished mid-reconcile
                 raise ValueError(f"trade {trade_id} vanished during reconcile")
 
+            # Snapshot DB values before the reconcile rewrite so we can
+            # emit ``risk_sync_drift_total`` per field that actually moved.
+            before = {
+                name: getattr(db_trade, name, None) for name in DRIFT_FIELDS
+            }
+
             if tp_sl_snapshot is not None:
                 db_trade.take_profit = tp_sl_snapshot.tp_price
                 db_trade.tp_order_id = tp_sl_snapshot.tp_order_id
@@ -422,6 +464,17 @@ class RiskStateManager:
                 risk_source = _RISK_SOURCE_SOFTWARE
             db_trade.risk_source = risk_source
             db_trade.last_synced_at = now
+
+            # Emit drift counter per field the reconcile actually rewrote.
+            # Only counts when DB and exchange disagreed; last_synced_at is
+            # intentionally excluded (it's a bookkeeping column, not drift).
+            changed = [
+                name for name in DRIFT_FIELDS
+                if getattr(db_trade, name, None) != before[name]
+            ]
+            if changed:
+                record_drift(changed)
+
             await session.commit()
 
         tp_dict = (

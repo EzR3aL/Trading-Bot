@@ -33,6 +33,7 @@ from src.exchanges.bitget.constants import (
 from src.exchanges.types import Balance, FundingRateInfo, Order, Position, Ticker
 from src.utils.circuit_breaker import circuit_registry
 from src.utils.logger import get_logger
+from src.utils.metrics import record_reject
 
 logger = get_logger(__name__)
 
@@ -121,10 +122,12 @@ class BitgetExchangeClient(HTTPExchangeClientMixin, ExchangeClient):
     def _parse_response(self, result: Any, response: aiohttp.ClientResponse) -> Any:
         """Parse Bitget API response — checks HTTP status and code field."""
         if response.status != 200:
+            record_reject("bitget", "http_status")
             raise BitgetClientError(
                 f"API Error: {result.get('msg', 'Unknown error')}"
             )
         if result.get("code") != SUCCESS_CODE:
+            record_reject("bitget", "error_code")
             raise BitgetClientError(
                 f"Bitget Error: {result.get('msg', 'Unknown error')}"
             )
