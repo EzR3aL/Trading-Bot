@@ -202,6 +202,12 @@ async def lifespan(app: FastAPI):
     await telegram_poller.start()
     app.state.telegram_poller = telegram_poller
 
+    # Optional: automatic bug-detection audit scheduler (#216 Section 2.4).
+    # Opt-in via AUTO_AUDIT_ENABLED=true so the default deployment is
+    # unchanged until the ops team explicitly turns it on.
+    from src.bot.audit_scheduler import build_and_start_if_enabled
+    app.state.audit_scheduler = await build_and_start_if_enabled()
+
     logger.info("Application started successfully")
     yield
 
@@ -210,6 +216,12 @@ async def lifespan(app: FastAPI):
     await telegram_poller.stop()
     auth_code_store.stop_cleanup()
     collector_task.cancel()
+
+    # Stop the audit scheduler before the DB closes so in-flight
+    # audit reports can still finish their writes.
+    audit_scheduler = getattr(app.state, "audit_scheduler", None)
+    if audit_scheduler is not None:
+        await audit_scheduler.shutdown()
 
     # Graceful bot shutdown: wait for in-flight trades, log open positions.
     # Total timeout of 25s leaves margin within Docker's 30s stop_grace_period.
