@@ -7,6 +7,7 @@ import { queryClient } from './api/queryClient'
 import AppLayout from './components/layout/AppLayout'
 import ToastContainer from './components/ui/Toast'
 import ErrorBoundary from './components/ui/ErrorBoundary'
+import RouteErrorBoundary from './components/ui/RouteErrorBoundary'
 import Login from './pages/Login'
 import AuthCallback from './pages/AuthCallback'
 
@@ -65,8 +66,8 @@ export default function App() {
     <ErrorBoundary>
       <ToastContainer />
       <Routes>
-        <Route path="/login" element={<Login />} />
-        <Route path="/auth/callback" element={<AuthCallback />} />
+        <Route path="/login" element={<RouteErrorBoundary><Login /></RouteErrorBoundary>} />
+        <Route path="/auth/callback" element={<RouteErrorBoundary><AuthCallback /></RouteErrorBoundary>} />
         <Route
           path="/*"
           element={
@@ -74,23 +75,23 @@ export default function App() {
               <AppLayout>
                 <Suspense fallback={<PageLoader />}>
                   <Routes>
-                    <Route path="/" element={<Dashboard />} />
-                    <Route path="/portfolio" element={<Portfolio />} />
-                    <Route path="/trades" element={<Trades />} />
-                    <Route path="/settings" element={<Settings />} />
-                    <Route path="/bots" element={<Bots />} />
-                    <Route path="/performance" element={<BotPerformance />} />
-                    <Route path="/tax-report" element={<TaxReport />} />
-                    <Route path="/guide" element={<GettingStarted />} />
+                    <Route path="/" element={<RouteErrorBoundary><Dashboard /></RouteErrorBoundary>} />
+                    <Route path="/portfolio" element={<RouteErrorBoundary><Portfolio /></RouteErrorBoundary>} />
+                    <Route path="/trades" element={<RouteErrorBoundary><Trades /></RouteErrorBoundary>} />
+                    <Route path="/settings" element={<RouteErrorBoundary><Settings /></RouteErrorBoundary>} />
+                    <Route path="/bots" element={<RouteErrorBoundary><Bots /></RouteErrorBoundary>} />
+                    <Route path="/performance" element={<RouteErrorBoundary><BotPerformance /></RouteErrorBoundary>} />
+                    <Route path="/tax-report" element={<RouteErrorBoundary><TaxReport /></RouteErrorBoundary>} />
+                    <Route path="/guide" element={<RouteErrorBoundary><GettingStarted /></RouteErrorBoundary>} />
                     <Route
                       path="/admin"
                       element={
                         <AdminRoute>
-                          <Admin />
+                          <RouteErrorBoundary><Admin /></RouteErrorBoundary>
                         </AdminRoute>
                       }
                     />
-<Route path="*" element={<NotFound />} />
+                    <Route path="*" element={<RouteErrorBoundary><NotFound /></RouteErrorBoundary>} />
                   </Routes>
                 </Suspense>
               </AppLayout>

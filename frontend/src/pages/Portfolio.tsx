@@ -11,6 +11,7 @@ import {
   ChevronUp, ChevronDown, ChevronRight, ShieldCheck, Settings,
 } from 'lucide-react'
 import { usePortfolioSummary, usePortfolioDaily, usePortfolioPositions, usePortfolioAllocation, useUpdateTpSl, queryKeys } from '../api/queries'
+import { getApiErrorMessage } from '../utils/api-error'
 import { useFilterStore } from '../stores/filterStore'
 import { ExchangeIcon } from '../components/ui/ExchangeLogo'
 import type { PortfolioPosition } from '../types'
@@ -22,6 +23,7 @@ import { useThemeStore } from '../stores/themeStore'
 import useIsMobile from '../hooks/useIsMobile'
 import usePullToRefresh from '../hooks/usePullToRefresh'
 import { useTradesSSE } from '../hooks/useTradesSSE'
+import { useVisibleTab } from '../hooks/useIntervalPaused'
 import PullToRefreshIndicator from '../components/ui/PullToRefreshIndicator'
 import GuidedTour, { TourHelpButton, type TourStep } from '../components/ui/GuidedTour'
 
@@ -96,8 +98,10 @@ export default function Portfolio() {
 
   // Real-time trade updates via SSE (Issue #216 §2.2). Replaces the previous
   // 5-second polling loop; falls back to polling automatically if the
-  // EventSource connection fails.
-  useTradesSSE()
+  // EventSource connection fails. Paused while the tab is backgrounded so
+  // we don't keep hammering the API for a user who isn't looking (UX-M9).
+  const tabVisible = useVisibleTab()
+  useTradesSSE({ enabled: tabVisible })
 
   const error = summaryError ? t('common.error') : ''
 
@@ -220,7 +224,26 @@ export default function Portfolio() {
     return Array.from(byName.values())
   })()
 
-  /* ── Loading State ──────────────────────────────────────── */
+  /* ── Error / Loading State ──────────────────────────────── */
+
+  // Show error state BEFORE skeleton so users see real errors instead of an
+  // eternal spinner when the backend is unreachable.
+  if (summaryError) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[40vh] gap-4 px-4 text-center">
+        <div role="alert" className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-sm max-w-md">
+          {getApiErrorMessage(summaryError, t('common.error'))}
+        </div>
+        <button
+          type="button"
+          onClick={() => { void refreshData() }}
+          className="px-4 py-2 text-sm rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20 transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500"
+        >
+          {t('common.retry', 'Retry')}
+        </button>
+      </div>
+    )
+  }
 
   if (loading) {
     return (
