@@ -83,6 +83,7 @@
     "noTradesTitle": "No trades found",
     "noTradesHint": "Completed trades will appear here. Start a bot to begin trading.",
     "reset": "Reset",
+    "clearAllFilters": "Clear all filters",
     "trailingStop": "Trailing Stop",
     "trailingStopProtecting": "Protecting profit",
     "trailingDistance": "Distance",
@@ -494,6 +495,9 @@
     "start": "Start",
     "stop": "Stop",
     "confirmStop": "Confirm Stop?",
+    "stopBot": "Stop Bot",
+    "confirmStopMessage": "Stop \"{{name}}\"? The bot will not open new trades.",
+    "confirmStopMessageWithOpen": "Stop \"{{name}}\"? It has {{count}} open position(s) that will NOT be closed automatically.",
     "restart": "Restart",
     "edit": "Edit",
     "delete": "Delete",
@@ -775,7 +779,15 @@
       "marginModeHintCross": "Cross: Margin is shared across all positions.",
       "marginModeHintIsolated": "Isolated: Each position has its own margin budget.",
       "demoNotSupported": "This exchange does not offer demo trading",
-      "demoNotSupportedHint": "This exchange does not support paper/demo trading. Please use live mode."
+      "demoNotSupportedHint": "This exchange does not support paper/demo trading. Please use live mode.",
+      "startShort": "Start",
+      "riskReAckReason": "You raised this bot's risk profile. Please re-confirm the risk disclaimer before saving the changes.",
+      "discordTestMissingUrl": "Please enter a Discord webhook URL first.",
+      "discordTestSent": "Test message sent to Discord.",
+      "discordTestFailed": "Discord test failed.",
+      "telegramTestMissingCredentials": "Please enter the bot token and chat ID first.",
+      "telegramTestSent": "Test message sent to Telegram.",
+      "telegramTestFailed": "Telegram test failed."
     }
   },
   "botDetail": {
@@ -872,6 +884,9 @@
     "builderFeePrompt": "Approve the builder fee to activate trading:",
     "builderWalletHint": "Important: The builder wallet requires a minimum balance of 100 USDC for trades to be executed.",
     "setupRequired": "Please set up Hyperliquid in Settings first.",
+    "setupRequiredTitle": "Hyperliquid Setup Required",
+    "setupRequiredMessage": "This bot cannot be started until Hyperliquid builder fee approval and referral verification are complete. Open Settings to finish the setup.",
+    "goToSettings": "Go to Settings",
     "pendingSteps": "{{count}} step(s) pending",
     "gateWarningTitle": "Setup required:",
     "gateWarningText": "Hyperliquid referral or builder fee not yet completed. Please finish the setup in Settings.",
@@ -890,6 +905,12 @@
     "enterCodeStep2": "Click 'Enter Code' and enter {{code}}",
     "enterCodeStep3": "Then click 'Verify now' here again",
     "wrongReferrerHint": "Hyperliquid does not allow changing the referrer after the fact. You can create a new wallet and register via our link if you want the discount."
+  },
+  "hyperliquid": {
+    "setup": {
+      "pollingStatus": "Checking on-chain status… ({{seconds}}s)",
+      "pollTimeout": "Approval did not land on-chain within 30s. Please try again."
+    }
   },
   "editPosition": {
     "title": "Edit Position",
@@ -935,11 +956,14 @@
     "net": "Net",
     "errorBoundaryTitle": "Something went wrong",
     "tryAgain": "Try again",
+    "retry": "Retry",
     "saveFailed": "Save failed",
     "noInternet": "No internet connection",
     "apiUnreachable": "API server temporarily unreachable",
     "loadError": "Failed to load data. Please try again.",
-    "sessionExpired": "Session expired. Redirecting to login..."
+    "sessionExpired": "Session expired. Redirecting to login...",
+    "goToDashboard": "Go to Dashboard",
+    "errorBoundaryGeneric": "An unexpected error occurred."
   },
   "admin": {
     "users": "Users",

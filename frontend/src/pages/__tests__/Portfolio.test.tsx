@@ -248,7 +248,7 @@ describe('Portfolio Page', () => {
     render(<Portfolio />, { wrapper: QueryWrapper })
 
     await waitFor(() => {
-      expect(screen.getByText('An error occurred')).toBeInTheDocument()
+      expect(screen.getByText('Network error')).toBeInTheDocument()
     })
   })
 

@@ -1,10 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
-import { MemoryRouter } from 'react-router-dom'
+import { render, screen, waitFor, act, fireEvent } from '@testing-library/react'
+import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import Trades from '../Trades'
 
-const mockT = (key: string) => {
+const mockT = (key: string, opts?: { defaultValue?: string }) => {
   const translations: Record<string, string> = {
     'trades.title': 'Trades',
     'trades.allStatuses': 'All Statuses',
@@ -20,12 +20,13 @@ const mockT = (key: string) => {
     'trades.dateFrom': 'From',
     'trades.dateTo': 'To',
     'trades.reset': 'Reset',
+    'trades.clearAllFilters': 'Clear all filters',
     'trades.noTradesTitle': 'No trades found',
     'trades.noTradesHint': 'Trades will appear here once your bots execute them',
     'common.error': 'An error occurred',
     'common.loadError': 'Failed to load data',
   }
-  return translations[key] || key
+  return translations[key] || opts?.defaultValue || key
 }
 
 vi.mock('react-i18next', () => ({
@@ -35,6 +36,7 @@ vi.mock('react-i18next', () => ({
 // Mock React Query hooks
 const mockUseTrades = vi.fn()
 const mockUseSyncTrades = vi.fn()
+const mockUseTradesFilterOptions = vi.fn()
 
 vi.mock('../../api/queries', () => ({
   useTrades: (...args: unknown[]) => mockUseTrades(...args),
@@ -42,6 +44,10 @@ vi.mock('../../api/queries', () => ({
   queryKeys: {
     trades: { all: ['trades'] },
   },
+}))
+
+vi.mock('../../hooks/useTradesFilterOptions', () => ({
+  useTradesFilterOptions: () => mockUseTradesFilterOptions(),
 }))
 
 vi.mock('../../api/client', () => ({
@@ -57,11 +63,6 @@ vi.mock('../../api/client', () => ({
   clearTokenExpiry: vi.fn(),
 }))
 
-vi.mock('react-router-dom', async () => {
-  const actual = await vi.importActual('react-router-dom')
-  return { ...actual, useNavigate: () => vi.fn() }
-})
-
 vi.mock('../../components/ui/ExchangeLogo', () => ({
   ExchangeIcon: ({ exchange }: { exchange: string }) => <span>{exchange}</span>,
 }))
@@ -75,27 +76,51 @@ vi.mock('../../components/ui/ExitReasonBadge', () => ({
   default: () => <span />,
 }))
 vi.mock('../../components/ui/Pagination', () => ({
-  default: ({ page, totalPages }: any) => (
+  default: ({ page, totalPages }: { page: number; totalPages: number }) => (
     <div data-testid="pagination">
       <span>Page {page} of {totalPages}</span>
     </div>
   ),
 }))
 vi.mock('../../components/ui/DatePicker', () => ({
-  default: () => <input data-testid="date-picker" />,
+  default: ({ value, onChange, label }: { value: string; onChange: (v: string) => void; label: string }) => (
+    <input
+      data-testid={`date-picker-${label}`}
+      aria-label={label}
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+    />
+  ),
 }))
+interface FilterDropdownOption { value: string; label: string }
 vi.mock('../../components/ui/FilterDropdown', () => ({
-  default: ({ value, onChange, ariaLabel, options }: any) => (
-    <select aria-label={ariaLabel} value={value} onChange={(e: any) => onChange(e.target.value)}>
-      {options.map((o: any) => <option key={o.value} value={o.value}>{o.label}</option>)}
+  default: ({
+    value,
+    onChange,
+    ariaLabel,
+    options,
+  }: {
+    value: string
+    onChange: (v: string) => void
+    ariaLabel: string
+    options: FilterDropdownOption[]
+  }) => (
+    <select
+      aria-label={ariaLabel}
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+    >
+      {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
     </select>
   ),
 }))
 vi.mock('../../components/ui/MobileTradeCard', () => ({
-  default: ({ trade }: any) => <div data-testid={`trade-${trade.id}`}>{trade.symbol}</div>,
+  default: ({ trade }: { trade: { id: number; symbol: string } }) => (
+    <div data-testid={`trade-${trade.id}`}>{trade.symbol}</div>
+  ),
 }))
 vi.mock('../../components/ui/SizeValue', () => ({
-  default: ({ children }: any) => <span>{children}</span>,
+  default: ({ children }: { children?: React.ReactNode }) => <span>{children}</span>,
 }))
 vi.mock('../../components/ui/PullToRefreshIndicator', () => ({
   default: () => null,
@@ -134,13 +159,28 @@ const makeTrade = (id: number, symbol: string) => ({
   bot_exchange: 'bitget',
 })
 
-function createWrapper() {
+// ── Location spy helper ───────────────────────────────────────────
+// Renders a tiny sidecar that exposes the current URL so tests can
+// assert on query-param updates without guessing at navigation APIs.
+let currentSearch = ''
+function LocationProbe() {
+  const loc = useLocation()
+  currentSearch = loc.search
+  return null
+}
+
+function createWrapper(initialEntries: string[] = ['/trades']) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   })
   return ({ children }: { children: React.ReactNode }) => (
     <QueryClientProvider client={queryClient}>
-      <MemoryRouter>{children}</MemoryRouter>
+      <MemoryRouter initialEntries={initialEntries}>
+        <LocationProbe />
+        <Routes>
+          <Route path="/trades" element={children} />
+        </Routes>
+      </MemoryRouter>
     </QueryClientProvider>
   )
 }
@@ -148,10 +188,22 @@ function createWrapper() {
 describe('Trades Page', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    currentSearch = ''
 
-    // Default sync mutation
     mockUseSyncTrades.mockReturnValue({
       mutate: (_: unknown, opts?: { onSettled?: () => void }) => opts?.onSettled?.(),
+    })
+    mockUseTradesFilterOptions.mockReturnValue({
+      data: {
+        symbols: ['BTCUSDT', 'ETHUSDT', 'SOLUSDT'],
+        bots: [
+          { id: 1, name: 'BTC Edge' },
+          { id: 2, name: 'ETH Hunter' },
+        ],
+        exchanges: ['bitget', 'hyperliquid'],
+        statuses: ['open', 'closed', 'cancelled'],
+      },
+      isLoading: false,
     })
   })
 
@@ -215,5 +267,124 @@ describe('Trades Page', () => {
     await waitFor(() => {
       expect(screen.getByText('Trades')).toBeInTheDocument()
     })
+  })
+
+  // ── New behavior: URL-driven filter state ────────────────────────
+
+  it('should hydrate filter controls from URL search params on mount', async () => {
+    mockUseTrades.mockReturnValue({ data: { trades: [], total: 0 }, isLoading: false, error: null })
+
+    render(<Trades />, {
+      wrapper: createWrapper(['/trades?symbol=BTCUSDT&status=open&exchange=bitget']),
+    })
+
+    await waitFor(() => {
+      const statusSelect = screen.getByLabelText('Status') as HTMLSelectElement
+      expect(statusSelect.value).toBe('open')
+
+      const symbolInput = screen.getByLabelText('Symbol') as HTMLInputElement
+      expect(symbolInput.value).toBe('BTCUSDT')
+
+      const exchangeSelect = screen.getByLabelText('Exchange') as HTMLSelectElement
+      expect(exchangeSelect.value).toBe('bitget')
+    })
+
+    // The useTrades query must receive URL-derived filters, not stale local state.
+    const lastCall = mockUseTrades.mock.calls.at(-1)?.[0] as Record<string, unknown>
+    expect(lastCall).toMatchObject({
+      symbol: 'BTCUSDT',
+      status: 'open',
+      exchange: 'bitget',
+      page: 1,
+    })
+  })
+
+  it('should update URL when a dropdown filter changes', async () => {
+    mockUseTrades.mockReturnValue({ data: { trades: [], total: 0 }, isLoading: false, error: null })
+
+    render(<Trades />, { wrapper: createWrapper() })
+
+    const statusSelect = screen.getByLabelText('Status') as HTMLSelectElement
+    await act(async () => {
+      fireEvent.change(statusSelect, { target: { value: 'open' } })
+    })
+
+    await waitFor(() => {
+      expect(currentSearch).toContain('status=open')
+    })
+  })
+
+  it('should debounce URL updates from the symbol textbox', async () => {
+    mockUseTrades.mockReturnValue({ data: { trades: [], total: 0 }, isLoading: false, error: null })
+
+    render(<Trades />, { wrapper: createWrapper() })
+
+    const symbolInput = screen.getByLabelText('Symbol') as HTMLInputElement
+
+    // Typing quickly shouldn't immediately write every keystroke to the URL.
+    // We use real timers (fake timers conflict with react-query's async
+    // machinery) and instead assert the intermediate and final states.
+    act(() => {
+      fireEvent.change(symbolInput, { target: { value: 'B' } })
+      fireEvent.change(symbolInput, { target: { value: 'BT' } })
+      fireEvent.change(symbolInput, { target: { value: 'BTC' } })
+    })
+
+    // Immediately after typing the URL must not yet reflect the new symbol —
+    // intermediate keystrokes ('B', 'BT') never produce a history entry.
+    expect(currentSearch).not.toContain('symbol=')
+
+    // After the debounce window elapses, the URL settles on the final value.
+    await waitFor(
+      () => {
+        expect(currentSearch).toContain('symbol=BTC')
+      },
+      { timeout: 1000 },
+    )
+    // Single write — no flicker through intermediate values.
+    expect(currentSearch).not.toContain('symbol=B&')
+    expect(currentSearch).not.toContain('symbol=BT&')
+  })
+
+  it('should populate dropdown options from the filter-options hook, not derive from trade list', async () => {
+    mockUseTrades.mockReturnValue({ data: { trades: [], total: 0 }, isLoading: false, error: null })
+    mockUseTradesFilterOptions.mockReturnValue({
+      data: {
+        symbols: ['DOGEUSDT'],
+        bots: [{ id: 99, name: 'Moonshot Bot' }],
+        exchanges: ['hyperliquid'],
+        statuses: ['open', 'closed'],
+      },
+      isLoading: false,
+    })
+
+    render(<Trades />, { wrapper: createWrapper() })
+
+    const botSelect = screen.getByLabelText('Bot') as HTMLSelectElement
+    await waitFor(() => {
+      const values = Array.from(botSelect.options).map((o) => o.value)
+      // "Moonshot Bot" comes from the hook even though no trades mention it
+      expect(values).toContain('Moonshot Bot')
+    })
+
+    const exchangeSelect = screen.getByLabelText('Exchange') as HTMLSelectElement
+    const exchangeValues = Array.from(exchangeSelect.options).map((o) => o.value)
+    expect(exchangeValues).toContain('hyperliquid')
+    expect(exchangeValues).not.toContain('bitget') // confirms it isn't derived from loaded trades
+  })
+
+  it('should gracefully render empty dropdowns when filter-options is loading', async () => {
+    mockUseTrades.mockReturnValue({ data: { trades: [], total: 0 }, isLoading: false, error: null })
+    mockUseTradesFilterOptions.mockReturnValue({ data: undefined, isLoading: true })
+
+    render(<Trades />, { wrapper: createWrapper() })
+
+    // Page renders without crashing; status falls back to a default list
+    await waitFor(() => {
+      expect(screen.getByText('Trades')).toBeInTheDocument()
+    })
+    const botSelect = screen.getByLabelText('Bot') as HTMLSelectElement
+    const values = Array.from(botSelect.options).map((o) => o.value)
+    expect(values).toEqual(['']) // only the "All Bots" option
   })
 })

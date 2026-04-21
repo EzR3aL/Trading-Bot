@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, Fragment } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { toBlob } from 'html-to-image'
 import api from '../api/client'
@@ -831,6 +832,7 @@ function BotTradeHistoryModal({ bot, onClose, t }: { bot: BotStatus; onClose: ()
 
 export default function Bots() {
   const { t } = useTranslation()
+  const navigate = useNavigate()
   const { demoFilter } = useFilterStore()
   const isMobile = useIsMobile()
   const haptic = useHaptic()
@@ -857,15 +859,15 @@ export default function Bots() {
   const [editBotId, setEditBotId] = useState<number | null>(null)
   const [expandedBotId, setExpandedBotId] = useState<number | null>(null)
   const [actionLoading, setActionLoading] = useState<number | null>(null)
-  const [confirmStopId, setConfirmStopId] = useState<number | null>(null)
   const [historyBot, setHistoryBot] = useState<BotStatus | null>(null)
   const [moreMenuOpen, setMoreMenuOpen] = useState<number | null>(null)
   const [closePositionOpen, setClosePositionOpen] = useState<number | null>(null)
   const [confirmModal, setConfirmModal] = useState<{
-    type: 'delete' | 'close-position'
+    type: 'delete' | 'close-position' | 'stop' | 'hl-gate'
     id: number
     name: string
     symbol?: string
+    openTrades?: number
   } | null>(null)
 
   const startBot = useStartBot()
@@ -882,11 +884,11 @@ export default function Bots() {
 
   const handleStart = async (id: number) => {
     haptic.medium()
-    // Check if HL bot needs builder fee approval or referral first (admins bypass)
-    // Instead of a modal, redirect the user to Settings
+    // Check if HL bot needs builder fee approval or referral first (admins bypass).
+    // Show a blocking modal instead of a dismissible toast so users cannot miss the requirement.
     const bot = bots.find(b => b.bot_config_id === id)
     if (!isAdmin && bot?.exchange_type === 'hyperliquid' && (bot?.builder_fee_approved === false || bot?.referral_verified === false)) {
-      addToast('warning', t('hlSetup.setupRequired'), 6000)
+      setConfirmModal({ type: 'hl-gate', id, name: bot?.name || '' })
       return
     }
 
@@ -901,23 +903,27 @@ export default function Bots() {
   }
 
   const handleStopClick = (id: number) => {
-    if (confirmStopId !== id) {
-      haptic.heavy()
-      setConfirmStopId(id)
-      setTimeout(() => setConfirmStopId((prev) => prev === id ? null : prev), 3000)
-      return
-    }
-    doStop(id)
+    haptic.heavy()
+    const bot = bots.find(b => b.bot_config_id === id)
+    setConfirmModal({
+      type: 'stop',
+      id,
+      name: bot?.name || '',
+      openTrades: bot?.open_trades ?? 0,
+    })
   }
 
-  const doStop = async (id: number) => {
-    setConfirmStopId(null)
+  const confirmStop = async () => {
+    if (!confirmModal || confirmModal.type !== 'stop') return
+    const id = confirmModal.id
     setActionLoading(id)
     try {
       await stopBot.mutateAsync(id)
       addToast('info', t('bots.stop'))
+      setConfirmModal(null)
     } catch (err) {
       addToast('error', getApiErrorMessage(err, t('bots.failedStop')))
+      setConfirmModal(null)
     }
     setActionLoading(null)
   }
@@ -1289,10 +1295,10 @@ export default function Bots() {
                       onClick={() => handleStopClick(bot.bot_config_id)}
                       disabled={actionLoading === bot.bot_config_id}
                       aria-label={`${t('bots.stop')} ${bot.name}`}
-                      className={`flex-1 flex items-center justify-center gap-1 px-2 py-1.5 text-xs rounded-lg border disabled:opacity-50 transition-all duration-200 ${confirmStopId === bot.bot_config_id ? 'bg-red-600 text-white border-red-500 animate-pulse' : 'bg-red-500/10 text-red-400 border-red-500/10 hover:bg-red-500/20'}`}
+                      className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 text-xs rounded-lg border disabled:opacity-50 transition-all duration-200 bg-red-500/10 text-red-400 border-red-500/10 hover:bg-red-500/20"
                     >
                       <Square size={14} />
-                      {confirmStopId === bot.bot_config_id ? t('bots.confirmStop') : t('bots.stop')}
+                      {t('bots.stop')}
                     </button>
                   ) : (
                     <button
@@ -1446,8 +1452,9 @@ export default function Bots() {
         message={t('bots.confirmDeleteMessage', { name: confirmModal?.name })}
         confirmLabel={t('bots.delete')}
         variant="danger"
+        loading={deleteBot.isPending}
         onConfirm={confirmDelete}
-        onCancel={() => setConfirmModal(null)}
+        onCancel={() => { if (!deleteBot.isPending) setConfirmModal(null) }}
       />
       <ConfirmModal
         open={confirmModal?.type === 'close-position'}
@@ -1455,7 +1462,44 @@ export default function Bots() {
         message={t('bots.closePositionConfirm', { symbol: confirmModal?.symbol })}
         confirmLabel={t('bots.closePosition', 'Close Position')}
         variant="warning"
+        loading={closePosition.isPending}
         onConfirm={confirmClosePosition}
+        onCancel={() => { if (!closePosition.isPending) setConfirmModal(null) }}
+      />
+      <ConfirmModal
+        open={confirmModal?.type === 'stop'}
+        title={t('bots.stopBot', 'Stop Bot')}
+        message={
+          (confirmModal?.openTrades ?? 0) > 0
+            ? t('bots.confirmStopMessageWithOpen', {
+                name: confirmModal?.name,
+                count: confirmModal?.openTrades,
+                defaultValue: 'Stop "{{name}}"? It currently has {{count}} open position(s) that will NOT be closed automatically.',
+              })
+            : t('bots.confirmStopMessage', {
+                name: confirmModal?.name,
+                defaultValue: 'Stop "{{name}}"? The bot will stop trading.',
+              })
+        }
+        confirmLabel={t('bots.stop')}
+        variant={(confirmModal?.openTrades ?? 0) > 0 ? 'warning' : 'danger'}
+        loading={stopBot.isPending}
+        onConfirm={confirmStop}
+        onCancel={() => { if (!stopBot.isPending) setConfirmModal(null) }}
+      />
+      <ConfirmModal
+        open={confirmModal?.type === 'hl-gate'}
+        title={t('hlSetup.setupRequiredTitle', 'Hyperliquid Setup Required')}
+        message={t('hlSetup.setupRequiredMessage', {
+          defaultValue: 'This bot requires Hyperliquid builder fee approval and referral verification before it can be started. Please complete the setup in Settings first.',
+        })}
+        confirmLabel={t('hlSetup.goToSettings', 'Go to Settings')}
+        cancelLabel={t('common.cancel', 'Cancel')}
+        variant="info"
+        onConfirm={() => {
+          setConfirmModal(null)
+          navigate('/settings')
+        }}
         onCancel={() => setConfirmModal(null)}
       />
     </div>
