@@ -293,8 +293,12 @@ class BotWorker(
                     bot_config_id=self.bot_config_id,
                 )
 
-            # ── Hyperliquid pre-start checks (admins bypass) ─────────
-            if self._config.exchange_type == "hyperliquid":
+            # ── Exchange pre-start gate checks (#ARCH-H2) ────────────
+            # All exchange-specific onboarding checks (HL: referral /
+            # builder fee / wallet, every exchange: affiliate UID) are
+            # dispatched via ``client.pre_start_checks``. Admins bypass
+            # the onboarding gates but the wallet gate still applies.
+            if self._client is not None:
                 from sqlalchemy import select as sa_select
                 from src.models.database import User as UserModel
                 async with get_session() as hl_session:
@@ -304,17 +308,30 @@ class BotWorker(
                     user_obj = user_result.scalar_one_or_none()
                     is_admin = user_obj and user_obj.role == "admin"
 
-                    if not is_admin:
-                        builder_ok = await self._check_builder_approval(self._client, hl_session)
-                        if not builder_ok:
-                            return False
-                        referral_ok = await self._check_referral_gate(self._client, hl_session)
-                        if not referral_ok:  # pragma: no cover — HL-specific gate
-                            return False
+                    try:
+                        gate_results = await self._client.pre_start_checks(
+                            user_id=self._config.user_id, db=hl_session
+                        )
+                    except Exception as e:
+                        logger.warning(
+                            f"[Bot:{self.bot_config_id}] pre_start_checks raised: {e}"
+                        )
+                        gate_results = []
 
-                    # Wallet validation (applies to all users including admins)
-                    wallet_ok = await self._check_wallet_gate(self._client)
-                    if not wallet_ok:
+                    # Admins only bypass onboarding gates (referral/builder/
+                    # affiliate UID); wallet problems still block everyone.
+                    ADMIN_BYPASS_KEYS = {"referral", "builder_fee", "affiliate_uid"}
+                    for gate in gate_results:
+                        if gate.ok:
+                            continue
+                        if is_admin and gate.key in ADMIN_BYPASS_KEYS:
+                            continue
+                        self.error_message = gate.message
+                        self.status = BotStatus.ERROR
+                        logger.warning(
+                            f"[Bot:{self.bot_config_id}] Pre-start gate '{gate.key}' "
+                            f"blocked bot start"
+                        )
                         return False
 
             # Validate trading pairs exist on exchange

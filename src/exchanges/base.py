@@ -13,6 +13,30 @@ from src.exchanges.types import Balance, FundingRateInfo, Order, Position, Ticke
 from src.utils.circuit_breaker import CircuitBreakerError, with_retry
 
 
+def _is_transient_http_error(exc: BaseException) -> bool:
+    """Return True if ``exc`` represents a retry-safe network/transport failure.
+
+    Used by ``_raw_request``'s ``@with_retry`` to filter out HTTP 4xx
+    responses — those mean the server has already received and rejected
+    the request (auth error, validation error, etc.) and retrying would
+    either duplicate side-effects (e.g. an accepted order) or produce the
+    same error. Only true network-level faults and 429 / 5xx are retried.
+    """
+    # Network-level faults: DNS, connection reset, TLS, timeout.
+    if isinstance(exc, asyncio.TimeoutError):
+        return True
+    if isinstance(exc, aiohttp.ClientResponseError):
+        status = getattr(exc, "status", 0) or 0
+        # 429 (rate-limited) and 5xx (server errors) are safe to retry.
+        # Everything else (400/401/403/404/422 ...) is terminal.
+        return status == 429 or status >= 500
+    if isinstance(exc, aiohttp.ClientError):
+        # ClientConnectionError, ServerTimeoutError, etc. — no response was
+        # received, so retry is always safe.
+        return True
+    return False
+
+
 # ── Risk-state readback snapshots (#190 / #191) ────────────────────────────
 # These dataclasses are returned by the per-exchange readback methods on
 # ``ExchangeClient`` and consumed by RiskStateManager (#190) as the source
@@ -51,6 +75,21 @@ class TrailingStopSnapshot:
     activation_price: Optional[float]
     trigger_price: Optional[float]  # current trigger if exchange exposes it
     order_id: Optional[str]
+
+
+@dataclass
+class GateCheckResult:
+    """Result of a pre-start gate check (#ARCH-H2).
+
+    Exchanges return a list of these from ``pre_start_checks``; an empty
+    list means "all gates pass". Each failing check carries a short key
+    (``referral``, ``builder_fee``, ``wallet``, ...) so the bot worker can
+    surface a user-actionable message without knowing the exchange.
+    """
+
+    key: str
+    ok: bool
+    message: str = ""
 
 
 @dataclass
@@ -101,12 +140,6 @@ class ExchangeClient(ABC):
         self.demo_mode = demo_mode
         self._rate_limiter = rate_limiter
 
-    async def _rate_limited_request(self, coro):
-        """Acquire a rate limit token before executing the coroutine."""
-        if self._rate_limiter:
-            await self._rate_limiter.acquire()
-        return await coro
-
     @abstractmethod
     async def get_account_balance(self) -> Balance:
         """Get account balance."""
@@ -122,9 +155,99 @@ class ExchangeClient(ABC):
         take_profit: Optional[float] = None,
         stop_loss: Optional[float] = None,
         margin_mode: str = "cross",
+        client_order_id: Optional[str] = None,
     ) -> Order:
-        """Place a market order with optional TP/SL."""
+        """Place a market order with optional TP/SL.
+
+        ``client_order_id`` is a caller-supplied idempotency key forwarded
+        to the exchange's native idempotency field (Bitget: ``clientOid``,
+        Hyperliquid: ``cloid`` (hashed to 16 bytes), BingX: ``clientOrderID``,
+        Bitunix: ``clientId``, Weex: ``newClientOrderId``). Keeping the same
+        id across transient-failure retries guarantees that a duplicate HTTP
+        attempt never books a second position. See #ARCH-C2.
+        """
         ...
+
+    async def pre_start_checks(
+        self,
+        user_id: int,
+        db: Optional[Any] = None,
+    ) -> List["GateCheckResult"]:
+        """Return a list of gate results that must be evaluated before starting a bot.
+
+        Each entry has ``ok=True`` when the gate passes and ``ok=False`` when
+        it should block bot start. The default implementation runs the
+        exchange-agnostic affiliate-UID gate (any exchange with an active
+        ``AffiliateLink.uid_required=True``). Exchanges like Hyperliquid
+        override this to add referral/builder-fee/wallet checks on top of
+        the base gates (#ARCH-H2).
+
+        ``db`` is an optional ``AsyncSession`` the exchange can use to read
+        (and persist) its per-connection verification flags.
+        """
+        results: List["GateCheckResult"] = []
+        affiliate_result = await self._check_affiliate_uid_gate(user_id=user_id, db=db)
+        if affiliate_result is not None:
+            results.append(affiliate_result)
+        return results
+
+    async def _check_affiliate_uid_gate(
+        self,
+        user_id: int,
+        db: Optional[Any] = None,
+    ) -> Optional["GateCheckResult"]:
+        """Shared affiliate-UID gate — applies to every exchange that has an
+        active ``AffiliateLink`` with ``uid_required=True`` (Bitget, Weex,
+        Hyperliquid, Bitunix, BingX — see ``AffiliateLink.exchange_type``).
+
+        Returns ``None`` when the gate passes or is not applicable (no DB
+        session, no active uid_required link, or user already verified).
+        Returns a failing ``GateCheckResult`` when verification is missing.
+        Fails open on unexpected errors to avoid blocking users.
+        """
+        if db is None:
+            return None
+        try:
+            from sqlalchemy import select as sa_select
+            from src.models.database import AffiliateLink, ExchangeConnection
+
+            exchange_type = self.exchange_name
+            if not exchange_type:
+                return None
+
+            link_row = await db.execute(
+                sa_select(AffiliateLink).where(
+                    AffiliateLink.exchange_type == exchange_type,
+                    AffiliateLink.is_active.is_(True),
+                    AffiliateLink.uid_required.is_(True),
+                )
+            )
+            affiliate_link = link_row.scalar_one_or_none()
+            if not affiliate_link:
+                return None  # No UID requirement for this exchange
+
+            conn_row = await db.execute(
+                sa_select(ExchangeConnection).where(
+                    ExchangeConnection.user_id == user_id,
+                    ExchangeConnection.exchange_type == exchange_type,
+                )
+            )
+            conn = conn_row.scalar_one_or_none()
+            if conn and getattr(conn, "affiliate_verified", False):
+                return None
+
+            return GateCheckResult(
+                key="affiliate_uid",
+                ok=False,
+                message=(
+                    f"Affiliate UID-Verifizierung erforderlich für {exchange_type}. "
+                    f"Bitte gib deine UID unter 'Affiliate Links' ein und verifiziere sie, "
+                    f"bevor du einen Bot starten kannst."
+                ),
+            )
+        except Exception:
+            # Fail open so transient DB / import issues don't lock users out.
+            return None
 
     @abstractmethod
     async def cancel_order(self, symbol: str, order_id: str) -> bool:
@@ -438,7 +561,15 @@ class HTTPExchangeClientMixin:
         max_attempts=3,
         min_wait=1.0,
         max_wait=10.0,
+        # Only retry on network-level failures. 4xx responses bubble up as
+        # the exchange-specific client error class (via ``_parse_response``)
+        # and must NOT be retried — the server already received the request
+        # and a retry of e.g. a place-order call would duplicate the order
+        # (see #ARCH-C2). 429 is raised as ClientResponseError with status
+        # 429 and is filtered via ``_is_transient_http_error`` below so only
+        # 429 / 5xx get retried.
         retry_on=(aiohttp.ClientError, asyncio.TimeoutError),
+        retry_predicate=lambda exc: _is_transient_http_error(exc),
     )
     async def _raw_request(
         self,
@@ -448,7 +579,20 @@ class HTTPExchangeClientMixin:
         data: Optional[Dict] = None,
         auth: bool = True,
     ) -> Any:
-        """Perform the actual HTTP request and delegate response parsing."""
+        """Perform the actual HTTP request and delegate response parsing.
+
+        Acquires a rate-limiter token before every HTTP call when a
+        per-exchange limiter is wired in (#ARCH-C3). The limiter is a
+        process-wide singleton per exchange type (see
+        ``ExchangeRateLimiter.get``) so multiple bots on the same exchange
+        share one token bucket.
+        """
+        # Serialize through the per-exchange token bucket. Acquired before
+        # every request including retries so a retry still consumes a token
+        # (safe: transient retries are rare and do not storm the API).
+        if getattr(self, "_rate_limiter", None) is not None:
+            await self._rate_limiter.acquire()
+
         await self._ensure_session()
         url = f"{self.base_url}{endpoint}"
         body = json.dumps(data) if data else ""

@@ -339,6 +339,7 @@ class BingXClient(HTTPExchangeClientMixin, ExchangeClient):
         take_profit: Optional[float] = None,
         stop_loss: Optional[float] = None,
         margin_mode: str = "cross",
+        client_order_id: Optional[str] = None,
     ) -> Order:
         """
         Place a market order on BingX perpetual swap.
@@ -374,6 +375,11 @@ class BingXClient(HTTPExchangeClientMixin, ExchangeClient):
         if stop_loss is not None:
             order_params["stopLoss"] = str(stop_loss)
             order_params["stopLossWorkingType"] = "MARK_PRICE"
+
+        # Idempotency: BingX accepts a caller-supplied ``clientOrderID``. Their
+        # docs say it must be <= 40 chars and unique per symbol (#ARCH-C2).
+        if client_order_id:
+            order_params["clientOrderID"] = str(client_order_id)[:40]
 
         result = await self._request("POST", ENDPOINTS["place_order"], data=order_params)
 
