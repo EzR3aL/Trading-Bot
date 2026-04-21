@@ -13,7 +13,12 @@ from src.api.dependencies.risk_state import (
     get_idempotency_cache,
     get_risk_state_manager,
 )
-from src.api.schemas.trade import TradeListResponse, TradeResponse
+from src.api.schemas.trade import (
+    TradeFilterBotOption,
+    TradeFilterOptionsResponse,
+    TradeListResponse,
+    TradeResponse,
+)
 from src.auth.dependencies import get_current_user
 from src.bot.risk_state_manager import RiskLeg, RiskOpResult, RiskOpStatus
 from src.data.market_data import MarketDataFetcher
@@ -295,6 +300,80 @@ async def list_trades(
     )
 
 
+@router.get("/filter-options", response_model=TradeFilterOptionsResponse)
+@limiter.limit("30/minute")
+async def get_trade_filter_options(
+    request: Request,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Return distinct filter values available for the user's trades.
+
+    Scope is restricted to the current user (same ownership filter as
+    ``GET /api/trades``). Uses ``SELECT DISTINCT`` / grouped queries so the
+    backend never pulls full trade rows just to populate a dropdown.
+    """
+    # Distinct symbols from the user's trades
+    symbols_result = await db.execute(
+        select(TradeRecord.symbol)
+        .where(TradeRecord.user_id == user.id)
+        .distinct()
+    )
+    symbols = sorted(
+        s for s in (row[0] for row in symbols_result.all()) if s
+    )
+
+    # Distinct exchanges — combine TradeRecord.exchange and BotConfig.exchange_type
+    # so a bot that has never traded still shows up if the user owns it.
+    trade_exchanges_result = await db.execute(
+        select(TradeRecord.exchange)
+        .where(TradeRecord.user_id == user.id)
+        .distinct()
+    )
+    exchanges_set: set[str] = {
+        e for e in (row[0] for row in trade_exchanges_result.all()) if e
+    }
+
+    bot_exchanges_result = await db.execute(
+        select(BotConfig.exchange_type)
+        .where(BotConfig.user_id == user.id)
+        .distinct()
+    )
+    for row in bot_exchanges_result.all():
+        if row[0]:
+            exchanges_set.add(row[0])
+    exchanges = sorted(exchanges_set)
+
+    # Distinct non-null statuses — typically {open, closed, cancelled/failed}
+    status_result = await db.execute(
+        select(TradeRecord.status)
+        .where(TradeRecord.user_id == user.id)
+        .distinct()
+    )
+    statuses = sorted(
+        s for s in (row[0] for row in status_result.all()) if s
+    )
+
+    # Bots the user owns. Pull (id, name) only — no full ORM objects.
+    bots_result = await db.execute(
+        select(BotConfig.id, BotConfig.name)
+        .where(BotConfig.user_id == user.id)
+        .order_by(BotConfig.name.asc())
+    )
+    bots = [
+        TradeFilterBotOption(id=row[0], name=row[1])
+        for row in bots_result.all()
+        if row[1]
+    ]
+
+    return TradeFilterOptionsResponse(
+        symbols=symbols,
+        bots=bots,
+        exchanges=exchanges,
+        statuses=statuses,
+    )
+
+
 @router.post("/sync")
 @limiter.limit("5/minute")
 async def sync_trades(
@@ -384,13 +463,40 @@ async def sync_trades(
                         ticker = await client.get_ticker(trade.symbol)
                         exit_price = ticker.last_price
 
-                    # Determine exit reason from price proximity
-                    if trade.take_profit and abs(exit_price - trade.take_profit) < trade.entry_price * 0.005:
-                        exit_reason = "TAKE_PROFIT"
-                    elif trade.stop_loss and abs(exit_price - trade.stop_loss) < trade.entry_price * 0.005:
-                        exit_reason = "STOP_LOSS"
+                    # Determine exit reason.
+                    #
+                    # When the RiskStateManager feature flag is on, defer to
+                    # ``classify_close`` — it probes the exchange order history
+                    # and attributes the close precisely (TAKE_PROFIT_NATIVE,
+                    # STOP_LOSS_NATIVE, TRAILING_STOP_NATIVE, MANUAL_CLOSE_*, …).
+                    # When the flag is off, keep the legacy heuristic so the
+                    # existing behaviour stays untouched (ARCH-C1a).
+                    exit_time_now = datetime.now(timezone.utc)
+                    if settings.risk.risk_state_manager_enabled:
+                        try:
+                            manager = get_risk_state_manager()
+                            exit_reason = await manager.classify_close(
+                                trade.id, exit_price, exit_time_now,
+                            )
+                        except Exception as classify_err:  # noqa: BLE001
+                            logger.warning(
+                                "Sync: classify_close failed for trade %s, "
+                                "falling back to heuristic: %s",
+                                trade.id, classify_err,
+                            )
+                            if trade.take_profit and abs(exit_price - trade.take_profit) < trade.entry_price * 0.005:
+                                exit_reason = "TAKE_PROFIT"
+                            elif trade.stop_loss and abs(exit_price - trade.stop_loss) < trade.entry_price * 0.005:
+                                exit_reason = "STOP_LOSS"
+                            else:
+                                exit_reason = "MANUAL_CLOSE"
                     else:
-                        exit_reason = "MANUAL_CLOSE"
+                        if trade.take_profit and abs(exit_price - trade.take_profit) < trade.entry_price * 0.005:
+                            exit_reason = "TAKE_PROFIT"
+                        elif trade.stop_loss and abs(exit_price - trade.stop_loss) < trade.entry_price * 0.005:
+                            exit_reason = "STOP_LOSS"
+                        else:
+                            exit_reason = "MANUAL_CLOSE"
 
                     # Calculate PnL
                     from src.bot.pnl import calculate_pnl
@@ -425,8 +531,24 @@ async def sync_trades(
                     trade.exit_price = exit_price
                     trade.pnl = round(pnl, 4)
                     trade.pnl_percent = round(pnl_percent, 2)
-                    trade.exit_time = datetime.now(timezone.utc)
+                    trade.exit_time = exit_time_now
                     trade.exit_reason = exit_reason
+
+                    # When the RSM is active, reconcile the trade after
+                    # marking it closed so the per-leg status columns
+                    # (tp_status, sl_status, trailing_status, risk_source,
+                    # last_synced_at) reflect the actual post-close exchange
+                    # state rather than stale pre-close values. Failure is
+                    # non-fatal — we already committed the close below.
+                    if settings.risk.risk_state_manager_enabled:
+                        try:
+                            await db.flush()
+                            await get_risk_state_manager().reconcile(trade.id)
+                        except Exception as rec_err:  # noqa: BLE001
+                            logger.warning(
+                                "Sync: reconcile failed for trade %s: %s",
+                                trade.id, rec_err,
+                            )
 
                     closed_trades.append({
                         "id": trade.id,

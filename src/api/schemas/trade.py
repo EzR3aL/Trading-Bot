@@ -5,6 +5,27 @@ from typing import Optional
 from pydantic import BaseModel, ConfigDict
 
 
+class TradeFilterBotOption(BaseModel):
+    """A bot option exposed via ``GET /api/trades/filter-options``."""
+
+    id: int
+    name: str
+
+
+class TradeFilterOptionsResponse(BaseModel):
+    """Distinct values available for the current user's trade filters.
+
+    Powers the dashboard's filter dropdowns without forcing the client to
+    load an entire trade page just to learn which symbols/bots/exchanges
+    it can filter by.
+    """
+
+    symbols: list[str]
+    bots: list[TradeFilterBotOption]
+    exchanges: list[str]
+    statuses: list[str]
+
+
 class TradeResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
