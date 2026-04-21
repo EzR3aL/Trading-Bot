@@ -55,8 +55,8 @@ RUN mkdir -p data logs \
 # Switch to non-root user
 USER botuser
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
+# Health check — uses python+urllib (no curl in slim image) to hit /api/health
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
     CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')" || exit 1
 
 EXPOSE 8000

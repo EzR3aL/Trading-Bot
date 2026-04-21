@@ -1,6 +1,7 @@
 # Git
 .git
 .gitignore
+.github/
 
 # Python
 __pycache__
@@ -27,6 +28,7 @@ env
 htmlcov
 .tox
 .nox
+tests/
 
 # Data (will be mounted as volume)
 data/
@@ -53,3 +55,8 @@ Thumbs.db
 
 # Backtest results
 data/backtest/
+
+# Node / frontend build artifacts (frontend is rebuilt in the Node stage of Dockerfile)
+node_modules/
+frontend/node_modules/
+frontend/dist/

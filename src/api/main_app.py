@@ -16,7 +16,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from fastapi import FastAPI, HTTPException, Request, Response  # noqa: E402
+from fastapi import FastAPI, Request, Response  # noqa: E402
 from fastapi.exceptions import RequestValidationError  # noqa: E402
 from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
 from fastapi.responses import JSONResponse  # noqa: E402
@@ -47,22 +47,32 @@ from src.api.routers import (  # noqa: E402
     websocket,
 )
 from src.models.session import close_db, init_db  # noqa: E402
-from src.utils.logger import get_logger, setup_logging  # noqa: E402
+from src.utils.logger import get_logger, request_id_var, setup_logging  # noqa: E402
 
 setup_logging(log_level=os.getenv("LOG_LEVEL", "INFO"))
 logger = get_logger(__name__)
 
 
 class RequestIDMiddleware(BaseHTTPMiddleware):
-    """Attach a unique request ID to every request for log correlation."""
+    """Attach a unique request ID to every request for log correlation.
+
+    ARCH-H6: the ID is also stored in a ``contextvars.ContextVar`` so every
+    ``logger.*`` call emitted during this request has ``request_id`` set on
+    the LogRecord (via ``RequestIDLogFilter``). The token is reset in the
+    finally block so we never leak a stale ID across requests.
+    """
 
     async def dispatch(self, request: Request, call_next):
         import uuid
         request_id = request.headers.get("x-request-id") or str(uuid.uuid4())[:8]
         request.state.request_id = request_id
-        response: Response = await call_next(request)
-        response.headers["X-Request-ID"] = request_id
-        return response
+        token = request_id_var.set(request_id)
+        try:
+            response: Response = await call_next(request)
+            response.headers["X-Request-ID"] = request_id
+            return response
+        finally:
+            request_id_var.reset(token)
 
 
 class HTTPSRedirectMiddleware(BaseHTTPMiddleware):
@@ -91,9 +101,16 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers["X-Frame-Options"] = "DENY"
         response.headers["X-API-Version"] = "1"
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        # SEC-H1: script-src must NOT include 'unsafe-inline' — Vite's
+        # production build does not emit inline <script> blocks, so 'self'
+        # is sufficient. style-src still allows 'unsafe-inline' because
+        # Vite/Tailwind ship small per-chunk <style> tags in the built
+        # index.html; that is a meaningfully smaller risk surface than
+        # inline scripts and removing it would require hash-tracking every
+        # build output.
         response.headers["Content-Security-Policy"] = (
             "default-src 'self'; "
-            "script-src 'self' 'unsafe-inline'; "
+            "script-src 'self'; "
             "style-src 'self' 'unsafe-inline'; "
             "img-src 'self' data: https:; "
             "connect-src 'self' wss: https:; "
@@ -516,34 +533,20 @@ def create_app() -> FastAPI:
     from src.api.websocket.manager import ws_manager
     app.state.ws_manager = ws_manager
 
-    # Serve frontend static files (built React app) with SPA catch-all
+    # ARCH-M4: SPA fallback via StaticFiles(html=True). Starlette's StaticFiles
+    # already performs path-traversal protection (see starlette.staticfiles.
+    # StaticFiles.get_path / get_response); mounting it at "/" with html=True
+    # transparently serves index.html for unknown paths so deep React Router
+    # routes reload cleanly. Must be registered LAST so it does not shadow
+    # /api/* routes.
     frontend_dir = Path("static/frontend")
-    # Whitelist of static file extensions the SPA route is allowed to serve
-    STATIC_EXT_WHITELIST = {
-        ".html", ".css", ".js", ".json", ".map",
-        ".png", ".jpg", ".jpeg", ".gif", ".svg", ".ico", ".webp",
-        ".woff", ".woff2", ".ttf", ".eot",
-        ".txt", ".xml", ".webmanifest",
-    }
 
     if frontend_dir.exists() and not os.getenv("TESTING"):
-        from fastapi.responses import FileResponse
-
-        app.mount("/assets", StaticFiles(directory=str(frontend_dir / "assets")), name="assets")
-
-        @app.get("/{full_path:path}")
-        async def serve_spa(full_path: str):
-            """Serve static files or fall back to index.html for SPA routing."""
-            file_path = (frontend_dir / full_path).resolve()
-            # Prevent path traversal — resolved path must stay inside frontend_dir
-            if not str(file_path).startswith(str(frontend_dir.resolve())):
-                raise HTTPException(status_code=404, detail="Not found")
-            if file_path.is_file():
-                # Only serve files with whitelisted extensions
-                if file_path.suffix.lower() not in STATIC_EXT_WHITELIST:
-                    raise HTTPException(status_code=404, detail="Not found")
-                return FileResponse(str(file_path))
-            return FileResponse(str(frontend_dir / "index.html"))
+        app.mount(
+            "/",
+            StaticFiles(directory=str(frontend_dir), html=True, check_dir=True),
+            name="spa",
+        )
     else:
         logger.info("Frontend not built yet - API-only mode")
 
