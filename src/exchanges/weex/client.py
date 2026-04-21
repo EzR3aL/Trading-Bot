@@ -184,6 +184,7 @@ class WeexClient(HTTPExchangeClientMixin, ExchangeClient):
         self, symbol: str, side: str, size: float, leverage: int,
         take_profit: Optional[float] = None, stop_loss: Optional[float] = None,
         margin_mode: str = "cross",
+        client_order_id: Optional[str] = None,
     ) -> Order:
         # Leverage is set by trade_executor before calling this method
 
@@ -192,9 +193,14 @@ class WeexClient(HTTPExchangeClientMixin, ExchangeClient):
         v3_side = "SELL" if side == "short" else "BUY"
         v3_position_side = "SHORT" if side == "short" else "LONG"
 
+        # Idempotency: prefer the caller-supplied id so retries hit the same
+        # ``newClientOrderId``. Weex caps this at 32 chars (#ARCH-C2).
+        new_client_oid = (
+            str(client_order_id)[:32] if client_order_id else uuid.uuid4().hex[:32]
+        )
         data: Dict[str, Any] = {
             "symbol": v3_symbol,
-            "newClientOrderId": uuid.uuid4().hex[:32],
+            "newClientOrderId": new_client_oid,
             "side": v3_side,
             "positionSide": v3_position_side,
             "type": "MARKET",

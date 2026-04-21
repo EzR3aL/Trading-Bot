@@ -3,6 +3,7 @@
 import asyncio
 import json
 import re
+import uuid
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -258,6 +259,16 @@ class TradeExecutorMixin:
             except Exception as pt_err:
                 logger.warning("%s [%s] Could not record pending trade: %s", log_prefix, mode_str, pt_err)
 
+            # Idempotency: derive a stable client_order_id per signal attempt.
+            # If the exchange call is retried by the circuit breaker we want
+            # the same id to reach the exchange so we don't double-open
+            # (#ARCH-C2). We prefer the pending-trade row id when available
+            # (guaranteed unique), falling back to a fresh uuid.
+            signal_token = (
+                str(pending_trade_id) if pending_trade_id is not None else uuid.uuid4().hex
+            )
+            client_order_id = f"bot-{self.bot_config_id}-{signal_token}"
+
             # Place order
             order = await client.place_market_order(
                 symbol=signal.symbol,
@@ -267,6 +278,7 @@ class TradeExecutorMixin:
                 take_profit=signal.target_price,
                 stop_loss=signal.stop_loss,
                 margin_mode=margin_mode,
+                client_order_id=client_order_id,
             )
 
             if not order:

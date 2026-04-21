@@ -4,6 +4,7 @@ Provides colored console output, file logging, and optional JSON output.
 """
 
 import asyncio
+import contextvars
 import json as json_lib
 import logging
 import logging.handlers
@@ -14,6 +15,22 @@ from datetime import datetime
 from pathlib import Path
 
 import colorlog
+
+# ARCH-H6: process-wide correlation ID for log output.
+# Set by ``RequestIDMiddleware`` per HTTP request and read by the log
+# filter below so the same request_id shows up on every log line emitted
+# while the request is being served.
+request_id_var: contextvars.ContextVar[str | None] = contextvars.ContextVar(
+    "request_id", default=None,
+)
+
+
+class RequestIDLogFilter(logging.Filter):
+    """Attach the current request_id (if any) to every LogRecord."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        record.request_id = request_id_var.get() or "-"
+        return True
 
 # Patterns that match sensitive data in log messages
 _REDACT_PATTERNS = [
@@ -58,6 +75,8 @@ class JSONFormatter(logging.Formatter):
             "module": record.module,
             "function": record.funcName,
             "line": record.lineno,
+            # ARCH-H6: correlation ID populated by RequestIDLogFilter.
+            "request_id": getattr(record, "request_id", "-"),
         }
         if record.exc_info and record.exc_info[0]:
             log_entry["exception"] = self.formatException(record.exc_info)
@@ -94,6 +113,8 @@ def setup_logging(
 
     # Add redaction filter to prevent secrets from leaking into logs
     root_logger.addFilter(RedactionFilter())
+    # ARCH-H6: attach the request-ID context to every record
+    root_logger.addFilter(RequestIDLogFilter())
 
     # JSON mode: explicit LOG_FORMAT=json, or auto-enabled in production
     environment = os.getenv("ENVIRONMENT", "development").lower()
@@ -108,7 +129,8 @@ def setup_logging(
         console_handler.setFormatter(JSONFormatter())
     else:
         console_format = colorlog.ColoredFormatter(
-            "%(log_color)s%(asctime)s | %(levelname)-8s | %(name)s | %(message)s",
+            # ARCH-H6: include request_id so correlating lines is easy locally too.
+            "%(log_color)s%(asctime)s | %(levelname)-8s | %(request_id)s | %(name)s | %(message)s",
             datefmt="%Y-%m-%d %H:%M:%S",
             log_colors={
                 "DEBUG": "cyan",
@@ -132,7 +154,8 @@ def setup_logging(
         file_handler.setFormatter(JSONFormatter())
     else:
         file_format = logging.Formatter(
-            "%(asctime)s | %(levelname)-8s | %(name)s | %(funcName)s:%(lineno)d | %(message)s",
+            # ARCH-H6: request_id on file output too.
+            "%(asctime)s | %(levelname)-8s | %(request_id)s | %(name)s | %(funcName)s:%(lineno)d | %(message)s",
             datefmt="%Y-%m-%d %H:%M:%S",
         )
         file_handler.setFormatter(file_format)

@@ -24,6 +24,7 @@ from tenacity import (
     retry,
     stop_after_attempt,
     wait_exponential,
+    retry_if_exception,
     retry_if_exception_type,
     before_sleep_log,
     RetryError,
@@ -357,6 +358,7 @@ def with_retry(
     min_wait: float = 1.0,
     max_wait: float = 10.0,
     retry_on: tuple = (Exception,),
+    retry_predicate: Optional[Callable[[BaseException], bool]] = None,
 ):
     """
     Decorator for retry with exponential backoff.
@@ -365,7 +367,13 @@ def with_retry(
         max_attempts: Maximum retry attempts
         min_wait: Minimum wait between retries (seconds)
         max_wait: Maximum wait between retries (seconds)
-        retry_on: Tuple of exceptions to retry on
+        retry_on: Tuple of exceptions that are eligible for retry.
+        retry_predicate: Optional secondary filter. When provided, an
+            exception of a type in ``retry_on`` is only retried when the
+            predicate also returns ``True``. Used to exclude non-transient
+            HTTP 4xx responses from the retry loop (#ARCH-C2) — retrying
+            a 4xx on e.g. ``place_order`` can duplicate a successful order
+            the exchange already accepted.
 
     Usage:
         @with_retry(max_attempts=3, min_wait=1.0, max_wait=10.0)
@@ -375,10 +383,24 @@ def with_retry(
     def decorator(func: Callable) -> Callable:
         @wraps(func)
         async def wrapper(*args, **kwargs):
+            if retry_predicate is not None:
+                def _combined(exc: BaseException) -> bool:
+                    if not isinstance(exc, retry_on):
+                        return False
+                    try:
+                        return bool(retry_predicate(exc))
+                    except Exception:
+                        # A broken predicate must not mask the real error:
+                        # bail out of retry so the original exception is raised.
+                        return False
+                retry_condition = retry_if_exception(_combined)
+            else:
+                retry_condition = retry_if_exception_type(retry_on)
+
             @retry(
                 stop=stop_after_attempt(max_attempts),
                 wait=wait_exponential(multiplier=1, min=min_wait, max=max_wait),
-                retry=retry_if_exception_type(retry_on),
+                retry=retry_condition,
                 before_sleep=before_sleep_log(logger, log_level=20),  # INFO level
                 reraise=True,
             )

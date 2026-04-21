@@ -169,6 +169,7 @@ class BitgetExchangeClient(HTTPExchangeClientMixin, ExchangeClient):
         take_profit: Optional[float] = None,
         stop_loss: Optional[float] = None,
         margin_mode: str = "cross",
+        client_order_id: Optional[str] = None,
     ) -> Order:
         # Set leverage first
         await self.set_leverage(symbol, leverage, margin_mode=margin_mode)
@@ -194,6 +195,11 @@ class BitgetExchangeClient(HTTPExchangeClientMixin, ExchangeClient):
             "orderType": "market",
             "size": str(rounded_size),
         }
+        # Idempotency: forward ``client_order_id`` as Bitget's ``clientOid``.
+        # Bitget requires it to be <= 40 chars; the executor hands us a
+        # ``bot-<id>-<uuid>`` shape that fits comfortably (#ARCH-C2).
+        if client_order_id:
+            data["clientOid"] = str(client_order_id)[:40]
 
         result = await self._request("POST", ENDPOINTS["place_order"], data=data)
 

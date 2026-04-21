@@ -260,6 +260,7 @@ class BitunixClient(HTTPExchangeClientMixin, ExchangeClient):
         take_profit: Optional[float] = None,
         stop_loss: Optional[float] = None,
         margin_mode: str = "cross",
+        client_order_id: Optional[str] = None,
     ) -> Order:
         """
         Place a market order with optional TP/SL.
@@ -271,6 +272,7 @@ class BitunixClient(HTTPExchangeClientMixin, ExchangeClient):
             leverage: Leverage multiplier
             take_profit: Optional take profit price
             stop_loss: Optional stop loss price
+            client_order_id: Optional idempotency key forwarded as ``clientId``.
         """
         # Set leverage first
         await self.set_leverage(symbol, leverage)
@@ -296,6 +298,11 @@ class BitunixClient(HTTPExchangeClientMixin, ExchangeClient):
             order_data["slPrice"] = str(stop_loss)
             order_data["slStopType"] = "LAST_PRICE"
             order_data["slOrderType"] = "MARKET"
+
+        # Idempotency: Bitunix exposes this as ``clientId`` on the place-order
+        # payload. Docs cap the length at 32 chars (#ARCH-C2).
+        if client_order_id:
+            order_data["clientId"] = str(client_order_id)[:32]
 
         result = await self._request("POST", ENDPOINTS["place_order"], data=order_data)
 
