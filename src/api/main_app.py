@@ -208,6 +208,38 @@ async def lifespan(app: FastAPI):
     from src.bot.audit_scheduler import build_and_start_if_enabled
     app.state.audit_scheduler = await build_and_start_if_enabled()
 
+    # Exchange WebSocket listeners (#240). Gated process-wide by
+    # EXCHANGE_WEBSOCKETS_ENABLED — start_for_user is a no-op when the
+    # flag is off, so these calls are safe to always run. Reuses the
+    # RiskStateManager singleton so WS events share the per-(trade, leg)
+    # lock map with the REST/bot-worker code paths.
+    from sqlalchemy import select as _ws_select
+    from src.api.dependencies.risk_state import get_risk_state_manager
+    from src.bot.ws_credentials_provider import ws_credentials_provider
+    from src.bot.ws_manager import WebSocketManager
+    from src.models.database import BotConfig as _BotConfig
+    from src.models.session import get_session as _ws_get_session
+
+    exchange_ws_manager = WebSocketManager(
+        risk_state_manager=get_risk_state_manager(),
+        credentials_provider=ws_credentials_provider,
+        session_factory=_ws_get_session,
+    )
+    app.state.exchange_ws_manager = exchange_ws_manager
+
+    try:
+        async with _ws_get_session() as ws_session:
+            active_pairs_result = await ws_session.execute(
+                _ws_select(_BotConfig.user_id, _BotConfig.exchange_type)
+                .where(_BotConfig.is_enabled.is_(True))
+                .distinct()
+            )
+            active_pairs = list(active_pairs_result.all())
+        for user_id, exchange in active_pairs:
+            await exchange_ws_manager.start_for_user(user_id, exchange)
+    except Exception as e:  # noqa: BLE001 — WS startup must not block app boot
+        logger.warning("Exchange WS startup skipped: %s", e)
+
     logger.info("Application started successfully")
     yield
 
@@ -222,6 +254,12 @@ async def lifespan(app: FastAPI):
     audit_scheduler = getattr(app.state, "audit_scheduler", None)
     if audit_scheduler is not None:
         await audit_scheduler.shutdown()
+
+    # Tear down every exchange WS listener (#240). stop_all is
+    # best-effort — errors are logged inside the manager.
+    exchange_ws_manager = getattr(app.state, "exchange_ws_manager", None)
+    if exchange_ws_manager is not None:
+        await exchange_ws_manager.stop_all()
 
     # Graceful bot shutdown: wait for in-flight trades, log open positions.
     # Total timeout of 25s leaves margin within Docker's 30s stop_grace_period.
