@@ -20,7 +20,8 @@ services:
     environment:
       - POSTGRES_DB=${POSTGRES_DB:-tradingbot}
       - POSTGRES_USER=${POSTGRES_USER:-tradingbot}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-tradingbot_dev}
+      # SEC-C2: fail loudly if unset — no weak default in production.
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}
     ports:
       - "127.0.0.1:5432:5432"
     volumes:
@@ -45,7 +46,8 @@ services:
 
     environment:
       - PYTHONUNBUFFERED=1
-      - DATABASE_URL=${DATABASE_URL:-postgresql+asyncpg://tradingbot:${POSTGRES_PASSWORD:-tradingbot_dev}@postgres:5432/tradingbot}
+      # SEC-C2: POSTGRES_PASSWORD is required — no silent "tradingbot_dev" fallback.
+      - DATABASE_URL=${DATABASE_URL:-postgresql+asyncpg://tradingbot:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}@postgres:5432/tradingbot}
 
     ports:
       - "127.0.0.1:8000:8000"
@@ -79,7 +81,8 @@ services:
     environment:
       - PGHOST=postgres
       - PGUSER=${POSTGRES_USER:-tradingbot}
-      - PGPASSWORD=${POSTGRES_PASSWORD:-tradingbot_dev}
+      # SEC-C2: must match the postgres service — no weak default allowed.
+      - PGPASSWORD=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}
       - PGDATABASE=${POSTGRES_DB:-tradingbot}
     volumes:
       - ./backups:/backups
@@ -144,8 +147,8 @@ services:
     ports:
       - "127.0.0.1:3000:3000"
     environment:
-      # ⚠ CHANGE in production! Default "changeme" is for local dev only
-      - GF_SECURITY_ADMIN_PASSWORD=${GF_ADMIN_PASSWORD:-changeme}
+      # SEC-C2: no weak default — must be set explicitly in .env.
+      - GF_SECURITY_ADMIN_PASSWORD=${GF_ADMIN_PASSWORD:?GF_ADMIN_PASSWORD must be set in .env}
     volumes:
       - grafana_data:/var/lib/grafana
       - ./monitoring/grafana/provisioning:/etc/grafana/provisioning

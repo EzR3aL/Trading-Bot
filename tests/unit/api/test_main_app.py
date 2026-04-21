@@ -320,7 +320,7 @@ async def test_seed_exchanges_skips_when_data_exists():
 # ---------------------------------------------------------------------------
 
 def test_frontend_mount_when_directory_exists():
-    """When static/frontend exists, assets mount and SPA catch-all are added."""
+    """When static/frontend exists, a single StaticFiles(html=True) SPA mount is added at root."""
     import os
     from src.api.main_app import create_app
 
@@ -335,8 +335,8 @@ def test_frontend_mount_when_directory_exists():
              patch("src.api.main_app.StaticFiles", return_value=mock_static):
             app = create_app()
             route_names = [r.name for r in app.routes if hasattr(r, "name")]
-            assert "assets" in route_names
-            assert "serve_spa" in route_names
+            # ARCH-M4: single SPA mount replaces the former assets + serve_spa split
+            assert "spa" in route_names
     finally:
         if old_testing is not None:
             os.environ["TESTING"] = old_testing
@@ -349,8 +349,7 @@ def test_frontend_not_mounted_when_directory_missing():
     with patch("src.api.main_app.Path.exists", return_value=False):
         app = create_app()
         route_names = [r.name for r in app.routes if hasattr(r, "name")]
-        assert "assets" not in route_names
-        assert "serve_spa" not in route_names
+        assert "spa" not in route_names
 
 
 async def test_serve_spa_blocks_path_traversal():

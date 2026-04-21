@@ -93,3 +93,59 @@ jobs:
       - run: pip install ruff
 
       - run: ruff check src/ tests/ --select E,W,F --ignore E501,E402,E731
+
+  # ARCH-C4: verify every migration has a working upgrade() AND downgrade()
+  # by running upgrade head -> downgrade base -> upgrade head against a real
+  # Postgres 16. Catches missing/broken downgrade() before it hits production.
+  alembic-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: tradingbot_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ci"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - run: pip install -r requirements.txt
+
+      - name: alembic upgrade head
+        run: alembic upgrade head
+        env:
+          DATABASE_URL: postgresql+asyncpg://ci:ci@localhost:5432/tradingbot_ci
+          ENVIRONMENT: test
+          JWT_SECRET_KEY: test-secret-key-for-ci-only-not-production
+          ENCRYPTION_KEY: dGVzdC1lbmNyeXB0aW9uLWtleS1mb3ItdGVzdGluZw==
+
+      - name: alembic downgrade base
+        run: alembic downgrade base
+        env:
+          DATABASE_URL: postgresql+asyncpg://ci:ci@localhost:5432/tradingbot_ci
+          ENVIRONMENT: test
+          JWT_SECRET_KEY: test-secret-key-for-ci-only-not-production
+          ENCRYPTION_KEY: dGVzdC1lbmNyeXB0aW9uLWtleS1mb3ItdGVzdGluZw==
+
+      - name: alembic upgrade head (re-apply)
+        run: alembic upgrade head
+        env:
+          DATABASE_URL: postgresql+asyncpg://ci:ci@localhost:5432/tradingbot_ci
+          ENVIRONMENT: test
+          JWT_SECRET_KEY: test-secret-key-for-ci-only-not-production
+          ENCRYPTION_KEY: dGVzdC1lbmNyeXB0aW9uLWtleS1mb3ItdGVzdGluZw==

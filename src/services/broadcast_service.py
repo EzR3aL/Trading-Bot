@@ -6,6 +6,7 @@ and provides helpers for target summaries and duration estimation.
 """
 
 import hashlib
+import html
 import json
 import re
 from datetime import datetime, timezone
@@ -211,20 +212,55 @@ def render_messages(
 
 
 def _escape_html(text: str) -> str:
-    """Escape HTML special characters."""
-    return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+    """Escape HTML special characters (including quotes)."""
+    return html.escape(text, quote=True)
+
+
+# Allowed URL schemes for Telegram markdown links.
+# javascript:, data:, vbscript: and others are rejected to prevent XSS
+# in any downstream renderer that parses the Telegram HTML (e.g. the admin preview).
+_SAFE_URL_SCHEMES = ("http://", "https://", "tg://")
+
+
+def _is_safe_url(url: str) -> bool:
+    """Return True if ``url`` starts with an allowed scheme."""
+    lowered = url.strip().lower()
+    return lowered.startswith(_SAFE_URL_SCHEMES)
 
 
 def _markdown_to_telegram_html(md: str) -> str:
     """Convert basic Markdown to Telegram-compatible HTML.
 
+    Security: the raw user-supplied markdown is HTML-escaped first so that
+    any stray ``<``, ``>``, ``&`` or ``"`` characters become harmless
+    entities before the regex pass re-introduces the intended ``<b>``,
+    ``<i>`` and ``<a>`` tags. URLs in ``[text](url)`` are restricted to
+    http(s)/tg schemes; anything else (javascript:, data:, ...) is
+    stripped and rendered as plain text.
+
     Handles: [text](url) -> <a>, **bold** -> <b>, *italic* -> <i>.
     """
-    # Links: [text](url) -> <a href="url">text</a>
-    text = re.sub(r"\[([^\]]+)\]\(([^)]+)\)", r'<a href="\2">\1</a>', md)
-    # Bold: **text** -> <b>text</b>
+    # 1) Escape everything first — defuses <script>, attribute breakouts, etc.
+    text = html.escape(md, quote=True)
+
+    # 2) Links: [text](url) -> <a href="url">text</a>
+    # Note: after step 1, '[' and ']' are untouched but '(' ')' remain literal;
+    # only safe URL schemes are accepted, otherwise the link becomes plain text.
+    def _link_replace(match: "re.Match[str]") -> str:
+        link_text = match.group(1)
+        url = match.group(2).strip()
+        if not _is_safe_url(url):
+            # Drop the link — keep only the visible text (already escaped)
+            return link_text
+        # url is already escaped by html.escape above; re-escape defensively
+        # to guarantee no quote can break out of the href attribute.
+        safe_href = html.escape(url, quote=True)
+        return f'<a href="{safe_href}">{link_text}</a>'
+
+    text = re.sub(r"\[([^\]]+)\]\(([^)]+)\)", _link_replace, text)
+    # 3) Bold: **text** -> <b>text</b>
     text = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", text)
-    # Italic: *text* -> <i>text</i> (single asterisks not already consumed)
+    # 4) Italic: *text* -> <i>text</i> (single asterisks not already consumed)
     text = re.sub(r"(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)", r"<i>\1</i>", text)
     return text
 
