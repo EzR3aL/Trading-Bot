@@ -149,15 +149,27 @@ def _extract_field(text: str, key: str) -> Optional[str]:
 
 
 def _parse_iso_timestamp(value) -> Optional[datetime]:
-    """Parse ``YYYY-MM-DDTHH:MM:SS[.fff]Z`` → tz-aware datetime."""
+    """Parse a timestamp from a JSON log line → tz-aware UTC datetime.
+
+    Accepts ISO-8601 (``YYYY-MM-DDTHH:MM:SS[.fff][Z|+HH:MM]``) as well as the
+    Python-logger default format ``YYYY-MM-DD HH:MM:SS,fff`` (comma decimal,
+    no timezone). Naive results are normalized to UTC — trading-bot logs are
+    always emitted in UTC.
+    """
     if not value:
         return None
     try:
-        if isinstance(value, str) and value.endswith("Z"):
-            value = value[:-1] + "+00:00"
-        return datetime.fromisoformat(value)
+        if isinstance(value, str):
+            if "," in value:
+                value = value.replace(",", ".", 1)
+            if value.endswith("Z"):
+                value = value[:-1] + "+00:00"
+        dt = datetime.fromisoformat(value)
     except (TypeError, ValueError):
         return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt
 
 
 def _parse_json_line(line: str) -> Optional[ClassifyEvent]:

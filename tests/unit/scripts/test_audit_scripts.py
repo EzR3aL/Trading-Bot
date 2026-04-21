@@ -13,7 +13,7 @@ directly or pass an in-memory SQLite session factory via ``patch``.
 from __future__ import annotations
 
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -228,6 +228,30 @@ def test_audit_classify_method_text_parser_recognises_line():
     assert event is not None
     assert event.trade_id == 286
     assert event.reason == "EXTERNAL_CLOSE_UNKNOWN"
+    assert event.method == "heuristic_fallback"
+
+
+def test_audit_classify_method_json_parser_yields_tz_aware_timestamp():
+    """Trading-bot JSON logs emit ``YYYY-MM-DD HH:MM:SS,fff`` without tz (#238).
+
+    Python 3.11+ ``fromisoformat`` parses that to a *naive* datetime; the
+    scheduler later compares it against a tz-aware ``since`` and raises
+    ``TypeError``. The parser must normalize to UTC.
+    """
+    from scripts import audit_classify_method
+
+    line = (
+        '{"timestamp": "2026-04-21 16:45:00,123", "level": "INFO", '
+        '"logger": "src.bot.risk_state_manager", '
+        '"message": "risk_state.classify_close trade=540 '
+        'reason=EXTERNAL_CLOSE_UNKNOWN method=heuristic_fallback"}'
+    )
+
+    event = audit_classify_method.parse_event_line(line)
+    assert event is not None
+    assert event.timestamp.tzinfo is not None
+    assert event.timestamp.utcoffset() == timedelta(0)
+    assert event.trade_id == 540
     assert event.method == "heuristic_fallback"
 
 

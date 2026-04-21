@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import os
 import sys
 from contextlib import asynccontextmanager
 from datetime import datetime
@@ -40,7 +41,7 @@ logger = get_logger(__name__)
 
 # ── Constants ──────────────────────────────────────────────────────────
 
-DEFAULT_REPORT_DIR = Path("reports")
+DEFAULT_REPORT_DIR = Path(os.getenv("AUDIT_REPORTS_DIR", "reports"))
 
 # TP/SL size tolerance: exchange rounding can move a size by a fraction of
 # one contract. 0.5 % stays on the "noise" side without masking real drift.
