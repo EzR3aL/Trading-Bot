@@ -529,6 +529,22 @@ Das bestehende `config_service.py`-Modul war bisher eine reine Helper-Sammlung (
 - `config_hyperliquid.get_hl_admin_settings` + der Rest von `config_hyperliquid.py` (Builder-Approval, Referral-Verify, Revenue-Summary). Eigene Extraktion, da `SystemSetting` / ENV-Fallback-Logik und der HL-Readback-Client zusätzliche Testing-Primitives brauchen.
 - `config_affiliate.list_affiliate_uids` — Admin-Paginierung mit Stats-Aggregat, plus Search-Filter über `User.username` join.
 - Alle Mutation-Handler (`update_trading_config`, `update_strategy_config`, `upsert_exchange_connection`, `delete_exchange_connection`, `set_affiliate_uid`, …) werden bewusst später extrahiert — Mutations brauchen saubere Error-Domain-Typen in `src/services/exceptions.py` statt direkte `HTTPException`-Raises.
+### 2026-04-22 — ARCH-C1 Phase 2b PR-1: BotsService — static read handlers (#286)
+
+Erste Extraction-Welle aus dem `/api/bots`-Router in den Service-Layer. Minimaler Scope: die beiden DB-freien, Orchestrator-freien Static-Read-Handler (`GET /api/bots/strategies`, `GET /api/bots/data-sources`) wandern nach `src/services/bots_service.py`. Der Router-Body schrumpft auf zwei Einzeiler die die Service-Funktion aufrufen und das Ergebnis auf die Pydantic-Response mappen. Zweck dieser ersten sub-PR ist ausschließlich das Anlegen des Service-Moduls und die Etablierung des Router→Service-Patterns für die folgenden (größeren) `list_bots` / `get_bot` / `create_bot` Extractions. **Zero behavior change** — die bestehenden Router-Tests in `tests/integration/test_bots.py` bleiben unverändert grün.
+
+#### Refactored
+- **[services]** `src/services/bots_service.py` (NEU, ~40 LOC): zwei Module-Level-Funktionen. `list_strategies()` delegiert direkt an `StrategyRegistry.list_available()` (Plain-Dict-Liste die der Router auf `StrategyInfo` mapt). `list_data_sources()` liefert `{"sources": [ds.to_dict() for ds in DATA_SOURCES], "defaults": DEFAULT_SOURCES}` — identisches Dict wie vorher vom Handler direkt returned. FastAPI-frei (kein `HTTPException`, kein `Depends`, kein `Request`), purer Business-Logic-Read.
+- **[router]** `src/api/routers/bots.py` Handler `list_strategies` + `list_data_sources` rufen jetzt `bots_service.list_strategies()` bzw. `bots_service.list_data_sources()`. Der lokale `from src.data.data_source_registry import ...`-Import im Handler entfällt — der Service owned den Import. Decorator (`@router.get`), Auth-Dependency (`get_current_user`), und Response-Model bleiben identisch.
+
+#### Tests
+- **[unit]** `tests/unit/services/test_bots_service.py` (NEU, 6 Tests): `TestListStrategies` (3 — non-empty, key-shape incl. `name`/`description`/`param_schema`, exact equality mit `StrategyRegistry.list_available()`) und `TestListDataSources` (3 — dict-shape, source-entries sind plain-dicts mit `id`+`name`, defaults referenzieren bestehende source-IDs). Alle grün.
+
+#### Scope für Follow-up PRs
+- PR-2: `list_bots` extrahieren (~185 LOC Handler-Body, DB + Orchestrator-Coupling via `orchestrator.get_bot_status` als injizierter Callable)
+- PR-3: `get_bot` + CRUD (`create_bot`, `update_bot`, `delete_bot`, `duplicate_bot`)
+- PR-4: Balance/Budget/Symbol-Conflict Handler (Exchange-Client-Coupling)
+- PR-5: `bots_lifecycle.py` und `bots_statistics.py` extraction
 
 ### 2026-04-22 — ARCH-C1 Phase 2a PR-5: extract PortfolioService (#253)
 
