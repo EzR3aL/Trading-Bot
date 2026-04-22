@@ -152,7 +152,9 @@ async def _check_symbol_conflicts(
 @router.get("/strategies", response_model=StrategiesListResponse)
 async def list_strategies(user: User = Depends(get_current_user)):
     """List all available trading strategies with their parameter schemas."""
-    strategies = StrategyRegistry.list_available()
+    from src.services import bots_service
+
+    strategies = bots_service.list_strategies()
     return StrategiesListResponse(
         strategies=[StrategyInfo(**s) for s in strategies]
     )
@@ -166,12 +168,9 @@ async def list_data_sources(user: User = Depends(get_current_user)):
     id, name, description, category, provider, free, default fields.
     Used by the Bot Builder to render selectable data source cards.
     """
-    from src.data.data_source_registry import DATA_SOURCES, DEFAULT_SOURCES
+    from src.services import bots_service
 
-    return {
-        "sources": [ds.to_dict() for ds in DATA_SOURCES],
-        "defaults": DEFAULT_SOURCES,
-    }
+    return bots_service.list_data_sources()
 
 
 # ─── Balance Preview (for BotBuilder) ────────────────────────
