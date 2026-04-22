@@ -759,7 +759,7 @@ class TestExecuteTradeExtended:
         signal = _make_mock_signal()
 
         mock_session = _make_db_session()
-        with patch("src.bot.trade_executor.get_session", return_value=_mock_session_ctx(mock_session)):
+        with patch("src.bot.components.trade_executor.get_session", return_value=_mock_session_ctx(mock_session)):
             await worker._execute_trade(signal, mock_client, demo_mode=True)
 
         # Verify leverage 10 was used
@@ -790,7 +790,7 @@ class TestExecuteTradeExtended:
         signal.stop_loss = 98000.0
 
         mock_session = _make_db_session()
-        with patch("src.bot.trade_executor.get_session", return_value=_mock_session_ctx(mock_session)):
+        with patch("src.bot.components.trade_executor.get_session", return_value=_mock_session_ctx(mock_session)):
             await worker._execute_trade(signal, mock_client, demo_mode=True)
 
         # Per-asset TP=5%, SL=2% overrides bot-level TP=4%, SL=1.5%
@@ -824,7 +824,7 @@ class TestExecuteTradeExtended:
         )
 
         mock_session = _make_db_session()
-        with patch("src.bot.trade_executor.get_session", return_value=_mock_session_ctx(mock_session)):
+        with patch("src.bot.components.trade_executor.get_session", return_value=_mock_session_ctx(mock_session)):
             await worker._execute_trade(signal, mock_client, demo_mode=True)
 
         call_kwargs = mock_client.place_market_order.call_args[1]
@@ -848,7 +848,7 @@ class TestExecuteTradeExtended:
         signal = _make_mock_signal(entry_price=95000.0)
 
         mock_session = _make_db_session()
-        with patch("src.bot.trade_executor.get_session", return_value=_mock_session_ctx(mock_session)):
+        with patch("src.bot.components.trade_executor.get_session", return_value=_mock_session_ctx(mock_session)):
             await worker._execute_trade(signal, mock_client, demo_mode=True, asset_budget=5000.0)
 
         # Full budget: position_usdt = 5000, should not call calculate_position_size
@@ -872,7 +872,7 @@ class TestExecuteTradeExtended:
         signal = _make_mock_signal()
 
         mock_session = _make_db_session()
-        with patch("src.bot.trade_executor.get_session", return_value=_mock_session_ctx(mock_session)):
+        with patch("src.bot.components.trade_executor.get_session", return_value=_mock_session_ctx(mock_session)):
             await worker._execute_trade(signal, mock_client, demo_mode=True, asset_budget=5000.0)
 
         # asset_budget takes priority — direct sizing, no RiskManager call
@@ -897,7 +897,7 @@ class TestExecuteTradeExtended:
         signal = _make_mock_signal()
 
         mock_session = _make_db_session()
-        with patch("src.bot.trade_executor.get_session", return_value=_mock_session_ctx(mock_session)):
+        with patch("src.bot.components.trade_executor.get_session", return_value=_mock_session_ctx(mock_session)):
             await worker._execute_trade(signal, mock_client, demo_mode=True)
 
         # Trade should still be recorded with order.price as fill
@@ -926,7 +926,7 @@ class TestExecuteTradeExtended:
         signal = _make_mock_signal()
 
         mock_session = _make_db_session()
-        with patch("src.bot.trade_executor.get_session", return_value=_mock_session_ctx(mock_session)):
+        with patch("src.bot.components.trade_executor.get_session", return_value=_mock_session_ctx(mock_session)):
             await worker._execute_trade(signal, mock_client, demo_mode=True)
 
         mock_notifier.send_trade_entry.assert_awaited_once()
@@ -955,7 +955,7 @@ class TestExecuteTradeExtended:
         signal = _make_mock_signal()
 
         mock_session = _make_db_session()
-        with patch("src.bot.trade_executor.get_session", return_value=_mock_session_ctx(mock_session)):
+        with patch("src.bot.components.trade_executor.get_session", return_value=_mock_session_ctx(mock_session)):
             await worker._execute_trade(signal, mock_client, demo_mode=True)
 
         # Trade should still be recorded even though notification failed
@@ -980,7 +980,7 @@ class TestExecuteTradeExtended:
         signal = _make_mock_signal()
 
         mock_session = _make_db_session()
-        with patch("src.bot.trade_executor.get_session", return_value=_mock_session_ctx(mock_session)):
+        with patch("src.bot.components.trade_executor.get_session", return_value=_mock_session_ctx(mock_session)):
             await worker._execute_trade(signal, mock_client, demo_mode=True)
 
         assert worker.trades_today == 1
@@ -1024,7 +1024,7 @@ class TestExecuteTradeExtended:
         signal = _make_mock_signal()
 
         mock_session = _make_db_session()
-        with patch("src.bot.trade_executor.get_session", return_value=_mock_session_ctx(mock_session)):
+        with patch("src.bot.components.trade_executor.get_session", return_value=_mock_session_ctx(mock_session)):
             await worker._execute_trade(signal, mock_client, demo_mode=True)
 
         assert worker.trades_today == 1
