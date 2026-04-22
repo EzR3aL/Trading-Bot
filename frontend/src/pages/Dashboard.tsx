@@ -100,10 +100,23 @@ export default function Dashboard() {
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Data fetching via React Query
-  const { data: stats = null, isLoading: loadingStats, error: statsError } = useDashboardStats(period, demoFilter)
-  const { data: dailyData, isLoading: loadingDaily, error: dailyError } = useDashboardDaily(period, demoFilter)
-  const { data: positions = [], isLoading: loadingPositions } = usePortfolioPositions()
+  const statsQuery = useDashboardStats(period, demoFilter)
+  const dailyQuery = useDashboardDaily(period, demoFilter)
+  const positionsQuery = usePortfolioPositions()
+  const { data: stats = null, isLoading: loadingStats, error: statsError } = statsQuery
+  const { data: dailyData, isLoading: loadingDaily, error: dailyError } = dailyQuery
+  const { data: positions = [], isLoading: loadingPositions } = positionsQuery
   const updateTpSl = useUpdateTpSl()
+
+  // Gate the onboarding tour until the core queries have delivered real
+  // content — otherwise the tour highlights empty skeleton elements.
+  // If any query errors out we still allow auto-start so the user is not
+  // locked out of the tutorial; the UI shows the error banner and the tour
+  // can run alongside it.
+  const dashboardReady =
+    (statsQuery.isSuccess || statsQuery.isError) &&
+    (dailyQuery.isSuccess || dailyQuery.isError) &&
+    (positionsQuery.isSuccess || positionsQuery.isError)
 
   // Real-time trade updates via SSE (Issue #216 §2.2). Replaces the previous
   // 5-second polling loop; falls back to polling automatically if the
@@ -254,8 +267,9 @@ export default function Dashboard() {
         onEditPosition={handleEditPosition}
       />
 
-      {/* Guided Tour */}
-      <GuidedTour tourId="dashboard" steps={dashboardTourSteps} />
+      {/* Guided Tour — auto-start only once the core queries have data so
+          the highlighted targets contain real content, not skeletons. */}
+      <GuidedTour tourId="dashboard" steps={dashboardTourSteps} autoStart={dashboardReady} />
 
       {/* Edit TP/SL Panel — rendered at top level for correct z-index */}
       {livePosition && livePosition.trade_id && (
