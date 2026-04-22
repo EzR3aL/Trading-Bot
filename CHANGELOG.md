@@ -529,6 +529,25 @@ Das bestehende `config_service.py`-Modul war bisher eine reine Helper-Sammlung (
 - `config_hyperliquid.get_hl_admin_settings` + der Rest von `config_hyperliquid.py` (Builder-Approval, Referral-Verify, Revenue-Summary). Eigene Extraktion, da `SystemSetting` / ENV-Fallback-Logik und der HL-Readback-Client zusätzliche Testing-Primitives brauchen.
 - `config_affiliate.list_affiliate_uids` — Admin-Paginierung mit Stats-Aggregat, plus Search-Filter über `User.username` join.
 - Alle Mutation-Handler (`update_trading_config`, `update_strategy_config`, `upsert_exchange_connection`, `delete_exchange_connection`, `set_affiliate_uid`, …) werden bewusst später extrahiert — Mutations brauchen saubere Error-Domain-Typen in `src/services/exceptions.py` statt direkte `HTTPException`-Raises.
+### 2026-04-22 — ARCH-C1 Phase 2b PR-2: BotsService — single-bot CRUD (#293)
+
+Zweite Extraction-Welle: die drei Single-Bot-CRUD-Handler (`GET /{bot_id}`, `DELETE /{bot_id}`, `POST /{bot_id}/duplicate`) wandern aus dem Router in den Service. Gemeinsamer Nenner war der `select(BotConfig).where(id == bot_id, user_id == user.id)`-Lookup, der jetzt als `bots_service.get_bot()` einmal zentral lebt. Delete stoppt den Bot via Orchestrator wenn er läuft, schreibt Event-Log + Config-Audit und gibt den Bot-Namen zurück. Duplicate erzwingt das `MAX_BOTS_PER_USER`-Limit über die neue `MaxBotsReached`-Service-Exception und clont alle 19 Policy-Felder (Strategy, Exchange, Mode, Trading-Pairs, Leverage, TP/SL-Percent, Schedule, Notifications-Webhooks). Router-Handler sind jetzt 5-15 LOC Delegates die `BotNotFound` → 404 und `MaxBotsReached` → 400 mappen. Stacked auf PR-1 (#286). **Zero behavior change** — Response-Shapes, Status-Codes und Rate-Limits identisch zu vorher.
+
+#### Refactored
+- **[services]** `src/services/bots_service.py`: drei neue async-Funktionen. `get_bot(db, user_id, bot_id)` → `BotConfig` oder `BotNotFound`. `delete_bot(db, user_id, bot_id, orchestrator)` → Bot-Name (String für Router-Response), führt `orchestrator.is_running` + `orchestrator.stop_bot` + `db.delete` + `log_event("bot_deleted")` + `log_config_change(action="delete")` aus. `duplicate_bot(db, user_id, bot_id)` → neue `BotConfig` mit `name=f"{original.name} (Copy)"`, `is_enabled=False`, identisch clonede Strategy/Exchange/Notification-Konfiguration, `log_event("bot_duplicated")`. Neuer `_OrchestratorLike`-Protocol-Type hält den Service orchestrator-stack-frei. Late Imports für `config_audit` + `event_logger` halten das Modul FastAPI-frei und testbar ohne Full-App-Bootstrap.
+- **[services]** `src/services/exceptions.py`: `BotNotFound` + `MaxBotsReached` ergänzt (unterhalb `InvalidTpSlIntent`). Wie die bestehenden `ServiceError`-Subklassen: keine Nachrichten-Konstanten gehardcoded — Router owned die User-facing Message.
+- **[router]** `src/api/routers/bots.py`: `get_bot` (15 LOC → 8 LOC), `delete_bot` (33 LOC → 10 LOC), `duplicate_bot` (54 LOC → 12 LOC). Module-level-Import `from src.services import bots_service` ersetzt die inline-Imports aus PR-1 (dreifache Nutzung jetzt). Try/except-Ketten mappen `BotNotFound` → `HTTPException(404, ERR_BOT_NOT_FOUND)` und `MaxBotsReached` → `HTTPException(400, ERR_MAX_BOTS_REACHED.format(max_bots=MAX_BOTS_PER_USER))`.
+
+#### Tests
+- **[unit]** `tests/unit/services/test_bots_service.py`: 10 neue Tests (16 total) mit in-memory SQLite + `_FakeOrchestrator`. `get_bot`: happy path, missing-ID, Foreign-Ownership (verifiziert No-Tenant-Leak durch Collapsing auf `BotNotFound`). `delete_bot`: happy path + Rückgabewert, Stop-if-running (verifiziert `orchestrator.stopped == [bot_id]`), missing-ID, Foreign-Ownership. `duplicate_bot`: disabled-copy-shape + Name-Suffix, missing-ID, `MaxBotsReached`-Guard (monkey-patch `MAX_BOTS_PER_USER=1`). Alle grün.
+
+#### Scope für Follow-up PRs
+- PR-3: `list_bots` extrahieren (~185 LOC, Orchestrator-Coupling über injizierten Callable)
+- PR-4: `create_bot` + `update_bot` (Validation, Strategy-Registry-Lookup, Encryption von Webhooks/Telegram-Tokens)
+- PR-5: Balance/Budget/Symbol-Conflict Handler (Exchange-Client-Coupling)
+
+---
+
 ### 2026-04-22 — ARCH-C1 Phase 2b PR-1: BotsService — static read handlers (#286)
 
 Erste Extraction-Welle aus dem `/api/bots`-Router in den Service-Layer. Minimaler Scope: die beiden DB-freien, Orchestrator-freien Static-Read-Handler (`GET /api/bots/strategies`, `GET /api/bots/data-sources`) wandern nach `src/services/bots_service.py`. Der Router-Body schrumpft auf zwei Einzeiler die die Service-Funktion aufrufen und das Ergebnis auf die Pydantic-Response mappen. Zweck dieser ersten sub-PR ist ausschließlich das Anlegen des Service-Moduls und die Etablierung des Router→Service-Patterns für die folgenden (größeren) `list_bots` / `get_bot` / `create_bot` Extractions. **Zero behavior change** — die bestehenden Router-Tests in `tests/integration/test_bots.py` bleiben unverändert grün.

@@ -22,3 +22,11 @@ class SyncInProgress(ServiceError):
 
 class InvalidTpSlIntent(ServiceError):
     """Raised when a TP/SL/trailing intent fails validation before RSM dispatch."""
+
+
+class BotNotFound(ServiceError):
+    """Raised when the requested bot does not exist or is not owned by the user."""
+
+
+class MaxBotsReached(ServiceError):
+    """Raised when the user has reached the per-user bot limit."""
