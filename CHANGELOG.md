@@ -11,6 +11,19 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ## [Unreleased]
 
+### 2026-04-22 — ARCH-C1 Phase 2a PR-5: extract PortfolioService (#253)
+
+Second extraction step of the service-layer refactor plan. **Zero behavior change** — the 10 portfolio characterization tests in `tests/integration/test_portfolio_router_characterization.py` and the 13 router unit tests in `tests/unit/api/test_portfolio_router.py` pass unmodified.
+
+#### Refactored
+- **[services]** `src/services/portfolio_service.py` — populated `PortfolioService` with the 4 handlers' business logic: `get_summary(days, demo_mode)`, `list_positions()`, `get_daily(days, demo_mode)`, `get_allocation()`. FastAPI-free (no `Request` / `HTTPException` imports). Returns plain dataclasses (`PortfolioSummaryResult`, `PortfolioPositionItem`, `PortfolioDailyItem`, `PortfolioAllocationItem`) which the router projects onto Pydantic models. The exchange-client loader is injected via a constructor callable (`clients_loader`) so tests that monkeypatch `portfolio_router._get_all_user_clients` still observe the patched version.
+- **[router]** `src/api/routers/portfolio.py` — reduced from 388 → 213 LOC. Handlers are now thin adapters: parse query params → call service → map dataclass → Pydantic response. Module-level TTL cache (`_cache`, `_cache_get`, `_cache_set`, `CACHE_TTL`) stays on the router (module-scoped lifetime, not per-request). Rate-limit decorators untouched. `_get_all_user_clients` kept on the router module so the existing monkeypatch contract in the characterization tests is preserved.
+
+#### Added (tests)
+- **[test]** `tests/unit/services/test_portfolio_service.py` — **8 unit tests** exercising the service directly with in-memory SQLite + mocked exchange clients: `get_summary` (empty/populated), `list_positions` (no clients / one enriched position), `get_daily` (empty/populated), `get_allocation` (no clients / two exchanges).
+
+All three affected suites stay green: `test_portfolio_service.py` (8/8), `test_portfolio_router.py` (13/13), `test_portfolio_router_characterization.py` (10/10).
+
 ### 2026-04-22 — ARCH-C1 Phase 1: service-layer scaffolding + characterization tests (#253)
 
 First execution step of the service-layer refactor plan (`Anleitungen/refactor_plan_service_layer.md`). **No production behavior change.** Sets up the safety net for PR-3 onward (read-only service extraction).
