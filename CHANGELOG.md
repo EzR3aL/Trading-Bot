@@ -11,6 +11,27 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ## [Unreleased]
 
+### 2026-04-22 — ARCH-C1 Phase 3 PR-2: extract UsersService (#288)
+
+Dritter Wave der ARCH-C1 Service-Layer-Refactor-Kette — nach TradesService (PR-3/PR-4), PortfolioService (PR-5) und BotsService-Scaffold (PR-1) werden jetzt die **User-Info-Read-Handler** aus den Users- und Auth-Routern in ein neues `UsersService`-Modul extrahiert. **Zero behavior change** — die 94 bestehenden Auth- und Users-Router-Tests (`tests/unit/test_auth.py`, `tests/unit/api/test_users_router.py`, `tests/integration/test_auth_flow.py`) bleiben unverändert grün. Der Login/Refresh/Logout/Change-Password-Flow und der Supabase-One-Time-Code-Bridge (`auth_bridge.py`) wurden bewusst NICHT angefasst — nur pure Reads wandern in die Service-Schicht.
+
+#### Refactored
+- **[services]** `src/services/users_service.py` (neu, 152 LOC) — FastAPI-freie Business-Logik für die beiden User-Info-Handler: `get_profile(user)` (pures `User` → `UserProfileResult` Transform, wird von `GET /api/auth/me` aufgerufen) und `list_users(db)` (Admin-Panel-Listing mit ge-batchten Exchange-/Bot-/Trade-Aggregaten für `GET /api/users`). Keine `HTTPException`, keine `Depends`, keine `Request`-Imports — der Service gibt Plain-Dataclasses (`UserProfileResult`, `AdminUserListItem`) zurück, die der Router mit direktem Konstruktor-Aufruf auf die bestehenden Pydantic-Response-Models projiziert. `list_users` behält die identische DB-Semantik: `is_deleted=False`-Filter, `ORDER BY id`, drei Batched-Queries gegen `ExchangeConnection` (DISTINCT exchange_type pro User), `BotConfig` (COUNT WHERE is_enabled=True) und `TradeRecord` (COUNT pro User) um N+1 zu vermeiden, plus `auth_provider or "local"`-Coalesce und ISO-8601-Serialisierung für `last_login_at` / `created_at`.
+- **[router]** `src/api/routers/users.py` — `list_users` reduziert von 55 → 24 LOC (Handler-Body). Handler ist jetzt ein dünner Adapter: service call → Projektion auf `AdminUserResponse`. Die Write-Endpoints (`create_user`, `update_user`, `delete_user`) bleiben komplett im Router (Mutation-Pfad, Rate-Limiter-Decorators, Pydantic-Validierungs-Shape, Soft-Delete-Semantik mit `token_version`-Bump). Unused imports (`func`, `BotConfig`, `ExchangeConnection`, `TradeRecord`) wurden entfernt.
+- **[router]** `src/api/routers/auth.py` — `get_me` ruft jetzt `users_service.get_profile(user)` und projiziert das Ergebnis auf `UserProfile`. Alle anderen Handler (login, refresh, logout, change-password) bleiben byte-identisch — der Service fasst bewusst nur die Pure-Read-Transform-Logik an, nicht die Auth-Seiteneffekte (Cookies, Rate-Limits, Session-Tabelle, Token-Versioning).
+
+#### Added (tests)
+- **[test]** `tests/unit/services/test_users_service.py` — **9 Unit-Tests** gegen den Service direkt, mit In-Memory-SQLite für die DB-Handler (mirror des `test_portfolio_service.py`-Patterns):
+  - `TestGetProfile`: alle Felder werden durchgereicht, NULL-E-Mail und NULL-Language bleiben `None`, `is_active=False` surfaced korrekt.
+  - `test_list_users_empty_db_returns_empty_list`: leere DB → `[]`, Batched-Queries crashen nicht bei leerer ID-Liste (Early-Return-Guard).
+  - `test_list_users_excludes_soft_deleted`: `is_deleted=True`-Row wird herausgefiltert.
+  - `test_list_users_orders_by_id_ascending`: Reihenfolge ist deterministisch über `id ASC`.
+  - `test_list_users_surfaces_supabase_auth_provider`: `auth_provider` wird für Supabase-Bridge-User verbatim durchgereicht, `None` coalesct zu `"local"`.
+  - `test_list_users_aggregates_exchanges_bots_and_trades`: Full-Happy-Path — ein User mit 2 Exchange-Connections (bitget+hyperliquid), 3 Bot-Configs (2 enabled + 1 disabled → `active_bots=2`), 3 Trades (alle gezählt, egal ob open/closed) liefert die erwarteten Aggregate; `last_login_at` und `created_at` sind ISO-8601-Strings.
+  - `test_list_users_zero_defaults_for_user_with_no_relations`: User ohne Exchanges/Bots/Trades bekommt `exchanges=[]`, `active_bots=0`, `total_trades=0`, `last_login_at=None`.
+
+Alle drei betroffenen Suites bleiben grün: `test_users_service.py` (9/9), `test_users_router.py` (unverändert), `test_auth.py` + `test_auth_flow.py` (94 kombiniert).
+
 ### 2026-04-22 — ARCH-C1 Phase 2a PR-5: extract PortfolioService (#253)
 
 Second extraction step of the service-layer refactor plan. **Zero behavior change** — the 10 portfolio characterization tests in `tests/integration/test_portfolio_router_characterization.py` and the 13 router unit tests in `tests/unit/api/test_portfolio_router.py` pass unmodified.

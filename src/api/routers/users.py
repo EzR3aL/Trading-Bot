@@ -3,7 +3,7 @@
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.rate_limit import limiter
@@ -11,8 +11,9 @@ from src.api.schemas.user import AdminUserResponse, UserCreate, UserResponse, Us
 from src.errors import ERR_CANNOT_DELETE_SELF, ERR_USERNAME_EXISTS, ERR_USER_NOT_FOUND
 from src.auth.dependencies import get_current_admin
 from src.auth.password import hash_password
-from src.models.database import BotConfig, ExchangeConnection, TradeRecord, User
+from src.models.database import User
 from src.models.session import get_db
+from src.services import users_service
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -26,54 +27,23 @@ async def list_users(
     db: AsyncSession = Depends(get_db),
 ):
     """List all active users with support-relevant details (admin only)."""
-    result = await db.execute(
-        select(User).where(User.is_deleted == False).order_by(User.id)  # noqa: E712
-    )
-    users = result.scalars().all()
-    user_ids = [u.id for u in users]
-
-    # Batch: exchanges per user
-    ex_result = await db.execute(
-        select(ExchangeConnection.user_id, ExchangeConnection.exchange_type)
-        .where(ExchangeConnection.user_id.in_(user_ids))
-        .distinct()
-    )
-    exchanges_map: dict[int, list[str]] = {}
-    for uid, ex_type in ex_result:
-        exchanges_map.setdefault(uid, []).append(ex_type)
-
-    # Batch: active bots per user
-    bot_result = await db.execute(
-        select(BotConfig.user_id, func.count(BotConfig.id))
-        .where(BotConfig.user_id.in_(user_ids), BotConfig.is_enabled == True)  # noqa: E712
-        .group_by(BotConfig.user_id)
-    )
-    bots_map = {uid: cnt for uid, cnt in bot_result.all()}
-
-    # Batch: total trades per user
-    trade_result = await db.execute(
-        select(TradeRecord.user_id, func.count(TradeRecord.id))
-        .where(TradeRecord.user_id.in_(user_ids))
-        .group_by(TradeRecord.user_id)
-    )
-    trades_map = {uid: cnt for uid, cnt in trade_result.all()}
-
+    items = await users_service.list_users(db)
     return [
         AdminUserResponse(
-            id=u.id,
-            username=u.username,
-            email=u.email,
-            role=u.role,
-            language=u.language,
-            is_active=u.is_active,
-            auth_provider=u.auth_provider or "local",
-            last_login_at=u.last_login_at.isoformat() if u.last_login_at else None,
-            created_at=u.created_at.isoformat() if u.created_at else None,
-            exchanges=exchanges_map.get(u.id, []),
-            active_bots=bots_map.get(u.id, 0),
-            total_trades=trades_map.get(u.id, 0),
+            id=item.id,
+            username=item.username,
+            email=item.email,
+            role=item.role,
+            language=item.language,
+            is_active=item.is_active,
+            auth_provider=item.auth_provider,
+            last_login_at=item.last_login_at,
+            created_at=item.created_at,
+            exchanges=item.exchanges,
+            active_bots=item.active_bots,
+            total_trades=item.total_trades,
         )
-        for u in users
+        for item in items
     ]
 
 

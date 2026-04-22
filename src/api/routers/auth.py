@@ -40,6 +40,7 @@ from src.errors import (
 )
 from src.models.database import User, UserSession
 from src.models.session import get_db
+from src.services import users_service
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -362,13 +363,14 @@ async def change_password(
 @router.get("/me", response_model=UserProfile)
 async def get_me(user: User = Depends(get_current_user)):
     """Get current user profile."""
+    profile = users_service.get_profile(user)
     return UserProfile(
-        id=user.id,
-        username=user.username,
-        email=user.email,
-        role=user.role,
-        language=user.language,
-        is_active=user.is_active,
+        id=profile.id,
+        username=profile.username,
+        email=profile.email,
+        role=profile.role,
+        language=profile.language,
+        is_active=profile.is_active,
     )
 
 
