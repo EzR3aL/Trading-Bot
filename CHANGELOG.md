@@ -23,6 +23,36 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 #### Fixed
 - **[lint]** `src/exchanges/hyperliquid/client.py` — `pre_start_checks` annotated its return type as `List["GateCheckResult"]` but `GateCheckResult` was only imported inside the function body, so the top-level string-forward-reference was unresolvable. Ruff's `F821` correctly flagged it (runtime was fine under PEP 563). Fix: hoist `GateCheckResult` into the existing `from src.exchanges.base import (...)` block and drop the redundant in-function import.
 - **[ci/alembic-check]** `alembic.ini` — added `prepend_sys_path = .` to the `[alembic]` section so the alembic CLI can import `src.models.database` / `src.models.broadcast` from `migrations/env.py`. Without it the brand-new `alembic-check` job (introduced in #243 to verify every migration has a working `upgrade()`+`downgrade()` round-trip) died at import time with `ModuleNotFoundError: No module named 'src'`. The FastAPI app startup path never hit this because uvicorn runs with the repo root already on `sys.path`; alembic CLI does not.
+### 2026-04-22 — ARCH-H2 completion: delete HyperliquidGatesMixin (#245, task 4/4)
+
+#### Removed
+- **[ARCH-H2]** `src/bot/hyperliquid_gates.py` (262 lines, `HyperliquidGatesMixin`) deleted. The four legacy methods (`_check_referral_gate`, `_check_builder_approval`, `_check_wallet_gate`, `_check_affiliate_uid_gate`) were a duplicate of the logic that already lived in `HyperliquidClient.pre_start_checks` — kept alive only because nine legacy unit tests were still driving the mixin directly. Production has been calling `client.pre_start_checks(...)` exclusively since PR #244. `BotWorker`'s MRO no longer lists `HyperliquidGatesMixin` and the import is gone from `src/bot/bot_worker.py`. The file-level docstring now points readers at `ExchangeClient.pre_start_checks` as the single entry point for per-exchange gate checks.
+
+#### Changed
+- **[ARCH-H2]** `tests/unit/exchanges/test_hyperliquid_builder.py` — `TestBotWorkerReferralGate` (5 tests) and `TestBotWorkerBuilderCheck` (6 tests) repointed at `HyperliquidClient.pre_start_checks(user_id, db)` and renamed `TestHyperliquidPreStartChecksReferralGate` / `TestHyperliquidPreStartChecksBuilderGate`. Each test now builds a lightweight `HyperliquidClient` via `object.__new__` (same pattern as the pre-existing `TestBuilderFeeApproval` tests), stubs the SDK-touching methods (`get_referral_info`, `check_builder_fee_approval`, `validate_wallet`), and asserts on the returned `List[GateCheckResult]` — failing blocks assert `any(r.key == "referral"/"builder_fee" and not r.ok)`, passing cases assert the gate is absent from the result list. The one-of-a-kind `test_builder_check_skipped_for_non_hl_client` now tests the routing contract by invoking the base `ExchangeClient.pre_start_checks` via descriptor-bind and asserting it never emits a `builder_fee` key.
+- **[ARCH-H2]** `tests/unit/bot/test_bot_worker_extra.py` — `TestCheckBuilderApproval` (4 tests) and `TestCheckReferralGate` (2 tests) ported in the same style. Shared `_make_hl_client_for_gates` helper mirrors the one in `test_hyperliquid_builder.py` to keep both test modules self-contained.
+- **[ARCH-H2]** `src/exchanges/hyperliquid/client.py` — `pre_start_checks` docstring updated: caller attribution now reads "`BotWorker.initialize` maps failing results to `self.error_message`" instead of referring to the deleted mixin.
+
+#### Verified
+- Full backend suite: 3158 passed, 24 skipped, 13 xfailed, 1 xpassed — no regressions (`python -m pytest tests/ --tb=line -q`, 497.80s).
+- Target 9 tests (listed in issue #245 task 4) + the 6 paired "passing" siblings in the same classes all run against `pre_start_checks` and pass.
+
+### 2026-04-22 — Manual-close endpoint routed through RiskStateManager.classify_close (#245)
+
+#### Changed
+- **`src/api/routers/bots_lifecycle.py`** (`POST /api/bots/{bot_id}/close-position/{symbol}`, lines 328-474): after the exchange-side close is verified the endpoint now defers to `RiskStateManager.classify_close(trade_id, exit_price, exit_time)` when `Settings.risk.risk_state_manager_enabled` is True. This closes the last gap from PR #244: strategy exits and position-monitor exits already went through the RSM, but manual closes still hard-coded `exit_reason = "MANUAL_CLOSE"` regardless of what actually triggered the close on the exchange. Mirrors the `sync_trades` pattern from `trades.py:475-499`. Failure modes: the classifier is wrapped in try/except and falls back to the legacy `"MANUAL_CLOSE"` string; when the feature flag is off the endpoint behaves exactly as before (no classifier call, no import of `get_risk_state_manager`). The call is gated behind the success path — a failed close or a 502 verify never reaches the classifier, so a bad close cannot leak into exit-reason attribution.
+
+#### Added
+- **`tests/unit/api/test_bots_router.py`** — new `TestClosePositionClassifyClose` test class (3 tests) covering: classify_close is awaited with `(trade_id, exit_price, exit_time)` and its return value becomes `TradeRecord.exit_reason` when the flag is on; classify_close is NOT awaited when the flag is off; a RuntimeError from classify_close does not break the endpoint (fallback to `MANUAL_CLOSE`). All 79 tests in `test_bots_router.py` pass.
+
+### 2026-04-22 — BUILD_COMMIT wiring: docker-compose + deploy script (#245)
+
+#### Changed
+- **`docker-compose.yml`**: `trading-bot.build` now declares an `args.BUILD_COMMIT: ${BUILD_COMMIT:-unknown}` block so the compose build stage forwards the host's commit SHA into the Dockerfile's `ARG BUILD_COMMIT`. Local `docker compose up` without the export still works thanks to the `:-unknown` fallback. The Dockerfile's `ARG BUILD_COMMIT` → `ENV BUILD_COMMIT` plumbing was already in place (lines 42-43) and was not touched.
+- **`scripts/deploy.sh`**: added `export BUILD_COMMIT=$(git rev-parse HEAD)` right before the build step (covers both the `--no-cache` and cached branches), plus an echo line so the deploy log records which SHA is being baked in. This closes the open ops note from the 2026-04-21 Workstream E entry — `/api/version` will now return the real commit in production instead of `unknown`.
+
+#### Verified
+- `docker compose config` (with dummy `BUILD_COMMIT=abc123`) resolves `args.BUILD_COMMIT: abc123` on the `trading-bot` service, confirming end-to-end interpolation.
 
 ### 2026-04-21 — Backend: trades filter-options + sync_trades classify_close wiring (Agent A1)
 
