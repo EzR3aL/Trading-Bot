@@ -11,6 +11,23 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ## [Unreleased]
 
+### 2026-04-22 — ARCH-C1 Phase 1: service-layer scaffolding + characterization tests (#253)
+
+First execution step of the service-layer refactor plan (`Anleitungen/refactor_plan_service_layer.md`). **No production behavior change.** Sets up the safety net for PR-3 onward (read-only service extraction).
+
+#### Added (scaffolding)
+- **[services]** `src/services/exceptions.py` — `ServiceError` base + `TradeNotFound`, `NotOwnedByUser`, `SyncInProgress`, `InvalidTpSlIntent`. Router will map these to HTTP status codes; this module does not import FastAPI.
+- **[services]** `src/services/trades_service.py` — `TradesService(db, user)` placeholder. Populated in PR-3/PR-4.
+- **[services]** `src/services/portfolio_service.py` — `PortfolioService(db, user)` placeholder. Populated in PR-5.
+- **[services]** `src/services/trade_sync_service.py` — `TradeSyncService(db, user)` placeholder. Populated in PR-7.
+- **[services]** `src/services/tpsl_service.py` — `TpSlService(db, user, risk_state_manager=None)` placeholder — RSM is constructor-injected for testability (plan §5). Populated in PR-6.
+
+#### Added (tests — freeze current behavior)
+- **[test]** `tests/integration/test_trades_router_characterization.py` — **14 characterization tests** covering all 6 handlers in `src/api/routers/trades.py`: list / filter-options / sync / detail / risk-state / tp-sl. Behaviors frozen include: the `POST /sync` response key is `synced` (not `synced_count`); `GET /{id}` and `PUT /{id}/tp-sl` return 404 (not 403) for "not owned by user" because ownership is fused into the SQL WHERE; `GET /{id}/risk-state` returns 404 when `risk_state_manager_enabled=False`.
+- **[test]** `tests/integration/test_portfolio_router_characterization.py` — **10 characterization tests** covering all 4 handlers in `src/api/routers/portfolio.py`: summary / positions / daily / allocation. Behaviors frozen: `/summary` has no in-memory cache (only `/positions` and `/allocation` do); `/positions` silently ignores an `?exchange=` query param (it doesn't exist on the handler); `/allocation` returns raw balances, not normalized percentages.
+
+All 24 new tests carry `@pytest.mark.characterization`. Backend suite: **3220 passed**, 24 skipped, 13 xfailed, 1 xpassed (+24 over pre-phase-1 baseline of 3196).
+
 ### 2026-04-22 — P3 Security polish (#251, task 1/3)
 
 #### Fixed
