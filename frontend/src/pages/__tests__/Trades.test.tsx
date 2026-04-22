@@ -373,6 +373,38 @@ describe('Trades Page', () => {
     expect(exchangeValues).not.toContain('bitget') // confirms it isn't derived from loaded trades
   })
 
+  // UX-M1 regression: virtualisation must keep the rendered-row DOM
+  // cost bounded when the trade list is large, without breaking the
+  // existing sort / filter / click contract.
+  it('should render fewer DOM rows than source when trade list exceeds virtualisation threshold', async () => {
+    // 250 trades — well above the 50-row threshold the hook uses.
+    // We deliberately don't use 1000+ here because under the parallel
+    // test suite JSDOM layout-less "rendering" of that many rows is
+    // slow enough to approach vitest's default per-test timeout; 250
+    // is still a strong signal that virtualisation is active and
+    // keeps the assertion snappy.
+    const trades = Array.from({ length: 250 }, (_, i) => makeTrade(i + 1, `COIN${i}USDT`))
+    mockUseTrades.mockReturnValue({ data: { trades, total: 250 }, isLoading: false, error: null })
+
+    render(<Trades />, { wrapper: createWrapper() })
+
+    await waitFor(() => {
+      // At least one trade row visible — the virtualised slice.
+      expect(screen.getAllByRole('row').length).toBeGreaterThan(1)
+    })
+
+    // Windowed render contract: the DOM holds strictly fewer rows
+    // than the source. Without virtualisation we'd see 250+ <tr>s
+    // (one per trade + header); the virtualised slice is bounded by
+    // viewport + overscan. We assert "< source size" rather than a
+    // tight cap because JSDOM does not perform real layout so exact
+    // bounds depend on react-virtual's fallback behaviour — the
+    // key invariant is that scaling the source does NOT scale the
+    // DOM linearly. A real browser renders ~30 rows here.
+    const rowCount = screen.getAllByRole('row').length
+    expect(rowCount).toBeLessThan(trades.length)
+  })
+
   it('should gracefully render empty dropdowns when filter-options is loading', async () => {
     mockUseTrades.mockReturnValue({ data: { trades: [], total: 0 }, isLoading: false, error: null })
     mockUseTradesFilterOptions.mockReturnValue({ data: undefined, isLoading: true })

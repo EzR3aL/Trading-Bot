@@ -1,4 +1,4 @@
-import { Fragment, useState, useMemo, useCallback } from 'react'
+import { Fragment, useState, useMemo, useCallback, useRef } from 'react'
 import { formatChartCurrency } from '../utils/dateUtils'
 import { useTranslation } from 'react-i18next'
 import { useQueryClient } from '@tanstack/react-query'
@@ -26,6 +26,7 @@ import { useTradesSSE } from '../hooks/useTradesSSE'
 import { useVisibleTab } from '../hooks/useIntervalPaused'
 import PullToRefreshIndicator from '../components/ui/PullToRefreshIndicator'
 import GuidedTour, { TourHelpButton, type TourStep } from '../components/ui/GuidedTour'
+import { useVirtualRows } from '../components/virtualised/useVirtualRows'
 
 /* ── Constants ────────────────────────────────────────────── */
 
@@ -164,6 +165,22 @@ export default function Portfolio() {
       : b.unrealized_pnl - a.unrealized_pnl
   )
   const [editingPos, setEditingPos] = useState<PortfolioPosition | null>(null)
+
+  // Scroll anchor for window-virtualised position rows. In day-to-day
+  // use there are rarely more than ~20 open positions, so virtualisation
+  // is dormant — but the hook is ready to kick in if a user connects
+  // many exchanges or the feed grows beyond the threshold.
+  const positionsTableRef = useRef<HTMLDivElement | null>(null)
+  const {
+    isVirtualised: positionsVirtualised,
+    virtualItems: positionsVirtualItems,
+    paddingTop: positionsPaddingTop,
+    paddingBottom: positionsPaddingBottom,
+    measureElement: positionsMeasureElement,
+  } = useVirtualRows({
+    count: sortedPositions.length,
+    scrollMarginRef: positionsTableRef,
+  })
 
   // Re-resolve the clicked position against the live positions query so the
   // modal always reflects the latest server state (e.g. a just-cleared SL).
@@ -543,7 +560,129 @@ export default function Portfolio() {
             ))}
           </div>
         ) : (
-          <div className="overflow-x-auto">
+          (() => {
+            // Row renderer shared between the virtualised and full paths.
+            // Closure over `expandedIdx`, translations, and the measure ref
+            // keeps the JSX shape identical regardless of which path we take.
+            const renderPositionRow = (pos: PortfolioPosition, idx: number, virtualIndex: number | null) => (
+              <Fragment key={`${pos.exchange}-${pos.symbol}-${idx}`}>
+                <tr
+                  onClick={() => setExpandedIdx(expandedIdx === idx ? null : idx)}
+                  className="cursor-pointer"
+                  data-index={virtualIndex ?? undefined}
+                  ref={virtualIndex !== null ? positionsMeasureElement : undefined}
+                >
+                  <td>
+                    <span className="inline-flex items-center gap-2">
+                      <ChevronRight size={14} className={`expand-chevron ${expandedIdx === idx ? 'open' : ''}`} />
+                      <ExchangeIcon exchange={pos.exchange} size={16} />
+                      <span className="text-gray-300 capitalize text-sm hidden md:inline">{pos.exchange}</span>
+                    </span>
+                  </td>
+                  <td className="text-white font-medium text-sm">{pos.symbol}</td>
+                  <td className="text-center">
+                    <span className={`text-xs font-medium px-2 py-0.5 rounded ${
+                      pos.side.toLowerCase() === 'long'
+                        ? 'bg-emerald-500/10 text-emerald-400'
+                        : 'bg-red-500/10 text-red-400'
+                    }`}>
+                      {pos.side.toUpperCase()}
+                    </span>
+                  </td>
+                  <td className="text-right text-gray-300 text-sm hidden xl:table-cell">
+                    <SizeValue size={pos.size} price={pos.current_price || pos.entry_price} symbol={pos.symbol} />
+                  </td>
+                  <td className="text-right text-gray-300 text-sm hidden lg:table-cell">
+                    ${pos.entry_price.toLocaleString()}
+                  </td>
+                  <td className="text-right text-gray-300 text-sm hidden lg:table-cell">
+                    ${pos.current_price.toLocaleString()}
+                  </td>
+                  <td className={`text-right text-sm font-medium whitespace-nowrap ${
+                    pos.unrealized_pnl >= 0 ? 'text-emerald-400' : 'text-red-400'
+                  }`}>
+                    {pos.unrealized_pnl >= 0 ? '▲ +' : '▼ '}${Math.abs(pos.unrealized_pnl).toFixed(2)}
+                  </td>
+                  <td className="text-center text-gray-300 text-sm hidden 2xl:table-cell">{pos.leverage}x</td>
+                  <td className="text-center hidden xl:table-cell">
+                    {pos.trailing_stop_active && pos.trailing_stop_price != null ? (
+                      <span className="inline-flex items-center justify-center gap-1 text-emerald-400 text-sm">
+                        ${pos.trailing_stop_price.toLocaleString()}
+                        <span className="text-xs text-gray-400">({pos.trailing_stop_distance_pct?.toFixed(2)}%)</span>
+                        {pos.can_close_at_loss === false && (
+                          <span title={t('bots.trailingStopProtecting')}>
+                            <ShieldCheck size={14} className="text-emerald-400" />
+                          </span>
+                        )}
+                      </span>
+                    ) : (
+                      <span className="text-gray-600 text-sm">--</span>
+                    )}
+                  </td>
+                  <td className="text-center">
+                    {pos.trade_id && (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setEditingPos(pos) }}
+                        className="p-1.5 text-gray-500 hover:text-white transition-colors rounded-lg hover:bg-white/5"
+                        title={t('editPosition.title')}
+                        aria-label="Edit position"
+                      >
+                        <Settings size={14} />
+                      </button>
+                    )}
+                  </td>
+                </tr>
+                {expandedIdx === idx && (
+                  <tr className="table-expand-row">
+                    <td colSpan={10} className="!p-0 !border-b-0">
+                      <dl className="table-expand-content">
+                        <div className="xl:hidden">
+                          <dt>{t('portfolio.size')}</dt>
+                          <dd>
+                            <SizeValue size={pos.size} price={pos.current_price || pos.entry_price} symbol={pos.symbol} />
+                          </dd>
+                        </div>
+                        <div className="lg:hidden">
+                          <dt>{t('portfolio.entryPrice')}</dt>
+                          <dd>${pos.entry_price.toLocaleString()}</dd>
+                        </div>
+                        <div className="lg:hidden">
+                          <dt>{t('portfolio.currentPrice')}</dt>
+                          <dd>${pos.current_price.toLocaleString()}</dd>
+                        </div>
+                        <div className="2xl:hidden">
+                          <dt>{t('portfolio.leverage')}</dt>
+                          <dd>{pos.leverage}x</dd>
+                        </div>
+                        <div className="xl:hidden">
+                          <dt>{t('bots.trailingStop')}</dt>
+                          <dd>
+                            {pos.trailing_stop_active && pos.trailing_stop_price != null
+                              ? `$${pos.trailing_stop_price.toLocaleString()} (${pos.trailing_stop_distance_pct?.toFixed(2)}%)`
+                              : '--'}
+                          </dd>
+                        </div>
+                        {pos.bot_name && (
+                          <div>
+                            <dt>{t('trades.bot')}</dt>
+                            <dd>{pos.bot_name}</dd>
+                          </div>
+                        )}
+                        {pos.margin != null && pos.margin > 0 && (
+                          <div>
+                            <dt>{t('portfolio.margin', 'Margin')}</dt>
+                            <dd>${pos.margin.toFixed(2)}</dd>
+                          </div>
+                        )}
+                      </dl>
+                    </td>
+                  </tr>
+                )}
+              </Fragment>
+            )
+
+            return (
+          <div className="overflow-x-auto" ref={positionsTableRef}>
             <table className="table-premium w-full">
               <thead>
                 <tr>
@@ -577,123 +716,30 @@ export default function Portfolio() {
                 </tr>
               </thead>
               <tbody>
-                {sortedPositions.map((pos, idx) => (
-                  <Fragment key={`${pos.exchange}-${pos.symbol}-${idx}`}>
-                    <tr
-                      onClick={() => setExpandedIdx(expandedIdx === idx ? null : idx)}
-                      className="cursor-pointer"
-                    >
-                      <td>
-                        <span className="inline-flex items-center gap-2">
-                          <ChevronRight size={14} className={`expand-chevron ${expandedIdx === idx ? 'open' : ''}`} />
-                          <ExchangeIcon exchange={pos.exchange} size={16} />
-                          <span className="text-gray-300 capitalize text-sm hidden md:inline">{pos.exchange}</span>
-                        </span>
-                      </td>
-                      <td className="text-white font-medium text-sm">{pos.symbol}</td>
-                      <td className="text-center">
-                        <span className={`text-xs font-medium px-2 py-0.5 rounded ${
-                          pos.side.toLowerCase() === 'long'
-                            ? 'bg-emerald-500/10 text-emerald-400'
-                            : 'bg-red-500/10 text-red-400'
-                        }`}>
-                          {pos.side.toUpperCase()}
-                        </span>
-                      </td>
-                      <td className="text-right text-gray-300 text-sm hidden xl:table-cell">
-                        <SizeValue size={pos.size} price={pos.current_price || pos.entry_price} symbol={pos.symbol} />
-                      </td>
-                      <td className="text-right text-gray-300 text-sm hidden lg:table-cell">
-                        ${pos.entry_price.toLocaleString()}
-                      </td>
-                      <td className="text-right text-gray-300 text-sm hidden lg:table-cell">
-                        ${pos.current_price.toLocaleString()}
-                      </td>
-                      <td className={`text-right text-sm font-medium whitespace-nowrap ${
-                        pos.unrealized_pnl >= 0 ? 'text-emerald-400' : 'text-red-400'
-                      }`}>
-                        {pos.unrealized_pnl >= 0 ? '▲ +' : '▼ '}${Math.abs(pos.unrealized_pnl).toFixed(2)}
-                      </td>
-                      <td className="text-center text-gray-300 text-sm hidden 2xl:table-cell">{pos.leverage}x</td>
-                      <td className="text-center hidden xl:table-cell">
-                        {pos.trailing_stop_active && pos.trailing_stop_price != null ? (
-                          <span className="inline-flex items-center justify-center gap-1 text-emerald-400 text-sm">
-                            ${pos.trailing_stop_price.toLocaleString()}
-                            <span className="text-xs text-gray-400">({pos.trailing_stop_distance_pct?.toFixed(2)}%)</span>
-                            {pos.can_close_at_loss === false && (
-                              <span title={t('bots.trailingStopProtecting')}>
-                                <ShieldCheck size={14} className="text-emerald-400" />
-                              </span>
-                            )}
-                          </span>
-                        ) : (
-                          <span className="text-gray-600 text-sm">--</span>
-                        )}
-                      </td>
-                      <td className="text-center">
-                        {pos.trade_id && (
-                          <button
-                            onClick={(e) => { e.stopPropagation(); setEditingPos(pos) }}
-                            className="p-1.5 text-gray-500 hover:text-white transition-colors rounded-lg hover:bg-white/5"
-                            title={t('editPosition.title')}
-                            aria-label="Edit position"
-                          >
-                            <Settings size={14} />
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                    {expandedIdx === idx && (
-                      <tr className="table-expand-row">
-                        <td colSpan={10} className="!p-0 !border-b-0">
-                          <dl className="table-expand-content">
-                            <div className="xl:hidden">
-                              <dt>{t('portfolio.size')}</dt>
-                              <dd>
-                                <SizeValue size={pos.size} price={pos.current_price || pos.entry_price} symbol={pos.symbol} />
-                              </dd>
-                            </div>
-                            <div className="lg:hidden">
-                              <dt>{t('portfolio.entryPrice')}</dt>
-                              <dd>${pos.entry_price.toLocaleString()}</dd>
-                            </div>
-                            <div className="lg:hidden">
-                              <dt>{t('portfolio.currentPrice')}</dt>
-                              <dd>${pos.current_price.toLocaleString()}</dd>
-                            </div>
-                            <div className="2xl:hidden">
-                              <dt>{t('portfolio.leverage')}</dt>
-                              <dd>{pos.leverage}x</dd>
-                            </div>
-                            <div className="xl:hidden">
-                              <dt>{t('bots.trailingStop')}</dt>
-                              <dd>
-                                {pos.trailing_stop_active && pos.trailing_stop_price != null
-                                  ? `$${pos.trailing_stop_price.toLocaleString()} (${pos.trailing_stop_distance_pct?.toFixed(2)}%)`
-                                  : '--'}
-                              </dd>
-                            </div>
-                            {pos.bot_name && (
-                              <div>
-                                <dt>{t('trades.bot')}</dt>
-                                <dd>{pos.bot_name}</dd>
-                              </div>
-                            )}
-                            {pos.margin != null && pos.margin > 0 && (
-                              <div>
-                                <dt>{t('portfolio.margin', 'Margin')}</dt>
-                                <dd>${pos.margin.toFixed(2)}</dd>
-                              </div>
-                            )}
-                          </dl>
-                        </td>
+                {positionsVirtualised ? (
+                  <>
+                    {positionsPaddingTop > 0 && (
+                      <tr aria-hidden="true" style={{ height: positionsPaddingTop }}>
+                        <td colSpan={10} />
                       </tr>
                     )}
-                  </Fragment>
-                ))}
+                    {positionsVirtualItems.map((vi) =>
+                      renderPositionRow(sortedPositions[vi.index], vi.index, vi.index)
+                    )}
+                    {positionsPaddingBottom > 0 && (
+                      <tr aria-hidden="true" style={{ height: positionsPaddingBottom }}>
+                        <td colSpan={10} />
+                      </tr>
+                    )}
+                  </>
+                ) : (
+                  sortedPositions.map((pos, idx) => renderPositionRow(pos, idx, null))
+                )}
               </tbody>
             </table>
           </div>
+            )
+          })()
         )}
       </div>
 

@@ -23,6 +23,7 @@ import useIsMobile from '../hooks/useIsMobile'
 import usePullToRefresh from '../hooks/usePullToRefresh'
 import PullToRefreshIndicator from '../components/ui/PullToRefreshIndicator'
 import { useTradesFilterOptions } from '../hooks/useTradesFilterOptions'
+import { useVirtualRows } from '../components/virtualised/useVirtualRows'
 
 // URL-search-param keys used by the filters — keeping them in a
 // const object so the URL surface is in one obvious spot and typos
@@ -192,6 +193,22 @@ export default function Trades() {
 
   const [expandedId, setExpandedId] = useState<number | null>(null)
 
+  // Scroll anchor for window-virtualised trade rows. Points at the
+  // overflow-x wrapper around the <table> so useVirtualRows can convert
+  // the page scroll offset into the correct row window. Only activates
+  // when trades.length crosses VIRTUALISATION_THRESHOLD (see hook).
+  const tradesTableRef = useRef<HTMLDivElement | null>(null)
+  const {
+    isVirtualised: tradesVirtualised,
+    virtualItems: tradesVirtualItems,
+    paddingTop: tradesPaddingTop,
+    paddingBottom: tradesPaddingBottom,
+    measureElement: tradesMeasureElement,
+  } = useVirtualRows({
+    count: trades.length,
+    scrollMarginRef: tradesTableRef,
+  })
+
   const refreshData = useCallback(async () => {
     await queryClient.invalidateQueries({ queryKey: queryKeys.trades.all })
   }, [queryClient])
@@ -352,7 +369,160 @@ export default function Trades() {
               </div>
             )
           ) : (
-          <div className="overflow-x-auto">
+          (() => {
+            // Row renderer shared between the virtualised and full paths.
+            // Kept as a closure so it can read `expandedId`, translations,
+            // and the measureElement ref without prop drilling. The
+            // `virtualIndex` arg is only non-null when virtualised — it's
+            // forwarded as data-index so react-virtual can dynamically
+            // measure rows whose expanded height differs from the estimate.
+            const renderTradeRow = (trade: Trade, virtualIndex: number | null) => (
+              <Fragment key={trade.id}>
+                <tr
+                  onClick={() => setExpandedId(expandedId === trade.id ? null : trade.id)}
+                  className="cursor-pointer"
+                  data-index={virtualIndex ?? undefined}
+                  ref={virtualIndex !== null ? tradesMeasureElement : undefined}
+                >
+                  <td className="text-gray-500 text-xs font-mono">#{trade.id}</td>
+                  <td className="text-gray-300">
+                    <span className="inline-flex items-center">
+                      <ChevronRight size={14} className={`expand-chevron ${expandedId === trade.id ? 'open' : ''}`} />
+                      <span title={formatTime(trade.entry_time)}>{formatDate(trade.entry_time)}</span>
+                    </span>
+                  </td>
+                  <td className="hidden xl:table-cell">
+                    {trade.bot_name ? (
+                      <span className="text-white font-medium">{trade.bot_name}</span>
+                    ) : (
+                      <span className="text-gray-600">--</span>
+                    )}
+                  </td>
+                  <td className="text-center hidden lg:table-cell">
+                    <span className="inline-flex justify-center">
+                      <ExchangeIcon exchange={trade.bot_exchange || trade.exchange} size={18} />
+                    </span>
+                  </td>
+                  <td className="text-white font-medium">{trade.symbol}</td>
+                  <td className="text-center">
+                    <span className={trade.side === 'long' ? 'text-profit' : 'text-loss'}>
+                      {trade.side === 'long' ? '+' : '-'} {trade.side.toUpperCase()}
+                    </span>
+                  </td>
+                  <td className="text-right text-gray-300 hidden 2xl:table-cell">
+                    <SizeValue size={Number(trade.size)} price={trade.entry_price} symbol={trade.symbol} />
+                  </td>
+                  <td className="text-right text-gray-300 hidden xl:table-cell">${trade.entry_price.toLocaleString()}</td>
+                  <td className="text-right text-gray-300 hidden 2xl:table-cell">
+                    {trade.exit_price ? `$${trade.exit_price.toLocaleString()}` : '--'}
+                  </td>
+                  <td className="text-right">
+                    <PnlCell
+                      pnl={trade.pnl}
+                      fees={trade.fees}
+                      fundingPaid={trade.funding_paid}
+                      status={trade.status}
+                      className={trade.pnl && trade.pnl >= 0 ? 'pnl-positive' : 'pnl-negative'}
+                    />
+                  </td>
+                  <td className="text-center hidden 2xl:table-cell">
+                    <span className={trade.demo_mode ? 'badge-demo' : 'badge-live'}>
+                      {trade.demo_mode ? t('common.demo') : t('common.live')}
+                    </span>
+                  </td>
+                  <td className="text-center">
+                    <span className={
+                      trade.status === 'open' ? 'badge-open' :
+                      trade.status === 'closed' ? 'badge-neutral' :
+                      'badge-demo'
+                    }>
+                      {t(`trades.${trade.status}`)}
+                    </span>
+                  </td>
+                </tr>
+                {expandedId === trade.id && (
+                  <tr className="table-expand-row">
+                    <td colSpan={12} className="!p-0 !border-b-0">
+                      <dl className="table-expand-content">
+                        <div className="xl:hidden">
+                          <dt>{t('trades.bot')}</dt>
+                          <dd>{trade.bot_name || '--'}</dd>
+                        </div>
+                        <div className="lg:hidden">
+                          <dt>{t('trades.exchange')}</dt>
+                          <dd className="capitalize">{trade.bot_exchange || trade.exchange}</dd>
+                        </div>
+                        <div className="2xl:hidden">
+                          <dt>{t('trades.size')}</dt>
+                          <dd>
+                            <SizeValue size={Number(trade.size)} price={trade.entry_price} symbol={trade.symbol} />
+                          </dd>
+                        </div>
+                        <div className="xl:hidden">
+                          <dt>{t('trades.entryPrice')}</dt>
+                          <dd>${trade.entry_price.toLocaleString()}</dd>
+                        </div>
+                        <div className="2xl:hidden">
+                          <dt>{t('trades.exitPrice')}</dt>
+                          <dd>{trade.exit_price ? `$${trade.exit_price.toLocaleString()}` : '--'}</dd>
+                        </div>
+                        <div className="2xl:hidden">
+                          <dt>{t('trades.mode')}</dt>
+                          <dd>{trade.demo_mode ? t('common.demo') : t('common.live')}</dd>
+                        </div>
+                        <div>
+                          <dt>{t('trades.pnl')} %</dt>
+                          <dd className={trade.pnl_percent && trade.pnl_percent >= 0 ? 'text-profit' : 'text-loss'}>
+                            {trade.pnl_percent != null ? `${trade.pnl_percent >= 0 ? '+' : ''}${trade.pnl_percent.toFixed(2)}%` : '--'}
+                          </dd>
+                        </div>
+                        {trade.exit_time && (
+                          <div>
+                            <dt>{t('trades.exitTime')}</dt>
+                            <dd>{formatDate(trade.exit_time)} {formatTime(trade.exit_time)}</dd>
+                          </div>
+                        )}
+                        {trade.exit_reason && (
+                          <div>
+                            <dt>{t('trades.exitReason')}</dt>
+                            <dd><ExitReasonBadge reason={trade.exit_reason} /></dd>
+                          </div>
+                        )}
+                        {trade.status === 'open' && (() => {
+                          const risk = deriveRiskStateFromPosition({
+                            trade_id: trade.id,
+                            symbol: trade.symbol,
+                            take_profit: trade.take_profit,
+                            stop_loss: trade.stop_loss,
+                            trailing_stop_active: trade.trailing_stop_active ?? false,
+                            trailing_stop_price: trade.trailing_stop_price,
+                            trailing_stop_distance_pct: trade.trailing_stop_distance_pct,
+                          })
+                          const hasAny = risk.tp != null || risk.sl != null || risk.trailing != null
+                          if (!hasAny) return null
+                          return (
+                            <div className="col-span-full">
+                              <dt>{t('trades.riskBadges.tp')}/{t('trades.riskBadges.sl')}/{t('trades.riskBadges.trail')}</dt>
+                              <dd>
+                                <RiskStateBadge
+                                  tp={risk.tp}
+                                  sl={risk.sl}
+                                  trailing={risk.trailing}
+                                  riskSource={risk.risk_source}
+                                />
+                              </dd>
+                            </div>
+                          )
+                        })()}
+                      </dl>
+                    </td>
+                  </tr>
+                )}
+              </Fragment>
+            )
+
+            return (
+          <div className="overflow-x-auto" ref={tradesTableRef}>
             <table className="table-premium w-full">
               <thead>
                 <tr>
@@ -389,153 +559,31 @@ export default function Trades() {
                       </div>
                     </td>
                   </tr>
-                ) : (
-                  trades.map((trade) => (
-                    <Fragment key={trade.id}>
-                      <tr
-                        onClick={() => setExpandedId(expandedId === trade.id ? null : trade.id)}
-                        className="cursor-pointer"
-                      >
-                        <td className="text-gray-500 text-xs font-mono">#{trade.id}</td>
-                        <td className="text-gray-300">
-                          <span className="inline-flex items-center">
-                            <ChevronRight size={14} className={`expand-chevron ${expandedId === trade.id ? 'open' : ''}`} />
-                            <span title={formatTime(trade.entry_time)}>{formatDate(trade.entry_time)}</span>
-                          </span>
-                        </td>
-                        <td className="hidden xl:table-cell">
-                          {trade.bot_name ? (
-                            <span className="text-white font-medium">{trade.bot_name}</span>
-                          ) : (
-                            <span className="text-gray-600">--</span>
-                          )}
-                        </td>
-                        <td className="text-center hidden lg:table-cell">
-                          <span className="inline-flex justify-center">
-                            <ExchangeIcon exchange={trade.bot_exchange || trade.exchange} size={18} />
-                          </span>
-                        </td>
-                        <td className="text-white font-medium">{trade.symbol}</td>
-                        <td className="text-center">
-                          <span className={trade.side === 'long' ? 'text-profit' : 'text-loss'}>
-                            {trade.side === 'long' ? '+' : '-'} {trade.side.toUpperCase()}
-                          </span>
-                        </td>
-                        <td className="text-right text-gray-300 hidden 2xl:table-cell">
-                          <SizeValue size={Number(trade.size)} price={trade.entry_price} symbol={trade.symbol} />
-                        </td>
-                        <td className="text-right text-gray-300 hidden xl:table-cell">${trade.entry_price.toLocaleString()}</td>
-                        <td className="text-right text-gray-300 hidden 2xl:table-cell">
-                          {trade.exit_price ? `$${trade.exit_price.toLocaleString()}` : '--'}
-                        </td>
-                        <td className="text-right">
-                          <PnlCell
-                            pnl={trade.pnl}
-                            fees={trade.fees}
-                            fundingPaid={trade.funding_paid}
-                            status={trade.status}
-                            className={trade.pnl && trade.pnl >= 0 ? 'pnl-positive' : 'pnl-negative'}
-                          />
-                        </td>
-                        <td className="text-center hidden 2xl:table-cell">
-                          <span className={trade.demo_mode ? 'badge-demo' : 'badge-live'}>
-                            {trade.demo_mode ? t('common.demo') : t('common.live')}
-                          </span>
-                        </td>
-                        <td className="text-center">
-                          <span className={
-                            trade.status === 'open' ? 'badge-open' :
-                            trade.status === 'closed' ? 'badge-neutral' :
-                            'badge-demo'
-                          }>
-                            {t(`trades.${trade.status}`)}
-                          </span>
-                        </td>
+                ) : tradesVirtualised ? (
+                  // Windowed render: only rows inside (viewport + overscan) hit
+                  // the DOM. Top/bottom spacer <tr>s preserve the scrollbar
+                  // extent so scrolling feels identical to the full render.
+                  <>
+                    {tradesPaddingTop > 0 && (
+                      <tr aria-hidden="true" style={{ height: tradesPaddingTop }}>
+                        <td colSpan={12} />
                       </tr>
-                      {expandedId === trade.id && (
-                        <tr className="table-expand-row">
-                          <td colSpan={12} className="!p-0 !border-b-0">
-                            <dl className="table-expand-content">
-                              <div className="xl:hidden">
-                                <dt>{t('trades.bot')}</dt>
-                                <dd>{trade.bot_name || '--'}</dd>
-                              </div>
-                              <div className="lg:hidden">
-                                <dt>{t('trades.exchange')}</dt>
-                                <dd className="capitalize">{trade.bot_exchange || trade.exchange}</dd>
-                              </div>
-                              <div className="2xl:hidden">
-                                <dt>{t('trades.size')}</dt>
-                                <dd>
-                                  <SizeValue size={Number(trade.size)} price={trade.entry_price} symbol={trade.symbol} />
-                                </dd>
-                              </div>
-                              <div className="xl:hidden">
-                                <dt>{t('trades.entryPrice')}</dt>
-                                <dd>${trade.entry_price.toLocaleString()}</dd>
-                              </div>
-                              <div className="2xl:hidden">
-                                <dt>{t('trades.exitPrice')}</dt>
-                                <dd>{trade.exit_price ? `$${trade.exit_price.toLocaleString()}` : '--'}</dd>
-                              </div>
-                              <div className="2xl:hidden">
-                                <dt>{t('trades.mode')}</dt>
-                                <dd>{trade.demo_mode ? t('common.demo') : t('common.live')}</dd>
-                              </div>
-                              <div>
-                                <dt>{t('trades.pnl')} %</dt>
-                                <dd className={trade.pnl_percent && trade.pnl_percent >= 0 ? 'text-profit' : 'text-loss'}>
-                                  {trade.pnl_percent != null ? `${trade.pnl_percent >= 0 ? '+' : ''}${trade.pnl_percent.toFixed(2)}%` : '--'}
-                                </dd>
-                              </div>
-                              {trade.exit_time && (
-                                <div>
-                                  <dt>{t('trades.exitTime')}</dt>
-                                  <dd>{formatDate(trade.exit_time)} {formatTime(trade.exit_time)}</dd>
-                                </div>
-                              )}
-                              {trade.exit_reason && (
-                                <div>
-                                  <dt>{t('trades.exitReason')}</dt>
-                                  <dd><ExitReasonBadge reason={trade.exit_reason} /></dd>
-                                </div>
-                              )}
-                              {trade.status === 'open' && (() => {
-                                const risk = deriveRiskStateFromPosition({
-                                  trade_id: trade.id,
-                                  symbol: trade.symbol,
-                                  take_profit: trade.take_profit,
-                                  stop_loss: trade.stop_loss,
-                                  trailing_stop_active: trade.trailing_stop_active ?? false,
-                                  trailing_stop_price: trade.trailing_stop_price,
-                                  trailing_stop_distance_pct: trade.trailing_stop_distance_pct,
-                                })
-                                const hasAny = risk.tp != null || risk.sl != null || risk.trailing != null
-                                if (!hasAny) return null
-                                return (
-                                  <div className="col-span-full">
-                                    <dt>{t('trades.riskBadges.tp')}/{t('trades.riskBadges.sl')}/{t('trades.riskBadges.trail')}</dt>
-                                    <dd>
-                                      <RiskStateBadge
-                                        tp={risk.tp}
-                                        sl={risk.sl}
-                                        trailing={risk.trailing}
-                                        riskSource={risk.risk_source}
-                                      />
-                                    </dd>
-                                  </div>
-                                )
-                              })()}
-                            </dl>
-                          </td>
-                        </tr>
-                      )}
-                    </Fragment>
-                  ))
+                    )}
+                    {tradesVirtualItems.map((vi) => renderTradeRow(trades[vi.index], vi.index))}
+                    {tradesPaddingBottom > 0 && (
+                      <tr aria-hidden="true" style={{ height: tradesPaddingBottom }}>
+                        <td colSpan={12} />
+                      </tr>
+                    )}
+                  </>
+                ) : (
+                  trades.map((trade) => renderTradeRow(trade, null))
                 )}
               </tbody>
             </table>
           </div>
+            )
+          })()
           )}
         </div>
       )}
