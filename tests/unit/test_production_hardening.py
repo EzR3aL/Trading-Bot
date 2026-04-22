@@ -450,7 +450,8 @@ class TestHealthCheckDbVerification:
             assert resp.status_code == 503
             data = resp.json()
             assert data["status"] == "unhealthy"
-            assert data["checks"]["database"] == "unreachable"
+            # ARCH-M6: database check is now a structured dict with ok flag.
+            assert data["checks"]["database"]["ok"] is False
 
     @pytest.mark.skipif(
         "postgresql" in os.environ.get("DATABASE_URL", ""),
@@ -477,9 +478,12 @@ class TestHealthCheckDbVerification:
             resp = await client.get("/api/health")
 
         assert resp.status_code == 200
+        # ARCH-M6: with no orchestrator/ws_manager wired on app.state in
+        # this test, non-critical probes fail and status becomes
+        # "degraded" (still HTTP 200). DB must still be ok.
         data = resp.json()
-        assert data["status"] == "healthy"
-        assert data["checks"]["database"] == "ok"
+        assert data["status"] in ("healthy", "degraded")
+        assert data["checks"]["database"]["ok"] is True
         assert "checks" in data
 
 
