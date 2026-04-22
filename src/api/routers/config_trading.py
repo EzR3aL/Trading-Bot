@@ -13,11 +13,8 @@ from src.api.schemas.config import (
 from src.auth.dependencies import get_current_user
 from src.models.database import User
 from src.models.session import get_db
-from src.services.config_service import (
-    conn_to_response,
-    get_or_create_config,
-    get_user_connections,
-)
+from src.services import config_service
+from src.services.config_service import get_or_create_config
 from src.api.rate_limit import limiter
 
 router = APIRouter()
@@ -29,30 +26,26 @@ async def get_config(
     db: AsyncSession = Depends(get_db),
 ):
     """Get current user's configuration."""
-    config = await get_or_create_config(user, db)
-    connections = await get_user_connections(user.id, db)
+    payload = await config_service.get_user_config_response(user, db)
 
-    trading = None
-    if config.trading_config:
-        trading = TradingConfigUpdate(**json.loads(config.trading_config))
-
-    strategy = None
-    if config.strategy_config:
-        strategy = StrategyConfigUpdate(**json.loads(config.strategy_config))
-
-    conn_responses = [conn_to_response(c) for c in connections]
-
-    # Deprecated fields for backward compat
-    has_live_keys = bool(config.api_key_encrypted)
-    has_demo_keys = bool(config.demo_api_key_encrypted)
+    trading = (
+        TradingConfigUpdate(**payload["trading"])
+        if payload["trading"] is not None
+        else None
+    )
+    strategy = (
+        StrategyConfigUpdate(**payload["strategy"])
+        if payload["strategy"] is not None
+        else None
+    )
 
     return ConfigResponse(
         trading=trading,
         strategy=strategy,
-        connections=conn_responses,
-        exchange_type=config.exchange_type,
-        api_keys_configured=has_live_keys,
-        demo_api_keys_configured=has_demo_keys,
+        connections=payload["connections"],
+        exchange_type=payload["exchange_type"],
+        api_keys_configured=payload["api_keys_configured"],
+        demo_api_keys_configured=payload["demo_api_keys_configured"],
     )
 
 
