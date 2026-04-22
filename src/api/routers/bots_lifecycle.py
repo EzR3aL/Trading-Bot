@@ -9,7 +9,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.rate_limit import limiter
-from src.api.routers.bots import _check_symbol_conflicts, get_orchestrator
+from src.api.routers.bots import get_orchestrator
+from src.services.bots_service import _check_symbol_conflicts
 from src.auth.dependencies import get_current_user
 from src.errors import (
     ERR_AFFILIATE_PENDING,

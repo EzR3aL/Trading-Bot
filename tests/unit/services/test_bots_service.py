@@ -18,6 +18,12 @@ PR-4 (#297) — write handlers
 * ``create_bot`` — strategy/symbol validation + encryption + audit log
 * ``update_bot`` — running guard + partial patch + audit log
 
+PR-5 (#299) — balance / budget / symbol-conflict reads
+* ``symbol_conflicts`` — overlap detection with copy-trading short-circuit
+* ``balance_preview`` — single-exchange allocation + cache + fetch-error paths
+* ``balance_overview`` — all-exchange parallel fetch
+* ``budget_info`` — per-bot budget with overallocation + insufficient-funds warnings
+
 The static-read tests are pure (no DB). The CRUD + list + write tests use
 an in-memory SQLite engine, following the same pattern as
 ``test_trades_service.py``.
@@ -754,3 +760,510 @@ async def test_update_bot_clears_webhook_on_empty_string(
         after = config.discord_webhook_url
 
     assert after is None
+
+
+# ---------------------------------------------------------------------------
+# PR-5 — balance / budget / symbol-conflict reads
+# ---------------------------------------------------------------------------
+
+
+from datetime import datetime, timezone  # noqa: E402
+from types import SimpleNamespace  # noqa: E402
+from unittest.mock import MagicMock  # noqa: E402
+
+from src.models.database import ExchangeConnection, TradeRecord  # noqa: E402
+
+
+@pytest.fixture(autouse=True)
+def _reset_budget_cache(monkeypatch):
+    """Module-level ``_budget_cache`` leaks across tests — reset per test.
+
+    Also stub out ``decrypt_value`` so the test blobs don't need a valid
+    Fernet key. We monkey-patch ``create_exchange_client`` in each test
+    that exercises the fetch path, so the actual decrypted values are
+    irrelevant — but balance fetch still calls ``decrypt_value``.
+    """
+    bots_service._budget_cache.clear()
+    monkeypatch.setattr(bots_service, "decrypt_value", lambda v: f"dec::{v}" if v else "")
+    yield
+    bots_service._budget_cache.clear()
+
+
+def _make_conn(
+    user_id: int,
+    exchange: str = "bitget",
+    *,
+    live: bool = True,
+    demo: bool = True,
+) -> ExchangeConnection:
+    """Build an ExchangeConnection with sentinel-blob credentials.
+
+    ``decrypt_value`` is monkey-patched in ``_reset_budget_cache`` so the
+    blobs don't need real encryption, and ``create_exchange_client`` is
+    also stubbed in each fetching test — the blob only has to be truthy.
+    """
+    blob = "blob"
+    return ExchangeConnection(
+        user_id=user_id,
+        exchange_type=exchange,
+        api_key_encrypted=blob if live else None,
+        api_secret_encrypted=blob if live else None,
+        passphrase_encrypted=blob if live else None,
+        demo_api_key_encrypted=blob if demo else None,
+        demo_api_secret_encrypted=blob if demo else None,
+        demo_passphrase_encrypted=blob if demo else None,
+        builder_fee_approved=False,
+    )
+
+
+def _fake_client_factory(available: float, total: float, currency: str = "USDT"):
+    """Return a ``create_exchange_client`` replacement that yields a client
+    whose ``get_account_balance`` returns the given values."""
+    def _factory(**kwargs) -> Any:
+        client = MagicMock()
+        balance = SimpleNamespace(available=available, total=total, currency=currency)
+        client.get_account_balance = AsyncMock(return_value=balance)
+        return client
+    return _factory
+
+
+# ── symbol_conflicts ────────────────────────────────────────────────
+
+
+class TestSymbolConflicts:
+    @pytest.mark.asyncio
+    async def test_empty_pairs_returns_no_conflicts(self, session_factory, user):
+        async with session_factory() as s:
+            resp = await bots_service.symbol_conflicts(
+                s, user.id, "bitget", "demo", [],
+            )
+        assert resp.has_conflicts is False
+        assert resp.conflicts == []
+
+    @pytest.mark.asyncio
+    async def test_detects_overlap_with_enabled_bot(self, session_factory, user):
+        async with session_factory() as s:
+            bot = _make_bot(user.id, "Existing")
+            bot.is_enabled = True
+            bot.trading_pairs = '["BTCUSDT","ETHUSDT"]'
+            s.add(bot)
+            await s.commit()
+
+        async with session_factory() as s:
+            resp = await bots_service.symbol_conflicts(
+                s, user.id, "bitget", "demo", ["BTCUSDT", "SOLUSDT"],
+            )
+        assert resp.has_conflicts is True
+        assert len(resp.conflicts) == 1
+        assert resp.conflicts[0].symbol == "BTCUSDT"
+        assert resp.conflicts[0].existing_bot_name == "Existing"
+
+    @pytest.mark.asyncio
+    async def test_disabled_bots_do_not_conflict(self, session_factory, user):
+        async with session_factory() as s:
+            bot = _make_bot(user.id, "Disabled")
+            bot.is_enabled = False
+            bot.trading_pairs = '["BTCUSDT"]'
+            s.add(bot)
+            await s.commit()
+
+        async with session_factory() as s:
+            resp = await bots_service.symbol_conflicts(
+                s, user.id, "bitget", "demo", ["BTCUSDT"],
+            )
+        assert resp.has_conflicts is False
+
+    @pytest.mark.asyncio
+    async def test_copy_trading_short_circuits(self, session_factory, user):
+        async with session_factory() as s:
+            bot = _make_bot(user.id, "Existing")
+            bot.is_enabled = True
+            s.add(bot)
+            await s.commit()
+
+        async with session_factory() as s:
+            resp = await bots_service.symbol_conflicts(
+                s, user.id, "bitget", "demo", ["BTCUSDT"],
+                strategy_type="copy_trading",
+            )
+        assert resp.has_conflicts is False
+        assert resp.conflicts == []
+
+    @pytest.mark.asyncio
+    async def test_exclude_bot_id_filters_self(self, session_factory, user):
+        async with session_factory() as s:
+            bot = _make_bot(user.id, "Self")
+            bot.is_enabled = True
+            s.add(bot)
+            await s.commit()
+            await s.refresh(bot)
+            bot_id = bot.id
+
+        async with session_factory() as s:
+            resp = await bots_service.symbol_conflicts(
+                s, user.id, "bitget", "demo", ["BTCUSDT"],
+                exclude_bot_id=bot_id,
+            )
+        assert resp.has_conflicts is False
+
+    @pytest.mark.asyncio
+    async def test_both_mode_conflicts_with_demo_and_live(self, session_factory, user):
+        """A new 'both'-mode bot overlaps with existing demo AND live bots."""
+        async with session_factory() as s:
+            demo_bot = _make_bot(user.id, "DemoBot")
+            demo_bot.is_enabled = True
+            demo_bot.mode = "demo"
+            live_bot = _make_bot(user.id, "LiveBot")
+            live_bot.is_enabled = True
+            live_bot.mode = "live"
+            s.add_all([demo_bot, live_bot])
+            await s.commit()
+
+        async with session_factory() as s:
+            resp = await bots_service.symbol_conflicts(
+                s, user.id, "bitget", "both", ["BTCUSDT"],
+            )
+        assert resp.has_conflicts is True
+        assert {c.existing_bot_name for c in resp.conflicts} == {"DemoBot", "LiveBot"}
+
+
+# ── balance_preview ─────────────────────────────────────────────────
+
+
+class TestBalancePreview:
+    @pytest.mark.asyncio
+    async def test_no_connection_returns_error(self, session_factory, user):
+        async with session_factory() as s:
+            resp = await bots_service.balance_preview(
+                s, user.id, "bitget", "demo",
+            )
+        assert resp.has_connection is False
+        assert resp.error == "no_connection"
+
+    @pytest.mark.asyncio
+    async def test_no_credentials_returns_error(self, session_factory, user):
+        """Connection row exists but demo creds are None → no_credentials."""
+        async with session_factory() as s:
+            s.add(_make_conn(user.id, demo=False))
+            await s.commit()
+
+        async with session_factory() as s:
+            resp = await bots_service.balance_preview(
+                s, user.id, "bitget", "demo",
+            )
+        assert resp.has_connection is False
+        assert resp.error == "no_credentials"
+
+    @pytest.mark.asyncio
+    async def test_successful_fetch_populates_balance(
+        self, session_factory, user, monkeypatch,
+    ):
+        monkeypatch.setattr(
+            bots_service, "create_exchange_client",
+            _fake_client_factory(available=800.0, total=1000.0),
+        )
+        async with session_factory() as s:
+            s.add(_make_conn(user.id))
+            await s.commit()
+
+        async with session_factory() as s:
+            resp = await bots_service.balance_preview(
+                s, user.id, "bitget", "demo",
+            )
+        assert resp.has_connection is True
+        assert resp.error is None
+        assert resp.exchange_balance == 800.0
+        assert resp.exchange_equity == 1000.0
+        assert resp.currency == "USDT"
+
+    @pytest.mark.asyncio
+    async def test_fetch_failure_returns_error(
+        self, session_factory, user, monkeypatch,
+    ):
+        def boom(**kwargs):
+            client = MagicMock()
+            client.get_account_balance = AsyncMock(side_effect=RuntimeError("API down"))
+            return client
+
+        monkeypatch.setattr(bots_service, "create_exchange_client", boom)
+        async with session_factory() as s:
+            s.add(_make_conn(user.id))
+            await s.commit()
+
+        async with session_factory() as s:
+            resp = await bots_service.balance_preview(
+                s, user.id, "bitget", "demo",
+            )
+        assert resp.has_connection is True
+        assert resp.error.startswith("fetch_failed:")
+
+    @pytest.mark.asyncio
+    async def test_cache_hit_skips_fetch(self, session_factory, user, monkeypatch):
+        """Second call within TTL uses cached tuple, does not invoke client."""
+        call_count = {"n": 0}
+
+        def factory(**kwargs):
+            call_count["n"] += 1
+            client = MagicMock()
+            client.get_account_balance = AsyncMock(
+                return_value=SimpleNamespace(available=500.0, total=500.0, currency="USDT"),
+            )
+            return client
+
+        monkeypatch.setattr(bots_service, "create_exchange_client", factory)
+        async with session_factory() as s:
+            s.add(_make_conn(user.id))
+            await s.commit()
+
+        async with session_factory() as s:
+            await bots_service.balance_preview(s, user.id, "bitget", "demo")
+        async with session_factory() as s:
+            await bots_service.balance_preview(s, user.id, "bitget", "demo")
+        assert call_count["n"] == 1
+
+    @pytest.mark.asyncio
+    async def test_allocation_subtracts_existing_bot_budget(
+        self, session_factory, user, monkeypatch,
+    ):
+        monkeypatch.setattr(
+            bots_service, "create_exchange_client",
+            _fake_client_factory(available=1000.0, total=1000.0),
+        )
+        async with session_factory() as s:
+            s.add(_make_conn(user.id))
+            bot = _make_bot(user.id, "Existing")
+            bot.per_asset_config = '{"BTCUSDT": {"position_usdt": 300}}'
+            bot.trading_pairs = '["BTCUSDT"]'
+            s.add(bot)
+            await s.commit()
+
+        async with session_factory() as s:
+            resp = await bots_service.balance_preview(
+                s, user.id, "bitget", "demo",
+            )
+        assert resp.existing_allocated_amount == 300.0
+        assert resp.remaining_balance == 700.0
+        assert resp.existing_allocated_pct == 30.0
+
+    @pytest.mark.asyncio
+    async def test_both_mode_uses_live_credentials(
+        self, session_factory, user, monkeypatch,
+    ):
+        """mode='both' resolves to live creds (the limiting balance)."""
+        monkeypatch.setattr(
+            bots_service, "create_exchange_client",
+            _fake_client_factory(available=100.0, total=100.0),
+        )
+        async with session_factory() as s:
+            # Only live creds set
+            s.add(_make_conn(user.id, live=True, demo=False))
+            await s.commit()
+
+        async with session_factory() as s:
+            resp = await bots_service.balance_preview(
+                s, user.id, "bitget", "both",
+            )
+        assert resp.has_connection is True
+        assert resp.error is None
+        assert resp.mode == "both"
+
+
+# ── balance_overview ────────────────────────────────────────────────
+
+
+class TestBalanceOverview:
+    @pytest.mark.asyncio
+    async def test_no_connections_returns_empty(self, session_factory, user):
+        async with session_factory() as s:
+            resp = await bots_service.balance_overview(s, user.id)
+        assert resp.exchanges == []
+
+    @pytest.mark.asyncio
+    async def test_lists_demo_and_live_when_both_creds_set(
+        self, session_factory, user, monkeypatch,
+    ):
+        monkeypatch.setattr(
+            bots_service, "create_exchange_client",
+            _fake_client_factory(available=500.0, total=500.0),
+        )
+        async with session_factory() as s:
+            s.add(_make_conn(user.id))
+            await s.commit()
+
+        async with session_factory() as s:
+            resp = await bots_service.balance_overview(s, user.id)
+        modes = {(e.exchange_type, e.mode) for e in resp.exchanges}
+        assert ("bitget", "demo") in modes
+        assert ("bitget", "live") in modes
+
+    @pytest.mark.asyncio
+    async def test_fetch_failure_produces_fetch_failed_entry(
+        self, session_factory, user, monkeypatch,
+    ):
+        def factory(**kwargs):
+            client = MagicMock()
+            client.get_account_balance = AsyncMock(side_effect=RuntimeError("boom"))
+            return client
+
+        monkeypatch.setattr(bots_service, "create_exchange_client", factory)
+        async with session_factory() as s:
+            s.add(_make_conn(user.id, live=True, demo=False))
+            await s.commit()
+
+        async with session_factory() as s:
+            resp = await bots_service.balance_overview(s, user.id)
+        assert len(resp.exchanges) == 1
+        assert resp.exchanges[0].error == "fetch_failed"
+
+
+# ── budget_info ─────────────────────────────────────────────────────
+
+
+def _trade(
+    user_id: int, bot_id: int,
+    *, entry: float, size: float, leverage: int,
+) -> TradeRecord:
+    return TradeRecord(
+        user_id=user_id,
+        bot_config_id=bot_id,
+        exchange="bitget",
+        symbol="BTCUSDT",
+        side="long",
+        size=size,
+        entry_price=entry,
+        leverage=leverage,
+        confidence=80,
+        reason="test",
+        order_id=f"test-order-{bot_id}",
+        status="open",
+        entry_time=datetime.now(timezone.utc),
+    )
+
+
+class TestBudgetInfo:
+    @pytest.mark.asyncio
+    async def test_no_bots_returns_empty(self, session_factory, user):
+        async with session_factory() as s:
+            resp = await bots_service.budget_info(s, user.id)
+        assert resp.budgets == []
+
+    @pytest.mark.asyncio
+    async def test_disabled_bots_excluded(self, session_factory, user):
+        async with session_factory() as s:
+            bot = _make_bot(user.id, "Off")
+            bot.is_enabled = False
+            s.add(bot)
+            await s.commit()
+
+        async with session_factory() as s:
+            resp = await bots_service.budget_info(s, user.id)
+        assert resp.budgets == []
+
+    @pytest.mark.asyncio
+    async def test_overallocation_warning(
+        self, session_factory, user, monkeypatch,
+    ):
+        """Two bots asking for 60% each on same exchange/mode → overallocated."""
+        monkeypatch.setattr(
+            bots_service, "create_exchange_client",
+            _fake_client_factory(available=1000.0, total=1000.0),
+        )
+        async with session_factory() as s:
+            s.add(_make_conn(user.id))
+            b1 = _make_bot(user.id, "A")
+            b1.is_enabled = True
+            b1.per_asset_config = '{"BTCUSDT": {"position_pct": 60}}'
+            b1.trading_pairs = '["BTCUSDT"]'
+            b2 = _make_bot(user.id, "B")
+            b2.is_enabled = True
+            b2.per_asset_config = '{"BTCUSDT": {"position_pct": 60}}'
+            b2.trading_pairs = '["BTCUSDT"]'
+            s.add_all([b1, b2])
+            await s.commit()
+
+        async with session_factory() as s:
+            resp = await bots_service.budget_info(s, user.id)
+        assert len(resp.budgets) == 2
+        for b in resp.budgets:
+            assert b.total_allocated_pct == 120.0
+            assert b.warning_message is not None
+            assert "Overallocated" in b.warning_message
+            assert b.has_sufficient_funds is False
+
+    @pytest.mark.asyncio
+    async def test_insufficient_balance_warning(
+        self, session_factory, user, monkeypatch,
+    ):
+        """Single bot wants $500 but only $100 available (and no margin-in-use)."""
+        monkeypatch.setattr(
+            bots_service, "create_exchange_client",
+            _fake_client_factory(available=100.0, total=500.0),
+        )
+        async with session_factory() as s:
+            s.add(_make_conn(user.id))
+            bot = _make_bot(user.id, "Hungry")
+            bot.is_enabled = True
+            bot.per_asset_config = '{"BTCUSDT": {"position_usdt": 500}}'
+            bot.trading_pairs = '["BTCUSDT"]'
+            s.add(bot)
+            await s.commit()
+
+        async with session_factory() as s:
+            resp = await bots_service.budget_info(s, user.id)
+        assert len(resp.budgets) == 1
+        b = resp.budgets[0]
+        assert b.has_sufficient_funds is False
+        assert b.warning_message is not None
+        assert "Insufficient balance" in b.warning_message
+
+    @pytest.mark.asyncio
+    async def test_open_position_margin_credited_back(
+        self, session_factory, user, monkeypatch,
+    ):
+        """A bot with an open position gets its margin credited toward effective available."""
+        monkeypatch.setattr(
+            bots_service, "create_exchange_client",
+            _fake_client_factory(available=100.0, total=1000.0),
+        )
+        async with session_factory() as s:
+            s.add(_make_conn(user.id))
+            bot = _make_bot(user.id, "Holder")
+            bot.is_enabled = True
+            bot.per_asset_config = '{"BTCUSDT": {"position_usdt": 500}}'
+            bot.trading_pairs = '["BTCUSDT"]'
+            s.add(bot)
+            await s.commit()
+            await s.refresh(bot)
+            # Open trade ties up 500 USDT margin (50000 * 0.1 / 10 = 500)
+            s.add(_trade(user.id, bot.id, entry=50000.0, size=0.1, leverage=10))
+            await s.commit()
+
+        async with session_factory() as s:
+            resp = await bots_service.budget_info(s, user.id)
+        b = resp.budgets[0]
+        # effective_available = 100 + 500 = 600, allocated = 500 → sufficient
+        assert b.has_sufficient_funds is True
+        assert b.warning_message is None
+
+    @pytest.mark.asyncio
+    async def test_both_mode_bot_appears_in_demo_and_live(
+        self, session_factory, user, monkeypatch,
+    ):
+        monkeypatch.setattr(
+            bots_service, "create_exchange_client",
+            _fake_client_factory(available=1000.0, total=1000.0),
+        )
+        async with session_factory() as s:
+            s.add(_make_conn(user.id))
+            bot = _make_bot(user.id, "Both")
+            bot.is_enabled = True
+            bot.mode = "both"
+            bot.per_asset_config = '{"BTCUSDT": {"position_pct": 10}}'
+            bot.trading_pairs = '["BTCUSDT"]'
+            s.add(bot)
+            await s.commit()
+
+        async with session_factory() as s:
+            resp = await bots_service.budget_info(s, user.id)
+        modes = {b.mode for b in resp.budgets}
+        assert modes == {"demo", "live"}
