@@ -1,0 +1,59 @@
+name: Security Audit
+
+# SEC-015: block merges and daily-monitor main/staging for high/critical CVEs in
+# Python and npm dependencies. Fails only on high/critical — moderate findings
+# surface in the logs but do not gate merges (noise budget).
+#
+# Run locally:
+#   pip install -r requirements-dev.txt
+#   pip-audit -r requirements.txt --strict
+#   (cd frontend && npm audit --audit-level=high)
+
+on:
+  push:
+    branches: [main, staging]
+  pull_request:
+    branches: [main, staging]
+  schedule:
+    # Daily at 06:00 UTC — catch newly-disclosed CVEs against a pinned tree.
+    - cron: '0 6 * * *'
+
+jobs:
+  pip-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - run: pip install -r requirements-dev.txt
+
+      # --strict: exit non-zero on any vulnerability.
+      # --vulnerability-service osv: OSV is the broader feed (covers PyPI Advisory DB + GHSA).
+      - name: pip-audit
+        run: pip-audit --requirement requirements.txt --strict --vulnerability-service osv
+
+  npm-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - run: npm ci --legacy-peer-deps
+
+      # --audit-level=high fails the job only on high/critical CVEs.
+      # Moderate/low appear in the log but do not gate the PR.
+      - run: npm audit --audit-level=high
