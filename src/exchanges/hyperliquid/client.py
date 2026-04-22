@@ -15,7 +15,7 @@ import os
 import re
 from datetime import datetime, timezone
 from functools import partial
-from typing import Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from eth_account import Account as EthAccount
 from hyperliquid.exchange import Exchange as HLExchange
@@ -32,6 +32,9 @@ from src.exchanges.base import (
 )
 from src.exchanges.hyperliquid.constants import DEFAULT_BUILDER_FEE
 from src.exchanges.types import Balance, FundingRateInfo, Order, Position, Ticker
+
+if TYPE_CHECKING:
+    from src.exchanges.base import GateCheckResult
 from src.utils.circuit_breaker import CircuitBreaker, CircuitBreakerError
 from src.utils.logger import get_logger
 

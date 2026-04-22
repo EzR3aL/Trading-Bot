@@ -284,9 +284,6 @@ class DiscordNotifier:
             result = "LOSS"
             color = self.COLOR_LOSS
 
-        # Direction emoji
-        _direction_emoji = "📈" if side.lower() == "long" else "📉"
-
         fields = [
             {"name": "🔸 Mode", "value": f"**`{mode_badge}`**", "inline": True},
             {"name": "📊 Asset", "value": f"`{symbol}`", "inline": True},
