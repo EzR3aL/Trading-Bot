@@ -9,6 +9,7 @@ Populated incrementally:
 * PR-1 (#286) — ``list_strategies`` + ``list_data_sources`` (static reads)
 * PR-2 (#293) — ``get_bot`` / ``delete_bot`` / ``duplicate_bot`` (single-bot CRUD)
 * PR-3 (#295) — ``list_bots_with_status`` (bot list with runtime + batch stats)
+* PR-4 (#297) — ``create_bot`` / ``update_bot`` (validation + encryption)
 """
 
 from __future__ import annotations
@@ -19,13 +20,21 @@ from typing import Any, Optional, Protocol
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.api.schemas.bots import BotRuntimeStatus
+from src.api.schemas.bots import BotConfigCreate, BotConfigUpdate, BotRuntimeStatus
 from src.constants import MAX_BOTS_PER_USER
 from src.data.data_source_registry import DATA_SOURCES, DEFAULT_SOURCES
+from src.exchanges.symbol_fetcher import get_exchange_symbols
 from src.models.database import BotConfig, ExchangeConnection, TradeRecord, User
 from src.models.enums import CEX_EXCHANGES
-from src.services.exceptions import BotNotFound, MaxBotsReached
+from src.services.exceptions import (
+    BotIsRunning,
+    BotNotFound,
+    InvalidSymbols,
+    MaxBotsReached,
+    StrategyNotFound,
+)
 from src.strategy import StrategyRegistry
+from src.utils.encryption import encrypt_value
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -390,3 +399,189 @@ async def list_bots_with_status(
         ))
 
     return bots
+
+
+# ── Write handlers ──────────────────────────────────────────────────
+
+
+async def _validate_strategy(strategy_type: str) -> None:
+    """Raise ``StrategyNotFound`` if the strategy isn't registered."""
+    try:
+        StrategyRegistry.get(strategy_type)
+    except KeyError:
+        raise StrategyNotFound(strategy_type)
+
+
+async def _validate_symbols(
+    exchange: str,
+    mode: str,
+    trading_pairs: list[str],
+) -> None:
+    """Raise ``InvalidSymbols`` if any pair isn't listed on the exchange.
+
+    Queries ``symbol_fetcher`` with the demo-or-live flag derived from ``mode``.
+    A short-circuits when the fetcher returns an empty set (cached-miss /
+    unreachable exchange) — validation degrades open in that case, mirroring
+    the original router behavior.
+    """
+    is_demo = mode in ("demo", "both")
+    available = await get_exchange_symbols(exchange, demo_mode=is_demo)
+    if not available:
+        return
+    invalid = [p for p in trading_pairs if p not in available]
+    if invalid:
+        mode_label = "demo" if is_demo else "live"
+        raise InvalidSymbols(exchange, mode_label, invalid)
+
+
+async def create_bot(
+    db: AsyncSession,
+    user_id: int,
+    body: BotConfigCreate,
+) -> BotConfig:
+    """Create a new bot configuration.
+
+    Validates strategy + symbols, enforces ``MAX_BOTS_PER_USER``, encrypts
+    the optional Discord / Telegram credentials, persists the row, and
+    writes audit + event log entries. Returns the refreshed ``BotConfig``
+    ORM object — the router maps it onto ``BotConfigResponse``.
+    """
+    await _validate_strategy(body.strategy_type)
+    await _validate_symbols(body.exchange_type, body.mode, body.trading_pairs)
+
+    count_result = await db.execute(
+        select(func.count(BotConfig.id)).where(BotConfig.user_id == user_id)
+    )
+    if count_result.scalar() >= MAX_BOTS_PER_USER:
+        raise MaxBotsReached(MAX_BOTS_PER_USER)
+
+    encrypted_webhook = encrypt_value(body.discord_webhook_url) if body.discord_webhook_url else None
+    encrypted_telegram_token = encrypt_value(body.telegram_bot_token) if body.telegram_bot_token else None
+    encrypted_chat_id = encrypt_value(body.telegram_chat_id) if body.telegram_chat_id else None
+
+    config = BotConfig(
+        user_id=user_id,
+        name=body.name,
+        description=body.description,
+        strategy_type=body.strategy_type,
+        exchange_type=body.exchange_type,
+        mode=body.mode,
+        margin_mode=body.margin_mode,
+        trading_pairs=json.dumps(body.trading_pairs),
+        leverage=body.leverage,
+        position_size_percent=body.position_size_percent,
+        max_trades_per_day=body.max_trades_per_day,
+        take_profit_percent=body.take_profit_percent,
+        stop_loss_percent=body.stop_loss_percent,
+        daily_loss_limit_percent=body.daily_loss_limit_percent,
+        per_asset_config=json.dumps(body.per_asset_config) if body.per_asset_config else None,
+        strategy_params=json.dumps(body.strategy_params) if body.strategy_params else None,
+        schedule_type=body.schedule_type,
+        schedule_config=json.dumps(body.schedule_config) if body.schedule_config else None,
+        discord_webhook_url=encrypted_webhook,
+        telegram_bot_token=encrypted_telegram_token,
+        telegram_chat_id=encrypted_chat_id,
+        pnl_alert_settings=(
+            json.dumps(body.pnl_alert_settings.model_dump())
+            if body.pnl_alert_settings else None
+        ),
+        is_enabled=False,
+    )
+    db.add(config)
+    await db.flush()
+    await db.refresh(config)
+
+    logger.info(f"Bot created: {config.name} (id={config.id}) by user {user_id}")
+
+    from src.utils.config_audit import log_config_change
+    from src.utils.event_logger import log_event
+    await log_event(
+        "bot_created",
+        f"Bot '{config.name}' created",
+        user_id=user_id,
+        bot_id=config.id,
+    )
+    await log_config_change(
+        user_id=user_id,
+        entity_type="bot_config",
+        entity_id=config.id,
+        action="create",
+        new_data=body.model_dump(),
+    )
+
+    return config
+
+
+# Fields where an empty-string value means "clear" and a non-empty value
+# means "replace with encrypted(value)". Centralizes the write-time rule
+# the router previously duplicated across three if-branches.
+_ENCRYPTED_CLEAR_ON_EMPTY_FIELDS: frozenset[str] = frozenset({
+    "discord_webhook_url",
+    "telegram_bot_token",
+    "telegram_chat_id",
+})
+
+# Fields that must be JSON-dumped before hitting the ORM column (string col).
+_JSON_DUMPED_FIELDS: frozenset[str] = frozenset({
+    "trading_pairs",
+    "strategy_params",
+    "schedule_config",
+    "per_asset_config",
+    "pnl_alert_settings",
+})
+
+
+async def update_bot(
+    db: AsyncSession,
+    user_id: int,
+    bot_id: int,
+    body: BotConfigUpdate,
+    orchestrator: _OrchestratorLike,
+) -> BotConfig:
+    """Update a bot configuration; the bot must not be running.
+
+    Raises ``BotNotFound``/``BotIsRunning``/``StrategyNotFound``/
+    ``InvalidSymbols``. Applies only fields present in ``body`` (uses
+    ``model_dump(exclude_unset=True)`` as the patch set) and writes the
+    diff to the config audit log.
+    """
+    config = await get_bot(db, user_id, bot_id)
+
+    if orchestrator.is_running(bot_id):
+        raise BotIsRunning(bot_id)
+
+    if body.strategy_type:
+        await _validate_strategy(body.strategy_type)
+
+    if body.trading_pairs is not None:
+        exchange = body.exchange_type or config.exchange_type
+        mode = body.mode or config.mode
+        await _validate_symbols(exchange, mode, body.trading_pairs)
+
+    update_data = body.model_dump(exclude_unset=True)
+    audit_old = {f: getattr(config, f, None) for f in update_data}
+
+    for field, value in update_data.items():
+        if field in _ENCRYPTED_CLEAR_ON_EMPTY_FIELDS:
+            setattr(config, field, encrypt_value(value) if value else None)
+        elif field in _JSON_DUMPED_FIELDS and value is not None:
+            setattr(config, field, json.dumps(value))
+        elif value is not None:
+            setattr(config, field, value)
+
+    await db.flush()
+    await db.refresh(config)
+
+    logger.info(f"Bot updated: {config.name} (id={bot_id})")
+
+    from src.utils.config_audit import log_config_change
+    await log_config_change(
+        user_id=user_id,
+        entity_type="bot_config",
+        entity_id=bot_id,
+        action="update",
+        old_data=audit_old,
+        new_data=update_data,
+    )
+
+    return config
