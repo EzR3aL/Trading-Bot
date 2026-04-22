@@ -47,8 +47,9 @@ class TestHealthCheck:
         ) as client:
             resp = await client.get("/api/health")
         data = resp.json()
-        # Health may be unhealthy in test (no real DB), just check fields exist
-        assert data["status"] in ("healthy", "unhealthy")
+        # Health may be healthy/degraded/unhealthy in test (no real DB and
+        # no orchestrator on app.state), just check the field contract.
+        assert data["status"] in ("healthy", "degraded", "unhealthy")
         assert "timestamp" in data
         assert "checks" in data
 
