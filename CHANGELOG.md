@@ -11,6 +11,35 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ## [Unreleased]
 
+### 2026-04-22 — ARCH-C1 Phase 3 PR-1: extract ConfigService read handlers (#289)
+
+Third wave of the service-layer refactor. Extracts the three smallest, pure-read handlers from the `config*` sub-routers into module-level functions in `src/services/config_service.py`. **Zero behavior change** — the existing 191 config-router tests (`tests/unit/api/test_config_router.py`, `tests/unit/api/test_config_router_extra.py`, `tests/integration/test_config_api.py`) pass unmodified, as do the 24 trades/portfolio characterization tests.
+
+Das bestehende `config_service.py`-Modul war bisher eine reine Helper-Sammlung (DB-Lookups, Ping, Response-Builder), die von allen Config-Sub-Routern importiert wird. Dieser PR legt eine zweite Schicht darauf: FastAPI-freie Handler-Funktionen, die der Router als dünner Adapter aufruft. Klassen-Pattern à la `TradesService`/`PortfolioService` wurde bewusst NICHT übernommen — das existierende Modul ist bereits function-based und ein Bruch hätte die 4 Sub-Router alle anfassen müssen. Stattdessen folgt der PR dem `bots_service.py`-Pattern (ARCH-C1 Phase 2b PR-1, function-based).
+
+#### Refactored
+- **[services]** `src/services/config_service.py` — drei neue Handler-Funktionen:
+  - `get_user_config_response(user, db)` — liefert das `GET /api/config/` Payload als Plain-Dict (`trading` / `strategy` als dekodierte JSON-Dicts, `connections` als bereits-projizierte `ExchangeConnectionResponse`-Liste, plus die deprecated `api_keys_configured` / `demo_api_keys_configured` Flags).
+  - `list_exchange_connections(user, db)` — dünner Wrapper um `get_user_connections` + `conn_to_response`, liefert `{connections: [...]}` wie vom Frontend erwartet.
+  - `list_config_changes(user, db, *, entity_type, entity_id, action, page, page_size)` — paginierte Audit-Trail-Query auf `ConfigChangeLog`, User-gescoped, mit optionalen Filtern. JSON-Decode des `changes`-Blobs fällt bei Malformed-Rows auf `None` zurück (identisches Verhalten wie vor dem Extract). Die `Query(..., ge=1, le=100)`-Bounds-Validierung bleibt weiterhin auf dem Router — die Service-Funktion akzeptiert die Werte unverändert.
+  - Keine Änderung an den bestehenden Helpern (`get_or_create_config`, `get_user_connections`, `conn_to_response`, `ping_service`, `create_hl_client`, `create_hl_mainnet_read_client`, `async_none`, `EXCHANGE_PING_URLS`). Die Service-Funktionen bleiben FastAPI-frei — kein `HTTPException`, kein `Depends`, kein `Request`.
+- **[router]** `src/api/routers/config_trading.py` — `get_config` delegiert an `config_service.get_user_config_response`. Der Handler projiziert die zurückgelieferten Plain-Dicts auf `TradingConfigUpdate` / `StrategyConfigUpdate` / `ConfigResponse` Pydantic-Modelle (die Pydantic-Validation bleibt bewusst auf Router-Ebene, damit Pydantic-Fehler als HTTP-422 sichtbar bleiben). Handler-LOC: 31 → 24.
+- **[router]** `src/api/routers/config_exchange.py` — `get_exchange_connections` ist jetzt ein Einzeiler über `config_service.list_exchange_connections`. Die bestehenden Imports (`get_user_connections`, `conn_to_response`) bleiben wegen der mutierenden Handler (`upsert_exchange_connection`, `test_exchange_connection`, `get_connections_status`) die weiterhin die Helper-Ebene nutzen.
+- **[router]** `src/api/routers/config_audit.py` — `list_config_changes` delegiert an `config_service.list_config_changes` und mappt die Plain-Dict-Items auf `ConfigChangeEntry` / `ConfigChangeListResponse`. `json` / `func` / `select` / `ConfigChangeLog`-Imports sind entfernt (LOC 93 → 61).
+
+#### Added (tests)
+- **[test]** `tests/unit/services/test_config_service.py` — **9 Unit-Tests** exercisen die drei neuen Handler direkt mit in-memory SQLite (gleiche Fixture-Blueprint wie `test_portfolio_service.py`):
+  - `get_user_config_response`: leerer User (erstellt Default-`UserConfig`, leere Connections, `bitget` als Default-Exchange); populated User (dekodiertes Trading-/Strategy-JSON, zwei projizierte Connections, deprecated Flags korrekt aus den `UserConfig`-Columns abgeleitet).
+  - `list_exchange_connections`: leerer User (`{connections: []}`); populated User (zwei Connections inkl. Affiliate-UID-Pass-Through auf `ExchangeConnectionResponse`).
+  - `list_config_changes`: leerer User (paginiertes 0-Result); Sortierung `created_at DESC` über 3 Rows; Filter nach `entity_type` (`bot_config` vs `exchange_connection`); Malformed-JSON-Blob liefert `changes=None` statt Crash; Paginierung mit `page_size=2` über 5 Rows (3 Seiten ohne Overlap).
+- Die Tests verwenden einen Sentinel-String (`"fake-encrypted-payload"`) für die `*_encrypted`-Spalten statt durch `encrypt_value` zu laufen — `conn_to_response` prüft nur Truthiness, so hängt die Test-Suite nicht an einem gültigen `ENCRYPTION_KEY` in der CI.
+
+#### Candidates for follow-up PRs (ARCH-C1 Phase 3 PR-2+)
+- `config_exchange.get_connections_status` — orchestriert parallele Pings über `aiohttp.ClientSession` plus die `data_source_registry` und `EXCHANGE_PING_URLS`-Union. Größerer Aufwand, verdient einen eigenen PR.
+- `config_hyperliquid.get_hl_admin_settings` + der Rest von `config_hyperliquid.py` (Builder-Approval, Referral-Verify, Revenue-Summary). Eigene Extraktion, da `SystemSetting` / ENV-Fallback-Logik und der HL-Readback-Client zusätzliche Testing-Primitives brauchen.
+- `config_affiliate.list_affiliate_uids` — Admin-Paginierung mit Stats-Aggregat, plus Search-Filter über `User.username` join.
+- Alle Mutation-Handler (`update_trading_config`, `update_strategy_config`, `upsert_exchange_connection`, `delete_exchange_connection`, `set_affiliate_uid`, …) werden bewusst später extrahiert — Mutations brauchen saubere Error-Domain-Typen in `src/services/exceptions.py` statt direkte `HTTPException`-Raises.
+
 ### 2026-04-22 — ARCH-C1 Phase 2a PR-5: extract PortfolioService (#253)
 
 Second extraction step of the service-layer refactor plan. **Zero behavior change** — the 10 portfolio characterization tests in `tests/integration/test_portfolio_router_characterization.py` and the 13 router unit tests in `tests/unit/api/test_portfolio_router.py` pass unmodified.

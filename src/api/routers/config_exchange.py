@@ -28,6 +28,7 @@ from src.errors import (
 from src.models.database import ExchangeConnection, User
 from src.models.enums import EXCHANGE_PATTERN
 from src.models.session import get_db
+from src.services import config_service
 from src.services.config_service import (
     EXCHANGE_PING_URLS,
     conn_to_response,
@@ -53,8 +54,7 @@ async def get_exchange_connections(
     db: AsyncSession = Depends(get_db),
 ):
     """Get all exchange connections for the user."""
-    connections = await get_user_connections(user.id, db)
-    return {"connections": [conn_to_response(c) for c in connections]}
+    return await config_service.list_exchange_connections(user, db)
 
 
 @router.put("/exchange-connections/{exchange_type}")

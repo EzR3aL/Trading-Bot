@@ -1,21 +1,28 @@
-"""Shared helpers for config sub-routers.
+"""Shared helpers and read-handler service for config sub-routers.
 
 Centralises DB lookups and response builders so that
 config_exchange, config_trading, config_hyperliquid and
 config_affiliate can import them without circular dependencies.
+
+ARCH-C1 Phase 3 PR-1 (#289) adds a second layer on top of the original
+helpers: FastAPI-free handler functions that the thin router adapters
+delegate to. The extracted handlers are pure reads (no mutations, no
+external API calls), returning plain dicts that the router projects onto
+Pydantic response models.
 """
 
+import json
 from typing import Any, Dict, List, Optional
 
 import aiohttp
 import time
 
 from fastapi import HTTPException
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.schemas.config import ExchangeConnectionResponse
-from src.models.database import ExchangeConnection, User, UserConfig
+from src.models.database import ConfigChangeLog, ExchangeConnection, User, UserConfig
 from src.utils.encryption import decrypt_value
 from src.utils.logger import get_logger
 
@@ -169,3 +176,130 @@ def create_hl_mainnet_read_client(conn: ExchangeConnection):
 async def async_none():
     """Helper that returns None for asyncio.gather when a task is skipped."""
     return None
+
+
+# ── Read-handler service functions (ARCH-C1 Phase 3 PR-1, #289) ─────
+#
+# These handler-level helpers are called by thin router adapters. They
+# stay FastAPI-free: no Depends, no HTTPException, no Request. The
+# router parses query params, calls the service, and maps the returned
+# plain dict onto a Pydantic response model.
+
+
+async def get_user_config_response(
+    user: User, db: AsyncSession
+) -> Dict[str, Any]:
+    """Build the ``GET /api/config/`` response payload for a user.
+
+    Reads (and lazily creates) the user's ``UserConfig`` row plus all
+    of their ``ExchangeConnection`` rows, then assembles the shape
+    the router wraps in ``ConfigResponse``. Returns ``connections`` as
+    already-projected ``ExchangeConnectionResponse`` models because the
+    existing ``conn_to_response`` helper produces them directly and the
+    router just needs to forward the list.
+
+    Behavior preserved verbatim from the pre-extract handler — same
+    JSON-decoded ``trading_config`` / ``strategy_config`` shape, same
+    deprecated ``api_keys_configured`` / ``demo_api_keys_configured``
+    flags derived from the legacy ``UserConfig`` columns.
+    """
+    config = await get_or_create_config(user, db)
+    connections = await get_user_connections(user.id, db)
+
+    trading: Optional[Dict[str, Any]] = None
+    if config.trading_config:
+        trading = json.loads(config.trading_config)
+
+    strategy: Optional[Dict[str, Any]] = None
+    if config.strategy_config:
+        strategy = json.loads(config.strategy_config)
+
+    return {
+        "trading": trading,
+        "strategy": strategy,
+        "connections": [conn_to_response(c) for c in connections],
+        "exchange_type": config.exchange_type,
+        "api_keys_configured": bool(config.api_key_encrypted),
+        "demo_api_keys_configured": bool(config.demo_api_key_encrypted),
+    }
+
+
+async def list_exchange_connections(
+    user: User, db: AsyncSession
+) -> Dict[str, List[ExchangeConnectionResponse]]:
+    """Return the ``GET /api/config/exchange-connections`` payload.
+
+    Thin wrapper around ``get_user_connections`` that projects each row
+    through ``conn_to_response`` and wraps the list under the
+    ``connections`` key expected by the frontend.
+    """
+    connections = await get_user_connections(user.id, db)
+    return {"connections": [conn_to_response(c) for c in connections]}
+
+
+async def list_config_changes(
+    user: User,
+    db: AsyncSession,
+    *,
+    entity_type: Optional[str] = None,
+    entity_id: Optional[int] = None,
+    action: Optional[str] = None,
+    page: int = 1,
+    page_size: int = 20,
+) -> Dict[str, Any]:
+    """Return the paginated config-change audit trail for a user.
+
+    Mirrors ``GET /api/config-changes/`` exactly — same filter semantics
+    (user-scoped, optional ``entity_type`` / ``entity_id`` / ``action``),
+    same ``created_at DESC`` ordering, same page-size bounds (validation
+    stays on the router via ``Query(..., ge=1, le=100)`` regex / bounds).
+
+    The ``changes`` blob is decoded from JSON; malformed rows surface as
+    ``None`` rather than raising, matching the pre-extract behavior.
+    """
+    filters = [ConfigChangeLog.user_id == user.id]
+    if entity_type:
+        filters.append(ConfigChangeLog.entity_type == entity_type)
+    if entity_id is not None:
+        filters.append(ConfigChangeLog.entity_id == entity_id)
+    if action:
+        filters.append(ConfigChangeLog.action == action)
+
+    count_result = await db.execute(
+        select(func.count(ConfigChangeLog.id)).where(*filters)
+    )
+    total = count_result.scalar() or 0
+
+    offset = (page - 1) * page_size
+    result = await db.execute(
+        select(ConfigChangeLog)
+        .where(*filters)
+        .order_by(ConfigChangeLog.created_at.desc())
+        .offset(offset)
+        .limit(page_size)
+    )
+    logs = result.scalars().all()
+
+    items: List[Dict[str, Any]] = []
+    for log in logs:
+        changes: Optional[Dict[str, Any]] = None
+        if log.changes:
+            try:
+                changes = json.loads(log.changes)
+            except (json.JSONDecodeError, TypeError):
+                changes = None
+        items.append({
+            "id": log.id,
+            "entity_type": log.entity_type,
+            "entity_id": log.entity_id,
+            "action": log.action,
+            "changes": changes,
+            "created_at": log.created_at.isoformat() if log.created_at else None,
+        })
+
+    return {
+        "items": items,
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+    }
