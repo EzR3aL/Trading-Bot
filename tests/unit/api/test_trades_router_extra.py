@@ -631,7 +631,12 @@ async def test_trailing_stop_in_list_trades(client, auth_headers, open_long_trai
     """list_trades endpoint also enriches open trades with trailing stop info."""
     mock_cls = _make_mdf_mock(_mock_klines(600.0))
 
-    with patch("src.api.routers.trades.MarketDataFetcher", mock_cls):
+    # list_trades was moved to TradesService; patch both import sites so the
+    # test still intercepts the fetcher after the ARCH-C1 extraction.
+    with (
+        patch("src.api.routers.trades.MarketDataFetcher", mock_cls),
+        patch("src.services.trades_service.MarketDataFetcher", mock_cls),
+    ):
         resp = await client.get(
             "/api/trades", headers=auth_headers, params={"status": "open"}
         )
