@@ -33,6 +33,7 @@ const mockT = (key: string) => {
     'portfolio.days30': '30D',
     'portfolio.days90': '90D',
     'common.error': 'An error occurred',
+    'common.retry': 'Retry',
   }
   return translations[key] || key
 }
@@ -250,6 +251,37 @@ describe('Portfolio Page', () => {
     await waitFor(() => {
       expect(screen.getByText('Network error')).toBeInTheDocument()
     })
+  })
+
+  // UX-H8 regression: a single failing query must surface the error view
+  // even when the other three queries succeed. Previously the render order
+  // was loading → empty → error, so a partial failure could be masked by a
+  // skeleton or an empty-state fallback for the queries that did succeed.
+  it('should render error when one query fails even if others succeed', async () => {
+    mockGet.mockImplementation((url: string) => {
+      if (url.includes('/portfolio/summary')) {
+        return Promise.reject(new Error('Summary backend down'))
+      }
+      if (url.includes('/portfolio/positions')) return Promise.resolve({ data: mockPositions })
+      if (url.includes('/portfolio/daily')) return Promise.resolve({ data: mockDaily })
+      if (url.includes('/portfolio/allocation')) return Promise.resolve({ data: mockAllocation })
+      return Promise.resolve({ data: {} })
+    })
+
+    render(<Portfolio />, { wrapper: QueryWrapper })
+
+    // Error message is visible
+    await waitFor(() => {
+      expect(screen.getByText('Summary backend down')).toBeInTheDocument()
+    })
+
+    // Retry button sits under the error message
+    expect(screen.getByRole('button', { name: /retry/i })).toBeInTheDocument()
+
+    // Happy-path content must NOT be rendered — neither the header nor the
+    // positions table should leak through when any query errors.
+    expect(screen.queryByText('Open Positions')).not.toBeInTheDocument()
+    expect(screen.queryByText('Exchange Breakdown')).not.toBeInTheDocument()
   })
 
   it('should change period on button click', async () => {

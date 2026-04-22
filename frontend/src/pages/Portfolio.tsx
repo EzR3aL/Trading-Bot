@@ -89,11 +89,11 @@ export default function Portfolio() {
 
   // Phase 1: Fast DB queries (summary + daily) -- renders page instantly
   const { data: summary = null, isLoading: loading, error: summaryError } = usePortfolioSummary(period, demoFilter)
-  const { data: dailyData = [] } = usePortfolioDaily(period, demoFilter)
+  const { data: dailyData = [], error: dailyError } = usePortfolioDaily(period, demoFilter)
 
   // Phase 2: Slow exchange API calls (positions + allocation) -- loads in background
-  const { data: positions = [], isLoading: loadingExchange } = usePortfolioPositions()
-  const { data: allocation = [] } = usePortfolioAllocation()
+  const { data: positions = [], isLoading: loadingExchange, error: positionsError } = usePortfolioPositions()
+  const { data: allocation = [], error: allocationError } = usePortfolioAllocation()
   const updateTpSl = useUpdateTpSl()
 
   // Real-time trade updates via SSE (Issue #216 §2.2). Replaces the previous
@@ -103,7 +103,11 @@ export default function Portfolio() {
   const tabVisible = useVisibleTab()
   useTradesSSE({ enabled: tabVisible })
 
-  const error = summaryError ? t('common.error') : ''
+  // Priority order for surfacing API errors: summary (core data) > positions
+  // > daily (chart) > allocation. Whichever fails first in this chain is what
+  // the user sees — we never hide a backend failure behind a skeleton or an
+  // empty-state (UX-H8).
+  const firstError = summaryError ?? positionsError ?? dailyError ?? allocationError
 
   const refreshData = useCallback(async () => {
     await Promise.all([
@@ -226,13 +230,15 @@ export default function Portfolio() {
 
   /* ── Error / Loading State ──────────────────────────────── */
 
-  // Show error state BEFORE skeleton so users see real errors instead of an
-  // eternal spinner when the backend is unreachable.
-  if (summaryError) {
+  // Render order is ERROR → LOADING → CONTENT (UX-H8). If ANY of the four
+  // portfolio queries errors out we show the error view immediately; otherwise
+  // a partial failure could be masked by a still-loading skeleton or by an
+  // empty-state fallback for the query that did succeed.
+  if (firstError) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[40vh] gap-4 px-4 text-center">
         <div role="alert" className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-sm max-w-md">
-          {getApiErrorMessage(summaryError, t('common.error'))}
+          {getApiErrorMessage(firstError, t('common.error'))}
         </div>
         <button
           type="button"
@@ -258,12 +264,6 @@ export default function Portfolio() {
   return (
     <div ref={containerRef} style={{ overscrollBehavior: 'contain' }} className="animate-in min-w-0" aria-busy={loading}>
       <PullToRefreshIndicator pullDistance={pullDistance} refreshing={refreshing} />
-      {/* Error */}
-      {error && (
-        <div role="alert" className="mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-sm">
-          {error}
-        </div>
-      )}
 
       {/* Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
