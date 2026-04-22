@@ -141,9 +141,6 @@ class BotWorker(
         self._risk_alerts_sent: set[str] = set()
         self._risk_alerts_last_reset: datetime = datetime.now(timezone.utc)
 
-        # Initialize per-instance position monitor state
-        self._init_monitor_state()
-
         # Wire the shared RiskStateManager singleton into the close-detection
         # path so `_handle_closed_position` uses exchange-readback classify_close
         # instead of the legacy proximity heuristic. Singleton is intentional —
@@ -152,6 +149,11 @@ class BotWorker(
         if settings.risk.risk_state_manager_enabled:
             from src.api.dependencies.risk_state import get_risk_state_manager
             self._risk_state_manager = get_risk_state_manager()
+
+        # Initialize per-instance position monitor state via the proxy mixin —
+        # this constructs the PositionMonitor component bound to self.
+        # (ARCH-H1 Phase 1 PR-4, #281).
+        self._init_monitor_state()
 
         # Start the Hyperliquid software trailing emulator (#216 Section 3.1).
         # HL has no native trailing primitive. The emulator is a process-wide

@@ -1049,12 +1049,13 @@ class TestMonitorAndCheckPosition:
         mock_session = _make_db_session()
         mock_session.execute = AsyncMock(return_value=mock_result)
 
-        worker._check_position = AsyncMock()
+        # Mock on the backing component — proxy forwards through it.
+        worker._position_monitor.check_position = AsyncMock()
 
-        with patch("src.bot.position_monitor.get_session", return_value=_mock_session_ctx(mock_session)):
+        with patch("src.bot.components.position_monitor.get_session", return_value=_mock_session_ctx(mock_session)):
             await worker._monitor_positions()
 
-        assert worker._check_position.await_count == 2
+        assert worker._position_monitor.check_position.await_count == 2
 
     async def test_check_position_no_client(self):
         """When no client available for trade mode, returns early."""
@@ -1096,13 +1097,16 @@ class TestMonitorAndCheckPosition:
         trade = _make_mock_trade(demo_mode=True)
         session = AsyncMock()
 
-        worker._handle_closed_position = AsyncMock()
-        worker._confirm_position_closed = AsyncMock(return_value=True)
+        # Mock on the backing component — proxy forwards through it.
+        worker._position_monitor.handle_closed_position = AsyncMock()
+        worker._position_monitor.confirm_position_closed = AsyncMock(return_value=True)
 
         await worker._check_position(trade, session)
 
-        worker._confirm_position_closed.assert_awaited_once()
-        worker._handle_closed_position.assert_awaited_once_with(trade, mock_client, session)
+        worker._position_monitor.confirm_position_closed.assert_awaited_once()
+        worker._position_monitor.handle_closed_position.assert_awaited_once_with(
+            trade, mock_client, session,
+        )
 
     async def test_check_position_position_gone_then_reappears(self):
         """When position is None but reappears on retry, do NOT close."""
@@ -1114,13 +1118,13 @@ class TestMonitorAndCheckPosition:
         trade = _make_mock_trade(demo_mode=True)
         session = AsyncMock()
 
-        worker._handle_closed_position = AsyncMock()
-        worker._confirm_position_closed = AsyncMock(return_value=False)
+        worker._position_monitor.handle_closed_position = AsyncMock()
+        worker._position_monitor.confirm_position_closed = AsyncMock(return_value=False)
 
         await worker._check_position(trade, session)
 
-        worker._confirm_position_closed.assert_awaited_once()
-        worker._handle_closed_position.assert_not_awaited()
+        worker._position_monitor.confirm_position_closed.assert_awaited_once()
+        worker._position_monitor.handle_closed_position.assert_not_awaited()
 
     async def test_check_position_side_mismatch_neutral_corrected(self):
         """When trade side is 'neutral', auto-correct to exchange side."""
@@ -1168,13 +1172,13 @@ class TestMonitorAndCheckPosition:
 
         trade = _make_mock_trade(demo_mode=False)
         session = AsyncMock()
-        worker._handle_closed_position = AsyncMock()
-        worker._confirm_position_closed = AsyncMock(return_value=True)
+        worker._position_monitor.handle_closed_position = AsyncMock()
+        worker._position_monitor.confirm_position_closed = AsyncMock(return_value=True)
 
         await worker._check_position(trade, session)
 
         mock_live.get_position.assert_awaited_once()
-        worker._handle_closed_position.assert_awaited_once()
+        worker._position_monitor.handle_closed_position.assert_awaited_once()
 
 
 class TestConfirmPositionClosed:
