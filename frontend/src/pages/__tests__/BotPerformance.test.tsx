@@ -140,4 +140,69 @@ describe('BotPerformance', () => {
 
     expect(screen.getByText('BTC Edge')).toBeInTheDocument()
   })
+
+  it('does not mount the hidden mobile share-capture div until a share is initiated', () => {
+    // Stats data with closed trades present. Before any share action is
+    // triggered, the hidden capture div (testid: mobile-share-capture) must
+    // not be in the DOM — this is the core of UX-M2: avoid re-rendering
+    // the hidden share subtree on every parent state change.
+    const bots = [
+      {
+        bot_id: 1,
+        name: 'BTC Edge',
+        strategy_type: 'edge_indicator',
+        exchange_type: 'bitget',
+        mode: 'live',
+        total_trades: 2,
+        total_pnl: 10,
+        total_fees: 0,
+        total_funding: 0,
+        win_rate: 50,
+        wins: 1,
+        last_direction: 'long',
+        last_confidence: 0.8,
+        series: [{ date: '2026-04-01', cumulative_pnl: 0 }],
+      },
+    ]
+    const stats = {
+      bot_id: 1,
+      summary: {
+        win_rate: 50,
+        avg_trade: 5,
+        best_trade: 20,
+        worst_trade: -10,
+        days: 30,
+      },
+      recent_trades: [
+        {
+          id: 101,
+          symbol: 'BTCUSDT',
+          side: 'long',
+          entry_price: 50000,
+          exit_price: 51000,
+          entry_time: '2026-04-10T12:00:00Z',
+          exit_time: '2026-04-10T13:00:00Z',
+          pnl: 20,
+          pnl_percent: 2.0,
+          fees: 1,
+          funding_paid: 0,
+          status: 'closed',
+          demo_mode: false,
+          size: 0.01,
+          leverage: 5,
+          exit_reason: 'take_profit',
+          reason: 'ema crossover',
+        },
+      ],
+      daily_series: [],
+    }
+    setDefaultMocks({
+      compare: { data: bots, isLoading: false },
+      stats: { data: stats, isLoading: false },
+    })
+    renderWithProviders(<BotPerformance />)
+
+    // Hidden capture div must NOT be mounted before any share interaction.
+    expect(screen.queryByTestId('mobile-share-capture')).not.toBeInTheDocument()
+  })
 })
