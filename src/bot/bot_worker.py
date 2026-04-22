@@ -122,6 +122,11 @@ class BotWorker(
         # Initialize per-instance position monitor state
         self._init_monitor_state()
 
+        # Build the composition-owned TradeExecutor (#72, ARCH-H1 Phase 1 PR-5).
+        # The component holds the order-placement pipeline; the mixin is a
+        # thin proxy so every existing callsite keeps working.
+        self._init_trade_executor_state()
+
         # Wire the shared RiskStateManager singleton into the close-detection
         # path so `_handle_closed_position` uses exchange-readback classify_close
         # instead of the legacy proximity heuristic. Singleton is intentional —

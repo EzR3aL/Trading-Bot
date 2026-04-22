@@ -300,8 +300,8 @@ class TestTPSLIntegrationFlow:
         db_capture = TradeRecordCapture()
         mock_session = _make_db_session()
 
-        with patch("src.bot.trade_executor.get_session", return_value=_mock_session_ctx(mock_session)), \
-             patch("src.bot.trade_executor.TradeRecord", db_capture):
+        with patch("src.bot.components.trade_executor.get_session", return_value=_mock_session_ctx(mock_session)), \
+             patch("src.bot.components.trade_executor.TradeRecord", db_capture):
             await worker._execute_trade(signal, exchange, demo_mode=True, asset_budget=500.0)
 
         # 1. Exchange received correct TP/SL prices
@@ -359,7 +359,7 @@ class TestTPSLIntegrationFlow:
         signal = _make_signal(direction=SignalDirection.SHORT, entry_price=68200.0)
         mock_session = _make_db_session()
 
-        with patch("src.bot.trade_executor.get_session", return_value=_mock_session_ctx(mock_session)):
+        with patch("src.bot.components.trade_executor.get_session", return_value=_mock_session_ctx(mock_session)):
             await worker._execute_trade(signal, exchange, demo_mode=True, asset_budget=500.0)
 
         order = exchange.placed_orders[0]
@@ -391,7 +391,7 @@ class TestTPSLIntegrationFlow:
         signal = _make_signal(direction=SignalDirection.LONG, entry_price=68200.0)
         mock_session = _make_db_session()
 
-        with patch("src.bot.trade_executor.get_session", return_value=_mock_session_ctx(mock_session)):
+        with patch("src.bot.components.trade_executor.get_session", return_value=_mock_session_ctx(mock_session)):
             await worker._execute_trade(signal, exchange, demo_mode=True, asset_budget=500.0)
 
         order = exchange.placed_orders[0]
@@ -420,8 +420,8 @@ class TestTPSLIntegrationFlow:
         db_capture = TradeRecordCapture()
         mock_session = _make_db_session()
 
-        with patch("src.bot.trade_executor.get_session", return_value=_mock_session_ctx(mock_session)), \
-             patch("src.bot.trade_executor.TradeRecord", db_capture):
+        with patch("src.bot.components.trade_executor.get_session", return_value=_mock_session_ctx(mock_session)), \
+             patch("src.bot.components.trade_executor.TradeRecord", db_capture):
             await worker._execute_trade(signal, exchange, demo_mode=True, asset_budget=500.0)
 
         # Exchange received None for both
@@ -469,8 +469,8 @@ class TestTPSLIntegrationFlow:
         db_capture = TradeRecordCapture()
         mock_session = _make_db_session()
 
-        with patch("src.bot.trade_executor.get_session", return_value=_mock_session_ctx(mock_session)), \
-             patch("src.bot.trade_executor.TradeRecord", db_capture):
+        with patch("src.bot.components.trade_executor.get_session", return_value=_mock_session_ctx(mock_session)), \
+             patch("src.bot.components.trade_executor.TradeRecord", db_capture):
             await worker._execute_trade(signal, exchange, demo_mode=True, asset_budget=500.0)
 
         # Exchange got TP/SL in the order, but tpsl_failed → reset
@@ -585,8 +585,8 @@ class TestTPSLIntegrationFlow:
         db_capture = TradeRecordCapture()
         mock_session = _make_db_session()
 
-        with patch("src.bot.trade_executor.get_session", return_value=_mock_session_ctx(mock_session)), \
-             patch("src.bot.trade_executor.TradeRecord", db_capture):
+        with patch("src.bot.components.trade_executor.get_session", return_value=_mock_session_ctx(mock_session)), \
+             patch("src.bot.components.trade_executor.TradeRecord", db_capture):
             await worker._execute_trade(signal, exchange, demo_mode=True, asset_budget=500.0)
 
         # TP set, SL is None
@@ -640,7 +640,7 @@ class TestTPSLExampleTrades:
         signal = _make_signal(direction=SignalDirection.LONG, entry_price=68200.0)
         mock_session = _make_db_session()
 
-        with patch("src.bot.trade_executor.get_session", return_value=_mock_session_ctx(mock_session)):
+        with patch("src.bot.components.trade_executor.get_session", return_value=_mock_session_ctx(mock_session)):
             await worker._execute_trade(signal, exchange, demo_mode=True, asset_budget=1000.0)
 
         order = exchange.placed_orders[0]
@@ -679,7 +679,7 @@ class TestTPSLExampleTrades:
         signal = _make_signal(direction=SignalDirection.SHORT, entry_price=68200.0)
         mock_session = _make_db_session()
 
-        with patch("src.bot.trade_executor.get_session", return_value=_mock_session_ctx(mock_session)):
+        with patch("src.bot.components.trade_executor.get_session", return_value=_mock_session_ctx(mock_session)):
             await worker._execute_trade(signal, exchange, demo_mode=True, asset_budget=1000.0)
 
         order = exchange.placed_orders[0]
@@ -718,7 +718,7 @@ class TestTPSLExampleTrades:
         signal = _make_signal(direction=SignalDirection.LONG, entry_price=68200.0)
         mock_session = _make_db_session()
 
-        with patch("src.bot.trade_executor.get_session", return_value=_mock_session_ctx(mock_session)):
+        with patch("src.bot.components.trade_executor.get_session", return_value=_mock_session_ctx(mock_session)):
             await worker._execute_trade(signal, exchange, demo_mode=True, asset_budget=1000.0)
 
         order = exchange.placed_orders[0]
@@ -753,8 +753,8 @@ class TestTPSLExampleTrades:
         db_capture = TradeRecordCapture()
         mock_session = _make_db_session()
 
-        with patch("src.bot.trade_executor.get_session", return_value=_mock_session_ctx(mock_session)), \
-             patch("src.bot.trade_executor.TradeRecord", db_capture):
+        with patch("src.bot.components.trade_executor.get_session", return_value=_mock_session_ctx(mock_session)), \
+             patch("src.bot.components.trade_executor.TradeRecord", db_capture):
             await worker._execute_trade(signal, exchange, demo_mode=True, asset_budget=1000.0)
 
         tp_price = db_capture.records[0]["take_profit"]
