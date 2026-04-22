@@ -765,7 +765,8 @@
         "noConnectionForExchange": "Keine {{mode}}-Verbindung für {{exchange}} vorhanden. Bitte hinterlege die API Keys unter Einstellungen → API Keys.",
         "intervalMinimum": "Intervall muss mindestens 5 Minuten betragen",
         "hoursRequired": "Bitte wähle mindestens eine Uhrzeit",
-        "symbolConflicts": "Speichern nicht möglich: Trading-Paare kollidieren mit einem bestehenden Bot."
+        "symbolConflicts": "Speichern nicht möglich: Trading-Paare kollidieren mit einem bestehenden Bot.",
+        "symbolAlreadyInUse": "Symbol {{symbol}} wird bereits vom Bot „{{botName}}\" genutzt. Stoppe oder lösche den anderen Bot oder wähle ein anderes Trading-Paar."
       },
       "symbolConflictTitle": "Symbol-Konflikt erkannt",
       "symbolConflictItem": "{{symbol}} wird bereits von \"{{botName}}\" ({{mode}}) gehandelt",

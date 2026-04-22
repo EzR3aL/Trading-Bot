@@ -765,7 +765,8 @@
         "noConnectionForExchange": "No {{mode}} connection for {{exchange}} found. Please set up your API keys under Settings → API Keys.",
         "intervalMinimum": "Interval must be at least 5 minutes",
         "hoursRequired": "Please select at least one hour",
-        "symbolConflicts": "Cannot save: trading pairs conflict with an existing bot."
+        "symbolConflicts": "Cannot save: trading pairs conflict with an existing bot.",
+        "symbolAlreadyInUse": "Symbol {{symbol}} is already in use by bot \"{{botName}}\". Stop or delete the other bot, or pick a different trading pair."
       },
       "symbolConflictTitle": "Symbol conflict detected",
       "symbolConflictItem": "{{symbol}} is already traded by \"{{botName}}\" ({{mode}})",
