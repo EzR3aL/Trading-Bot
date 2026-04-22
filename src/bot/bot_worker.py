@@ -22,6 +22,7 @@ from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 
 from config.settings import settings
+from src.bot.components.hyperliquid_gates import HyperliquidGates
 from src.bot.components.notifier import Notifier
 from src.bot.hyperliquid_gates import HyperliquidGatesMixin
 from src.bot.notifications import NotificationsMixin
@@ -110,6 +111,12 @@ class BotWorker(
         # Graceful shutdown support
         self._shutting_down: bool = False
         self._operation_in_progress: asyncio.Event = asyncio.Event()
+
+        # Hyperliquid gate component — composition-owned (ARCH-H1 Phase 1 PR-2, #277).
+        # Uses a getter because _config is loaded during start(), not __init__.
+        self._hl_gates: HyperliquidGates = HyperliquidGates(
+            bot_config_id, lambda: self._config
+        )
         self._operation_in_progress.set()  # Not busy initially
 
         # Auto-recovery tracking
