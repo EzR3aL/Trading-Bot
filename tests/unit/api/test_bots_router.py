@@ -12,7 +12,7 @@ import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import AsyncGenerator
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 import pytest_asyncio
@@ -33,6 +33,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from src.models.database import (  # noqa: E402
     Base,
     BotConfig,
+    ExchangeConnection,
     TradeRecord,
     User,
 )
@@ -1266,3 +1267,178 @@ class TestTelegramTest:
         )
         assert resp.status_code == 400
         assert ERR_TELEGRAM_NOT_CONFIGURED in resp.json()["detail"]
+
+
+# ---------------------------------------------------------------------------
+# CLOSE POSITION: RSM classify_close wiring (ARCH-C1a manual — Issue #245)
+# ---------------------------------------------------------------------------
+
+
+class TestClosePositionClassifyClose:
+    """Manual-close endpoint must route through RiskStateManager.classify_close
+    when the feature flag is on, mirroring the sync_trades path (PR #244)."""
+
+    @pytest_asyncio.fixture
+    async def open_trade_and_conn(self, test_engine, test_user, sample_bot):
+        """Insert an open TradeRecord for BTCUSDT plus a bitget ExchangeConnection."""
+        factory = async_sessionmaker(
+            test_engine, class_=AsyncSession, expire_on_commit=False
+        )
+        now = datetime.now(timezone.utc)
+        async with factory() as session:
+            conn = ExchangeConnection(
+                user_id=test_user.id,
+                exchange_type="bitget",
+                demo_api_key_encrypted="encrypted_key",
+                demo_api_secret_encrypted="encrypted_secret",
+            )
+            trade = TradeRecord(
+                user_id=test_user.id,
+                bot_config_id=sample_bot.id,
+                symbol="BTCUSDT",
+                side="long",
+                size=0.01,
+                entry_price=95000.0,
+                take_profit=97000.0,
+                stop_loss=94000.0,
+                leverage=4,
+                confidence=70,
+                reason="open manual-close test",
+                order_id="manual_close_001",
+                status="open",
+                entry_time=now - timedelta(hours=2),
+                exchange="bitget",
+                demo_mode=True,
+            )
+            session.add_all([conn, trade])
+            await session.commit()
+            await session.refresh(trade)
+            return trade
+
+    async def _build_mock_client(self):
+        """Exchange-client double: close succeeds, position is gone afterwards."""
+        mock_client = AsyncMock()
+        mock_client.close_position = AsyncMock(return_value=MagicMock())
+        mock_client.get_position = AsyncMock(return_value=None)
+        mock_client.get_close_fill_price = AsyncMock(return_value=96500.0)
+        mock_client.get_ticker = AsyncMock(return_value=MagicMock(last_price=96500.0))
+        return mock_client
+
+    async def test_close_position_invokes_classify_close_when_rsm_enabled(
+        self, client, auth_headers, sample_bot, open_trade_and_conn,
+    ):
+        """With the RSM flag on, classify_close is awaited after the close
+        succeeds and its return value becomes the trade's exit_reason.
+        The close must be verified before classify_close is consulted."""
+        mock_client = await self._build_mock_client()
+
+        fake_manager = MagicMock()
+        fake_manager.classify_close = AsyncMock(return_value="MANUAL_CLOSE_UI")
+
+        fake_settings = MagicMock()
+        fake_settings.risk.risk_state_manager_enabled = True
+
+        with patch(
+            "src.exchanges.factory.create_exchange_client",
+            return_value=mock_client,
+        ), patch(
+            "src.utils.encryption.decrypt_value",
+            return_value="decrypted",
+        ), patch(
+            "src.api.routers.bots_lifecycle.settings",
+            fake_settings,
+        ), patch(
+            "src.api.routers.bots_lifecycle.get_risk_state_manager",
+            return_value=fake_manager,
+        ):
+            resp = await client.post(
+                f"/api/bots/{sample_bot.id}/close-position/BTCUSDT",
+                headers=auth_headers,
+            )
+
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "ok"
+
+        # classify_close was invoked exactly once with (trade_id, exit_price, exit_time)
+        fake_manager.classify_close.assert_awaited_once()
+        call_args = fake_manager.classify_close.await_args
+        # Positional args: (trade_id, exit_price, exit_time)
+        assert call_args.args[0] == open_trade_and_conn.id
+        assert call_args.args[1] == 96500.0
+
+        # The position was cleared: a follow-up close on the same symbol
+        # now returns 404 (no open trade), confirming the close path ran.
+        resp_again = await client.post(
+            f"/api/bots/{sample_bot.id}/close-position/BTCUSDT",
+            headers=auth_headers,
+        )
+        assert resp_again.status_code == 404
+
+    async def test_close_position_legacy_reason_when_rsm_disabled(
+        self, client, auth_headers, sample_bot, open_trade_and_conn,
+    ):
+        """With the RSM flag off, classify_close is never called and
+        exit_reason falls back to the legacy ``MANUAL_CLOSE`` literal."""
+        mock_client = await self._build_mock_client()
+
+        fake_manager = MagicMock()
+        fake_manager.classify_close = AsyncMock(return_value="SHOULD_NOT_BE_USED")
+
+        fake_settings = MagicMock()
+        fake_settings.risk.risk_state_manager_enabled = False
+
+        with patch(
+            "src.exchanges.factory.create_exchange_client",
+            return_value=mock_client,
+        ), patch(
+            "src.utils.encryption.decrypt_value",
+            return_value="decrypted",
+        ), patch(
+            "src.api.routers.bots_lifecycle.settings",
+            fake_settings,
+        ), patch(
+            "src.api.routers.bots_lifecycle.get_risk_state_manager",
+            return_value=fake_manager,
+        ):
+            resp = await client.post(
+                f"/api/bots/{sample_bot.id}/close-position/BTCUSDT",
+                headers=auth_headers,
+            )
+
+        assert resp.status_code == 200
+        fake_manager.classify_close.assert_not_awaited()
+
+    async def test_close_position_falls_back_on_classify_close_error(
+        self, client, auth_headers, sample_bot, open_trade_and_conn,
+    ):
+        """If classify_close raises, the close still succeeds and
+        exit_reason falls back to the legacy ``MANUAL_CLOSE`` literal."""
+        mock_client = await self._build_mock_client()
+
+        fake_manager = MagicMock()
+        fake_manager.classify_close = AsyncMock(side_effect=RuntimeError("boom"))
+
+        fake_settings = MagicMock()
+        fake_settings.risk.risk_state_manager_enabled = True
+
+        with patch(
+            "src.exchanges.factory.create_exchange_client",
+            return_value=mock_client,
+        ), patch(
+            "src.utils.encryption.decrypt_value",
+            return_value="decrypted",
+        ), patch(
+            "src.api.routers.bots_lifecycle.settings",
+            fake_settings,
+        ), patch(
+            "src.api.routers.bots_lifecycle.get_risk_state_manager",
+            return_value=fake_manager,
+        ):
+            resp = await client.post(
+                f"/api/bots/{sample_bot.id}/close-position/BTCUSDT",
+                headers=auth_headers,
+            )
+
+        # Close still succeeded (200), classify_close failure is swallowed
+        assert resp.status_code == 200
+        fake_manager.classify_close.assert_awaited_once()
