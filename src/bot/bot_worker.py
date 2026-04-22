@@ -155,6 +155,11 @@ class BotWorker(
         # (ARCH-H1 Phase 1 PR-4, #281).
         self._init_monitor_state()
 
+        # Build the composition-owned TradeExecutor (#72, ARCH-H1 Phase 1 PR-5).
+        # The component holds the order-placement pipeline; the mixin is a
+        # thin proxy so every existing callsite keeps working.
+        self._init_trade_executor_state()
+
         # Start the Hyperliquid software trailing emulator (#216 Section 3.1).
         # HL has no native trailing primitive. The emulator is a process-wide
         # singleton (one watchdog services every HL trade regardless of which

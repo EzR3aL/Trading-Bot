@@ -479,7 +479,7 @@ class TestExecuteTrade:
         mock_session.__aenter__ = AsyncMock(return_value=mock_session)
         mock_session.__aexit__ = AsyncMock(return_value=False)
 
-        with patch("src.bot.trade_executor.get_session", return_value=mock_session):
+        with patch("src.bot.components.trade_executor.get_session", return_value=mock_session):
             await worker._execute_trade(signal, mock_client, demo_mode=True)
 
         mock_client.place_market_order.assert_awaited_once()
