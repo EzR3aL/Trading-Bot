@@ -11,6 +11,153 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ## [Unreleased]
 
+### 2026-04-22 — P3 Security polish (#251, task 1/3)
+
+#### Fixed
+- **[cache-leak]** `src/api/main_app.py:101` — `SecurityHeadersMiddleware` now emits `Cache-Control: no-store` on all `/api/*` responses so authenticated JSON payloads are not cached by shared proxies or the browser disk cache. Static SPA assets served from `/` keep their own `Cache-Control`; only `/api/*` is patched, and only when the handler did not already set its own header.
+- **[audit-log-ip]** `src/api/middleware/audit_log.py:16,34` — `AuditLogMiddleware` now uses the shared `_get_real_client_ip(request)` resolver from `src/api/rate_limit.py` instead of raw `request.client.host`. Behind Nginx the old path always logged the proxy's IP (`127.0.0.1`), making audit trails useless. `X-Forwarded-For` is only trusted when `BEHIND_PROXY=true`.
+- **[token-type-confusion]** `src/api/middleware/audit_log.py:91` — `_extract_user_id` now calls `decode_token(token, expected_type="access")`; a refresh token presented via the `Authorization` header used to label audit rows with its `sub`. Refresh tokens live longer and carry elevated refresh privileges, so they must never be accepted on the authenticated API surface.
+- **[auth-bridge-ip]** `src/api/routers/auth_bridge.py:68,119` — `generate_code` + `exchange_code` switched from `request.headers.get("X-Forwarded-For", request.client.host ...)` to the same `_get_real_client_ip` helper. Raw `X-Forwarded-For` is spoofable when the bot is reachable outside the proxy; consolidating on the helper means the `BEHIND_PROXY` flag is the single source of truth.
+
+#### Added (tests)
+- **[test]** `tests/unit/api/test_audit_log_extra.py::test_returns_none_for_refresh_token_in_auth_header` — locks in the token-type restriction by minting a refresh token with `create_refresh_token`, passing it as `Bearer ...`, and asserting `_extract_user_id` returns `None`.
+- **[test]** `tests/unit/api/test_main_app.py::test_cache_control_no_store_on_api_responses` — boots the app via `create_app()`, hits `/api/status`, asserts `cache-control == "no-store"`.
+
+### 2026-04-22 — P3 Architecture polish (#251, task 3/3)
+
+#### Fixed
+- **[dead-code]** `src/notifications/discord_notifier.py:288` — removed unused local `_direction_emoji` that was assigned but never read (pyflakes F841).
+- **[undefined-name]** `src/exchanges/hyperliquid/client.py:18,36` — added `TYPE_CHECKING` import + guarded `from src.exchanges.base import GateCheckResult` block so the forward-reference annotation `List["GateCheckResult"]` on `pre_start_checks` resolves statically (fixes pyflakes/ruff F821).
+- **[docstring]** `src/api/routers/copy_trading.py:134` — added one-line docstring to the `GET /api/exchanges/{exchange}/leverage-limits` route (`leverage_limits`). Every other FastAPI route handler in `src/api/routers/` already has one; this was the only gap.
+- **[i18n-orphans]** `frontend/src/i18n/{de,en}.json` — deleted the entire `botDetail` section (34 keys per locale, 68 total) — zero references anywhere in `frontend/src/**/*.{ts,tsx}` (verified via grep for both `t('botDetail.*')` and template-literal prefixes). The local variable named `botDetail` in `BotPerformance.tsx` is a JS identifier, not an i18n key lookup.
+
+#### Audited (findings)
+- Pyflakes + `ruff check src/ --select F` — only the three issues above after respecting noqa. The `src/api/routers/bots.py:1232/1241` re-exports (`start_bot`, `stop_bot`, `_enforce_*`, etc.) are intentional backward-compat shims for tests (`test_bots_router_extra.py`, `test_concurrency.py`, `test_injection_security.py`) and already carry `noqa: F401` — left untouched.
+- `src/strategy/__init__.py` auto-imports every sibling module at package load (ARCH-H7). `StrategyRegistry` import in `src/bot/orchestrator.py:22` is a side-effect import (auto-register) and already carries `noqa: F401` — left untouched.
+- No stray `print(` statements in `src/` (only in `scripts/`, which is allowed).
+- Every FastAPI route handler now has a docstring; checked via AST walk over `src/api/routers/*.py`.
+- `__all__` declarations in `src/**/*.py` all reference live names — no orphan re-exports.
+- Logging style: ~200 f-string `logger.*` calls across `src/` that ignore lazy `%s` formatting — blanket rename is scope creep (flagged follow-up).
+- i18n orphan scan found 103 likely-orphan keys across 11 namespaces (mostly `settings.*` tabs, `performance.*` aliases, `affiliate.*` legacy). Only `botDetail` (34 keys) was obviously safe to remove — the rest may be dynamically referenced via template literals or computed key paths, so they are flagged as follow-ups rather than deleted.
+- `requirements.txt` vs `src/` import scan: every declared dep either has a direct import (`from fastapi import ...`, `from sqlalchemy import ...`) or is a runtime-only transitive dep (e.g. `uvicorn` runs the app, `asyncpg` is the driver `sqlalchemy[asyncio]` dispatches to, `discord.py` is used via `aiohttp` webhook calls). No removable entries — per task hard-limit, no dependency changes made.
+
+#### Deferred as follow-ups
+- Orphan i18n keys in `settings.*` (35), `performance.*` (8), `affiliate.*` (10) and smaller namespaces — need per-key verification with page-level grep (some may be referenced via `t(\`namespace.${key}\`)` templates).
+- F-string logging → lazy `%s` formatting — ~200 call sites; needs a dedicated mechanical sweep with codemod.
+- 1118 ruff auto-fixes under `SIM/UP/RUF` rulesets (e.g. `try/except/pass` → `contextlib.suppress`) — blanket roll-out is scope creep.
+
+### 2026-04-22 — P3-UX polish (#251, task 2/3)
+
+#### Audited (~15 findings)
+- **[title]** No route-level document title; `<title>Edge Bots</title>` in `frontend/index.html` is the only value — every tab stays "Edge Bots". **FIXED.**
+- **[a11y]** `frontend/src/pages/AdminBroadcasts.tsx:37,419` — X close-buttons missing `aria-label`. **FIXED.**
+- **[a11y]** `frontend/src/components/hyperliquid/BuilderFeeApproval.tsx:244` — X close-button missing `aria-label`. **FIXED.**
+- **[a11y]** `frontend/src/components/bots/BotBuilderStepNotifications.tsx:126` — Plus (add threshold) button missing `aria-label`. **FIXED.**
+- **[i18n]** `frontend/src/components/bots/BotBuilderStepNotifications.tsx:63,138` — hardcoded German strings "Schwellenwerte" + "Typ wählen ($/%), Wert eingeben..." + "Maximal 10 Schwellenwerte". **FIXED** (now `t('bots.builder.pnlThresholdsLabel')` + `t('bots.builder.pnlThresholdHint')`).
+- **[copy-affordance]** `frontend/src/components/hyperliquid/HyperliquidSetup.tsx:516` — HL wallet short-address in the referral diagnostic card was display-only; no way to copy the full `wallet_address` that the backend already returns. **FIXED** (new reusable `CopyButton`).
+- **[empty-state]** `frontend/src/pages/AdminUsers.tsx:301` — bare "Keine Benutzer vorhanden." centred text, no icon, no hint. **FIXED.**
+- **[empty-state]** `frontend/src/pages/AdminBroadcasts.tsx:580` — bare "Noch keine Broadcasts vorhanden" centred text, no icon, no hint. **FIXED.**
+- **[focus-ring]** `frontend/src/pages/Settings.tsx:109-122` — save / test / delete buttons on KeyForm had no `focus-visible:ring-*`. **FIXED** (+ Save now shows `t('common.loading')` while `saving`).
+- **[mutation-state]** `frontend/src/pages/Settings.tsx:113` — "Test Connection" button stayed enabled while `saving` (race-risk). **FIXED** (`disabled={!configured || saving}`).
+- **[number-format]** `frontend/src/components/**` — 95 `toFixed()` call sites, only `utils/dateUtils.ts` has a centralised formatter (`formatChartCurrency`). No locale-aware `formatCurrency`/`formatPercent` helper. **FIXED** — new `frontend/src/utils/numberFormat.ts` (adoption deferred as follow-up, not forcing a branch-wide rename).
+- **[copy-affordance]** `frontend/src/components/ui/EditPositionPanel.tsx` trade-id/order-id text strings — no copy button. Deferred.
+- **[a11y]** `frontend/src/components/ui/OfflineIndicator.tsx:67` has hardcoded `aria-label="Dismiss"` — should be translated. Deferred.
+- **[a11y]** `frontend/src/pages/Trades.tsx:371` has hardcoded `aria-label="Sort by PnL"` — should be translated. Deferred.
+- **[pending-state]** Broadcast "Send" / AdminUsers "Create" / BotBuilder "Save" buttons already use `isPending`. No missing wiring found (PR #244 + M6 covered the main mutation surfaces). No change required.
+
+#### Added
+- **[P3-UX]** `frontend/src/hooks/useDocumentTitle.ts` — 20-line hook (no new dependency, no react-helmet). Sets `document.title = "${title} · Edge Bots"` on mount and restores the previous title on unmount so back-navigation shows the right tab label for the previous route until the next `useDocumentTitle` fires.
+- **[P3-UX]** `frontend/src/components/ui/CopyButton.tsx` — small icon-only button that writes a string to the clipboard via `navigator.clipboard.writeText`, swaps the `Copy` icon for a green `Check` for 1.5 s, and fires `showSuccess(t('common.copiedToast', { label }))` from the unified toast wrapper (`utils/toast.ts`, UX-M6). `aria-label` uses `t('common.copyValue', { label })` so screen readers announce what's being copied. Includes `focus-visible:ring-2 focus-visible:ring-primary-500/60` for keyboard users.
+- **[P3-UX]** `frontend/src/utils/numberFormat.ts` — `formatCurrency(value, { decimals?, withSign? })`, `formatPercent(value, { decimals?, withSign? })`, `formatNumber(value, { decimals? })`. All three accept `null`/`undefined` and return `'--'`. Uses `Intl.NumberFormat` with the browser-resolved locale (so DE users get `1.234,56 $` grouping, EN users get `$1,234.56`). Not force-adopted across existing `toFixed()` sites — new code and any touched component should prefer these helpers.
+
+#### Changed — per-route document titles (11 pages)
+- **[P3-UX]** `frontend/src/pages/Dashboard.tsx:84` → `useDocumentTitle(t('nav.dashboard'))`
+- **[P3-UX]** `frontend/src/pages/Portfolio.tsx:73` → `useDocumentTitle(t('nav.portfolio'))`
+- **[P3-UX]** `frontend/src/pages/Trades.tsx:72` → `useDocumentTitle(t('nav.trades'))`
+- **[P3-UX]** `frontend/src/pages/Settings.tsx:148` → `useDocumentTitle(t('nav.settings'))`
+- **[P3-UX]** `frontend/src/pages/Bots.tsx:836` → `useDocumentTitle(t('nav.myBots'))`
+- **[P3-UX]** `frontend/src/pages/BotPerformance.tsx:418` → `useDocumentTitle(t('nav.performance'))`
+- **[P3-UX]** `frontend/src/pages/TaxReport.tsx:29` → `useDocumentTitle(t('nav.taxReport'))`
+- **[P3-UX]** `frontend/src/pages/GettingStarted.tsx:749` → `useDocumentTitle(t('nav.guide'))`
+- **[P3-UX]** `frontend/src/pages/Admin.tsx:29` → `useDocumentTitle(t('nav.admin'))`
+- **[P3-UX]** `frontend/src/pages/Login.tsx:14` → `useDocumentTitle(t('login.title'))`
+- **[P3-UX]** `frontend/src/pages/NotFound.tsx:6` → `useDocumentTitle(t('notFound'))`
+
+#### Changed — accessibility fixes
+- **[P3-UX]** `frontend/src/pages/AdminBroadcasts.tsx:37,419` — added `aria-label={t('common.close')}` + focus-visible ring to both X close buttons (detail-modal header + create-form reset).
+- **[P3-UX]** `frontend/src/components/hyperliquid/BuilderFeeApproval.tsx:244` — added `aria-label={t('common.close', 'Close')}` + focus-visible ring on the modal X close button.
+- **[P3-UX]** `frontend/src/components/bots/BotBuilderStepNotifications.tsx:126` — added `aria-label={t('bots.builder.addThreshold')}` + focus-visible ring on the PnL-threshold add button. `ThresholdChipInput` now pulls `useTranslation()` so its label + hint render from i18n (no more German literals).
+
+#### Changed — empty states
+- **[P3-UX]** `frontend/src/pages/AdminUsers.tsx:301-307` — replaced bare "Keine Benutzer vorhanden." text with glass-card centred block: `UsersIcon` + `t('admin.noUsers')` title + `t('admin.noUsersHint')` sub-copy.
+- **[P3-UX]** `frontend/src/pages/AdminBroadcasts.tsx:580-586` — replaced bare "Noch keine Broadcasts vorhanden" text with centred `Radio` icon + `t('broadcast.noHistory')` title + `t('broadcast.noHistoryHint')` sub-copy. Matches the Bots/Trades/Portfolio empty-state visual shape that already existed.
+
+#### Changed — mutation-state + focus polish
+- **[P3-UX]** `frontend/src/components/hyperliquid/HyperliquidSetup.tsx:516` — wrapped the diagnostic wallet short-address display in a flex row and added `<CopyButton value={referralDiag.wallet_address} label={t('hlSetup.diagWallet')} />` next to it. Copies the **full** address, not the short version.
+- **[P3-UX]** `frontend/src/pages/Settings.tsx:109-122` — added `focus-visible:outline-none focus-visible:ring-2` to Save / Test / Delete buttons in `KeyForm`; Save button now renders `t('common.loading')` while `saving` (was always `t('settings.save')`); Test Connection now disables while saving (`disabled={!configured || saving}`) to prevent double-submit races.
+
+#### i18n keys added (DE + EN parity preserved)
+- **[P3-UX]** `common.copyValue` — "Copy {{label}}" / "{{label}} kopieren"
+- **[P3-UX]** `common.copiedToast` — "{{label}} copied to clipboard" / "{{label}} in die Zwischenablage kopiert"
+- **[P3-UX]** `common.copyFailed` — "Copy failed" / "Kopieren fehlgeschlagen"
+- **[P3-UX]** `admin.noUsersHint` — "Create the first user with the button above." / "Lege den ersten Benutzer über den Button oben an."
+- **[P3-UX]** `broadcast.noHistoryHint` — "Broadcasts you send will appear here." / "Gesendete Broadcasts erscheinen hier."
+- **[P3-UX]** `bots.builder.addThreshold` — "Add threshold" / "Schwellenwert hinzufügen"
+- **[P3-UX]** `bots.builder.pnlThresholdsLabel` — "Thresholds" / "Schwellenwerte"
+- **[P3-UX]** `bots.builder.pnlThresholdHint` — "Pick a type ($/%), enter a value, press Enter. Up to 10 thresholds." / "Typ wählen ($/%), Wert eingeben, Enter drücken. Maximal 10 Schwellenwerte."
+
+#### Follow-ups (not addressed — under the 10-fix budget)
+- Hardcoded English `aria-label="Dismiss"`/`"Close"`/`"Sort by PnL"` strings in `OfflineIndicator.tsx:67`, `EditPositionPanel.tsx:348`, `Trades.tsx:371`, `Bots.tsx:276,480`, and the `DatePicker.tsx:151,164` "Previous/Next month" labels — should be translated.
+- 95 `toFixed()` call sites across 23 files not migrated to the new `formatCurrency`/`formatPercent` helpers. A future pure-cosmetic rename PR can do the sweep; touching 23 files would blow the scope/LOC budget here.
+- `EditPositionPanel.tsx` trade-id / order-id fields still have no copy-to-clipboard affordance. `CopyButton` now exists, wiring it up is a one-liner per field.
+- `HyperliquidSetup.tsx:135` inline validation still uses hardcoded strings (`t('settings.validationAddress')` keys already exist — already fine). No change needed, but re-verify when the Settings skeleton (UX-M5) lands.
+
+#### Test results
+- **[P3-UX]** `cd frontend && npm test -- --run` — **57/57 test files passed, 553/553 tests passed**, 27.06 s duration. No regressions — all pre-existing suites (Trades, Portfolio, Dashboard, Bots, Settings, Login, ErrorBoundary, i18n-completeness, toast, etc.) still green.
+
+---
+
+### 2026-04-22 — P3-Security polish (#251, task 1/3)
+
+#### Audit findings (top ~15, severity in brackets)
+- **[HIGH]** `src/api/routers/auth_bridge.py:68,118` — `client_ip` read straight from `X-Forwarded-For` without the `BEHIND_PROXY` flag. A client could spoof the logged IP by sending the header (rate-limit key uses the shared resolver, but bridge-specific audit logs did not). **FIXED.**
+- **[HIGH]** `src/api/middleware/audit_log.py:33` — audit writes captured `request.client.host` unconditionally. Behind Nginx this is always the proxy IP, so the DB `audit_logs.client_ip` column was effectively useless in production. **FIXED** (reuses `_get_real_client_ip`).
+- **[HIGH]** npm `lodash@4.17.23` (transitive via `recharts` + `@metamask/utils`) — GHSA-r5fr-rjxr-66jc (template code injection), GHSA-f23m-r3pf-42rh (prototype pollution). Not reachable in our call sites (we never use `_.template` or `_.unset`). **DEFERRED** — blocks on `recharts` upstream bump.
+- **[HIGH]** npm `defu <=6.1.4` (transitive via `wagmi → walletconnect → h3`) — GHSA-737v-mqg7-c878 prototype pollution. Not reachable from our UI code. **DEFERRED** — upstream fix pending in walletconnect.
+- **[HIGH]** npm `vite 7.0.0-7.3.1` (dev dependency only, GHSA-4w7w-66w2-5vf9 + GHSA-v2wj-q39q-566r + GHSA-p9ff-h696-f583). Dev-server only, production build ships static files. **DEFERRED** — upstream coordinated Vite 7.4 bump pending.
+- **[MEDIUM]** `src/api/main_app.py` `SecurityHeadersMiddleware` — no `Cache-Control: no-store` on `/api/*` responses, so authenticated JSON could be cached by shared proxies. **FIXED.**
+- **[MEDIUM]** `src/api/middleware/audit_log.py:84` — `decode_token` called without `expected_type`, so a refresh token presented in `Authorization: Bearer …` would resolve a `user_id` for audit purposes. Small exposure (audit label only) but wrong. **FIXED** (`expected_type="access"`).
+- **[MEDIUM]** npm `axios 1.0.0-1.14.0` — SSRF / header-injection (GHSA-3p68-rc4w-qgx5 + GHSA-fvcv-3m26-pcqx). Moderate severity, direct dep. **DEFERRED** — out of the ~10-fix budget; covered below as follow-up.
+- **[LOW]** `src/api/main_app.py` HSTS header carries `preload` without domain submission. Harmless, but non-trivial to advertise; leaving as-is since HSTS is only set in production. **NO CHANGE.**
+- **[LOW]** `src/telegram/poller.py:111,167` logs last 6 chars of Telegram bot tokens. Tokens are 40+ chars, 6-char suffix non-reversible. **NO CHANGE.**
+- **[LOW]** `src/api/routers/auth.py:113,121,139,146,153` logs full usernames on failed login. Required for security forensics + lockout triage. **NO CHANGE (intentional).**
+- **[LOW]** `src/utils/logger.py:36-43` already runs a `RedactionFilter` over every LogRecord — catches `api_key=…`, `Bearer …`, JWTs. Coverage is good; would benefit from wider pattern set but out of scope.
+- **[LOW]** `docker-compose.yml` binds Postgres/Prometheus/Grafana/Alertmanager to `127.0.0.1:*` — correct.
+- **[LOW]** `.env.example` — every placeholder is empty or `your_*_here`. No real secrets committed.
+- **[INFO]** Cookie flags (`httponly`, `secure` in prod, `samesite=lax`, path-scoped) already correct in `src/auth/jwt_handler.py` — no change.
+- **[INFO]** Rate limiter from PR #244 covers all auth-sensitive endpoints (`/login` 5/min, `/refresh` 5/min, `/change-password` 3/min, `/bridge/generate` 10/min, `/bridge/exchange` 10/min, `/sessions` delete 5/min) — coverage verified, no gap.
+
+#### Fixed
+- **[SEC-P3-1]** `src/api/routers/auth_bridge.py` — replaced two unguarded `request.headers.get("X-Forwarded-For", …)` calls with the shared `_get_real_client_ip(request)` helper so `X-Forwarded-For` is only trusted when `BEHIND_PROXY=true`. Matches rate-limiter + auth.py behaviour.
+- **[SEC-P3-2]** `src/api/middleware/audit_log.py` — `AuditLogMiddleware.dispatch` now reuses `_get_real_client_ip` for the `client_ip` field in both the log line and the DB `audit_logs.client_ip` write. Preserves real-client attribution behind the reverse proxy without letting clients spoof the audit trail locally.
+- **[SEC-P3-3]** `src/api/middleware/audit_log.py` — `_extract_user_id` now passes `expected_type="access"` into `decode_token`, so a refresh token in the `Authorization` header can no longer label audit rows with a `user_id`. Defense-in-depth: refresh tokens are only meant for the `/api/auth/refresh` cookie path.
+- **[SEC-P3-4]** `src/api/main_app.py` `SecurityHeadersMiddleware` — adds `Cache-Control: no-store` on `/api/*` responses that do not already set one. SPA static assets under `/` keep their own cache headers from `StaticFiles`, so build caching is unaffected.
+
+#### Deferred as follow-ups (out of the ~10-fix budget, or needs product/infra decision)
+- **[DEP-1]** `axios` bump to `>=1.15.0`. Direct dep; SSRF advisory is moderate severity; fix is a drop-in but touches 50+ call sites worth of response-shape regression testing.
+- **[DEP-2]** `lodash` transitive via `recharts` — waits on recharts major bump.
+- **[DEP-3]** `defu` transitive via `wagmi` → `walletconnect` — waits on upstream.
+- **[DEP-4]** `vite` 7.x dev-only high-sev advisories — dev server exposure only, coordinated bump after frontend test suite is stabilised.
+- **[DEP-5]** `follow-redirects`, `hono` — moderate severity transitive, same story as above.
+- **[HARDENING-1]** Raise `ChangePasswordRequest.new_password` min length from 8 → 12 (NIST SP 800-63B still allows 8 but 12 is defensible). Needs product decision — would break users mid-migration.
+- **[HARDENING-2]** Consider stripping `preload` from HSTS until domain is actually submitted to hstspreload.org.
+- **[HARDENING-3]** Extend `RedactionFilter` patterns in `src/utils/logger.py` to cover Ethereum wallet addresses (0x…40hex) and Hyperliquid agent wallet seeds. Not urgent — wallets are public chain addresses, but privacy-conscious users may disagree.
+
+#### Not changed (scope)
+- CSP already tightened in PR #244.
+- No new dependencies pulled in (no `secure`, no `itsdangerous`).
+- No API response-shape changes.
+
 ### 2026-04-22 — P2-Batch-UX: Virtualised long tables (#249, task 1/5)
 
 #### Added
