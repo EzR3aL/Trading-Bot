@@ -37,6 +37,10 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        # Injected at build time so /api/version can report the running commit.
+        # Deploy script exports BUILD_COMMIT=$(git rev-parse HEAD) before `docker compose build`.
+        BUILD_COMMIT: ${BUILD_COMMIT:-unknown}
     container_name: bitget-trading-bot
     restart: unless-stopped
     stop_grace_period: 30s
