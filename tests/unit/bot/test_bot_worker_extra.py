@@ -1454,7 +1454,7 @@ class TestGetNotifiersExtended:
         worker = BotWorker(bot_config_id=1)
         worker._config = _make_mock_config(discord_webhook_url="enc_url")
 
-        with patch("src.bot.notifications.decrypt_value", side_effect=Exception("Decrypt error")):
+        with patch("src.bot.components.notifier.decrypt_value", side_effect=Exception("Decrypt error")):
             result = await worker._get_discord_notifier()
 
         assert result is None
@@ -1472,7 +1472,7 @@ class TestGetNotifiersExtended:
         mock_telegram_instance = MagicMock()
         mock_telegram_cls.return_value = mock_telegram_instance
 
-        with patch("src.bot.notifications.decrypt_value", return_value="decrypted_token"), \
+        with patch("src.bot.components.notifier.decrypt_value", return_value="decrypted_token"), \
              patch("src.notifications.telegram_notifier.TelegramNotifier", mock_telegram_cls):
             notifiers = await worker._get_notifiers()
 
@@ -1487,7 +1487,7 @@ class TestGetNotifiersExtended:
             telegram_chat_id="123456",
         )
 
-        with patch("src.bot.notifications.decrypt_value", side_effect=Exception("Decrypt error")):
+        with patch("src.bot.components.notifier.decrypt_value", side_effect=Exception("Decrypt error")):
             notifiers = await worker._get_notifiers()
 
         assert notifiers == []
@@ -1501,8 +1501,8 @@ class TestGetNotifiersExtended:
             telegram_chat_id="123456",
         )
 
-        with patch("src.bot.notifications.decrypt_value", return_value="decrypted_value"), \
-             patch("src.bot.notifications.DiscordNotifier") as mock_discord:
+        with patch("src.bot.components.notifier.decrypt_value", return_value="decrypted_value"), \
+             patch("src.bot.components.notifier.DiscordNotifier") as mock_discord:
             mock_discord.return_value = MagicMock()
             notifiers = await worker._get_notifiers()
 

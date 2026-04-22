@@ -585,7 +585,7 @@ class TestGetNotifiers:
             discord_webhook_url="encrypted_webhook_url",
         )
 
-        with patch("src.bot.notifications.decrypt_value", return_value="https://discord.com/webhook/123"):
+        with patch("src.bot.components.notifier.decrypt_value", return_value="https://discord.com/webhook/123"):
             notifier = await worker._get_discord_notifier()
 
         assert notifier is not None
