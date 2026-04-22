@@ -8,6 +8,8 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from config.settings import settings
+from src.api.dependencies.risk_state import get_risk_state_manager
 from src.api.rate_limit import limiter
 from src.api.routers.bots import _check_symbol_conflicts, get_orchestrator
 from src.auth.dependencies import get_current_user
@@ -477,6 +479,28 @@ async def close_position(
     except Exception as e:
         logger.debug(f"Manual close: builder-fee calc failed for trade #{trade.id}: {e}")
 
+    # Determine exit reason. When the RiskStateManager feature flag is on,
+    # defer to ``classify_close`` — it probes the exchange order history
+    # and attributes the close precisely (MANUAL_CLOSE_UI, MANUAL_CLOSE_EXCHANGE,
+    # TAKE_PROFIT_NATIVE, etc.). When the flag is off OR classify_close
+    # fails, fall back to the legacy ``MANUAL_CLOSE`` literal so historical
+    # behaviour is preserved.
+    exit_time_now = datetime.now(timezone.utc)
+    exit_reason = "MANUAL_CLOSE"
+    if settings.risk.risk_state_manager_enabled:
+        try:
+            manager = get_risk_state_manager()
+            exit_reason = await manager.classify_close(
+                trade.id, exit_price, exit_time_now,
+            )
+        except Exception as classify_err:  # noqa: BLE001
+            logger.warning(
+                "Manual close: classify_close failed for trade %s, "
+                "falling back to MANUAL_CLOSE: %s",
+                trade.id, classify_err,
+            )
+            exit_reason = "MANUAL_CLOSE"
+
     # Prefer the live worker's RiskManager + notification dispatcher so daily
     # stats update the same in-memory object the bot is using. Fall back to
     # a DB-backed RiskManager + standalone dispatcher when the bot is stopped.
@@ -513,7 +537,7 @@ async def close_position(
     pnl, pnl_percent = await close_and_record_trade(
         trade,
         exit_price,
-        "MANUAL_CLOSE",
+        exit_reason,
         bot_config_id=bot_id,
         config=config,
         risk_manager=risk_manager,
