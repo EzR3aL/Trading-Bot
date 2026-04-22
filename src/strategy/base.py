@@ -30,7 +30,7 @@ class StrategyTickContext:
     bot_config: Any  # BotConfig ORM object
     user_id: int
     exchange_client: Any  # ExchangeClient
-    trade_executor: Any  # TradeExecutorMixin (typically the BotWorker itself)
+    trade_executor: Any  # exposes TradeExecutor public API (typically the BotWorker itself)
     send_notification: Any  # async callable: (lambda n: n.send_*(...), event_type, summary)
     logger: Any
     bot_config_id: int

@@ -5,17 +5,25 @@ Each BotWorker runs its own strategy loop on its own schedule,
 trading on a specific exchange with its own parameters.
 Managed by the BotOrchestrator.
 
-Decomposed into focused mixins:
-- TradeExecutorMixin: trade execution logic
-- PositionMonitorMixin: position monitoring and close handling
-- HyperliquidGatesMixin: Hyperliquid-specific pre-start checks
-- NotificationsMixin: Discord and Telegram notification dispatch
+Pure composition architecture (ARCH-H1 Phase 1 PR-6, #285). The five
+former mixins have been extracted into focused components under
+``src/bot/components/``:
+
+- ``Notifier``          — Discord + Telegram notification dispatch
+- ``HyperliquidGates``  — Hyperliquid pre-start gate checks
+- ``TradeCloser``       — Close-and-record pipeline (DB + notifications)
+- ``PositionMonitor``   — Position polling loop + exit classification
+- ``TradeExecutor``     — Order placement + risk-check pipeline
+
+BotWorker holds one instance of each as ``self._<name>`` and exposes
+thin forwarder methods for every callsite that used to reach the
+mixin-inherited API. No multi-inheritance.
 """
 
 import asyncio
 import json
 from datetime import datetime, timedelta, timezone
-from typing import Any, List, Optional
+from typing import Any, Callable, List, Optional
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -24,12 +32,10 @@ from apscheduler.triggers.interval import IntervalTrigger
 from config.settings import settings
 from src.bot.components.hyperliquid_gates import HyperliquidGates
 from src.bot.components.notifier import Notifier
+from src.bot.components.position_monitor import PositionMonitor
 from src.bot.components.trade_closer import TradeCloser
-from src.bot.hyperliquid_gates import HyperliquidGatesMixin
-from src.bot.notifications import NotificationsMixin
-from src.bot.position_monitor import PositionMonitorMixin
-from src.bot.trade_closer import TradeCloserMixin
-from src.bot.trade_executor import TradeExecutorMixin
+from src.bot.components.trade_executor import TradeExecutor
+from src.bot.risk_state_manager import RiskStateManager
 from src.exchanges.base import ExchangeClient
 from src.exchanges.factory import create_exchange_client
 from src.models.database import BotConfig, ExchangeConnection, TradeRecord
@@ -57,13 +63,7 @@ logger = get_logger(__name__)
 DEFAULT_MARKET_HOURS = [1, 8, 14, 21]
 
 
-class BotWorker(
-    TradeExecutorMixin,
-    PositionMonitorMixin,
-    TradeCloserMixin,
-    HyperliquidGatesMixin,
-    NotificationsMixin,
-):
+class BotWorker:
     """
     A single bot instance running its own strategy loop.
 
@@ -85,6 +85,7 @@ class BotWorker(
         self._client: Optional[ExchangeClient] = None
         self._strategy: Optional[BaseStrategy] = None
         self._risk_manager: Optional[RiskManager] = None
+        self._risk_state_manager: Optional[RiskStateManager] = None
         self._scheduler: Optional[AsyncIOScheduler] = scheduler
         # Notifier component — composition-owned (ARCH-H1 Phase 1 PR-1, #274).
         # Uses a getter because _config is loaded during start(), not __init__.
@@ -122,7 +123,8 @@ class BotWorker(
 
         # TradeCloser component — composition-owned (ARCH-H1 Phase 1 PR-3, #279).
         # Getters defer attribute access: _config and _risk_manager are attached
-        # during initialize(), and _send_notification is the mixin-bound method.
+        # during initialize(); the bound method self._send_notification forwards
+        # to the Notifier component.
         self._trade_closer: TradeCloser = TradeCloser(
             bot_config_id=bot_config_id,
             config_getter=lambda: self._config,
@@ -142,7 +144,7 @@ class BotWorker(
         self._risk_alerts_last_reset: datetime = datetime.now(timezone.utc)
 
         # Wire the shared RiskStateManager singleton into the close-detection
-        # path so `_handle_closed_position` uses exchange-readback classify_close
+        # path so _handle_closed_position uses exchange-readback classify_close
         # instead of the legacy proximity heuristic. Singleton is intentional —
         # the per-(trade, leg) lock map must be shared with the API path.
         # See issue #218, Epic #188.
@@ -150,15 +152,28 @@ class BotWorker(
             from src.api.dependencies.risk_state import get_risk_state_manager
             self._risk_state_manager = get_risk_state_manager()
 
-        # Initialize per-instance position monitor state via the proxy mixin —
-        # this constructs the PositionMonitor component bound to self.
-        # (ARCH-H1 Phase 1 PR-4, #281).
-        self._init_monitor_state()
+        # PositionMonitor component — composition-owned (ARCH-H1 Phase 1 PR-4, #281).
+        self._position_monitor: PositionMonitor = PositionMonitor(
+            bot_config_id=bot_config_id,
+            config_getter=lambda: self._config,
+            strategy_getter=lambda: self._strategy,
+            risk_state_manager_getter=lambda: self._risk_state_manager,
+            client_factory=self._get_client,
+            close_trade=self._close_and_record_trade,
+            notification_sender=self._send_notification,
+        )
 
-        # Build the composition-owned TradeExecutor (#72, ARCH-H1 Phase 1 PR-5).
-        # The component holds the order-placement pipeline; the mixin is a
-        # thin proxy so every existing callsite keeps working.
-        self._init_trade_executor_state()
+        # TradeExecutor component — composition-owned (ARCH-H1 Phase 1 PR-5, #72).
+        self._trade_executor: TradeExecutor = TradeExecutor(
+            bot_config_id=bot_config_id,
+            config_getter=lambda: self._config,
+            risk_manager_getter=lambda: self._risk_manager,
+            close_trade=self._close_and_record_trade,
+            notification_sender=self._send_notification,
+            client_getter=lambda: self._client,
+            on_trade_opened=self._on_trade_opened,
+            on_fatal_error=self._on_fatal_trade_error,
+        )
 
         # Start the Hyperliquid software trailing emulator (#216 Section 3.1).
         # HL has no native trailing primitive. The emulator is a process-wide
@@ -175,6 +190,185 @@ class BotWorker(
                 # emulator explicitly once its loop is alive. Tolerate here
                 # so unit tests that construct BotWorker synchronously pass.
                 pass
+
+    # ------------------------------------------------------------------
+    # Component callbacks used by TradeExecutor
+    # ------------------------------------------------------------------
+
+    def _on_trade_opened(self) -> None:
+        """Bump the per-day counter after a successful open."""
+        current = self.trades_today or 0
+        self.trades_today = current + 1
+
+    def _on_fatal_trade_error(self, friendly_error: str) -> None:
+        """Flip the bot to ERROR state on unrecoverable config failures."""
+        self.status = BotStatus.ERROR
+        self.error_message = friendly_error
+
+    # ------------------------------------------------------------------
+    # Notifier forwarders (former NotificationsMixin)
+    # ------------------------------------------------------------------
+
+    async def _get_discord_notifier(self) -> Optional[Any]:
+        return await self._notifier.get_discord_notifier()
+
+    async def _get_notifiers(self) -> List[Any]:
+        return await self._notifier.get_notifiers()
+
+    async def _send_notification(
+        self,
+        send_fn: Callable,
+        event_type: str = "unknown",
+        summary: Optional[str] = None,
+    ) -> None:
+        # Load notifiers via self._get_notifiers so test stubs that replace
+        # that method keep working.
+        try:
+            notifiers = await self._get_notifiers()
+        except Exception:
+            notifiers = []
+        await self._notifier.send_notification(
+            send_fn, event_type, summary, notifiers=notifiers
+        )
+
+    # ------------------------------------------------------------------
+    # HyperliquidGates forwarders (former HyperliquidGatesMixin)
+    # ------------------------------------------------------------------
+
+    async def _check_referral_gate(self, client: ExchangeClient, db) -> bool:
+        result = await self._hl_gates.check_referral(client, db)
+        if not result.ok:
+            self.error_message = result.error_message
+            self.status = "error"
+        return result.ok
+
+    async def _check_builder_approval(self, client: ExchangeClient, db) -> bool:
+        result = await self._hl_gates.check_builder_approval(client, db)
+        if not result.ok:
+            self.error_message = result.error_message
+            self.status = "error"
+        return result.ok
+
+    async def _check_wallet_gate(self, client: ExchangeClient) -> bool:
+        result = await self._hl_gates.check_wallet(client)
+        if not result.ok:
+            self.error_message = result.error_message
+            self.status = "error"
+        return result.ok
+
+    async def _check_affiliate_uid_gate(self, db) -> bool:
+        result = await self._hl_gates.check_affiliate_uid(db)
+        if not result.ok:
+            self.error_message = result.error_message
+            self.status = "error"
+        return result.ok
+
+    # ------------------------------------------------------------------
+    # TradeCloser forwarder (former TradeCloserMixin)
+    # ------------------------------------------------------------------
+
+    async def _close_and_record_trade(
+        self,
+        trade: TradeRecord,
+        exit_price: float,
+        exit_reason: str,
+        *,
+        fees: Optional[float] = None,
+        funding_paid: Optional[float] = None,
+        builder_fee: Optional[float] = None,
+        strategy_reason: Optional[str] = None,
+    ) -> None:
+        await self._trade_closer.close_and_record(
+            trade,
+            exit_price,
+            exit_reason,
+            fees=fees,
+            funding_paid=funding_paid,
+            builder_fee=builder_fee,
+            strategy_reason=strategy_reason,
+        )
+
+    # ------------------------------------------------------------------
+    # PositionMonitor forwarders (former PositionMonitorMixin)
+    # ------------------------------------------------------------------
+
+    async def _monitor_positions_safe(self) -> None:
+        await self._position_monitor.monitor_safe()
+
+    async def _monitor_positions(self) -> None:
+        await self._position_monitor.monitor()
+
+    async def _check_position(self, trade: TradeRecord, session) -> None:
+        await self._position_monitor.check_position(trade, session)
+
+    async def _try_place_native_trailing_stop(
+        self, trade, client, position, current_price, session,
+    ) -> None:
+        await self._position_monitor.try_place_native_trailing_stop(
+            trade, client, position, current_price, session,
+        )
+
+    async def _confirm_position_closed(self, trade, client) -> bool:
+        return await self._position_monitor.confirm_position_closed(trade, client)
+
+    async def _check_pnl_alert(self, trade, current_price) -> None:
+        await self._position_monitor.check_pnl_alert(trade, current_price)
+
+    @staticmethod
+    def _classify_close_heuristic(trade: TradeRecord, exit_price: float) -> str:
+        return PositionMonitor.classify_close_heuristic(trade, exit_price)
+
+    async def _handle_closed_position(self, trade, client, session) -> None:
+        await self._position_monitor.handle_closed_position(trade, client, session)
+
+    # ------------------------------------------------------------------
+    # TradeExecutor forwarders (former TradeExecutorMixin)
+    # ------------------------------------------------------------------
+
+    async def _execute_trade(self, signal, client, demo_mode, asset_budget: Optional[float] = None):
+        await self._trade_executor.execute(signal, client, demo_mode, asset_budget)
+
+    async def _resolve_pending_trade(
+        self, pending_trade_id: int | None, status: str, error_message: str | None = None,
+    ):
+        await self._trade_executor.resolve_pending_trade(
+            pending_trade_id, status, error_message,
+        )
+
+    async def _notify_trade_failure(self, signal, mode_str: str, error: str):
+        await self._trade_executor.notify_trade_failure(signal, mode_str, error)
+
+    async def get_open_trades_count(self, bot_config_id: int) -> int:
+        return await self._trade_executor.get_open_trades_count(bot_config_id)
+
+    async def get_open_trades_for_bot(self, bot_config_id: int) -> list:
+        return await self._trade_executor.get_open_trades_for_bot(bot_config_id)
+
+    async def execute_trade(
+        self,
+        *,
+        symbol: str,
+        side: str,
+        notional_usdt: float,
+        leverage: int,
+        reason: str,
+        bot_config_id: int,
+        take_profit_pct: Optional[float] = None,
+        stop_loss_pct: Optional[float] = None,
+    ) -> None:
+        await self._trade_executor.execute_wrapper(
+            symbol=symbol,
+            side=side,
+            notional_usdt=notional_usdt,
+            leverage=leverage,
+            reason=reason,
+            bot_config_id=bot_config_id,
+            take_profit_pct=take_profit_pct,
+            stop_loss_pct=stop_loss_pct,
+        )
+
+    async def close_trade_by_strategy(self, trade, *, reason: str) -> None:
+        await self._trade_executor.close_by_strategy(trade, reason=reason)
 
     def _cleanup_stale_signal_keys(self) -> None:
         """Remove signal dedup entries older than 24 hours."""
@@ -757,7 +951,7 @@ class BotWorker(
                 bot_config=self._config,
                 user_id=self._config.user_id,
                 exchange_client=self._client,
-                trade_executor=self,  # BotWorker is also the TradeExecutorMixin
+                trade_executor=self,  # BotWorker exposes TradeExecutor methods via forwarders
                 send_notification=self._send_notification,
                 logger=logger,
                 bot_config_id=self.bot_config_id,
