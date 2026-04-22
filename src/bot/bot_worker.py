@@ -8,8 +8,12 @@ Managed by the BotOrchestrator.
 Decomposed into focused mixins:
 - TradeExecutorMixin: trade execution logic
 - PositionMonitorMixin: position monitoring and close handling
-- HyperliquidGatesMixin: Hyperliquid-specific pre-start checks
 - NotificationsMixin: Discord and Telegram notification dispatch
+
+Exchange-specific pre-start gates (Hyperliquid referral / builder-fee /
+wallet; affiliate-UID on Bitget/Weex/Bitunix/BingX) live on the
+``ExchangeClient`` itself and are invoked via ``client.pre_start_checks``
+(#ARCH-H2).
 """
 
 import asyncio
@@ -22,7 +26,6 @@ from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 
 from config.settings import settings
-from src.bot.hyperliquid_gates import HyperliquidGatesMixin
 from src.bot.notifications import NotificationsMixin
 from src.bot.position_monitor import PositionMonitorMixin
 from src.bot.trade_closer import TradeCloserMixin
@@ -58,7 +61,6 @@ class BotWorker(
     TradeExecutorMixin,
     PositionMonitorMixin,
     TradeCloserMixin,
-    HyperliquidGatesMixin,
     NotificationsMixin,
 ):
     """
