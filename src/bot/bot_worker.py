@@ -22,6 +22,7 @@ from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 
 from config.settings import settings
+from src.bot.components.notifier import Notifier
 from src.bot.hyperliquid_gates import HyperliquidGatesMixin
 from src.bot.notifications import NotificationsMixin
 from src.bot.position_monitor import PositionMonitorMixin
@@ -83,6 +84,9 @@ class BotWorker(
         self._strategy: Optional[BaseStrategy] = None
         self._risk_manager: Optional[RiskManager] = None
         self._scheduler: Optional[AsyncIOScheduler] = scheduler
+        # Notifier component — composition-owned (ARCH-H1 Phase 1 PR-1, #274).
+        # Uses a getter because _config is loaded during start(), not __init__.
+        self._notifier: Notifier = Notifier(bot_config_id, lambda: self._config)
         self._owns_scheduler = scheduler is None  # Only stop if we created it
         self._task: Optional[asyncio.Task] = None
 
