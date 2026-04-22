@@ -6,8 +6,6 @@ import asyncio
 import json
 from unittest.mock import MagicMock
 
-import pytest
-
 from src.api.middleware.error_handler import global_exception_handler
 
 
