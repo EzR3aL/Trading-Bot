@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Shield, ShieldOff, LayoutGrid, List, Trash2, UserCheck, UserX, Bot, ArrowLeftRight, Globe } from 'lucide-react'
+import { Shield, ShieldOff, LayoutGrid, List, Trash2, UserCheck, UserX, Bot, ArrowLeftRight, Globe, Users as UsersIcon } from 'lucide-react'
 import { ExchangeIcon } from '../components/ui/ExchangeLogo'
 import api from '../api/client'
 import { getApiErrorMessage } from '../utils/api-error'
@@ -299,8 +299,10 @@ export default function AdminUsers() {
       )}
 
       {users.length === 0 && (
-        <div className="text-center text-gray-500 py-12 text-sm">
-          {t('admin.noUsers')}
+        <div className="glass-card rounded-xl flex flex-col items-center justify-center py-12 text-center">
+          <UsersIcon className="w-10 h-10 text-gray-600 dark:text-gray-600 mb-3" />
+          <p className="text-gray-500 dark:text-gray-400 font-medium">{t('admin.noUsers')}</p>
+          <p className="text-gray-400 dark:text-gray-500 text-sm mt-1">{t('admin.noUsersHint')}</p>
         </div>
       )}
     </div>

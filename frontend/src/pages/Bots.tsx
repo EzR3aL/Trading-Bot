@@ -46,6 +46,7 @@ import useIsMobile from '../hooks/useIsMobile'
 import useHaptic from '../hooks/useHaptic'
 import useSwipeToClose from '../hooks/useSwipeToClose'
 import usePullToRefresh from '../hooks/usePullToRefresh'
+import { useDocumentTitle } from '../hooks/useDocumentTitle'
 import { useAuthStore } from '../stores/authStore'
 import PullToRefreshIndicator from '../components/ui/PullToRefreshIndicator'
 
@@ -832,6 +833,7 @@ function BotTradeHistoryModal({ bot, onClose, t }: { bot: BotStatus; onClose: ()
 
 export default function Bots() {
   const { t } = useTranslation()
+  useDocumentTitle(t('nav.myBots'))
   const navigate = useNavigate()
   const { demoFilter } = useFilterStore()
   const isMobile = useIsMobile()

@@ -8,6 +8,7 @@ import { useToastStore } from '../stores/toastStore'
 import type { ConnectionsStatusResponse, ServiceStatus, AdminUidEntry, HlRevenueInfo } from '../types'
 import { ExchangeIcon } from '../components/ui/ExchangeLogo'
 import FilterDropdown from '../components/ui/FilterDropdown'
+import { useDocumentTitle } from '../hooks/useDocumentTitle'
 
 const AdminUsers = lazy(() => import('./AdminUsers'))
 const AdminBroadcasts = lazy(() => import('./AdminBroadcasts'))
@@ -26,6 +27,7 @@ type TabKey = typeof TABS[number]['key']
 
 export default function Admin() {
   const { t } = useTranslation()
+  useDocumentTitle(t('nav.admin'))
   const [activeTab, setActiveTab] = useState<TabKey>('users')
 
   // Connections status

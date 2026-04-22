@@ -17,6 +17,7 @@ import ExitReasonBadge from '../components/ui/ExitReasonBadge'
 import MobileTradeCard from '../components/ui/MobileTradeCard'
 import useIsMobile from '../hooks/useIsMobile'
 import useSwipeToClose from '../hooks/useSwipeToClose'
+import { useDocumentTitle } from '../hooks/useDocumentTitle'
 import { Eye, EyeOff, ArrowUpRight, ArrowDownRight, Trophy, Target, LayoutGrid, BarChart3, X, ChevronRight, Share2 } from 'lucide-react'
 import SizeValue from '../components/ui/SizeValue'
 
@@ -415,6 +416,7 @@ function StatCard({ label, value, color, isPositive }: {
 
 export default function BotPerformance() {
   const { t } = useTranslation()
+  useDocumentTitle(t('nav.performance'))
   const { demoFilter } = useFilterStore()
   const theme = useThemeStore((s) => s.theme)
   const chartGridColor = theme === 'light' ? '#e2e8f0' : '#374151'
