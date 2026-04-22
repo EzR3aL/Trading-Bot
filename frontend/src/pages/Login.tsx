@@ -7,9 +7,11 @@ import EdgeBotsLogo from '../components/ui/EdgeBotsLogo'
 import FormField from '../components/ui/FormField'
 import { loginSchema, validateField } from '../utils/validation'
 import { showError } from '../utils/toast'
+import { useDocumentTitle } from '../hooks/useDocumentTitle'
 
 export default function Login() {
   const { t } = useTranslation()
+  useDocumentTitle(t('login.title'))
   const navigate = useNavigate()
   const { login, isLoading } = useAuthStore()
   const [username, setUsername] = useState('')

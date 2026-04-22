@@ -23,6 +23,7 @@ import useIsMobile from '../hooks/useIsMobile'
 import usePullToRefresh from '../hooks/usePullToRefresh'
 import PullToRefreshIndicator from '../components/ui/PullToRefreshIndicator'
 import { useTradesFilterOptions } from '../hooks/useTradesFilterOptions'
+import { useDocumentTitle } from '../hooks/useDocumentTitle'
 import { useVirtualRows } from '../components/virtualised/useVirtualRows'
 
 // URL-search-param keys used by the filters — keeping them in a
@@ -69,6 +70,7 @@ function readFiltersFromParams(params: URLSearchParams): FiltersFromUrl {
 
 export default function Trades() {
   const { t } = useTranslation()
+  useDocumentTitle(t('nav.trades'))
   const isMobile = useIsMobile()
   const { toggle: toggleSizeUnit } = useSizeUnitStore()
   const sizeUnit = useSizeUnitStore((s) => s.unit)

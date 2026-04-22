@@ -34,7 +34,11 @@ function BroadcastDetailModal({ broadcast, onClose }: { broadcast: Broadcast; on
       <div className="bg-[#0f1923] border border-white/10 rounded-xl p-5 max-w-2xl w-full mx-4 max-h-[80vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-semibold text-white">{broadcast.title}</h2>
-          <button onClick={onClose} className="p-1 text-gray-400 hover:text-white transition-colors">
+          <button
+            onClick={onClose}
+            aria-label={t('common.close')}
+            className="p-1 text-gray-400 hover:text-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/60 rounded"
+          >
             <X size={18} />
           </button>
         </div>
@@ -418,7 +422,8 @@ export default function AdminBroadcasts() {
             <h2 className="text-sm font-semibold text-white">{t('broadcast.create')}</h2>
             <button
               onClick={resetForm}
-              className="p-1 text-gray-400 hover:text-white transition-colors"
+              aria-label={t('common.close')}
+              className="p-1 text-gray-400 hover:text-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/60 rounded"
             >
               <X size={16} />
             </button>
@@ -578,8 +583,10 @@ export default function AdminBroadcasts() {
           <div className="w-6 h-6 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
         </div>
       ) : broadcasts.length === 0 ? (
-        <div className="text-center text-gray-500 py-12 text-sm">
-          {t('broadcast.noHistory')}
+        <div className="flex flex-col items-center justify-center py-12 text-center">
+          <Radio className="w-10 h-10 text-gray-600 dark:text-gray-600 mb-3" />
+          <p className="text-gray-500 dark:text-gray-400 font-medium">{t('broadcast.noHistory')}</p>
+          <p className="text-gray-400 dark:text-gray-500 text-sm mt-1">{t('broadcast.noHistoryHint')}</p>
         </div>
       ) : (
         <>

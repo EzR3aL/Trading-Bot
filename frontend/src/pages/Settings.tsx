@@ -4,6 +4,7 @@ import { ChevronDown, ExternalLink, Zap } from 'lucide-react'
 import api from '../api/client'
 import { getApiErrorMessage } from '../utils/api-error'
 import { useAuthStore } from '../stores/authStore'
+import { useDocumentTitle } from '../hooks/useDocumentTitle'
 import type { ExchangeConnectionStatus, ExchangeInfo } from '../types'
 import { ExchangeIcon } from '../components/ui/ExchangeLogo'
 import GuidedTour, { TourHelpButton, type TourStep } from '../components/ui/GuidedTour'
@@ -107,16 +108,16 @@ function KeyForm({
       </div>
       <div className="flex flex-wrap gap-2">
         <button onClick={onSave} disabled={saving}
-          className="px-3 py-1.5 text-sm bg-primary-600 text-white rounded hover:bg-primary-700 disabled:opacity-50">
-          {t('settings.save')}
+          className="px-3 py-1.5 text-sm bg-primary-600 text-white rounded hover:bg-primary-700 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/60">
+          {saving ? t('common.loading') : t('settings.save')}
         </button>
-        <button onClick={onTest} disabled={!configured}
-          className="px-3 py-1.5 text-sm bg-gray-700 text-white rounded hover:bg-gray-600 disabled:opacity-50">
+        <button onClick={onTest} disabled={!configured || saving}
+          className="px-3 py-1.5 text-sm bg-gray-700 text-white rounded hover:bg-gray-600 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-400/60">
           {t('settings.testConnection')}
         </button>
         {onDelete && configured && (
           <button onClick={onDelete} disabled={saving}
-            className="ml-auto px-3 py-1.5 text-sm bg-red-900/40 text-red-300 border border-red-700/40 rounded hover:bg-red-900/60 hover:border-red-600/60 disabled:opacity-50 transition-colors">
+            className="ml-auto px-3 py-1.5 text-sm bg-red-900/40 text-red-300 border border-red-700/40 rounded hover:bg-red-900/60 hover:border-red-600/60 disabled:opacity-50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500/60">
             {t('settings.deleteKeys')}
           </button>
         )}
@@ -145,6 +146,7 @@ const emptyForm = (): ExchangeKeyForm => ({
 
 export default function Settings() {
   const { t } = useTranslation()
+  useDocumentTitle(t('nav.settings'))
   const user = useAuthStore((s) => s.user)
   const isAdmin = user?.role === 'admin'
   const [exchanges, setExchanges] = useState<ExchangeInfo[]>([])
