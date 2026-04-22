@@ -1633,3 +1633,223 @@ async def test_copy_trading_bot_does_not_conflict(factory, regular_user):
             strategy_type="copy_trading",
         )
         assert conflicts_copy == []
+
+
+# ---------------------------------------------------------------------------
+# Symbol-conflict enforcement on create/update (UX-C5 / issue #247)
+#
+# Source-of-truth is the backend 409 — the frontend probe is UX sugar. These
+# tests lock in the behavioural contract for the handler:
+#   - CREATE: clashing symbol on an enabled bot → 409 SYMBOL_ALREADY_IN_USE
+#   - CREATE: no clash → 200
+#   - UPDATE: editing the same bot doesn't self-conflict
+#   - UPDATE: clash against *another* enabled bot → 409
+#   - Disabled (stopped) and soft-deleted rows are ignored
+# ---------------------------------------------------------------------------
+
+
+class TestSymbolConflictBlocking:
+    """409 when creating/updating collides with an enabled bot's symbol."""
+
+    async def test_create_blocks_when_symbol_in_use(self, factory, admin_user, mock_request):
+        """Second bot on the same symbol while the first is enabled → 409."""
+        from fastapi import HTTPException
+
+        async with factory() as session:
+            session.add(BotConfig(
+                user_id=admin_user.id,
+                name="Running BTC Bot",
+                strategy_type="test_strategy",
+                exchange_type="bitget",
+                mode="demo",
+                trading_pairs=json.dumps(["BTCUSDT"]),
+                is_enabled=True,
+            ))
+            await session.commit()
+
+        async with factory() as session:
+            body = BotConfigCreate(
+                name="Duplicate BTC Bot",
+                strategy_type="test_strategy",
+                exchange_type="bitget",
+                mode="demo",
+                trading_pairs=["BTCUSDT"],
+            )
+            with pytest.raises(HTTPException) as exc_info:
+                await create_bot(request=mock_request, body=body, user=admin_user, db=session)
+            assert exc_info.value.status_code == 409
+            detail = exc_info.value.detail
+            assert isinstance(detail, dict)
+            assert detail["code"] == "SYMBOL_ALREADY_IN_USE"
+            assert "Running BTC Bot" in detail["conflicts"][0]["existing_bot_name"]
+
+    async def test_create_succeeds_when_no_conflict(self, factory, admin_user, mock_request):
+        """Different symbol → allowed."""
+        async with factory() as session:
+            session.add(BotConfig(
+                user_id=admin_user.id,
+                name="Running BTC Bot",
+                strategy_type="test_strategy",
+                exchange_type="bitget",
+                mode="demo",
+                trading_pairs=json.dumps(["BTCUSDT"]),
+                is_enabled=True,
+            ))
+            await session.commit()
+
+        async with factory() as session:
+            body = BotConfigCreate(
+                name="ETH Bot",
+                strategy_type="test_strategy",
+                exchange_type="bitget",
+                mode="demo",
+                trading_pairs=["ETHUSDT"],
+            )
+            result = await create_bot(request=mock_request, body=body, user=admin_user, db=session)
+            await session.commit()
+        assert result.name == "ETH Bot"
+
+    async def test_create_ignores_disabled_bot(self, factory, admin_user, mock_request):
+        """A stopped (is_enabled=False) bot does not reserve its symbol."""
+        async with factory() as session:
+            session.add(BotConfig(
+                user_id=admin_user.id,
+                name="Stopped BTC Bot",
+                strategy_type="test_strategy",
+                exchange_type="bitget",
+                mode="demo",
+                trading_pairs=json.dumps(["BTCUSDT"]),
+                is_enabled=False,
+            ))
+            await session.commit()
+
+        async with factory() as session:
+            body = BotConfigCreate(
+                name="New BTC Bot",
+                strategy_type="test_strategy",
+                exchange_type="bitget",
+                mode="demo",
+                trading_pairs=["BTCUSDT"],
+            )
+            result = await create_bot(request=mock_request, body=body, user=admin_user, db=session)
+            await session.commit()
+        assert result.name == "New BTC Bot"
+
+    async def test_create_ignores_soft_deleted_bot(self, factory, admin_user, mock_request):
+        """Soft-deleted bots (deleted_at != NULL) no longer block symbols."""
+        async with factory() as session:
+            session.add(BotConfig(
+                user_id=admin_user.id,
+                name="Deleted BTC Bot",
+                strategy_type="test_strategy",
+                exchange_type="bitget",
+                mode="demo",
+                trading_pairs=json.dumps(["BTCUSDT"]),
+                is_enabled=True,
+                deleted_at=datetime.now(timezone.utc),
+            ))
+            await session.commit()
+
+        async with factory() as session:
+            body = BotConfigCreate(
+                name="New BTC Bot",
+                strategy_type="test_strategy",
+                exchange_type="bitget",
+                mode="demo",
+                trading_pairs=["BTCUSDT"],
+            )
+            result = await create_bot(request=mock_request, body=body, user=admin_user, db=session)
+            await session.commit()
+        assert result.name == "New BTC Bot"
+
+    async def test_update_same_bot_does_not_self_conflict(self, factory, admin_user, mock_request, mock_orchestrator):
+        """Editing an enabled bot's own symbol list must not trip the check."""
+        async with factory() as session:
+            config = BotConfig(
+                user_id=admin_user.id,
+                name="Edit Me",
+                strategy_type="test_strategy",
+                exchange_type="bitget",
+                mode="demo",
+                trading_pairs=json.dumps(["BTCUSDT"]),
+                is_enabled=True,
+            )
+            session.add(config)
+            await session.commit()
+            await session.refresh(config)
+            bot_id = config.id
+
+        async with factory() as session:
+            body = BotConfigUpdate(trading_pairs=["BTCUSDT", "ETHUSDT"])
+            result = await update_bot(
+                request=mock_request, bot_id=bot_id, body=body,
+                user=admin_user, db=session, orchestrator=mock_orchestrator,
+            )
+            await session.commit()
+        assert set(result.trading_pairs) == {"BTCUSDT", "ETHUSDT"}
+
+    async def test_update_blocks_when_other_bot_has_symbol(self, factory, admin_user, mock_request, mock_orchestrator):
+        """Adding a symbol another enabled bot already trades → 409."""
+        from fastapi import HTTPException
+
+        async with factory() as session:
+            other = BotConfig(
+                user_id=admin_user.id,
+                name="Owns ETH",
+                strategy_type="test_strategy",
+                exchange_type="bitget",
+                mode="demo",
+                trading_pairs=json.dumps(["ETHUSDT"]),
+                is_enabled=True,
+            )
+            editable = BotConfig(
+                user_id=admin_user.id,
+                name="Owns BTC",
+                strategy_type="test_strategy",
+                exchange_type="bitget",
+                mode="demo",
+                trading_pairs=json.dumps(["BTCUSDT"]),
+                is_enabled=False,
+            )
+            session.add_all([other, editable])
+            await session.commit()
+            await session.refresh(editable)
+            bot_id = editable.id
+
+        async with factory() as session:
+            body = BotConfigUpdate(trading_pairs=["BTCUSDT", "ETHUSDT"])
+            with pytest.raises(HTTPException) as exc_info:
+                await update_bot(
+                    request=mock_request, bot_id=bot_id, body=body,
+                    user=admin_user, db=session, orchestrator=mock_orchestrator,
+                )
+            assert exc_info.value.status_code == 409
+            assert exc_info.value.detail["code"] == "SYMBOL_ALREADY_IN_USE"
+
+    async def test_conflict_check_case_insensitive(self, factory, admin_user, mock_request):
+        """btcusdt from the request must collide with stored BTCUSDT."""
+        from fastapi import HTTPException
+
+        async with factory() as session:
+            session.add(BotConfig(
+                user_id=admin_user.id,
+                name="Running Upper",
+                strategy_type="test_strategy",
+                exchange_type="bitget",
+                mode="demo",
+                trading_pairs=json.dumps(["BTCUSDT"]),
+                is_enabled=True,
+            ))
+            await session.commit()
+
+        # Pydantic enforces uppercase for BotConfigCreate, but the underlying
+        # helper (used by the GET /symbol-conflicts endpoint) must still match
+        # case-insensitively for any direct callers.
+        from src.api.routers.bots import _check_symbol_conflicts
+
+        async with factory() as session:
+            conflicts = await _check_symbol_conflicts(
+                session, admin_user.id, "bitget", "demo", ["btcusdt"],
+            )
+            assert len(conflicts) == 1
+            assert conflicts[0].symbol == "BTCUSDT"

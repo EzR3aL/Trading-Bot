@@ -482,6 +482,10 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
         errors.push(t('bots.builder.errors.noConnectionForExchange', { exchange: exchangeType.charAt(0).toUpperCase() + exchangeType.slice(1), mode: mode.toUpperCase() }))
       }
       if (tradingPairs.length === 0) errors.push(t('bots.builder.errors.pairsRequired'))
+      // Block advancing past the exchange step when symbols clash with an
+      // existing enabled bot. The backend also enforces this (409), but
+      // blocking here avoids the round-trip.
+      if (symbolConflicts.length > 0) errors.push(t('bots.builder.errors.symbolConflicts'))
     }
     if (stepKey === 'step5') {
       if (scheduleType === 'custom_cron' && customHours.length === 0) errors.push(t('bots.builder.errors.hoursRequired'))
@@ -555,7 +559,8 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
   //  - creating a new bot (always), OR
   //  - editing and the risk profile was raised above the original.
   const needsRiskAck = !isEdit || riskIncreasedOnEdit
-  const saveDisabled = saving || (needsRiskAck && !riskAccepted)
+  const hasSymbolConflicts = symbolConflicts.length > 0
+  const saveDisabled = saving || (needsRiskAck && !riskAccepted) || hasSymbolConflicts
 
   // If the user lowers the risk back at/below the original after having raised
   // it, clear any stale acknowledgment so subsequent raise prompts again.

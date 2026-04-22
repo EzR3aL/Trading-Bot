@@ -30,7 +30,14 @@ from src.api.schemas.bots import (
     SymbolConflictResponse,
 )
 from src.auth.dependencies import get_current_user
-from src.errors import ERR_BOT_NOT_FOUND, ERR_MAX_BOTS_REACHED, ERR_ORCHESTRATOR_NOT_INITIALIZED, ERR_STOP_BOT_BEFORE_EDIT, ERR_STRATEGY_NOT_FOUND
+from src.errors import (
+    ERR_BOT_NOT_FOUND,
+    ERR_MAX_BOTS_REACHED,
+    ERR_ORCHESTRATOR_NOT_INITIALIZED,
+    ERR_STOP_BOT_BEFORE_EDIT,
+    ERR_STRATEGY_NOT_FOUND,
+    ERR_SYMBOL_CONFLICT,
+)
 from src.models.database import BotConfig, ExchangeConnection, TradeRecord, User
 from src.models.session import get_db
 from src.strategy import StrategyRegistry  # imports __init__.py → registers all strategies
@@ -124,6 +131,10 @@ async def _check_symbol_conflicts(
             BotConfig.exchange_type == exchange_type,
             BotConfig.is_enabled.is_(True),
             BotConfig.mode.in_(conflicting_modes),
+            # Skip soft-deleted bots (migration 027 / ARCH-M3). Rows with
+            # deleted_at set are "alive but tombstoned" — they neither run
+            # nor should block new bots from reusing their symbols.
+            BotConfig.deleted_at.is_(None),
         )
     )
     if exclude_bot_id is not None:
@@ -132,10 +143,16 @@ async def _check_symbol_conflicts(
     result = await db.execute(query)
     existing_bots = result.scalars().all()
 
-    requested_set = set(trading_pairs)
+    # Case-normalize: symbols are stored uppercase in BotConfig.trading_pairs
+    # (Pydantic validator on BotConfigCreate enforces ``^[A-Z0-9_-]{1,30}$``),
+    # so we compare on the upper-cased set to catch ``btcusdt`` vs ``BTCUSDT``.
+    requested_set = {p.upper() for p in trading_pairs}
     conflicts: list[SymbolConflict] = []
     for bot in existing_bots:
-        existing_pairs = set(parse_json_field(bot.trading_pairs, field_name="trading_pairs", context=f"bot {bot.id}", default=[]))
+        existing_pairs = {
+            p.upper()
+            for p in parse_json_field(bot.trading_pairs, field_name="trading_pairs", context=f"bot {bot.id}", default=[])
+        }
         overlap = requested_set & existing_pairs
         for symbol in sorted(overlap):
             conflicts.append(SymbolConflict(
@@ -145,6 +162,47 @@ async def _check_symbol_conflicts(
                 existing_bot_mode=bot.mode,
             ))
     return conflicts
+
+
+async def _raise_if_symbol_conflict(
+    db: AsyncSession,
+    user_id: int,
+    exchange_type: str,
+    mode: str,
+    trading_pairs: list[str],
+    exclude_bot_id: int | None = None,
+    strategy_type: str | None = None,
+) -> None:
+    """Raise 409 CONFLICT when the user already runs a bot on the same
+    exchange/mode/symbol combination.
+
+    Defense-in-depth companion to the frontend probe on
+    ``GET /api/bots/symbol-conflicts``. Uses a stable error code
+    (``SYMBOL_ALREADY_IN_USE``) so the UI can map the response to the
+    localized message regardless of language.
+    """
+    conflicts = await _check_symbol_conflicts(
+        db,
+        user_id,
+        exchange_type,
+        mode,
+        trading_pairs,
+        exclude_bot_id=exclude_bot_id,
+        strategy_type=strategy_type,
+    )
+    if not conflicts:
+        return
+    # Stable, machine-readable payload — the UI translates the code.
+    raise HTTPException(
+        status_code=409,
+        detail={
+            "code": "SYMBOL_ALREADY_IN_USE",
+            "message": ERR_SYMBOL_CONFLICT.format(
+                symbols=", ".join(sorted({c.symbol for c in conflicts}))
+            ),
+            "conflicts": [c.model_dump() for c in conflicts],
+        },
+    )
 
 
 # ─── Strategies ───────────────────────────────────────────────
@@ -470,6 +528,18 @@ async def create_bot(
     )
     if count_result.scalar() >= MAX_BOTS_PER_USER:
         raise HTTPException(status_code=400, detail=ERR_MAX_BOTS_REACHED.format(max_bots=MAX_BOTS_PER_USER))
+
+    # Block if another enabled bot of this user already trades one of the
+    # requested symbols on the same exchange/mode. Defense-in-depth — the
+    # frontend also probes ``GET /symbol-conflicts`` before save.
+    await _raise_if_symbol_conflict(
+        db,
+        user_id=user.id,
+        exchange_type=body.exchange_type,
+        mode=body.mode,
+        trading_pairs=body.trading_pairs,
+        strategy_type=body.strategy_type,
+    )
 
     # Encrypt discord webhook if provided
     encrypted_webhook = None
@@ -981,6 +1051,27 @@ async def update_bot(
                     status_code=400,
                     detail=f"Symbol(s) not available on {exchange} ({mode_label}): {', '.join(invalid)}",
                 )
+
+    # Block when the update would collide with another enabled bot's symbol.
+    # We only probe when pairs/exchange/mode are being modified — a pure rename
+    # or webhook change shouldn't cost a conflict query.
+    touches_symbol = any(
+        getattr(body, f, None) is not None
+        for f in ("trading_pairs", "exchange_type", "mode")
+    )
+    if touches_symbol:
+        pairs_for_check = body.trading_pairs if body.trading_pairs is not None else parse_json_field(
+            config.trading_pairs, field_name="trading_pairs", context=f"bot {config.id}", default=[]
+        )
+        await _raise_if_symbol_conflict(
+            db,
+            user_id=user.id,
+            exchange_type=body.exchange_type or config.exchange_type,
+            mode=body.mode or config.mode,
+            trading_pairs=pairs_for_check,
+            exclude_bot_id=bot_id,
+            strategy_type=body.strategy_type or config.strategy_type,
+        )
 
     # Snapshot old values for audit trail (only fields being updated)
     update_data = body.model_dump(exclude_unset=True)

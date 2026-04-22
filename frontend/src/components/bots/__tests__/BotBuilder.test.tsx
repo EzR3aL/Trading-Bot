@@ -373,4 +373,65 @@ describe('BotBuilder', () => {
       expect(saveBtn).not.toBeDisabled()
     })
   })
+
+  describe('symbol conflict blocking (issue #247)', () => {
+    // Reports a conflict on the BTCUSDT symbol. The backend source of
+    // truth is the 409, but the frontend blocks Next/Save as UX sugar.
+    const conflictingGetImpl = (url: string) => {
+      if (url.includes('/symbol-conflicts')) {
+        return Promise.resolve({
+          data: {
+            has_conflicts: true,
+            conflicts: [{
+              symbol: 'BTCUSDT',
+              existing_bot_id: 99,
+              existing_bot_name: 'Running BTC Bot',
+              existing_bot_mode: 'demo',
+            }],
+          },
+        })
+      }
+      return defaultGetImpl()(url)
+    }
+
+    it('blocks Next on the Exchange step and shows an inline error when a conflict exists', async () => {
+      const user = userEvent.setup()
+      mockGet.mockImplementation(conflictingGetImpl)
+      render(
+        <MemoryRouter>
+          <BotBuilder onDone={mockOnDone} onCancel={mockOnCancel} />
+        </MemoryRouter>
+      )
+      // Advance through Name → Strategy → Exchange (step3).
+      await waitFor(() => expect(screen.getByTestId('step-name')).toBeInTheDocument())
+      await user.type(screen.getByPlaceholderText('Enter bot name'), 'My Bot')
+      await user.click(screen.getByText('Next'))
+      await waitFor(() => expect(screen.getByTestId('step-strategy')).toBeInTheDocument())
+      await user.click(screen.getByText('Next'))
+      await waitFor(() => expect(screen.getByTestId('step-exchange')).toBeInTheDocument())
+
+      // Wait for the conflict fetch to resolve — it's triggered by the
+      // default tradingPairs (["BTCUSDT"]) on mount, so no user action is
+      // required. The guard is that getStepErrors('step3') now includes
+      // the symbol-conflict error, which is pushed into validationErrors
+      // when Next is clicked.
+      await waitFor(() => {
+        expect(mockGet).toHaveBeenCalledWith(expect.stringContaining('/symbol-conflicts'))
+      })
+
+      // Clicking Next should NOT advance to step4 — it should surface
+      // the inline validation error instead.
+      await user.click(screen.getByText('Next'))
+
+      // The inline error lives in the amber validationErrors panel. It is
+      // rendered with the raw translation key because the test's `t`
+      // mock doesn't have this key — which is sufficient to prove the
+      // gate triggered.
+      await waitFor(() => {
+        expect(screen.getByText('bots.builder.errors.symbolConflicts')).toBeInTheDocument()
+      })
+      // Still on the exchange step.
+      expect(screen.getByTestId('step-exchange')).toBeInTheDocument()
+    })
+  })
 })
