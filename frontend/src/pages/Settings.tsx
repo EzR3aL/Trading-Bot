@@ -151,6 +151,9 @@ export default function Settings() {
   const [connections, setConnections] = useState<ExchangeConnectionStatus[]>([])
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState('')
+  // Tracks the initial page load so we can show a skeleton instead of a
+  // blank white page while /exchanges + /config/* + /affiliate-links are in flight.
+  const [initialLoading, setInitialLoading] = useState(true)
 
   // Per-exchange API key forms
   const [keyForms, setKeyForms] = useState<Record<string, ExchangeKeyForm>>({})
@@ -198,6 +201,10 @@ export default function Settings() {
       if (authResults.every(r => r.status === 'rejected')) {
         setMessage(t('common.error'))
       }
+
+      // Flip off the skeleton once the first round-trip completes — success or
+      // failure, we still want to show the real (possibly empty) page chrome.
+      setInitialLoading(false)
     }
     load()
   }, [])
@@ -309,6 +316,10 @@ export default function Settings() {
       if (!hlReferralInfo) loadHlReferralInfo()
     }
   }, [openExchange])
+
+  if (initialLoading) {
+    return <SettingsSkeleton />
+  }
 
   return (
     <div>
@@ -552,3 +563,77 @@ const settingsTourSteps: TourStep[] = [
     position: 'bottom',
   },
 ]
+
+/* ------------------------------------------------------------------ */
+/*  Loading Skeleton                                                  */
+/*                                                                    */
+/*  Mirrors the final layout (title row + summary bar + 2 exchange    */
+/*  accordion cards) so users see structure instead of a blank page   */
+/*  while /exchanges, /config, /config/exchange-connections, and      */
+/*  /affiliate-links are in flight. Dimensions are fixed (no random   */
+/*  widths) to stay SSR-stable.                                       */
+/* ------------------------------------------------------------------ */
+
+function SkeletonRect({ className = '' }: { className?: string }) {
+  return <div className={`skeleton-pulse rounded-lg bg-white/5 ${className}`} />
+}
+
+function SkeletonExchangeCard() {
+  return (
+    <div className="border border-white/[0.08] bg-white/[0.02] rounded-xl overflow-hidden">
+      <div className="flex items-center justify-between px-5 py-3.5">
+        <div className="flex items-center gap-3">
+          <SkeletonRect className="w-9 h-9" />
+          <div className="space-y-2">
+            <SkeletonRect className="h-4 w-24" />
+            <SkeletonRect className="h-3 w-14" />
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <SkeletonRect className="h-4 w-12" />
+          <SkeletonRect className="h-3 w-3 rounded-full" />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+export function SettingsSkeleton() {
+  return (
+    <div data-testid="settings-skeleton" aria-busy="true" aria-label="Loading settings">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-6">
+        <SkeletonRect className="h-8 w-40" />
+        <SkeletonRect className="h-8 w-8 rounded-full" />
+      </div>
+
+      {/* Summary bar */}
+      <div className="space-y-6">
+        <div className="border border-white/10 bg-white/[0.03] rounded-xl p-5">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-center gap-4">
+              <SkeletonRect className="w-12 h-12" />
+              <div className="space-y-2">
+                <SkeletonRect className="h-5 w-32" />
+                <SkeletonRect className="h-3 w-24" />
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <SkeletonRect className="h-2 w-24 rounded-full" />
+              <SkeletonRect className="h-4 w-10" />
+            </div>
+          </div>
+        </div>
+
+        {/* Exchange accordion cards — two placeholders match the current
+            exchange lineup (Bitget + Hyperliquid, optionally Weex/Bitunix/BingX).
+            Two is the minimum rhythm; real pages with more will have brief
+            incremental expansion instead of a layout-shift jump. */}
+        <div className="space-y-3 max-w-2xl">
+          <SkeletonExchangeCard />
+          <SkeletonExchangeCard />
+        </div>
+      </div>
+    </div>
+  )
+}

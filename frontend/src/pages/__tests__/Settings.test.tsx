@@ -154,4 +154,40 @@ describe('Settings Page', () => {
       expect(screen.getByText('Settings')).toBeInTheDocument()
     })
   })
+
+  it('should render the skeleton while the initial load is in flight and hide it once data arrives', async () => {
+    // Hold the /exchanges promise open so the first render resolves with
+    // initialLoading still true — this is the skeleton branch.
+    let releaseExchanges: ((value: unknown) => void) | null = null
+    mockGet.mockImplementation((url: string) => {
+      if (url === '/exchanges') {
+        return new Promise((resolve) => {
+          releaseExchanges = () => resolve({ data: { exchanges: mockExchanges } })
+        })
+      }
+      if (url === '/config') return Promise.resolve({ data: {} })
+      if (url === '/config/exchange-connections') return Promise.resolve({ data: { connections: mockConnections } })
+      if (url === '/affiliate-links') return Promise.resolve({ data: [] })
+      return Promise.resolve({ data: {} })
+    })
+
+    render(
+      <MemoryRouter>
+        <Settings />
+      </MemoryRouter>
+    )
+
+    // While loading: skeleton visible, real header NOT mounted.
+    expect(screen.getByTestId('settings-skeleton')).toBeInTheDocument()
+    expect(screen.queryByText('Settings')).not.toBeInTheDocument()
+
+    // Release the in-flight request so the effect finishes.
+    releaseExchanges!({ data: { exchanges: mockExchanges } })
+
+    // After load: real content visible, skeleton gone.
+    await waitFor(() => {
+      expect(screen.getByText('Settings')).toBeInTheDocument()
+    })
+    expect(screen.queryByTestId('settings-skeleton')).not.toBeInTheDocument()
+  })
 })
