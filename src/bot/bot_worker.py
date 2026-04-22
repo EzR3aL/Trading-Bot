@@ -24,6 +24,7 @@ from apscheduler.triggers.interval import IntervalTrigger
 from config.settings import settings
 from src.bot.components.hyperliquid_gates import HyperliquidGates
 from src.bot.components.notifier import Notifier
+from src.bot.components.trade_closer import TradeCloser
 from src.bot.hyperliquid_gates import HyperliquidGatesMixin
 from src.bot.notifications import NotificationsMixin
 from src.bot.position_monitor import PositionMonitorMixin
@@ -118,6 +119,16 @@ class BotWorker(
             bot_config_id, lambda: self._config
         )
         self._operation_in_progress.set()  # Not busy initially
+
+        # TradeCloser component — composition-owned (ARCH-H1 Phase 1 PR-3, #279).
+        # Getters defer attribute access: _config and _risk_manager are attached
+        # during initialize(), and _send_notification is the mixin-bound method.
+        self._trade_closer: TradeCloser = TradeCloser(
+            bot_config_id=bot_config_id,
+            config_getter=lambda: self._config,
+            risk_manager_getter=lambda: self._risk_manager,
+            notification_sender=self._send_notification,
+        )
 
         # Auto-recovery tracking
         self._consecutive_errors: int = 0
