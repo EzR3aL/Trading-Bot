@@ -101,6 +101,12 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers["X-Frame-Options"] = "DENY"
         response.headers["X-API-Version"] = "1"
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        # SEC-P3: Prevent caching of authenticated API responses in
+        # shared proxies/browser caches. Static assets served from "/"
+        # (via StaticFiles) keep their own Cache-Control; we only patch
+        # /api/* responses so the SPA build can still be cached.
+        if request.url.path.startswith("/api/") and "Cache-Control" not in response.headers:
+            response.headers["Cache-Control"] = "no-store"
         # SEC-H1: script-src must NOT include 'unsafe-inline' — Vite's
         # production build does not emit inline <script> blocks, so 'self'
         # is sufficient. style-src still allows 'unsafe-inline' because

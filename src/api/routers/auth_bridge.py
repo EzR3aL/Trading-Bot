@@ -31,7 +31,7 @@ from src.auth.jwt_handler import (
 )
 from src.auth.password import hash_password
 from src.auth.supabase_jwt import verify_supabase_token
-from src.api.rate_limit import limiter
+from src.api.rate_limit import _get_real_client_ip, limiter
 from src.models.database import User
 from src.models.session import get_db
 
@@ -65,7 +65,8 @@ async def generate_code(request: Request):
         )
 
     code = auth_code_store.generate(supabase_jwt)
-    client_ip = request.headers.get("X-Forwarded-For", request.client.host if request.client else "unknown")
+    # SEC-P3: use shared IP resolver — trusts X-Forwarded-For only behind a proxy.
+    client_ip = _get_real_client_ip(request)
     logger.info(
         "AUTH_BRIDGE: Code generated for Supabase user %s from %s",
         claims.sub,
@@ -115,7 +116,8 @@ async def exchange_code(
     set_access_cookie(response, access_token)
     set_refresh_cookie(response, refresh_token)
 
-    client_ip = request.headers.get("X-Forwarded-For", request.client.host if request.client else "unknown")
+    # SEC-P3: use shared IP resolver — trusts X-Forwarded-For only behind a proxy.
+    client_ip = _get_real_client_ip(request)
     logger.info(
         "AUTH_BRIDGE: User '%s' (id=%s, new=%s) authenticated via bridge from %s",
         user.username,

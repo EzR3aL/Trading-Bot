@@ -115,6 +115,18 @@ async def test_hsts_set_when_enable_hsts_true():
             assert "max-age=63072000" in hsts
 
 
+async def test_cache_control_no_store_on_api_responses():
+    """SEC-P3: /api/* responses carry Cache-Control: no-store so authenticated
+    JSON payloads are not cached by shared proxies or the browser disk cache."""
+    from src.api.main_app import create_app
+
+    app = create_app()
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        resp = await client.get("/api/status")
+        assert resp.headers.get("cache-control") == "no-store"
+
+
 # ---------------------------------------------------------------------------
 # create_app factory
 # ---------------------------------------------------------------------------
