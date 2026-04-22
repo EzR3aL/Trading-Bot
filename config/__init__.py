@@ -1,5 +1,5 @@
-"""Configuration module for Bitget Trading Bot."""
+"""Configuration module for the Trading Bot."""
 
-from .settings import settings, Settings, BitgetConfig, DiscordConfig, TradingConfig, StrategyConfig
+from .settings import settings, Settings, BitgetConfig, TradingConfig, StrategyConfig, RiskConfig
 
-__all__ = ["settings", "Settings", "BitgetConfig", "DiscordConfig", "TradingConfig", "StrategyConfig"]
+__all__ = ["settings", "Settings", "BitgetConfig", "TradingConfig", "StrategyConfig", "RiskConfig"]

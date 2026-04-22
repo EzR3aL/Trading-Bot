@@ -1,23 +1,39 @@
 """
-Configuration settings for the Bitget Trading Bot.
+Configuration settings for the Trading Bot.
+
 Loads settings from environment variables with sensible defaults.
+
+Scope
+-----
+This file is the ENV-backed settings container. It intentionally holds only
+the config that the web-app actually reads at runtime:
+
+* ``TradingConfig`` / ``StrategyConfig`` — seed values shown on the CLI
+  ``python main.py --status`` banner (per-bot overrides live in the DB).
+* ``RiskConfig`` — system-wide feature flags for the risk rollout
+  (``RISK_STATE_MANAGER_ENABLED``, ``HL_SOFTWARE_TRAILING_ENABLED``).
+* ``BitgetConfig`` — DEPRECATED, kept empty on purpose so no stray
+  ``BITGET_API_KEY`` env var ever leaks into the process. The security
+  regression test ``tests/unit/test_security.py`` locks this down.
+
+All other ENV lookups (JWT secrets, DB URLs, DB-first feature toggles, HL
+builder fee, LOG_LEVEL, per-user Discord webhooks, admin audit webhook,
+etc.) are read at their respective call sites via ``os.getenv`` or the
+``src.utils.settings.get_setting`` DB-first helper. Keeping this module
+small is intentional — fewer fields, fewer places to drift.
+
+The feature-flag inventory lives in ``config/feature_flags.py`` and is
+derived from this file.
 """
 
 import os
 from dataclasses import dataclass, field
 from typing import List, Tuple
+
 from dotenv import load_dotenv
 
 # Load environment variables from .env file
 load_dotenv()
-
-
-class ConfigValidationError(Exception):
-    """Raised when configuration validation fails."""
-
-    def __init__(self, errors: List[str]):
-        self.errors = errors
-        super().__init__(f"Configuration validation failed:\n" + "\n".join(f"  - {e}" for e in errors))
 
 
 def get_env(key: str, default: str = "", cast_type: type = str):
@@ -39,7 +55,9 @@ class BitgetConfig:
 
     DEPRECATED: API keys are now stored encrypted in the database via
     ExchangeConnection. This class no longer loads keys from environment
-    variables. Kept for backwards compatibility of the settings object.
+    variables. The empty fields are asserted by the security regression
+    test ``tests/unit/test_security.py`` to guarantee no legacy plaintext
+    key path is ever re-introduced.
     """
     # All credential fields default to empty — no longer loaded from env
     api_key: str = ""
@@ -48,42 +66,6 @@ class BitgetConfig:
     demo_api_key: str = ""
     demo_api_secret: str = ""
     demo_passphrase: str = ""
-
-    testnet: bool = field(default_factory=lambda: get_env("BITGET_TESTNET", "false", bool))
-
-    def validate(self, demo_mode: bool = False) -> bool:
-        """Validate that all required credentials are present."""
-        if demo_mode:
-            return all([self.demo_api_key, self.demo_api_secret, self.demo_passphrase])
-        else:
-            return all([self.api_key, self.api_secret, self.passphrase])
-
-    def get_active_credentials(self, demo_mode: bool = False) -> dict:
-        """Get the active API credentials based on trading mode."""
-        if demo_mode:
-            return {
-                "api_key": self.demo_api_key,
-                "api_secret": self.demo_api_secret,
-                "passphrase": self.demo_passphrase,
-            }
-        else:
-            return {
-                "api_key": self.api_key,
-                "api_secret": self.api_secret,
-                "passphrase": self.passphrase,
-            }
-
-
-@dataclass
-class DiscordConfig:
-    """Discord notification configuration."""
-    bot_token: str = field(default_factory=lambda: get_env("DISCORD_BOT_TOKEN"))
-    channel_id: int = field(default_factory=lambda: get_env("DISCORD_CHANNEL_ID", "0", int))
-    webhook_url: str = field(default_factory=lambda: get_env("DISCORD_WEBHOOK_URL"))
-
-    def validate(self) -> bool:
-        """Validate Discord configuration."""
-        return bool(self.webhook_url or (self.bot_token and self.channel_id))
 
 
 @dataclass
@@ -199,13 +181,6 @@ class StrategyConfig:
 
 
 @dataclass
-class LoggingConfig:
-    """Logging configuration."""
-    level: str = field(default_factory=lambda: get_env("LOG_LEVEL", "INFO"))
-    file: str = field(default_factory=lambda: get_env("LOG_FILE", "logs/trading_bot.log"))
-
-
-@dataclass
 class RiskConfig:
     """Risk-management feature flags (Epic #188).
 
@@ -231,61 +206,9 @@ class RiskConfig:
 class Settings:
     """Main settings container."""
     bitget: BitgetConfig = field(default_factory=BitgetConfig)
-    discord: DiscordConfig = field(default_factory=DiscordConfig)
     trading: TradingConfig = field(default_factory=TradingConfig)
     strategy: StrategyConfig = field(default_factory=StrategyConfig)
-    logging: LoggingConfig = field(default_factory=LoggingConfig)
     risk: RiskConfig = field(default_factory=RiskConfig)
-
-    def validate(self) -> dict:
-        """Validate all configurations and return status."""
-        trading_valid, _ = self.trading.validate()
-        strategy_valid, _ = self.strategy.validate()
-
-        return {
-            "bitget": self.bitget.validate(),
-            "discord": self.discord.validate(),
-            "trading": trading_valid,
-            "strategy": strategy_valid,
-        }
-
-    def validate_strict(self, raise_on_error: bool = True) -> Tuple[bool, List[str]]:
-        """
-        Validate all configurations with detailed error messages.
-
-        Args:
-            raise_on_error: If True, raises ConfigValidationError on failure
-
-        Returns:
-            Tuple of (is_valid, list of all error messages)
-
-        Raises:
-            ConfigValidationError: If raise_on_error=True and validation fails
-        """
-        all_errors = []
-
-        # Validate Bitget credentials
-        if not self.bitget.validate():
-            all_errors.append("Bitget API credentials are incomplete")
-
-        # Validate Discord (optional, just warn)
-        if not self.discord.validate():
-            all_errors.append("Discord notifications not configured (optional)")
-
-        # Validate trading config
-        trading_valid, trading_errors = self.trading.validate()
-        all_errors.extend(trading_errors)
-
-        # Validate strategy config
-        strategy_valid, strategy_errors = self.strategy.validate()
-        all_errors.extend(strategy_errors)
-
-        is_valid = len([e for e in all_errors if "optional" not in e.lower()]) == 0
-
-        if not is_valid and raise_on_error:
-            raise ConfigValidationError(all_errors)
-
-        return (is_valid, all_errors)
 
     @property
     def is_demo_mode(self) -> bool:
