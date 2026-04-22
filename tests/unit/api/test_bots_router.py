@@ -670,8 +670,9 @@ class TestCreateBot:
 
     async def test_create_bot_hyperliquid(self, client, auth_headers, test_user, monkeypatch):
         from unittest.mock import AsyncMock
+        # Symbol validation moved into bots_service (#297) — patch it there.
         monkeypatch.setattr(
-            "src.api.routers.bots.get_exchange_symbols",
+            "src.services.bots_service.get_exchange_symbols",
             AsyncMock(return_value=["BTCUSDT"]),
         )
         body = {

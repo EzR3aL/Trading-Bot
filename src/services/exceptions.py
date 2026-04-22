@@ -30,3 +30,40 @@ class BotNotFound(ServiceError):
 
 class MaxBotsReached(ServiceError):
     """Raised when the user has reached the per-user bot limit."""
+
+
+class StrategyNotFound(ServiceError):
+    """Raised when a bot create/update references an unknown strategy type."""
+
+    def __init__(self, strategy_name: str) -> None:
+        super().__init__(strategy_name)
+        self.strategy_name = strategy_name
+
+
+class InvalidSymbols(ServiceError):
+    """Raised when one or more requested trading pairs are not listed on the exchange.
+
+    Carries the exchange, demo/live mode label, and the rejected symbol list so
+    the router can render a user-facing detail string without re-deriving it.
+    """
+
+    def __init__(
+        self,
+        exchange: str,
+        mode_label: str,
+        invalid_symbols: list[str],
+    ) -> None:
+        super().__init__(
+            f"Symbols not available on {exchange} ({mode_label}): {invalid_symbols}"
+        )
+        self.exchange = exchange
+        self.mode_label = mode_label
+        self.invalid_symbols = invalid_symbols
+
+
+class BotIsRunning(ServiceError):
+    """Raised when an update is attempted against a bot that is currently running."""
+
+    def __init__(self, bot_id: int) -> None:
+        super().__init__(f"Bot {bot_id} is running")
+        self.bot_id = bot_id

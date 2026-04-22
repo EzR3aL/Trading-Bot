@@ -12,7 +12,7 @@ import time as _time
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from src.api.schemas.bots import (
     BotBudgetInfo,
@@ -34,15 +34,18 @@ from src.errors import ERR_BOT_NOT_FOUND, ERR_MAX_BOTS_REACHED, ERR_ORCHESTRATOR
 from src.models.database import BotConfig, ExchangeConnection, TradeRecord, User
 from src.models.session import get_db
 from src.services import bots_service
-from src.services.exceptions import BotNotFound, MaxBotsReached
-from src.strategy import StrategyRegistry  # imports __init__.py → registers all strategies
+from src.services.exceptions import (
+    BotIsRunning,
+    BotNotFound,
+    InvalidSymbols,
+    MaxBotsReached,
+    StrategyNotFound,
+)
 from src.api.rate_limit import limiter
 from src.models.enums import CEX_EXCHANGES, EXCHANGE_NAMES, EXCHANGE_PATTERN
-from src.utils.encryption import encrypt_value
 from src.utils.json_helpers import parse_json_field
 from src.constants import MAX_BOTS_PER_USER
 from src.utils.logger import get_logger
-from src.exchanges.symbol_fetcher import get_exchange_symbols
 
 logger = get_logger(__name__)
 
@@ -443,80 +446,17 @@ async def create_bot(
     db: AsyncSession = Depends(get_db),
 ):
     """Create a new bot configuration."""
-    # Validate strategy exists
     try:
-        StrategyRegistry.get(body.strategy_type)
-    except KeyError:
-        raise HTTPException(status_code=400, detail=ERR_STRATEGY_NOT_FOUND.format(name=body.strategy_type))
-
-    # Validate trading pairs exist on exchange (use demo symbols when applicable)
-    is_demo = body.mode in ("demo", "both")
-    available = await get_exchange_symbols(body.exchange_type, demo_mode=is_demo)
-    if available:
-        invalid = [p for p in body.trading_pairs if p not in available]
-        if invalid:
-            mode_label = "demo" if is_demo else "live"
-            raise HTTPException(
-                status_code=400,
-                detail=f"Symbol(s) not available on {body.exchange_type} ({mode_label}): {', '.join(invalid)}",
-            )
-
-    # Check bot limit
-    count_result = await db.execute(
-        select(func.count(BotConfig.id)).where(BotConfig.user_id == user.id)
-    )
-    if count_result.scalar() >= MAX_BOTS_PER_USER:
+        config = await bots_service.create_bot(db, user.id, body)
+    except StrategyNotFound as e:
+        raise HTTPException(status_code=400, detail=ERR_STRATEGY_NOT_FOUND.format(name=e.strategy_name))
+    except InvalidSymbols as e:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Symbol(s) not available on {e.exchange} ({e.mode_label}): {', '.join(e.invalid_symbols)}",
+        )
+    except MaxBotsReached:
         raise HTTPException(status_code=400, detail=ERR_MAX_BOTS_REACHED.format(max_bots=MAX_BOTS_PER_USER))
-
-    # Encrypt discord webhook if provided
-    encrypted_webhook = None
-    if body.discord_webhook_url:
-        encrypted_webhook = encrypt_value(body.discord_webhook_url)
-
-    # Encrypt telegram bot token if provided
-    encrypted_telegram_token = None
-    if body.telegram_bot_token:
-        encrypted_telegram_token = encrypt_value(body.telegram_bot_token)
-
-    config = BotConfig(
-        user_id=user.id,
-        name=body.name,
-        description=body.description,
-        strategy_type=body.strategy_type,
-        exchange_type=body.exchange_type,
-        mode=body.mode,
-        margin_mode=body.margin_mode,
-        trading_pairs=json.dumps(body.trading_pairs),
-        leverage=body.leverage,
-        position_size_percent=body.position_size_percent,
-        max_trades_per_day=body.max_trades_per_day,
-        take_profit_percent=body.take_profit_percent,
-        stop_loss_percent=body.stop_loss_percent,
-        daily_loss_limit_percent=body.daily_loss_limit_percent,
-        per_asset_config=json.dumps(body.per_asset_config) if body.per_asset_config else None,
-        strategy_params=json.dumps(body.strategy_params) if body.strategy_params else None,
-        schedule_type=body.schedule_type,
-        schedule_config=json.dumps(body.schedule_config) if body.schedule_config else None,
-        discord_webhook_url=encrypted_webhook,
-        telegram_bot_token=encrypted_telegram_token,
-        telegram_chat_id=encrypt_value(body.telegram_chat_id) if body.telegram_chat_id else None,
-        pnl_alert_settings=json.dumps(body.pnl_alert_settings.model_dump()) if body.pnl_alert_settings else None,
-        is_enabled=False,
-    )
-    db.add(config)
-    await db.flush()
-    await db.refresh(config)
-
-    logger.info(f"Bot created: {config.name} (id={config.id}) by user {user.id}")
-
-    from src.utils.event_logger import log_event
-    await log_event("bot_created", f"Bot '{config.name}' created", user_id=user.id, bot_id=config.id)
-
-    from src.utils.config_audit import log_config_change
-    await log_config_change(
-        user_id=user.id, entity_type="bot_config", entity_id=config.id,
-        action="create", new_data=body.model_dump(),
-    )
 
     return _config_to_response(config)
 
@@ -768,86 +708,19 @@ async def update_bot(
     orchestrator=Depends(get_orchestrator),
 ):
     """Update a bot configuration. Bot must be stopped to update."""
-    result = await db.execute(
-        select(BotConfig).where(BotConfig.id == bot_id, BotConfig.user_id == user.id)
-    )
-    config = result.scalar_one_or_none()
-    if not config:
+    try:
+        config = await bots_service.update_bot(db, user.id, bot_id, body, orchestrator)
+    except BotNotFound:
         raise HTTPException(status_code=404, detail=ERR_BOT_NOT_FOUND)
-
-    # Check if running
-    if orchestrator.is_running(bot_id):
+    except BotIsRunning:
         raise HTTPException(status_code=400, detail=ERR_STOP_BOT_BEFORE_EDIT)
-
-    # Validate strategy if changed
-    if body.strategy_type:
-        try:
-            StrategyRegistry.get(body.strategy_type)
-        except KeyError as e:
-            raise HTTPException(status_code=400, detail=str(e))
-
-    # Validate trading pairs exist on exchange (if pairs or exchange changed)
-    if body.trading_pairs is not None:
-        exchange = body.exchange_type or config.exchange_type
-        mode = body.mode or config.mode
-        is_demo = mode in ("demo", "both")
-        available = await get_exchange_symbols(exchange, demo_mode=is_demo)
-        if available:
-            invalid = [p for p in body.trading_pairs if p not in available]
-            if invalid:
-                mode_label = "demo" if is_demo else "live"
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Symbol(s) not available on {exchange} ({mode_label}): {', '.join(invalid)}",
-                )
-
-    # Snapshot old values for audit trail (only fields being updated)
-    update_data = body.model_dump(exclude_unset=True)
-    _audit_old = {f: getattr(config, f, None) for f in update_data}
-
-    # Apply updates
-    for field, value in update_data.items():
-        if field == "trading_pairs" and value is not None:
-            setattr(config, field, json.dumps(value))
-        elif field == "strategy_params" and value is not None:
-            setattr(config, field, json.dumps(value))
-        elif field == "schedule_config" and value is not None:
-            setattr(config, field, json.dumps(value))
-        elif field == "per_asset_config" and value is not None:
-            setattr(config, field, json.dumps(value))
-        elif field == "discord_webhook_url":
-            # Empty string = clear, non-empty = encrypt
-            if value:
-                setattr(config, field, encrypt_value(value))
-            else:
-                setattr(config, field, None)
-        elif field == "telegram_bot_token":
-            # Empty string = clear, non-empty = encrypt
-            if value:
-                setattr(config, field, encrypt_value(value))
-            else:
-                setattr(config, field, None)
-        elif field == "telegram_chat_id":
-            # Empty string = clear, non-empty = encrypt
-            if value:
-                setattr(config, field, encrypt_value(value))
-            else:
-                setattr(config, field, None)
-        elif field == "pnl_alert_settings" and value is not None:
-            setattr(config, field, json.dumps(value))
-        elif value is not None:
-            setattr(config, field, value)
-
-    await db.flush()
-    await db.refresh(config)
-
-    logger.info(f"Bot updated: {config.name} (id={bot_id})")
-
-    from src.utils.config_audit import log_config_change
-    await log_config_change(
-        user_id=user.id, entity_type="bot_config", entity_id=bot_id,
-        action="update", old_data=_audit_old, new_data=update_data,
-    )
+    except StrategyNotFound as e:
+        raise HTTPException(status_code=400, detail=ERR_STRATEGY_NOT_FOUND.format(name=e.strategy_name))
+    except InvalidSymbols as e:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Symbol(s) not available on {e.exchange} ({e.mode_label}): {', '.join(e.invalid_symbols)}",
+        )
 
     return _config_to_response(config)
 
