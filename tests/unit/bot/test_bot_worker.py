@@ -555,7 +555,7 @@ class TestMonitorPositions:
         mock_session.__aenter__ = AsyncMock(return_value=mock_session)
         mock_session.__aexit__ = AsyncMock(return_value=False)
 
-        with patch("src.bot.position_monitor.get_session", return_value=mock_session):
+        with patch("src.bot.components.position_monitor.get_session", return_value=mock_session):
             await worker._monitor_positions()
 
         # No _check_position calls
