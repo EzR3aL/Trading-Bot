@@ -24,6 +24,11 @@ if echo "$CHANGED_FILES" | grep -qE "requirements\.txt|frontend/package\.json|fr
     DEPS_CHANGED=true
 fi
 
+# Export current commit hash so docker-compose bakes it into the image via
+# ARG BUILD_COMMIT — makes /api/version return the real SHA in production.
+export BUILD_COMMIT=$(git rev-parse HEAD)
+echo "=== Building with BUILD_COMMIT=$BUILD_COMMIT ==="
+
 # Build with or without cache
 if [ "$DEPS_CHANGED" = true ] || [ "$1" = "--force-clean" ]; then
     echo "=== Dependencies changed or --force-clean — building WITHOUT cache ==="
