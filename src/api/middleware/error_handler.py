@@ -12,6 +12,7 @@ import traceback
 from fastapi import Request
 from fastapi.responses import JSONResponse
 
+from src.api.secret_redaction import redact_lines, redact_secrets
 from src.exceptions import (
     AuthError,
     BotError,
@@ -90,10 +91,17 @@ async def global_exception_handler(request: Request, exc: Exception) -> JSONResp
             content={"detail": safe_message},
         )
     else:
+        # Dev responses include exc_detail + traceback for debugging. BOTH
+        # still pass through redact_secrets so a local .env or DSN leaked
+        # into an exception string is never echoed back in the HTTP body
+        # (SEC-010). The server log above is gated separately — log-hosts
+        # are considered trusted, the HTTP response is not.
         return JSONResponse(
             status_code=status_code,
             content={
-                "detail": f"{safe_message}: {exc_detail}",
-                "traceback": traceback.format_exception(type(exc), exc, exc.__traceback__),
+                "detail": redact_secrets(f"{safe_message}: {exc_detail}"),
+                "traceback": redact_lines(
+                    traceback.format_exception(type(exc), exc, exc.__traceback__)
+                ),
             },
         )
