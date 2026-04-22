@@ -6,6 +6,7 @@ import { Loader2 } from 'lucide-react'
 import EdgeBotsLogo from '../components/ui/EdgeBotsLogo'
 import FormField from '../components/ui/FormField'
 import { loginSchema, validateField } from '../utils/validation'
+import { showError } from '../utils/toast'
 
 export default function Login() {
   const { t } = useTranslation()
@@ -13,7 +14,6 @@ export default function Login() {
   const { login, isLoading } = useAuthStore()
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
-  const [error, setError] = useState('')
   const [fieldErrors, setFieldErrors] = useState<Record<string, string | null>>({})
 
   const validateSingleField = (field: 'username' | 'password', value: string) => {
@@ -24,7 +24,6 @@ export default function Login() {
 
   const handleLoginSubmit = async (e: FormEvent) => {
     e.preventDefault()
-    setError('')
 
     // Validate the full form before submission
     const result = loginSchema.safeParse({ username, password })
@@ -42,7 +41,7 @@ export default function Login() {
       await login(username, password)
       navigate('/')
     } catch {
-      setError(t('login.error'))
+      showError(t('login.error'))
     }
   }
 
@@ -61,12 +60,6 @@ export default function Login() {
           <h2 className="text-sm text-gray-400 mb-8 text-center">
             {t('login.title')}
           </h2>
-
-          {error && (
-            <div role="alert" className="mb-6 p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-sm text-center">
-              {error}
-            </div>
-          )}
 
           <form onSubmit={handleLoginSubmit} className="space-y-5">
             <FormField

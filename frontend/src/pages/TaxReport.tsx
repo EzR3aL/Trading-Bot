@@ -7,6 +7,7 @@ import { Download, ArrowUpRight, ArrowDownRight, Loader2, ChevronDown } from 'lu
 import useIsMobile from '../hooks/useIsMobile'
 import FilterDropdown from '../components/ui/FilterDropdown'
 import { USER_TIMEZONE } from '../utils/dateUtils'
+import { showError } from '../utils/toast'
 
 interface TaxData {
   year: number
@@ -32,18 +33,16 @@ export default function TaxReport() {
   const isMobile = useIsMobile()
   const [expandedMonth, setExpandedMonth] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
 
   useEffect(() => {
     const load = async () => {
       setLoading(true)
-      setError('')
       try {
         const demoParam = demoFilter === 'demo' ? '&demo_mode=true' : demoFilter === 'live' ? '&demo_mode=false' : ''
         const res = await api.get(`/tax-report?year=${year}${demoParam}`)
         setData(res.data)
       } catch {
-        setError(t('common.error'))
+        showError(t('common.error'))
       } finally {
         setLoading(false)
       }
@@ -71,7 +70,7 @@ export default function TaxReport() {
       link.remove()
       window.URL.revokeObjectURL(url)
     } catch {
-      setError(t('tax.downloadError'))
+      showError(t('tax.downloadError'))
     } finally {
       setDownloading(false)
     }
@@ -99,13 +98,6 @@ export default function TaxReport() {
           </button>
         </div>
       </div>
-
-      {/* Error */}
-      {error && (
-        <div role="alert" className="mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-sm">
-          {error}
-        </div>
-      )}
 
       {/* Loading */}
       {loading && (
