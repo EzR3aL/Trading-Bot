@@ -266,7 +266,7 @@ class HyperliquidClient(ExchangeClient):
           - ``wallet`` — wallet is not usable (unfunded / unauthorized)
 
         Passing gates are omitted (empty list = all clear). The caller
-        ``HyperliquidGatesMixin`` maps failing results to ``self.error_message``
+        (``BotWorker.initialize``) maps failing results to ``self.error_message``
         and decides whether to abort.
         """
         from src.utils.settings import get_hl_config
