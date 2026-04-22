@@ -13,6 +13,7 @@ from typing import Optional, Set
 from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
 
+from src.api.rate_limit import _get_real_client_ip
 from src.auth.jwt_handler import decode_token
 from src.utils.logger import get_logger
 
@@ -30,7 +31,11 @@ class AuditLogMiddleware(BaseHTTPMiddleware):
 
     async def dispatch(self, request: Request, call_next):
         start_time = time.monotonic()
-        client_ip = request.client.host if request.client else "unknown"
+        # SEC-P3: use shared IP resolver so X-Forwarded-For is only trusted
+        # behind a reverse proxy (BEHIND_PROXY=true). Previously the middleware
+        # stored request.client.host directly — behind Nginx that always
+        # reported the proxy IP, making audit trails useless.
+        client_ip = _get_real_client_ip(request)
         method = request.method
         # Only log the path, never query parameters (may contain tokens/keys)
         path = request.url.path[:500]
@@ -83,7 +88,10 @@ def _extract_user_id(request: Request) -> Optional[int]:
 
     token = auth_header[7:]
     try:
-        payload = decode_token(token)
+        # SEC-P3: restrict to access tokens — refresh tokens must never be
+        # accepted via the Authorization header because they live longer
+        # and carry elevated refresh privileges.
+        payload = decode_token(token, expected_type="access")
         if not payload:
             return None
         sub = payload.get("sub")

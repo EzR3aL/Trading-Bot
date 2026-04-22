@@ -69,6 +69,18 @@ class TestExtractUserId:
         result = _extract_user_id(mock_request)
         assert result is None
 
+    def test_returns_none_for_refresh_token_in_auth_header(self):
+        """SEC-P3: a refresh token in Authorization is not treated as an access
+        token, so it cannot label audit rows with its user_id."""
+        from src.api.middleware.audit_log import _extract_user_id
+        from src.auth.jwt_handler import create_refresh_token
+
+        refresh = create_refresh_token({"sub": "99", "role": "user"})
+        mock_request = MagicMock()
+        mock_request.headers = {"authorization": f"Bearer {refresh}"}
+
+        assert _extract_user_id(mock_request) is None
+
 
 # ---------------------------------------------------------------------------
 # Tests: Middleware exception re-raise (lines 40-42)
