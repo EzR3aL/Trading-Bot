@@ -131,6 +131,7 @@ async def leverage_limits(
     symbol: str = Query(...),
     user: User = Depends(get_current_user),
 ):
+    """Return the maximum allowed leverage for a symbol on the given exchange."""
     try:
         max_lev = get_max_leverage(exchange, symbol)
     except ExchangeNotSupported as e:
