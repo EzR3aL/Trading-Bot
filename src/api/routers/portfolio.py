@@ -1,11 +1,17 @@
-"""Multi-exchange portfolio view endpoints."""
+"""Multi-exchange portfolio view endpoints.
 
-import asyncio
+Thin HTTP adapter: parse query params → call ``PortfolioService`` → map
+domain results onto pydantic response models. Business logic lives in
+``src.services.portfolio_service``. See ARCH-C1 Phase 2a PR-5.
+
+The in-memory TTL cache stays module-scoped here: it's shared across
+requests and we don't want per-request caching semantics in the service.
+"""
+
 import time
 from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, Query, Request
-from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.rate_limit import limiter
@@ -17,14 +23,12 @@ from src.api.schemas.portfolio import (
     PortfolioSummary,
 )
 from src.auth.dependencies import get_current_user
-from src.models.database import BotConfig, TradeRecord, User
+from src.models.database import User
 from src.models.session import get_db
-from src.exchanges.symbol_map import normalize_symbol
+from src.services.portfolio_service import PortfolioService
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
-
-_closed_date = func.coalesce(TradeRecord.exit_time, TradeRecord.entry_time)
 
 router = APIRouter(prefix="/api/portfolio", tags=["portfolio"])
 
@@ -44,6 +48,37 @@ def _cache_set(key: str, value: Any) -> None:
     _cache[key] = (time.monotonic(), value)
 
 
+async def _get_all_user_clients(
+    user_id: int, db: AsyncSession,
+) -> list[tuple[str, bool, object]]:
+    """Load all exchange connections and create clients.
+
+    Returns a list of ``(exchange_type, demo_mode, client)`` tuples — one
+    entry per mode the user has credentials for. See
+    ``src.exchanges.factory.get_all_user_clients`` for the construction
+    rules, especially around header-based demo for Bitget / BingX.
+
+    Kept on the router module (not inlined into the service) so the
+    characterization tests can monkeypatch it — they inject fake exchange
+    clients via ``monkeypatch.setattr(portfolio_router, "_get_all_user_clients", ...)``.
+    """
+    from src.exchanges.factory import get_all_user_clients
+    return await get_all_user_clients(user_id, db)
+
+
+def _build_service(db: AsyncSession, user: User) -> PortfolioService:
+    """Construct the service with the router's clients-loader injected.
+
+    Using a lambda so that monkeypatching ``_get_all_user_clients`` on this
+    module keeps working — the closure resolves the attribute lazily at
+    call time, not at service-construction time.
+    """
+    async def loader(user_id: int, db_: AsyncSession):
+        return await _get_all_user_clients(user_id, db_)
+
+    return PortfolioService(db=db, user=user, clients_loader=loader)
+
+
 @router.get("/summary", response_model=PortfolioSummary)
 @limiter.limit("30/minute")
 async def get_portfolio_summary(
@@ -54,69 +89,27 @@ async def get_portfolio_summary(
     db: AsyncSession = Depends(get_db),
 ):
     """Aggregated PnL summary grouped by exchange."""
-    from datetime import datetime, timedelta, timezone
-
-    since = datetime.now(timezone.utc) - timedelta(days=days)
-
-    filters = [
-        TradeRecord.user_id == user.id,
-        TradeRecord.status == "closed",
-        _closed_date >= since,
-    ]
-    if demo_mode and demo_mode != "all":
-        filters.append(TradeRecord.demo_mode == (demo_mode == "true"))
-
-    result = await db.execute(
-        select(
-            TradeRecord.exchange,
-            func.count().label("total_trades"),
-            func.sum(case((TradeRecord.pnl > 0, 1), else_=0)).label("winning_trades"),
-            func.sum(TradeRecord.pnl).label("total_pnl"),
-            func.sum(TradeRecord.fees).label("total_fees"),
-            func.sum(TradeRecord.funding_paid).label("total_funding"),
-        )
-        .where(*filters)
-        .group_by(TradeRecord.exchange)
-    )
-    rows = result.all()
-
-    exchanges = []
-    grand_pnl = 0.0
-    grand_trades = 0
-    grand_wins = 0
-    grand_fees = 0.0
-    grand_funding = 0.0
-
-    for row in rows:
-        total = row.total_trades or 0
-        wins = row.winning_trades or 0
-        pnl = row.total_pnl or 0
-        fees = row.total_fees or 0
-        funding = row.total_funding or 0
-
-        exchanges.append(ExchangeSummary(
-            exchange=row.exchange,
-            total_pnl=pnl,
-            total_trades=total,
-            winning_trades=wins,
-            win_rate=(wins / total * 100) if total > 0 else 0,
-            total_fees=fees,
-            total_funding=funding,
-        ))
-
-        grand_pnl += pnl
-        grand_trades += total
-        grand_wins += wins
-        grand_fees += fees
-        grand_funding += funding
+    service = _build_service(db, user)
+    result = await service.get_summary(days=days, demo_mode=demo_mode)
 
     return PortfolioSummary(
-        total_pnl=grand_pnl,
-        total_trades=grand_trades,
-        overall_win_rate=(grand_wins / grand_trades * 100) if grand_trades > 0 else 0,
-        total_fees=grand_fees,
-        total_funding=grand_funding,
-        exchanges=exchanges,
+        total_pnl=result.total_pnl,
+        total_trades=result.total_trades,
+        overall_win_rate=result.overall_win_rate,
+        total_fees=result.total_fees,
+        total_funding=result.total_funding,
+        exchanges=[
+            ExchangeSummary(
+                exchange=e.exchange,
+                total_pnl=e.total_pnl,
+                total_trades=e.total_trades,
+                winning_trades=e.winning_trades,
+                win_rate=e.win_rate,
+                total_fees=e.total_fees,
+                total_funding=e.total_funding,
+            )
+            for e in result.exchanges
+        ],
     )
 
 
@@ -133,144 +126,34 @@ async def get_portfolio_positions(
     if cached is not None:
         return cached
 
-    clients = await _get_all_user_clients(user.id, db)
-    if not clients:
-        return []
+    service = _build_service(db, user)
+    items = await service.list_positions()
 
-    # Pre-load open trades with bot configs for trailing stop calculation
-    from src.api.routers.trades import _compute_trailing_stop
-    open_trades_result = await db.execute(
-        select(TradeRecord)
-        .where(TradeRecord.user_id == user.id, TradeRecord.status == "open")
-    )
-    open_trades = open_trades_result.scalars().all()
-
-    # Build lookup: (exchange, base_symbol, side, demo_mode) -> trade.
-    # demo_mode is part of the key so a user running both a live and a demo
-    # bot on the same symbol+side can see both positions independently — and
-    # more importantly so a demo trade doesn't collide with a live one when
-    # get_all_user_clients returns both modes for the same connection (#141).
-    trade_lookup: dict[tuple, TradeRecord] = {}
-    for t in open_trades:
-        base_sym = normalize_symbol(t.symbol, t.exchange)
-        key = (t.exchange, base_sym, t.side, bool(t.demo_mode))
-        existing = trade_lookup.get(key)
-        if existing is None or (t.entry_time and existing.entry_time and t.entry_time > existing.entry_time):
-            trade_lookup[key] = t
-
-    # Batch-load all referenced BotConfigs in a single query (fix N+1)
-    bot_cache: dict[int, BotConfig] = {}
-    bot_ids = {t.bot_config_id for t in open_trades if t.bot_config_id}
-    if bot_ids:
-        bot_result = await db.execute(
-            select(BotConfig).where(BotConfig.id.in_(bot_ids))
+    positions = [
+        PortfolioPosition(
+            trade_id=p.trade_id,
+            exchange=p.exchange,
+            symbol=p.symbol,
+            side=p.side,
+            size=p.size,
+            entry_price=p.entry_price,
+            current_price=p.current_price,
+            unrealized_pnl=p.unrealized_pnl,
+            leverage=p.leverage,
+            margin=p.margin,
+            bot_name=p.bot_name,
+            demo_mode=p.demo_mode,
+            take_profit=p.take_profit,
+            stop_loss=p.stop_loss,
+            trailing_stop_active=p.trailing_stop_active,
+            trailing_stop_price=p.trailing_stop_price,
+            trailing_stop_distance_pct=p.trailing_stop_distance_pct,
+            trailing_atr_override=p.trailing_atr_override,
+            native_trailing_stop=p.native_trailing_stop,
+            can_close_at_loss=p.can_close_at_loss,
         )
-        for bot in bot_result.scalars().all():
-            bot_cache[bot.id] = bot
-
-    # Batch pre-fetch klines for trailing stop calculation (avoid N+1 Binance API calls).
-    # Cache is keyed by (symbol, interval) because different bots may use
-    # different kline_intervals (e.g. edge_indicator conservative uses 4h,
-    # standard uses 1h, liquidation_hunter uses 1h). Using the resolved per-bot
-    # interval guarantees the dashboard sees the same data as the live strategy.
-    from src.api.routers.trades import TRAILING_STOP_STRATEGIES
-    from src.strategy.base import resolve_strategy_params
-
-    klines_cache: dict[tuple[str, str], list] = {}
-    prefetch_keys: set[tuple[str, str]] = set()
-    for t in open_trades:
-        if t.status != "open":
-            continue
-        bot = bot_cache.get(t.bot_config_id) if t.bot_config_id else None
-        strat_type = bot.strategy_type if bot else None
-        has_strat_trailing = strat_type in TRAILING_STOP_STRATEGIES
-        has_override = t.trailing_atr_override is not None
-        if not has_strat_trailing and not has_override:
-            continue
-        strat_params_json = bot.strategy_params if bot else None
-        resolved = resolve_strategy_params(strat_type, strat_params_json)
-        interval = resolved.get("kline_interval", "1h")
-        prefetch_keys.add((t.symbol, interval))
-
-    if prefetch_keys:
-        try:
-            from src.data.market_data import MarketDataFetcher
-            fetcher = MarketDataFetcher()
-            for sym, interval in prefetch_keys:
-                try:
-                    klines_cache[(sym, interval)] = await fetcher.get_binance_klines(sym, interval, 30)
-                except Exception:
-                    pass
-            await fetcher.close()
-        except Exception:
-            pass
-
-    positions: list[PortfolioPosition] = []
-
-    async def fetch_positions(exchange_type: str, demo_mode: bool, client):
-        try:
-            open_positions = await asyncio.wait_for(
-                client.get_open_positions(), timeout=10.0
-            )
-            for pos in open_positions:
-                # Match with DB trade including the client's mode so demo
-                # and live positions can coexist for the same symbol+side (#141)
-                base_sym = normalize_symbol(pos.symbol, exchange_type)
-                key = (exchange_type, base_sym, pos.side, demo_mode)
-                trade = trade_lookup.get(key)
-                if trade is None:
-                    logger.debug(
-                        "No DB trade match: exchange=%s demo=%s symbol=%s (base=%s) side=%s",
-                        exchange_type, demo_mode, pos.symbol, base_sym, pos.side,
-                    )
-                bot_name = None
-                ts_info: dict = {}
-                if trade:
-                    bot = bot_cache.get(trade.bot_config_id) if trade.bot_config_id else None
-                    bot_name = bot.name if bot else None
-                    strat_type = bot.strategy_type if bot else None
-                    strat_params = bot.strategy_params if bot else None
-                    try:
-                        ts_info = await _compute_trailing_stop(trade, strat_type, strat_params, klines_cache=klines_cache)
-                    except Exception:
-                        pass
-
-                positions.append(PortfolioPosition(
-                    trade_id=trade.id if trade else None,
-                    exchange=exchange_type,
-                    symbol=pos.symbol,
-                    side=pos.side,
-                    size=pos.size,
-                    entry_price=pos.entry_price,
-                    current_price=pos.current_price,
-                    unrealized_pnl=pos.unrealized_pnl,
-                    leverage=pos.leverage,
-                    margin=pos.margin,
-                    bot_name=bot_name,
-                    demo_mode=trade.demo_mode if trade else demo_mode,
-                    take_profit=trade.take_profit if trade else None,
-                    stop_loss=trade.stop_loss if trade else None,
-                    trailing_stop_active=ts_info.get("trailing_stop_active", False),
-                    trailing_stop_price=ts_info.get("trailing_stop_price"),
-                    trailing_stop_distance_pct=ts_info.get("trailing_stop_distance_pct"),
-                    trailing_atr_override=trade.trailing_atr_override if trade else None,
-                    native_trailing_stop=trade.native_trailing_stop if trade else False,
-                    can_close_at_loss=ts_info.get("can_close_at_loss"),
-                ))
-        except asyncio.TimeoutError:
-            logger.warning(
-                f"Position fetch timeout for {exchange_type} "
-                f"({'demo' if demo_mode else 'live'})"
-            )
-        except Exception as e:
-            logger.warning(
-                f"Position fetch failed for {exchange_type} "
-                f"({'demo' if demo_mode else 'live'}): {e}"
-            )
-
-    await asyncio.gather(
-        *(fetch_positions(ex, demo, cl) for ex, demo, cl in clients)
-    )
+        for p in items
+    ]
 
     _cache_set(cache_key, positions)
     return positions
@@ -286,40 +169,18 @@ async def get_portfolio_daily(
     db: AsyncSession = Depends(get_db),
 ):
     """Daily PnL breakdown per exchange for stacked charts."""
-    from datetime import datetime, timedelta, timezone
-
-    since = datetime.now(timezone.utc) - timedelta(days=days)
-
-    filters = [
-        TradeRecord.user_id == user.id,
-        TradeRecord.status == "closed",
-        _closed_date >= since,
-    ]
-    if demo_mode and demo_mode != "all":
-        filters.append(TradeRecord.demo_mode == (demo_mode == "true"))
-
-    result = await db.execute(
-        select(
-            func.date(_closed_date).label("date"),
-            TradeRecord.exchange,
-            func.sum(TradeRecord.pnl).label("pnl"),
-            func.count().label("trades"),
-            func.sum(TradeRecord.fees).label("fees"),
-        )
-        .where(*filters)
-        .group_by(func.date(_closed_date), TradeRecord.exchange)
-        .order_by(func.date(_closed_date))
-    )
+    service = _build_service(db, user)
+    items = await service.get_daily(days=days, demo_mode=demo_mode)
 
     return [
         PortfolioDaily(
-            date=str(row.date),
-            exchange=row.exchange,
-            pnl=row.pnl or 0,
-            trades=row.trades,
-            fees=row.fees or 0,
+            date=item.date,
+            exchange=item.exchange,
+            pnl=item.pnl,
+            trades=item.trades,
+            fees=item.fees,
         )
-        for row in result.all()
+        for item in items
     ]
 
 
@@ -336,53 +197,17 @@ async def get_portfolio_allocation(
     if cached is not None:
         return cached
 
-    clients = await _get_all_user_clients(user.id, db)
-    if not clients:
-        return []
+    service = _build_service(db, user)
+    items = await service.get_allocation()
 
-    # For allocation we only want ONE balance per exchange — summing demo and
-    # live would double-count, and the pie chart is a capital-distribution
-    # view. Prefer the live client; fall back to demo if only demo exists.
-    per_exchange: dict[str, tuple[bool, object]] = {}
-    for exchange_type, demo_mode, client in clients:
-        existing = per_exchange.get(exchange_type)
-        if existing is None or (existing[0] and not demo_mode):
-            per_exchange[exchange_type] = (demo_mode, client)
-
-    allocations: list[PortfolioAllocation] = []
-
-    async def fetch_balance(exchange_type: str, client):
-        try:
-            balance = await asyncio.wait_for(
-                client.get_account_balance(), timeout=10.0
-            )
-            allocations.append(PortfolioAllocation(
-                exchange=exchange_type,
-                balance=balance.total,
-                currency=balance.currency,
-            ))
-        except asyncio.TimeoutError:
-            logger.warning(f"Balance fetch timeout for {exchange_type}")
-        except Exception as e:
-            logger.warning(f"Balance fetch failed for {exchange_type}: {e}")
-
-    await asyncio.gather(
-        *(fetch_balance(ex, client) for ex, (_demo, client) in per_exchange.items())
-    )
+    allocations = [
+        PortfolioAllocation(
+            exchange=item.exchange,
+            balance=item.balance,
+            currency=item.currency,
+        )
+        for item in items
+    ]
 
     _cache_set(cache_key, allocations)
     return allocations
-
-
-async def _get_all_user_clients(
-    user_id: int, db: AsyncSession,
-) -> list[tuple[str, bool, object]]:
-    """Load all exchange connections and create clients.
-
-    Returns a list of ``(exchange_type, demo_mode, client)`` tuples — one
-    entry per mode the user has credentials for. See
-    ``src.exchanges.factory.get_all_user_clients`` for the construction
-    rules, especially around header-based demo for Bitget / BingX.
-    """
-    from src.exchanges.factory import get_all_user_clients
-    return await get_all_user_clients(user_id, db)
