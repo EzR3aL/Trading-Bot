@@ -14,7 +14,8 @@ export interface User {
 }
 
 export interface TokenResponse {
-  access_token: string
+  // access_token no longer populated in body (SEC-012) — delivered via httpOnly cookie.
+  access_token?: string | null
   refresh_token?: string
   token_type: string
   expires_in: number

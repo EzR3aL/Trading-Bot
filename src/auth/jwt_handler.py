@@ -1,4 +1,9 @@
-"""JWT token creation and validation."""
+"""JWT token creation and validation.
+
+Supports both HS256 (legacy) and RS256 (preferred). When both are configured,
+signing uses RS256 and verification accepts either, enabling a 14-day rollover
+window. See Anleitungen/auth-key-rotation.md.
+"""
 
 import os
 from datetime import datetime, timedelta, timezone
@@ -12,38 +17,62 @@ from src.utils.logger import get_logger
 
 _jwt_logger = get_logger(__name__)
 
-ALGORITHM = "HS256"
-# 4 hours — shorter TTL for financial security; refresh token handles session continuity
-ACCESS_TOKEN_EXPIRE_MINUTES = 240
-# Refresh token: 90 days. Bumped from 30 because users complained about
-# being logged out — the previous TTL hit users who only opened the app
-# every couple of weeks.
-REFRESH_TOKEN_EXPIRE_DAYS = 90
+ALGORITHM_HS256 = "HS256"
+ALGORITHM_RS256 = "RS256"
+
+ACCESS_TOKEN_EXPIRE_MINUTES = 240  # 4 hours
+# 14 days is the industry default for refresh tokens. Combined with session
+# rotation and `token_version`, this limits theft windows while still covering
+# typical user dormancy (weekends, short trips).
+REFRESH_TOKEN_EXPIRE_DAYS = 14
 
 REFRESH_COOKIE_NAME = "refresh_token"
+ACCESS_COOKIE_NAME = "access_token"
 
 
-def _get_secret_key() -> str:
-    """Lazy-load JWT secret key from environment.
-
-    Reads at call time (not import time) so that load_dotenv() in
-    main_app.py has already populated the environment.
-    """
+def _get_hs_secret() -> str:
     return os.getenv("JWT_SECRET_KEY", "")
 
 
-def validate_jwt_config() -> None:
-    """Validate that JWT_SECRET_KEY is configured and strong enough.
+def _get_rs_private_key() -> str:
+    return os.getenv("JWT_PRIVATE_KEY", "")
 
-    Call this during application startup (lifespan) instead of at import
-    time, so the error is logged properly rather than crashing via sys.exit().
-    """
-    key = _get_secret_key()
+
+def _get_rs_public_key() -> str:
+    return os.getenv("JWT_PUBLIC_KEY", "")
+
+
+def _rs256_configured() -> bool:
+    return bool(_get_rs_private_key() and _get_rs_public_key())
+
+
+def _signing_algorithm() -> str:
+    return ALGORITHM_RS256 if _rs256_configured() else ALGORITHM_HS256
+
+
+def _signing_key() -> str:
+    return _get_rs_private_key() if _rs256_configured() else _get_hs_secret()
+
+
+def validate_jwt_config() -> None:
+    """Validate JWT config at startup. Accepts either RS256 key-pair or HS256 secret."""
+    if _rs256_configured():
+        priv = _get_rs_private_key()
+        pub = _get_rs_public_key()
+        if "BEGIN" not in priv or "BEGIN" not in pub:
+            msg = "FATAL: JWT_PRIVATE_KEY / JWT_PUBLIC_KEY must be PEM-encoded."
+            _jwt_logger.critical(msg)
+            raise RuntimeError(msg)
+        _jwt_logger.info("AUTH: JWT configured with RS256 (asymmetric). HS256 fallback: %s", bool(_get_hs_secret()))
+        return
+
+    key = _get_hs_secret()
     if not key:
         msg = (
-            "FATAL: JWT_SECRET_KEY environment variable is not set. "
-            "Generate one with: python -c \"import secrets; print(secrets.token_urlsafe(64))\" "
-            "Then add it to your .env file."
+            "FATAL: No JWT signing material configured. "
+            "Set either JWT_PRIVATE_KEY + JWT_PUBLIC_KEY (RS256, preferred) "
+            "or JWT_SECRET_KEY (HS256, legacy). "
+            "See Anleitungen/auth-key-rotation.md."
         )
         _jwt_logger.critical(msg)
         raise RuntimeError(msg)
@@ -51,83 +80,57 @@ def validate_jwt_config() -> None:
     if len(key) < 32:
         msg = (
             "FATAL: JWT_SECRET_KEY is too short (minimum 32 characters). "
-            "Generate a strong key with: python -c \"import secrets; print(secrets.token_urlsafe(64))\""
+            "Generate with: python -c \"import secrets; print(secrets.token_urlsafe(64))\""
         )
         _jwt_logger.critical(msg)
         raise RuntimeError(msg)
 
+    _jwt_logger.warning("AUTH: JWT configured with HS256 only. RS256 is preferred — see Anleitungen/auth-key-rotation.md.")
+
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
-    """
-    Create a JWT access token.
-
-    Args:
-        data: Payload data (must include 'sub' with user_id)
-        expires_delta: Custom expiration time
-
-    Returns:
-        Encoded JWT string
-    """
     to_encode = data.copy()
     expire = datetime.now(timezone.utc) + (
         expires_delta or timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     )
     to_encode.update({"exp": expire, "type": "access"})
-    return jwt.encode(to_encode, _get_secret_key(), algorithm=ALGORITHM)
+    return jwt.encode(to_encode, _signing_key(), algorithm=_signing_algorithm())
 
 
 def create_refresh_token(data: dict) -> str:
-    """
-    Create a JWT refresh token with longer expiration.
-
-    Args:
-        data: Payload data (must include 'sub' with user_id)
-
-    Returns:
-        Encoded JWT string
-    """
     to_encode = data.copy()
     expire = datetime.now(timezone.utc) + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
     to_encode.update({"exp": expire, "type": "refresh"})
-    return jwt.encode(to_encode, _get_secret_key(), algorithm=ALGORITHM)
+    return jwt.encode(to_encode, _signing_key(), algorithm=_signing_algorithm())
 
 
 def decode_token(token: str, expected_type: Optional[str] = None) -> Optional[dict]:
-    """
-    Decode and validate a JWT token.
+    """Decode and validate a JWT. Tries RS256 then HS256 (dual-validate window).
 
-    Args:
-        token: Encoded JWT string
-        expected_type: If set, reject tokens whose "type" field doesn't match
-                       (e.g. "access" or "refresh")
-
-    Returns:
-        Decoded payload dict or None if invalid / wrong type
+    Returns None on any failure: invalid signature, expired, wrong type, malformed.
     """
+    payload = _try_decode(token, ALGORITHM_RS256, _get_rs_public_key())
+    if payload is None:
+        payload = _try_decode(token, ALGORITHM_HS256, _get_hs_secret())
+    if payload is None:
+        return None
+    if expected_type and payload.get("type") != expected_type:
+        return None
+    return payload
+
+
+def _try_decode(token: str, algorithm: str, key: str) -> Optional[dict]:
+    if not key:
+        return None
     try:
-        payload = jwt.decode(token, _get_secret_key(), algorithms=[ALGORITHM])
-        if expected_type and payload.get("type") != expected_type:
-            return None
-        return payload
+        return jwt.decode(token, key, algorithms=[algorithm])
     except PyJWTError:
         return None
 
 
-ACCESS_COOKIE_NAME = "access_token"
-
-
 def set_access_cookie(response: Response, access_token: str) -> None:
-    """Set the access token as an httpOnly secure cookie.
-
-    Security properties:
-    - httponly: JS cannot read the cookie (XSS protection)
-    - secure: Only sent over HTTPS (except in development)
-    - samesite=lax: Prevents CSRF on cross-origin POST
-    - path=/api: Cookie sent to all API endpoints
-    """
     environment = os.getenv("ENVIRONMENT", "development").lower()
     is_prod = environment == "production"
-
     response.set_cookie(
         key=ACCESS_COOKIE_NAME,
         value=access_token,
@@ -140,7 +143,6 @@ def set_access_cookie(response: Response, access_token: str) -> None:
 
 
 def clear_access_cookie(response: Response) -> None:
-    """Clear the access token cookie (on logout or token revocation)."""
     response.delete_cookie(
         key=ACCESS_COOKIE_NAME,
         httponly=True,
@@ -149,17 +151,8 @@ def clear_access_cookie(response: Response) -> None:
 
 
 def set_refresh_cookie(response: Response, refresh_token: str) -> None:
-    """Set the refresh token as an httpOnly secure cookie.
-
-    Security properties:
-    - httponly: JS cannot read the cookie (XSS protection)
-    - secure: Only sent over HTTPS (except in development)
-    - samesite=lax: Prevents CSRF on cross-origin POST
-    - path=/api/auth: Cookie only sent to auth endpoints (minimizes exposure)
-    """
     environment = os.getenv("ENVIRONMENT", "development").lower()
     is_prod = environment == "production"
-
     response.set_cookie(
         key=REFRESH_COOKIE_NAME,
         value=refresh_token,
@@ -172,7 +165,6 @@ def set_refresh_cookie(response: Response, refresh_token: str) -> None:
 
 
 def clear_refresh_cookie(response: Response) -> None:
-    """Clear the refresh token cookie (on logout or token revocation)."""
     response.delete_cookie(
         key=REFRESH_COOKIE_NAME,
         httponly=True,

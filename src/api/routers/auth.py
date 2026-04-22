@@ -18,6 +18,7 @@ from src.api.schemas.auth import (
 )
 from src.auth.dependencies import get_current_user
 from src.auth.jwt_handler import (
+    ACCESS_TOKEN_EXPIRE_MINUTES,
     REFRESH_COOKIE_NAME,
     REFRESH_TOKEN_EXPIRE_DAYS,
     clear_access_cookie,
@@ -176,7 +177,10 @@ async def login(request: Request, response: Response, body: LoginRequest, db: As
 
     logger.info("AUTH: User '%s' (id=%s) logged in from %s", user.username, user.id, client_ip)
     return LoginResponse(
-        access_token=access_token,
+        # access_token intentionally NOT in body — httpOnly cookie only (SEC-012)
+        # Frontend reads expires_in to schedule refresh. Legacy clients that decode
+        # the JWT for expiry get None and must fall back to expires_in.
+        expires_in=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
         # refresh_token intentionally NOT in response body — httpOnly cookie only
     )
 
@@ -185,7 +189,7 @@ async def login(request: Request, response: Response, body: LoginRequest, db: As
 
 
 @router.post("/refresh", response_model=TokenResponse)
-@limiter.limit("5/minute")
+@limiter.limit("2/minute")
 async def refresh_token(
     request: Request,
     response: Response,
@@ -265,25 +269,52 @@ async def refresh_token(
     token_data = {"sub": str(user.id), "role": user.role, "tv": user_tv}
     access_token = create_access_token(token_data)
 
-    # Issue a fresh access token but DO NOT rotate the refresh token. Rotating
-    # caused logouts under normal use because two parallel refresh requests
-    # (PWA wake-up + interceptor 401, multi-tab visibility events) raced on
-    # the same session row, leaving the browser with a token whose hash no
-    # longer existed in the DB. The next refresh would then fail and force a
-    # login. With httpOnly + secure cookies the theft window is small enough
-    # that we accept the trade-off.
-    set_access_cookie(response, access_token)
-    await db.execute(
+    # Optimistic refresh-token rotation (SEC-002).
+    # Try to atomically rotate the session's refresh-token hash using session_version
+    # as the lock. If two parallel refreshes race, only one UPDATE matches the version
+    # and wins the rotation; the loser keeps the current cookie but still gets a new
+    # access token. This eliminates the forced-logout regression that motivated the
+    # previous no-rotation policy while closing the unbounded-theft window.
+    new_refresh = create_refresh_token(token_data)
+    new_hash = _hash_token(new_refresh)
+    now = datetime.now(timezone.utc)
+    rotate_result = await db.execute(
         update(UserSession)
-        .where(UserSession.session_token_hash == _hash_token(raw_token))
-        .values(last_activity=datetime.now(timezone.utc))
+        .where(
+            UserSession.id == session.id,
+            UserSession.session_version == session.session_version,
+            UserSession.is_active.is_(True),
+        )
+        .values(
+            session_token_hash=new_hash,
+            session_version=UserSession.session_version + 1,
+            last_activity=now,
+            expires_at=now + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS),
+        )
     )
+
+    set_access_cookie(response, access_token)
+    rotated = rotate_result.rowcount == 1
+    if rotated:
+        set_refresh_cookie(response, new_refresh)
+    else:
+        # Lost the race (another request rotated first). Don't overwrite the cookie —
+        # the browser already has a valid refresh token from the winning request.
+        # Just bump last_activity on whatever the current row is.
+        await db.execute(
+            update(UserSession)
+            .where(UserSession.user_id == int(user_id), UserSession.is_active.is_(True))
+            .values(last_activity=now)
+        )
     await db.commit()
 
-    logger.info("AUTH: Token refreshed for user_id=%s (tv=%s) from %s", user.id, user.token_version, client_ip)
+    logger.info(
+        "AUTH: Token refreshed for user_id=%s (tv=%s, rotated=%s) from %s",
+        user.id, user.token_version, rotated, client_ip,
+    )
     return TokenResponse(
-        access_token=access_token,
-        # refresh_token NOT in body — httpOnly cookie only
+        # access_token NOT in body — httpOnly cookie only (SEC-012)
+        expires_in=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
     )
 
 
