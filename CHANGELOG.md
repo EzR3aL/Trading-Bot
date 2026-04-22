@@ -11,6 +11,23 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ## [Unreleased]
 
+### 2026-04-22 — ARCH-C1 Phase 1: service-layer scaffolding + characterization tests (#253)
+
+First execution step of the service-layer refactor plan (`Anleitungen/refactor_plan_service_layer.md`). **No production behavior change.** Sets up the safety net for PR-3 onward (read-only service extraction).
+
+#### Added (scaffolding)
+- **[services]** `src/services/exceptions.py` — `ServiceError` base + `TradeNotFound`, `NotOwnedByUser`, `SyncInProgress`, `InvalidTpSlIntent`. Router will map these to HTTP status codes; this module does not import FastAPI.
+- **[services]** `src/services/trades_service.py` — `TradesService(db, user)` placeholder. Populated in PR-3/PR-4.
+- **[services]** `src/services/portfolio_service.py` — `PortfolioService(db, user)` placeholder. Populated in PR-5.
+- **[services]** `src/services/trade_sync_service.py` — `TradeSyncService(db, user)` placeholder. Populated in PR-7.
+- **[services]** `src/services/tpsl_service.py` — `TpSlService(db, user, risk_state_manager=None)` placeholder — RSM is constructor-injected for testability (plan §5). Populated in PR-6.
+
+#### Added (tests — freeze current behavior)
+- **[test]** `tests/integration/test_trades_router_characterization.py` — **14 characterization tests** covering all 6 handlers in `src/api/routers/trades.py`: list / filter-options / sync / detail / risk-state / tp-sl. Behaviors frozen include: the `POST /sync` response key is `synced` (not `synced_count`); `GET /{id}` and `PUT /{id}/tp-sl` return 404 (not 403) for "not owned by user" because ownership is fused into the SQL WHERE; `GET /{id}/risk-state` returns 404 when `risk_state_manager_enabled=False`.
+- **[test]** `tests/integration/test_portfolio_router_characterization.py` — **10 characterization tests** covering all 4 handlers in `src/api/routers/portfolio.py`: summary / positions / daily / allocation. Behaviors frozen: `/summary` has no in-memory cache (only `/positions` and `/allocation` do); `/positions` silently ignores an `?exchange=` query param (it doesn't exist on the handler); `/allocation` returns raw balances, not normalized percentages.
+
+All 24 new tests carry `@pytest.mark.characterization`.
+
 ### Added
 - **WebSocketManager im App-Lifespan verdrahtet (#240)**: `src/bot/ws_credentials_provider.py` löst `(user_id, exchange)` gegen `ExchangeConnection` + `BotConfig` auf und liefert entschlüsselte Credentials (Bitget: api_key/api_secret/passphrase/demo_mode aus der neuesten enabled BotConfig; Hyperliquid: wallet_address aus `api_key_encrypted` — HL hat keine dedizierte Wallet-Spalte, der Client speichert sie als api_key). Die `lifespan` in `src/api/main_app.py` konstruiert nach RiskStateManager-Resolve einen Prozess-weiten `WebSocketManager`, legt ihn auf `app.state.exchange_ws_manager` (dort wo `/api/health` ihn bereits erwartet) und ruft `start_for_user` für jede `(user_id, exchange)` mit `is_enabled=true` Bot-Config. `EXCHANGE_WEBSOCKETS_ENABLED` bleibt default off → `start_for_user` ist dann ein dokumentierter No-Op, kein Production-Verhalten ändert sich bis das Flag explizit an ist. Shutdown ruft `stop_all()` nach dem Audit-Scheduler und vor dem Orchestrator-Shutdown. 7 neue Unit-Tests in `tests/unit/bot/test_ws_credentials_provider.py` (Bitget live/demo, Hyperliquid, fehlende Connection, fehlende Credentials, Default-Live ohne Bot, Unsupported-Exchange).
 - Prometheus risk-state Metriken + Grafana Dashboard (#216 Section 2.3): `src/utils/metrics.py` exportiert drei neue Metriken — `risk_exchange_reject_total` (Counter: `exchange`, `reject_reason`; incremented in den `_parse_response`-Branches von Bitget/BingX/Weex Clients), `risk_intent_duration_seconds` (Histogram: `exchange`, `leg`, `outcome`; misst die End-to-End-Latenz von `RiskStateManager.apply_intent` über alle 2PC-Phasen), und `risk_sync_drift_total` (Counter: `field`; incremented pro DB-Feld das `RiskStateManager.reconcile` vom Exchange-State überschreibt). Die Metriken landen im Default-Registry und werden über den bereits existierenden `GET /metrics`-Endpoint (IP-restricted in Prod via `METRICS_ALLOWED_IPS`) von Prometheus gescrapt. Dashboard-Template in `docs/grafana/risk-state-dashboard.json` (Panels: Reject-Rate gestackt per Exchange, Intent-Duration P50/P95/P99 pro Leg, Drift-Count pro Feld; schemaVersion 38). Unit-Tests in `tests/unit/utils/test_metrics.py` decken Label-Contract, Counter-Inkremente und Histogram-Observation ab. Metrik-Helper sind best-effort — eine fehlschlagende Instrumentierung blockiert niemals den Request-Pfad. `prometheus-client` in `requirements.txt` auf `~=0.20.0` gepinnt.
