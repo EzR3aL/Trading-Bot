@@ -29,6 +29,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.pool import NullPool, StaticPool
 
 from src.models.database import Base, BotConfig, TradeRecord, User
 from src.auth.password import hash_password
@@ -60,9 +61,16 @@ async def test_engine():
     """
     test_db_url = os.environ.get("TEST_DATABASE_URL", "sqlite+aiosqlite:///:memory:")
     is_sqlite = test_db_url.startswith("sqlite")
+    # SQLite :memory: needs StaticPool so every session shares one connection
+    # (otherwise each new connection sees a fresh empty DB). Postgres uses
+    # NullPool so connections close immediately and hundreds of function-scoped
+    # engines in CI don't exhaust max_connections.
     engine_kwargs = {"echo": False}
     if is_sqlite:
         engine_kwargs["connect_args"] = {"check_same_thread": False}
+        engine_kwargs["poolclass"] = StaticPool
+    else:
+        engine_kwargs["poolclass"] = NullPool
     engine = create_async_engine(test_db_url, **engine_kwargs)
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
