@@ -1,6 +1,6 @@
 """Unit tests for ``bots_service`` (ARCH-C1 Phase 2b).
 
-Covers the five handlers extracted so far:
+Covers the handlers extracted so far:
 
 PR-1 (#286) — static reads
 * ``list_strategies`` — returns the ``StrategyRegistry.list_available()`` catalog
@@ -11,8 +11,12 @@ PR-2 (#293) — single-bot CRUD
 * ``delete_bot`` — stop-if-running + delete, raises ``BotNotFound``
 * ``duplicate_bot`` — clone with ``MaxBotsReached`` guard
 
-The static-read tests are pure (no DB). The CRUD tests use an in-memory
-SQLite engine, following the same pattern as ``test_trades_service.py``.
+PR-3 (#295) — list with runtime status
+* ``list_bots_with_status`` — batch preloads HL/affiliate state + trade stats
+
+The static-read tests are pure (no DB). The CRUD + list tests use an
+in-memory SQLite engine, following the same pattern as
+``test_trades_service.py``.
 """
 
 from __future__ import annotations
@@ -186,8 +190,13 @@ def _make_bot(user_id: int, name: str = "TestBot") -> BotConfig:
 class _FakeOrchestrator:
     """Minimal orchestrator stub — tracks stop_bot calls for assertions."""
 
-    def __init__(self, running_ids: set[int] | None = None) -> None:
+    def __init__(
+        self,
+        running_ids: set[int] | None = None,
+        statuses: dict[int, dict] | None = None,
+    ) -> None:
         self._running = running_ids or set()
+        self._statuses = statuses or {}
         self.stopped: list[int] = []
 
     def is_running(self, bot_id: int) -> bool:
@@ -196,6 +205,9 @@ class _FakeOrchestrator:
     async def stop_bot(self, bot_id: int) -> None:
         self.stopped.append(bot_id)
         self._running.discard(bot_id)
+
+    def get_bot_status(self, bot_id: int) -> dict | None:
+        return self._statuses.get(bot_id)
 
 
 # ---------------------------------------------------------------------------
@@ -362,3 +374,123 @@ async def test_duplicate_bot_raises_on_max_bots(session_factory, user, monkeypat
     async with session_factory() as s:
         with pytest.raises(MaxBotsReached):
             await bots_service.duplicate_bot(s, user.id, bot_id)
+
+
+# ---------------------------------------------------------------------------
+# list_bots_with_status
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_list_bots_with_status_empty(session_factory, user):
+    """User with no bots → empty list (no crashes on empty bot_ids)."""
+    orchestrator = _FakeOrchestrator()
+    async with session_factory() as s:
+        result = await bots_service.list_bots_with_status(s, user, orchestrator)
+
+    assert result == []
+
+
+@pytest.mark.asyncio
+async def test_list_bots_with_status_returns_only_owned(
+    session_factory, user, other_user,
+):
+    """Foreign bots never appear in the user's listing."""
+    async with session_factory() as s:
+        s.add(_make_bot(user.id, "Mine"))
+        s.add(_make_bot(other_user.id, "Yours"))
+        await s.commit()
+
+    orchestrator = _FakeOrchestrator()
+    async with session_factory() as s:
+        result = await bots_service.list_bots_with_status(s, user, orchestrator)
+
+    assert [b.name for b in result] == ["Mine"]
+    assert result[0].exchange_type == "bitget"
+    assert result[0].is_enabled is False
+    # No runtime entry → idle for disabled bot
+    assert result[0].status == "idle"
+
+
+@pytest.mark.asyncio
+async def test_list_bots_with_status_respects_demo_mode_filter(
+    session_factory, user,
+):
+    """``demo_mode=True`` keeps demo/both bots only (live bot excluded)."""
+    async with session_factory() as s:
+        demo = _make_bot(user.id, "DemoBot")
+        demo.mode = "demo"
+        live = _make_bot(user.id, "LiveBot")
+        live.mode = "live"
+        both = _make_bot(user.id, "BothBot")
+        both.mode = "both"
+        s.add_all([demo, live, both])
+        await s.commit()
+
+    orchestrator = _FakeOrchestrator()
+
+    async with session_factory() as s:
+        demo_only = await bots_service.list_bots_with_status(
+            s, user, orchestrator, demo_mode=True,
+        )
+    assert sorted(b.name for b in demo_only) == ["BothBot", "DemoBot"]
+
+    async with session_factory() as s:
+        live_only = await bots_service.list_bots_with_status(
+            s, user, orchestrator, demo_mode=False,
+        )
+    assert sorted(b.name for b in live_only) == ["BothBot", "LiveBot"]
+
+
+@pytest.mark.asyncio
+async def test_list_bots_with_status_admin_bypasses_hl_gates(
+    session_factory, user,
+):
+    """Admin role short-circuits HL/affiliate preloads to 'verified'."""
+    user.role = "admin"
+    async with session_factory() as s:
+        bot = _make_bot(user.id, "HLBot")
+        bot.exchange_type = "hyperliquid"
+        s.add(bot)
+        await s.commit()
+
+    orchestrator = _FakeOrchestrator()
+    async with session_factory() as s:
+        # Re-attach the admin user under this session
+        result = await bots_service.list_bots_with_status(s, user, orchestrator)
+
+    assert len(result) == 1
+    assert result[0].builder_fee_approved is True
+    assert result[0].referral_verified is True
+
+
+@pytest.mark.asyncio
+async def test_list_bots_with_status_exposes_runtime_state(session_factory, user):
+    """When orchestrator reports status, it overrides the config-derived default."""
+    async with session_factory() as s:
+        bot = _make_bot(user.id, "RunningBot")
+        bot.is_enabled = True
+        s.add(bot)
+        await s.commit()
+        await s.refresh(bot)
+        bot_id = bot.id
+
+    orchestrator = _FakeOrchestrator(
+        statuses={
+            bot_id: {
+                "status": "running",
+                "trades_today": 3,
+                "started_at": "2026-04-22T12:00:00Z",
+                "last_analysis": "2026-04-22T12:05:00Z",
+                "error_message": None,
+            }
+        }
+    )
+
+    async with session_factory() as s:
+        result = await bots_service.list_bots_with_status(s, user, orchestrator)
+
+    assert len(result) == 1
+    assert result[0].status == "running"
+    assert result[0].trades_today == 3
+    assert result[0].started_at == "2026-04-22T12:00:00Z"
