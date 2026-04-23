@@ -1,0 +1,10 @@
+# Dev-only tooling (not installed in production image).
+# Install with:  pip install -r requirements-dev.txt
+
+-r requirements.txt
+
+# Security / dependency auditing — run by .github/workflows/security-audit.yml
+pip-audit>=2.7.0
+
+# Test extras used in CI but not in the prod container
+pytest-timeout>=2.3.0
