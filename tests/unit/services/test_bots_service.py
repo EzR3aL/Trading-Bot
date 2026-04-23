@@ -14,8 +14,12 @@ PR-2 (#293) — single-bot CRUD
 PR-3 (#295) — list with runtime status
 * ``list_bots_with_status`` — batch preloads HL/affiliate state + trade stats
 
-The static-read tests are pure (no DB). The CRUD + list tests use an
-in-memory SQLite engine, following the same pattern as
+PR-4 (#297) — write handlers
+* ``create_bot`` — strategy/symbol validation + encryption + audit log
+* ``update_bot`` — running guard + partial patch + audit log
+
+The static-read tests are pure (no DB). The CRUD + list + write tests use
+an in-memory SQLite engine, following the same pattern as
 ``test_trades_service.py``.
 """
 
@@ -45,10 +49,19 @@ from sqlalchemy.ext.asyncio import (  # noqa: E402
     create_async_engine,
 )
 
+from unittest.mock import AsyncMock  # noqa: E402
+
+from src.api.schemas.bots import BotConfigCreate, BotConfigUpdate  # noqa: E402
 from src.auth.password import hash_password  # noqa: E402
 from src.models.database import Base, BotConfig, User  # noqa: E402
 from src.services import bots_service  # noqa: E402
-from src.services.exceptions import BotNotFound, MaxBotsReached  # noqa: E402
+from src.services.exceptions import (  # noqa: E402
+    BotIsRunning,
+    BotNotFound,
+    InvalidSymbols,
+    MaxBotsReached,
+    StrategyNotFound,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -494,3 +507,250 @@ async def test_list_bots_with_status_exposes_runtime_state(session_factory, user
     assert result[0].status == "running"
     assert result[0].trades_today == 3
     assert result[0].started_at == "2026-04-22T12:00:00Z"
+
+
+# ---------------------------------------------------------------------------
+# create_bot
+# ---------------------------------------------------------------------------
+
+
+def _make_create_body(**overrides) -> BotConfigCreate:
+    """Minimal valid ``BotConfigCreate`` body, overridable per-test."""
+    data = {
+        "name": "NewBot",
+        "strategy_type": "edge_indicator",
+        "exchange_type": "bitget",
+        "mode": "demo",
+        "trading_pairs": ["BTCUSDT"],
+    }
+    data.update(overrides)
+    return BotConfigCreate(**data)
+
+
+@pytest.mark.asyncio
+async def test_create_bot_happy_path(session_factory, user, monkeypatch):
+    """Validation passes, row is inserted disabled, name/strategy match the body."""
+    monkeypatch.setattr(
+        bots_service,
+        "get_exchange_symbols",
+        AsyncMock(return_value={"BTCUSDT"}),
+    )
+
+    body = _make_create_body()
+    async with session_factory() as s:
+        config = await bots_service.create_bot(s, user.id, body)
+        await s.commit()
+        new_id = config.id
+
+    async with session_factory() as s:
+        fetched = await bots_service.get_bot(s, user.id, new_id)
+
+    assert fetched.name == "NewBot"
+    assert fetched.strategy_type == "edge_indicator"
+    assert fetched.is_enabled is False
+    # trading_pairs is stored as JSON string
+    import json as _json
+    assert _json.loads(fetched.trading_pairs) == ["BTCUSDT"]
+
+
+@pytest.mark.asyncio
+async def test_create_bot_raises_strategy_not_found(
+    session_factory, user, monkeypatch,
+):
+    monkeypatch.setattr(
+        bots_service,
+        "get_exchange_symbols",
+        AsyncMock(return_value={"BTCUSDT"}),
+    )
+    body = _make_create_body(strategy_type="does_not_exist")
+
+    async with session_factory() as s:
+        with pytest.raises(StrategyNotFound) as excinfo:
+            await bots_service.create_bot(s, user.id, body)
+    assert excinfo.value.strategy_name == "does_not_exist"
+
+
+@pytest.mark.asyncio
+async def test_create_bot_raises_invalid_symbols(
+    session_factory, user, monkeypatch,
+):
+    monkeypatch.setattr(
+        bots_service,
+        "get_exchange_symbols",
+        AsyncMock(return_value={"ETHUSDT"}),  # no BTCUSDT
+    )
+    body = _make_create_body(trading_pairs=["BTCUSDT", "ETHUSDT"])
+
+    async with session_factory() as s:
+        with pytest.raises(InvalidSymbols) as excinfo:
+            await bots_service.create_bot(s, user.id, body)
+    assert excinfo.value.invalid_symbols == ["BTCUSDT"]
+    assert excinfo.value.exchange == "bitget"
+    assert excinfo.value.mode_label == "demo"
+
+
+@pytest.mark.asyncio
+async def test_create_bot_raises_max_bots(session_factory, user, monkeypatch):
+    monkeypatch.setattr(bots_service, "MAX_BOTS_PER_USER", 1)
+    monkeypatch.setattr(
+        bots_service,
+        "get_exchange_symbols",
+        AsyncMock(return_value={"BTCUSDT"}),
+    )
+    # Pre-seed one bot so the count already equals the limit.
+    async with session_factory() as s:
+        s.add(_make_bot(user.id, "ExistingOne"))
+        await s.commit()
+
+    body = _make_create_body(name="SecondOne")
+    async with session_factory() as s:
+        with pytest.raises(MaxBotsReached):
+            await bots_service.create_bot(s, user.id, body)
+
+
+@pytest.mark.asyncio
+async def test_create_bot_encrypts_webhook_and_telegram(
+    session_factory, user, monkeypatch,
+):
+    """Discord webhook URL and Telegram token pass through encrypt_value."""
+    monkeypatch.setattr(
+        bots_service,
+        "get_exchange_symbols",
+        AsyncMock(return_value={"BTCUSDT"}),
+    )
+    # Replace real Fernet encryption with a deterministic tag so the test
+    # doesn't depend on ENCRYPTION_KEY formatting.
+    monkeypatch.setattr(bots_service, "encrypt_value", lambda v: f"ENC::{v}")
+
+    body = _make_create_body(
+        discord_webhook_url="https://discord.com/api/webhooks/1/abc",
+        telegram_bot_token="123:secret",
+        telegram_chat_id="42",
+    )
+
+    async with session_factory() as s:
+        config = await bots_service.create_bot(s, user.id, body)
+        await s.commit()
+        new_id = config.id
+
+    async with session_factory() as s:
+        fetched = await bots_service.get_bot(s, user.id, new_id)
+
+    assert fetched.discord_webhook_url == "ENC::https://discord.com/api/webhooks/1/abc"
+    assert fetched.telegram_bot_token == "ENC::123:secret"
+    assert fetched.telegram_chat_id == "ENC::42"
+
+
+# ---------------------------------------------------------------------------
+# update_bot
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_update_bot_applies_partial_patch(session_factory, user, monkeypatch):
+    """Only fields present in the body are touched; others are preserved."""
+    monkeypatch.setattr(
+        bots_service,
+        "get_exchange_symbols",
+        AsyncMock(return_value={"BTCUSDT", "ETHUSDT"}),
+    )
+    async with session_factory() as s:
+        bot = _make_bot(user.id, "BeforeUpdate")
+        s.add(bot)
+        await s.commit()
+        await s.refresh(bot)
+        bot_id = bot.id
+
+    orchestrator = _FakeOrchestrator()
+    body = BotConfigUpdate(name="AfterUpdate", leverage=7)
+
+    async with session_factory() as s:
+        config = await bots_service.update_bot(s, user.id, bot_id, body, orchestrator)
+        await s.commit()
+        new_name = config.name
+        new_leverage = config.leverage
+        old_lev_in_db = (await bots_service.get_bot(s, user.id, bot_id)).leverage
+
+    assert new_name == "AfterUpdate"
+    assert new_leverage == 7
+    assert old_lev_in_db == 7
+
+
+@pytest.mark.asyncio
+async def test_update_bot_raises_bot_not_found(session_factory, user):
+    orchestrator = _FakeOrchestrator()
+    body = BotConfigUpdate(name="Whatever")
+
+    async with session_factory() as s:
+        with pytest.raises(BotNotFound):
+            await bots_service.update_bot(s, user.id, 99999, body, orchestrator)
+
+
+@pytest.mark.asyncio
+async def test_update_bot_raises_when_running(session_factory, user):
+    async with session_factory() as s:
+        bot = _make_bot(user.id, "RunningBot")
+        s.add(bot)
+        await s.commit()
+        await s.refresh(bot)
+        bot_id = bot.id
+
+    orchestrator = _FakeOrchestrator(running_ids={bot_id})
+    body = BotConfigUpdate(name="CantEdit")
+
+    async with session_factory() as s:
+        with pytest.raises(BotIsRunning) as excinfo:
+            await bots_service.update_bot(s, user.id, bot_id, body, orchestrator)
+    assert excinfo.value.bot_id == bot_id
+
+
+@pytest.mark.asyncio
+async def test_update_bot_raises_invalid_symbols(session_factory, user, monkeypatch):
+    monkeypatch.setattr(
+        bots_service,
+        "get_exchange_symbols",
+        AsyncMock(return_value={"ETHUSDT"}),
+    )
+    async with session_factory() as s:
+        bot = _make_bot(user.id, "Bot")
+        s.add(bot)
+        await s.commit()
+        await s.refresh(bot)
+        bot_id = bot.id
+
+    orchestrator = _FakeOrchestrator()
+    body = BotConfigUpdate(trading_pairs=["NOSUCHUSDT"])
+
+    async with session_factory() as s:
+        with pytest.raises(InvalidSymbols) as excinfo:
+            await bots_service.update_bot(s, user.id, bot_id, body, orchestrator)
+    assert "NOSUCHUSDT" in excinfo.value.invalid_symbols
+
+
+@pytest.mark.asyncio
+async def test_update_bot_clears_webhook_on_empty_string(
+    session_factory, user, monkeypatch,
+):
+    """An explicit empty-string for discord_webhook_url clears the stored value."""
+    monkeypatch.setattr(
+        bots_service,
+        "get_exchange_symbols",
+        AsyncMock(return_value={"BTCUSDT"}),
+    )
+    async with session_factory() as s:
+        bot = _make_bot(user.id, "WithWebhook")
+        bot.discord_webhook_url = "already-encrypted-blob"
+        s.add(bot)
+        await s.commit()
+        await s.refresh(bot)
+        bot_id = bot.id
+
+    orchestrator = _FakeOrchestrator()
+    body = BotConfigUpdate(discord_webhook_url="")
+
+    async with session_factory() as s:
+        config = await bots_service.update_bot(s, user.id, bot_id, body, orchestrator)
+        await s.commit()
+        after = config.discord_webhook_url
+
+    assert after is None
