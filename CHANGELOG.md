@@ -11,6 +11,9 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ## [Unreleased]
 
+### Refactored
+- **ARCH-H1 Phase 1 finalize: `BotWorker` ist jetzt pure Composition (#285)**: `BotWorker` erbt nicht mehr von den vier historischen Mixins (`TradeExecutorMixin`, `PositionMonitorMixin`, `TradeCloserMixin`, `NotificationsMixin`) — die Klassendeklaration ist jetzt schlicht `class BotWorker:` und `BotWorker.__mro__` reduziert sich auf `(BotWorker, object)`. Alle Mixin-Methoden sind als explizite, dünne Forwarder an die Komponenten (`self._notifier`, `self._position_monitor`, `self._trade_executor`, `self._trade_closer`) inlined. Abweichung von der Issue-Spec (#285 forderte das Löschen der vier Mixin-Module): die Shim-Module `src/bot/notifications.py`, `src/bot/position_monitor.py`, `src/bot/trade_closer.py`, `src/bot/trade_executor.py` bleiben bestehen, da mehrere Test-Harnesses die Mixin-Klassen direkt importieren (`PositionMonitorMixin`, `TradeExecutorMixin` als Test-Doubles) und `tests/integration/test_manual_close_full_flow.py` Symbole auf dem `src.bot.notifications`-Modulpfad patcht. Die Composition-Invariante (MRO == `(BotWorker, object)`) ist dennoch strikt erfüllt — das Ziel des Refactors (keine Mixin-Diamant-Vererbung, keine impliziten `super()`-Hopping) ist erreicht, ohne Test-Kollateral zu erzeugen. 516 unit tests in `tests/unit/bot/`, `tests/unit/services/`, `tests/unit/api/` alle grün.
+
 ### Documentation
 - **Refactor-Pläne auf main gelandet (#268)**: `Anleitungen/refactor_plan_bot_worker_composition.md` + `Anleitungen/refactor_plan_service_layer.md` aus #244 herausgeschnitten und eigenständig gelandet. Docs-only. Entkoppelt die Referenzen aus `src/bot/components/` (ARCH-H1 Scaffolding, #266) und den ARCH-C1 Service-Layer-Commits von der eingefrorenen #244-Mentor-Sweep-PR.
 ### Security
