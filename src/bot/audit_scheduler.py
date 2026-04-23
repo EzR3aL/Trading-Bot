@@ -343,15 +343,120 @@ class AuditScheduler:
 # ── Default notifier backed by the project's Discord + Telegram stack ──
 
 
+async def _load_admin_notification_config() -> dict:
+    """Resolve admin notifier credentials from DB first, falling back to env.
+
+    Strategy (Issue #242):
+    1. Find the first active admin user (``role='admin'`` AND ``is_active=True``).
+    2. Pick the newest enabled ``BotConfig`` of that admin that has any of the
+       relevant notification fields populated — notifier fields live on
+       ``BotConfig`` (per-bot), not on ``User``.
+    3. Decrypt each field individually. Missing / undecryptable values fall
+       back to the matching ``ADMIN_*`` env var.
+    4. If neither DB nor env yields credentials for a channel, that channel is
+       skipped by the caller (no-op with warn log).
+
+    Returns a dict with optional keys ``discord_webhook_url``,
+    ``telegram_bot_token``, ``telegram_chat_id``.
+    """
+    resolved: dict[str, str] = {}
+
+    # 1) DB lookup — best-effort, never raises out of the notifier.
+    try:
+        from sqlalchemy import select
+
+        from src.models.database import BotConfig, User
+        from src.models.session import get_session
+        from src.utils.encryption import decrypt_value
+
+        async with get_session() as session:
+            admin_row = await session.execute(
+                select(User)
+                .where(User.role == "admin", User.is_active.is_(True))
+                .order_by(User.id.asc())
+                .limit(1)
+            )
+            admin = admin_row.scalar_one_or_none()
+
+            if admin is not None:
+                bot_row = await session.execute(
+                    select(BotConfig)
+                    .where(
+                        BotConfig.user_id == admin.id,
+                        BotConfig.is_enabled.is_(True),
+                    )
+                    .order_by(BotConfig.updated_at.desc().nullslast(), BotConfig.id.desc())
+                )
+                for candidate in bot_row.scalars().all():
+                    if candidate.discord_webhook_url and "discord_webhook_url" not in resolved:
+                        try:
+                            plain = decrypt_value(candidate.discord_webhook_url)
+                            if plain:
+                                resolved["discord_webhook_url"] = plain
+                        except Exception as decrypt_err:  # noqa: BLE001
+                            logger.warning(
+                                "audit default_admin_notifier discord decrypt failed: %s",
+                                decrypt_err,
+                            )
+                    if (
+                        candidate.telegram_bot_token
+                        and candidate.telegram_chat_id
+                        and "telegram_bot_token" not in resolved
+                    ):
+                        try:
+                            token_plain = decrypt_value(candidate.telegram_bot_token)
+                            chat_plain = decrypt_value(candidate.telegram_chat_id)
+                            if token_plain and chat_plain:
+                                resolved["telegram_bot_token"] = token_plain
+                                resolved["telegram_chat_id"] = chat_plain
+                        except Exception as decrypt_err:  # noqa: BLE001
+                            logger.warning(
+                                "audit default_admin_notifier telegram decrypt failed: %s",
+                                decrypt_err,
+                            )
+                    if "discord_webhook_url" in resolved and "telegram_bot_token" in resolved:
+                        break
+    except Exception as db_err:  # noqa: BLE001 — never block the audit path
+        logger.warning("audit default_admin_notifier db lookup failed: %s", db_err)
+
+    # 2) Env fallback for any channel the DB did not fill.
+    if "discord_webhook_url" not in resolved:
+        env_webhook = os.getenv("ADMIN_DISCORD_WEBHOOK_URL", "").strip()
+        if env_webhook:
+            resolved["discord_webhook_url"] = env_webhook
+
+    if "telegram_bot_token" not in resolved:
+        env_token = os.getenv("ADMIN_TELEGRAM_BOT_TOKEN", "").strip()
+        env_chat = os.getenv("ADMIN_TELEGRAM_CHAT_ID", "").strip()
+        if env_token and env_chat:
+            resolved["telegram_bot_token"] = env_token
+            resolved["telegram_chat_id"] = env_chat
+
+    return resolved
+
+
 async def default_admin_notifier(summary: str, outcome: dict) -> None:
     """Send ``summary`` to the admin Discord webhook and Telegram chat.
 
-    Reads the webhook/bot credentials from the environment so the scheduler
-    stays usable in containers without needing a per-bot config lookup.
-    Missing env vars mean the respective channel is skipped — the log
-    warning is the baseline signal.
+    Credential lookup (Issue #242): DB-first via the first active admin
+    user's newest enabled ``BotConfig`` (same fields the BotBuilder already
+    writes/encrypts), with ``ADMIN_*`` env vars as fallback so existing
+    deployments keep working until the admin configures the DB values. When
+    neither source yields credentials for a channel, that channel is
+    skipped — the ``audit_scheduler.finding`` WARN log remains the baseline
+    signal.
     """
-    webhook_url = os.getenv("ADMIN_DISCORD_WEBHOOK_URL", "").strip()
+    config = await _load_admin_notification_config()
+    finding_count = float(len(outcome.get("findings", []) or []))
+
+    if not config:
+        logger.warning(
+            "audit default_admin_notifier: no admin channels configured "
+            "(DB admin user/bot + ADMIN_* env vars both empty) — skipping delivery",
+        )
+        return
+
+    webhook_url = config.get("discord_webhook_url", "")
     if webhook_url:
         try:
             from src.notifications.discord_notifier import DiscordNotifier
@@ -359,15 +464,15 @@ async def default_admin_notifier(summary: str, outcome: dict) -> None:
                 await notifier.send_alert(
                     alert_type="audit",
                     symbol=None,
-                    current_value=float(len(outcome.get("findings", []) or [])),
+                    current_value=finding_count,
                     threshold=0.0,
                     message=summary,
                 )
         except Exception as e:  # noqa: BLE001
             logger.warning("audit default_admin_notifier discord error: %s", e)
 
-    bot_token = os.getenv("ADMIN_TELEGRAM_BOT_TOKEN", "").strip()
-    chat_id = os.getenv("ADMIN_TELEGRAM_CHAT_ID", "").strip()
+    bot_token = config.get("telegram_bot_token", "")
+    chat_id = config.get("telegram_chat_id", "")
     if bot_token and chat_id:
         try:
             from src.notifications.telegram_notifier import TelegramNotifier
@@ -376,7 +481,7 @@ async def default_admin_notifier(summary: str, outcome: dict) -> None:
                 await notifier.send_alert(
                     alert_type="audit",
                     symbol=None,
-                    current_value=float(len(outcome.get("findings", []) or [])),
+                    current_value=finding_count,
                     threshold=0.0,
                     message=summary,
                 )
