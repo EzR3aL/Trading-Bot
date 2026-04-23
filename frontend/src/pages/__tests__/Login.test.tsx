@@ -27,6 +27,15 @@ vi.mock('react-i18next', () => ({
   }),
 }))
 
+// Mock the toast wrapper — errors now surface as toasts rather than inline banners.
+const mockShowError = vi.fn()
+vi.mock('../../utils/toast', () => ({
+  showError: (msg: string) => mockShowError(msg),
+  showSuccess: vi.fn(),
+  showInfo: vi.fn(),
+  showWarning: vi.fn(),
+}))
+
 // Mock the api client to prevent side effects from authStore import
 vi.mock('../../api/client', () => ({
   default: {
@@ -42,6 +51,7 @@ vi.mock('../../api/client', () => ({
 describe('Login Page', () => {
   beforeEach(() => {
     mockNavigate.mockClear()
+    mockShowError.mockClear()
     useAuthStore.setState({
       user: null,
       isAuthenticated: false,
@@ -119,7 +129,7 @@ describe('Login Page', () => {
     })
   })
 
-  it('should display error message on login failure', async () => {
+  it('should show error toast on login failure', async () => {
     const mockLogin = vi.fn().mockRejectedValueOnce(new Error('fail'))
     useAuthStore.setState({ login: mockLogin } as unknown as Parameters<typeof useAuthStore.setState>[0])
 
@@ -131,7 +141,7 @@ describe('Login Page', () => {
     await user.click(screen.getByText('Sign in'))
 
     await waitFor(() => {
-      expect(screen.getByText('Invalid username or password')).toBeInTheDocument()
+      expect(mockShowError).toHaveBeenCalledWith('Invalid username or password')
     })
   })
 
@@ -153,7 +163,7 @@ describe('Login Page', () => {
     expect(submitButton).toBeDisabled()
   })
 
-  it('should clear error on new submit attempt', async () => {
+  it('should navigate home on a successful retry after a failed attempt', async () => {
     const mockLogin = vi.fn()
       .mockRejectedValueOnce(new Error('fail'))
       .mockResolvedValueOnce(undefined)
@@ -162,20 +172,20 @@ describe('Login Page', () => {
     const user = userEvent.setup()
     render(<Login />)
 
-    // First attempt - fails
+    // First attempt - fails — a toast is dispatched
     await user.type(screen.getByLabelText(/Username/), 'bad')
     await user.type(screen.getByLabelText(/Password/), 'wrong')
     await user.click(screen.getByText('Sign in'))
 
     await waitFor(() => {
-      expect(screen.getByText('Invalid username or password')).toBeInTheDocument()
+      expect(mockShowError).toHaveBeenCalledWith('Invalid username or password')
     })
 
-    // Second attempt - error should be cleared during submission
+    // Second attempt — the toast surface is separate from the form, so the
+    // form submits cleanly and navigates home.
     fireEvent.submit(screen.getByRole('button').closest('form')!)
 
     await waitFor(() => {
-      // After successful login, error should be gone and navigation should happen
       expect(mockNavigate).toHaveBeenCalledWith('/')
     })
   })

@@ -442,7 +442,12 @@ export default function BotPerformance() {
   const tradeCardRef = useRef<HTMLDivElement>(null)
   const swipeTradeModal = useSwipeToClose({ onClose: () => setSelectedTrade(null), enabled: isMobile && selectedTrade !== null })
   const latestCardRef = useRef<HTMLDivElement>(null)
-  const mobileShareRefs = useRef<Map<number, HTMLDivElement>>(new Map())
+  // Lazy-mount mobile share capture: only render the card for the trade
+  // currently being shared. Previously we pre-rendered every closed trade in
+  // a hidden div at -9999px — a performance drain since React re-ran that
+  // subtree on every parent state change.
+  const [sharingTrade, setSharingTrade] = useState<BotDetailStats['recent_trades'][0] | null>(null)
+  const shareResolveRef = useRef<((el: HTMLDivElement | null) => void) | null>(null)
   const handleShare = async (ref: React.RefObject<HTMLDivElement | null>, trade: { symbol: string; side: string; pnl_percent: number }, affiliateUrl?: string, copiedSetter?: (v: boolean) => void) => {
     if (!ref.current) return
     const setFlag = copiedSetter || setCopied
@@ -494,13 +499,23 @@ export default function BotPerformance() {
   }
 
   const handleMobileDirectShare = useCallback(async (trade: BotDetailStats['recent_trades'][0]) => {
-    const ref = mobileShareRefs.current.get(trade.id)
-    if (!ref) { setSelectedTrade(trade); return }
     try {
+      // Lazy-mount the hidden capture card for this trade and wait for
+      // the callback ref to fire once React has committed the node to
+      // the DOM. This keeps the share-capture subtree out of the DOM
+      // until the user actually invokes share.
+      const mountPromise = new Promise<HTMLDivElement | null>((resolve) => {
+        shareResolveRef.current = resolve
+      })
+      setSharingTrade(trade)
+      const ref = await mountPromise
+      if (!ref) { setSharingTrade(null); setSelectedTrade(trade); return }
       const blob = await toBlob(ref, {
         pixelRatio: 2,
         backgroundColor: theme === 'light' ? '#f8fafc' : '#0b0f19',
       })
+      // Unmount the capture div as soon as the blob is produced.
+      setSharingTrade(null)
       if (!blob) { setSelectedTrade(trade); return }
       const file = new File([blob], 'trade.png', { type: 'image/png' })
       const pnlStr = trade.pnl_percent >= 0 ? `+${trade.pnl_percent.toFixed(2)}%` : `${trade.pnl_percent.toFixed(2)}%`
@@ -517,6 +532,7 @@ export default function BotPerformance() {
         setSelectedTrade(trade)
       }
     } catch (err) {
+      setSharingTrade(null)
       if ((err as DOMException).name !== 'AbortError') {
         console.error('Failed to share image:', err)
         useToastStore.getState().addToast('error', t('common.error'))
@@ -878,49 +894,61 @@ export default function BotPerformance() {
                             onShare={() => handleMobileDirectShare(trade)}
                           />
                         ))}
-                        {/* Hidden capture divs for mobile direct share */}
-                        <div className="absolute -left-[9999px] pointer-events-none" aria-hidden="true">
-                          {botDetail.recent_trades.filter(tr => tr.status === 'closed').map((trade) => (
+                        {/*
+                          Hidden capture div for mobile direct share.
+                          Only mounts while a share is in-flight (sharingTrade !== null)
+                          and only for the single trade being shared. The callback
+                          ref below fires after React commits the node, which lets
+                          handleMobileDirectShare await the mount before calling
+                          toBlob — otherwise the first click would capture nothing.
+                        */}
+                        {sharingTrade && sharingTrade.status === 'closed' && (
+                          <div className="absolute -left-[9999px] pointer-events-none" aria-hidden="true" data-testid="mobile-share-capture">
                             <div
-                              key={trade.id}
-                              ref={(el) => { if (el) mobileShareRefs.current.set(trade.id, el); else mobileShareRefs.current.delete(trade.id) }}
+                              ref={(el) => {
+                                const resolve = shareResolveRef.current
+                                if (el && resolve) {
+                                  shareResolveRef.current = null
+                                  resolve(el)
+                                }
+                              }}
                               className="bg-[#0f1420] rounded-2xl p-5 border border-white/10 shadow-2xl" style={{ width: 420, minWidth: 420 }}
                             >
                               <div className="flex items-center gap-2 mb-1">
                                 <ExchangeIcon exchange={botExchange} size={18} />
-                                <span className="text-lg font-bold text-white">{trade.symbol}</span>
+                                <span className="text-lg font-bold text-white">{sharingTrade.symbol}</span>
                               </div>
                               <div className="flex items-center gap-2 text-sm text-gray-400 mb-4">
                                   <span>Perp</span>
                                   <span className="text-gray-600">|</span>
-                                  <span className={trade.side === 'long' ? 'text-emerald-400 font-medium' : 'text-red-400 font-medium'}>
-                                    {trade.side === 'long' ? '+ LONG' : '- SHORT'}
+                                  <span className={sharingTrade.side === 'long' ? 'text-emerald-400 font-medium' : 'text-red-400 font-medium'}>
+                                    {sharingTrade.side === 'long' ? '+ LONG' : '- SHORT'}
                                   </span>
-                                  {trade.leverage && (
+                                  {sharingTrade.leverage && (
                                     <>
                                       <span className="text-gray-600">|</span>
-                                      <span className="text-white font-medium">{trade.leverage}x</span>
+                                      <span className="text-white font-medium">{sharingTrade.leverage}x</span>
                                     </>
                                   )}
-                                  <span className="text-xs text-gray-500 shrink-0" style={{ marginLeft: 'auto' }}>{formatDate(trade.entry_time)}</span>
+                                  <span className="text-xs text-gray-500 shrink-0" style={{ marginLeft: 'auto' }}>{formatDate(sharingTrade.entry_time)}</span>
                               </div>
                               <div className="text-center py-5 mb-4">
-                                <div className={`text-5xl font-bold tracking-tight ${trade.pnl_percent >= 0 ? 'text-profit' : 'text-loss'}`}>
-                                  {formatPnlPercent(trade.pnl_percent)}
+                                <div className={`text-5xl font-bold tracking-tight ${sharingTrade.pnl_percent >= 0 ? 'text-profit' : 'text-loss'}`}>
+                                  {formatPnlPercent(sharingTrade.pnl_percent)}
                                 </div>
-                                <div className={`text-lg font-semibold mt-1 ${trade.pnl >= 0 ? 'text-profit/70' : 'text-loss/70'}`}>
-                                  <PnlCell pnl={trade.pnl} fees={trade.fees ?? 0} fundingPaid={trade.funding_paid ?? 0} status={trade.status}
-                                    className={`text-lg font-semibold ${trade.pnl >= 0 ? 'text-profit/70' : 'text-loss/70'}`} />
+                                <div className={`text-lg font-semibold mt-1 ${sharingTrade.pnl >= 0 ? 'text-profit/70' : 'text-loss/70'}`}>
+                                  <PnlCell pnl={sharingTrade.pnl} fees={sharingTrade.fees ?? 0} fundingPaid={sharingTrade.funding_paid ?? 0} status={sharingTrade.status}
+                                    className={`text-lg font-semibold ${sharingTrade.pnl >= 0 ? 'text-profit/70' : 'text-loss/70'}`} />
                                 </div>
                               </div>
                               <div className="grid grid-cols-2 gap-4 max-w-xs mx-auto mb-4">
                                 <div className="text-center">
                                   <div className="text-xs text-gray-400 mb-1">{t('bots.entryPrice')}</div>
-                                  <div className="text-white font-semibold text-lg">${trade.entry_price.toLocaleString()}</div>
+                                  <div className="text-white font-semibold text-lg">${sharingTrade.entry_price.toLocaleString()}</div>
                                 </div>
                                 <div className="text-center">
                                   <div className="text-xs text-gray-400 mb-1">{t('bots.exitPrice')}</div>
-                                  <div className="text-white font-semibold text-lg">{trade.exit_price ? `$${trade.exit_price.toLocaleString()}` : '--'}</div>
+                                  <div className="text-white font-semibold text-lg">{sharingTrade.exit_price ? `$${sharingTrade.exit_price.toLocaleString()}` : '--'}</div>
                                 </div>
                               </div>
                               <div className="pt-3 border-t border-white/5">
@@ -933,8 +961,8 @@ export default function BotPerformance() {
                                 )}
                               </div>
                             </div>
-                          ))}
-                        </div>
+                          </div>
+                        )}
                       </>
                     )
                   })()}
