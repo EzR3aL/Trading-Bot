@@ -1,6 +1,13 @@
-"""Notification helpers for BotWorker (mixin) and manual-close API path."""
+"""BotWorker notifications mixin + manual-close API helpers.
 
-from typing import Callable, Optional
+The ``NotificationsMixin`` is a thin proxy delegating to
+``src.bot.components.notifier.Notifier`` (composition refactor — ARCH-H1
+Phase 1 PR-1, #276). Module-level helpers (``_load_notifiers_from_config``,
+``build_standalone_dispatcher``) support the manual-close API path where
+no BotWorker is available to supply ``self._send_notification``.
+"""
+
+from typing import Any, Callable, List, Optional
 
 from src.notifications.discord_notifier import DiscordNotifier
 from src.notifications.log_helper import log_notification
@@ -25,7 +32,7 @@ def _load_notifiers_from_config(config) -> list:
 
     Standalone variant (no ``self``) so the manual-close API path can send
     notifications without instantiating a full BotWorker. Mirrors the
-    semantics of :meth:`NotificationsMixin._get_notifiers`.
+    semantics of :meth:`Notifier.get_notifiers`.
     """
     notifiers: list = []
     if config is None:
@@ -95,74 +102,26 @@ def build_standalone_dispatcher(config, bot_config_id: int) -> Callable:
 
 
 class NotificationsMixin:
-    """Mixin providing notification methods for BotWorker."""
+    """Thin proxy delegating to ``self._notifier`` (Notifier component, set in BotWorker.__init__)."""
 
-    async def _get_discord_notifier(self) -> Optional[DiscordNotifier]:
-        """Load Discord webhook from bot-specific config only."""
+    async def _get_discord_notifier(self) -> Optional[Any]:
+        return await self._notifier.get_discord_notifier()
+
+    async def _get_notifiers(self) -> List[Any]:
+        return await self._notifier.get_notifiers()
+
+    async def _send_notification(
+        self,
+        send_fn: Callable,
+        event_type: str = "unknown",
+        summary: Optional[str] = None,
+    ) -> None:
+        # Load notifiers through the proxy (not the component directly) so
+        # tests that stub ``worker._get_notifiers`` keep working.
         try:
-            if self._config and self._config.discord_webhook_url:
-                webhook_url = decrypt_value(self._config.discord_webhook_url)
-                return DiscordNotifier(webhook_url=webhook_url)
-        except Exception as e:
-            logger.warning(f"[Bot:{self.bot_config_id}] Could not load Discord config: {e}")
-        return None
-
-    async def _get_notifiers(self) -> list:
-        """Return all configured notifiers (Discord + Telegram)."""
-        notifiers = []
-        discord = await self._get_discord_notifier()
-        if discord:
-            notifiers.append(discord)
-        try:
-            if self._config and self._config.telegram_bot_token and self._config.telegram_chat_id:
-                from src.notifications.telegram_notifier import TelegramNotifier
-                notifiers.append(TelegramNotifier(
-                    bot_token=decrypt_value(self._config.telegram_bot_token),
-                    chat_id=decrypt_value(self._config.telegram_chat_id),
-                ))
-        except Exception as e:
-            logger.warning(f"[Bot:{self.bot_config_id}] Could not load Telegram config: {e}")
-        return notifiers
-
-    async def _send_notification(self, send_fn: Callable, event_type: str = "unknown", summary: str | None = None) -> None:
-        """Dispatch a notification to all configured notifiers.
-
-        Args:
-            send_fn: async callable that takes a notifier and sends the message.
-                     e.g. ``lambda n: n.send_trade_entry(...)``
-            event_type: notification category for logging (e.g. "trade_entry").
-            summary: optional short text for the log payload_summary field.
-        """
-        log_prefix = f"[Bot:{self.bot_config_id}]"
-        user_id = getattr(self._config, "user_id", None) if self._config else None
-        try:
-            for notifier in await self._get_notifiers():
-                channel = _channel_name(notifier)
-                try:
-                    async with notifier:
-                        await send_fn(notifier)
-                    # Log successful delivery (fire-and-forget)
-                    if user_id:
-                        await log_notification(
-                            user_id=user_id,
-                            bot_config_id=self.bot_config_id,
-                            channel=channel,
-                            event_type=event_type,
-                            status="sent",
-                            summary=summary,
-                        )
-                except Exception as ne:
-                    logger.warning(f"{log_prefix} Notification failed: {ne}")
-                    # Log failed delivery (fire-and-forget)
-                    if user_id:
-                        await log_notification(
-                            user_id=user_id,
-                            bot_config_id=self.bot_config_id,
-                            channel=channel,
-                            event_type=event_type,
-                            status="failed",
-                            error=str(ne),
-                            summary=summary,
-                        )
-        except Exception as notify_err:
-            logger.warning(f"{log_prefix} Notifier setup failed: {notify_err}")
+            notifiers = await self._get_notifiers()
+        except Exception:
+            notifiers = []
+        await self._notifier.send_notification(
+            send_fn, event_type, summary, notifiers=notifiers
+        )
