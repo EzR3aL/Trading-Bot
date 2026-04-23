@@ -417,10 +417,24 @@ def create_app() -> FastAPI:
             "[422] %s %s | errors=%s",
             request.method, request.url.path, exc.errors(),
         )
-        # Sanitize errors: Pydantic v2 can include bytes in 'input' field
+
+        def _coerce(value):
+            # Drop raw bytes (may leak secrets), stringify non-JSON-serializable objects
+            # like Exception instances that Pydantic v2 attaches to ctx.error when a
+            # @field_validator raises ValueError.
+            if isinstance(value, bytes):
+                return value.decode(errors="replace")
+            if isinstance(value, (str, int, float, bool)) or value is None:
+                return value
+            if isinstance(value, dict):
+                return {k: _coerce(v) for k, v in value.items()}
+            if isinstance(value, (list, tuple)):
+                return [_coerce(v) for v in value]
+            return str(value)
+
         sanitized = []
         for err in exc.errors():
-            clean = {k: (v.decode() if isinstance(v, bytes) else v) for k, v in err.items() if k != "input"}
+            clean = {k: _coerce(v) for k, v in err.items() if k != "input"}
             sanitized.append(clean)
         return JSONResponse(status_code=422, content={"detail": sanitized})
 
