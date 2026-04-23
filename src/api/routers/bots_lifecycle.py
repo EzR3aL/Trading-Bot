@@ -331,10 +331,20 @@ async def close_position(
     symbol: str,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
+    orchestrator=Depends(get_orchestrator),
 ):
-    """Manually close an open position on the exchange and mark the trade record as closed."""
+    """Manually close an open position on the exchange and mark the trade record as closed.
+
+    Routes through the shared :func:`close_and_record_trade` helper so the
+    manual-close path emits the same side effects as an automated exit:
+    fee/funding/builder-fee capture, Discord/Telegram notification,
+    WebSocket broadcast, SSE ``trade_closed`` event, and RiskManager
+    daily-stats update (Issue #275).
+    """
     from src.exchanges.factory import create_exchange_client
     from src.utils.encryption import decrypt_value
+    from src.bot.notifications import build_standalone_dispatcher
+    from src.bot.trade_closer import close_and_record_trade
 
     result = await db.execute(
         select(BotConfig).where(BotConfig.id == bot_id, BotConfig.user_id == user.id)
@@ -383,11 +393,14 @@ async def close_position(
     )
 
     # Close position on exchange
+    close_order_id: str | None = None
     try:
-        await asyncio.wait_for(
+        close_order = await asyncio.wait_for(
             client.close_position(symbol, trade.side, margin_mode=getattr(config, "margin_mode", "cross")),
             timeout=15.0,
         )
+        if close_order is not None:
+            close_order_id = getattr(close_order, "order_id", None)
     except Exception as e:
         logger.warning(f"Exchange close_position call failed for {symbol} bot {bot_id}: {e}")
 
@@ -424,18 +437,106 @@ async def close_position(
         except Exception:
             exit_price = trade.entry_price  # fallback
 
-    from src.bot.pnl import calculate_pnl
-    pnl, pnl_percent = calculate_pnl(trade.side, trade.entry_price, exit_price, trade.size)
+    # Persist the close order id so fee lookups can include exit fills
+    if close_order_id:
+        trade.close_order_id = close_order_id
 
-    trade.status = "closed"
-    trade.exit_price = exit_price
+    # ── Fee capture (matches PositionMonitorMixin._handle_closed_position) ──
+    fees = trade.fees or 0
+    try:
+        if trade.order_id:
+            fees = await client.get_trade_total_fees(
+                symbol=trade.symbol,
+                entry_order_id=trade.order_id,
+                close_order_id=trade.close_order_id,
+            )
+    except Exception as e:
+        logger.debug(f"Manual close: fee fetch failed for trade #{trade.id}: {e}")
+
+    funding_paid = trade.funding_paid or 0
+    try:
+        if trade.entry_time:
+            entry_ms = int(trade.entry_time.timestamp() * 1000)
+            exit_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
+            funding_paid = await client.get_funding_fees(
+                symbol=trade.symbol,
+                start_time_ms=entry_ms,
+                end_time_ms=exit_ms,
+            )
+    except Exception as e:
+        logger.debug(f"Manual close: funding fetch failed for trade #{trade.id}: {e}")
+
+    builder_fee = 0
+    try:
+        if hasattr(client, "calculate_builder_fee"):
+            builder_fee = client.calculate_builder_fee(
+                entry_price=trade.entry_price,
+                exit_price=exit_price,
+                size=trade.size,
+            )
+    except Exception as e:
+        logger.debug(f"Manual close: builder-fee calc failed for trade #{trade.id}: {e}")
+
+    # Prefer the live worker's RiskManager + notification dispatcher so daily
+    # stats update the same in-memory object the bot is using. Fall back to
+    # a DB-backed RiskManager + standalone dispatcher when the bot is stopped.
+    worker = None
+    workers_map = getattr(orchestrator, "_workers", None)
+    if isinstance(workers_map, dict):
+        worker = workers_map.get(bot_id)
+    risk_manager = getattr(worker, "_risk_manager", None) if worker else None
+    if worker is not None and hasattr(worker, "_send_notification"):
+        send_notification = worker._send_notification
+    else:
+        send_notification = build_standalone_dispatcher(config, bot_id)
+
+    # If the bot is stopped there's no live RiskManager — build one from DB
+    # so daily-stats still get updated and persisted.
+    if risk_manager is None:
+        try:
+            from src.risk.risk_manager import RiskManager
+            risk_manager = RiskManager(
+                max_trades_per_day=getattr(config, "max_trades_per_day", None),
+                daily_loss_limit_percent=getattr(config, "daily_loss_limit_percent", None),
+                position_size_percent=getattr(config, "position_size_percent", None),
+                bot_config_id=bot_id,
+            )
+            # Load today's stats; if none exist we seed with the trade's
+            # entry balance so record_trade_exit has a valid DailyStats.
+            await risk_manager.load_stats_from_db()
+            if risk_manager._daily_stats is None:
+                risk_manager.initialize_day(starting_balance=0.0)
+        except Exception as rm_err:
+            logger.warning(f"Manual close: could not build RiskManager: {rm_err}")
+            risk_manager = None
+
+    pnl, pnl_percent = await close_and_record_trade(
+        trade,
+        exit_price,
+        "MANUAL_CLOSE",
+        bot_config_id=bot_id,
+        config=config,
+        risk_manager=risk_manager,
+        send_notification=send_notification,
+        fees=fees,
+        funding_paid=funding_paid,
+        builder_fee=builder_fee,
+        strategy_reason=f"[{config.name}] Manual close",
+    )
+
+    # Round numeric fields for the response and downstream consumers
     trade.pnl = round(pnl, 4)
     trade.pnl_percent = round(pnl_percent, 2)
-    trade.exit_time = datetime.now(timezone.utc)
-    trade.exit_reason = "MANUAL_CLOSE"
     await db.flush()
 
-    logger.info(f"Manual close: trade #{trade.id} {symbol} {trade.side} | PnL: ${pnl:.2f} ({pnl_percent:+.2f}%)")
+    # Persist updated RiskManager daily stats if we built a fresh one.
+    # When a live worker was reused, record_trade_exit already scheduled the
+    # autosave via its own background task.
+    if risk_manager is not None and worker is None:
+        try:
+            await risk_manager._save_stats_to_db()
+        except Exception as save_err:
+            logger.debug(f"Manual close: save_stats_to_db failed: {save_err}")
 
     from src.utils.event_logger import log_event
     await log_event("position_closed", f"Position {symbol} manually closed | PnL: ${pnl:.2f}", user_id=user.id, bot_id=bot_id)
