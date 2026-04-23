@@ -37,8 +37,8 @@ from src.api.rate_limit import limiter  # noqa: E402
 limiter.enabled = False
 
 from src.auth.jwt_handler import (  # noqa: E402
-    ALGORITHM,
-    _get_secret_key,
+    ALGORITHM_HS256,
+    _get_hs_secret,
     create_access_token,
     create_refresh_token,
     decode_token,
@@ -140,26 +140,26 @@ class TestJwtTokenDataPreservation:
     def test_access_token_preserves_sub_field(self):
         """The 'sub' field in the input data must appear in the decoded token."""
         token = create_access_token({"sub": "123", "role": "admin"})
-        payload = jwt.decode(token, _get_secret_key(), algorithms=[ALGORITHM])
+        payload = jwt.decode(token, _get_hs_secret(), algorithms=[ALGORITHM_HS256])
         assert payload["sub"] == "123"
 
     def test_access_token_preserves_role_field(self):
         """Custom fields like 'role' must survive the encode/decode round-trip."""
         token = create_access_token({"sub": "1", "role": "admin"})
-        payload = jwt.decode(token, _get_secret_key(), algorithms=[ALGORITHM])
+        payload = jwt.decode(token, _get_hs_secret(), algorithms=[ALGORITHM_HS256])
         assert payload["role"] == "admin"
 
     def test_access_token_preserves_token_version(self):
         """The 'tv' (token_version) field must be preserved in the token."""
         token = create_access_token({"sub": "1", "role": "user", "tv": 3})
-        payload = jwt.decode(token, _get_secret_key(), algorithms=[ALGORITHM])
+        payload = jwt.decode(token, _get_hs_secret(), algorithms=[ALGORITHM_HS256])
         assert payload["tv"] == 3
 
     def test_refresh_token_preserves_all_fields(self):
         """Refresh token must preserve sub, role, and tv fields."""
         data = {"sub": "42", "role": "admin", "tv": 5}
         token = create_refresh_token(data)
-        payload = jwt.decode(token, _get_secret_key(), algorithms=[ALGORITHM])
+        payload = jwt.decode(token, _get_hs_secret(), algorithms=[ALGORITHM_HS256])
         assert payload["sub"] == "42"
         assert payload["role"] == "admin"
         assert payload["tv"] == 5
@@ -209,8 +209,8 @@ class TestJwtTokenTypes:
         access = create_access_token(data)
         refresh = create_refresh_token(data)
 
-        access_payload = jwt.decode(access, _get_secret_key(), algorithms=[ALGORITHM])
-        refresh_payload = jwt.decode(refresh, _get_secret_key(), algorithms=[ALGORITHM])
+        access_payload = jwt.decode(access, _get_hs_secret(), algorithms=[ALGORITHM_HS256])
+        refresh_payload = jwt.decode(refresh, _get_hs_secret(), algorithms=[ALGORITHM_HS256])
 
         assert access_payload["type"] == "access"
         assert refresh_payload["type"] == "refresh"
@@ -246,7 +246,7 @@ class TestDecodeTokenEdgeCases:
         token = jwt.encode(
             {"sub": "1", "type": "access"},
             "different-secret-key",
-            algorithm=ALGORITHM,
+            algorithm=ALGORITHM_HS256,
         )
         assert decode_token(token) is None
 
@@ -256,13 +256,13 @@ class TestValidateJwtConfig:
 
     def test_validate_jwt_config_raises_when_secret_empty(self):
         """validate_jwt_config should raise RuntimeError if secret key is empty."""
-        with patch("src.auth.jwt_handler._get_secret_key", return_value=""):
+        with patch("src.auth.jwt_handler._get_hs_secret", return_value=""):
             with pytest.raises(RuntimeError, match="JWT_SECRET_KEY"):
                 validate_jwt_config()
 
     def test_validate_jwt_config_passes_when_secret_set(self):
         """validate_jwt_config should not raise when secret key is set."""
-        with patch("src.auth.jwt_handler._get_secret_key", return_value="a-real-secret-key-that-is-at-least-32-characters-long"):
+        with patch("src.auth.jwt_handler._get_hs_secret", return_value="a-real-secret-key-that-is-at-least-32-characters-long"):
             validate_jwt_config()
 
 
@@ -469,8 +469,8 @@ class TestGetCurrentUser:
         # Manually craft a token without 'sub'
         token = jwt.encode(
             {"role": "user", "type": "access", "exp": 9999999999},
-            _get_secret_key(),
-            algorithm=ALGORITHM,
+            _get_hs_secret(),
+            algorithm=ALGORITHM_HS256,
         )
         credentials = _make_mock_credentials(token)
         db = _make_mock_db_session()
@@ -630,26 +630,37 @@ class TestLoginEndpointLogic:
 
         result = await login(request=mock_request, response=mock_response, body=body, db=mock_db)
 
-        assert result.access_token is not None
+        # SEC-012: access_token is NOT in the response body — delivered via
+        # httpOnly cookie only. Frontend reads expires_in to schedule refresh.
+        assert result.access_token is None
         assert result.token_type == "bearer"
+        assert result.expires_in > 0
 
-        # Verify the access token contains the correct user data
-        access_payload = decode_token(result.access_token)
+        # Both access and refresh tokens must be set as httpOnly cookies
+        cookie_calls = mock_response.set_cookie.call_args_list
+        cookie_keys = [
+            (c.kwargs.get("key") or (c.args[0] if c.args else ""))
+            for c in cookie_calls
+        ]
+        assert "access_token" in cookie_keys
+        assert "refresh_token" in cookie_keys
+
+        def _cookie_value(key):
+            for c in cookie_calls:
+                k = c.kwargs.get("key") or (c.args[0] if c.args else "")
+                if k == key:
+                    return c.kwargs.get("value") or (c.args[1] if len(c.args) > 1 else "")
+            return None
+
+        # Verify the access cookie contains the correct user data
+        access_payload = decode_token(_cookie_value("access_token"))
         assert access_payload["sub"] == "5"
         assert access_payload["role"] == "admin"
         assert access_payload["tv"] == 2
         assert access_payload["type"] == "access"
 
-        # Verify the refresh token is set as httpOnly cookie (not in response body)
-        assert mock_response.set_cookie.call_count >= 1
-        # Find the refresh_token cookie call
-        refresh_cookie_calls = [
-            c for c in mock_response.set_cookie.call_args_list
-            if (c.kwargs.get("key") or (c.args[0] if c.args else "")) == "refresh_token"
-        ]
-        assert len(refresh_cookie_calls) == 1
-        refresh_cookie_value = refresh_cookie_calls[0].kwargs.get("value") or refresh_cookie_calls[0][1].get("value", "")
-        refresh_payload = decode_token(refresh_cookie_value)
+        # Verify the refresh cookie contains the correct user data
+        refresh_payload = decode_token(_cookie_value("refresh_token"))
         assert refresh_payload["sub"] == "5"
         assert refresh_payload["role"] == "admin"
         assert refresh_payload["tv"] == 2
@@ -665,9 +676,12 @@ class TestRefreshEndpointLogic:
     """Unit tests for the refresh token endpoint logic."""
 
     @pytest.mark.asyncio
-    async def test_refresh_with_valid_refresh_token_returns_new_access_only(self):
-        """A valid refresh request returns a new access token but does NOT
-        rotate the refresh token (#147 — rotation race caused logouts)."""
+    async def test_refresh_with_valid_refresh_token_sets_new_access_cookie(self):
+        """A valid refresh request sets a new access cookie. Access token is
+        delivered via httpOnly cookie only (SEC-012); refresh rotation is
+        optimistic (SEC-002) and only commits when the session_version UPDATE
+        matches — under mocked rowcount it stays put.
+        """
         from src.api.routers.auth import refresh_token as refresh_endpoint
         from src.api.schemas.auth import RefreshRequest
 
@@ -686,14 +700,16 @@ class TestRefreshEndpointLogic:
         mock_resp = MagicMock()
         result = await refresh_endpoint(request=mock_request, response=mock_resp, body=body, refresh_token_cookie=None, db=mock_db)
 
-        assert result.access_token is not None
+        # SEC-012: access_token is NOT in body, only in httpOnly cookie
+        assert result.access_token is None
         assert result.token_type == "bearer"
-        # Only the access cookie is rotated; the refresh cookie stays put
-        # to avoid the multi-tab race that locked out users.
-        assert mock_resp.set_cookie.call_count == 1
-        cookie_call = mock_resp.set_cookie.call_args
-        cookie_key = cookie_call.kwargs.get("key") or cookie_call.args[0]
-        assert "access" in str(cookie_key).lower()
+        assert result.expires_in > 0
+        # At minimum the access cookie must be set
+        cookie_keys = [
+            (c.kwargs.get("key") or (c.args[0] if c.args else ""))
+            for c in mock_resp.set_cookie.call_args_list
+        ]
+        assert "access_token" in cookie_keys
 
     @pytest.mark.asyncio
     async def test_refresh_with_cookie_and_no_body_succeeds(self):
@@ -717,8 +733,14 @@ class TestRefreshEndpointLogic:
             body=None, refresh_token_cookie=cookie_token, db=mock_db,
         )
 
-        assert result.access_token is not None
+        # SEC-012: access_token is NOT in body, only in httpOnly cookie
+        assert result.access_token is None
         assert result.token_type == "bearer"
+        cookie_keys = [
+            (c.kwargs.get("key") or (c.args[0] if c.args else ""))
+            for c in mock_response.set_cookie.call_args_list
+        ]
+        assert "access_token" in cookie_keys
 
     @pytest.mark.asyncio
     async def test_refresh_with_no_cookie_and_no_body_returns_401(self):
@@ -840,9 +862,8 @@ class TestRefreshEndpointLogic:
     async def test_refresh_with_matching_token_version_succeeds(self):
         """A refresh token with tv == user.token_version should succeed.
 
-        Per the no-rotation policy (#147), only the access cookie is set —
-        the refresh cookie stays untouched so multi-tab and PWA wake-up
-        races can't lock the user out.
+        Post-#256 (SEC-002 + SEC-012), refresh rotation is optimistic and
+        access_token is delivered via httpOnly cookie only.
         """
         from src.api.routers.auth import refresh_token as refresh_endpoint
         from src.api.schemas.auth import RefreshRequest
@@ -861,16 +882,21 @@ class TestRefreshEndpointLogic:
 
         mock_resp = MagicMock()
         result = await refresh_endpoint(request=mock_request, response=mock_resp, body=body, refresh_token_cookie=None, db=mock_db)
-        assert result.access_token is not None
-        # Only the access cookie — no rotation
-        assert mock_resp.set_cookie.call_count == 1
+        # SEC-012: access_token is NOT in body, only in httpOnly cookie
+        assert result.access_token is None
+        assert result.expires_in > 0
+        cookie_keys = [
+            (c.kwargs.get("key") or (c.args[0] if c.args else ""))
+            for c in mock_resp.set_cookie.call_args_list
+        ]
+        assert "access_token" in cookie_keys
 
     @pytest.mark.asyncio
     async def test_refresh_new_tokens_contain_updated_user_data(self):
         """New access token from refresh should contain the user's current data.
 
-        Refresh token is NOT rotated (#147), so we only verify the access
-        token contents and that exactly one cookie was set.
+        Post-SEC-012, access_token is in the httpOnly cookie only — we decode
+        the cookie value (not the response body) to verify contents.
         """
         from src.api.routers.auth import refresh_token as refresh_endpoint
         from src.api.schemas.auth import RefreshRequest
@@ -890,19 +916,26 @@ class TestRefreshEndpointLogic:
         mock_resp = MagicMock()
         result = await refresh_endpoint(request=mock_request, response=mock_resp, body=body, refresh_token_cookie=None, db=mock_db)
 
+        # access_token is NOT in body (SEC-012)
+        assert result.access_token is None
+        assert result.token_type == "bearer"
+
+        # Extract access_token cookie value and verify its payload
+        access_cookie_value = None
+        for c in mock_resp.set_cookie.call_args_list:
+            k = c.kwargs.get("key") or (c.args[0] if c.args else "")
+            if k == "access_token":
+                access_cookie_value = c.kwargs.get("value") or (c.args[1] if len(c.args) > 1 else "")
+                break
+        assert access_cookie_value is not None
+
         # Verify new access token has correct data (tv stays the same —
         # token_version is only bumped for security events, not routine refreshes)
-        access_payload = decode_token(result.access_token)
+        access_payload = decode_token(access_cookie_value)
         assert access_payload["sub"] == "10"
         assert access_payload["role"] == "admin"
         assert access_payload["tv"] == 7
         assert access_payload["type"] == "access"
-
-        # Only the access cookie was set; refresh cookie was NOT rotated
-        assert mock_resp.set_cookie.call_count == 1
-        cookie_call = mock_resp.set_cookie.call_args
-        cookie_key = cookie_call.kwargs.get("key") or cookie_call.args[0]
-        assert "access" in str(cookie_key).lower()
 
 
 # ============================================================================
