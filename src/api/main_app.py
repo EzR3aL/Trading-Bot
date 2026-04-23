@@ -459,10 +459,21 @@ def create_app() -> FastAPI:
 
     logger.debug("CORS allowed origins: %s", allowed_origins)
 
+    # Hard fail at startup if wildcard + credentials combine: browsers treat
+    # that pairing as a CSRF vector and most reject it at runtime, but we
+    # refuse to start rather than rely on that. (SEC-004)
+    _allow_credentials = True
+    if _allow_credentials and any(o.strip() == "*" for o in allowed_origins):
+        raise RuntimeError(
+            "CORS misconfiguration: allow_origins contains '*' while "
+            "allow_credentials=True. This combination is insecure — refusing "
+            "to start. Set CORS_ORIGINS to an explicit origin list."
+        )
+
     app.add_middleware(
         CORSMiddleware,
         allow_origins=allowed_origins,
-        allow_credentials=True,
+        allow_credentials=_allow_credentials,
         allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
         allow_headers=["Authorization", "Content-Type", "Accept"],
     )
