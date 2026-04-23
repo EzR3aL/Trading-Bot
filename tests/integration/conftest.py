@@ -21,9 +21,29 @@ os.environ["TESTING"] = "1"
 import pytest_asyncio
 from httpx import AsyncClient, ASGITransport
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.pool import NullPool, StaticPool
 
 # Use TEST_DATABASE_URL env var if set (e.g. PostgreSQL in CI), otherwise SQLite
 TEST_DATABASE_URL = os.environ.get("TEST_DATABASE_URL", "sqlite+aiosqlite:///:memory:")
+
+
+def _engine_kwargs(is_sqlite: bool) -> dict:
+    """Build engine kwargs that avoid keeping pooled connections between tests.
+
+    * SQLite :memory: -> ``StaticPool`` so every session shares one connection
+      (otherwise each new connection sees a fresh empty DB).
+    * Postgres -> ``NullPool`` so each session opens + closes its own connection.
+      Without this, every function-scoped test engine retains ``pool_size``
+      connections until dispose, exhausting the postgres ``max_connections``
+      limit when hundreds of tests run back-to-back in CI.
+    """
+    kwargs: dict = {}
+    if is_sqlite:
+        kwargs["connect_args"] = {"check_same_thread": False}
+        kwargs["poolclass"] = StaticPool
+    else:
+        kwargs["poolclass"] = NullPool
+    return kwargs
 
 
 @pytest_asyncio.fixture
@@ -32,11 +52,7 @@ async def test_db():
     from src.models.database import Base
 
     is_sqlite = TEST_DATABASE_URL.startswith("sqlite")
-    engine_kwargs = {}
-    if is_sqlite:
-        engine_kwargs["connect_args"] = {"check_same_thread": False}
-
-    engine = create_async_engine(TEST_DATABASE_URL, **engine_kwargs)
+    engine = create_async_engine(TEST_DATABASE_URL, **_engine_kwargs(is_sqlite))
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
@@ -65,11 +81,7 @@ async def test_app(test_db, monkeypatch):
 
     # Create a dedicated engine for the app (separate from the fixture session)
     is_sqlite = TEST_DATABASE_URL.startswith("sqlite")
-    engine_kwargs = {}
-    if is_sqlite:
-        engine_kwargs["connect_args"] = {"check_same_thread": False}
-
-    engine = create_async_engine(TEST_DATABASE_URL, **engine_kwargs)
+    engine = create_async_engine(TEST_DATABASE_URL, **_engine_kwargs(is_sqlite))
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 

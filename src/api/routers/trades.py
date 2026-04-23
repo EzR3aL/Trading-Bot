@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from config.settings import settings
@@ -25,6 +25,11 @@ from src.data.market_data import MarketDataFetcher
 from src.exchanges.factory import create_exchange_client
 from src.models.database import BotConfig, ExchangeConnection, TradeRecord, User, UserConfig
 from src.models.session import get_db
+from src.services.trades_service import (
+    Pagination,
+    TradeFilters,
+    TradesService,
+)
 from src.strategy.base import resolve_strategy_params
 from src.utils.encryption import decrypt_value
 from src.api.rate_limit import limiter
@@ -171,132 +176,61 @@ async def list_trades(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """List trades for the current user with filters."""
-    query = (
-        select(
-            TradeRecord,
-            BotConfig.name.label("bot_name"),
-            BotConfig.exchange_type.label("bot_exchange"),
-            BotConfig.strategy_type.label("strategy_type"),
-            BotConfig.strategy_params.label("strategy_params"),
+    """List trades for the current user with filters.
+
+    Thin adapter: parse query params into service dataclasses, delegate to
+    ``TradesService.list_trades``, then project the result back onto the
+    ``TradeListResponse`` pydantic model.
+    """
+    filters = TradeFilters(
+        status=status,
+        symbol=symbol,
+        exchange=exchange,
+        bot_name=bot_name,
+        date_from=date_from,
+        date_to=date_to,
+        demo_mode=demo_mode,
+    )
+    pagination = Pagination(page=page, per_page=per_page)
+
+    service = TradesService(db=db, user=user)
+    result = await service.list_trades(filters, pagination)
+
+    trades_out = [
+        TradeResponse(
+            id=item.id,
+            symbol=item.symbol,
+            side=item.side,
+            size=item.size,
+            entry_price=item.entry_price,
+            exit_price=item.exit_price,
+            take_profit=item.take_profit,
+            stop_loss=item.stop_loss,
+            leverage=item.leverage,
+            confidence=item.confidence,
+            reason=item.reason,
+            status=item.status,
+            pnl=item.pnl,
+            pnl_percent=item.pnl_percent,
+            fees=item.fees,
+            funding_paid=item.funding_paid,
+            entry_time=item.entry_time,
+            exit_time=item.exit_time,
+            exit_reason=item.exit_reason,
+            exchange=item.exchange,
+            demo_mode=item.demo_mode,
+            bot_name=item.bot_name,
+            bot_exchange=item.bot_exchange,
+            **item.trailing,
         )
-        .outerjoin(BotConfig, TradeRecord.bot_config_id == BotConfig.id)
-        .where(TradeRecord.user_id == user.id)
-    )
-
-    if status:
-        query = query.where(TradeRecord.status == status)
-    if symbol:
-        safe_symbol = symbol.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-        query = query.where(TradeRecord.symbol.ilike(f"%{safe_symbol}%", escape="\\"))
-    if exchange:
-        query = query.where(BotConfig.exchange_type == exchange)
-    if bot_name:
-        query = query.where(BotConfig.name == bot_name)
-    if date_from:
-        query = query.where(TradeRecord.entry_time >= datetime.fromisoformat(date_from))
-    if date_to:
-        query = query.where(TradeRecord.entry_time < datetime.fromisoformat(date_to + "T23:59:59"))
-    if demo_mode is not None:
-        query = query.where(TradeRecord.demo_mode == demo_mode)
-
-    # Count total
-    count_base = (
-        select(TradeRecord.id)
-        .outerjoin(BotConfig, TradeRecord.bot_config_id == BotConfig.id)
-        .where(TradeRecord.user_id == user.id)
-    )
-    if status:
-        count_base = count_base.where(TradeRecord.status == status)
-    if symbol:
-        count_base = count_base.where(TradeRecord.symbol.ilike(f"%{safe_symbol}%", escape="\\"))
-    if exchange:
-        count_base = count_base.where(BotConfig.exchange_type == exchange)
-    if bot_name:
-        count_base = count_base.where(BotConfig.name == bot_name)
-    if date_from:
-        count_base = count_base.where(TradeRecord.entry_time >= datetime.fromisoformat(date_from))
-    if date_to:
-        count_base = count_base.where(TradeRecord.entry_time < datetime.fromisoformat(date_to + "T23:59:59"))
-    if demo_mode is not None:
-        count_base = count_base.where(TradeRecord.demo_mode == demo_mode)
-    count_query = select(func.count()).select_from(count_base.subquery())
-    total = (await db.execute(count_query)).scalar() or 0
-
-    # Paginate
-    query = query.order_by(TradeRecord.entry_time.desc())
-    query = query.offset((page - 1) * per_page).limit(per_page)
-
-    result = await db.execute(query)
-    rows = result.all()
-
-    # Pre-fetch klines for all unique (symbol, interval) pairs with open trades
-    # (avoids N+1 API calls). Interval comes from the resolved strategy params
-    # so each bot's kline_interval (1h / 4h / ...) is honored correctly.
-    klines_cache: dict[tuple[str, str], list] = {}
-    prefetch_keys: set[tuple[str, str]] = set()
-    for t, _, _, strat_type, strat_params in rows:
-        if t.status != "open":
-            continue
-        if strat_type not in TRAILING_STOP_STRATEGIES and t.trailing_atr_override is None:
-            continue
-        resolved = resolve_strategy_params(strat_type, strat_params)
-        interval = resolved.get("kline_interval", "1h")
-        prefetch_keys.add((t.symbol, interval))
-
-    if prefetch_keys:
-        fetcher = MarketDataFetcher()
-        try:
-            for sym, interval in prefetch_keys:
-                try:
-                    klines_cache[(sym, interval)] = await fetcher.get_binance_klines(sym, interval, 14 + 15)
-                except Exception as exc:
-                    logger.debug("Batch kline fetch failed for %s %s: %s", sym, interval, exc)
-        finally:
-            await fetcher.close()
-
-    # Build responses and enrich open trades with trailing stop info
-    trades_out: list[TradeResponse] = []
-    for t, bot_name_val, bot_exchange_val, strat_type, strat_params in rows:
-        ts_info: dict = {}
-        if t.status == "open":
-            try:
-                ts_info = await _compute_trailing_stop(t, strat_type, strat_params, klines_cache)
-            except Exception as exc:
-                logger.debug("Trailing stop enrichment failed for trade %s: %s", t.id, exc)
-
-        trades_out.append(TradeResponse(
-            id=t.id,
-            symbol=t.symbol,
-            side=t.side,
-            size=t.size,
-            entry_price=t.entry_price,
-            exit_price=t.exit_price,
-            take_profit=t.take_profit,
-            stop_loss=t.stop_loss,
-            leverage=t.leverage,
-            confidence=t.confidence,
-            reason=t.reason,
-            status=t.status,
-            pnl=t.pnl,
-            pnl_percent=t.pnl_percent,
-            fees=t.fees or 0,
-            funding_paid=t.funding_paid or 0,
-            entry_time=t.entry_time.isoformat() if t.entry_time else "",
-            exit_time=t.exit_time.isoformat() if t.exit_time else None,
-            exit_reason=t.exit_reason,
-            exchange=t.exchange,
-            demo_mode=t.demo_mode,
-            bot_name=bot_name_val,
-            bot_exchange=bot_exchange_val,
-            **ts_info,
-        ))
+        for item in result.items
+    ]
 
     return TradeListResponse(
         trades=trades_out,
-        total=total,
-        page=page,
-        per_page=per_page,
+        total=result.total,
+        page=result.page,
+        per_page=result.per_page,
     )
 
 
@@ -309,69 +243,19 @@ async def get_trade_filter_options(
 ):
     """Return distinct filter values available for the user's trades.
 
-    Scope is restricted to the current user (same ownership filter as
-    ``GET /api/trades``). Uses ``SELECT DISTINCT`` / grouped queries so the
-    backend never pulls full trade rows just to populate a dropdown.
+    Thin adapter: delegates to ``TradesService.get_filter_options`` and maps
+    the domain result onto the pydantic response model.
     """
-    # Distinct symbols from the user's trades
-    symbols_result = await db.execute(
-        select(TradeRecord.symbol)
-        .where(TradeRecord.user_id == user.id)
-        .distinct()
-    )
-    symbols = sorted(
-        s for s in (row[0] for row in symbols_result.all()) if s
-    )
-
-    # Distinct exchanges — combine TradeRecord.exchange and BotConfig.exchange_type
-    # so a bot that has never traded still shows up if the user owns it.
-    trade_exchanges_result = await db.execute(
-        select(TradeRecord.exchange)
-        .where(TradeRecord.user_id == user.id)
-        .distinct()
-    )
-    exchanges_set: set[str] = {
-        e for e in (row[0] for row in trade_exchanges_result.all()) if e
-    }
-
-    bot_exchanges_result = await db.execute(
-        select(BotConfig.exchange_type)
-        .where(BotConfig.user_id == user.id)
-        .distinct()
-    )
-    for row in bot_exchanges_result.all():
-        if row[0]:
-            exchanges_set.add(row[0])
-    exchanges = sorted(exchanges_set)
-
-    # Distinct non-null statuses — typically {open, closed, cancelled/failed}
-    status_result = await db.execute(
-        select(TradeRecord.status)
-        .where(TradeRecord.user_id == user.id)
-        .distinct()
-    )
-    statuses = sorted(
-        s for s in (row[0] for row in status_result.all()) if s
-    )
-
-    # Bots the user owns. Pull (id, name) only — no full ORM objects.
-    bots_result = await db.execute(
-        select(BotConfig.id, BotConfig.name)
-        .where(BotConfig.user_id == user.id)
-        .order_by(BotConfig.name.asc())
-    )
-    bots = [
-        TradeFilterBotOption(id=row[0], name=row[1])
-        for row in bots_result.all()
-        if row[1]
-    ]
+    service = TradesService(db=db, user=user)
+    result = await service.get_filter_options()
 
     return TradeFilterOptionsResponse(
-        symbols=symbols,
-        bots=bots,
-        exchanges=exchanges,
-        statuses=statuses,
+        symbols=result.symbols,
+        bots=[TradeFilterBotOption(id=b.id, name=b.name) for b in result.bots],
+        exchanges=result.exchanges,
+        statuses=result.statuses,
     )
+
 
 
 @router.post("/sync")
