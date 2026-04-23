@@ -179,9 +179,70 @@ describe('overall parity', () => {
     expect(deSections).toEqual(enSections);
   });
 
-  it('total key count differs by no more than 5', () => {
+  it('total key count is identical', () => {
     const deTotal = flattenKeys(de).length;
     const enTotal = flattenKeys(en).length;
-    expect(Math.abs(deTotal - enTotal)).toBeLessThanOrEqual(5);
+    expect(deTotal).toBe(enTotal);
+  });
+
+  it('no key missing in either language (full dot-path parity)', () => {
+    const deKeys = new Set(flattenKeys(de));
+    const enKeys = new Set(flattenKeys(en));
+
+    const missingInDe = [...enKeys].filter((k) => !deKeys.has(k)).sort();
+    const missingInEn = [...deKeys].filter((k) => !enKeys.has(k)).sort();
+
+    if (missingInDe.length > 0 || missingInEn.length > 0) {
+      // Surface the exact gaps for fast debugging when CI fails.
+      const msg = [
+        missingInDe.length > 0
+          ? `Missing in de.json (${missingInDe.length}):\n  ${missingInDe.join('\n  ')}`
+          : '',
+        missingInEn.length > 0
+          ? `Missing in en.json (${missingInEn.length}):\n  ${missingInEn.join('\n  ')}`
+          : '',
+      ]
+        .filter(Boolean)
+        .join('\n');
+      throw new Error(`i18n parity broken:\n${msg}`);
+    }
+
+    expect(missingInDe).toEqual([]);
+    expect(missingInEn).toEqual([]);
+  });
+
+  it('no structural mismatches (leaf vs object) between de and en', () => {
+    function walk(
+      a: Record<string, any>,
+      b: Record<string, any>,
+      prefix = ''
+    ): Array<{ path: string; de: string; en: string }> {
+      const mismatches: Array<{ path: string; de: string; en: string }> = [];
+      const shared = Object.keys(a).filter((k) => k in b);
+      for (const key of shared) {
+        const path = prefix ? `${prefix}.${key}` : key;
+        const va = a[key];
+        const vb = b[key];
+        const ta =
+          va !== null && typeof va === 'object' && !Array.isArray(va) ? 'object' : 'leaf';
+        const tb =
+          vb !== null && typeof vb === 'object' && !Array.isArray(vb) ? 'object' : 'leaf';
+        if (ta !== tb) {
+          mismatches.push({ path, de: ta, en: tb });
+        } else if (ta === 'object') {
+          mismatches.push(...walk(va, vb, path));
+        }
+      }
+      return mismatches;
+    }
+
+    const mismatches = walk(de as Record<string, any>, en as Record<string, any>);
+    if (mismatches.length > 0) {
+      const details = mismatches
+        .map((m) => `  ${m.path}: de=${m.de} vs en=${m.en}`)
+        .join('\n');
+      throw new Error(`Structural mismatches between de.json and en.json:\n${details}`);
+    }
+    expect(mismatches).toEqual([]);
   });
 });
