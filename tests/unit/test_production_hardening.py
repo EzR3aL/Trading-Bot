@@ -237,7 +237,7 @@ class TestCanTradeGuard:
         async def mock_get_session():
             yield mock_session
 
-        with patch("src.bot.trade_executor.get_session", mock_get_session):
+        with patch("src.bot.components.trade_executor.get_session", mock_get_session):
             await worker._execute_trade(signal, mock_client, demo_mode=True, asset_budget=5000.0)
 
         mock_client.place_market_order.assert_awaited_once()
@@ -1099,7 +1099,7 @@ class TestTradeFailureNotification:
         mock_ws = MagicMock()
         mock_ws.broadcast_to_user = AsyncMock()
 
-        with patch("src.bot.trade_executor.asyncio.create_task"):
+        with patch("src.bot.components.trade_executor.asyncio.create_task"):
             with patch("src.api.websocket.manager.ws_manager", mock_ws):
                 await mixin._notify_trade_failure(signal, "LIVE", "Connection timeout")
 
@@ -1126,7 +1126,7 @@ class TestTradeFailureNotification:
 
         signal = self._make_signal()
 
-        with patch("src.bot.trade_executor.asyncio.create_task"):
+        with patch("src.bot.components.trade_executor.asyncio.create_task"):
             with patch.dict("sys.modules", {"src.api.websocket.manager": MagicMock()}):
                 await mixin._notify_trade_failure(signal, "DEMO", "Rate limit exceeded")
 
@@ -1156,7 +1156,10 @@ class TestTradeFailureNotification:
         mixin._risk_manager = MagicMock()
         mixin._risk_manager.can_trade.return_value = (True, None)
         mixin._risk_manager.calculate_position_size.return_value = (100.0, 0.002)
-        mixin._notify_trade_failure = AsyncMock()
+        # Mock on the component — OrderError is caught inside TradeExecutor.execute,
+        # which dispatches to its own notify_trade_failure. The mixin-level proxy
+        # method is not involved in the error path after the composition refactor.
+        mixin._ensure_trade_executor().notify_trade_failure = AsyncMock()
 
         signal = self._make_signal()
 
@@ -1167,8 +1170,8 @@ class TestTradeFailureNotification:
 
         await mixin._execute_trade(signal, mock_client, demo_mode=False)
 
-        mixin._notify_trade_failure.assert_called_once()
-        args = mixin._notify_trade_failure.call_args[0]
+        mixin._trade_executor.notify_trade_failure.assert_called_once()
+        args = mixin._trade_executor.notify_trade_failure.call_args[0]
         assert "API rate limit" in args[2]
 
     @pytest.mark.asyncio
@@ -1187,7 +1190,8 @@ class TestTradeFailureNotification:
         mixin._risk_manager = MagicMock()
         mixin._risk_manager.can_trade.return_value = (True, None)
         mixin._risk_manager.calculate_position_size.return_value = (100.0, 0.002)
-        mixin._notify_trade_failure = AsyncMock()
+        # Mock on the component — see comment in the sibling test above.
+        mixin._ensure_trade_executor().notify_trade_failure = AsyncMock()
 
         signal = self._make_signal()
 
@@ -1198,7 +1202,7 @@ class TestTradeFailureNotification:
 
         await mixin._execute_trade(signal, mock_client, demo_mode=False)
 
-        mixin._notify_trade_failure.assert_not_called()
+        mixin._trade_executor.notify_trade_failure.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
