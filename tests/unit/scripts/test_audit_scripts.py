@@ -436,3 +436,263 @@ async def test_audit_scheduler_notifier_skipped_on_clean_run():
     await runner()
 
     assert call_count["n"] == 0
+
+
+# ── default_admin_notifier: DB-first with env fallback (#242) ──────────
+
+
+def _admin_user(user_id: int = 1) -> SimpleNamespace:
+    """Duck-typed admin row with the fields audit_scheduler reads."""
+    return SimpleNamespace(id=user_id, role="admin", is_active=True)
+
+
+def _bot_config_stub(
+    *,
+    discord_webhook_url=None,
+    telegram_bot_token=None,
+    telegram_chat_id=None,
+    bot_id: int = 1,
+) -> SimpleNamespace:
+    """Duck-typed BotConfig row with encrypted-style fields."""
+    return SimpleNamespace(
+        id=bot_id,
+        discord_webhook_url=discord_webhook_url,
+        telegram_bot_token=telegram_bot_token,
+        telegram_chat_id=telegram_chat_id,
+    )
+
+
+class _FakeScalarResult:
+    def __init__(self, items):
+        self._items = list(items)
+
+    def scalar_one_or_none(self):
+        return self._items[0] if self._items else None
+
+    def scalars(self):
+        class _Scalars:
+            def __init__(self, items):
+                self._items = items
+
+            def all(self):
+                return list(self._items)
+
+            def first(self):
+                return self._items[0] if self._items else None
+
+        return _Scalars(self._items)
+
+
+class _FakeSession:
+    """Minimal AsyncSession stand-in for audit_scheduler DB lookups.
+
+    ``results`` is a FIFO list of iterables — one per ``session.execute``
+    call, in the order audit_scheduler invokes them (admin row first,
+    then bot configs).
+    """
+
+    def __init__(self, results):
+        self._results = list(results)
+        self.calls = 0
+
+    async def execute(self, _query):
+        self.calls += 1
+        batch = self._results.pop(0) if self._results else []
+        return _FakeScalarResult(batch)
+
+
+def _session_ctx(session):
+    """Wrap a _FakeSession as the async contextmanager ``get_session`` yields."""
+    from contextlib import asynccontextmanager
+
+    @asynccontextmanager
+    async def _ctx():
+        yield session
+
+    return _ctx()
+
+
+@pytest.mark.asyncio
+async def test_default_admin_notifier_uses_admin_user_db_config(monkeypatch):
+    """DB-configured Discord + Telegram credentials drive notifier dispatch."""
+    from src.bot import audit_scheduler as scheduler_module
+
+    session = _FakeSession([
+        [_admin_user()],
+        [_bot_config_stub(
+            discord_webhook_url="enc_webhook",
+            telegram_bot_token="enc_token",
+            telegram_chat_id="enc_chat",
+        )],
+    ])
+
+    def fake_get_session():
+        return _session_ctx(session)
+
+    def fake_decrypt(ciphertext: str) -> str:
+        return {
+            "enc_webhook": "https://discord.test/webhook",
+            "enc_token": "tg-token-value",
+            "enc_chat": "tg-chat-value",
+        }[ciphertext]
+
+    monkeypatch.setattr("src.models.session.get_session", fake_get_session)
+    monkeypatch.setattr("src.utils.encryption.decrypt_value", fake_decrypt)
+    # Env values must NOT leak in when DB wins.
+    monkeypatch.setenv("ADMIN_DISCORD_WEBHOOK_URL", "https://env.example/hook")
+    monkeypatch.setenv("ADMIN_TELEGRAM_BOT_TOKEN", "env-token")
+    monkeypatch.setenv("ADMIN_TELEGRAM_CHAT_ID", "env-chat")
+
+    calls: dict[str, dict] = {}
+
+    class _FakeDiscord:
+        def __init__(self, webhook_url: str):
+            calls["discord_init"] = {"webhook_url": webhook_url}
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *exc):
+            return False
+
+        async def send_alert(self, **kwargs):
+            calls["discord_send"] = kwargs
+
+    class _FakeTelegram:
+        def __init__(self, bot_token: str, chat_id: str):
+            calls["telegram_init"] = {"bot_token": bot_token, "chat_id": chat_id}
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *exc):
+            return False
+
+        async def send_alert(self, **kwargs):
+            calls["telegram_send"] = kwargs
+
+    monkeypatch.setattr(
+        "src.notifications.discord_notifier.DiscordNotifier", _FakeDiscord,
+    )
+    monkeypatch.setattr(
+        "src.notifications.telegram_notifier.TelegramNotifier", _FakeTelegram,
+    )
+
+    await scheduler_module.default_admin_notifier(
+        "synthetic summary", {"findings": [1, 2]},
+    )
+
+    assert calls["discord_init"]["webhook_url"] == "https://discord.test/webhook"
+    assert calls["telegram_init"] == {
+        "bot_token": "tg-token-value",
+        "chat_id": "tg-chat-value",
+    }
+    assert calls["discord_send"]["message"] == "synthetic summary"
+    assert calls["telegram_send"]["message"] == "synthetic summary"
+
+
+@pytest.mark.asyncio
+async def test_default_admin_notifier_falls_back_to_env_when_db_empty(monkeypatch):
+    """Missing DB admin/bot-config makes the notifier use ADMIN_* env vars."""
+    from src.bot import audit_scheduler as scheduler_module
+
+    # No admin row returned → fully empty DB path.
+    session = _FakeSession([[]])
+
+    def fake_get_session():
+        return _session_ctx(session)
+
+    monkeypatch.setattr("src.models.session.get_session", fake_get_session)
+    monkeypatch.setenv("ADMIN_DISCORD_WEBHOOK_URL", "https://env.example/hook")
+    monkeypatch.setenv("ADMIN_TELEGRAM_BOT_TOKEN", "env-token")
+    monkeypatch.setenv("ADMIN_TELEGRAM_CHAT_ID", "env-chat")
+
+    init_args: dict[str, dict] = {}
+
+    class _FakeDiscord:
+        def __init__(self, webhook_url: str):
+            init_args["discord"] = {"webhook_url": webhook_url}
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *exc):
+            return False
+
+        async def send_alert(self, **kwargs):
+            init_args["discord_sent"] = True
+
+    class _FakeTelegram:
+        def __init__(self, bot_token: str, chat_id: str):
+            init_args["telegram"] = {"bot_token": bot_token, "chat_id": chat_id}
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *exc):
+            return False
+
+        async def send_alert(self, **kwargs):
+            init_args["telegram_sent"] = True
+
+    monkeypatch.setattr(
+        "src.notifications.discord_notifier.DiscordNotifier", _FakeDiscord,
+    )
+    monkeypatch.setattr(
+        "src.notifications.telegram_notifier.TelegramNotifier", _FakeTelegram,
+    )
+
+    await scheduler_module.default_admin_notifier(
+        "env summary", {"findings": []},
+    )
+
+    assert init_args["discord"] == {"webhook_url": "https://env.example/hook"}
+    assert init_args["telegram"] == {"bot_token": "env-token", "chat_id": "env-chat"}
+    assert init_args.get("discord_sent") is True
+    assert init_args.get("telegram_sent") is True
+
+
+@pytest.mark.asyncio
+async def test_default_admin_notifier_noop_when_nothing_configured(monkeypatch, caplog):
+    """Empty DB and empty env → no notifier constructed, WARN logged."""
+    from src.bot import audit_scheduler as scheduler_module
+
+    session = _FakeSession([[]])
+
+    def fake_get_session():
+        return _session_ctx(session)
+
+    monkeypatch.setattr("src.models.session.get_session", fake_get_session)
+    monkeypatch.delenv("ADMIN_DISCORD_WEBHOOK_URL", raising=False)
+    monkeypatch.delenv("ADMIN_TELEGRAM_BOT_TOKEN", raising=False)
+    monkeypatch.delenv("ADMIN_TELEGRAM_CHAT_ID", raising=False)
+
+    built = {"discord": 0, "telegram": 0}
+
+    class _ExplodingDiscord:
+        def __init__(self, *a, **kw):
+            built["discord"] += 1
+            raise AssertionError("Discord notifier must not be constructed")
+
+    class _ExplodingTelegram:
+        def __init__(self, *a, **kw):
+            built["telegram"] += 1
+            raise AssertionError("Telegram notifier must not be constructed")
+
+    monkeypatch.setattr(
+        "src.notifications.discord_notifier.DiscordNotifier", _ExplodingDiscord,
+    )
+    monkeypatch.setattr(
+        "src.notifications.telegram_notifier.TelegramNotifier", _ExplodingTelegram,
+    )
+
+    with caplog.at_level("WARNING"):
+        await scheduler_module.default_admin_notifier(
+            "noop summary", {"findings": [1]},
+        )
+
+    assert built == {"discord": 0, "telegram": 0}
+    assert any(
+        "no admin channels configured" in rec.getMessage()
+        for rec in caplog.records
+    )
