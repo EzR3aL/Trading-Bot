@@ -1606,7 +1606,7 @@ class TestOrchestratorNotInitialized:
 @pytest.mark.asyncio
 async def test_copy_trading_bot_does_not_conflict(factory, regular_user):
     """Copy bots may overlap with existing bots on the same symbols."""
-    from src.api.routers.bots import _check_symbol_conflicts
+    from src.services.bots_service import _check_symbol_conflicts
 
     async with factory() as session:
         existing = BotConfig(
@@ -1845,7 +1845,7 @@ class TestSymbolConflictBlocking:
         # Pydantic enforces uppercase for BotConfigCreate, but the underlying
         # helper (used by the GET /symbol-conflicts endpoint) must still match
         # case-insensitively for any direct callers.
-        from src.api.routers.bots import _check_symbol_conflicts
+        from src.services.bots_service import _check_symbol_conflicts
 
         async with factory() as session:
             conflicts = await _check_symbol_conflicts(

@@ -6,27 +6,20 @@ Lifecycle (start/stop) and statistics live in sub-modules
 (bots_lifecycle, bots_statistics) and are included via sub-routers.
 """
 
-import asyncio
-import json
-import time as _time
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from src.api.schemas.bots import (
-    BotBudgetInfo,
     BotBudgetListResponse,
     BotConfigCreate,
     BotConfigResponse,
     BotConfigUpdate,
     BotListResponse,
-    BotRuntimeStatus,
     ExchangeBalanceOverview,
     ExchangeBalancePreview,
     StrategiesListResponse,
     StrategyInfo,
-    SymbolConflict,
     SymbolConflictResponse,
 )
 from src.auth.dependencies import get_current_user
@@ -38,7 +31,7 @@ from src.errors import (
     ERR_STRATEGY_NOT_FOUND,
     ERR_SYMBOL_CONFLICT,
 )
-from src.models.database import BotConfig, ExchangeConnection, TradeRecord, User
+from src.models.database import BotConfig, User
 from src.models.session import get_db
 from src.services import bots_service
 from src.services.exceptions import (
@@ -49,12 +42,9 @@ from src.services.exceptions import (
     StrategyNotFound,
 )
 from src.api.rate_limit import limiter
-from src.models.enums import CEX_EXCHANGES, EXCHANGE_NAMES, EXCHANGE_PATTERN
+from src.models.enums import EXCHANGE_PATTERN
 from src.utils.json_helpers import parse_json_field
 from src.constants import MAX_BOTS_PER_USER
-from src.utils.logger import get_logger
-
-logger = get_logger(__name__)
 
 router = APIRouter(prefix="/api/bots", tags=["bots"])
 
@@ -104,71 +94,6 @@ def _config_to_response(config: BotConfig) -> BotConfigResponse:
     )
 
 
-# Mode overlap: which existing modes conflict with a new bot's mode
-_MODE_CONFLICTS: dict[str, set[str]] = {
-    "demo": {"demo", "both"},
-    "live": {"live", "both"},
-    "both": {"demo", "live", "both"},
-}
-
-
-async def _check_symbol_conflicts(
-    db: AsyncSession,
-    user_id: int,
-    exchange_type: str,
-    mode: str,
-    trading_pairs: list[str],
-    exclude_bot_id: int | None = None,
-    strategy_type: str | None = None,
-) -> list[SymbolConflict]:
-    """Find enabled bots that already trade the same symbols on the same exchange/mode.
-
-    Copy-trading bots are budget-isolated and may overlap freely with other bots,
-    so we short-circuit when ``strategy_type == "copy_trading"``.
-    """
-    if strategy_type == "copy_trading":
-        return []
-    conflicting_modes = _MODE_CONFLICTS.get(mode, set())
-    query = (
-        select(BotConfig)
-        .where(
-            BotConfig.user_id == user_id,
-            BotConfig.exchange_type == exchange_type,
-            BotConfig.is_enabled.is_(True),
-            BotConfig.mode.in_(conflicting_modes),
-            # Skip soft-deleted bots (migration 027 / ARCH-M3). Rows with
-            # deleted_at set are "alive but tombstoned" — they neither run
-            # nor should block new bots from reusing their symbols.
-            BotConfig.deleted_at.is_(None),
-        )
-    )
-    if exclude_bot_id is not None:
-        query = query.where(BotConfig.id != exclude_bot_id)
-
-    result = await db.execute(query)
-    existing_bots = result.scalars().all()
-
-    # Case-normalize: symbols are stored uppercase in BotConfig.trading_pairs
-    # (Pydantic validator on BotConfigCreate enforces ``^[A-Z0-9_-]{1,30}$``),
-    # so we compare on the upper-cased set to catch ``btcusdt`` vs ``BTCUSDT``.
-    requested_set = {p.upper() for p in trading_pairs}
-    conflicts: list[SymbolConflict] = []
-    for bot in existing_bots:
-        existing_pairs = {
-            p.upper()
-            for p in parse_json_field(bot.trading_pairs, field_name="trading_pairs", context=f"bot {bot.id}", default=[])
-        }
-        overlap = requested_set & existing_pairs
-        for symbol in sorted(overlap):
-            conflicts.append(SymbolConflict(
-                symbol=symbol,
-                existing_bot_id=bot.id,
-                existing_bot_name=bot.name,
-                existing_bot_mode=bot.mode,
-            ))
-    return conflicts
-
-
 async def _raise_if_symbol_conflict(
     db: AsyncSession,
     user_id: int,
@@ -181,12 +106,11 @@ async def _raise_if_symbol_conflict(
     """Raise 409 CONFLICT when the user already runs a bot on the same
     exchange/mode/symbol combination.
 
-    Defense-in-depth companion to the frontend probe on
-    ``GET /api/bots/symbol-conflicts``. Uses a stable error code
-    (``SYMBOL_ALREADY_IN_USE``) so the UI can map the response to the
-    localized message regardless of language.
+    Thin wrapper around ``bots_service._check_symbol_conflicts`` — kept in
+    the router because the HTTP error envelope (stable ``SYMBOL_ALREADY_IN_USE``
+    code, localized message) is a transport concern, not a service concern.
     """
-    conflicts = await _check_symbol_conflicts(
+    conflicts = await bots_service._check_symbol_conflicts(
         db,
         user_id,
         exchange_type,
@@ -197,7 +121,6 @@ async def _raise_if_symbol_conflict(
     )
     if not conflicts:
         return
-    # Stable, machine-readable payload — the UI translates the code.
     raise HTTPException(
         status_code=409,
         detail={
@@ -208,6 +131,7 @@ async def _raise_if_symbol_conflict(
             "conflicts": [c.model_dump() for c in conflicts],
         },
     )
+
 
 
 # ─── Strategies ───────────────────────────────────────────────
@@ -245,113 +169,7 @@ async def get_balance_preview(
     db: AsyncSession = Depends(get_db),
 ):
     """Balance preview for the BotBuilder — shows equity, allocated %, and remaining."""
-    import asyncio
-    from src.exchanges.factory import create_exchange_client
-    from src.utils.encryption import decrypt_value
-
-    # For "both" mode, live balance is the limiting factor
-    effective_mode = "live" if mode == "both" else mode
-
-    # Check exchange connection
-    conn_result = await db.execute(
-        select(ExchangeConnection).where(
-            ExchangeConnection.user_id == user.id,
-            ExchangeConnection.exchange_type == exchange_type,
-        )
-    )
-    conn = conn_result.scalar_one_or_none()
-    if not conn:
-        return ExchangeBalancePreview(
-            exchange_type=exchange_type, mode=mode, has_connection=False,
-            error="no_connection",
-        )
-
-    is_demo = effective_mode == "demo"
-    api_key_enc = conn.demo_api_key_encrypted if is_demo else conn.api_key_encrypted
-    api_secret_enc = conn.demo_api_secret_encrypted if is_demo else conn.api_secret_encrypted
-    passphrase_enc = conn.demo_passphrase_encrypted if is_demo else conn.passphrase_encrypted
-
-    if not api_key_enc or not api_secret_enc:
-        return ExchangeBalancePreview(
-            exchange_type=exchange_type, mode=mode, has_connection=False,
-            error="no_credentials",
-        )
-
-    # Fetch balance (reuse budget cache)
-    cache_key = f"budget:{user.id}:{exchange_type}:{effective_mode}"
-    cached = _budget_cache_get(cache_key)
-    if cached:
-        available, equity, currency = cached
-    else:
-        try:
-            client = create_exchange_client(
-                exchange_type=exchange_type,
-                api_key=decrypt_value(api_key_enc),
-                api_secret=decrypt_value(api_secret_enc),
-                passphrase=decrypt_value(passphrase_enc) if passphrase_enc else "",
-                demo_mode=is_demo,
-            )
-            balance = await asyncio.wait_for(client.get_account_balance(), timeout=10.0)
-            available = balance.available
-            equity = balance.total
-            currency = balance.currency
-            _budget_cache_set(cache_key, (available, equity, currency))
-        except Exception as e:
-            logger.warning("Balance preview fetch failed for %s/%s: %s", exchange_type, effective_mode, e)
-            return ExchangeBalancePreview(
-                exchange_type=exchange_type, mode=mode, has_connection=True,
-                error=f"fetch_failed: {e}",
-            )
-
-    # Calculate already-allocated % from existing bots on this exchange/mode
-    bot_filter = [
-        BotConfig.user_id == user.id,
-        BotConfig.exchange_type == exchange_type,
-    ]
-    if mode == "both":
-        bot_filter.append(BotConfig.mode.in_(["live", "both"]))
-    else:
-        bot_filter.append(BotConfig.mode.in_([mode, "both"]))
-
-    if exclude_bot_id:
-        bot_filter.append(BotConfig.id != exclude_bot_id)
-
-    bots_result = await db.execute(select(BotConfig).where(*bot_filter))
-    existing_bots = bots_result.scalars().all()
-
-    total_allocated_amount = 0.0
-    total_allocated_pct = 0.0
-    for bot in existing_bots:
-        pac = parse_json_field(bot.per_asset_config, field_name="per_asset_config", context=f"bot {bot.id}", default={})
-        try:
-            pairs = json.loads(bot.trading_pairs) if isinstance(bot.trading_pairs, str) else (bot.trading_pairs or [])
-        except (json.JSONDecodeError, TypeError):
-            pairs = []
-        for symbol in pairs:
-            asset_cfg = pac.get(symbol) or {}
-            usdt = asset_cfg.get("position_usdt")
-            pct = asset_cfg.get("position_pct")
-            if usdt and usdt > 0:
-                total_allocated_amount += usdt
-            elif pct and pct > 0:
-                total_allocated_amount += equity * pct / 100 if equity > 0 else 0.0
-
-    if equity > 0:
-        total_allocated_pct = (total_allocated_amount / equity) * 100
-    allocated_amount = total_allocated_amount
-    remaining = max(0.0, equity - allocated_amount)
-
-    return ExchangeBalancePreview(
-        exchange_type=exchange_type,
-        mode=mode,
-        currency=currency,
-        exchange_balance=round(available, 2),
-        exchange_equity=round(equity, 2),
-        existing_allocated_pct=round(total_allocated_pct, 1),
-        existing_allocated_amount=round(allocated_amount, 2),
-        remaining_balance=round(remaining, 2),
-        has_connection=True,
-    )
+    return await bots_service.balance_preview(db, user.id, exchange_type, mode, exclude_bot_id)
 
 
 @router.get("/balance-overview", response_model=ExchangeBalanceOverview)
@@ -363,110 +181,7 @@ async def get_balance_overview(
     db: AsyncSession = Depends(get_db),
 ):
     """Balance overview across ALL connected exchanges (demo + live)."""
-    import asyncio
-    from src.exchanges.factory import create_exchange_client
-    from src.utils.encryption import decrypt_value
-
-    # Load all exchange connections
-    conn_result = await db.execute(
-        select(ExchangeConnection).where(ExchangeConnection.user_id == user.id)
-    )
-    connections = {c.exchange_type: c for c in conn_result.scalars().all()}
-
-    # Load all bots for allocation calculation
-    bot_filter = [BotConfig.user_id == user.id]
-    if exclude_bot_id:
-        bot_filter.append(BotConfig.id != exclude_bot_id)
-    bots_result = await db.execute(select(BotConfig).where(*bot_filter))
-    all_bots = bots_result.scalars().all()
-
-    # Build (exchange, mode) pairs to query
-    exchange_modes: list[tuple[str, str]] = []
-    for ex_type in EXCHANGE_NAMES:
-        conn = connections.get(ex_type)
-        if not conn:
-            continue
-        if conn.demo_api_key_encrypted and conn.demo_api_secret_encrypted:
-            exchange_modes.append((ex_type, "demo"))
-        if conn.api_key_encrypted and conn.api_secret_encrypted:
-            exchange_modes.append((ex_type, "live"))
-
-    if not exchange_modes:
-        return ExchangeBalanceOverview(exchanges=[])
-
-    # Fetch balances in parallel
-    results: list[ExchangeBalancePreview] = []
-
-    async def _fetch(ex_type: str, mode: str):
-        conn = connections[ex_type]
-        is_demo = mode == "demo"
-        api_key_enc = conn.demo_api_key_encrypted if is_demo else conn.api_key_encrypted
-        api_secret_enc = conn.demo_api_secret_encrypted if is_demo else conn.api_secret_encrypted
-        passphrase_enc = conn.demo_passphrase_encrypted if is_demo else conn.passphrase_encrypted
-
-        # Fetch balance with cache
-        cache_key = f"budget:{user.id}:{ex_type}:{mode}"
-        cached = _budget_cache_get(cache_key)
-        if cached:
-            available, equity, currency = cached
-        else:
-            try:
-                client = create_exchange_client(
-                    exchange_type=ex_type,
-                    api_key=decrypt_value(api_key_enc),
-                    api_secret=decrypt_value(api_secret_enc),
-                    passphrase=decrypt_value(passphrase_enc) if passphrase_enc else "",
-                    demo_mode=is_demo,
-                )
-                balance = await asyncio.wait_for(client.get_account_balance(), timeout=10.0)
-                available, equity, currency = balance.available, balance.total, balance.currency
-                _budget_cache_set(cache_key, (available, equity, currency))
-            except Exception as e:
-                logger.warning("Balance overview fetch failed for %s/%s: %s", ex_type, mode, e)
-                results.append(ExchangeBalancePreview(
-                    exchange_type=ex_type, mode=mode, has_connection=True,
-                    error="fetch_failed",
-                ))
-                return
-
-        # Calculate allocated amount from existing bots on this exchange/mode
-        total_alloc = 0.0
-        for bot in all_bots:
-            if bot.exchange_type != ex_type:
-                continue
-            if mode not in (["demo", "both"] if bot.mode == "both" else [bot.mode]):
-                if not (bot.mode == "both" or bot.mode == mode):
-                    continue
-            pac = parse_json_field(bot.per_asset_config, field_name="per_asset_config", context=f"bot {bot.id}", default={})
-            try:
-                pairs = json.loads(bot.trading_pairs) if isinstance(bot.trading_pairs, str) else (bot.trading_pairs or [])
-            except (json.JSONDecodeError, TypeError):
-                pairs = []
-            for symbol in pairs:
-                asset_cfg = pac.get(symbol) or {}
-                usdt = asset_cfg.get("position_usdt")
-                pct = asset_cfg.get("position_pct")
-                if usdt and usdt > 0:
-                    total_alloc += usdt
-                elif pct and pct > 0:
-                    total_alloc += equity * pct / 100 if equity > 0 else 0.0
-
-        total_pct = (total_alloc / equity * 100) if equity > 0 else 0.0
-        results.append(ExchangeBalancePreview(
-            exchange_type=ex_type,
-            mode=mode,
-            currency=currency,
-            exchange_balance=round(available, 2),
-            exchange_equity=round(equity, 2),
-            existing_allocated_pct=round(total_pct, 1),
-            existing_allocated_amount=round(total_alloc, 2),
-            remaining_balance=round(max(0.0, equity - total_alloc), 2),
-            has_connection=True,
-        ))
-
-    await asyncio.gather(*(_fetch(ex, m) for ex, m in exchange_modes), return_exceptions=True)
-
-    return ExchangeBalanceOverview(exchanges=results)
+    return await bots_service.balance_overview(db, user.id, exclude_bot_id)
 
 
 # ─── Symbol Conflict Check ────────────────────────────────────
@@ -485,12 +200,9 @@ async def check_symbol_conflicts(
 ):
     """Check if trading pairs conflict with existing enabled bots."""
     pairs = [p.strip() for p in trading_pairs.split(",") if p.strip()]
-    if not pairs:
-        return SymbolConflictResponse()
-    conflicts = await _check_symbol_conflicts(
-        db, user.id, exchange_type, mode, pairs, exclude_bot_id, strategy_type=strategy_type
+    return await bots_service.symbol_conflicts(
+        db, user.id, exchange_type, mode, pairs, exclude_bot_id, strategy_type,
     )
-    return SymbolConflictResponse(has_conflicts=len(conflicts) > 0, conflicts=conflicts)
 
 
 # ─── CRUD ─────────────────────────────────────────────────────
@@ -545,20 +257,6 @@ async def list_bots(
 
 # ─── Budget / Balance Info (must be before /{bot_id} to avoid route conflict) ──
 
-_budget_cache: dict[str, tuple[float, any]] = {}
-_BUDGET_CACHE_TTL = 30  # seconds
-
-
-def _budget_cache_get(key: str):
-    entry = _budget_cache.get(key)
-    if entry and (_time.monotonic() - entry[0]) < _BUDGET_CACHE_TTL:
-        return entry[1]
-    return None
-
-
-def _budget_cache_set(key: str, value):
-    _budget_cache[key] = (_time.monotonic(), value)
-
 
 @router.get("/budget-info", response_model=BotBudgetListResponse)
 @limiter.limit("10/minute")
@@ -568,189 +266,7 @@ async def get_budget_info(
     db: AsyncSession = Depends(get_db),
 ):
     """Budget allocation info per bot with overallocation warnings."""
-    from src.exchanges.factory import create_exchange_client
-    from src.utils.encryption import decrypt_value
-
-    result = await db.execute(
-        select(BotConfig).where(
-            BotConfig.user_id == user.id,
-            BotConfig.is_enabled == True,  # noqa: E712
-        )
-    )
-    bot_configs = result.scalars().all()
-    if not bot_configs:
-        return BotBudgetListResponse(budgets=[])
-
-    conn_result = await db.execute(
-        select(ExchangeConnection).where(ExchangeConnection.user_id == user.id)
-    )
-    connections = {c.exchange_type: c for c in conn_result.scalars().all()}
-
-    groups: dict[tuple[str, str], list[BotConfig]] = {}
-    for bot in bot_configs:
-        modes = ["demo", "live"] if bot.mode == "both" else [bot.mode]
-        for m in modes:
-            key = (bot.exchange_type, m)
-            groups.setdefault(key, []).append(bot)
-
-    balances: dict[tuple[str, str], tuple[float, float, str]] = {}
-
-    async def _fetch_balance(exchange_type: str, mode: str):
-        cache_key = f"budget:{user.id}:{exchange_type}:{mode}"
-        cached = _budget_cache_get(cache_key)
-        if cached is not None:
-            balances[(exchange_type, mode)] = cached
-            return
-
-        conn = connections.get(exchange_type)
-        if not conn:
-            return
-
-        is_demo = mode == "demo"
-        if is_demo:
-            api_key_enc = conn.demo_api_key_encrypted
-            api_secret_enc = conn.demo_api_secret_encrypted
-            passphrase_enc = conn.demo_passphrase_encrypted
-        else:
-            api_key_enc = conn.api_key_encrypted
-            api_secret_enc = conn.api_secret_encrypted
-            passphrase_enc = conn.passphrase_encrypted
-
-        if not api_key_enc or not api_secret_enc:
-            return
-
-        try:
-            client = create_exchange_client(
-                exchange_type=exchange_type,
-                api_key=decrypt_value(api_key_enc),
-                api_secret=decrypt_value(api_secret_enc),
-                passphrase=decrypt_value(passphrase_enc) if passphrase_enc else "",
-                demo_mode=is_demo,
-            )
-            balance = await asyncio.wait_for(client.get_account_balance(), timeout=10.0)
-            val = (balance.available, balance.total, balance.currency)
-            balances[(exchange_type, mode)] = val
-            _budget_cache_set(cache_key, val)
-        except Exception as e:
-            logger.warning(f"Budget balance fetch failed for {exchange_type}/{mode}: {e}")
-
-    await asyncio.gather(
-        *(_fetch_balance(ex, m) for ex, m in groups.keys()),
-        return_exceptions=True,
-    )
-
-    group_total_pct: dict[tuple[str, str], float] = {}
-    bot_pct_map: dict[tuple[int, str], float] = {}
-
-    for (exchange_type, mode), bots in groups.items():
-        total_pct = 0.0
-        for bot in bots:
-            pac = parse_json_field(
-                bot.per_asset_config,
-                field_name="per_asset_config",
-                context=f"bot {bot.id}",
-                default={},
-            )
-            bot_pct = 0.0
-            try:
-                pairs = json.loads(bot.trading_pairs) if isinstance(bot.trading_pairs, str) else bot.trading_pairs
-            except (json.JSONDecodeError, TypeError):
-                pairs = []
-
-            has_fixed = False
-            for symbol in pairs:
-                asset_cfg = pac.get(symbol, {})
-                usdt_val = asset_cfg.get("position_usdt")
-                pct_val = asset_cfg.get("position_pct")
-                if usdt_val is not None and usdt_val > 0:
-                    # Store as pseudo-pct for the budget calculation
-                    eq = balances.get((exchange_type, mode), (0, 0, "USDT"))[1]
-                    bot_pct += (usdt_val / eq * 100) if eq > 0 else 0.0
-                    has_fixed = True
-                elif pct_val is not None and pct_val > 0:
-                    bot_pct += pct_val
-                    has_fixed = True
-
-            if not has_fixed:
-                def _has_fixed_alloc(b):
-                    _pac = parse_json_field(b.per_asset_config, default={})
-                    try:
-                        _pairs = json.loads(b.trading_pairs) if isinstance(b.trading_pairs, str) else []
-                    except (json.JSONDecodeError, TypeError):
-                        _pairs = []
-                    return any(
-                        (_pac.get(s, {}).get("position_usdt") or _pac.get(s, {}).get("position_pct"))
-                        for s in _pairs
-                    )
-                bot_pct = 100.0 / max(len(bots), 1) if not any(_has_fixed_alloc(b) for b in bots) else 0.0
-
-            bot_pct_map[(bot.id, mode)] = bot_pct
-            total_pct += bot_pct
-
-        group_total_pct[(exchange_type, mode)] = total_pct
-
-    # Query open trades to calculate margin already in use per bot
-    open_trades_result = await db.execute(
-        select(TradeRecord).where(
-            TradeRecord.user_id == user.id,
-            TradeRecord.status == "open",
-        )
-    )
-    open_trades = open_trades_result.scalars().all()
-
-    # Build map: bot_id -> total margin used by open positions
-    bot_margin_used: dict[int, float] = {}
-    for trade in open_trades:
-        if trade.entry_price and trade.size and trade.leverage:
-            margin = trade.entry_price * trade.size / trade.leverage
-            bot_margin_used[trade.bot_config_id] = bot_margin_used.get(trade.bot_config_id, 0.0) + margin
-
-    budgets: list[BotBudgetInfo] = []
-    seen = set()
-
-    for (exchange_type, mode), bots in groups.items():
-        bal = balances.get((exchange_type, mode))
-        available = bal[0] if bal else 0.0
-        equity = bal[1] if bal else 0.0
-        currency = bal[2] if bal else "USDT"
-        total_pct = group_total_pct.get((exchange_type, mode), 0.0)
-
-        for bot in bots:
-            entry_key = (bot.id, mode)
-            if entry_key in seen:
-                continue
-            seen.add(entry_key)
-
-            pct = bot_pct_map.get((bot.id, mode), 0.0)
-            allocated_budget = equity * pct / 100 if pct > 0 else 0.0
-
-            # Account for margin already used by this bot's open positions
-            margin_in_use = bot_margin_used.get(bot.id, 0.0)
-            effective_available = available + margin_in_use
-            has_funds = allocated_budget <= effective_available and total_pct <= 100.0
-
-            warning = None
-            if total_pct > 100.0:
-                warning = f"Overallocated: {total_pct:.0f}% of 100% used on {exchange_type} ({mode})"
-            elif allocated_budget > effective_available:
-                warning = f"Insufficient balance: ${allocated_budget:,.2f} needed, ${effective_available:,.2f} available"
-
-            budgets.append(BotBudgetInfo(
-                bot_config_id=bot.id,
-                bot_name=bot.name,
-                exchange_type=exchange_type,
-                mode=mode,
-                currency=currency,
-                exchange_balance=available,
-                exchange_equity=equity,
-                allocated_budget=allocated_budget,
-                allocated_pct=pct,
-                total_allocated_pct=total_pct,
-                has_sufficient_funds=has_funds,
-                warning_message=warning,
-            ))
-
-    return BotBudgetListResponse(budgets=budgets)
+    return await bots_service.budget_info(db, user.id)
 
 
 @router.get("/{bot_id}", response_model=BotConfigResponse)

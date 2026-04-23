@@ -310,7 +310,7 @@ class TestOversizedInputs:
         from unittest.mock import AsyncMock
         pairs = [f"TOKEN{i}USDT" for i in range(20)]
         monkeypatch.setattr(
-            "src.api.routers.bots.get_exchange_symbols",
+            "src.services.bots_service.get_exchange_symbols",
             AsyncMock(return_value=pairs),
         )
         async with factory() as session:
