@@ -5,6 +5,7 @@ import json
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -12,6 +13,7 @@ from config.settings import settings
 from src.api.dependencies.risk_state import get_risk_state_manager
 from src.api.rate_limit import limiter
 from src.api.routers.bots import _check_symbol_conflicts, get_orchestrator
+from src.api.schemas.bots import _validate_webhook_url
 from src.auth.dependencies import get_current_user
 from src.errors import (
     ERR_AFFILIATE_PENDING,
@@ -122,16 +124,33 @@ async def _enforce_affiliate_gate(exchange_type: str, user: User, db: AsyncSessi
 # ─── Notification Test (without bot_id, for new bots) ────────
 
 
+class TelegramTestRequest(BaseModel):
+    """Body model for /test-telegram-direct."""
+    bot_token: str = Field(..., min_length=1, max_length=200)
+    chat_id: str = Field(..., min_length=1, max_length=64)
+
+
+class DiscordTestRequest(BaseModel):
+    """Body model for /test-discord-direct (SSRF-protected)."""
+    webhook_url: str = Field(..., min_length=1, max_length=500)
+
+    @field_validator("webhook_url")
+    @classmethod
+    def _check_webhook(cls, v: str) -> str:
+        # Reuses the shared SSRF-prevention validator
+        return _validate_webhook_url(v) or ""
+
+
 @lifecycle_router.post("/test-telegram-direct")
 @limiter.limit("5/minute")
 async def test_telegram_direct(
     request: Request,
+    body: TelegramTestRequest,
     user: User = Depends(get_current_user),
 ):
     """Send a test Telegram message with provided credentials (no bot required)."""
-    body = await request.json()
-    bot_token = body.get("bot_token", "").strip()
-    chat_id = body.get("chat_id", "").strip()
+    bot_token = body.bot_token.strip()
+    chat_id = body.chat_id.strip()
     if not bot_token or not chat_id:
         raise HTTPException(status_code=400, detail=ERR_TELEGRAM_NOT_CONFIGURED)
 
@@ -150,11 +169,11 @@ async def test_telegram_direct(
 @limiter.limit("5/minute")
 async def test_discord_direct(
     request: Request,
+    body: DiscordTestRequest,
     user: User = Depends(get_current_user),
 ):
     """Send a test Discord message with provided webhook URL (no bot required)."""
-    body = await request.json()
-    webhook_url = body.get("webhook_url", "").strip()
+    webhook_url = body.webhook_url.strip()
     if not webhook_url:
         raise HTTPException(status_code=400, detail=ERR_DISCORD_NOT_CONFIGURED)
 
