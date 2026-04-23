@@ -40,6 +40,8 @@ from src.errors import (
 )
 from src.models.database import BotConfig, ExchangeConnection, TradeRecord, User
 from src.models.session import get_db
+from src.services import bots_service
+from src.services.exceptions import BotNotFound, MaxBotsReached
 from src.strategy import StrategyRegistry  # imports __init__.py → registers all strategies
 from src.api.rate_limit import limiter
 from src.models.enums import CEX_EXCHANGES, EXCHANGE_NAMES, EXCHANGE_PATTERN
@@ -210,8 +212,6 @@ async def _raise_if_symbol_conflict(
 @router.get("/strategies", response_model=StrategiesListResponse)
 async def list_strategies(user: User = Depends(get_current_user)):
     """List all available trading strategies with their parameter schemas."""
-    from src.services import bots_service
-
     strategies = bots_service.list_strategies()
     return StrategiesListResponse(
         strategies=[StrategyInfo(**s) for s in strategies]
@@ -226,8 +226,6 @@ async def list_data_sources(user: User = Depends(get_current_user)):
     id, name, description, category, provider, free, default fields.
     Used by the Bot Builder to render selectable data source cards.
     """
-    from src.services import bots_service
-
     return bots_service.list_data_sources()
 
 
@@ -998,11 +996,9 @@ async def get_bot(
     db: AsyncSession = Depends(get_db),
 ):
     """Get a specific bot configuration."""
-    result = await db.execute(
-        select(BotConfig).where(BotConfig.id == bot_id, BotConfig.user_id == user.id)
-    )
-    config = result.scalar_one_or_none()
-    if not config:
+    try:
+        config = await bots_service.get_bot(db, user.id, bot_id)
+    except BotNotFound:
         raise HTTPException(status_code=404, detail=ERR_BOT_NOT_FOUND)
     return _config_to_response(config)
 
@@ -1133,30 +1129,10 @@ async def delete_bot(
     orchestrator=Depends(get_orchestrator),
 ):
     """Delete a bot configuration. Bot must be stopped first."""
-    result = await db.execute(
-        select(BotConfig).where(BotConfig.id == bot_id, BotConfig.user_id == user.id)
-    )
-    config = result.scalar_one_or_none()
-    if not config:
+    try:
+        bot_name = await bots_service.delete_bot(db, user.id, bot_id, orchestrator)
+    except BotNotFound:
         raise HTTPException(status_code=404, detail=ERR_BOT_NOT_FOUND)
-
-    # Stop if running
-    if orchestrator.is_running(bot_id):
-        await orchestrator.stop_bot(bot_id)
-
-    bot_name = config.name
-    await db.delete(config)
-    logger.info(f"Bot deleted: {bot_name} (id={bot_id})")
-
-    from src.utils.event_logger import log_event
-    await log_event("bot_deleted", f"Bot '{bot_name}' deleted", user_id=user.id, bot_id=bot_id)
-
-    from src.utils.config_audit import log_config_change
-    await log_config_change(
-        user_id=user.id, entity_type="bot_config", entity_id=bot_id,
-        action="delete", old_data={"name": bot_name},
-    )
-
     return {"status": "ok", "message": f"Bot '{bot_name}' deleted"}
 
 
@@ -1169,52 +1145,15 @@ async def duplicate_bot(
     db: AsyncSession = Depends(get_db),
 ):
     """Duplicate an existing bot configuration (stopped, disabled copy)."""
-    result = await db.execute(
-        select(BotConfig).where(BotConfig.id == bot_id, BotConfig.user_id == user.id)
-    )
-    original = result.scalar_one_or_none()
-    if not original:
+    try:
+        copy = await bots_service.duplicate_bot(db, user.id, bot_id)
+    except BotNotFound:
         raise HTTPException(status_code=404, detail=ERR_BOT_NOT_FOUND)
-
-    # Check bot limit
-    count_result = await db.execute(
-        select(func.count(BotConfig.id)).where(BotConfig.user_id == user.id)
-    )
-    if count_result.scalar() >= MAX_BOTS_PER_USER:
-        raise HTTPException(status_code=400, detail=ERR_MAX_BOTS_REACHED.format(max_bots=MAX_BOTS_PER_USER))
-
-    copy = BotConfig(
-        user_id=user.id,
-        name=f"{original.name} (Copy)",
-        description=original.description,
-        strategy_type=original.strategy_type,
-        exchange_type=original.exchange_type,
-        mode=original.mode,
-        trading_pairs=original.trading_pairs,
-        leverage=original.leverage,
-        position_size_percent=original.position_size_percent,
-        max_trades_per_day=original.max_trades_per_day,
-        take_profit_percent=original.take_profit_percent,
-        stop_loss_percent=original.stop_loss_percent,
-        daily_loss_limit_percent=original.daily_loss_limit_percent,
-        per_asset_config=original.per_asset_config,
-        strategy_params=original.strategy_params,
-        schedule_type=original.schedule_type,
-        schedule_config=original.schedule_config,
-        discord_webhook_url=original.discord_webhook_url,
-        telegram_bot_token=original.telegram_bot_token,
-        telegram_chat_id=original.telegram_chat_id,
-        is_enabled=False,
-    )
-    db.add(copy)
-    await db.flush()
-    await db.refresh(copy)
-
-    logger.info(f"Bot duplicated: {original.name} -> {copy.name} (id={copy.id}) by user {user.id}")
-
-    from src.utils.event_logger import log_event
-    await log_event("bot_duplicated", f"Bot '{original.name}' duplicated as '{copy.name}'", user_id=user.id, bot_id=copy.id)
-
+    except MaxBotsReached:
+        raise HTTPException(
+            status_code=400,
+            detail=ERR_MAX_BOTS_REACHED.format(max_bots=MAX_BOTS_PER_USER),
+        )
     return _config_to_response(copy)
 
 
