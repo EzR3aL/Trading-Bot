@@ -27,6 +27,7 @@ from src.exceptions import ExchangeError
 from src.exchanges.base import (
     CloseReasonSnapshot,
     ExchangeClient,
+    GateCheckResult,
     PositionTpSlSnapshot,
     TrailingStopSnapshot,
 )
@@ -268,7 +269,6 @@ class HyperliquidClient(ExchangeClient):
         ``HyperliquidGatesMixin`` maps failing results to ``self.error_message``
         and decides whether to abort.
         """
-        from src.exchanges.base import GateCheckResult
         from src.utils.settings import get_hl_config
 
         # Base gates (affiliate-UID) first — shared across exchanges.
