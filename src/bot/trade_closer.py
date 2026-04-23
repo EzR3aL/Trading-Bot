@@ -1,10 +1,22 @@
 """Shared trade closing logic for position monitor, rotation manager, and manual-close API.
 
-Exposes both a standalone ``close_and_record_trade`` helper and a
-``TradeCloserMixin`` for BotWorker. Both go through the same code path so
-the manual-close endpoint produces the same fee/notification/WS/SSE side
-effects as an automated exit (Issue #275).
+Two entry points:
+
+* ``close_and_record_trade`` — module-level helper used by the manual-close
+  API route (#275). No BotWorker required; caller passes config, risk
+  manager, and a notification dispatcher explicitly. Keeps the DB /
+  WebSocket / SSE / notification side effects identical to the BotWorker
+  path so manual closes are accounted the same way as automatic ones.
+
+* ``TradeCloserMixin`` — thin proxy on BotWorker delegating to the
+  composition-owned ``TradeCloser`` component
+  (``src.bot.components.trade_closer.TradeCloser``). The mixin is kept
+  for compatibility with existing call sites (``self._close_and_record_trade``)
+  during the ARCH-H1 composition migration; it will be dropped in the
+  Phase 1 finalize PR.
 """
+
+from __future__ import annotations
 
 import asyncio
 from datetime import datetime, timezone
@@ -23,8 +35,6 @@ from src.utils.logger import get_logger
 logger = get_logger(__name__)
 
 
-# Callback signature for notification dispatch. Receives a notifier instance
-# and must send the trade_exit message. Matches BotWorker._send_notification.
 NotificationDispatcher = Callable[
     [Callable[[object], Awaitable[bool]], str, Optional[str]],
     Awaitable[None],
@@ -47,14 +57,8 @@ async def close_and_record_trade(
 ) -> tuple[float, float]:
     """Close a trade and trigger all side effects (DB, risk, WS, SSE, notifications).
 
-    This is the single source of truth for trade-close accounting. Both the
-    BotWorker mixin path and the manual-close API route call it so they stay
-    in sync for fee capture, Discord/Telegram dispatch, WebSocket broadcast
-    and SSE publish.
-
-    Returns:
-        (pnl, pnl_percent) — already written to ``trade`` but returned for
-        convenience so callers don't have to re-read the attribute.
+    Used by the manual-close API path where no BotWorker is available.
+    Returns ``(pnl, pnl_percent)`` — already written to ``trade``.
     """
     log_prefix = f"[Bot:{bot_config_id}]"
 
@@ -64,7 +68,6 @@ async def close_and_record_trade(
 
     now = datetime.now(timezone.utc)
 
-    # Update the in-memory trade object (always works, including tests)
     trade.exit_price = exit_price
     trade.pnl = pnl
     trade.pnl_percent = pnl_percent
@@ -78,9 +81,6 @@ async def close_and_record_trade(
     if builder_fee is not None:
         trade.builder_fee = builder_fee
 
-    # Persist via a dedicated session to guarantee DB commit even if
-    # the caller's session is stale or detached.  Falls back to the
-    # in-memory update above if the DB round-trip fails (e.g. in tests).
     try:
         async with get_session() as session:
             from sqlalchemy import select
@@ -102,14 +102,11 @@ async def close_and_record_trade(
                 if builder_fee is not None:
                     db_trade.builder_fee = builder_fee
     except Exception as db_err:
-        # In-memory object is already updated; the caller's session
-        # commit will persist the changes if it's still active.
         logger.debug(
             "%s DB round-trip for trade #%s close failed (in-memory updated): %s",
             log_prefix, trade.id, db_err,
         )
 
-    # Record in risk manager (may be None for manual-close when bot is stopped)
     if risk_manager is not None:
         try:
             risk_manager.record_trade_exit(
@@ -134,7 +131,6 @@ async def close_and_record_trade(
         f"PnL: ${pnl:.2f} ({pnl_percent:+.2f}%)"
     )
 
-    # Broadcast via WebSocket (keep reference to prevent GC)
     try:
         from src.api.websocket.manager import ws_manager
         task = asyncio.create_task(ws_manager.broadcast_to_user(
@@ -157,9 +153,6 @@ async def close_and_record_trade(
     except Exception as e:
         logger.debug("WS broadcast failed: %s", e)
 
-    # Publish trade_closed on the SSE event bus (Issue #216 §2.2).
-    # Kept distinct from the WS broadcast so the SSE trades stream stays
-    # the single source of truth for the real-time trades-list view.
     try:
         publish_trade_event(
             EVENT_TRADE_CLOSED,
@@ -170,11 +163,8 @@ async def close_and_record_trade(
     except Exception as e:
         logger.debug("SSE publish failed (trade_closed): %s", e)
 
-    # Send notifications (Discord + Telegram) via the provided dispatcher
     duration_minutes = None
     if trade.entry_time:
-        # SQLite drops tzinfo on read — normalize to UTC so the subtraction
-        # doesn't raise "can't subtract offset-naive and offset-aware datetimes".
         entry_dt = trade.entry_time
         if entry_dt.tzinfo is None:
             entry_dt = entry_dt.replace(tzinfo=timezone.utc)
@@ -211,14 +201,7 @@ async def close_and_record_trade(
 
 
 class TradeCloserMixin:
-    """Mixin providing shared trade close/record logic for BotWorker.
-
-    Used by PositionMonitorMixin, RotationManagerMixin, and TradeExecutorMixin
-    to avoid duplicating the trade record update, risk manager recording,
-    WebSocket broadcast, and notification dispatch. Delegates to the
-    standalone :func:`close_and_record_trade` helper so the manual-close API
-    path can share the same logic without pulling in BotWorker.
-    """
+    """Proxies the close-and-record call to the composition-owned ``TradeCloser``."""
 
     async def _close_and_record_trade(
         self,
@@ -231,15 +214,10 @@ class TradeCloserMixin:
         builder_fee: Optional[float] = None,
         strategy_reason: Optional[str] = None,
     ) -> None:
-        """Close a trade and record the result via the shared helper."""
-        await close_and_record_trade(
+        await self._trade_closer.close_and_record(
             trade,
             exit_price,
             exit_reason,
-            bot_config_id=self.bot_config_id,
-            config=self._config,
-            risk_manager=self._risk_manager,
-            send_notification=self._send_notification,
             fees=fees,
             funding_paid=funding_paid,
             builder_fee=builder_fee,
