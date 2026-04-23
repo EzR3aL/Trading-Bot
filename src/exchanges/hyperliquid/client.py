@@ -28,7 +28,19 @@ from src.exchanges.base import (
     PositionTpSlSnapshot,
     TrailingStopSnapshot,
 )
-from src.exchanges.hyperliquid.constants import DEFAULT_BUILDER_FEE
+from src.exchanges.hyperliquid.constants import (
+    DEFAULT_BUILDER_FEE,
+    MAINNET_CHAIN_ID,
+    MAX_BUILDER_FEE_TENTHS_BPS,
+    MIN_BUILDER_FEE_TENTHS_BPS,
+    TESTNET_CHAIN_ID,
+)
+from src.exchanges.hyperliquid.eip712_validator import (
+    EIP712ValidationError,
+    assert_builder_fee_tenths_bps,
+    assert_chain_id,
+    validate_approve_builder_fee,
+)
 from src.exchanges.types import Balance, FundingRateInfo, Order, Position, Ticker
 from src.utils.circuit_breaker import CircuitBreaker, CircuitBreakerError
 from src.utils.logger import get_logger
@@ -183,7 +195,10 @@ class HyperliquidClient(ExchangeClient):
         # Accepts kwargs from caller (DB-first) or falls back to ENV.
         builder_address = (kwargs.get("builder_address") or os.environ.get("HL_BUILDER_ADDRESS", "")).strip()
         builder_fee = int(kwargs.get("builder_fee") or os.environ.get("HL_BUILDER_FEE", str(DEFAULT_BUILDER_FEE)))
-        if builder_address and 1 <= builder_fee <= 100:
+        within_bounds = (
+            MIN_BUILDER_FEE_TENTHS_BPS <= builder_fee <= MAX_BUILDER_FEE_TENTHS_BPS
+        )
+        if builder_address and within_bounds:
             self._builder = {"b": builder_address.lower(), "f": builder_fee}
             logger.info(
                 f"Builder code enabled: {builder_address[:10]}... "
@@ -191,11 +206,16 @@ class HyperliquidClient(ExchangeClient):
             )
         else:
             self._builder = None
-            if builder_address and not (1 <= builder_fee <= 100):
+            if builder_address and not within_bounds:
                 logger.warning(
-                    f"HL_BUILDER_FEE={builder_fee} out of range (1-100). "
+                    f"HL_BUILDER_FEE={builder_fee} out of range "
+                    f"[{MIN_BUILDER_FEE_TENTHS_BPS}-{MAX_BUILDER_FEE_TENTHS_BPS}]. "
                     f"Builder code disabled."
                 )
+
+        # SEC-005: pin expected signature chain_id so a manipulated SDK
+        # cannot produce a cross-chain-replayable approval.
+        self._expected_chain_id = TESTNET_CHAIN_ID if demo_mode else MAINNET_CHAIN_ID
 
         if is_agent_wallet:
             logger.info(
@@ -798,15 +818,32 @@ class HyperliquidClient(ExchangeClient):
 
         Must be called once per user before builder fees can be charged.
         Uses the SDK's approve_builder_fee (EIP-712 signed).
+
+        Defense-in-depth (SEC-008): both the integer fee and the wire-format
+        percentage string are validated before signing. Historical incident:
+        the fee was once computed 10x too high; the validators prevent a
+        recurrence by refusing anything outside the HL documented range.
         """
         if not self._builder:
             logger.warning("No builder code configured, cannot approve")
             return False
 
         fee = max_fee_rate or self._builder["f"]
-        # Hyperliquid API expects maxFeeRate as percentage string
-        # Internal fee is in tenths of basis points (e.g. 10 = 1bp = 0.01%)
-        fee_pct = f"{fee / 1000:.3f}%"
+        # Hyperliquid API expects maxFeeRate as percentage string.
+        # Internal fee is in tenths of basis points (e.g. 10 = 1bp = 0.01%).
+        try:
+            assert_builder_fee_tenths_bps(fee)
+            fee_pct = f"{fee / 1000:.3f}%"
+            validate_approve_builder_fee(
+                builder=self._builder["b"],
+                max_fee_rate=fee_pct,
+                demo_mode=self.demo_mode,
+                chain_id=self._expected_chain_id,
+            )
+        except EIP712ValidationError as e:
+            logger.error(f"Builder-fee approval rejected by validator: {e}")
+            return False
+
         try:
             self._exchange.approve_builder_fee(
                 builder=self._builder["b"],

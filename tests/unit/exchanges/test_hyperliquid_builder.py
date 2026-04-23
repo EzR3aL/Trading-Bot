@@ -252,13 +252,20 @@ class TestBuilderFeeApproval:
 
 
 class TestApproveBuilderFee:
+    # 20-byte hex address satisfies the EIP-712 builder-address validator
+    # introduced in #257.
+    _VALID_BUILDER = "0x1234567890abcdef1234567890abcdef12345678"
+
     @pytest.mark.asyncio
     async def test_approve_calls_exchange_sdk(self):
         """approve_builder_fee calls SDK's approve_builder_fee method."""
         from src.exchanges.hyperliquid.client import HyperliquidClient
+        from src.exchanges.hyperliquid.constants import TESTNET_CHAIN_ID
 
         client = object.__new__(HyperliquidClient)
-        client._builder = {"b": "0xbuilder", "f": 10}
+        client._builder = {"b": self._VALID_BUILDER, "f": 10}
+        client.demo_mode = True
+        client._expected_chain_id = TESTNET_CHAIN_ID
         client._exchange = MagicMock()
         client._exchange.approve_builder_fee.return_value = {"status": "ok"}
 
@@ -266,7 +273,7 @@ class TestApproveBuilderFee:
         assert result is True
         # SDK expects max_fee_rate as percentage string (EIP-712 signing)
         client._exchange.approve_builder_fee.assert_called_once_with(
-            builder="0xbuilder", max_fee_rate="0.010%",
+            builder=self._VALID_BUILDER, max_fee_rate="0.010%",
         )
 
     @pytest.mark.asyncio
@@ -284,14 +291,33 @@ class TestApproveBuilderFee:
     async def test_approve_handles_sdk_error(self):
         """approve_builder_fee returns False on SDK error."""
         from src.exchanges.hyperliquid.client import HyperliquidClient
+        from src.exchanges.hyperliquid.constants import TESTNET_CHAIN_ID
 
         client = object.__new__(HyperliquidClient)
-        client._builder = {"b": "0xbuilder", "f": 10}
+        client._builder = {"b": self._VALID_BUILDER, "f": 10}
+        client.demo_mode = True
+        client._expected_chain_id = TESTNET_CHAIN_ID
         client._exchange = MagicMock()
         client._exchange.approve_builder_fee.side_effect = Exception("signing failed")
 
         result = await client.approve_builder_fee()
         assert result is False
+
+    @pytest.mark.asyncio
+    async def test_approve_rejects_fee_beyond_cap(self):
+        """Regression guard (#257 SEC-008): fee 10x over cap must not be signed."""
+        from src.exchanges.hyperliquid.client import HyperliquidClient
+        from src.exchanges.hyperliquid.constants import TESTNET_CHAIN_ID
+
+        client = object.__new__(HyperliquidClient)
+        client._builder = {"b": self._VALID_BUILDER, "f": 1000}  # 10x historical bug
+        client.demo_mode = True
+        client._expected_chain_id = TESTNET_CHAIN_ID
+        client._exchange = MagicMock()
+
+        result = await client.approve_builder_fee()
+        assert result is False
+        client._exchange.approve_builder_fee.assert_not_called()
 
 
 # ── Referral Info Query ────────────────────────────────────────────
