@@ -83,6 +83,7 @@
     "noTradesTitle": "Keine Trades gefunden",
     "noTradesHint": "Abgeschlossene Trades erscheinen hier. Starte einen Bot, um zu handeln.",
     "reset": "Zurücksetzen",
+    "clearAllFilters": "Alle Filter zurücksetzen",
     "trailingStop": "Trailing Stop",
     "trailingStopProtecting": "Gewinn abgesichert",
     "trailingDistance": "Abstand",
@@ -494,6 +495,9 @@
     "start": "Starten",
     "stop": "Stoppen",
     "confirmStop": "Wirklich stoppen?",
+    "stopBot": "Bot stoppen",
+    "confirmStopMessage": "\"{{name}}\" wirklich stoppen? Der Bot wird keine neuen Trades mehr öffnen.",
+    "confirmStopMessageWithOpen": "\"{{name}}\" stoppen? Es gibt {{count}} offene Position(en), die NICHT automatisch geschlossen werden.",
     "restart": "Neustart",
     "edit": "Bearbeiten",
     "delete": "Löschen",
@@ -775,7 +779,15 @@
       "marginModeHintCross": "Cross: Margin wird über alle Positionen geteilt.",
       "marginModeHintIsolated": "Isolated: Jede Position hat ein eigenes Margin-Budget.",
       "demoNotSupported": "Diese Exchange bietet kein Demo-Trading an",
-      "demoNotSupportedHint": "Diese Exchange unterstützt kein Paper/Demo-Trading. Bitte nutze den Live-Modus."
+      "demoNotSupportedHint": "Diese Exchange unterstützt kein Paper/Demo-Trading. Bitte nutze den Live-Modus.",
+      "startShort": "Starten",
+      "riskReAckReason": "Du hast das Risikoprofil dieses Bots erhöht. Bitte bestätige den Risikohinweis erneut, bevor du die Änderungen speicherst.",
+      "discordTestMissingUrl": "Bitte gib zuerst eine Discord-Webhook-URL ein.",
+      "discordTestSent": "Test-Nachricht an Discord gesendet.",
+      "discordTestFailed": "Discord-Test fehlgeschlagen.",
+      "telegramTestMissingCredentials": "Bitte gib zuerst Bot-Token und Chat-ID ein.",
+      "telegramTestSent": "Test-Nachricht an Telegram gesendet.",
+      "telegramTestFailed": "Telegram-Test fehlgeschlagen."
     }
   },
   "botDetail": {
@@ -872,6 +884,9 @@
     "builderFeePrompt": "Genehmige die Builder Fee um Trading zu aktivieren:",
     "builderWalletHint": "Wichtig: Die Builder Wallet benötigt mindestens 100 USDC Guthaben, damit Trades ausgeführt werden können.",
     "setupRequired": "Bitte richte Hyperliquid zuerst in den Einstellungen ein.",
+    "setupRequiredTitle": "Hyperliquid-Einrichtung erforderlich",
+    "setupRequiredMessage": "Dieser Bot kann erst gestartet werden, wenn die Builder-Fee-Genehmigung und die Referral-Verifizierung für Hyperliquid abgeschlossen sind. Öffne die Einstellungen, um die Einrichtung fertigzustellen.",
+    "goToSettings": "Zu den Einstellungen",
     "pendingSteps": "{{count}} Schritt(e) ausstehend",
     "gateWarningTitle": "Einrichtung erforderlich:",
     "gateWarningText": "Hyperliquid Referral oder Builder Fee sind noch nicht abgeschlossen. Bitte schließe die Einrichtung in den Einstellungen ab.",
@@ -890,6 +905,12 @@
     "enterCodeStep2": "Klicke 'Enter Code' und trage {{code}} ein",
     "enterCodeStep3": "Danach hier erneut auf 'Jetzt prüfen' klicken",
     "wrongReferrerHint": "Hyperliquid erlaubt keine nachträgliche Änderung des Referrers. Du kannst ein neues Wallet anlegen und mit unserem Link registrieren, wenn du den Rabatt möchtest."
+  },
+  "hyperliquid": {
+    "setup": {
+      "pollingStatus": "Prüfe On-Chain-Status… ({{seconds}}s)",
+      "pollTimeout": "Die Genehmigung ist nicht innerhalb von 30s on-chain angekommen. Bitte erneut versuchen."
+    }
   },
   "editPosition": {
     "title": "Position bearbeiten",
@@ -935,11 +956,14 @@
     "net": "Netto",
     "errorBoundaryTitle": "Etwas ist schiefgelaufen",
     "tryAgain": "Erneut versuchen",
+    "retry": "Wiederholen",
     "saveFailed": "Speichern fehlgeschlagen",
     "noInternet": "Keine Internetverbindung",
     "apiUnreachable": "API-Server vorübergehend nicht erreichbar",
     "loadError": "Daten konnten nicht geladen werden. Bitte versuche es erneut.",
-    "sessionExpired": "Sitzung abgelaufen. Weiterleitung zum Login..."
+    "sessionExpired": "Sitzung abgelaufen. Weiterleitung zum Login...",
+    "goToDashboard": "Zum Dashboard",
+    "errorBoundaryGeneric": "Ein unerwarteter Fehler ist aufgetreten."
   },
   "admin": {
     "users": "Benutzer",

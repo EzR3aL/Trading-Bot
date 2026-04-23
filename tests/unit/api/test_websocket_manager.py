@@ -30,6 +30,29 @@ def _make_ws() -> AsyncMock:
     return ws
 
 
+async def _drain(mgr: ConnectionManager, min_sends: int = 0, timeout: float = 1.0) -> None:
+    """Yield control until broadcast queues have been flushed.
+
+    ARCH-H5: broadcast helpers only put_nowait onto a per-connection queue;
+    the writer task does the actual send. Tests that assert on send_text
+    calls need to wait for the writer task to drain.
+    """
+    deadline = asyncio.get_event_loop().time() + timeout
+    while asyncio.get_event_loop().time() < deadline:
+        still_buffered = any(
+            not state.queue.empty() for state in mgr._state.values()
+        )
+        total_sent = sum(
+            state.ws.send_text.await_count for state in mgr._state.values()
+        )
+        if not still_buffered and total_sent >= min_sends:
+            # Give the writer one more tick to actually call send_text.
+            await asyncio.sleep(0)
+            await asyncio.sleep(0)
+            return
+        await asyncio.sleep(0.01)
+
+
 # ── Connect / Disconnect ─────────────────────────────────────────────
 
 
@@ -106,6 +129,7 @@ async def test_broadcast_to_user_sends_to_all_user_connections():
     await mgr.connect(ws2, user_id=1)
 
     await mgr.broadcast_to_user(1, "trade_opened", {"symbol": "BTCUSDT"})
+    await _drain(mgr, min_sends=2)
 
     expected = json.dumps({"type": "trade_opened", "data": {"symbol": "BTCUSDT"}})
     ws1.send_text.assert_awaited_once_with(expected)
@@ -120,6 +144,7 @@ async def test_broadcast_to_user_does_not_send_to_other_users():
     await mgr.connect(ws_user2, user_id=2)
 
     await mgr.broadcast_to_user(1, "bot_started", {})
+    await _drain(mgr, min_sends=1)
 
     ws_user1.send_text.assert_awaited_once()
     ws_user2.send_text.assert_not_awaited()
@@ -144,6 +169,7 @@ async def test_broadcast_all_sends_to_every_connection():
     await mgr.connect(ws3, user_id=2)
 
     await mgr.broadcast_all("system_update", {"version": "4.17"})
+    await _drain(mgr, min_sends=3)
 
     expected = json.dumps({"type": "system_update", "data": {"version": "4.17"}})
     ws1.send_text.assert_awaited_once_with(expected)
@@ -202,6 +228,12 @@ async def test_broadcast_to_user_removes_dead_connections():
     assert mgr.total_connections == 2
 
     await mgr.broadcast_to_user(1, "event", {})
+    # Let writer tasks drain, then give the async disconnect scheduled by the
+    # failing writer a chance to complete.
+    for _ in range(20):
+        await asyncio.sleep(0.01)
+        if mgr.total_connections == 1:
+            break
 
     # Dead connection should have been cleaned up
     assert mgr.total_connections == 1
@@ -220,6 +252,10 @@ async def test_broadcast_all_removes_dead_connections():
     assert mgr.total_connections == 2
 
     await mgr.broadcast_all("event", {})
+    for _ in range(20):
+        await asyncio.sleep(0.01)
+        if mgr.total_connections == 1:
+            break
 
     # Dead connection for user 2 should be removed
     assert mgr.total_connections == 1
@@ -278,6 +314,45 @@ async def test_total_connections_property():
     await mgr.connect(_make_ws(), user_id=1)
     await mgr.connect(_make_ws(), user_id=2)
     assert mgr.total_connections == 3
+
+
+# ── ARCH-H5: slow client does not block fast peers ────────────────────
+
+
+@pytest.mark.asyncio
+async def test_slow_client_does_not_block_fast_ones():
+    """A client whose send_text blocks must not stall other clients' sends."""
+    mgr = ConnectionManager()
+    ws_slow = _make_ws()
+    ws_fast = _make_ws()
+
+    slow_can_proceed = asyncio.Event()
+
+    async def slow_send(_msg: str) -> None:
+        await slow_can_proceed.wait()
+
+    ws_slow.send_text.side_effect = slow_send
+
+    await mgr.connect(ws_slow, user_id=1)
+    await mgr.connect(ws_fast, user_id=2)
+
+    # Broadcast returns immediately (put_nowait) — must not wait on slow client.
+    await mgr.broadcast_all("ping", {"i": 1})
+
+    # Fast client should receive its message promptly even though the slow
+    # writer is still blocked inside send_text.
+    for _ in range(50):
+        await asyncio.sleep(0.01)
+        if ws_fast.send_text.await_count >= 1:
+            break
+
+    assert ws_fast.send_text.await_count == 1
+    # Slow writer started the send but has not returned yet.
+    assert ws_slow.send_text.call_count == 1
+
+    # Let the slow client unblock so cleanup is clean.
+    slow_can_proceed.set()
+    await _drain(mgr)
 
 
 @pytest.mark.asyncio

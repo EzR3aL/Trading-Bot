@@ -19,8 +19,7 @@ from src.bot.bot_worker import BotWorker
 from src.models.database import BotConfig, BotInstance, PendingTrade
 from src.models.enums import BotStatus
 from src.models.session import get_session
-from src.strategy import StrategyRegistry  # noqa: F401 — triggers registration
-from src.strategy.liquidation_hunter import LiquidationHunterStrategy  # noqa: F401 — registers strategy
+from src.strategy import StrategyRegistry  # noqa: F401 — package __init__ auto-registers all strategies
 from src.constants import MAX_BOTS_PER_USER
 from src.utils.logger import get_logger
 

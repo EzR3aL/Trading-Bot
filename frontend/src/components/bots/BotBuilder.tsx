@@ -18,6 +18,17 @@ import BotBuilderStepNotifications from './BotBuilderStepNotifications'
 import BotBuilderStepSchedule from './BotBuilderStepSchedule'
 import BotBuilderStepReview from './BotBuilderStepReview'
 
+// Risk profile ordering, lowest to highest. Used to detect risk INCREASE during edit.
+// If the user picks a higher-index profile than the one the bot was saved with, the
+// previous acknowledgment is stale and a fresh checkbox click is required.
+const RISK_ORDER = ['conservative', 'standard', 'aggressive'] as const
+type RiskProfile = typeof RISK_ORDER[number]
+
+const riskIndex = (profile: unknown): number => {
+  const idx = RISK_ORDER.indexOf(profile as RiskProfile)
+  return idx === -1 ? 0 : idx
+}
+
 interface BotBuilderProps {
   botId?: number | null
   onDone: () => void
@@ -35,6 +46,9 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
   const [error, setError] = useState('')
   const [validationErrors, setValidationErrors] = useState<string[]>([])
   const [riskAccepted, setRiskAccepted] = useState(false)
+  // Remember the risk profile the bot was loaded with (edit mode only). If the
+  // user later raises the risk profile, we require a fresh acknowledgment.
+  const [originalRiskProfile, setOriginalRiskProfile] = useState<string | null>(null)
 
   // Data sources catalog
   const [dataSources, setDataSources] = useState<DataSource[]>([])
@@ -133,21 +147,27 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
 
   // ─── Data loading effects ───────────────────────────────────────────
 
-  // Load strategies
+  // Load strategies (once at mount). Using functional updates + skipping init when
+  // strategyType is already set (e.g. edit-mode load) lets us depend only on stable
+  // callbacks, avoiding the need for a blanket exhaustive-deps disable.
   useEffect(() => {
     api.get('/bots/strategies').then(res => {
       setStrategies(res.data.strategies)
-      if (res.data.strategies.length > 0 && !strategyType) {
+      setStrategyType(prevType => {
+        if (prevType || !res.data.strategies?.length) return prevType
         const first = res.data.strategies[0]
-        setStrategyType(first.name)
         const defaults: Record<string, any> = {}
         Object.entries(first.param_schema).forEach(([key, def]) => {
           defaults[key] = (def as any).default
         })
         setStrategyParams(defaults)
-      }
-    }).catch((err) => { console.error('Failed to load strategies:', err); addToast('error', t('common.loadError', 'Failed to load data')) })
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+        return first.name
+      })
+    }).catch((err) => {
+      console.error('Failed to load strategies:', err)
+      addToast('error', t('common.loadError', 'Failed to load data'))
+    })
+  }, [addToast, t])
 
   // Load data sources catalog
   useEffect(() => {
@@ -158,7 +178,7 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
         setSelectedSources([])
       }
     }).catch((err) => { console.error('Failed to load data sources:', err); addToast('error', t('common.loadError', 'Failed to load data')) })
-  }, [isEdit])
+  }, [isEdit, addToast, t])
 
   // Load existing bot if editing
   useEffect(() => {
@@ -168,7 +188,12 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
         setName(d.name)
         setDescription(d.description || '')
         setStrategyType(d.strategy_type)
-        setStrategyParams(d.strategy_params || {})
+        const loadedParams = d.strategy_params || {}
+        setStrategyParams(loadedParams)
+        // Capture the original risk profile at load time for re-ack detection.
+        if (typeof loadedParams.risk_profile === 'string') {
+          setOriginalRiskProfile(loadedParams.risk_profile)
+        }
         setExchangeType(d.exchange_type)
         setMode(d.mode)
         setMarginMode(d.margin_mode || 'cross')
@@ -260,7 +285,7 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
       }).filter((p): p is string => p !== null)
       return converted.length > 0 ? converted : prev
     })
-  }, [exchangeType, exchangeSymbols]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [exchangeType, exchangeSymbols, isHyperliquid, isBingx])
 
   // Fetch exchange balance preview when exchange/mode changes
   useEffect(() => {
@@ -376,12 +401,12 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
       } else if (discordWebhookUrl) {
         await api.post('/bots/test-discord-direct', { webhook_url: discordWebhookUrl })
       } else {
-        addToast('error', 'Bitte Discord Webhook URL eingeben')
+        addToast('error', t('bots.builder.discordTestMissingUrl'))
         return
       }
-      addToast('success', 'Discord-Testnachricht gesendet!')
+      addToast('success', t('bots.builder.discordTestSent'))
     } catch (err) {
-      addToast('error', getApiErrorMessage(err, 'Discord-Test fehlgeschlagen'))
+      addToast('error', getApiErrorMessage(err, t('bots.builder.discordTestFailed')))
     }
   }
 
@@ -392,12 +417,12 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
       } else if (telegramBotToken && telegramChatId) {
         await api.post('/bots/test-telegram-direct', { bot_token: telegramBotToken, chat_id: telegramChatId })
       } else {
-        addToast('error', 'Bitte Bot Token und Chat ID eingeben')
+        addToast('error', t('bots.builder.telegramTestMissingCredentials'))
         return
       }
-      addToast('success', 'Telegram-Testnachricht gesendet!')
+      addToast('success', t('bots.builder.telegramTestSent'))
     } catch (err) {
-      addToast('error', getApiErrorMessage(err, 'Telegram-Test fehlgeschlagen'))
+      addToast('error', getApiErrorMessage(err, t('bots.builder.telegramTestFailed')))
     }
   }
 
@@ -517,6 +542,29 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
   const b = t('bots.builder', { returnObjects: true }) as Record<string, string>
   const currentStepKey = steps[step]
 
+  // Has the user raised the risk profile above what the bot was saved with?
+  // Only applicable in edit mode — for creates we use the existing single-ack flow.
+  const riskIncreasedOnEdit = useMemo(() => {
+    if (!isEdit || !originalRiskProfile) return false
+    const current = strategyParams.risk_profile
+    if (typeof current !== 'string') return false
+    return riskIndex(current) > riskIndex(originalRiskProfile)
+  }, [isEdit, originalRiskProfile, strategyParams.risk_profile])
+
+  // Save is blocked until risk is acknowledged when:
+  //  - creating a new bot (always), OR
+  //  - editing and the risk profile was raised above the original.
+  const needsRiskAck = !isEdit || riskIncreasedOnEdit
+  const saveDisabled = saving || (needsRiskAck && !riskAccepted)
+
+  // If the user lowers the risk back at/below the original after having raised
+  // it, clear any stale acknowledgment so subsequent raise prompts again.
+  useEffect(() => {
+    if (isEdit && !riskIncreasedOnEdit && riskAccepted) {
+      setRiskAccepted(false)
+    }
+  }, [isEdit, riskIncreasedOnEdit, riskAccepted])
+
   return (
     <div>
       {/* Header */}
@@ -552,6 +600,13 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
 
       {error && (
         <div role="alert" className="mb-4 p-3 bg-red-900/30 border border-red-800 rounded text-red-400 text-sm">{error}</div>
+      )}
+
+      {/* Risk-increase banner — only in edit mode when user raised the risk profile */}
+      {riskIncreasedOnEdit && currentStepKey === 'step6' && (
+        <div role="alert" className="mb-4 p-3 bg-amber-900/30 border border-amber-800 rounded text-amber-300 text-sm">
+          {t('bots.builder.riskReAckReason')}
+        </div>
       )}
 
       {/* Step content */}
@@ -696,7 +751,7 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
             <>
               <button
                 onClick={() => handleSave(false)}
-                disabled={saving || (!isEdit && !riskAccepted)}
+                disabled={saveDisabled}
                 className="flex items-center gap-1 px-3 sm:px-4 py-2 text-sm bg-gray-700 text-white rounded font-medium hover:bg-gray-600 disabled:opacity-50 transition-colors"
               >
                 <Check size={16} />
@@ -705,12 +760,12 @@ export default function BotBuilder({ botId, onDone, onCancel }: BotBuilderProps)
               {!isEdit && (
                 <button
                   onClick={() => handleSave(true)}
-                  disabled={saving || !riskAccepted}
+                  disabled={saveDisabled}
                   className="flex items-center gap-1 px-3 sm:px-4 py-2 text-sm bg-green-700 text-white rounded font-medium hover:bg-green-600 disabled:opacity-50 transition-colors"
                 >
                   <Play size={16} />
                   <span className="hidden sm:inline">{b.createAndStart}</span>
-                  <span className="sm:hidden">Start</span>
+                  <span className="sm:hidden">{t('bots.builder.startShort')}</span>
                 </button>
               )}
             </>

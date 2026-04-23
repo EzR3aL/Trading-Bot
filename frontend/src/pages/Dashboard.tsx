@@ -18,6 +18,7 @@ import EditPositionPanel from '../components/ui/EditPositionPanel'
 import useIsMobile from '../hooks/useIsMobile'
 import usePullToRefresh from '../hooks/usePullToRefresh'
 import { useTradesSSE } from '../hooks/useTradesSSE'
+import { useVisibleTab } from '../hooks/useIntervalPaused'
 import PullToRefreshIndicator from '../components/ui/PullToRefreshIndicator'
 
 /* ── Animated Number ─────────────────────────────────────── */
@@ -106,8 +107,10 @@ export default function Dashboard() {
 
   // Real-time trade updates via SSE (Issue #216 §2.2). Replaces the previous
   // 5-second polling loop; falls back to polling automatically if the
-  // EventSource connection fails.
-  useTradesSSE()
+  // EventSource connection fails. Paused while the tab is backgrounded so
+  // we don't keep hammering the API for a user who isn't looking (UX-M9).
+  const tabVisible = useVisibleTab()
+  useTradesSSE({ enabled: tabVisible })
 
   const dailyStats: DailyStats[] = dailyData?.days || []
   const loading = loadingStats || loadingDaily

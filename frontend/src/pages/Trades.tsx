@@ -1,6 +1,7 @@
-import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useQueryClient } from '@tanstack/react-query'
+import { useSearchParams } from 'react-router-dom'
 import { useTrades, useSyncTrades, queryKeys } from '../api/queries'
 import { useFilterStore } from '../stores/filterStore'
 import type { Trade } from '../types'
@@ -21,6 +22,49 @@ import { useSizeUnitStore } from '../stores/sizeUnitStore'
 import useIsMobile from '../hooks/useIsMobile'
 import usePullToRefresh from '../hooks/usePullToRefresh'
 import PullToRefreshIndicator from '../components/ui/PullToRefreshIndicator'
+import { useTradesFilterOptions } from '../hooks/useTradesFilterOptions'
+
+// URL-search-param keys used by the filters — keeping them in a
+// const object so the URL surface is in one obvious spot and typos
+// at call sites fail the type checker.
+const PARAM_KEYS = {
+  status: 'status',
+  symbol: 'symbol',
+  exchange: 'exchange',
+  bot: 'bot',
+  dateFrom: 'date_from',
+  dateTo: 'date_to',
+  page: 'page',
+} as const
+
+// Debounce for free-text filter inputs (e.g. symbol textbox) before
+// they hit the history stack. 300ms keeps typing responsive without
+// creating a new history entry for every keystroke.
+const TEXT_DEBOUNCE_MS = 300
+
+interface FiltersFromUrl {
+  status: string
+  symbol: string
+  exchange: string
+  bot: string
+  dateFrom: string
+  dateTo: string
+  page: number
+}
+
+function readFiltersFromParams(params: URLSearchParams): FiltersFromUrl {
+  const rawPage = Number(params.get(PARAM_KEYS.page) ?? '1')
+  const page = Number.isFinite(rawPage) && rawPage >= 1 ? rawPage : 1
+  return {
+    status: params.get(PARAM_KEYS.status) ?? '',
+    symbol: params.get(PARAM_KEYS.symbol) ?? '',
+    exchange: params.get(PARAM_KEYS.exchange) ?? '',
+    bot: params.get(PARAM_KEYS.bot) ?? '',
+    dateFrom: params.get(PARAM_KEYS.dateFrom) ?? '',
+    dateTo: params.get(PARAM_KEYS.dateTo) ?? '',
+    page,
+  }
+}
 
 export default function Trades() {
   const { t } = useTranslation()
@@ -29,17 +73,74 @@ export default function Trades() {
   const sizeUnit = useSizeUnitStore((s) => s.unit)
   const { demoFilter } = useFilterStore()
   const queryClient = useQueryClient()
-  const [page, setPage] = useState(1)
-  const [statusFilter, setStatusFilter] = useState('')
-  const [symbolFilter, setSymbolFilter] = useState('')
-  const [exchangeFilter, setExchangeFilter] = useState('')
-  const [botFilter, setBotFilter] = useState('')
-  const [dateFrom, setDateFrom] = useState('')
-  const [dateTo, setDateTo] = useState('')
-  const [expandedId, setExpandedId] = useState<number | null>(null)
+  const [searchParams, setSearchParams] = useSearchParams()
   const perPage = 25
 
-  // Sync trades on mount
+  // ── Filter state: URL is the single source of truth ────────────
+  // `filters` mirrors the URL. We derive it inside useMemo so the
+  // memoized value is referentially stable across renders where the
+  // search-param string hasn't changed. Local state exists only for
+  // the symbol textbox (so typing stays snappy without writing the
+  // URL on every keystroke — debounced below).
+  const filters = useMemo(() => readFiltersFromParams(searchParams), [searchParams])
+
+  // Symbol textbox buffer — pre-populated from the URL and kept in
+  // sync whenever the URL changes out from under us (back/forward
+  // navigation, programmatic navigation, etc.).
+  const [symbolDraft, setSymbolDraft] = useState(filters.symbol)
+  useEffect(() => {
+    setSymbolDraft(filters.symbol)
+  }, [filters.symbol])
+
+  // ── URL mutators ────────────────────────────────────────────────
+  // All filter-control onChange handlers funnel through updateParams
+  // so there's exactly one place that touches the URL. Passing null
+  // strips a key; any non-null string sets it. We reset `page` to 1
+  // on every filter change (unless the caller is setting `page`
+  // itself) — required because moving to page 3 of an old filter and
+  // then switching filters would otherwise land the user on a page
+  // that no longer exists.
+  const updateParams = useCallback(
+    (updates: Record<string, string | null>) => {
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev)
+          const isPageUpdate = Object.prototype.hasOwnProperty.call(updates, PARAM_KEYS.page)
+          for (const [key, value] of Object.entries(updates)) {
+            if (value === null || value === '') {
+              next.delete(key)
+            } else {
+              next.set(key, value)
+            }
+          }
+          if (!isPageUpdate) {
+            next.delete(PARAM_KEYS.page)
+          }
+          return next
+        },
+        { replace: true },
+      )
+    },
+    [setSearchParams],
+  )
+
+  // Debounced write of the symbol textbox. Typing "BTCUSDT" shouldn't
+  // create 7 history entries, and shouldn't fire 7 queries. We still
+  // let the URL be the source of truth — we're only delaying WHEN the
+  // URL gets updated, not skipping the update.
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => {
+    if (symbolDraft === filters.symbol) return
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    debounceRef.current = setTimeout(() => {
+      updateParams({ [PARAM_KEYS.symbol]: symbolDraft || null })
+    }, TEXT_DEBOUNCE_MS)
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current)
+    }
+  }, [symbolDraft, filters.symbol, updateParams])
+
+  // ── Sync trades on mount ────────────────────────────────────────
   const syncTrades = useSyncTrades()
   const [synced, setSynced] = useState(false)
   useEffect(() => {
@@ -48,48 +149,48 @@ export default function Trades() {
     })
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Fetch a larger set once to extract unique exchanges/bots for filter dropdowns
-  const allTradesFilters: Record<string, unknown> = {
-    page: 1, per_page: 200,
-    ...(demoFilter === 'demo' ? { demo_mode: 'true' } : demoFilter === 'live' ? { demo_mode: 'false' } : {}),
-  }
-  const { data: allTradesData } = useTrades(allTradesFilters)
-  const allTrades: Trade[] = synced ? (allTradesData?.trades || []) : []
+  // ── Filter-option lists (symbols, bots, exchanges, statuses) ───
+  // Served by a dedicated endpoint so dropdowns include values that
+  // exist across ALL the user's trades, not just the currently-loaded
+  // page. Falls back to empty arrays while loading/on error.
+  const { data: options } = useTradesFilterOptions()
 
-  const uniqueExchanges = useMemo(() => {
-    const set = new Set<string>()
-    allTrades.forEach(trade => {
-      const ex = trade.bot_exchange || trade.exchange
-      if (ex) set.add(ex)
-    })
-    return Array.from(set).sort()
-  }, [allTrades])
-
-  const uniqueBots = useMemo(() => {
-    const set = new Set<string>()
-    allTrades.forEach(trade => { if (trade.bot_name) set.add(trade.bot_name) })
-    return Array.from(set).sort()
-  }, [allTrades])
-
+  // Reset to page 1 when the demo-mode filter flips. demoFilter isn't
+  // part of the URL (it's a global store) but it does affect which
+  // trades we fetch, so we need to guard against sitting on page 5 of
+  // a live-only view after switching to demo-only.
+  const demoFilterRef = useRef(demoFilter)
   useEffect(() => {
-    setPage(1)
-  }, [demoFilter])
+    if (demoFilterRef.current !== demoFilter) {
+      demoFilterRef.current = demoFilter
+      if (filters.page !== 1) {
+        updateParams({ [PARAM_KEYS.page]: null })
+      }
+    }
+  }, [demoFilter, filters.page, updateParams])
 
-  // Main trade list query
-  const tradeFilters: Record<string, unknown> = {
-    page, per_page: perPage,
-    ...(statusFilter ? { status: statusFilter } : {}),
-    ...(symbolFilter ? { symbol: symbolFilter } : {}),
-    ...(exchangeFilter ? { exchange: exchangeFilter } : {}),
-    ...(botFilter ? { bot_name: botFilter } : {}),
-    ...(dateFrom ? { date_from: dateFrom } : {}),
-    ...(dateTo ? { date_to: dateTo } : {}),
+  // ── Main trade list query ───────────────────────────────────────
+  // Query key is derived from URL-parsed filters so two renders with
+  // the same URL hit the same cache entry — no drift between UI and
+  // request params even during fast navigation.
+  const tradeFilters: Record<string, unknown> = useMemo(() => ({
+    page: filters.page,
+    per_page: perPage,
+    ...(filters.status ? { status: filters.status } : {}),
+    ...(filters.symbol ? { symbol: filters.symbol } : {}),
+    ...(filters.exchange ? { exchange: filters.exchange } : {}),
+    ...(filters.bot ? { bot_name: filters.bot } : {}),
+    ...(filters.dateFrom ? { date_from: filters.dateFrom } : {}),
+    ...(filters.dateTo ? { date_to: filters.dateTo } : {}),
     ...(demoFilter === 'demo' ? { demo_mode: 'true' } : demoFilter === 'live' ? { demo_mode: 'false' } : {}),
-  }
+  }), [filters, demoFilter])
+
   const { data: tradeData, isLoading: loading, error: tradeError } = useTrades(tradeFilters)
-  const trades: Trade[] = synced ? (tradeData?.trades || []) : []
-  const total = synced ? (tradeData?.total || 0) : 0
+  const trades: Trade[] = synced ? (tradeData?.trades ?? []) : []
+  const total = synced ? (tradeData?.total ?? 0) : 0
   const error = tradeError ? t('common.error') : ''
+
+  const [expandedId, setExpandedId] = useState<number | null>(null)
 
   const refreshData = useCallback(async () => {
     await queryClient.invalidateQueries({ queryKey: queryKeys.trades.all })
@@ -102,17 +203,58 @@ export default function Trades() {
 
   const totalPages = Math.ceil(total / perPage)
 
-  const hasActiveFilters = statusFilter || symbolFilter || exchangeFilter || botFilter || dateFrom || dateTo
+  const hasActiveFilters = Boolean(
+    filters.status ||
+    filters.symbol ||
+    filters.exchange ||
+    filters.bot ||
+    filters.dateFrom ||
+    filters.dateTo,
+  )
 
-  const clearAllFilters = () => {
-    setStatusFilter('')
-    setSymbolFilter('')
-    setExchangeFilter('')
-    setBotFilter('')
-    setDateFrom('')
-    setDateTo('')
-    setPage(1)
-  }
+  const clearAllFilters = useCallback(() => {
+    // Clearing wipes every filter param and the page cursor in one
+    // setSearchParams call — avoids the URL briefly showing a stale
+    // combination during multiple updates.
+    setSearchParams(new URLSearchParams(), { replace: true })
+  }, [setSearchParams])
+
+  const handlePageChange = useCallback(
+    (nextPage: number) => {
+      updateParams({ [PARAM_KEYS.page]: nextPage === 1 ? null : String(nextPage) })
+    },
+    [updateParams],
+  )
+
+  // ── Dropdown options ────────────────────────────────────────────
+  // Built from the /filter-options endpoint. The statuses list has a
+  // default fallback because the current UI already translates the
+  // three known statuses — if the endpoint ships without statuses we
+  // still want the dropdown usable.
+  const statusOptions = useMemo(() => {
+    const fromApi = options?.statuses ?? []
+    const statuses = fromApi.length > 0 ? fromApi : ['open', 'closed', 'cancelled']
+    return [
+      { value: '', label: t('trades.allStatuses') },
+      ...statuses.map((s) => ({ value: s, label: t(`trades.${s}`, { defaultValue: s }) })),
+    ]
+  }, [options?.statuses, t])
+
+  const exchangeOptions = useMemo(() => {
+    const exchanges = options?.exchanges ?? []
+    return [
+      { value: '', label: t('trades.allExchanges') },
+      ...exchanges.map((ex) => ({ value: ex, label: ex.charAt(0).toUpperCase() + ex.slice(1) })),
+    ]
+  }, [options?.exchanges, t])
+
+  const botOptions = useMemo(() => {
+    const bots = options?.bots ?? []
+    return [
+      { value: '', label: t('trades.allBots') },
+      ...bots.map((b) => ({ value: b.name, label: b.name })),
+    ]
+  }, [options?.bots, t])
 
   return (
     <div ref={containerRef} style={{ overscrollBehavior: 'contain' }} className="animate-in min-w-0" aria-busy={loading}>
@@ -128,56 +270,53 @@ export default function Trades() {
       {/* Filters */}
       <div className="grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-2 sm:gap-2.5 mb-5">
         <FilterDropdown
-          value={statusFilter}
-          onChange={(v) => { setStatusFilter(v); setPage(1) }}
+          value={filters.status}
+          onChange={(v) => updateParams({ [PARAM_KEYS.status]: v || null })}
           ariaLabel={t('trades.status')}
-          options={[
-            { value: '', label: t('trades.allStatuses') },
-            { value: 'open', label: t('trades.open') },
-            { value: 'closed', label: t('trades.closed') },
-            { value: 'cancelled', label: t('trades.cancelled') },
-          ]}
+          options={statusOptions}
         />
 
         <input
           type="text"
           placeholder={`${t('trades.symbol')}...`}
-          value={symbolFilter}
-          onChange={(e) => { setSymbolFilter(e.target.value.toUpperCase()); setPage(1) }}
+          value={symbolDraft}
+          onChange={(e) => setSymbolDraft(e.target.value.toUpperCase())}
           aria-label={t('trades.symbol')}
           className="filter-select w-32"
+          list="trades-symbol-options"
         />
+        {/* Native combobox data-list — optional hinting from the API,
+            doesn't constrain what the user can type. */}
+        <datalist id="trades-symbol-options">
+          {(options?.symbols ?? []).map((s) => (
+            <option key={s} value={s} />
+          ))}
+        </datalist>
 
         <FilterDropdown
-          value={exchangeFilter}
-          onChange={(v) => { setExchangeFilter(v); setPage(1) }}
+          value={filters.exchange}
+          onChange={(v) => updateParams({ [PARAM_KEYS.exchange]: v || null })}
           ariaLabel={t('trades.exchange')}
-          options={[
-            { value: '', label: t('trades.allExchanges') },
-            ...uniqueExchanges.map(ex => ({ value: ex, label: ex.charAt(0).toUpperCase() + ex.slice(1) })),
-          ]}
+          options={exchangeOptions}
         />
 
         <FilterDropdown
-          value={botFilter}
-          onChange={(v) => { setBotFilter(v); setPage(1) }}
+          value={filters.bot}
+          onChange={(v) => updateParams({ [PARAM_KEYS.bot]: v || null })}
           ariaLabel={t('trades.bot')}
-          options={[
-            { value: '', label: t('trades.allBots') },
-            ...uniqueBots.map(name => ({ value: name, label: name })),
-          ]}
+          options={botOptions}
         />
 
         <DatePicker
-          value={dateFrom}
-          onChange={(v) => { setDateFrom(v); setPage(1) }}
+          value={filters.dateFrom}
+          onChange={(v) => updateParams({ [PARAM_KEYS.dateFrom]: v || null })}
           label={t('trades.dateFrom')}
           placeholder={t('trades.dateFrom') + '...'}
         />
 
         <DatePicker
-          value={dateTo}
-          onChange={(v) => { setDateTo(v); setPage(1) }}
+          value={filters.dateTo}
+          onChange={(v) => updateParams({ [PARAM_KEYS.dateTo]: v || null })}
           label={t('trades.dateTo')}
           placeholder={t('trades.dateTo') + '...'}
         />
@@ -186,7 +325,7 @@ export default function Trades() {
           <button
             onClick={clearAllFilters}
             className="filter-reset"
-            aria-label="Clear all filters"
+            aria-label={t('trades.clearAllFilters')}
           >
             <X size={12} />
             {t('trades.reset')}
@@ -404,10 +543,10 @@ export default function Trades() {
       {/* Pagination */}
       <div className="mt-5">
         <Pagination
-          page={page}
+          page={filters.page}
           totalPages={totalPages}
-          onPageChange={setPage}
-          label={totalPages > 1 ? `${t('common.page')} ${page} ${t('common.of')} ${totalPages}` : undefined}
+          onPageChange={handlePageChange}
+          label={totalPages > 1 ? `${t('common.page')} ${filters.page} ${t('common.of')} ${totalPages}` : undefined}
         />
       </div>
     </div>

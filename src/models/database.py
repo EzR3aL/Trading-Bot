@@ -60,7 +60,12 @@ class User(Base):
     funding_payments = relationship("FundingPayment", back_populates="user", cascade="all")
     bot_instances = relationship("BotInstance", back_populates="user", cascade="all")
     exchange_connections = relationship("ExchangeConnection", back_populates="user", cascade="all")
-    bot_configs = relationship("BotConfig", back_populates="user", cascade="all")
+    bot_configs = relationship(
+        "BotConfig",
+        back_populates="user",
+        cascade="all",
+        foreign_keys="BotConfig.user_id",
+    )
     notification_logs = relationship("NotificationLog", back_populates="user", cascade="all")
     sessions = relationship("UserSession", back_populates="user", cascade="all")
 
@@ -131,6 +136,15 @@ class TradeRecord(Base):
         Index("ix_trade_exit_time", "exit_time"),
         Index("ix_trade_user_demo", "user_id", "demo_mode"),
         Index("ix_trade_records_status_synced", "status", "last_synced_at"),
+        # Partial unique index: enforces (exchange, order_id) uniqueness for
+        # rows that actually have an order_id. See migration 025.
+        Index(
+            "uq_trade_records_exchange_order_id",
+            "exchange",
+            "order_id",
+            unique=True,
+            postgresql_where=text("order_id IS NOT NULL AND order_id <> ''"),
+        ),
         CheckConstraint(
             "risk_source IN ('native_exchange', 'software_bot', 'manual_user', 'unknown')",
             name="ck_trade_records_risk_source",
@@ -317,6 +331,15 @@ class BotConfig(Base):
     Data source selection is stored in strategy_params["data_sources"].
     """
     __tablename__ = "bot_configs"
+    __table_args__ = (
+        # Alive-rows partial index (Postgres-only predicate is ignored on
+        # SQLite). See migration 027 / ARCH-M3.
+        Index(
+            "ix_bot_configs_alive",
+            "user_id",
+            postgresql_where=text("deleted_at IS NULL"),
+        ),
+    )
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
@@ -369,11 +392,21 @@ class BotConfig(Base):
     # State
     is_enabled = Column(Boolean, default=False)
 
+    # Soft-delete (ARCH-M3 prep, migration 027). NULL = alive row.
+    # Router-level filtering on deleted_at is a follow-up; columns live here
+    # so background audits and future queries have a stable schema.
+    deleted_at = Column(DateTime(timezone=True), nullable=True)
+    deleted_by_user_id = Column(
+        Integer,
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
     # Relationships
-    user = relationship("User", back_populates="bot_configs")
+    user = relationship("User", back_populates="bot_configs", foreign_keys=[user_id])
     trades = relationship("TradeRecord", back_populates="bot_config", foreign_keys="TradeRecord.bot_config_id")
 
 
@@ -532,7 +565,7 @@ class RevenueEntry(Base):
     exchange = Column(String(50), nullable=False, index=True)
     revenue_type = Column(String(50), nullable=False)  # builder_fee | affiliate | referral
     amount_usd = Column(Float, nullable=False, default=0.0)
-    source = Column(String(20), nullable=False, default="manual", server_default="manual")  # auto_import | manual
+    source = Column(String(32), nullable=False, default="manual", server_default="manual")  # manual | auto_import | fee_auto | referral_bonus | ...
     notes = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())

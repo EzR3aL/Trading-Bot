@@ -789,3 +789,225 @@ async def test_sync_trades_handles_exchange_error_gracefully(
     assert resp.status_code == 200
     data = resp.json()
     assert data["synced"] == 0
+
+
+# ---------------------------------------------------------------------------
+# filter-options: GET /api/trades/filter-options
+# ---------------------------------------------------------------------------
+
+
+async def test_filter_options_requires_auth(client):
+    """GET /api/trades/filter-options without auth returns 401."""
+    resp = await client.get("/api/trades/filter-options")
+    assert resp.status_code == 401
+
+
+async def test_filter_options_empty_for_new_user(client, auth_headers, user):
+    """A user with no trades and no bots receives empty lists."""
+    resp = await client.get("/api/trades/filter-options", headers=auth_headers)
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["symbols"] == []
+    assert data["bots"] == []
+    assert data["exchanges"] == []
+    assert data["statuses"] == []
+
+
+async def test_filter_options_returns_distinct_values(
+    client, auth_headers, trades, bot_config,
+):
+    """Distinct symbols / statuses / exchanges / bots from the user's data."""
+    resp = await client.get("/api/trades/filter-options", headers=auth_headers)
+    assert resp.status_code == 200
+    data = resp.json()
+
+    # Symbols: trades fixture inserts BTCUSDT + ETHUSDT
+    assert set(data["symbols"]) == {"BTCUSDT", "ETHUSDT"}
+
+    # Statuses: fixture has both open and closed trades
+    assert set(data["statuses"]) == {"open", "closed"}
+
+    # Exchanges: bitget is the only exchange on both trades and bot_config
+    assert data["exchanges"] == ["bitget"]
+
+    # Bots: TestBot is owned by this user
+    assert data["bots"] == [{"id": bot_config.id, "name": "TestBot"}]
+
+
+async def test_filter_options_user_isolation(
+    client, auth_headers, trades, other_user_trade, other_user,
+):
+    """Another user's symbols / trades must never leak through the response."""
+    resp = await client.get("/api/trades/filter-options", headers=auth_headers)
+    assert resp.status_code == 200
+    data = resp.json()
+    # other_user_trade symbol is XRPUSDT — must not appear
+    assert "XRPUSDT" not in data["symbols"]
+    # Requesting user owns no XRPUSDT-related bot either
+    for bot in data["bots"]:
+        assert other_user.id != bot["id"]  # sanity
+
+
+async def test_filter_options_includes_bot_exchange_without_trades(
+    client, auth_headers, session_factory, user,
+):
+    """A bot's exchange is listed even if the bot has no trades yet."""
+    async with session_factory() as session:
+        bc = BotConfig(
+            user_id=user.id,
+            name="UntradedBot",
+            description="No trades yet",
+            strategy_type="test",
+            exchange_type="hyperliquid",
+            mode="demo",
+            trading_pairs='["BTCUSDT"]',
+            leverage=2,
+            is_enabled=False,
+        )
+        session.add(bc)
+        await session.commit()
+
+    resp = await client.get("/api/trades/filter-options", headers=auth_headers)
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "hyperliquid" in data["exchanges"]
+    assert any(b["name"] == "UntradedBot" for b in data["bots"])
+
+
+# ---------------------------------------------------------------------------
+# sync_trades: RSM-routed exit-reason attribution (ARCH-C1a)
+# ---------------------------------------------------------------------------
+
+
+async def test_sync_trades_uses_classify_close_when_rsm_enabled(
+    client, auth_headers, trades, session_factory, user,
+):
+    """With the RSM flag on, sync_trades defers to classify_close.
+
+    The heuristic must NOT win when the manager is available — the
+    response's exit_reason is whatever classify_close returns.
+    """
+    async with session_factory() as session:
+        conn = ExchangeConnection(
+            user_id=user.id,
+            exchange_type="bitget",
+            demo_api_key_encrypted="encrypted_key",
+            demo_api_secret_encrypted="encrypted_secret",
+        )
+        session.add(conn)
+        await session.commit()
+
+    mock_client = AsyncMock()
+    mock_client.get_close_fill_price = AsyncMock(return_value=None)
+    mock_client.get_open_positions = AsyncMock(return_value=[])
+    mock_client.get_ticker = AsyncMock(return_value=MagicMock(last_price=96000.0))
+    mock_client.get_trade_total_fees = AsyncMock(return_value=0.5)
+    mock_client.get_funding_fees = AsyncMock(return_value=0.1)
+    mock_client.close = AsyncMock()
+
+    fake_manager = MagicMock()
+    fake_manager.classify_close = AsyncMock(return_value="TAKE_PROFIT_NATIVE")
+    fake_manager.reconcile = AsyncMock()
+
+    fake_settings = MagicMock()
+    fake_settings.risk.risk_state_manager_enabled = True
+
+    with patch("src.api.routers.trades.decrypt_value", return_value="decrypted"), \
+         patch("src.api.routers.trades.create_exchange_client", return_value=mock_client), \
+         patch("src.api.routers.trades.settings", fake_settings), \
+         patch("src.api.routers.trades.get_risk_state_manager", return_value=fake_manager):
+        resp = await client.post("/api/trades/sync", headers=auth_headers)
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["synced"] == 1
+    assert data["closed_trades"][0]["exit_reason"] == "TAKE_PROFIT_NATIVE"
+    # classify_close was consulted; reconcile was invoked post-close
+    fake_manager.classify_close.assert_awaited_once()
+    fake_manager.reconcile.assert_awaited_once()
+
+
+async def test_sync_trades_falls_back_to_heuristic_when_classify_close_fails(
+    client, auth_headers, trades, session_factory, user,
+):
+    """A failing classify_close must not break the sync — heuristic takes over."""
+    async with session_factory() as session:
+        conn = ExchangeConnection(
+            user_id=user.id,
+            exchange_type="bitget",
+            demo_api_key_encrypted="encrypted_key",
+            demo_api_secret_encrypted="encrypted_secret",
+        )
+        session.add(conn)
+        await session.commit()
+
+    mock_client = AsyncMock()
+    mock_client.get_close_fill_price = AsyncMock(return_value=None)
+    mock_client.get_open_positions = AsyncMock(return_value=[])
+    mock_client.get_ticker = AsyncMock(return_value=MagicMock(last_price=96000.0))
+    mock_client.get_trade_total_fees = AsyncMock(return_value=0.5)
+    mock_client.get_funding_fees = AsyncMock(return_value=0.1)
+    mock_client.close = AsyncMock()
+
+    fake_manager = MagicMock()
+    fake_manager.classify_close = AsyncMock(side_effect=RuntimeError("boom"))
+    fake_manager.reconcile = AsyncMock()
+
+    fake_settings = MagicMock()
+    fake_settings.risk.risk_state_manager_enabled = True
+
+    with patch("src.api.routers.trades.decrypt_value", return_value="decrypted"), \
+         patch("src.api.routers.trades.create_exchange_client", return_value=mock_client), \
+         patch("src.api.routers.trades.settings", fake_settings), \
+         patch("src.api.routers.trades.get_risk_state_manager", return_value=fake_manager):
+        resp = await client.post("/api/trades/sync", headers=auth_headers)
+
+    assert resp.status_code == 200
+    data = resp.json()
+    # Still synced, and the exit_reason is one of the legacy heuristic values.
+    assert data["synced"] == 1
+    assert data["closed_trades"][0]["exit_reason"] in {
+        "TAKE_PROFIT", "STOP_LOSS", "MANUAL_CLOSE",
+    }
+
+
+async def test_sync_trades_legacy_path_untouched_when_rsm_disabled(
+    client, auth_headers, trades, session_factory, user,
+):
+    """With the RSM flag off, classify_close is never consulted."""
+    async with session_factory() as session:
+        conn = ExchangeConnection(
+            user_id=user.id,
+            exchange_type="bitget",
+            demo_api_key_encrypted="encrypted_key",
+            demo_api_secret_encrypted="encrypted_secret",
+        )
+        session.add(conn)
+        await session.commit()
+
+    mock_client = AsyncMock()
+    mock_client.get_close_fill_price = AsyncMock(return_value=None)
+    mock_client.get_open_positions = AsyncMock(return_value=[])
+    mock_client.get_ticker = AsyncMock(return_value=MagicMock(last_price=96000.0))
+    mock_client.get_trade_total_fees = AsyncMock(return_value=0.5)
+    mock_client.get_funding_fees = AsyncMock(return_value=0.1)
+    mock_client.close = AsyncMock()
+
+    fake_manager = MagicMock()
+    fake_manager.classify_close = AsyncMock(return_value="SHOULD_NOT_BE_USED")
+    fake_manager.reconcile = AsyncMock()
+
+    fake_settings = MagicMock()
+    fake_settings.risk.risk_state_manager_enabled = False
+
+    with patch("src.api.routers.trades.decrypt_value", return_value="decrypted"), \
+         patch("src.api.routers.trades.create_exchange_client", return_value=mock_client), \
+         patch("src.api.routers.trades.settings", fake_settings), \
+         patch("src.api.routers.trades.get_risk_state_manager", return_value=fake_manager):
+        resp = await client.post("/api/trades/sync", headers=auth_headers)
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["synced"] == 1
+    fake_manager.classify_close.assert_not_awaited()
+    fake_manager.reconcile.assert_not_awaited()

@@ -3,7 +3,7 @@
  * Handles affiliate verification and builder fee approval
  * as a natural continuation of wallet credential setup.
  */
-import { useState, useEffect, Component, type ReactNode } from 'react'
+import { useState, useEffect, useCallback, useRef, Component, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { WagmiProvider } from 'wagmi'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
@@ -15,6 +15,13 @@ import { CheckCircle, Loader2, ExternalLink, Wallet, AlertTriangle, Info } from 
 import api from '../../api/client'
 
 const queryClient = new QueryClient()
+
+// On-chain confirmation polling config.
+// Hyperliquid's L1 state can lag 1-5s after a successful signed action,
+// occasionally longer under RPC load. Poll until the backend confirms the
+// approved fee landed, or give up after MAX_POLL_MS to show a clear error.
+const POLL_INTERVAL_MS = 1000
+const MAX_POLL_MS = 30_000
 
 interface BuilderConfig {
   builder_configured: boolean
@@ -72,8 +79,13 @@ function HyperliquidSetupInner({ onComplete }: HyperliquidSetupProps) {
   const [builderFeeApproved, setBuilderFeeApproved] = useState(false)
   const [verifyingReferral, setVerifyingReferral] = useState(false)
   const [signingFee, setSigningFee] = useState(false)
+  // Elapsed seconds while polling the backend for on-chain approval.
+  // null = not polling, number = seconds elapsed (shown next to the spinner).
+  const [pollElapsedSec, setPollElapsedSec] = useState<number | null>(null)
+  // Abort flag so unmount/cleanup can stop an in-flight poll loop.
+  const pollAbortRef = useRef(false)
 
-  const fetchConfig = async () => {
+  const fetchConfig = useCallback(async () => {
     try {
       const res = await api.get('/config/hyperliquid/builder-config')
       const cfg = res.data as BuilderConfig
@@ -85,16 +97,23 @@ function HyperliquidSetupInner({ onComplete }: HyperliquidSetupProps) {
     } finally {
       setLoading(false)
     }
-  }
+  }, [t])
 
-  useEffect(() => { fetchConfig() }, [])
+  useEffect(() => { fetchConfig() }, [fetchConfig])
+
+  // Stop any in-flight poll loop on unmount.
+  useEffect(() => {
+    return () => {
+      pollAbortRef.current = true
+    }
+  }, [])
 
   // Notify parent when all steps are complete
   useEffect(() => {
     if (referralVerified && builderFeeApproved && onComplete) {
       onComplete()
     }
-  }, [referralVerified, builderFeeApproved])
+  }, [referralVerified, builderFeeApproved, onComplete])
 
   const handleVerifyReferral = async () => {
     setError(null)
@@ -184,12 +203,57 @@ function HyperliquidSetupInner({ onComplete }: HyperliquidSetupProps) {
         throw new Error(`Hyperliquid: ${hlBody.response || 'Unknown error'}`)
       }
 
-      // Wait for on-chain propagation
-      await new Promise(resolve => setTimeout(resolve, 3000))
+      // Poll the backend for on-chain confirmation instead of a fixed sleep.
+      // The /confirm-builder-approval endpoint returns 200 once HL reports the
+      // approved fee, otherwise 400. We retry every POLL_INTERVAL_MS up to
+      // MAX_POLL_MS, pausing while the tab is hidden so we don't burn requests
+      // for a user who walked away.
+      pollAbortRef.current = false
+      setPollElapsedSec(0)
+      const startedAt = Date.now()
+      let confirmed = false
+      let lastPollError: unknown = null
 
-      await api.post('/config/hyperliquid/confirm-builder-approval', {
-        wallet_address: address,
-      })
+      while (!pollAbortRef.current && Date.now() - startedAt < MAX_POLL_MS) {
+        await new Promise(resolve => setTimeout(resolve, POLL_INTERVAL_MS))
+
+        if (pollAbortRef.current) break
+
+        // Skip the request entirely while the tab is backgrounded. The elapsed
+        // counter keeps advancing so the user sees real time, but we don't
+        // spam the server. As soon as they return, the next tick will fire.
+        if (typeof document !== 'undefined' && document.visibilityState !== 'visible') {
+          setPollElapsedSec(Math.floor((Date.now() - startedAt) / 1000))
+          continue
+        }
+
+        setPollElapsedSec(Math.floor((Date.now() - startedAt) / 1000))
+
+        try {
+          await api.post('/config/hyperliquid/confirm-builder-approval', {
+            wallet_address: address,
+          })
+          confirmed = true
+          break
+        } catch (pollErr: unknown) {
+          // 400 = approval not on-chain yet, keep polling.
+          // Record in case we time out so we can surface the backend message.
+          lastPollError = pollErr
+        }
+      }
+
+      setPollElapsedSec(null)
+
+      if (!confirmed) {
+        const e = lastPollError as
+          | { response?: { data?: { detail?: string } } }
+          | undefined
+        const backendDetail = e?.response?.data?.detail
+        throw new Error(
+          backendDetail ||
+            t('hyperliquid.setup.pollTimeout', 'Approval did not land on-chain within 30s. Try again.')
+        )
+      }
 
       setBuilderFeeApproved(true)
     } catch (err: unknown) {
@@ -201,6 +265,7 @@ function HyperliquidSetupInner({ onComplete }: HyperliquidSetupProps) {
       }
     } finally {
       setSigningFee(false)
+      setPollElapsedSec(null)
     }
   }
 
@@ -405,7 +470,12 @@ function HyperliquidSetupInner({ onComplete }: HyperliquidSetupProps) {
                 {signingFee ? (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin" />
-                    {t('builderFee.approving')}
+                    {pollElapsedSec !== null
+                      ? t('hyperliquid.setup.pollingStatus', {
+                          seconds: pollElapsedSec,
+                          defaultValue: 'Checking on-chain status… ({{seconds}}s)',
+                        })
+                      : t('builderFee.approving')}
                   </>
                 ) : (
                   t('builderFee.approve')

@@ -169,11 +169,12 @@ async def get_session():
 
 
 async def get_db() -> AsyncSession:
-    """FastAPI dependency that provides a database session."""
-    async with async_session_factory() as session:
-        try:
-            yield session
-            await session.commit()
-        except Exception:
-            await session.rollback()
-            raise
+    """FastAPI dependency that provides a database session.
+
+    ARCH-H3: this dependency now shares the circuit-breaker-protected
+    acquisition path with ``get_session()``. Previously only ``get_session``
+    went through the breaker, so a failing database still exposed the API
+    paths to cascading timeouts while background tasks fast-failed correctly.
+    """
+    async with get_session() as session:
+        yield session

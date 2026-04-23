@@ -1,29 +1,30 @@
 """Health check and status endpoints."""
 
 import os
-import subprocess
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
 from src.api.middleware.audit_log import get_audit_failure_count
 from src.api.rate_limit import limiter
+from src.auth.dependencies import get_current_user
+from src.models.database import User
 from src.models.session import get_session
 from src.utils.logger import get_logger
 
-# Resolve build version at import time (once, not per request)
-# In Docker: read from BUILD_COMMIT env var (set during build)
-# Fallback: try git, then "unknown"
-_GIT_COMMIT = os.environ.get("BUILD_COMMIT", "").strip()
-if not _GIT_COMMIT:
-    try:
-        _GIT_COMMIT = subprocess.check_output(
-            ["git", "rev-parse", "--short", "HEAD"], stderr=subprocess.DEVNULL, text=True,
-        ).strip()
-    except Exception:
-        _GIT_COMMIT = "unknown"
+# SEC-L1: resolve build version from BUILD_COMMIT / GIT_COMMIT env vars
+# populated at Docker build time (see Dockerfile's ARG BUILD_COMMIT).
+# The previous implementation called `git rev-parse --short HEAD` via
+# subprocess at import time, which requires a .git/ tree inside the
+# container (not present in the production image) and adds a needless
+# process spawn on every cold start.
+_GIT_COMMIT = (
+    os.environ.get("BUILD_COMMIT", "").strip()
+    or os.environ.get("GIT_COMMIT", "").strip()
+    or "unknown"
+)
 
 logger = get_logger(__name__)
 
@@ -99,6 +100,12 @@ async def get_status():
 
 
 @router.get("/api/version")
-async def get_version():
-    """Return build version for deploy verification."""
+async def get_version(_user: User = Depends(get_current_user)):
+    """Return build version for deploy verification.
+
+    SEC-L1: auth-required. Not consumed by any unauth monitor in this
+    codebase (verified via grep: no ``/api/version`` callers in frontend
+    or monitoring config), so hiding the commit SHA behind ``get_current_user``
+    is safe and prevents leaking internal build metadata to the public.
+    """
     return {"commit": _GIT_COMMIT}
