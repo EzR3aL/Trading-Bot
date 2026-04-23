@@ -1,9 +1,15 @@
 """One-time authorization code store for the auth bridge.
 
-Codes are short-lived (60 s), single-use tokens that carry a Supabase
-JWT from the main site to the bot backend.  They live in memory — a
-container restart simply invalidates any pending codes, which is fine
-because they expire in under a minute anyway.
+Codes are short-lived, single-use tokens that carry a Supabase JWT from
+the main site to the bot backend.  They live in memory — a container
+restart simply invalidates any pending codes, which is fine because
+they expire within the configured TTL.
+
+Thread-safety: all mutations to ``_codes`` are guarded by an
+``asyncio.Lock`` (SEC-014).  This prevents a race between a ``generate``
+that inserts a new entry and the background cleanup loop that purges
+expired entries, and between two concurrent ``exchange`` calls that
+could otherwise both succeed for the same code.
 """
 
 import asyncio
@@ -14,8 +20,12 @@ from dataclasses import dataclass, field
 
 logger = logging.getLogger(__name__)
 
-CODE_TTL_SECONDS = 60
-CLEANUP_INTERVAL_SECONDS = 300  # 5 minutes
+# 5-minute TTL (SEC-013). Codes are a short-lived bridge from the main
+# site to the bot backend; 5 min gives the user comfortable time to
+# complete the redirect + token exchange while still limiting the
+# replay window.
+CODE_TTL_SECONDS = 300
+CLEANUP_INTERVAL_SECONDS = 60  # sweep expired codes every minute
 
 
 @dataclass
@@ -34,40 +44,51 @@ class AuthCodeStore:
 
     def __init__(self) -> None:
         self._codes: dict[str, _PendingCode] = {}
+        self._lock = asyncio.Lock()
         self._cleanup_task: asyncio.Task | None = None
 
     # ── Public API ────────────────────────────────────────────
 
-    def generate(self, supabase_jwt: str) -> str:
+    async def generate(self, supabase_jwt: str) -> str:
         """Create a new one-time code and return it."""
         code = secrets.token_urlsafe(24)
-        self._codes[code] = _PendingCode(supabase_jwt=supabase_jwt)
-        logger.info("AUTH_BRIDGE: Generated one-time code (total pending: %d)", len(self._codes))
+        async with self._lock:
+            self._codes[code] = _PendingCode(supabase_jwt=supabase_jwt)
+            pending = len(self._codes)
+        logger.info("AUTH_BRIDGE: Generated one-time code (total pending: %d)", pending)
         return code
 
-    def exchange(self, code: str) -> str | None:
+    async def exchange(self, code: str) -> str | None:
         """Consume a code and return the stored Supabase JWT.
 
         Returns None if the code does not exist, is expired, or was
-        already used.
+        already used. The lock ensures that concurrent exchange calls
+        on the same code cannot both succeed.
         """
-        entry = self._codes.get(code)
-        if entry is None:
-            logger.warning("AUTH_BRIDGE: Code exchange failed — code not found")
-            return None
-        if entry.expired:
-            del self._codes[code]
-            logger.warning("AUTH_BRIDGE: Code exchange failed — code expired")
-            return None
-        if entry.used:
-            logger.warning("AUTH_BRIDGE: Code exchange failed — code already used")
-            return None
+        async with self._lock:
+            entry = self._codes.get(code)
+            if entry is None:
+                logger.warning("AUTH_BRIDGE: Code exchange failed — code not found")
+                return None
+            if entry.expired:
+                del self._codes[code]
+                logger.warning("AUTH_BRIDGE: Code exchange failed — code expired")
+                return None
+            if entry.used:
+                logger.warning("AUTH_BRIDGE: Code exchange failed — code already used")
+                return None
 
-        entry.used = True
-        jwt_value = entry.supabase_jwt
-        del self._codes[code]
+            entry.used = True
+            jwt_value = entry.supabase_jwt
+            del self._codes[code]
+
         logger.info("AUTH_BRIDGE: Code exchanged successfully")
         return jwt_value
+
+    async def pending_count(self) -> int:
+        """Return the number of currently-stored (not-yet-consumed) codes."""
+        async with self._lock:
+            return len(self._codes)
 
     # ── Background cleanup ────────────────────────────────────
 
@@ -86,11 +107,12 @@ class AuthCodeStore:
         while True:
             try:
                 await asyncio.sleep(CLEANUP_INTERVAL_SECONDS)
-                before = len(self._codes)
-                self._codes = {
-                    k: v for k, v in self._codes.items() if not v.expired
-                }
-                removed = before - len(self._codes)
+                async with self._lock:
+                    before = len(self._codes)
+                    self._codes = {
+                        k: v for k, v in self._codes.items() if not v.expired
+                    }
+                    removed = before - len(self._codes)
                 if removed:
                     logger.debug("AUTH_BRIDGE: Cleaned up %d expired codes", removed)
             except asyncio.CancelledError:

@@ -64,7 +64,7 @@ async def generate_code(request: Request):
             detail="Invalid or expired Supabase token",
         )
 
-    code = auth_code_store.generate(supabase_jwt)
+    code = await auth_code_store.generate(supabase_jwt)
     client_ip = _get_real_client_ip(request)
     logger.info(
         "AUTH_BRIDGE: Code generated for Supabase user %s from %s",
@@ -88,7 +88,7 @@ async def exchange_code(
 
     Looks up or creates a bot user based on the Supabase identity.
     """
-    supabase_jwt = auth_code_store.exchange(body.code)
+    supabase_jwt = await auth_code_store.exchange(body.code)
     if supabase_jwt is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

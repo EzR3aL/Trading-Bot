@@ -1,15 +1,27 @@
 """
-WebSocket endpoint with JWT authentication.
+WebSocket endpoint with JWT authentication (SEC-013).
 
-Clients connect via /api/ws and send the JWT token as the first message
-(avoids exposing tokens in URL query strings / server logs).
-Receives real-time events: bot_started, bot_stopped, trade_opened, trade_closed.
+Authentication happens **before** the WebSocket handshake is accepted:
+the JWT is required as a ``token`` query parameter and is validated
+with ``decode_token(expected_type="access")``. Failed auth is signalled
+with close code ``1008`` (policy violation) per RFC 6455.
+
+Token sources (in priority order):
+1. ``?token=...`` query param (required — returns 1008 if missing).
+2. The ``access_token`` httpOnly cookie — used as a fallback for
+   browsers that cannot put the JWT in the URL (the cookie is sent on
+   the WebSocket handshake automatically).
+
+Once authenticated the client receives real-time events:
+``bot_started``, ``bot_stopped``, ``trade_opened``, ``trade_closed``.
 """
 
 import asyncio
+from typing import Optional
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect
 from sqlalchemy import select
+from starlette.status import WS_1008_POLICY_VIOLATION
 
 from src.api.websocket.manager import ws_manager
 from src.auth.jwt_handler import decode_token
@@ -22,63 +34,59 @@ logger = get_logger(__name__)
 
 router = APIRouter()
 
-AUTH_TIMEOUT_SECONDS = 10
 WS_INACTIVITY_TIMEOUT = 300  # seconds
 
 
 @router.websocket("/api/ws")
-async def websocket_endpoint(websocket: WebSocket):
-    """Authenticated WebSocket endpoint for real-time events."""
-    await websocket.accept()
+async def websocket_endpoint(
+    websocket: WebSocket,
+    token: Optional[str] = Query(default=None),
+):
+    """Authenticated WebSocket endpoint for real-time events.
 
-    # Try httpOnly cookie first (browser sends cookies on WebSocket handshake)
-    cookie_token = websocket.cookies.get("access_token")
-    payload = None
-
-    if cookie_token:
-        payload = decode_token(cookie_token, expected_type="access")
-        # If cookie token is invalid, fall through to message-based auth
-
-    # Fallback: wait for auth message (first message = JWT token)
-    if not payload:
-        try:
-            first_msg = await asyncio.wait_for(
-                websocket.receive_text(), timeout=AUTH_TIMEOUT_SECONDS
-            )
-        except asyncio.TimeoutError:
-            await websocket.close(code=4001, reason="Auth timeout")
-            return
-        payload = decode_token(first_msg, expected_type="access")
-
-    if not payload:
-        await websocket.close(code=4001, reason="Invalid token")
+    The JWT access token MUST be supplied either as the ``token`` query
+    parameter or the ``access_token`` httpOnly cookie. Requests that
+    fail authentication are rejected with close code ``1008`` (policy
+    violation) before the handshake is accepted.
+    """
+    # Resolve token: query param first, fall back to httpOnly cookie.
+    raw_token = token or websocket.cookies.get("access_token")
+    if not raw_token:
+        await websocket.close(code=WS_1008_POLICY_VIOLATION, reason="Missing token")
         return
 
-    user_id = payload.get("sub")
-    if user_id is None:
-        await websocket.close(code=4001, reason="Invalid token payload")
+    payload = decode_token(raw_token, expected_type="access")
+    if not payload:
+        await websocket.close(code=WS_1008_POLICY_VIOLATION, reason="Invalid token")
         return
 
+    user_id_claim = payload.get("sub")
+    if user_id_claim is None:
+        await websocket.close(code=WS_1008_POLICY_VIOLATION, reason="Invalid token payload")
+        return
     try:
-        user_id = int(user_id)
+        user_id = int(user_id_claim)
     except (TypeError, ValueError):
-        await websocket.close(code=4001, reason="Invalid user ID")
+        await websocket.close(code=WS_1008_POLICY_VIOLATION, reason="Invalid user ID")
         return
 
-    # Verify user status and token_version against database
+    # Verify user status and token_version against the database before accepting.
     async with get_session() as db:
         result = await db.execute(select(User).where(User.id == user_id))
         user = result.scalar_one_or_none()
         if not user or not user.is_active:
-            await websocket.close(code=4001, reason="User inactive")
+            await websocket.close(code=WS_1008_POLICY_VIOLATION, reason="User inactive")
             return
-        if getattr(user, 'is_deleted', False):
-            await websocket.close(code=4001, reason="User not found")
+        if getattr(user, "is_deleted", False):
+            await websocket.close(code=WS_1008_POLICY_VIOLATION, reason="User not found")
             return
         tv = payload.get("tv", 0)
         if tv < (user.token_version or 0):
-            await websocket.close(code=4001, reason="Token revoked")
+            await websocket.close(code=WS_1008_POLICY_VIOLATION, reason="Token revoked")
             return
+
+    # Auth successful — accept the connection and register it.
+    await websocket.accept()
 
     connected = await ws_manager.connect(websocket, user_id)
     if not connected:
@@ -90,9 +98,13 @@ async def websocket_endpoint(websocket: WebSocket):
     try:
         while True:
             try:
-                data = await asyncio.wait_for(websocket.receive_text(), timeout=WS_INACTIVITY_TIMEOUT)
+                data = await asyncio.wait_for(
+                    websocket.receive_text(), timeout=WS_INACTIVITY_TIMEOUT
+                )
             except asyncio.TimeoutError:
-                logger.info("WebSocket: Client %d timed out after 5min inactivity", user_id)
+                logger.info(
+                    "WebSocket: Client %d timed out after 5min inactivity", user_id
+                )
                 break
             if data == "ping":
                 await websocket.send_text("pong")
