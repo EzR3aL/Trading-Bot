@@ -648,13 +648,23 @@ class TestAuthLoginLockoutFlow:
         mock_request.client.host = "127.0.0.1"
         mock_request.headers = {}
 
+        mock_response = MagicMock()
         result = await login(
             request=mock_request,
-            response=MagicMock(),
+            response=mock_response,
             body=LoginRequest(username="locktest", password="CorrectPass1!"),
             db=mock_db,
         )
-        assert result.access_token
+        # SEC-012: access_token is NOT in body, only in httpOnly cookie.
+        # Successful login is proven by reaching this line (no HTTPException),
+        # expires_in being set, and the cookie being written.
+        assert result.token_type == "bearer"
+        assert result.expires_in > 0
+        cookie_keys = [
+            (c.kwargs.get("key") or (c.args[0] if c.args else ""))
+            for c in mock_response.set_cookie.call_args_list
+        ]
+        assert "access_token" in cookie_keys
         assert user.failed_login_attempts == 0
         assert user.locked_until is None
 

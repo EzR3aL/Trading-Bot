@@ -12,10 +12,12 @@ class LoginRequest(BaseModel):
 
 
 class TokenResponse(BaseModel):
-    access_token: str
+    # access_token is no longer populated in the body (SEC-012) — it's delivered
+    # via the httpOnly access_token cookie. Field kept Optional for API stability.
+    access_token: str | None = None
     refresh_token: str | None = None
     token_type: str = "bearer"
-    expires_in: int = 14400  # 4 hours  # 24 hours
+    expires_in: int = 14400  # 4 hours
 
 
 class RefreshRequest(BaseModel):

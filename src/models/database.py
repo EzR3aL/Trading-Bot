@@ -80,6 +80,10 @@ class UserSession(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     session_token_hash = Column(String(255), nullable=False)
+    # Optimistic-locking counter for refresh-token rotation (SEC-002). Incremented
+    # on every successful refresh; parallel refresh-requests race on this version
+    # so only one rotates the cookie — the loser still gets a new access token.
+    session_version = Column(Integer, nullable=False, default=0, server_default="0")
     device_name = Column(String(255), nullable=True)
     ip_address = Column(String(45), nullable=True)
     user_agent = Column(String(500), nullable=True)

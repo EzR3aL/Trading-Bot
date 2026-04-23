@@ -4,7 +4,7 @@ import { clearTokenExpiry, setTokenExpiry } from '../api/client'
 import type { User } from '../types'
 
 /** Default access token lifetime in seconds (must match backend ACCESS_TOKEN_EXPIRE_MINUTES). */
-const DEFAULT_TOKEN_LIFETIME_S = 10080 * 60  // 7 days
+const DEFAULT_TOKEN_LIFETIME_S = 240 * 60  // 4 hours
 
 interface AuthState {
   user: User | null
@@ -17,18 +17,27 @@ interface AuthState {
 }
 
 /**
- * Extract token expiry (seconds from now) from a JWT access_token string.
- * Falls back to the default lifetime if parsing fails.
+ * Resolve access-token lifetime in seconds.
+ *
+ * The backend no longer returns the access token in the response body (SEC-012);
+ * it is delivered only via the httpOnly cookie. We rely on `expires_in` from the
+ * response body, falling back to legacy JWT decoding for the dual-validate window,
+ * then to the default lifetime.
  */
-function extractExpirySeconds(accessToken: string): number {
-  try {
-    const payload = JSON.parse(atob(accessToken.split('.')[1]))
-    if (payload.exp) {
-      const remaining = payload.exp - Math.floor(Date.now() / 1000)
-      return remaining > 0 ? remaining : DEFAULT_TOKEN_LIFETIME_S
+function resolveExpirySeconds(data: { expires_in?: number; access_token?: string | null }): number {
+  if (typeof data.expires_in === 'number' && data.expires_in > 0) {
+    return data.expires_in
+  }
+  if (data.access_token) {
+    try {
+      const payload = JSON.parse(atob(data.access_token.split('.')[1]))
+      if (payload.exp) {
+        const remaining = payload.exp - Math.floor(Date.now() / 1000)
+        if (remaining > 0) return remaining
+      }
+    } catch {
+      // Fall through
     }
-  } catch {
-    // Fall through
   }
   return DEFAULT_TOKEN_LIFETIME_S
 }
@@ -43,11 +52,10 @@ export const useAuthStore = create<AuthState>((set) => ({
     set({ isLoading: true })
     try {
       const res = await api.post('/auth/login', { username, password })
-      const { access_token } = res.data
 
-      // Access token is now stored as httpOnly cookie by the backend.
-      // Track expiry for proactive refresh scheduling.
-      setTokenExpiry(extractExpirySeconds(access_token))
+      // Access token lives only in the httpOnly cookie (SEC-012). Track expiry
+      // from `expires_in` for proactive refresh scheduling.
+      setTokenExpiry(resolveExpirySeconds(res.data))
 
       // Fetch user profile
       const userRes = await api.get('/auth/me')
@@ -62,9 +70,9 @@ export const useAuthStore = create<AuthState>((set) => ({
     set({ isLoading: true })
     try {
       const res = await api.post('/auth/bridge/exchange', { code })
-      const { access_token, user } = res.data
+      const { user } = res.data
 
-      setTokenExpiry(extractExpirySeconds(access_token))
+      setTokenExpiry(resolveExpirySeconds(res.data))
 
       set({ user, isAuthenticated: true, isLoading: false })
     } catch (error) {

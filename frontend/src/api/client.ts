@@ -141,16 +141,20 @@ async function doRefresh(): Promise<boolean> {
       const res = await axios.post('/api/auth/refresh', undefined, {
         withCredentials: true,
       })
-      const { access_token } = res.data
 
-      // Extract expiry from the response token for proactive refresh scheduling
-      try {
-        const payload = JSON.parse(atob(access_token.split('.')[1]))
-        if (payload.exp) {
-          tokenExpiryMs = payload.exp * 1000
+      // Prefer `expires_in` (SEC-012 — token no longer in body). Fall back to
+      // legacy JWT-decode if a dual-validate-period server still returns one.
+      const expiresIn: number | undefined = res.data?.expires_in
+      if (typeof expiresIn === 'number' && expiresIn > 0) {
+        tokenExpiryMs = Date.now() + expiresIn * 1000
+      } else if (res.data?.access_token) {
+        try {
+          const payload = JSON.parse(atob(res.data.access_token.split('.')[1]))
+          tokenExpiryMs = payload.exp ? payload.exp * 1000 : Date.now() + 240 * 60 * 1000
+        } catch {
+          tokenExpiryMs = Date.now() + 240 * 60 * 1000
         }
-      } catch {
-        // If token parsing fails, fall back to 4 hours (matches backend default)
+      } else {
         tokenExpiryMs = Date.now() + 240 * 60 * 1000
       }
       persistTokenExpiry(tokenExpiryMs)
