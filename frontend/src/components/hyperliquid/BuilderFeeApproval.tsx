@@ -241,7 +241,11 @@ function BuilderFeeApprovalInner({ onApproved, onClose }: BuilderFeeApprovalProp
           <h3 className="text-lg font-semibold text-white">{t('builderFee.title')}</h3>
         </div>
         {onClose && (
-          <button onClick={onClose} className="absolute top-0 right-0 text-gray-400 hover:text-white transition-colors">
+          <button
+            onClick={onClose}
+            aria-label={t('common.close', 'Close')}
+            className="absolute top-0 right-0 text-gray-400 hover:text-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/60 rounded"
+          >
             <X className="w-5 h-5" />
           </button>
         )}

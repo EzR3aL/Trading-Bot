@@ -13,6 +13,7 @@ import '@rainbow-me/rainbowkit/styles.css'
 import { walletConfig } from '../../config/wallet'
 import { CheckCircle, Loader2, ExternalLink, Wallet, AlertTriangle, Info } from 'lucide-react'
 import api from '../../api/client'
+import CopyButton from '../ui/CopyButton'
 
 const queryClient = new QueryClient()
 
@@ -513,7 +514,10 @@ function HyperliquidSetupInner({ onComplete }: HyperliquidSetupProps) {
               <div className="text-[10px] uppercase tracking-wide text-gray-500 mb-1">
                 {t('hlSetup.diagWallet')}
               </div>
-              <div className="text-sm text-white font-mono">{referralDiag.wallet_short}</div>
+              <div className="text-sm text-white font-mono flex items-center gap-1.5">
+                <span>{referralDiag.wallet_short}</span>
+                <CopyButton value={referralDiag.wallet_address} label={t('hlSetup.diagWallet')} />
+              </div>
             </div>
             <div className="p-3 bg-black/20">
               <div className="text-[10px] uppercase tracking-wide text-gray-500 mb-1">

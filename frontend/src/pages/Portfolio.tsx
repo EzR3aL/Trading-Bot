@@ -24,6 +24,7 @@ import useIsMobile from '../hooks/useIsMobile'
 import usePullToRefresh from '../hooks/usePullToRefresh'
 import { useTradesSSE } from '../hooks/useTradesSSE'
 import { useVisibleTab } from '../hooks/useIntervalPaused'
+import { useDocumentTitle } from '../hooks/useDocumentTitle'
 import PullToRefreshIndicator from '../components/ui/PullToRefreshIndicator'
 import GuidedTour, { TourHelpButton, type TourStep } from '../components/ui/GuidedTour'
 import { useVirtualRows } from '../components/virtualised/useVirtualRows'
@@ -70,6 +71,7 @@ function ChartTooltip({ active, payload, label }: any) {
 
 export default function Portfolio() {
   const { t } = useTranslation()
+  useDocumentTitle(t('nav.portfolio'))
   const { demoFilter } = useFilterStore()
   const { theme } = useThemeStore()
   const isLight = theme === 'light'

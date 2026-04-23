@@ -8,6 +8,7 @@ import useIsMobile from '../hooks/useIsMobile'
 import FilterDropdown from '../components/ui/FilterDropdown'
 import { USER_TIMEZONE } from '../utils/dateUtils'
 import { showError } from '../utils/toast'
+import { useDocumentTitle } from '../hooks/useDocumentTitle'
 
 interface TaxData {
   year: number
@@ -26,6 +27,7 @@ function formatPnl(value: number): string {
 
 export default function TaxReport() {
   const { t, i18n } = useTranslation()
+  useDocumentTitle(t('nav.taxReport'))
   const { demoFilter } = useFilterStore()
   const currentYear = new Date().getFullYear()
   const [year, setYear] = useState(currentYear)

@@ -19,6 +19,7 @@ import useIsMobile from '../hooks/useIsMobile'
 import usePullToRefresh from '../hooks/usePullToRefresh'
 import { useTradesSSE } from '../hooks/useTradesSSE'
 import { useVisibleTab } from '../hooks/useIntervalPaused'
+import { useDocumentTitle } from '../hooks/useDocumentTitle'
 import PullToRefreshIndicator from '../components/ui/PullToRefreshIndicator'
 
 /* ── Animated Number ─────────────────────────────────────── */
@@ -82,6 +83,7 @@ const PERIOD_LABELS: Record<number, string> = { 7: 'dashboard.days7', 14: 'dashb
 
 export default function Dashboard() {
   const { t } = useTranslation()
+  useDocumentTitle(t('nav.dashboard'))
   const { demoFilter } = useFilterStore()
   const isMobile = useIsMobile()
   const [period, setPeriod] = useState<number>(30)

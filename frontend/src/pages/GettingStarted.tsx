@@ -28,6 +28,7 @@ import {
 } from 'lucide-react'
 import { ExchangeIcon } from '../components/ui/ExchangeLogo'
 import GuidedTour, { TourHelpButton, type TourStep } from '../components/ui/GuidedTour'
+import { useDocumentTitle } from '../hooks/useDocumentTitle'
 
 /* ─── Prerequisite Banner ─────────────────────────────────────────── */
 
@@ -746,6 +747,7 @@ const SECTIONS = [
 
 export default function GettingStarted() {
   const { t } = useTranslation()
+  useDocumentTitle(t('nav.guide'))
   const [activeSection, setActiveSection] = useState<string>('quickstart')
 
   const renderSection = () => {

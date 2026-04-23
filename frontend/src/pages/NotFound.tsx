@@ -1,8 +1,10 @@
 import { Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
+import { useDocumentTitle } from '../hooks/useDocumentTitle'
 
 export default function NotFound() {
   const { t } = useTranslation()
+  useDocumentTitle(t('notFound', 'Page not found'))
 
   return (
     <div className="flex flex-col items-center justify-center min-h-[60vh] p-8">

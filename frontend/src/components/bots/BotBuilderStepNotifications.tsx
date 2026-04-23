@@ -36,6 +36,7 @@ function ThresholdChipInput({
   thresholds: PnlThreshold[]
   onChange: (vals: PnlThreshold[]) => void
 }) {
+  const { t } = useTranslation()
   const [input, setInput] = useState('')
   const [inputMode, setInputMode] = useState<'dollar' | 'percent'>('percent')
 
@@ -60,7 +61,7 @@ function ThresholdChipInput({
 
   return (
     <div>
-      <label className="block text-xs text-gray-400 mb-2">Schwellenwerte</label>
+      <label className="block text-xs text-gray-400 mb-2">{t('bots.builder.pnlThresholdsLabel', 'Schwellenwerte')}</label>
 
       {/* Existing chips */}
       {thresholds.length > 0 && (
@@ -127,7 +128,8 @@ function ThresholdChipInput({
             type="button"
             onClick={addThreshold}
             disabled={!input}
-            className="p-1.5 rounded-lg bg-amber-500/15 border border-amber-500/25 text-amber-400 hover:bg-amber-500/25 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            aria-label={t('bots.builder.addThreshold', 'Add threshold')}
+            className="p-1.5 rounded-lg bg-amber-500/15 border border-amber-500/25 text-amber-400 hover:bg-amber-500/25 disabled:opacity-30 disabled:cursor-not-allowed transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/60"
           >
             <Plus size={16} />
           </button>
@@ -135,7 +137,7 @@ function ThresholdChipInput({
       )}
 
       <p className="text-[10px] text-gray-500 mt-1.5">
-        Typ wählen ($/%​), Wert eingeben, Enter drücken. Maximal 10 Schwellenwerte.
+        {t('bots.builder.pnlThresholdHint', 'Typ wählen ($/%), Wert eingeben, Enter drücken. Maximal 10 Schwellenwerte.')}
       </p>
     </div>
   )
