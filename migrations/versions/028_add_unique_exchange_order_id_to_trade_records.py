@@ -19,9 +19,15 @@ Implementation notes:
   by Alembic/SQLAlchemy; the test env has a single exchange so the
   predicate is effectively always true there.
 
-Revision ID: 025
-Revises: 024
+Revision ID: 028
+Revises: 027
 Create Date: 2026-04-21
+(Renumbered from 025 to 028 in #346 to resolve a duplicate-025 head
+that existed alongside ``025_add_session_version.py``. Neither migration
+had been applied to prod at renumbering time — last deploy was commit
+``fd77ba9`` on 2026-04-21, which pre-dates both 025 files — so the
+renumber is a pure file/metadata change with no prod-DB reconciliation
+needed.)
 """
 from typing import Sequence, Union
 
@@ -29,8 +35,8 @@ from alembic import op
 import sqlalchemy as sa
 
 
-revision: str = "025"
-down_revision: Union[str, None] = "024"
+revision: str = "028"
+down_revision: Union[str, None] = "027"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
