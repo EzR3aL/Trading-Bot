@@ -31,6 +31,7 @@ from apscheduler.triggers.interval import IntervalTrigger
 from config.settings import settings
 from src.bot.components.notifier import Notifier
 from src.bot.components.position_monitor import PositionMonitor
+from src.bot.components.risk import AlertThrottler, RiskComponentDeps
 from src.bot.components.trade_closer import TradeCloser
 from src.bot.components.trade_executor import TradeExecutor
 from src.exchanges.base import ExchangeClient
@@ -138,9 +139,27 @@ class BotWorker:
         self._last_signal_keys: dict[str, datetime] = {}
         self._last_signal_cleanup: datetime = datetime.now(timezone.utc)
 
-        # Risk alert deduplication (reset daily)
-        self._risk_alerts_sent: set[str] = set()
-        self._risk_alerts_last_reset: datetime = datetime.now(timezone.utc)
+        # Risk alert deduplication (reset daily) — AlertThrottler component
+        # owns the dedupe set + last-reset timestamp + notifier dispatch.
+        # Legacy ``_risk_alerts_sent`` / ``_risk_alerts_last_reset`` attrs
+        # stay backward-compatible via properties below so existing tests
+        # (and external readers) keep working. The notifier is wired via
+        # a thunk so tests that swap ``worker._send_notification`` after
+        # construction still route through the mock.
+        # See issue #326, ARCH-H2 Phase 1 PR-4.
+        async def _notification_thunk(send_fn, *, event_type, summary):
+            await self._send_notification(
+                send_fn, event_type=event_type, summary=summary,
+            )
+
+        self._risk_component_deps = RiskComponentDeps(
+            bot_config_id=bot_config_id,
+            notifier=_notification_thunk,
+        )
+        self._alert_throttler = AlertThrottler(
+            bot_config_id=bot_config_id,
+            notification_sender=_notification_thunk,
+        )
 
         # Wire the shared RiskStateManager singleton into the close-detection
         # path so `_handle_closed_position` uses exchange-readback classify_close
@@ -298,6 +317,28 @@ class BotWorker:
     @_pnl_alert_parsed.setter
     def _pnl_alert_parsed(self, value):
         self._ensure_monitor()._pnl_alert_parsed = value
+
+    # ── AlertThrottler backward-compat surface ──────────────────────
+    # Legacy attribute shims so callers (and characterization tests) that
+    # pre-date ARCH-H2 Phase 1 PR-4 still see ``_risk_alerts_sent`` +
+    # ``_risk_alerts_last_reset`` directly on the worker. New code should
+    # call ``self._alert_throttler`` explicitly.
+
+    @property
+    def _risk_alerts_sent(self) -> set[str]:
+        return self._alert_throttler.sent
+
+    @_risk_alerts_sent.setter
+    def _risk_alerts_sent(self, value: set[str]) -> None:
+        self._alert_throttler.sent = value
+
+    @property
+    def _risk_alerts_last_reset(self) -> datetime:
+        return self._alert_throttler.last_reset
+
+    @_risk_alerts_last_reset.setter
+    def _risk_alerts_last_reset(self, value: datetime) -> None:
+        self._alert_throttler.last_reset = value
 
     # ── PositionMonitor method forwarders ──────────────────────────────
 
@@ -1007,10 +1048,8 @@ class BotWorker:
             self._cleanup_stale_signal_keys()
             self._last_signal_cleanup = now
 
-        # Reset risk alerts daily
-        if (now - self._risk_alerts_last_reset).total_seconds() > 86400:
-            self._risk_alerts_sent.clear()
-            self._risk_alerts_last_reset = now
+        # Reset risk alerts daily (owned by AlertThrottler — #326 Phase 1 PR-4)
+        self._alert_throttler.maybe_reset()
 
         logger.info(f"{log_prefix} Starting analysis...")
 
@@ -1038,19 +1077,7 @@ class BotWorker:
         can_trade, reason = self._risk_manager.can_trade()
         if not can_trade:
             logger.warning(f"{log_prefix} Cannot trade: {reason}")
-            reason_lower = reason.lower()
-            if "halted" in reason_lower or "limit" in reason_lower:
-                alert_key = f"global_{reason}"
-                if alert_key not in self._risk_alerts_sent:
-                    self._risk_alerts_sent.add(alert_key)
-                    alert_type = "TRADE_LIMIT" if "trade limit" in reason_lower else "DAILY_LOSS_LIMIT"
-                    await self._send_notification(
-                        lambda n, at=alert_type: n.send_risk_alert(
-                            alert_type=at, message=reason,
-                        ),
-                        event_type="risk_alert",
-                        summary=f"{alert_type}: {reason[:100]}",
-                    )
+            await self._alert_throttler.emit_global_if_needed(reason)
             return
 
         # Parse trading pairs
@@ -1069,20 +1096,7 @@ class BotWorker:
             can_trade_sym, sym_reason = self._risk_manager.can_trade(symbol)
             if not can_trade_sym:
                 logger.info(f"{log_prefix} Skipping {symbol}: {sym_reason}")
-                sym_reason_lower = sym_reason.lower()
-                if "halted" in sym_reason_lower or "limit" in sym_reason_lower:
-                    alert_key = f"{symbol}_{sym_reason}"
-                    if alert_key not in self._risk_alerts_sent:
-                        self._risk_alerts_sent.add(alert_key)
-                        sym_alert_type = "TRADE_LIMIT" if "trade limit" in sym_reason_lower else "DAILY_LOSS_LIMIT"
-                        msg = f"{symbol}: {sym_reason}"
-                        await self._send_notification(
-                            lambda n, at=sym_alert_type, m=msg: n.send_risk_alert(
-                                alert_type=at, message=m,
-                            ),
-                            event_type="risk_alert",
-                            summary=f"{sym_alert_type}: {msg[:100]}",
-                        )
+                await self._alert_throttler.emit_per_symbol_if_needed(symbol, sym_reason)
                 continue
 
             try:
@@ -1227,8 +1241,8 @@ class BotWorker:
         except Exception as e:
             logger.warning(f"{log_prefix} Failed to send daily summary: {e}")
 
-        # Reset risk alert deduplication for the new day
-        self._risk_alerts_sent.clear()
+        # Reset risk alert deduplication for the new day (#326 Phase 1 PR-4)
+        self._alert_throttler.reset()
 
     def _get_strategy_param(self, key: str, default):
         """Read a strategy parameter from the strategy instance."""
