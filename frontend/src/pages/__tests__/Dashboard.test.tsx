@@ -15,10 +15,10 @@ const mockT = (key: string) => {
     'dashboard.funding': 'Funding',
     'dashboard.pnlOverTime': 'PnL Over Time',
     'dashboard.winLoss': 'Win / Loss',
-    'dashboard.days7': '7D',
+    'common.timeframes.days7': '7D',
     'dashboard.days14': '14D',
-    'dashboard.days30': '30D',
-    'dashboard.days90': '90D',
+    'common.timeframes.days30': '30D',
+    'common.timeframes.days90': '90D',
     'common.error': 'An error occurred',
   }
   return translations[key] || key

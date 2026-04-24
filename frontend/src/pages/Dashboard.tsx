@@ -79,7 +79,7 @@ function StatCard({ label, value, numericValue, color, sub, isPositive }: {
 
 
 const PERIODS = [7, 14, 30, 90] as const
-const PERIOD_LABELS: Record<number, string> = { 7: 'dashboard.days7', 14: 'dashboard.days14', 30: 'dashboard.days30', 90: 'dashboard.days90' }
+const PERIOD_LABELS: Record<number, string> = { 7: 'common.timeframes.days7', 14: 'dashboard.days14', 30: 'common.timeframes.days30', 90: 'common.timeframes.days90' }
 
 export default function Dashboard() {
   const { t } = useTranslation()
