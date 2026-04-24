@@ -12,7 +12,7 @@ from src.auth.dependencies import get_current_user
 from src.errors import ERR_BOT_NOT_FOUND
 from src.models.database import BotConfig, TradeRecord, User
 from src.models.session import get_db
-from src.api.routers.trades import _compute_trailing_stop
+from src.services.trades_service import _compute_trailing_stop
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)

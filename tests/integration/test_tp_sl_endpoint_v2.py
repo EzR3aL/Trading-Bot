@@ -564,9 +564,10 @@ async def test_trailing_stop_leg_confirmed_with_payload(
     _wire_manager(fake, session_factory_cb)
 
     app = _build_app(session_factory)
-    # Stub ATR fetch so we don't hit Binance from a test
+    # Stub ATR fetch so we don't hit Binance from a test (helper was moved to
+    # the service layer in #325 PR-2).
     with patch(
-        "src.api.routers.trades._compute_atr_for_trailing",
+        "src.services.trades_service._compute_atr_for_trailing",
         new=AsyncMock(return_value=400.0),
     ):
         try:
@@ -672,20 +673,20 @@ async def test_remove_tp_only_yields_cleared_status(
 @pytest.mark.asyncio
 async def test_compute_atr_for_trailing_returns_live_value():
     """``_compute_atr_for_trailing`` returns the latest ATR from the fetcher."""
-    from src.api.routers.trades import _compute_atr_for_trailing
+    from src.services.trades_service import _compute_atr_for_trailing
     from unittest.mock import MagicMock
 
     fake_fetcher = AsyncMock()
     fake_fetcher.get_binance_klines = AsyncMock(return_value=[[1, 1, 1, 1, 1]] * 20)
     fake_fetcher.close = AsyncMock()
 
-    # MarketDataFetcher is referenced in trades.py — patch both the class
-    # constructor and its static calculate_atr to return a deterministic series.
+    # Patch the class constructor and its static calculate_atr to return a
+    # deterministic series. The helper accepts the fetcher class as a parameter
+    # so we pass the fake class directly.
     fake_class = MagicMock(return_value=fake_fetcher)
     fake_class.calculate_atr = MagicMock(return_value=[123.0, 456.0, 789.0])
 
-    with patch("src.api.routers.trades.MarketDataFetcher", fake_class):
-        atr = await _compute_atr_for_trailing("BTCUSDT", 68000.0)
+    atr = await _compute_atr_for_trailing("BTCUSDT", 68000.0, fake_class)
 
     assert atr == 789.0  # last element of the series
 
@@ -694,16 +695,15 @@ async def test_compute_atr_for_trailing_returns_live_value():
 async def test_compute_atr_for_trailing_falls_back_on_exception():
     """When the fetcher raises, ``_compute_atr_for_trailing`` returns the
     1.5% fallback estimate based on entry price."""
-    from src.api.routers.trades import _compute_atr_for_trailing
+    from src.services.trades_service import _compute_atr_for_trailing
+    from unittest.mock import MagicMock
 
     fake_fetcher = AsyncMock()
     fake_fetcher.get_binance_klines = AsyncMock(side_effect=RuntimeError("net down"))
     fake_fetcher.close = AsyncMock()
+    fake_class = MagicMock(return_value=fake_fetcher)
 
-    with patch(
-        "src.api.routers.trades.MarketDataFetcher", return_value=fake_fetcher
-    ):
-        atr = await _compute_atr_for_trailing("BTCUSDT", 68000.0)
+    atr = await _compute_atr_for_trailing("BTCUSDT", 68000.0, fake_class)
 
     assert atr == pytest.approx(68000.0 * 0.015)
 
@@ -711,12 +711,12 @@ async def test_compute_atr_for_trailing_falls_back_on_exception():
 @pytest.mark.asyncio
 async def test_derive_overall_status_edges():
     """Cover the ``no_change`` and ``all_rejected`` aggregation branches."""
-    from src.api.routers.trades import _derive_overall_status, RiskLegStatus
+    from src.services.trades_service import _derive_overall_status, RiskLegOutcome
 
     assert _derive_overall_status([]) == "no_change"
-    rejected = RiskLegStatus(status="rejected", value=None, latency_ms=0)
+    rejected = RiskLegOutcome(status="rejected", value=None, latency_ms=0)
     assert _derive_overall_status([rejected]) == "all_rejected"
-    pending = RiskLegStatus(status="pending", value=None, latency_ms=0)
+    pending = RiskLegOutcome(status="pending", value=None, latency_ms=0)
     # Only "pending" → still no_change (neither OK nor FAIL)
     assert _derive_overall_status([pending]) == "no_change"
 

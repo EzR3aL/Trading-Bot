@@ -232,7 +232,7 @@ class TestComputeTrailingStopParity:
         so trailing must NOT activate. The pre-fix dashboard calc (1h ATR ≈
         406, DEFAULTS 1.5) produced threshold 609 < 1082 → falsely active.
         """
-        from src.api.routers.trades import _compute_trailing_stop
+        from src.services.trades_service import _compute_trailing_stop
 
         trade = _FakeTrade()
         # 4h klines with ATR ≈ 905 (simplified constant range)
@@ -262,7 +262,7 @@ class TestComputeTrailingStopParity:
         prefetch with "1h" hardcoded and _compute_trailing_stop would miss
         the cache, falling back to a live fetch with the wrong interval.
         """
-        from src.api.routers.trades import _compute_trailing_stop
+        from src.services.trades_service import _compute_trailing_stop
 
         trade = _FakeTrade(highest_price=75000)  # clearly profitable at any ATR
         # Same fake data for both cache keys, but only 4h should be read
@@ -285,7 +285,7 @@ class TestComputeTrailingStopParity:
 
     async def test_liquidation_hunter_supported(self):
         """Regression: liquidation_hunter trades now get trailing info too."""
-        from src.api.routers.trades import _compute_trailing_stop
+        from src.services.trades_service import _compute_trailing_stop
 
         trade = _FakeTrade(highest_price=70500)
         klines = [
@@ -334,7 +334,7 @@ class TestDashboardExchangeAgnostic:
         (one per exchange convention) but identical strategy settings, and
         verifying the output shape is the same.
         """
-        from src.api.routers.trades import _compute_trailing_stop
+        from src.services.trades_service import _compute_trailing_stop
 
         # Each exchange uses a slightly different symbol format, but the
         # dashboard computation only cares about the strategy + highest_price.
@@ -396,7 +396,7 @@ class TestDashboardExchangeAgnostic:
         is the only place they see the stop level. If the two calculations
         diverge, the displayed stop is misleading.
         """
-        from src.api.routers.trades import _compute_trailing_stop
+        from src.services.trades_service import _compute_trailing_stop
         from src.strategy.base import check_atr_trailing_stop
 
         # Shared inputs
@@ -476,7 +476,7 @@ class TestDashboardExchangeAgnostic:
         highest_price for shorts actually tracks the LOWEST price since entry
         (see position_monitor.py:108 and check_atr_trailing_stop).
         """
-        from src.api.routers.trades import _compute_trailing_stop
+        from src.services.trades_service import _compute_trailing_stop
 
         trade = _FakeTrade(
             side="short",

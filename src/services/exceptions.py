@@ -67,3 +67,47 @@ class BotIsRunning(ServiceError):
     def __init__(self, bot_id: int) -> None:
         super().__init__(f"Bot {bot_id} is running")
         self.bot_id = bot_id
+
+
+class TradeNotOpen(ServiceError):
+    """Raised when a write operation targets a trade that is not currently open.
+
+    Carries the trade id so the router can compose a user-friendly error
+    detail without re-querying.
+    """
+
+    def __init__(self, trade_id: int) -> None:
+        super().__init__(f"Trade {trade_id} is not open")
+        self.trade_id = trade_id
+
+
+class ExchangeConnectionMissing(ServiceError):
+    """Raised when the user has no :class:`ExchangeConnection` for the trade's exchange.
+
+    Also raised when the connection exists but has no usable API keys
+    (neither demo nor live credentials). The router maps this to a 400.
+    """
+
+
+class TpSlExchangeNotSupported(ServiceError):
+    """Raised when the exchange client does not support native TP/SL orders.
+
+    Carries the exchange name so the router can surface it in the detail
+    string (``ERR_TPSL_EXCHANGE_NOT_SUPPORTED.format(exchange=...)``).
+    """
+
+    def __init__(self, exchange: str) -> None:
+        super().__init__(f"TP/SL not supported on {exchange}")
+        self.exchange = exchange
+
+
+class TpSlUpdateFailed(ServiceError):
+    """Raised when the exchange rejects a TP/SL update with an opaque error.
+
+    Carries the raw exchange error message so the router can decide
+    whether to surface it as 400 (validation-ish) or 502 (upstream).
+    """
+
+    def __init__(self, raw_error: str) -> None:
+        super().__init__(raw_error)
+        self.raw_error = raw_error

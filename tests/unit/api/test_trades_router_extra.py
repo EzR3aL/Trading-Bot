@@ -658,7 +658,12 @@ async def test_trailing_stop_kline_fetch_failure(
     mock_fetcher.close = AsyncMock()
     mock_cls = MagicMock(return_value=mock_fetcher)
 
-    with patch("src.api.routers.trades.MarketDataFetcher", mock_cls):
+    # get_trade was moved to TradesService; patch both import sites so the
+    # test still intercepts the fetcher after the #325 PR-1 extraction.
+    with (
+        patch("src.api.routers.trades.MarketDataFetcher", mock_cls),
+        patch("src.services.trades_service.MarketDataFetcher", mock_cls),
+    ):
         resp = await client.get(
             f"/api/trades/{open_long_trailing.id}", headers=auth_headers
         )

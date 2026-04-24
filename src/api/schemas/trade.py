@@ -1,8 +1,9 @@
 """Trade schemas."""
 
-from typing import Optional
+from datetime import datetime
+from typing import Any, Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class TradeFilterBotOption(BaseModel):
@@ -69,3 +70,55 @@ class TradeListResponse(BaseModel):
     total: int
     page: int = 1
     per_page: int = 50
+
+
+# ---------------------------------------------------------------------------
+# TP/SL update request / response models
+# ---------------------------------------------------------------------------
+
+
+class TrailingStopParams(BaseModel):
+    """Trailing-stop sub-object on ``PUT /api/trades/{id}/tp-sl``."""
+
+    callback_pct: float  # ATR multiplier (e.g., 2.5 = 2.5x ATR)
+
+    @field_validator("callback_pct")
+    @classmethod
+    def validate_atr_range(cls, v: float) -> float:
+        if v < 1.0 or v > 5.0:
+            raise ValueError("ATR multiplier must be between 1.0 and 5.0")
+        return v
+
+
+class UpdateTpSlRequest(BaseModel):
+    """Request body for ``PUT /api/trades/{id}/tp-sl``."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    take_profit: Optional[float] = None
+    stop_loss: Optional[float] = None
+    remove_tp: bool = False
+    remove_sl: bool = False
+    trailing_stop: Optional[TrailingStopParams] = None
+    remove_trailing: bool = False
+
+
+class RiskLegStatus(BaseModel):
+    """Per-leg outcome surfaced from a RiskStateManager apply_intent call."""
+
+    value: Optional[Any] = None
+    status: str  # pending | confirmed | rejected | cleared | cancel_failed
+    order_id: Optional[str] = None
+    error: Optional[str] = None
+    latency_ms: int = 0
+
+
+class TpSlResponse(BaseModel):
+    """Aggregate response for the RiskStateManager-backed TP/SL endpoint."""
+
+    trade_id: int
+    tp: Optional[RiskLegStatus] = None
+    sl: Optional[RiskLegStatus] = None
+    trailing: Optional[RiskLegStatus] = None
+    applied_at: datetime
+    overall_status: str  # all_confirmed | partial_success | all_rejected | no_change
