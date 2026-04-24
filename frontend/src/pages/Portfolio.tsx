@@ -32,6 +32,12 @@ import { useVirtualRows } from '../components/virtualised/useVirtualRows'
 /* ── Constants ────────────────────────────────────────────── */
 
 const PERIODS = [7, 14, 30, 90] as const
+const PERIOD_LABELS: Record<number, string> = {
+  7: 'common.timeframes.days7',
+  14: 'portfolio.days14',
+  30: 'common.timeframes.days30',
+  90: 'common.timeframes.days90',
+}
 
 const EXCHANGE_COLORS: Record<string, string> = {
   bitget: '#3b82f6',
@@ -306,7 +312,7 @@ export default function Portfolio() {
                   : 'text-gray-400 hover:text-white hover:bg-white/5'
               }`}
             >
-              {t(`portfolio.days${p}` as any)}
+              {t(PERIOD_LABELS[p])}
             </button>
           ))}
           </div>

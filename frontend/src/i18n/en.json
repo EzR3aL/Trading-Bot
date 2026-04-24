@@ -45,10 +45,7 @@
     "bestTrade": "Best Trade",
     "worstTrade": "Worst Trade",
     "period": "Period",
-    "days7": "7 Days",
     "days14": "14 Days",
-    "days30": "30 Days",
-    "days90": "90 Days",
     "noData": "No data available",
     "revenueTitle": "Builder Fee Revenue",
     "builderFees": "Builder Fees",
@@ -934,7 +931,12 @@
     "errorBoundaryGeneric": "An unexpected error occurred.",
     "copyValue": "Copy {{label}}",
     "copiedToast": "{{label}} copied to clipboard",
-    "copyFailed": "Copy failed"
+    "copyFailed": "Copy failed",
+    "timeframes": {
+      "days7": "7 Days",
+      "days30": "30 Days",
+      "days90": "90 Days"
+    }
   },
   "admin": {
     "users": "Users",
@@ -1088,10 +1090,7 @@
     "noData": "No data available",
     "noDataHint": "Start trading to see your daily performance here.",
     "period": "Period",
-    "days7": "7 Days",
     "days14": "14 Days",
-    "days30": "30 Days",
-    "days90": "90 Days",
     "loadingPositions": "Loading positions...",
     "exchangeCards": "Exchange Overview",
     "total": "Total",

@@ -45,10 +45,7 @@
     "bestTrade": "Bester Trade",
     "worstTrade": "Schlechtester Trade",
     "period": "Zeitraum",
-    "days7": "7 Tage",
     "days14": "14 Tage",
-    "days30": "30 Tage",
-    "days90": "90 Tage",
     "noData": "Keine Daten vorhanden",
     "revenueTitle": "Builder-Fee Einnahmen",
     "builderFees": "Builder-Gebühren",
@@ -934,7 +931,12 @@
     "errorBoundaryGeneric": "Ein unerwarteter Fehler ist aufgetreten.",
     "copyValue": "{{label}} kopieren",
     "copiedToast": "{{label}} in die Zwischenablage kopiert",
-    "copyFailed": "Kopieren fehlgeschlagen"
+    "copyFailed": "Kopieren fehlgeschlagen",
+    "timeframes": {
+      "days7": "7 Tage",
+      "days30": "30 Tage",
+      "days90": "90 Tage"
+    }
   },
   "admin": {
     "users": "Benutzer",
@@ -1088,10 +1090,7 @@
     "noData": "Keine Daten vorhanden",
     "noDataHint": "Starte den Handel, um hier deine tägliche Performance zu sehen.",
     "period": "Zeitraum",
-    "days7": "7 Tage",
     "days14": "14 Tage",
-    "days30": "30 Tage",
-    "days90": "90 Tage",
     "loadingPositions": "Lade Positionen...",
     "exchangeCards": "Exchange-Übersicht",
     "total": "Gesamt",

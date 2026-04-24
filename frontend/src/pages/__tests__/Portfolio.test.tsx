@@ -28,10 +28,10 @@ const mockT = (key: string) => {
     'portfolio.noData': 'No data',
     'portfolio.exchangeCards': 'Exchange Breakdown',
     'portfolio.dailyChart': 'Daily PnL',
-    'portfolio.days7': '7D',
+    'common.timeframes.days7': '7D',
     'portfolio.days14': '14D',
-    'portfolio.days30': '30D',
-    'portfolio.days90': '90D',
+    'common.timeframes.days30': '30D',
+    'common.timeframes.days90': '90D',
     'common.error': 'An error occurred',
     'common.retry': 'Retry',
   }
