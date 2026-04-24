@@ -1,11 +1,9 @@
-<<<<<<< HEAD
 # Vitest / v8 coverage output
 coverage/
 *.lcov
-=======
+
 # Playwright E2E artifacts (#335)
 test-results/
 playwright-report/
 .playwright/
 e2e/.auth/
->>>>>>> frontend/335-playwright-e2e

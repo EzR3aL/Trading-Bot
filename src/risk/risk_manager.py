@@ -8,14 +8,17 @@ Handles:
 - Drawdown protection
 - Risk-adjusted returns tracking
 
-Composition note (#326 Phase 1 PR-5):
+Composition note (#326 Phase 1 PR-5 + PR-6):
 The daily stats aggregation (PnL counters, trade counter, per-symbol
 PnL, win/loss tracking, DailyStats snapshot lifecycle) lives in
-``src.bot.components.risk.daily_stats.DailyStatsAggregator``. This
-module stays the public façade — re-exports ``DailyStats`` for backward
-compatibility and delegates the aggregator calls. Persistence + the
-trade-logger side effects + per-symbol halt logic continue to live
-here until PR-6 (TradeGate) and PR-7 (RiskStatePersistence) land.
+``src.bot.components.risk.daily_stats.DailyStatsAggregator``. The
+trade-limit gate (``can_trade`` branches, per-symbol halt logic,
+global halt primitive, dynamic loss limits, remaining-trades/budget)
+lives in ``src.bot.components.risk.trade_gate.TradeGate``. This module
+stays the public façade — re-exports ``DailyStats`` for backward
+compatibility and delegates aggregator + gate calls. Persistence + the
+trade-logger side effects continue to live here until PR-7
+(RiskStatePersistence) lands.
 """
 
 from __future__ import annotations
@@ -118,12 +121,21 @@ class RiskManager:
         self._use_db = bot_config_id is not None and _db_available
 
         self.trade_logger = TradeLogger()
-        # DailyStats aggregation is owned by ``DailyStatsAggregator`` —
-        # this façade forwards ``initialize_day`` / ``get_daily_stats`` /
-        # the counter-mutation side of record_trade_entry/exit. The
-        # persistence + trade-logger + halt-on-loss orchestration stays
-        # here until PR-6 (TradeGate) and PR-7 (RiskStatePersistence).
+        # DailyStats aggregation is owned by ``DailyStatsAggregator``
+        # (PR-5). ``TradeGate`` owns the ``can_trade`` branches + halt
+        # state (PR-6). This façade forwards both and keeps the
+        # persistence + trade-logger side-effects co-located until PR-7.
         self._daily_stats_aggregator = DailyStatsAggregator()
+        self._trade_gate = TradeGate(
+            aggregator=self._daily_stats_aggregator,
+            max_trades_per_day=max_trades_per_day,
+            daily_loss_limit_percent=daily_loss_limit_percent,
+            per_symbol_limits=self.per_symbol_limits,
+            enable_profit_lock=enable_profit_lock,
+            profit_lock_percent=profit_lock_percent,
+            min_profit_floor=min_profit_floor,
+            save_stats=self._save_daily_stats,
+        )
         # Note: record_trade_entry/exit are synchronous with no await points,
         # so they are safe under asyncio's single-threaded model without a lock.
         # Per-symbol locks in BotWorker prevent concurrent calls for the same symbol.
@@ -273,105 +285,35 @@ class RiskManager:
         return stats
 
     def get_dynamic_loss_limit(self, symbol: Optional[str] = None) -> Optional[float]:
-        """
-        Calculate dynamic loss limit based on current daily PnL.
-
-        Args:
-            symbol: If provided, checks per-symbol PnL. Otherwise global.
-
-        Returns:
-            Current effective loss limit as percentage, or None if no limit set.
-        """
-        if self.daily_loss_limit is None:
-            return None
-
-        if not self.enable_profit_lock or not self._daily_stats:
-            return self.daily_loss_limit
-
-        current_return = self._daily_stats.return_percent
-
-        if current_return <= 0:
-            return self.daily_loss_limit
-
-        max_allowed_loss = current_return - self.min_profit_floor
-        new_limit = min(self.daily_loss_limit, max_allowed_loss)
-        new_limit = max(new_limit, 0.5)
-
-        logger.debug(
-            f"Profit Lock-In: Return={current_return:.2f}%, "
-            f"Dynamic Limit={new_limit:.2f}% (Standard: {self.daily_loss_limit}%)"
-        )
-
-        return new_limit
+        """Profit-lock-in adjusted loss limit — delegates to :class:`TradeGate`."""
+        return self._trade_gate.get_dynamic_loss_limit(symbol)
 
     def can_trade(self, symbol: Optional[str] = None) -> tuple[bool, str]:
+        """Trade-limit gate — delegates to :class:`TradeGate`.
+
+        Preserves the ``tuple[bool, str]`` contract + byte-identical
+        reason strings (locked by the Phase-0 characterization tests).
         """
-        Check if trading is allowed based on risk limits.
-
-        Args:
-            symbol: If provided, checks per-symbol limits. Otherwise general check.
-
-        Returns:
-            Tuple of (can_trade: bool, reason: str)
-        """
-        if not self._daily_stats:
-            return False, "Daily stats not initialized. Call initialize_day() first."
-
-        # Check if trading is globally halted
-        if self._daily_stats.is_trading_halted:
-            return False, f"Trading halted: {self._daily_stats.halt_reason}"
-
-        # Check if this specific symbol is halted
-        if symbol and symbol in self._daily_stats.halted_symbols:
-            return False, f"{symbol} halted: {self._daily_stats.halted_symbols[symbol]}"
-
-        # Resolve per-symbol limits (per-symbol override > global fallback > None)
-        if symbol:
-            sym_limits = self.per_symbol_limits.get(symbol, {})
-            effective_max_trades = sym_limits.get("max_trades", self.max_trades)
-            effective_loss_limit = sym_limits.get("loss_limit", self.daily_loss_limit)
-
-            # Check per-symbol trade count limit
-            if effective_max_trades is not None:
-                symbol_count = self._daily_stats.symbol_trades.get(symbol, 0)
-                if symbol_count >= effective_max_trades:
-                    return False, f"{symbol}: trade limit reached ({symbol_count}/{effective_max_trades})"
-
-            # Check per-symbol loss limit
-            if effective_loss_limit is not None:
-                symbol_pnl = self._daily_stats.symbol_pnl.get(symbol, 0.0)
-                if self._daily_stats.starting_balance > 0:
-                    symbol_loss_pct = abs(min(0, (symbol_pnl / self._daily_stats.starting_balance) * 100))
-                    if symbol_loss_pct >= effective_loss_limit:
-                        halt_reason = f"Loss limit exceeded ({symbol_loss_pct:.2f}% >= {effective_loss_limit:.2f}%)"
-                        self._daily_stats.halted_symbols[symbol] = halt_reason
-                        self._save_daily_stats()
-                        logger.warning(f"{symbol} HALTED: {halt_reason}")
-                        return False, f"{symbol}: {halt_reason}"
-
-        # General check (no symbol) — for gating entire analysis runs
-        if symbol is None:
-            # Check global trade count limit
-            if self.max_trades is not None:
-                if self._daily_stats.trades_executed >= self.max_trades:
-                    return False, f"Global trade limit reached ({self._daily_stats.trades_executed}/{self.max_trades})"
-
-            # Check global loss limit
-            if self.daily_loss_limit is not None and self._daily_stats.starting_balance > 0:
-                current_loss_pct = abs(min(0, self._daily_stats.return_percent))
-                if current_loss_pct >= self.daily_loss_limit:
-                    self._halt_trading(f"Daily loss limit exceeded ({current_loss_pct:.2f}% >= {self.daily_loss_limit:.2f}%)")
-                    return False, f"Daily loss limit exceeded ({current_loss_pct:.2f}% >= {self.daily_loss_limit}%)"
-
-        return True, "Trading allowed"
+        return self._trade_gate.can_trade(symbol)
 
     def _halt_trading(self, reason: str) -> None:
-        """Halt trading for the day."""
-        if self._daily_stats:
-            self._daily_stats.is_trading_halted = True
-            self._daily_stats.halt_reason = reason
-            self._save_daily_stats()
-            logger.warning(f"TRADING HALTED: {reason}")
+        """Global-halt primitive — delegates to :class:`TradeGate`.
+
+        Kept as a pseudo-private method because the legacy characterization
+        tests exercise it directly (``rm._halt_trading("Test reason")``).
+        """
+        self._trade_gate._halt_trading(reason)
+
+    @property
+    def halted_symbols(self) -> Dict[str, str]:
+        """Per-symbol halt reasons — delegates to :class:`TradeGate`.
+
+        Returns the underlying ``DailyStats.halted_symbols`` dict by
+        reference so legacy ``rm.halted_symbols[sym] = reason`` mutations
+        keep working (same strategy PR-4 used for ``_risk_alerts_sent``).
+        Pre-init returns ``{}`` — matches legacy.
+        """
+        return self._trade_gate.halted_symbols
 
     def calculate_position_size(
         self,
@@ -544,16 +486,9 @@ class RiskManager:
             f"Day PnL: ${self._daily_stats.net_pnl:.2f} ({self._daily_stats.return_percent:+.2f}%)"
         )
 
-        # Check per-symbol loss limit (per-symbol override > global fallback)
-        sym_limits = self.per_symbol_limits.get(symbol, {})
-        effective_loss_limit = sym_limits.get("loss_limit", self.daily_loss_limit)
-        if effective_loss_limit is not None and self._daily_stats.starting_balance > 0:
-            symbol_pnl_total = self._daily_stats.symbol_pnl.get(symbol, 0.0)
-            symbol_loss_pct = abs(min(0, (symbol_pnl_total / self._daily_stats.starting_balance) * 100))
-            if symbol_loss_pct >= effective_loss_limit:
-                self._daily_stats.halted_symbols[symbol] = f"Loss limit reached: {symbol_loss_pct:.2f}%"
-                self._save_daily_stats()
-                logger.warning(f"{symbol} HALTED: Loss limit {symbol_loss_pct:.2f}% >= {effective_loss_limit}%")
+        # Eager per-symbol halt check — the gate stamps halted_symbols
+        # on cap-crossing (PR-6 consolidation: was inlined here pre-PR-6).
+        self._trade_gate.check_and_halt(symbol)
 
         return True
 
@@ -562,31 +497,12 @@ class RiskManager:
         return self._daily_stats
 
     def get_remaining_trades(self, symbol: Optional[str] = None) -> int:
-        """Get number of trades remaining for today (per-symbol if symbol given)."""
-        if symbol:
-            sym_limits = self.per_symbol_limits.get(symbol, {})
-            effective_max = sym_limits.get("max_trades", self.max_trades)
-            if effective_max is None:
-                return 999
-            if not self._daily_stats:
-                return effective_max
-            symbol_count = self._daily_stats.symbol_trades.get(symbol, 0)
-            return max(0, effective_max - symbol_count)
-        if self.max_trades is None:
-            return 999
-        if not self._daily_stats:
-            return self.max_trades
-        return max(0, self.max_trades - self._daily_stats.trades_executed)
+        """Remaining trades for today — delegates to :class:`TradeGate`."""
+        return self._trade_gate.get_remaining_trades(symbol)
 
     def get_remaining_risk_budget(self) -> Optional[float]:
-        """Get remaining risk budget as percentage."""
-        if self.daily_loss_limit is None:
-            return None
-        if not self._daily_stats:
-            return self.daily_loss_limit
-
-        current_loss = abs(min(0, self._daily_stats.return_percent))
-        return max(0, self.daily_loss_limit - current_loss)
+        """Remaining loss-limit percent — delegates to :class:`TradeGate`."""
+        return self._trade_gate.get_remaining_risk_budget()
 
     def get_historical_stats(self, days: int = 30) -> List[Dict]:
         """Get historical daily stats from DB (sync wrapper).
@@ -664,3 +580,4 @@ from src.bot.components.risk.daily_stats import (  # noqa: E402
     DailyStats,
     DailyStatsAggregator,
 )
+from src.bot.components.risk.trade_gate import TradeGate  # noqa: E402

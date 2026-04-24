@@ -21,6 +21,7 @@ from src.bot.components.risk.protocols import (
     RiskStatePersistenceProtocol,
     TradeGateProtocol,
 )
+from src.bot.components.risk.trade_gate import TradeGate
 
 __all__ = [
     "DailyStatsAggregatorProtocol",
@@ -31,4 +32,5 @@ __all__ = [
     "AlertThrottler",
     "DailyStats",
     "DailyStatsAggregator",
+    "TradeGate",
 ]
