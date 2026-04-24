@@ -47,6 +47,28 @@ jobs:
           ENCRYPTION_KEY: dGVzdC1lbmNyeXB0aW9uLWtleS1mb3ItdGVzdGluZw==
           DATABASE_URL: sqlite+aiosqlite:///test.db
 
+      - name: Raise PostgreSQL max_connections to 500
+        # GitHub Actions `services.postgres.options` cannot pass `-c` server
+        # flags (those are CMD args, not docker-create flags — see the
+        # `fec45a6` revert). Instead, exec into the running container, append
+        # `max_connections = 500` to postgresql.conf, and restart it. Needed
+        # because the default `max_connections=100` is exhausted by function-
+        # scoped engines under pytest-asyncio 1.x auto mode (#354).
+        run: |
+          set -euo pipefail
+          CONTAINER=$(docker ps --filter ancestor=postgres:16-alpine --format '{{.ID}}' | head -n1)
+          test -n "$CONTAINER"
+          docker exec "$CONTAINER" bash -c "echo 'max_connections = 500' >> /var/lib/postgresql/data/postgresql.conf"
+          docker restart "$CONTAINER"
+          for i in {1..30}; do
+            if docker exec "$CONTAINER" pg_isready -U test_user -d test_trading_bot >/dev/null 2>&1; then
+              echo "PostgreSQL is ready"
+              break
+            fi
+            sleep 2
+          done
+          docker exec "$CONTAINER" psql -U test_user -d test_trading_bot -c "SHOW max_connections;"
+
       - name: Run integration tests with PostgreSQL
         # Scoped to tests/integration/ — unit tests run against SQLite above
         # (authoritative). Integration tests validate real PG behaviour
@@ -62,8 +84,8 @@ jobs:
           DATABASE_URL: postgresql+asyncpg://test_user:test_password@localhost:5432/test_trading_bot
           JWT_SECRET_KEY: test-secret-key-for-ci-only-not-for-production
           ENCRYPTION_KEY: dGVzdC1lbmNyeXB0aW9uLWtleS1mb3ItdGVzdGluZw==
-          DB_POOL_SIZE: 5
-          DB_MAX_OVERFLOW: 10
+          DB_POOL_SIZE: 2
+          DB_MAX_OVERFLOW: 3
 
   frontend-tests:
     runs-on: ubuntu-latest
