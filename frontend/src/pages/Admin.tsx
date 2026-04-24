@@ -372,8 +372,10 @@ export default function Admin() {
                     const hasExisting = !!affiliateLinks[ex]
                     return (
                       <div key={ex} className="border border-white/[0.08] bg-white/[0.02] rounded-xl overflow-hidden">
-                        <div
-                          className={`px-4 py-2.5 flex items-center justify-between cursor-pointer select-none ${
+                        <button
+                          type="button"
+                          aria-expanded={!!affiliateCardOpen[ex]}
+                          className={`w-full text-left appearance-none bg-transparent border-0 px-4 py-2.5 flex items-center justify-between cursor-pointer select-none ${
                             affiliateCardOpen[ex]
                               ? `border-b ${hasExisting ? 'border-emerald-500/10 bg-emerald-500/[0.03]' : 'border-white/[0.06] bg-white/[0.02]'}`
                               : hasExisting ? 'bg-emerald-500/[0.03]' : 'bg-white/[0.02]'
@@ -392,7 +394,7 @@ export default function Admin() {
                             </span>
                             <ChevronDown size={14} className={`text-gray-400 transition-transform duration-200 ${affiliateCardOpen[ex] ? 'rotate-180' : ''}`} />
                           </div>
-                        </div>
+                        </button>
                         {affiliateCardOpen[ex] && (
                         <div className="p-4 space-y-3">
                           <div>

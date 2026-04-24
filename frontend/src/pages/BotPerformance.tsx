@@ -767,8 +767,17 @@ export default function BotPerformance() {
                     </div>
                     <div
                       ref={latestCardRef}
+                      role="button"
+                      tabIndex={0}
+                      aria-label={t('bots.latestTrade')}
                       className="bg-white/[0.02] rounded-xl p-4 border border-white/5 cursor-pointer hover:border-white/10 transition-all"
                       onClick={() => setSelectedTrade(latestClosed)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault()
+                          setSelectedTrade(latestClosed)
+                        }
+                      }}
                     >
                       <div className="flex items-center justify-between mb-3">
                         <div className="flex items-center gap-3">
@@ -1011,7 +1020,15 @@ export default function BotPerformance() {
                         return botDetail.recent_trades.map((trade) => (
                           <Fragment key={trade.id}>
                           <tr
+                            tabIndex={0}
+                            aria-expanded={expandedTradeId === trade.id}
                             onClick={() => setExpandedTradeId(expandedTradeId === trade.id ? null : trade.id)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' || e.key === ' ') {
+                                e.preventDefault()
+                                setExpandedTradeId(expandedTradeId === trade.id ? null : trade.id)
+                              }
+                            }}
                             className="cursor-pointer"
                           >
                             <td className="text-gray-300">
@@ -1136,12 +1153,21 @@ export default function BotPerformance() {
 
       {/* Trade Detail Modal */}
       {selectedTrade && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 backdrop-blur-md" onClick={() => setSelectedTrade(null)}>
+        <div className="fixed inset-0 z-[60] flex items-center justify-center">
+          <button
+            type="button"
+            aria-label={t('common.close')}
+            onClick={() => setSelectedTrade(null)}
+            className="absolute inset-0 w-full h-full bg-black/70 backdrop-blur-md border-0 appearance-none cursor-default"
+          />
           <div
             ref={swipeTradeModal.ref}
             style={swipeTradeModal.style}
-            className="bg-[#0f1420] rounded-2xl max-w-lg w-full mx-4 border border-white/10 shadow-2xl overflow-hidden"
-            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-label={selectedTrade.symbol}
+            onKeyDown={(e) => { if (e.key === 'Escape') setSelectedTrade(null) }}
+            className="relative bg-[#0f1420] rounded-2xl max-w-lg w-full mx-4 border border-white/10 shadow-2xl overflow-hidden"
           >
             {isMobile && (
               <div className="flex justify-center pt-2 pb-1 lg:hidden">

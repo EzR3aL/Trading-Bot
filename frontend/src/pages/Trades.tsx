@@ -384,7 +384,15 @@ export default function Trades() {
             const renderTradeRow = (trade: Trade, virtualIndex: number | null) => (
               <Fragment key={trade.id}>
                 <tr
+                  tabIndex={0}
+                  aria-expanded={expandedId === trade.id}
                   onClick={() => setExpandedId(expandedId === trade.id ? null : trade.id)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault()
+                      setExpandedId(expandedId === trade.id ? null : trade.id)
+                    }
+                  }}
                   className="cursor-pointer"
                   data-index={virtualIndex ?? undefined}
                   ref={virtualIndex !== null ? tradesMeasureElement : undefined}

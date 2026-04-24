@@ -65,10 +65,11 @@ export default function MobileBottomNav() {
     <>
       {/* Bottom sheet overlay */}
       {sheetOpen && (
-        <div
-          className="lg:hidden fixed inset-0 z-[59] bg-black/60 backdrop-blur-sm"
+        <button
+          type="button"
+          aria-label={t('common.close', { defaultValue: 'Close' })}
           onClick={() => setSheetOpen(false)}
-          aria-hidden="true"
+          className="lg:hidden fixed inset-0 z-[59] w-full h-full bg-black/60 backdrop-blur-sm border-0 appearance-none cursor-default"
         />
       )}
 

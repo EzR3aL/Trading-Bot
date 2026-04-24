@@ -264,7 +264,14 @@ export default function GuidedTour({ tourId, steps, autoStart = true, onComplete
       )}
 
       {/* Click overlay to prevent interaction outside target */}
-      <div className="absolute inset-0" onClick={handleSkip} style={{ pointerEvents: 'auto' }} />
+      <button
+        type="button"
+        aria-label={t('common.skip', { defaultValue: 'Skip' })}
+        tabIndex={-1}
+        onClick={handleSkip}
+        className="absolute inset-0 w-full h-full bg-transparent border-0 appearance-none cursor-default"
+        style={{ pointerEvents: 'auto' }}
+      />
 
       {/* Tooltip */}
       <div
@@ -277,7 +284,6 @@ export default function GuidedTour({ tourId, steps, autoStart = true, onComplete
           left: tooltipPos.left,
           zIndex: 10000,
         }}
-        onClick={(e) => e.stopPropagation()}
       >
         {/* Step indicator + counter + close */}
         <div className="flex items-center justify-between mb-2">

@@ -278,16 +278,22 @@ export default function EditPositionPanel({ position, onClose, onSave }: EditPos
   return createPortal(
     <>
       {/* ── Backdrop ── */}
-      <div
-        className="fixed inset-0 z-[99] bg-black/60 backdrop-blur-sm"
+      <button
+        type="button"
+        aria-label={t('common.close')}
         onClick={onClose}
-        aria-hidden="true"
+        className="fixed inset-0 z-[99] w-full h-full bg-black/60 backdrop-blur-sm border-0 appearance-none cursor-default"
       />
 
       {/* ── Desktop wrapper (centers the panel) ── */}
       {!isMobile && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center pointer-events-none">
-          <div className={`${desktopPanel} pointer-events-auto`} onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
+          <div
+            className={`${desktopPanel} pointer-events-auto`}
+            role="dialog"
+            aria-modal="true"
+            onKeyDown={(e) => { if (e.key === 'Escape') onClose() }}
+          >
             {renderContent()}
           </div>
         </div>
@@ -299,9 +305,9 @@ export default function EditPositionPanel({ position, onClose, onSave }: EditPos
           ref={swipe.ref}
           style={swipe.style}
           className={mobilePanel}
-          onClick={(e) => e.stopPropagation()}
           role="dialog"
           aria-modal="true"
+          onKeyDown={(e) => { if (e.key === 'Escape') onClose() }}
         >
           {/* Swipe handle */}
           <div className="flex justify-center pt-3 pb-1 shrink-0">

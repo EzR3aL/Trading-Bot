@@ -30,8 +30,20 @@ interface Broadcast {
 function BroadcastDetailModal({ broadcast, onClose }: { broadcast: Broadcast; onClose: () => void }) {
   const { t } = useTranslation()
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
-      <div className="bg-[#0f1923] border border-white/10 rounded-xl p-5 max-w-2xl w-full mx-4 max-h-[80vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <button
+        type="button"
+        aria-label={t('common.close')}
+        onClick={onClose}
+        className="absolute inset-0 w-full h-full bg-black/60 backdrop-blur-sm border-0 appearance-none cursor-default"
+      />
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={broadcast.title}
+        onKeyDown={(e) => { if (e.key === 'Escape') onClose() }}
+        className="relative bg-[#0f1923] border border-white/10 rounded-xl p-5 max-w-2xl w-full mx-4 max-h-[80vh] overflow-y-auto"
+      >
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-semibold text-white">{broadcast.title}</h2>
           <button

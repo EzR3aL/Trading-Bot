@@ -153,8 +153,10 @@ export default function TaxReport() {
                   const net = m.pnl - m.fees
                   return (
                     <div key={m.month} className="border border-white/[0.06] rounded-lg bg-white/[0.02] overflow-hidden">
-                      <div
-                        className="flex items-center justify-between px-3 py-2 cursor-pointer"
+                      <button
+                        type="button"
+                        aria-expanded={isExp}
+                        className="w-full text-left appearance-none bg-transparent border-0 flex items-center justify-between px-3 py-2 cursor-pointer"
                         onClick={() => setExpandedMonth(isExp ? null : m.month)}
                       >
                         <div className="flex items-center gap-2">
@@ -167,7 +169,7 @@ export default function TaxReport() {
                           </span>
                           <ChevronDown size={12} className={`text-gray-400 transition-transform ${isExp ? 'rotate-180' : ''}`} />
                         </div>
-                      </div>
+                      </button>
                       {isExp && (
                         <div className="border-t border-white/[0.04] px-3 py-2 grid grid-cols-2 gap-x-4 gap-y-1.5 text-[11px]">
                           <div>

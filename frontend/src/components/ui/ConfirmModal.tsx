@@ -91,7 +91,12 @@ export default function ConfirmModal({
       aria-labelledby="confirm-title"
       aria-describedby="confirm-desc"
     >
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={handleBackdropClick} />
+      <div
+        role="presentation"
+        onClick={handleBackdropClick}
+        onKeyDown={(e) => { if (dismissOnBackdrop && !loading && (e.key === 'Enter' || e.key === ' ')) handleBackdropClick() }}
+        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+      />
       <div className="relative glass-card p-6 max-w-md w-full rounded-xl shadow-2xl">
         <button
           onClick={onCancel}

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, Fragment } from 'react'
+import { useState, useEffect, useRef, Fragment, type KeyboardEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { toBlob } from 'html-to-image'
@@ -255,13 +255,21 @@ function TradeDetailModal({ trade, onClose, t, affiliateLink }: { trade: BotTrad
   }
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 backdrop-blur-md" onClick={onClose} role="dialog" aria-modal="true" onKeyDown={(e) => { if (e.key === 'Escape') onClose() }}>
+    <div className="fixed inset-0 z-[60] flex items-center justify-center">
+      <button
+        type="button"
+        aria-label={t('common.close')}
+        onClick={onClose}
+        className="absolute inset-0 w-full h-full bg-black/70 backdrop-blur-md border-0 appearance-none cursor-default"
+      />
       <div
         ref={swipe.ref}
         style={swipe.style}
-        className="bg-[#0f1420] rounded-2xl max-w-lg w-full mx-4 border border-white/10 shadow-2xl max-h-[90vh] overflow-y-auto"
-        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
         aria-label={t('bots.tradeDetail')}
+        onKeyDown={(e) => { if (e.key === 'Escape') onClose() }}
+        className="relative bg-[#0f1420] rounded-2xl max-w-lg w-full mx-4 border border-white/10 shadow-2xl max-h-[90vh] overflow-y-auto"
       >
         {isMobile && (
           <div className="flex justify-center pt-2 pb-1 lg:hidden">
@@ -440,13 +448,21 @@ function BotTradeHistoryModal({ bot, onClose, t }: { bot: BotStatus; onClose: ()
   const latestClosed = stats?.recent_trades.find(tr => tr.status === 'closed')
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-md" onClick={onClose} role="dialog" aria-modal="true" onKeyDown={(e) => { if (e.key === 'Escape') onClose() }}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <button
+        type="button"
+        aria-label={t('common.close')}
+        onClick={onClose}
+        className="absolute inset-0 w-full h-full bg-black/60 backdrop-blur-md border-0 appearance-none cursor-default"
+      />
       <div
         ref={swipe.ref}
         style={swipe.style}
-        className="bg-[#0b0f19] rounded-2xl max-w-5xl w-full mx-2 sm:mx-4 my-2 sm:my-3 max-h-[95vh] lg:max-h-[90vh] lg:my-6 flex flex-col border border-white/10 shadow-2xl overflow-hidden"
-        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
         aria-label={t('bots.tradeHistory')}
+        onKeyDown={(e) => { if (e.key === 'Escape') onClose() }}
+        className="relative bg-[#0b0f19] rounded-2xl max-w-5xl w-full mx-2 sm:mx-4 my-2 sm:my-3 max-h-[95vh] lg:max-h-[90vh] lg:my-6 flex flex-col border border-white/10 shadow-2xl overflow-hidden"
       >
         {isMobile && (
           <div className="flex justify-center pt-2 pb-1 lg:hidden">
@@ -717,7 +733,15 @@ function BotTradeHistoryModal({ bot, onClose, t }: { bot: BotStatus; onClose: ()
                       {stats.recent_trades.map((trade) => (
                         <Fragment key={trade.id}>
                           <tr
+                            tabIndex={0}
+                            aria-expanded={expandedTradeId === trade.id}
                             onClick={() => setExpandedTradeId(expandedTradeId === trade.id ? null : trade.id)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' || e.key === ' ') {
+                                e.preventDefault()
+                                setExpandedTradeId(expandedTradeId === trade.id ? null : trade.id)
+                              }
+                            }}
                             className="cursor-pointer"
                           >
                             <td className="text-gray-300">
@@ -1096,7 +1120,20 @@ export default function Bots() {
                 {/* Header row */}
                 <div
                   className={`flex items-start justify-between gap-2 ${isBotExpanded ? 'mb-3' : ''} ${isMobile ? 'cursor-pointer' : ''}`}
-                  onClick={isMobile ? () => setExpandedBotId(expandedBotId === bot.bot_config_id ? null : bot.bot_config_id) : undefined}
+                  {...(isMobile
+                    ? {
+                        role: 'button',
+                        tabIndex: 0,
+                        'aria-expanded': isBotExpanded,
+                        onClick: () => setExpandedBotId(expandedBotId === bot.bot_config_id ? null : bot.bot_config_id),
+                        onKeyDown: (e: KeyboardEvent) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault()
+                            setExpandedBotId(expandedBotId === bot.bot_config_id ? null : bot.bot_config_id)
+                          }
+                        },
+                      }
+                    : {})}
                 >
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
@@ -1286,7 +1323,13 @@ export default function Bots() {
                         </button>
                         {closePositionOpen === bot.bot_config_id && (
                           <>
-                            <div className="fixed inset-0 z-10" onClick={() => setClosePositionOpen(null)} />
+                            <button
+                              type="button"
+                              aria-label={t('common.close')}
+                              tabIndex={-1}
+                              onClick={() => setClosePositionOpen(null)}
+                              className="fixed inset-0 z-10 w-full h-full bg-transparent border-0 appearance-none cursor-default"
+                            />
                             <div className="absolute left-0 right-0 top-full mt-1 z-20 bg-[#1a1f2e] border border-amber-500/20 rounded-xl shadow-xl overflow-hidden">
                               {bot.trading_pairs.map(symbol => (
                                 <button
@@ -1396,16 +1439,21 @@ export default function Bots() {
 
       {/* Mobile bottom sheet overlay for 3-dot menu */}
       {isMobile && moreMenuOpen !== null && (
-        <div
-          className="fixed inset-0 z-[9998] bg-black/60 backdrop-blur-sm"
+        <button
+          type="button"
+          aria-label={t('common.close')}
           onClick={() => setMoreMenuOpen(null)}
+          className="fixed inset-0 z-[9998] w-full h-full bg-black/60 backdrop-blur-sm border-0 appearance-none cursor-default"
         />
       )}
       {/* Desktop overlay (transparent click-catcher) */}
       {!isMobile && moreMenuOpen !== null && (
-        <div
-          className="fixed inset-0 z-20"
+        <button
+          type="button"
+          aria-label={t('common.close')}
+          tabIndex={-1}
           onClick={() => setMoreMenuOpen(null)}
+          className="fixed inset-0 z-20 w-full h-full bg-transparent border-0 appearance-none cursor-default"
         />
       )}
 

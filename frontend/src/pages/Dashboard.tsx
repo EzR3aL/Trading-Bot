@@ -389,7 +389,15 @@ function DashboardOpenPositions({ positions, loading, onEditPosition }: { positi
               {sortedPositions.map((pos, idx) => (
                 <Fragment key={`${pos.exchange}-${pos.symbol}-${idx}`}>
                   <tr
+                    tabIndex={0}
+                    aria-expanded={expandedIdx === idx}
                     onClick={() => setExpandedIdx(expandedIdx === idx ? null : idx)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault()
+                        setExpandedIdx(expandedIdx === idx ? null : idx)
+                      }
+                    }}
                     className="cursor-pointer"
                   >
                     <td>
