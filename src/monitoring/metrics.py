@@ -11,18 +11,10 @@ from prometheus_client import Counter, Gauge, Histogram, Info
 # Application info
 APP_INFO = Info("trading_bot", "Trading Bot application info")
 
-# HTTP request metrics
-HTTP_REQUESTS_TOTAL = Counter(
-    "http_requests_total",
-    "Total HTTP requests",
-    ["method", "endpoint", "status_code"],
-)
-HTTP_REQUEST_DURATION = Histogram(
-    "http_request_duration_seconds",
-    "HTTP request duration",
-    ["method", "endpoint"],
-    buckets=[0.01, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0],
-)
+# HTTP request metrics live in src/observability/metrics.py as of #327
+# PR-2 and are emitted by src/api/middleware/metrics.py against a
+# dedicated CollectorRegistry (#337 removed the legacy middleware that
+# wrote to the default registry here).
 
 # Bot metrics
 BOTS_RUNNING = Gauge("bots_running_total", "Number of currently running bots")
