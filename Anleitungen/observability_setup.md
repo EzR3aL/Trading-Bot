@@ -83,11 +83,11 @@ nur konstantes Hintergrundrauschen ohne operativen Wert produzieren.
 Die Middleware macht einen Early-Return, sobald der Request-Pfad mit
 `/metrics` beginnt.
 
-**Legacy-Middleware:**
-`src/monitoring/middleware.py` existiert weiterhin, nutzt aber die
-alte Default-Registry aus `src/monitoring/metrics.py`. Sie wird in
-einem Folge-PR entfernt, sobald kein Code sie mehr importiert —
-siehe CHANGELOG-Eintrag zu PR-2 von #327.
+**Legacy-Middleware entfernt (#337):**
+Die alte `src/monitoring/middleware.py` (die HTTP-Metriken gegen die
+Default-Registry geschrieben hat) wurde in #337 entfernt. Einziger
+HTTP-Metrics-Pfad ist jetzt `src/api/middleware/metrics.py` gegen die
+dedizierte `OBSERVABILITY_REGISTRY`.
 
 ### Grafana-Dashboards + lokaler Stack (PR-5 von #327)
 
@@ -284,11 +284,11 @@ produce a constant background of noise without any operational
 value. The middleware short-circuits as soon as the request path
 starts with `/metrics`.
 
-**Legacy middleware:**
-`src/monitoring/middleware.py` still exists but uses the old default
-registry from `src/monitoring/metrics.py`. It will be removed in a
-follow-up PR once no code imports it — see the PR-2 CHANGELOG entry
-for #327.
+**Legacy middleware removed (#337):**
+The old `src/monitoring/middleware.py` (which wrote HTTP metrics to
+the default registry) was removed in #337. The only HTTP metrics
+path is now `src/api/middleware/metrics.py` against the dedicated
+`OBSERVABILITY_REGISTRY`.
 
 ### Grafana dashboards + local stack (PR-5 of #327)
 

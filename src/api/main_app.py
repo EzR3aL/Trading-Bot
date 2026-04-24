@@ -457,11 +457,10 @@ def create_app() -> FastAPI:
             sanitized.append(clean)
         return JSONResponse(status_code=422, content={"detail": sanitized})
 
-    # Prometheus metrics middleware
-    from src.monitoring.middleware import PrometheusMiddleware
-    app.add_middleware(PrometheusMiddleware)
-
     # Audit logging middleware
+    # (HTTP metrics are emitted by src.api.middleware.metrics.MetricsMiddleware
+    # registered later in this function — #337 removed the legacy
+    # src/monitoring/middleware.py which wrote to the default registry.)
     from src.api.middleware.audit_log import AuditLogMiddleware
     app.add_middleware(AuditLogMiddleware)
 
