@@ -2,6 +2,8 @@
 
 import asyncio
 import json
+import re
+import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import datetime
@@ -10,7 +12,46 @@ from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Type
 import aiohttp
 
 from src.exchanges.types import Balance, FundingRateInfo, Order, Position, Ticker
+from src.observability.metrics import (
+    EXCHANGE_API_REQUEST_DURATION_SECONDS,
+    EXCHANGE_API_REQUESTS_TOTAL,
+)
 from src.utils.circuit_breaker import CircuitBreakerError, with_retry
+
+
+# Collapse numeric IDs, long hex blobs and UUID-like tokens inside endpoint
+# paths to the fixed ``{id}`` token so Prometheus series stay bounded. Keeps
+# distinct URL templates (``/api/v2/mix/order/place-order`` vs
+# ``/api/v2/mix/order/cancel-order``) apart while folding per-request variants
+# (``/orders/1234567890``) onto a single series.
+_ENDPOINT_ID_PATTERNS = (
+    re.compile(r"/\d{4,}"),                         # long numeric ids
+    re.compile(r"/[0-9a-fA-F]{16,}"),              # hex order hashes
+    re.compile(
+        r"/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"
+    ),                                              # UUIDs
+)
+
+
+def _collapse_endpoint(endpoint: str) -> str:
+    """Return a cardinality-safe form of ``endpoint`` for metric labels.
+
+    Exchange REST endpoints in this codebase are already template-shaped
+    (variable parameters are passed via query-string or body), but this
+    function is a defence-in-depth guard in case a future adapter embeds
+    an order-id or user-id into the path. Mirrors the template-collapsing
+    approach the HTTP middleware applies on the inbound side (PR-2).
+    """
+    if not endpoint:
+        return "<unknown>"
+    collapsed = endpoint
+    for pattern in _ENDPOINT_ID_PATTERNS:
+        collapsed = pattern.sub("/{id}", collapsed)
+    # Strip query string so different param combinations do not multiply
+    # the series — the path alone is the template key.
+    if "?" in collapsed:
+        collapsed = collapsed.split("?", 1)[0]
+    return collapsed
 
 
 def _is_transient_http_error(exc: BaseException) -> bool:
@@ -544,14 +585,37 @@ class HTTPExchangeClientMixin:
         use_circuit_breaker: bool = True,
     ) -> Any:
         """Execute an API request, optionally through the circuit breaker."""
-        if use_circuit_breaker:
-            async def _do():
-                return await self._raw_request(method, endpoint, params, data, auth)
-            try:
-                return await self._circuit_breaker.call(_do)
-            except CircuitBreakerError as e:
-                raise self._client_error_class(f"API temporarily unavailable: {e}")
-        return await self._raw_request(method, endpoint, params, data, auth)
+        # Prometheus instrumentation (#327 PR-4). Covers every REST-based
+        # exchange adapter that routes through this mixin (Bitget, Weex,
+        # BingX, Bitunix) — Hyperliquid has its own entry point and is
+        # instrumented inside ``HyperliquidClient._cb_call``.
+        exchange_label = getattr(self, "exchange_name", self.__class__.__name__)
+        endpoint_label = _collapse_endpoint(endpoint)
+        status_label = "error"
+        start = time.perf_counter()
+        try:
+            if use_circuit_breaker:
+                async def _do():
+                    return await self._raw_request(method, endpoint, params, data, auth)
+                try:
+                    result = await self._circuit_breaker.call(_do)
+                except CircuitBreakerError as e:
+                    status_label = "circuit_open"
+                    raise self._client_error_class(f"API temporarily unavailable: {e}")
+            else:
+                result = await self._raw_request(method, endpoint, params, data, auth)
+            status_label = "ok"
+            return result
+        finally:
+            EXCHANGE_API_REQUESTS_TOTAL.labels(
+                exchange=exchange_label,
+                endpoint=endpoint_label,
+                status=status_label,
+            ).inc()
+            EXCHANGE_API_REQUEST_DURATION_SECONDS.labels(
+                exchange=exchange_label,
+                endpoint=endpoint_label,
+            ).observe(time.perf_counter() - start)
 
     # ── Raw HTTP request (standard REST pattern) ──────────────────
     # Suitable for exchanges that sign (method + request_path + body).

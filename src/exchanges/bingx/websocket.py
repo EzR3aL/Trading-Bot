@@ -20,6 +20,7 @@ import websockets
 from websockets.exceptions import ConnectionClosed
 
 from src.exchanges.base import ExchangeWebSocket
+from src.observability.metrics import EXCHANGE_WEBSOCKET_CONNECTED
 from src.exchanges.bingx.constants import (
     BASE_URL,
     ENDPOINTS,
@@ -127,6 +128,7 @@ class BingXWebSocket(ExchangeWebSocket):
                 logger.info("Connected to BingX private WebSocket")
 
         self._connected = True
+        EXCHANGE_WEBSOCKET_CONNECTED.labels(exchange="bingx").set(1)
         self._running = True
 
         self._tasks.append(asyncio.create_task(self._receive_loop(self._ws_public, "public")))
@@ -159,6 +161,7 @@ class BingXWebSocket(ExchangeWebSocket):
     async def disconnect(self) -> None:
         self._running = False
         self._connected = False
+        EXCHANGE_WEBSOCKET_CONNECTED.labels(exchange="bingx").set(0)
         for task in self._tasks:
             task.cancel()
             try:

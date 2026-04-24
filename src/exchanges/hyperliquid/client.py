@@ -13,6 +13,7 @@ import asyncio
 import hashlib
 import os
 import re
+import time
 from datetime import datetime, timezone
 from functools import partial
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
@@ -30,6 +31,10 @@ from src.exchanges.base import (
     GateCheckResult,
     PositionTpSlSnapshot,
     TrailingStopSnapshot,
+)
+from src.observability.metrics import (
+    EXCHANGE_API_REQUEST_DURATION_SECONDS,
+    EXCHANGE_API_REQUESTS_TOTAL,
 )
 from src.exchanges.hyperliquid.constants import (
     DEFAULT_BUILDER_FEE,
@@ -438,10 +443,31 @@ class HyperliquidClient(ExchangeClient):
 
         async def _wrapper():
             return await loop.run_in_executor(None, partial(func, *args, **kwargs))
+
+        # Prometheus instrumentation (#327 PR-4). The HL SDK does not expose
+        # the REST URL to us, so ``endpoint`` is the SDK method name
+        # (``market_open``, ``cancel``, ``user_state`` …) which is both
+        # stable and low-cardinality.
+        endpoint_label = getattr(func, "__name__", "unknown") or "unknown"
+        status_label = "error"
+        start = time.perf_counter()
         try:
-            return await _hl_breaker.call(_wrapper)
+            result = await _hl_breaker.call(_wrapper)
+            status_label = "ok"
+            return result
         except CircuitBreakerError as e:
+            status_label = "circuit_open"
             raise HyperliquidClientError(f"API temporarily unavailable: {e}")
+        finally:
+            EXCHANGE_API_REQUESTS_TOTAL.labels(
+                exchange="hyperliquid",
+                endpoint=endpoint_label,
+                status=status_label,
+            ).inc()
+            EXCHANGE_API_REQUEST_DURATION_SECONDS.labels(
+                exchange="hyperliquid",
+                endpoint=endpoint_label,
+            ).observe(time.perf_counter() - start)
 
     # ── Read Operations ─────────────────────────────────────────────────────
 

@@ -7,66 +7,91 @@ Handles:
 - Trade count limits
 - Drawdown protection
 - Risk-adjusted returns tracking
-
-Composition note (#326 Phase 1 PR-5 + PR-6):
-The daily stats aggregation (PnL counters, trade counter, per-symbol
-PnL, win/loss tracking, DailyStats snapshot lifecycle) lives in
-``src.bot.components.risk.daily_stats.DailyStatsAggregator``. The
-trade-limit gate (``can_trade`` branches, per-symbol halt logic,
-global halt primitive, dynamic loss limits, remaining-trades/budget)
-lives in ``src.bot.components.risk.trade_gate.TradeGate``. This module
-stays the public façade — re-exports ``DailyStats`` for backward
-compatibility and delegates aggregator + gate calls. Persistence + the
-trade-logger side effects continue to live here until PR-7
-(RiskStatePersistence) lands.
 """
-
-from __future__ import annotations
 
 import json
 import os
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta
-from typing import TYPE_CHECKING, Optional, Dict, List
+from typing import Optional, Dict, List
 
+from src.observability.metrics import RISK_TRADE_GATE_DECISIONS_TOTAL
 from src.utils.logger import get_logger, TradeLogger
 
-# Lazy imports for async DB — only used when bot_config_id is set.
-# ``get_session`` is re-exported here so the Phase 0 characterization tests
-# can continue to patch ``src.risk.risk_manager.get_session`` (locked
-# observable behaviour). The persistence component routes its session
-# acquisition through this module-level name.
+# Lazy imports for async DB — only used when bot_config_id is set
 _db_available = True
 try:
+    from sqlalchemy import select
+    from src.models.database import RiskStats
     from src.models.session import get_session
 except ImportError:
     _db_available = False
-    get_session = None  # type: ignore[assignment]
 
 logger = get_logger(__name__)
 
-# ``DailyStats`` + ``DailyStatsAggregator`` live in
-# ``src.bot.components.risk.daily_stats`` (extracted in #326 Phase 1 PR-5).
-# Importing that module at the top of this file triggers the parent
-# ``src.bot`` package init which in turn imports ``BotWorker`` → back
-# into ``src.risk.risk_manager`` for ``RiskManager`` — a circular import
-# cycle when ``src.risk`` is the first package loaded (e.g. directly via
-# ``from src.risk.risk_manager import …`` in a test module).
-#
-# We resolve the cycle by importing the aggregator module at the bottom
-# of this file, after ``RiskManager`` is fully defined, and exposing
-# ``DailyStats`` / ``DailyStatsAggregator`` at module scope for legacy
-# ``from src.risk.risk_manager import DailyStats`` callers. ``TYPE_CHECKING``
-# provides the type references for readers + static analysers.
-if TYPE_CHECKING:  # pragma: no cover
-    from src.bot.components.risk.daily_stats import (
-        DailyStats,
-        DailyStatsAggregator,
-    )
 
-# Re-export so ``from src.risk.risk_manager import DailyStats`` keeps
-# working (existing tests + callers rely on the legacy path). The actual
-# binding happens via the deferred import at the bottom of this file.
-__all__ = ["DailyStats", "RiskManager"]
+@dataclass
+class DailyStats:
+    """Daily trading statistics."""
+    date: str
+    starting_balance: float
+    current_balance: float
+    trades_executed: int
+    winning_trades: int
+    losing_trades: int
+    total_pnl: float
+    total_fees: float
+    total_funding: float
+    max_drawdown: float
+    is_trading_halted: bool = False
+    halt_reason: str = ""
+    # Per-symbol tracking for per-asset risk limits
+    symbol_trades: Dict[str, int] = field(default_factory=dict)
+    symbol_pnl: Dict[str, float] = field(default_factory=dict)
+    halted_symbols: Dict[str, str] = field(default_factory=dict)
+
+    @property
+    def net_pnl(self) -> float:
+        """Net PnL after fees and funding."""
+        return self.total_pnl - self.total_fees - self.total_funding
+
+    @property
+    def return_percent(self) -> float:
+        """Return percentage for the day."""
+        if self.starting_balance == 0:
+            return 0.0
+        return (self.net_pnl / self.starting_balance) * 100
+
+    @property
+    def win_rate(self) -> float:
+        """Win rate percentage."""
+        total = self.winning_trades + self.losing_trades
+        if total == 0:
+            return 0.0
+        return (self.winning_trades / total) * 100
+
+    def to_dict(self) -> dict:
+        """Convert to dictionary."""
+        return {
+            "date": self.date,
+            "starting_balance": self.starting_balance,
+            "current_balance": self.current_balance,
+            "trades_executed": self.trades_executed,
+            "winning_trades": self.winning_trades,
+            "losing_trades": self.losing_trades,
+            "total_pnl": self.total_pnl,
+            "total_fees": self.total_fees,
+            "total_funding": self.total_funding,
+            "net_pnl": self.net_pnl,
+            "return_percent": self.return_percent,
+            "win_rate": self.win_rate,
+            "max_drawdown": self.max_drawdown,
+            "is_trading_halted": self.is_trading_halted,
+            "halt_reason": self.halt_reason,
+            "symbol_trades": self.symbol_trades,
+            "symbol_pnl": self.symbol_pnl,
+            "halted_symbols": self.halted_symbols,
+        }
 
 
 class RiskManager:
@@ -123,67 +148,14 @@ class RiskManager:
         self.bot_config_id = bot_config_id
         self._use_db = bot_config_id is not None and _db_available
 
-        # Persistence component owns DB I/O (ARCH-H2 Phase 1 PR-7, #326).
-        # The session-factory is a closure over ``get_session`` in THIS
-        # module so characterization tests that patch
-        # ``src.risk.risk_manager.get_session`` still win — the lookup
-        # happens at call-time, not at RiskManager-construction time.
-        # The ``_use_db`` gate is re-checked in each façade delegator so
-        # tests that flip ``rm._use_db = True`` after construction still
-        # reach the DB path.
-        #
-        # Lazy import: ``src.bot.components.risk.persistence`` transitively
-        # pulls in ``src.bot`` which auto-imports ``BotWorker`` which
-        # imports this module. Deferring the import to __init__ breaks
-        # that cycle (src.bot is always fully loaded before any
-        # RiskManager is constructed at runtime).
-        from src.bot.components.risk.persistence import RiskStatePersistence
-        self._persistence = RiskStatePersistence(
-            bot_config_id=bot_config_id,
-            session_factory=self._get_session_proxy,
-            dailystats_cls=DailyStats,
-        )
-
         self.trade_logger = TradeLogger()
-        # DailyStats aggregation is owned by ``DailyStatsAggregator``
-        # (PR-5). ``TradeGate`` owns the ``can_trade`` branches + halt
-        # state (PR-6). This façade forwards both and keeps the
-        # persistence + trade-logger side-effects co-located until PR-7.
-        self._daily_stats_aggregator = DailyStatsAggregator()
-        self._trade_gate = TradeGate(
-            aggregator=self._daily_stats_aggregator,
-            max_trades_per_day=max_trades_per_day,
-            daily_loss_limit_percent=daily_loss_limit_percent,
-            per_symbol_limits=self.per_symbol_limits,
-            enable_profit_lock=enable_profit_lock,
-            profit_lock_percent=profit_lock_percent,
-            min_profit_floor=min_profit_floor,
-            save_stats=self._save_daily_stats,
-        )
+        self._daily_stats: Optional[DailyStats] = None
         # Note: record_trade_entry/exit are synchronous with no await points,
         # so they are safe under asyncio's single-threaded model without a lock.
         # Per-symbol locks in BotWorker prevent concurrent calls for the same symbol.
         #
         # Stats are loaded from DB via load_stats_from_db() after async init,
         # not from __init__ (no blocking file I/O).
-
-    # ------------------------------------------------------------------
-    # DailyStats snapshot proxy — all legacy reads/writes of
-    # ``self._daily_stats`` are forwarded to the aggregator. A setter is
-    # kept for test harnesses that assign ``rm._daily_stats = None`` to
-    # force an uninitialised state between assertions.
-    # ------------------------------------------------------------------
-    @property
-    def _daily_stats(self) -> Optional[DailyStats]:
-        return self._daily_stats_aggregator.get_daily_stats()
-
-    @_daily_stats.setter
-    def _daily_stats(self, value: Optional[DailyStats]) -> None:
-        if value is None:
-            # Rebuild the aggregator so ``get_daily_stats()`` returns None.
-            self._daily_stats_aggregator = DailyStatsAggregator()
-        else:
-            self._daily_stats_aggregator.hydrate(value)
 
     def _save_daily_stats(self) -> None:
         """Schedule an async DB write for current daily stats.
@@ -204,55 +176,88 @@ class RiskManager:
                 # call that happens inside an async context.
                 logger.debug("No running event loop — DB stats write deferred to next async call")
 
-    def _get_session_proxy(self):
-        """Return the current module-level ``get_session`` context manager.
-
-        Indirection lets characterization tests patch
-        ``src.risk.risk_manager.get_session`` after ``RiskManager`` is
-        already constructed — the persistence component calls back into
-        this proxy on every DB op, so each call picks up the currently
-        bound name.
-        """
-        return get_session()
-
     async def _save_stats_to_db(self) -> None:
-        """Persist current daily stats to the risk_stats table.
-
-        Thin delegator to :class:`RiskStatePersistence` (ARCH-H2 Phase 1
-        PR-7). Kept as ``_save_stats_to_db`` for backward-compat with
-        the characterization test suite and the sync wrapper below.
-        """
+        """Persist current daily stats to the risk_stats table."""
         if not self._daily_stats or not self._use_db:
             return
-        await self._persistence.save_stats(self._daily_stats)
+        try:
+            stats_dict = self._daily_stats.to_dict()
+            async with get_session() as session:
+                result = await session.execute(
+                    select(RiskStats).where(
+                        RiskStats.bot_config_id == self.bot_config_id,
+                        RiskStats.date == self._daily_stats.date,
+                    )
+                )
+                existing = result.scalar_one_or_none()
+
+                if existing:
+                    existing.stats_json = json.dumps(stats_dict)
+                    existing.daily_pnl = self._daily_stats.net_pnl
+                    existing.trades_count = self._daily_stats.trades_executed
+                    existing.is_halted = self._daily_stats.is_trading_halted
+                else:
+                    row = RiskStats(
+                        bot_config_id=self.bot_config_id,
+                        date=self._daily_stats.date,
+                        stats_json=json.dumps(stats_dict),
+                        daily_pnl=self._daily_stats.net_pnl,
+                        trades_count=self._daily_stats.trades_executed,
+                        is_halted=self._daily_stats.is_trading_halted,
+                    )
+                    session.add(row)
+        except Exception as e:
+            logger.warning("Failed to save risk stats to DB: %s", e)
 
     async def load_stats_from_db(self) -> None:
-        """Load today's stats from DB (call after async init).
-
-        Thin delegator to :class:`RiskStatePersistence` (ARCH-H2 Phase 1
-        PR-7). Assigns the loaded snapshot to ``self._daily_stats`` on
-        hit; leaves it untouched on miss / error (the persistence
-        component returns ``None`` and logs).
-        """
+        """Load today's stats from DB (call after async init)."""
         if not self._use_db:
             return
-        stats = await self._persistence.load_stats()
-        if stats is not None:
-            self._daily_stats_aggregator.hydrate(stats)
+        today = datetime.now().strftime("%Y-%m-%d")
+        try:
+            async with get_session() as session:
+                result = await session.execute(
+                    select(RiskStats).where(
+                        RiskStats.bot_config_id == self.bot_config_id,
+                        RiskStats.date == today,
+                    )
+                )
+                row = result.scalar_one_or_none()
+                if row:
+                    data = json.loads(row.stats_json)
+                    for key in ("net_pnl", "return_percent", "win_rate"):
+                        data.pop(key, None)
+                    self._daily_stats = DailyStats(**data)
+                    logger.info(
+                        "Loaded risk stats from DB: %d trades, PnL: $%.2f",
+                        self._daily_stats.trades_executed,
+                        self._daily_stats.net_pnl,
+                    )
+        except Exception as e:
+            logger.warning("Failed to load risk stats from DB: %s", e)
 
     async def get_historical_stats_from_db(self, days: int = 30) -> List[Dict]:
-        """Get historical stats from the database.
-
-        Thin delegator to :class:`RiskStatePersistence` (ARCH-H2 Phase 1
-        PR-7).
-        """
+        """Get historical stats from the database."""
         if not self._use_db:
             return []
-        return await self._persistence.get_historical_stats(days)
+        try:
+            cutoff = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
+            async with get_session() as session:
+                result = await session.execute(
+                    select(RiskStats).where(
+                        RiskStats.bot_config_id == self.bot_config_id,
+                        RiskStats.date >= cutoff,
+                    ).order_by(RiskStats.date.desc())
+                )
+                rows = result.scalars().all()
+                return [json.loads(r.stats_json) for r in rows]
+        except Exception as e:
+            logger.warning("Failed to load historical stats from DB: %s", e)
+            return []
 
     def initialize_day(self, starting_balance: float) -> DailyStats:
         """
-        Initialize a new trading day. Delegates to ``DailyStatsAggregator``.
+        Initialize a new trading day.
 
         Args:
             starting_balance: Account balance at start of day
@@ -260,49 +265,171 @@ class RiskManager:
         Returns:
             DailyStats for the new day
         """
-        existing = self._daily_stats_aggregator.get_daily_stats()
         today = datetime.now().strftime("%Y-%m-%d")
-        is_new_day = existing is None or existing.date != today
 
-        stats = self._daily_stats_aggregator.initialize_day(starting_balance)
+        # Check if we already have stats for today
+        if self._daily_stats and self._daily_stats.date == today:
+            logger.info(f"Day already initialized. Trades: {self._daily_stats.trades_executed}")
+            return self._daily_stats
 
-        # Only persist on a genuinely new/replaced snapshot — same-day
-        # idempotent returns skip the DB write (no state mutation).
-        if is_new_day:
-            self._save_daily_stats()
+        self._daily_stats = DailyStats(
+            date=today,
+            starting_balance=starting_balance,
+            current_balance=starting_balance,
+            trades_executed=0,
+            winning_trades=0,
+            losing_trades=0,
+            total_pnl=0.0,
+            total_fees=0.0,
+            total_funding=0.0,
+            max_drawdown=0.0,
+        )
 
-        return stats
+        self._save_daily_stats()
+        logger.info(f"Initialized new trading day with balance: ${starting_balance:,.2f}")
+
+        return self._daily_stats
 
     def get_dynamic_loss_limit(self, symbol: Optional[str] = None) -> Optional[float]:
-        """Profit-lock-in adjusted loss limit — delegates to :class:`TradeGate`."""
-        return self._trade_gate.get_dynamic_loss_limit(symbol)
+        """
+        Calculate dynamic loss limit based on current daily PnL.
+
+        Args:
+            symbol: If provided, checks per-symbol PnL. Otherwise global.
+
+        Returns:
+            Current effective loss limit as percentage, or None if no limit set.
+        """
+        if self.daily_loss_limit is None:
+            return None
+
+        if not self.enable_profit_lock or not self._daily_stats:
+            return self.daily_loss_limit
+
+        current_return = self._daily_stats.return_percent
+
+        if current_return <= 0:
+            return self.daily_loss_limit
+
+        max_allowed_loss = current_return - self.min_profit_floor
+        new_limit = min(self.daily_loss_limit, max_allowed_loss)
+        new_limit = max(new_limit, 0.5)
+
+        logger.debug(
+            f"Profit Lock-In: Return={current_return:.2f}%, "
+            f"Dynamic Limit={new_limit:.2f}% (Standard: {self.daily_loss_limit}%)"
+        )
+
+        return new_limit
 
     def can_trade(self, symbol: Optional[str] = None) -> tuple[bool, str]:
-        """Trade-limit gate — delegates to :class:`TradeGate`.
-
-        Preserves the ``tuple[bool, str]`` contract + byte-identical
-        reason strings (locked by the Phase-0 characterization tests).
         """
-        return self._trade_gate.can_trade(symbol)
+        Check if trading is allowed based on risk limits.
+
+        Args:
+            symbol: If provided, checks per-symbol limits. Otherwise general check.
+
+        Returns:
+            Tuple of (can_trade: bool, reason: str)
+        """
+        # ``bot_id`` metric label — we use ``bot_config_id`` so the Prometheus
+        # series drill-down matches how the bot is identified elsewhere in the
+        # API and DB. ``unknown`` is only emitted for ad-hoc RiskManager
+        # instances created in tests (no bot wired in).
+        bot_id_label = (
+            str(self.bot_config_id) if self.bot_config_id is not None else "unknown"
+        )
+
+        if not self._daily_stats:
+            RISK_TRADE_GATE_DECISIONS_TOTAL.labels(
+                bot_id=bot_id_label, decision="block_uninitialized"
+            ).inc()
+            return False, "Daily stats not initialized. Call initialize_day() first."
+
+        # Check if trading is globally halted
+        if self._daily_stats.is_trading_halted:
+            RISK_TRADE_GATE_DECISIONS_TOTAL.labels(
+                bot_id=bot_id_label, decision="block_global_halted"
+            ).inc()
+            return False, f"Trading halted: {self._daily_stats.halt_reason}"
+
+        # Check if this specific symbol is halted
+        if symbol and symbol in self._daily_stats.halted_symbols:
+            RISK_TRADE_GATE_DECISIONS_TOTAL.labels(
+                bot_id=bot_id_label, decision="block_symbol_halted"
+            ).inc()
+            return False, f"{symbol} halted: {self._daily_stats.halted_symbols[symbol]}"
+
+        # Resolve per-symbol limits (per-symbol override > global fallback > None)
+        if symbol:
+            sym_limits = self.per_symbol_limits.get(symbol, {})
+            effective_max_trades = sym_limits.get("max_trades", self.max_trades)
+            effective_loss_limit = sym_limits.get("loss_limit", self.daily_loss_limit)
+
+            # Check per-symbol trade count limit
+            if effective_max_trades is not None:
+                symbol_count = self._daily_stats.symbol_trades.get(symbol, 0)
+                if symbol_count >= effective_max_trades:
+                    RISK_TRADE_GATE_DECISIONS_TOTAL.labels(
+                        bot_id=bot_id_label, decision="block_max_trades_symbol"
+                    ).inc()
+                    return False, f"{symbol}: trade limit reached ({symbol_count}/{effective_max_trades})"
+
+            # Check per-symbol loss limit.
+            #
+            # Note: the per-symbol loss limit has two user-facing emission
+            # points — this eager path (gate-time) and the lazy write inside
+            # ``record_trade_exit`` that flips ``halted_symbols`` after the
+            # fact. Only the gate return is counted here; the exit-time
+            # flip is not a trade-gate decision (no trade was gated by it,
+            # the trade already executed). Counting both would double-count
+            # a single halt event across two semantically different moments.
+            if effective_loss_limit is not None:
+                symbol_pnl = self._daily_stats.symbol_pnl.get(symbol, 0.0)
+                if self._daily_stats.starting_balance > 0:
+                    symbol_loss_pct = abs(min(0, (symbol_pnl / self._daily_stats.starting_balance) * 100))
+                    if symbol_loss_pct >= effective_loss_limit:
+                        halt_reason = f"Loss limit exceeded ({symbol_loss_pct:.2f}% >= {effective_loss_limit:.2f}%)"
+                        self._daily_stats.halted_symbols[symbol] = halt_reason
+                        self._save_daily_stats()
+                        logger.warning(f"{symbol} HALTED: {halt_reason}")
+                        RISK_TRADE_GATE_DECISIONS_TOTAL.labels(
+                            bot_id=bot_id_label, decision="block_daily_loss_symbol"
+                        ).inc()
+                        return False, f"{symbol}: {halt_reason}"
+
+        # General check (no symbol) — for gating entire analysis runs
+        if symbol is None:
+            # Check global trade count limit
+            if self.max_trades is not None:
+                if self._daily_stats.trades_executed >= self.max_trades:
+                    RISK_TRADE_GATE_DECISIONS_TOTAL.labels(
+                        bot_id=bot_id_label, decision="block_max_trades"
+                    ).inc()
+                    return False, f"Global trade limit reached ({self._daily_stats.trades_executed}/{self.max_trades})"
+
+            # Check global loss limit
+            if self.daily_loss_limit is not None and self._daily_stats.starting_balance > 0:
+                current_loss_pct = abs(min(0, self._daily_stats.return_percent))
+                if current_loss_pct >= self.daily_loss_limit:
+                    self._halt_trading(f"Daily loss limit exceeded ({current_loss_pct:.2f}% >= {self.daily_loss_limit:.2f}%)")
+                    RISK_TRADE_GATE_DECISIONS_TOTAL.labels(
+                        bot_id=bot_id_label, decision="block_daily_loss"
+                    ).inc()
+                    return False, f"Daily loss limit exceeded ({current_loss_pct:.2f}% >= {self.daily_loss_limit}%)"
+
+        RISK_TRADE_GATE_DECISIONS_TOTAL.labels(
+            bot_id=bot_id_label, decision="allow"
+        ).inc()
+        return True, "Trading allowed"
 
     def _halt_trading(self, reason: str) -> None:
-        """Global-halt primitive — delegates to :class:`TradeGate`.
-
-        Kept as a pseudo-private method because the legacy characterization
-        tests exercise it directly (``rm._halt_trading("Test reason")``).
-        """
-        self._trade_gate._halt_trading(reason)
-
-    @property
-    def halted_symbols(self) -> Dict[str, str]:
-        """Per-symbol halt reasons — delegates to :class:`TradeGate`.
-
-        Returns the underlying ``DailyStats.halted_symbols`` dict by
-        reference so legacy ``rm.halted_symbols[sym] = reason`` mutations
-        keep working (same strategy PR-4 used for ``_risk_alerts_sent``).
-        Pre-init returns ``{}`` — matches legacy.
-        """
-        return self._trade_gate.halted_symbols
+        """Halt trading for the day."""
+        if self._daily_stats:
+            self._daily_stats.is_trading_halted = True
+            self._daily_stats.halt_reason = reason
+            self._save_daily_stats()
+            logger.warning(f"TRADING HALTED: {reason}")
 
     def calculate_position_size(
         self,
@@ -383,13 +510,15 @@ class RiskManager:
         Returns:
             True if recorded successfully
         """
-        # Delegate counter mutation to the aggregator. Returns False
-        # (and logs an error) if stats were not initialised — matches
-        # the legacy safety path.
-        if not self._daily_stats_aggregator.record_entry(symbol):
+        if not self._daily_stats:
+            logger.error("Daily stats not initialized!")
             return False
 
-        # Log the trade (façade-side side effect — not aggregator's job).
+        # Update trade counts (global + per-symbol)
+        self._daily_stats.trades_executed += 1
+        self._daily_stats.symbol_trades[symbol] = self._daily_stats.symbol_trades.get(symbol, 0) + 1
+
+        # Log the trade
         self.trade_logger.log_trade_entry(
             symbol=symbol,
             side=side,
@@ -402,8 +531,7 @@ class RiskManager:
         )
 
         self._save_daily_stats()
-        stats = self._daily_stats_aggregator.get_daily_stats()
-        symbol_count = stats.symbol_trades[symbol]
+        symbol_count = self._daily_stats.symbol_trades[symbol]
         limit_str = str(self.max_trades) if self.max_trades is not None else "∞"
         logger.info(f"Trade entry recorded. {symbol}: {symbol_count}/{limit_str} trades today")
 
@@ -438,20 +566,28 @@ class RiskManager:
         Returns:
             True if recorded successfully
         """
-        # Delegate PnL + counter mutation to the aggregator. Returns
-        # ``None`` (and logs an error) if stats were not initialised.
-        exit_result = self._daily_stats_aggregator.record_exit(
-            symbol=symbol,
-            side=side,
-            size=size,
-            entry_price=entry_price,
-            exit_price=exit_price,
-            fees=fees,
-            funding_paid=funding_paid,
-        )
-        if exit_result is None:
+        if not self._daily_stats:
+            logger.error("Daily stats not initialized!")
             return False
-        pnl, pnl_percent = exit_result
+
+        from src.bot.pnl import calculate_pnl
+        pnl, pnl_percent = calculate_pnl(side, entry_price, exit_price, size)
+
+        # Update stats (global + per-symbol)
+        self._daily_stats.total_pnl += pnl
+        self._daily_stats.total_fees += fees
+        self._daily_stats.total_funding += funding_paid
+        self._daily_stats.current_balance += (pnl - fees - funding_paid)
+        self._daily_stats.symbol_pnl[symbol] = self._daily_stats.symbol_pnl.get(symbol, 0.0) + pnl
+
+        if pnl > 0:
+            self._daily_stats.winning_trades += 1
+        else:
+            self._daily_stats.losing_trades += 1
+
+        # Update max drawdown
+        current_drawdown = abs(min(0, self._daily_stats.return_percent))
+        self._daily_stats.max_drawdown = max(self._daily_stats.max_drawdown, current_drawdown)
 
         # Log the trade
         self.trade_logger.log_trade_exit(
@@ -475,9 +611,16 @@ class RiskManager:
             f"Day PnL: ${self._daily_stats.net_pnl:.2f} ({self._daily_stats.return_percent:+.2f}%)"
         )
 
-        # Eager per-symbol halt check — the gate stamps halted_symbols
-        # on cap-crossing (PR-6 consolidation: was inlined here pre-PR-6).
-        self._trade_gate.check_and_halt(symbol)
+        # Check per-symbol loss limit (per-symbol override > global fallback)
+        sym_limits = self.per_symbol_limits.get(symbol, {})
+        effective_loss_limit = sym_limits.get("loss_limit", self.daily_loss_limit)
+        if effective_loss_limit is not None and self._daily_stats.starting_balance > 0:
+            symbol_pnl_total = self._daily_stats.symbol_pnl.get(symbol, 0.0)
+            symbol_loss_pct = abs(min(0, (symbol_pnl_total / self._daily_stats.starting_balance) * 100))
+            if symbol_loss_pct >= effective_loss_limit:
+                self._daily_stats.halted_symbols[symbol] = f"Loss limit reached: {symbol_loss_pct:.2f}%"
+                self._save_daily_stats()
+                logger.warning(f"{symbol} HALTED: Loss limit {symbol_loss_pct:.2f}% >= {effective_loss_limit}%")
 
         return True
 
@@ -486,12 +629,31 @@ class RiskManager:
         return self._daily_stats
 
     def get_remaining_trades(self, symbol: Optional[str] = None) -> int:
-        """Remaining trades for today — delegates to :class:`TradeGate`."""
-        return self._trade_gate.get_remaining_trades(symbol)
+        """Get number of trades remaining for today (per-symbol if symbol given)."""
+        if symbol:
+            sym_limits = self.per_symbol_limits.get(symbol, {})
+            effective_max = sym_limits.get("max_trades", self.max_trades)
+            if effective_max is None:
+                return 999
+            if not self._daily_stats:
+                return effective_max
+            symbol_count = self._daily_stats.symbol_trades.get(symbol, 0)
+            return max(0, effective_max - symbol_count)
+        if self.max_trades is None:
+            return 999
+        if not self._daily_stats:
+            return self.max_trades
+        return max(0, self.max_trades - self._daily_stats.trades_executed)
 
     def get_remaining_risk_budget(self) -> Optional[float]:
-        """Remaining loss-limit percent — delegates to :class:`TradeGate`."""
-        return self._trade_gate.get_remaining_risk_budget()
+        """Get remaining risk budget as percentage."""
+        if self.daily_loss_limit is None:
+            return None
+        if not self._daily_stats:
+            return self.daily_loss_limit
+
+        current_loss = abs(min(0, self._daily_stats.return_percent))
+        return max(0, self.daily_loss_limit - current_loss)
 
     def get_historical_stats(self, days: int = 30) -> List[Dict]:
         """Get historical daily stats from DB (sync wrapper).
@@ -556,17 +718,3 @@ class RiskManager:
             "max_drawdown": max_dd,
             "sharpe_estimate": sharpe,
         }
-
-
-# ---------------------------------------------------------------------------
-# Deferred import of the DailyStats aggregator — see the import-cycle
-# rationale at the top of the module. By now ``RiskManager`` is fully
-# defined, so when this import triggers ``src.bot.__init__`` →
-# ``BotWorker`` → ``from src.risk.risk_manager import RiskManager``, the
-# symbol is already bound.
-# ---------------------------------------------------------------------------
-from src.bot.components.risk.daily_stats import (  # noqa: E402
-    DailyStats,
-    DailyStatsAggregator,
-)
-from src.bot.components.risk.trade_gate import TradeGate  # noqa: E402

@@ -13,6 +13,7 @@ from websockets.exceptions import ConnectionClosed
 
 from src.exchanges.base import ExchangeWebSocket
 from src.exchanges.weex.constants import WS_PRIVATE_URL, WS_PUBLIC_URL
+from src.observability.metrics import EXCHANGE_WEBSOCKET_CONNECTED
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -56,6 +57,7 @@ class WeexWebSocket(ExchangeWebSocket):
             self._authenticated = data.get("event") == "login" and data.get("code") == "0"
 
         self._connected = True
+        EXCHANGE_WEBSOCKET_CONNECTED.labels(exchange="weex").set(1)
         self._running = True
         self._tasks.append(asyncio.create_task(self._receive_loop(self._ws_public, "public")))
         if self._ws_private:
@@ -85,6 +87,7 @@ class WeexWebSocket(ExchangeWebSocket):
     async def disconnect(self) -> None:
         self._running = False
         self._connected = False
+        EXCHANGE_WEBSOCKET_CONNECTED.labels(exchange="weex").set(0)
         for t in self._tasks:
             t.cancel()
             try:

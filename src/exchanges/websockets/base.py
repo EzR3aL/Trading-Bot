@@ -31,6 +31,7 @@ import asyncio
 from abc import ABC, abstractmethod
 from typing import Any, Awaitable, Callable, Optional, Sequence
 
+from src.observability.metrics import EXCHANGE_WEBSOCKET_CONNECTED
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -107,6 +108,7 @@ class ExchangeWebSocketClient(ABC):
             await self._safe_close_transport()
             raise
         self._connected = True
+        EXCHANGE_WEBSOCKET_CONNECTED.labels(exchange=self.exchange).set(1)
         logger.info(
             "ws.connected user=%s exchange=%s",
             self.user_id, self.exchange,
@@ -123,6 +125,7 @@ class ExchangeWebSocketClient(ABC):
         """
         self._stop_requested = True
         self._connected = False
+        EXCHANGE_WEBSOCKET_CONNECTED.labels(exchange=self.exchange).set(0)
         await self._safe_close_transport()
         if self._task is not None and not self._task.done():
             self._task.cancel()
@@ -181,6 +184,7 @@ class ExchangeWebSocketClient(ABC):
                 raise
             except Exception as e:  # noqa: BLE001
                 self._connected = False
+                EXCHANGE_WEBSOCKET_CONNECTED.labels(exchange=self.exchange).set(0)
                 await self._safe_close_transport()
                 if self._stop_requested:
                     break
