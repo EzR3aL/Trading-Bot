@@ -17,7 +17,6 @@
 | [Alerts einrichten](Alerts-einrichten.md) | Preis- und Signal-Alerts konfigurieren |
 | [Telegram Benachrichtigungen](Telegram%20Benachrichtigungen%20einrichten.md) | Telegram-Bot fuer Notifications |
 | [Portfolio-Ansicht](Portfolio-View.md) | Portfolio-Dashboard nutzen |
-| ~~[LLM-Provider Konfiguration](LLM-Provider-Konfiguration.md)~~ | ~~KI-Provider fuer LLM-Strategien~~ (Archiv -- LLM entfernt in v4.6.0) |
 | [Weex Exchange Setup](Weex-Exchange-Setup.md) | Weex-Boerse anbinden |
 | [Hyperliquid Builder Fee](Hyperliquid%20Builder%20Fee%20genehmigen.md) | Builder Fee auf Hyperliquid |
 | [PostgreSQL Migration](PostgreSQL%20Migration.md) | Von SQLite auf PostgreSQL wechseln |
@@ -31,7 +30,6 @@
 | [Setting Up Alerts](en/Setting-Up-Alerts.md) | Configure price and signal alerts |
 | [Telegram Notifications](en/Setting-Up-Telegram-Notifications.md) | Telegram bot for notifications |
 | [Portfolio View](en/Portfolio-View.md) | Using the portfolio dashboard |
-| ~~[LLM Provider Configuration](en/LLM-Provider-Configuration.md)~~ | ~~AI providers for LLM strategies~~ (Archive -- LLM removed in v4.6.0) |
 | [Weex Exchange Setup](en/Weex-Exchange-Setup.md) | Connect Weex exchange |
 | [Hyperliquid Builder Fee](en/Hyperliquid-Builder-Fee-Approval.md) | Builder fee on Hyperliquid |
 | [PostgreSQL Migration](en/PostgreSQL-Migration.md) | Migrate from SQLite to PostgreSQL |

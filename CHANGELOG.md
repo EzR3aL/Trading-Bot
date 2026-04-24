@@ -17,6 +17,9 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 ### Removed
 - refactor(monitoring): remove legacy src/monitoring/middleware.py, superseded by src/api/middleware/metrics.py (#337, follows up #327 PR-2)
 
+### Changed
+- fix(i18n): unify "Gebühren"/"Fees" label across Trades/Dashboard/Portfolio, consolidate `common.timeframes.*`, cleanup stale docs (#340)
+
 ### Added
 - feat(observability): add `app_feature_flags` Prometheus gauge for runtime flag state (#338, follows up #327 PR-3)
 - Frontend health audit report (`Anleitungen/frontend_health_report.md`) — see #328. Inventory over 8 categories (TS strictness, API client integrity, state management, error boundaries, a11y, performance, theme+i18n, test coverage); 3 critical / 5 medium / 6 nice-to-have findings; 8 follow-up issues #329–#336 filed.
