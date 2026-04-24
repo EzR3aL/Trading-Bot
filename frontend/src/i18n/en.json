@@ -79,7 +79,7 @@
     "allBots": "All Bots",
     "dateFrom": "From",
     "dateTo": "To",
-    "fees": "Transaction Fee",
+    "fees": "Fees",
     "noTradesTitle": "No trades found",
     "noTradesHint": "Completed trades will appear here. Start a bot to begin trading.",
     "reset": "Reset",
@@ -262,7 +262,7 @@
     "month": "Month",
     "trades": "Trades",
     "pnl": "PnL",
-    "fees": "Transaction Fee",
+    "fees": "Fees",
     "net": "Net",
     "downloadError": "Download failed"
   },
