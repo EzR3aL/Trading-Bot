@@ -1,0 +1,138 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "title": "Signals / min (bot $bot_id)",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "expr": "sum by (side, strategy) (rate(bot_signals_generated_total{bot_id=\"$bot_id\"}[5m])) * 60",
+          "legendFormat": "{{strategy}} / {{side}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "short" },
+        "overrides": []
+      }
+    },
+    {
+      "title": "Trade Executions by Result (bot $bot_id)",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "targets": [
+        {
+          "expr": "sum by (result) (rate(bot_trades_executed_total{bot_id=\"$bot_id\"}[5m]))",
+          "legendFormat": "{{result}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "short" },
+        "overrides": []
+      }
+    },
+    {
+      "title": "PositionMonitor p95 Tick Duration (bot $bot_id)",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(bot_position_monitor_tick_duration_seconds_bucket{bot_id=\"$bot_id\"}[5m])))",
+          "legendFormat": "p95",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "s" },
+        "overrides": []
+      }
+    },
+    {
+      "title": "Open Positions per Exchange (bot $bot_id)",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "targets": [
+        {
+          "expr": "sum by (exchange) (bot_open_positions{bot_id=\"$bot_id\"})",
+          "legendFormat": "{{exchange}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "short" },
+        "overrides": []
+      }
+    },
+    {
+      "title": "Daily PnL (bot $bot_id)",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+      "targets": [
+        {
+          "expr": "sum by (exchange) (bot_daily_pnl{bot_id=\"$bot_id\"})",
+          "legendFormat": "{{exchange}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "currencyUSD" },
+        "overrides": []
+      }
+    },
+    {
+      "title": "Trade Execution p95 Duration per Exchange (global)",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
+      "description": "bot_trade_execution_duration_seconds has only the 'exchange' label, so this is global, not bot-scoped.",
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum by (le, exchange) (rate(bot_trade_execution_duration_seconds_bucket[5m])))",
+          "legendFormat": "{{exchange}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "s" },
+        "overrides": []
+      }
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "tags": ["trading-bot", "per-bot", "#327"],
+  "templating": {
+    "list": [
+      {
+        "name": "bot_id",
+        "type": "query",
+        "datasource": { "type": "prometheus", "uid": "prometheus" },
+        "definition": "label_values(bot_open_positions, bot_id)",
+        "query": {
+          "query": "label_values(bot_open_positions, bot_id)",
+          "refId": "StandardVariableQuery"
+        },
+        "refresh": 1,
+        "multi": false,
+        "includeAll": false,
+        "sort": 1,
+        "current": { "text": "", "value": "" }
+      }
+    ]
+  },
+  "time": { "from": "now-6h", "to": "now" },
+  "title": "Trading Bot - Bot Detail",
+  "uid": "trading-bot-detail"
+}

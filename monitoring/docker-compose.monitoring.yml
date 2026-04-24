@@ -1,0 +1,74 @@
+# Optional standalone Prometheus + Grafana stack for the Trading Bot
+# observability layer (#327 PR-5).
+#
+# The main `docker-compose.yml` at the repo root already runs Prometheus +
+# Grafana as part of the full app stack. This file is the **alternative**
+# for setups where the Trading-Bot API runs outside compose (e.g. on
+# bare-metal) and only the monitoring stack is containerised.
+#
+# Usage:
+#   cd monitoring
+#   docker compose -f docker-compose.monitoring.yml up -d
+#
+# The `trading-bot-net` network is declared as `external: true` so this
+# stack can attach to the same Docker network the application container
+# is running on. Create it once with:
+#   docker network create trading-bot-net
+# If the API runs on the host (not in Docker), replace the static target
+# in `prometheus.yml` with `host.docker.internal:8000` (macOS/Windows) or
+# add an `extra_hosts` entry for Linux.
+
+services:
+  prometheus:
+    image: prom/prometheus:v3.2.1
+    container_name: trading-bot-prometheus
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./alert_rules.yml:/etc/prometheus/alert_rules.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=15d
+    networks:
+      - trading-bot-net
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+
+  grafana:
+    image: grafana/grafana:11.5.2
+    container_name: trading-bot-grafana
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3000:3000"
+    environment:
+      # Default admin/admin — change immediately after first login,
+      # or override via env var before `docker compose up`.
+      - GF_SECURITY_ADMIN_USER=${GF_ADMIN_USER:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GF_ADMIN_PASSWORD:-admin}
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      - prometheus
+    networks:
+      - trading-bot-net
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+
+volumes:
+  prometheus_data:
+  grafana_data:
+
+networks:
+  trading-bot-net:
+    external: true
