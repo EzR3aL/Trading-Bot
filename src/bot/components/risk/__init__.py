@@ -14,6 +14,7 @@ the issue for details.
 """
 from src.bot.components.risk.alert_throttler import AlertThrottler
 from src.bot.components.risk.daily_stats import DailyStats, DailyStatsAggregator
+from src.bot.components.risk.persistence import RiskStatePersistence
 from src.bot.components.risk.protocols import (
     AlertThrottlerProtocol,
     DailyStatsAggregatorProtocol,
@@ -32,5 +33,6 @@ __all__ = [
     "AlertThrottler",
     "DailyStats",
     "DailyStatsAggregator",
+    "RiskStatePersistence",
     "TradeGate",
 ]

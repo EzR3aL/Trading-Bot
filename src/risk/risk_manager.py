@@ -30,14 +30,17 @@ from typing import TYPE_CHECKING, Optional, Dict, List
 
 from src.utils.logger import get_logger, TradeLogger
 
-# Lazy imports for async DB — only used when bot_config_id is set
+# Lazy imports for async DB — only used when bot_config_id is set.
+# ``get_session`` is re-exported here so the Phase 0 characterization tests
+# can continue to patch ``src.risk.risk_manager.get_session`` (locked
+# observable behaviour). The persistence component routes its session
+# acquisition through this module-level name.
 _db_available = True
 try:
-    from sqlalchemy import select
-    from src.models.database import RiskStats
     from src.models.session import get_session
 except ImportError:
     _db_available = False
+    get_session = None  # type: ignore[assignment]
 
 logger = get_logger(__name__)
 
@@ -120,6 +123,27 @@ class RiskManager:
         self.bot_config_id = bot_config_id
         self._use_db = bot_config_id is not None and _db_available
 
+        # Persistence component owns DB I/O (ARCH-H2 Phase 1 PR-7, #326).
+        # The session-factory is a closure over ``get_session`` in THIS
+        # module so characterization tests that patch
+        # ``src.risk.risk_manager.get_session`` still win — the lookup
+        # happens at call-time, not at RiskManager-construction time.
+        # The ``_use_db`` gate is re-checked in each façade delegator so
+        # tests that flip ``rm._use_db = True`` after construction still
+        # reach the DB path.
+        #
+        # Lazy import: ``src.bot.components.risk.persistence`` transitively
+        # pulls in ``src.bot`` which auto-imports ``BotWorker`` which
+        # imports this module. Deferring the import to __init__ breaks
+        # that cycle (src.bot is always fully loaded before any
+        # RiskManager is constructed at runtime).
+        from src.bot.components.risk.persistence import RiskStatePersistence
+        self._persistence = RiskStatePersistence(
+            bot_config_id=bot_config_id,
+            session_factory=self._get_session_proxy,
+            dailystats_cls=DailyStats,
+        )
+
         self.trade_logger = TradeLogger()
         # DailyStats aggregation is owned by ``DailyStatsAggregator``
         # (PR-5). ``TradeGate`` owns the ``can_trade`` branches + halt
@@ -180,86 +204,51 @@ class RiskManager:
                 # call that happens inside an async context.
                 logger.debug("No running event loop — DB stats write deferred to next async call")
 
+    def _get_session_proxy(self):
+        """Return the current module-level ``get_session`` context manager.
+
+        Indirection lets characterization tests patch
+        ``src.risk.risk_manager.get_session`` after ``RiskManager`` is
+        already constructed — the persistence component calls back into
+        this proxy on every DB op, so each call picks up the currently
+        bound name.
+        """
+        return get_session()
+
     async def _save_stats_to_db(self) -> None:
-        """Persist current daily stats to the risk_stats table."""
+        """Persist current daily stats to the risk_stats table.
+
+        Thin delegator to :class:`RiskStatePersistence` (ARCH-H2 Phase 1
+        PR-7). Kept as ``_save_stats_to_db`` for backward-compat with
+        the characterization test suite and the sync wrapper below.
+        """
         if not self._daily_stats or not self._use_db:
             return
-        try:
-            stats_dict = self._daily_stats.to_dict()
-            async with get_session() as session:
-                result = await session.execute(
-                    select(RiskStats).where(
-                        RiskStats.bot_config_id == self.bot_config_id,
-                        RiskStats.date == self._daily_stats.date,
-                    )
-                )
-                existing = result.scalar_one_or_none()
-
-                if existing:
-                    existing.stats_json = json.dumps(stats_dict)
-                    existing.daily_pnl = self._daily_stats.net_pnl
-                    existing.trades_count = self._daily_stats.trades_executed
-                    existing.is_halted = self._daily_stats.is_trading_halted
-                else:
-                    row = RiskStats(
-                        bot_config_id=self.bot_config_id,
-                        date=self._daily_stats.date,
-                        stats_json=json.dumps(stats_dict),
-                        daily_pnl=self._daily_stats.net_pnl,
-                        trades_count=self._daily_stats.trades_executed,
-                        is_halted=self._daily_stats.is_trading_halted,
-                    )
-                    session.add(row)
-        except Exception as e:
-            logger.warning("Failed to save risk stats to DB: %s", e)
+        await self._persistence.save_stats(self._daily_stats)
 
     async def load_stats_from_db(self) -> None:
-        """Load today's stats from DB (call after async init)."""
+        """Load today's stats from DB (call after async init).
+
+        Thin delegator to :class:`RiskStatePersistence` (ARCH-H2 Phase 1
+        PR-7). Assigns the loaded snapshot to ``self._daily_stats`` on
+        hit; leaves it untouched on miss / error (the persistence
+        component returns ``None`` and logs).
+        """
         if not self._use_db:
             return
-        today = datetime.now().strftime("%Y-%m-%d")
-        try:
-            async with get_session() as session:
-                result = await session.execute(
-                    select(RiskStats).where(
-                        RiskStats.bot_config_id == self.bot_config_id,
-                        RiskStats.date == today,
-                    )
-                )
-                row = result.scalar_one_or_none()
-                if row:
-                    data = json.loads(row.stats_json)
-                    # Strip @property computed fields before DailyStats(**data);
-                    # without this the dataclass constructor raises on the
-                    # ``net_pnl`` / ``return_percent`` / ``win_rate`` keys.
-                    stats = DailyStatsAggregator.hydrate_from_dict(data)
-                    self._daily_stats_aggregator.hydrate(stats)
-                    logger.info(
-                        "Loaded risk stats from DB: %d trades, PnL: $%.2f",
-                        stats.trades_executed,
-                        stats.net_pnl,
-                    )
-        except Exception as e:
-            logger.warning("Failed to load risk stats from DB: %s", e)
+        stats = await self._persistence.load_stats()
+        if stats is not None:
+            self._daily_stats_aggregator.hydrate(stats)
 
     async def get_historical_stats_from_db(self, days: int = 30) -> List[Dict]:
-        """Get historical stats from the database."""
+        """Get historical stats from the database.
+
+        Thin delegator to :class:`RiskStatePersistence` (ARCH-H2 Phase 1
+        PR-7).
+        """
         if not self._use_db:
             return []
-        try:
-            cutoff = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
-            async with get_session() as session:
-                result = await session.execute(
-                    select(RiskStats).where(
-                        RiskStats.bot_config_id == self.bot_config_id,
-                        RiskStats.date >= cutoff,
-                    ).order_by(RiskStats.date.desc())
-                )
-                rows = result.scalars().all()
-                return [json.loads(r.stats_json) for r in rows]
-        except Exception as e:
-            logger.warning("Failed to load historical stats from DB: %s", e)
-            return []
+        return await self._persistence.get_historical_stats(days)
 
     def initialize_day(self, starting_balance: float) -> DailyStats:
         """
