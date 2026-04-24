@@ -69,19 +69,25 @@ if TYPE_CHECKING:  # pragma: no cover
 __all__ = ["DailyStats", "RiskManager"]
 
 
-def _classify_gate_reason(reason: str) -> str:
-    """Map a ``can_trade`` reason string to a Prometheus metric label."""
-    r = reason.lower()
-    if "not initialized" in r:
+def _classify_gate_reason(reason: str, symbol: Optional[str]) -> str:
+    """Map a ``can_trade`` reason string to a Prometheus metric label.
+
+    Labels match the TradeGate reason-string shapes: global paths use
+    ``Global trade limit`` / ``Daily loss limit``, per-symbol paths use
+    ``{symbol}: trade limit`` / ``{symbol}: Loss limit exceeded``. Halted
+    paths use ``Trading halted`` (global) / ``{symbol} halted`` (per-symbol).
+    """
+    if "not initialized" in reason:
         return "block_uninitialized"
-    if "trading halted" in r:
+    if reason.startswith("Trading halted"):
         return "block_global_halted"
-    if "halted" in r:
+    if symbol and reason.startswith(f"{symbol} halted"):
         return "block_symbol_halted"
-    if "trade limit" in r or "max trades" in r:
-        return "block_trade_limit"
-    if "loss limit" in r:
-        return "block_loss_limit"
+    per_symbol = symbol is not None and reason.startswith(f"{symbol}:")
+    if "trade limit" in reason:
+        return "block_max_trades_symbol" if per_symbol else "block_max_trades"
+    if "Loss limit" in reason or "loss limit" in reason:
+        return "block_daily_loss_symbol" if per_symbol else "block_daily_loss"
     return "block_other"
 
 
@@ -306,7 +312,7 @@ class RiskManager:
             bot_id_label = (
                 str(self.bot_config_id) if self.bot_config_id is not None else "unknown"
             )
-            decision = "allow" if allowed else _classify_gate_reason(reason)
+            decision = "allow" if allowed else _classify_gate_reason(reason, symbol)
             RISK_TRADE_GATE_DECISIONS_TOTAL.labels(
                 bot_id=bot_id_label, decision=decision
             ).inc()
