@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ChevronDown, Search, CheckCircle, Clock, Users, Activity, Wifi, WifiOff, Shield, Zap, BarChart3, TrendingUp, Database, Cpu, DollarSign, ExternalLink, Settings2 } from 'lucide-react'
 import Pagination from '../components/ui/Pagination'
@@ -37,6 +37,9 @@ export default function Admin() {
   // Shared message
   const [message, setMessage] = useState('')
   const [saving, setSaving] = useState(false)
+  // Tracks the pending showMessage timer so we can clear it on unmount and
+  // avoid a state-update-after-unmount warning (#332).
+  const messageTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Hyperliquid revenue
   const [hlRevenue, setHlRevenue] = useState<HlRevenueInfo | null>(null)
@@ -66,8 +69,23 @@ export default function Admin() {
 
   const showMessage = (msg: string) => {
     setMessage(msg)
-    setTimeout(() => setMessage(''), 3000)
+    if (messageTimerRef.current) clearTimeout(messageTimerRef.current)
+    messageTimerRef.current = setTimeout(() => {
+      setMessage('')
+      messageTimerRef.current = null
+    }, 3000)
   }
+
+  // Clear any pending showMessage timer on unmount so the deferred setMessage
+  // does not fire against a stale component.
+  useEffect(() => {
+    return () => {
+      if (messageTimerRef.current) {
+        clearTimeout(messageTimerRef.current)
+        messageTimerRef.current = null
+      }
+    }
+  }, [])
 
   const loadConnectionStatus = async () => {
     setConnLoading(true)

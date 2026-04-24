@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef, useCallback, Fragment } from 'react'
+import { useState, useMemo, useRef, useCallback, useEffect, Fragment } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   XAxis, YAxis, CartesianGrid, Tooltip,
@@ -441,6 +441,10 @@ export default function BotPerformance() {
   const [selectedTrade, setSelectedTrade] = useState<BotDetailStats['recent_trades'][0] | null>(null)
   const [expandedTradeId, setExpandedTradeId] = useState<number | null>(null)
   const [copied, setCopied] = useState(false)
+  // Tracks the "copied" flag-reset timer for the share handler so we can
+  // clear it on unmount and avoid a state-update-after-unmount warning when
+  // the user navigates away within the 2s window (#332).
+  const copiedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const tradeCardRef = useRef<HTMLDivElement>(null)
   const swipeTradeModal = useSwipeToClose({ onClose: () => setSelectedTrade(null), enabled: isMobile && selectedTrade !== null })
   const latestCardRef = useRef<HTMLDivElement>(null)
@@ -450,6 +454,18 @@ export default function BotPerformance() {
   // subtree on every parent state change.
   const [sharingTrade, setSharingTrade] = useState<BotDetailStats['recent_trades'][0] | null>(null)
   const shareResolveRef = useRef<((el: HTMLDivElement | null) => void) | null>(null)
+
+  // Clear any pending "copied" flag-reset timer on unmount so the deferred
+  // setFlag(false) does not fire against a stale component.
+  useEffect(() => {
+    return () => {
+      if (copiedTimerRef.current) {
+        clearTimeout(copiedTimerRef.current)
+        copiedTimerRef.current = null
+      }
+    }
+  }, [])
+
   const handleShare = async (ref: React.RefObject<HTMLDivElement | null>, trade: { symbol: string; side: string; pnl_percent: number }, affiliateUrl?: string, copiedSetter?: (v: boolean) => void) => {
     if (!ref.current) return
     const setFlag = copiedSetter || setCopied
@@ -471,7 +487,11 @@ export default function BotPerformance() {
           new ClipboardItem({ 'image/png': blobPromise }),
         ])
         setFlag(true)
-        setTimeout(() => setFlag(false), 2000)
+        if (copiedTimerRef.current) clearTimeout(copiedTimerRef.current)
+        copiedTimerRef.current = setTimeout(() => {
+          setFlag(false)
+          copiedTimerRef.current = null
+        }, 2000)
         return
       }
 

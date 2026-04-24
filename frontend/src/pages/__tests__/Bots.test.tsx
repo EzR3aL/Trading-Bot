@@ -256,4 +256,32 @@ describe('Bots Page', () => {
       expect(screen.getByText('Bots')).toBeInTheDocument()
     })
   })
+
+  // Regression guard for #332 — the "copied" flag-reset timer in TradeDetailModal
+  // (Bots.tsx) used to leak across unmount, firing setCopied(false) against a
+  // stale component. After the fix, unmount + runAllTimers must be silent.
+  it('unmounts cleanly with fake timers and without stale state updates (#332)', async () => {
+    vi.useFakeTimers()
+    try {
+      mockUseBots.mockReturnValue({
+        data: { bots: [] },
+        isLoading: false,
+        error: null,
+        refetch: vi.fn(),
+      })
+
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+      const { unmount } = render(<Bots />, { wrapper: createWrapper() })
+      unmount()
+      vi.runAllTimers()
+
+      const stateAfterUnmountWarnings = errorSpy.mock.calls.filter((args) =>
+        typeof args[0] === 'string' && args[0].includes("can't perform a React state update on an unmounted"),
+      )
+      expect(stateAfterUnmountWarnings).toHaveLength(0)
+      errorSpy.mockRestore()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
 })

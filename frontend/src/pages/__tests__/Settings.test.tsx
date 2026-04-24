@@ -190,4 +190,29 @@ describe('Settings Page', () => {
     })
     expect(screen.queryByTestId('settings-skeleton')).not.toBeInTheDocument()
   })
+
+  // Regression guard for #332 — the showMessage timer used to leak across
+  // unmount, firing setMessage('') against a stale component. After the fix
+  // unmount + runAllTimers must be silent.
+  it('unmounts cleanly with fake timers and without stale state updates (#332)', async () => {
+    vi.useFakeTimers()
+    try {
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+      const { unmount } = render(
+        <MemoryRouter>
+          <Settings />
+        </MemoryRouter>,
+      )
+      unmount()
+      vi.runAllTimers()
+
+      const stateAfterUnmountWarnings = errorSpy.mock.calls.filter((args) =>
+        typeof args[0] === 'string' && args[0].includes("can't perform a React state update on an unmounted"),
+      )
+      expect(stateAfterUnmountWarnings).toHaveLength(0)
+      errorSpy.mockRestore()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
 })

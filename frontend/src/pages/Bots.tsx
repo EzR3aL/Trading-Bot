@@ -185,8 +185,21 @@ function TradeDetailModal({ trade, onClose, t, affiliateLink }: { trade: BotTrad
   const copyRef = useRef<HTMLDivElement>(null)
   const theme = useThemeStore((s) => s.theme)
   const [copied, setCopied] = useState(false)
+  // Tracks the "copied" flag-reset timer so we can clear it on unmount and
+  // avoid a state-update-after-unmount warning when the modal is closed
+  // within the 2s window (#332).
+  const copiedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const isMobile = useIsMobile()
   const swipe = useSwipeToClose({ onClose, enabled: isMobile })
+
+  useEffect(() => {
+    return () => {
+      if (copiedTimerRef.current) {
+        clearTimeout(copiedTimerRef.current)
+        copiedTimerRef.current = null
+      }
+    }
+  }, [])
 
   const captureBlob = async () => {
     if (!copyRef.current) return null
@@ -211,7 +224,11 @@ function TradeDetailModal({ trade, onClose, t, affiliateLink }: { trade: BotTrad
           new ClipboardItem({ 'image/png': blobPromise }),
         ])
         setCopied(true)
-        setTimeout(() => setCopied(false), 2000)
+        if (copiedTimerRef.current) clearTimeout(copiedTimerRef.current)
+        copiedTimerRef.current = setTimeout(() => {
+          setCopied(false)
+          copiedTimerRef.current = null
+        }, 2000)
         return
       }
 

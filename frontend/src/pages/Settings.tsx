@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ChevronDown, ExternalLink, Zap } from 'lucide-react'
 import api from '../api/client'
@@ -153,6 +153,9 @@ export default function Settings() {
   const [connections, setConnections] = useState<ExchangeConnectionStatus[]>([])
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState('')
+  // Tracks the pending showMessage timer so we can clear it on unmount and
+  // avoid a state-update-after-unmount warning (#332).
+  const messageTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   // Tracks the initial page load so we can show a skeleton instead of a
   // blank white page while /exchanges + /config/* + /affiliate-links are in flight.
   const [initialLoading, setInitialLoading] = useState(true)
@@ -213,8 +216,23 @@ export default function Settings() {
 
   const showMessage = (msg: string, duration = 3000) => {
     setMessage(msg)
-    setTimeout(() => setMessage(''), duration)
+    if (messageTimerRef.current) clearTimeout(messageTimerRef.current)
+    messageTimerRef.current = setTimeout(() => {
+      setMessage('')
+      messageTimerRef.current = null
+    }, duration)
   }
+
+  // Clear any pending showMessage timer on unmount so the deferred setMessage
+  // does not fire against a stale component.
+  useEffect(() => {
+    return () => {
+      if (messageTimerRef.current) {
+        clearTimeout(messageTimerRef.current)
+        messageTimerRef.current = null
+      }
+    }
+  }, [])
 
   const getForm = (ex: string): ExchangeKeyForm => keyForms[ex] || emptyForm()
   const updateForm = (ex: string, patch: Partial<ExchangeKeyForm>) =>
