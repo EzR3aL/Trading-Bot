@@ -458,7 +458,8 @@ def create_app() -> FastAPI:
     # Request ID for log correlation
     app.add_middleware(RequestIDMiddleware)
 
-    # HTTPS redirect (outermost — added last so it runs first)
+    # HTTPS redirect (outermost of the runtime middlewares below — CORS
+    # and MetricsMiddleware wrap it later so they observe the redirect).
     app.add_middleware(HTTPSRedirectMiddleware)
 
     # CORS — same-origin (localhost:8000) does not need CORS so it is excluded.
@@ -514,6 +515,18 @@ def create_app() -> FastAPI:
         allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
         allow_headers=["Authorization", "Content-Type", "Accept"],
     )
+
+    # HTTP metrics middleware (#327 PR-2) — registered LAST so it is the
+    # outermost layer of the middleware stack. Starlette wraps middlewares
+    # in reverse registration order, so the last ``add_middleware`` call
+    # produces the outermost ASGI wrapper. Outermost placement means the
+    # histogram / counter capture the wall-clock cost of every other
+    # middleware (CORS, HTTPS redirect, auth, rate limit, security headers)
+    # and even CORS preflights show up in ``http_requests_total``.
+    # Gated internally by the ``prometheus_enabled`` flag; when the flag
+    # is off the middleware is a pure pass-through.
+    from src.api.middleware.metrics import MetricsMiddleware
+    app.add_middleware(MetricsMiddleware)
 
     # Rate limit handler
     from src.api.rate_limit import limiter

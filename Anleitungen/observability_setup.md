@@ -50,11 +50,51 @@ HTTP-Basic-Auth.
 - Labels enthalten bewusst keine User-E-Mails, Wallet-Adressen oder
   API-Keys — nur `bot_id` und `exchange` (Issue #327, Security-Erwägungen).
 
+### HTTP-Metrics (PR-2 von #327)
+
+Mit PR-2 werden drei HTTP-Metriken automatisch befüllt, sobald der
+`PROMETHEUS_ENABLED`-Flag **an** ist:
+
+| Metrik | Typ | Labels |
+|--------|-----|--------|
+| `http_requests_total` | Counter | `method`, `path`, `status` |
+| `http_request_duration_seconds` | Histogram | `method`, `path` |
+| `http_requests_in_flight` | Gauge | `method`, `path` |
+
+Die Middleware `src/api/middleware/metrics.py` läuft als äußerste
+Schicht des Middleware-Stacks, damit das Histogramm auch die Zeit
+aller anderen Middlewares (Auth, Rate-Limit, Security-Header) erfasst.
+Sie ist als reine ASGI-Middleware geschrieben, weil sie den
+matched-Route-Template **vor** dem Handler-Aufruf auflösen muss
+(über `Route.matches(scope)`), damit der In-Flight-Counter denselben
+Label-Wert für `inc()` und `dec()` sieht.
+
+**Template-Path-Collapsing (Kardinalitätsschutz):**
+`GET /api/bots/42`, `GET /api/bots/17`, `GET /api/bots/999` landen
+**alle** unter `path="/api/bots/{bot_id}"`. Ohne diese Normalisierung
+würde die Prometheus-Zeitreihenzahl mit jeder Bot-ID wachsen —
+`http_requests_total` hätte dann Millionen Serien statt Dutzenden.
+Requests, die auf **keine** Route matchen (404), werden unter dem
+Sentinel `path="<unmatched>"` gezählt, nie mit dem rohen Request-Pfad.
+
+**`/metrics` ist selbst nicht instrumentiert:**
+Prometheus scraped den Endpoint alle 15 s — Self-Observation würde
+nur konstantes Hintergrundrauschen ohne operativen Wert produzieren.
+Die Middleware macht einen Early-Return, sobald der Request-Pfad mit
+`/metrics` beginnt.
+
+**Legacy-Middleware:**
+`src/monitoring/middleware.py` existiert weiterhin, nutzt aber die
+alte Default-Registry aus `src/monitoring/metrics.py`. Sie wird in
+einem Folge-PR entfernt, sobald kein Code sie mehr importiert —
+siehe CHANGELOG-Eintrag zu PR-2 von #327.
+
 ### Status — was noch fehlt
 
-Vollständiges Setup mit Prometheus-Scraper, Docker-Compose-Snippet und
-Grafana-Dashboards folgt in **PR-5 von #327**. Dieser Stub dokumentiert
-nur den PR-1-Scope.
+Instrumentierung der BotWorker-Komponenten (PR-3), RiskStateManager
++ Exchange-Adapter (PR-4) und vollständiges Setup mit
+Prometheus-Scraper, Docker-Compose-Snippet und Grafana-Dashboards
+folgen in **PR-5 von #327**.
 
 ---
 
@@ -102,8 +142,49 @@ reachable at `https://<your-domain>/metrics` with HTTP Basic-Auth.
 - Labels deliberately never carry user emails, wallet addresses or API
   keys — only `bot_id` and `exchange` (#327 security notes).
 
+### HTTP metrics (PR-2 of #327)
+
+PR-2 wires three HTTP metrics that are populated automatically as
+soon as `PROMETHEUS_ENABLED` is **on**:
+
+| Metric | Type | Labels |
+|--------|------|--------|
+| `http_requests_total` | Counter | `method`, `path`, `status` |
+| `http_request_duration_seconds` | Histogram | `method`, `path` |
+| `http_requests_in_flight` | Gauge | `method`, `path` |
+
+The middleware `src/api/middleware/metrics.py` is registered as the
+outermost layer of the middleware stack so the histogram captures
+the wall-clock cost of every other middleware (auth, rate limit,
+security headers). It is implemented as a pure ASGI middleware
+because it must resolve the matched route template **before** the
+downstream handler runs (via `Route.matches(scope)`), so that the
+in-flight gauge sees the same label value on `inc()` and `dec()`.
+
+**Template-path collapsing (cardinality control):**
+`GET /api/bots/42`, `GET /api/bots/17`, `GET /api/bots/999` are
+**all** recorded under `path="/api/bots/{bot_id}"`. Without this
+normalisation the Prometheus series count would grow linearly with
+each bot ID — `http_requests_total` would balloon to millions of
+series instead of dozens. Requests that match **no** route (404) are
+counted under the sentinel `path="<unmatched>"`, never with the raw
+request path.
+
+**`/metrics` itself is not instrumented:**
+Prometheus scrapes the endpoint every 15 s — self-observation would
+produce a constant background of noise without any operational
+value. The middleware short-circuits as soon as the request path
+starts with `/metrics`.
+
+**Legacy middleware:**
+`src/monitoring/middleware.py` still exists but uses the old default
+registry from `src/monitoring/metrics.py`. It will be removed in a
+follow-up PR once no code imports it — see the PR-2 CHANGELOG entry
+for #327.
+
 ### Status — what is still missing
 
-The full setup with a Prometheus scraper, Docker-Compose snippet and
-Grafana dashboards arrives in **PR-5 of #327**. This stub only
-documents the PR-1 scope.
+Instrumentation of the BotWorker components (PR-3), RiskStateManager
++ exchange adapters (PR-4) and the full setup with a Prometheus
+scraper, Docker-Compose snippet and Grafana dashboards arrive in
+**PR-5 of #327**.
