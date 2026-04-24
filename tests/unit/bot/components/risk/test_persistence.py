@@ -618,7 +618,7 @@ class TestRiskManagerDelegationSurface:
         rm._use_db = True
         # initialize_day inside an async context ALSO fires _save_daily_stats;
         # create the stats directly so we isolate just the wrapper call.
-        rm._daily_stats = _make_dailystats()
+        rm._daily_stats_aggregator.hydrate(_make_dailystats())
 
         session = _FakeSession(row=None)
         with patch("src.risk.risk_manager.get_session", _factory(session)):

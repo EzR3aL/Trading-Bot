@@ -415,7 +415,7 @@ class TestAlertThrottlerDedupe:
         send_mock.assert_awaited_once()
         # Key recorded
         assert any(
-            k.startswith("global_") for k in worker._risk_alerts_sent
+            k.startswith("global_") for k in worker._alert_throttler.sent
         ), "global alert key must be recorded in _risk_alerts_sent"
 
     async def test_duplicate_global_alert_is_deduped(self):
@@ -456,7 +456,7 @@ class TestAlertThrottlerDedupe:
         )
         # No key recorded because "not initialized" doesn't match the filter.
         assert not any(
-            "not initialized" in k for k in worker._risk_alerts_sent
+            "not initialized" in k for k in worker._alert_throttler.sent
         )
 
     async def test_per_symbol_alert_key_includes_symbol(self):
@@ -479,7 +479,7 @@ class TestAlertThrottlerDedupe:
 
         await worker._analyze_and_trade()
         assert any(
-            k.startswith("BTCUSDT_") for k in worker._risk_alerts_sent
+            k.startswith("BTCUSDT_") for k in worker._alert_throttler.sent
         ), "per-symbol alert key must include the symbol prefix"
 
 
@@ -503,27 +503,27 @@ class TestAlertThrottlerMidnightReset:
     async def test_no_reset_when_within_24h_window(self):
         """Last reset < 24h ago → set is NOT cleared."""
         worker = BotWorker(bot_config_id=1)
-        worker._risk_alerts_last_reset = datetime.now(timezone.utc) - timedelta(hours=1)
+        worker._alert_throttler.last_reset = datetime.now(timezone.utc) - timedelta(hours=1)
         stale_key = "global_some_old_reason"
-        worker._risk_alerts_sent.add(stale_key)
+        worker._alert_throttler.sent.add(stale_key)
 
         send_mock = await _run_alert_pass(worker, global_reason=None)
         # No alert because no reason triggered, and the stale key is preserved.
         send_mock.assert_not_awaited()
-        assert stale_key in worker._risk_alerts_sent
+        assert stale_key in worker._alert_throttler.sent
 
     async def test_resets_after_24h_window_and_stamps_new_timestamp(self):
         """Last reset > 24h ago → set cleared, timestamp bumped."""
         worker = BotWorker(bot_config_id=1)
         old_reset = datetime.now(timezone.utc) - timedelta(hours=25)
-        worker._risk_alerts_last_reset = old_reset
-        worker._risk_alerts_sent.add("stale_from_yesterday")
+        worker._alert_throttler.last_reset = old_reset
+        worker._alert_throttler.sent.add("stale_from_yesterday")
 
         await _run_alert_pass(worker, global_reason=None)
 
-        assert "stale_from_yesterday" not in worker._risk_alerts_sent
+        assert "stale_from_yesterday" not in worker._alert_throttler.sent
         # Timestamp was bumped forward (monotonically > old_reset).
-        assert worker._risk_alerts_last_reset > old_reset
+        assert worker._alert_throttler.last_reset > old_reset
 
     async def test_reset_unblocks_same_key_emission_next_day(self):
         """After midnight reset, the same alert key that was deduped
@@ -533,10 +533,10 @@ class TestAlertThrottlerMidnightReset:
         await _run_alert_pass(
             worker, global_reason="Global trade limit reached (3/3)",
         )
-        assert any(k.startswith("global_") for k in worker._risk_alerts_sent)
+        assert any(k.startswith("global_") for k in worker._alert_throttler.sent)
 
         # Simulate 25h elapsed
-        worker._risk_alerts_last_reset = datetime.now(timezone.utc) - timedelta(hours=25)
+        worker._alert_throttler.last_reset = datetime.now(timezone.utc) - timedelta(hours=25)
 
         # Day 2 — SAME reason should re-emit
         worker._send_notification = AsyncMock()
@@ -557,14 +557,14 @@ class TestAlertThrottlerMidnightReset:
         worker._config.name = "Bot"
         worker._config.user_id = 1
         worker._config.id = 1
-        worker._risk_alerts_sent.add("stale")
+        worker._alert_throttler.sent.add("stale")
         rm = MagicMock()
         rm.get_daily_stats.return_value = None
         worker._risk_manager = rm
         worker._send_notification = AsyncMock()
 
         await worker._send_daily_summary()
-        assert worker._risk_alerts_sent == set()
+        assert worker._alert_throttler.sent == set()
 
 
 # ---------------------------------------------------------------------------

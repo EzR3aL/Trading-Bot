@@ -23,6 +23,7 @@ from unittest.mock import MagicMock
 import sys
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
+from src.bot.components.risk.daily_stats import DailyStatsAggregator
 from src.risk.risk_manager import RiskManager, DailyStats
 
 
@@ -427,7 +428,7 @@ class TestCanTrade:
         temp_dir = tempfile.mkdtemp()
         try:
             rm = RiskManager(data_dir=temp_dir)
-            rm._daily_stats = None
+            rm._daily_stats_aggregator = DailyStatsAggregator()
 
             can_trade, reason = rm.can_trade()
 
@@ -665,7 +666,7 @@ class TestHaltTrading:
 
     def test_halt_trading_sets_flags(self, risk_manager):
         """Should set halt flags on daily stats."""
-        risk_manager._halt_trading("Test halt reason")
+        risk_manager._trade_gate._halt_trading("Test halt reason")
 
         stats = risk_manager.get_daily_stats()
         assert stats.is_trading_halted is True
@@ -676,16 +677,16 @@ class TestHaltTrading:
         temp_dir = tempfile.mkdtemp()
         try:
             rm = RiskManager(data_dir=temp_dir)
-            rm._daily_stats = None
+            rm._daily_stats_aggregator = DailyStatsAggregator()
 
             # Should not raise
-            rm._halt_trading("Test reason")
+            rm._trade_gate._halt_trading("Test reason")
         finally:
             shutil.rmtree(temp_dir, ignore_errors=True)
 
     def test_halt_trading_updates_in_memory_stats(self, risk_manager):
         """Halting should update in-memory stats."""
-        risk_manager._halt_trading("Persisted halt")
+        risk_manager._trade_gate._halt_trading("Persisted halt")
 
         stats = risk_manager.get_daily_stats()
         assert stats.is_trading_halted is True
@@ -954,7 +955,7 @@ class TestRecordTradeEntry:
         temp_dir = tempfile.mkdtemp()
         try:
             rm = RiskManager(data_dir=temp_dir)
-            rm._daily_stats = None
+            rm._daily_stats_aggregator = DailyStatsAggregator()
             rm.trade_logger = MagicMock()
 
             result = rm.record_trade_entry(
@@ -1168,7 +1169,7 @@ class TestRecordTradeExit:
         temp_dir = tempfile.mkdtemp()
         try:
             rm = RiskManager(data_dir=temp_dir)
-            rm._daily_stats = None
+            rm._daily_stats_aggregator = DailyStatsAggregator()
             rm.trade_logger = MagicMock()
 
             result = rm.record_trade_exit(
@@ -1335,7 +1336,7 @@ class TestProfitLockIn:
                 enable_profit_lock=True,
                 data_dir=temp_dir,
             )
-            rm._daily_stats = None
+            rm._daily_stats_aggregator = DailyStatsAggregator()
 
             result = rm.get_dynamic_loss_limit()
 
@@ -1383,7 +1384,7 @@ class TestGetDailyStats:
 
     def test_get_daily_stats_returns_none_if_not_initialized(self, risk_manager):
         """Should return None if day not initialized."""
-        risk_manager._daily_stats = None
+        risk_manager._daily_stats_aggregator = DailyStatsAggregator()
 
         stats = risk_manager.get_daily_stats()
 
@@ -1474,7 +1475,7 @@ class TestGetRemainingTrades:
         temp_dir = tempfile.mkdtemp()
         try:
             rm = RiskManager(max_trades_per_day=5, data_dir=temp_dir)
-            rm._daily_stats = None
+            rm._daily_stats_aggregator = DailyStatsAggregator()
 
             remaining = rm.get_remaining_trades()
 
@@ -1528,7 +1529,7 @@ class TestGetRemainingTrades:
                 data_dir=temp_dir,
                 per_symbol_limits={"BTCUSDT": {"max_trades": 3}},
             )
-            rm._daily_stats = None
+            rm._daily_stats_aggregator = DailyStatsAggregator()
 
             remaining = rm.get_remaining_trades(symbol="BTCUSDT")
 
@@ -1599,7 +1600,7 @@ class TestGetRemainingRiskBudget:
         temp_dir = tempfile.mkdtemp()
         try:
             rm = RiskManager(daily_loss_limit_percent=5.0, data_dir=temp_dir)
-            rm._daily_stats = None
+            rm._daily_stats_aggregator = DailyStatsAggregator()
 
             budget = rm.get_remaining_risk_budget()
 
@@ -1640,7 +1641,7 @@ class TestGetHistoricalStats:
         temp_dir = tempfile.mkdtemp()
         try:
             rm = RiskManager(data_dir=temp_dir)
-            rm._daily_stats = None
+            rm._daily_stats_aggregator = DailyStatsAggregator()
 
             stats = rm.get_historical_stats(days=7)
 
@@ -1684,7 +1685,7 @@ class TestGetPerformanceSummary:
         temp_dir = tempfile.mkdtemp()
         try:
             rm = RiskManager(data_dir=temp_dir)
-            rm._daily_stats = None
+            rm._daily_stats_aggregator = DailyStatsAggregator()
 
             summary = rm.get_performance_summary(days=30)
 

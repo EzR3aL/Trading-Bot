@@ -249,8 +249,10 @@ class TestRiskManagerSaveError:
         from src.risk.risk_manager import RiskManager
 
         rm = RiskManager.__new__(RiskManager)
-        rm._daily_stats = MagicMock()
-        rm._daily_stats.date = "2024-01-01"
+        rm._daily_stats_aggregator = MagicMock()
+        rm._daily_stats_aggregator.get_daily_stats.return_value = MagicMock(
+            date="2024-01-01"
+        )
         rm._use_db = False
 
         # With _use_db=False, _save_daily_stats does nothing (no file fallback)
