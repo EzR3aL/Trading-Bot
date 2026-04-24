@@ -6,6 +6,13 @@ TESTNET_URL = "https://api.bitget.com"  # Bitget uses same URL with demo header
 WS_PUBLIC_URL = "wss://ws.bitget.com/v2/ws/public"
 WS_PRIVATE_URL = "wss://ws.bitget.com/v2/ws/private"
 
+# Demo Trading (paper-trading) has dedicated WebSocket hosts. REST demo goes
+# through the same https://api.bitget.com with a `paptrading: 1` header, but
+# that header is not part of the WS handshake — demo clients MUST dial the
+# wspap.* hosts, otherwise the private login returns code=30017.
+WS_PUBLIC_URL_DEMO = "wss://wspap.bitget.com/v2/ws/public"
+WS_PRIVATE_URL_DEMO = "wss://wspap.bitget.com/v2/ws/private"
+
 # Product types
 PRODUCT_TYPE_USDT = "USDT-FUTURES"
 PRODUCT_TYPE_COIN = "COIN-FUTURES"
