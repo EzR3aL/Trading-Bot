@@ -47,50 +47,59 @@ def _engine_kwargs(is_sqlite: bool) -> dict:
 
 
 @pytest_asyncio.fixture
-async def test_db():
-    """Create a fresh test database for each test."""
+async def _integration_engine():
+    """Shared engine for ``test_db`` and ``test_app`` in a single test.
+
+    Previously each of those fixtures built its own engine, meaning tests
+    that used both held two PG connection pools simultaneously. Under CI
+    with the default ``max_connections=100`` that doubled the pressure
+    and contributed to the #354 pool exhaustion. Sharing a single engine
+    halves connection churn per integration test.
+    """
     from src.models.database import Base
 
     is_sqlite = TEST_DATABASE_URL.startswith("sqlite")
     engine = create_async_engine(TEST_DATABASE_URL, **_engine_kwargs(is_sqlite))
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-
-    session_factory = async_sessionmaker(
-        engine, class_=AsyncSession, expire_on_commit=False
-    )
-
-    async with session_factory() as session:
-        yield session
-
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.drop_all)
-    await engine.dispose()
+    try:
+        yield engine
+    finally:
+        try:
+            async with engine.begin() as conn:
+                await conn.run_sync(Base.metadata.drop_all)
+        except Exception:
+            # Loop may be tearing down — swallow so dispose still runs.
+            pass
+        await engine.dispose()
 
 
 @pytest_asyncio.fixture
-async def test_app(test_db, monkeypatch):
-    """Create a test FastAPI app with test database.
+async def test_db(_integration_engine):
+    """Provide an async session bound to the shared integration engine."""
+    session_factory = async_sessionmaker(
+        _integration_engine, class_=AsyncSession, expire_on_commit=False
+    )
+    async with session_factory() as session:
+        yield session
+
+
+@pytest_asyncio.fixture
+async def test_app(_integration_engine, monkeypatch):
+    """Create a test FastAPI app that reuses the integration engine.
 
     Monkeypatches ``src.models.session`` so that all application code
-    (routers, dependencies, lifespan) uses the in-memory test engine
-    rather than the real database.
+    (routers, dependencies, lifespan) uses the test engine rather than
+    the real database.
     """
     import src.models.session as session_module
-    from src.models.database import Base
-
-    # Create a dedicated engine for the app (separate from the fixture session)
-    is_sqlite = TEST_DATABASE_URL.startswith("sqlite")
-    engine = create_async_engine(TEST_DATABASE_URL, **_engine_kwargs(is_sqlite))
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
 
     test_session_factory = async_sessionmaker(
-        engine, class_=AsyncSession, expire_on_commit=False
+        _integration_engine, class_=AsyncSession, expire_on_commit=False
     )
 
     # Monkey-patch the session module so every import sees test resources
-    monkeypatch.setattr(session_module, "engine", engine)
+    monkeypatch.setattr(session_module, "engine", _integration_engine)
     monkeypatch.setattr(session_module, "async_session_factory", test_session_factory)
     monkeypatch.setattr(session_module, "DATABASE_URL", TEST_DATABASE_URL)
 
@@ -115,10 +124,6 @@ async def test_app(test_db, monkeypatch):
     app.state.orchestrator = mock_orch
 
     yield app
-
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.drop_all)
-    await engine.dispose()
 
 
 @pytest_asyncio.fixture
