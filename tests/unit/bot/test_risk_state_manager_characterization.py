@@ -728,11 +728,6 @@ class TestExceptionSwallowContracts:
         prevent the per-symbol analysis loop from continuing to the next
         symbol. Locks the AlertThrottler swallow-on-error contract
         introduced in ARCH-H2 Phase 1 PR-4 (#326).
-
-        Before PR-4, notifier exceptions propagated out of
-        ``_analyze_and_trade``; this test was skipped with a FIXME. PR-4
-        wraps the dispatch in ``AlertThrottler._dispatch`` so a flaky
-        webhook never aborts the analysis loop.
         """
         worker = BotWorker(bot_config_id=1)
         worker._risk_manager = _FakeRiskManager(
@@ -755,9 +750,7 @@ class TestExceptionSwallowContracts:
 
         # Must not raise — throttler swallows the notifier exception.
         await worker._analyze_and_trade()
-
-        # Loop survived: both BTCUSDT + ETHUSDT alert branches ran. The
-        # first notifier call raised + was swallowed; the second ran.
+        # Loop survived: both BTCUSDT + ETHUSDT alert branches ran.
         assert worker._send_notification.await_count == 2
 
     async def test_save_stats_inserts_new_row_when_none_exists(self):

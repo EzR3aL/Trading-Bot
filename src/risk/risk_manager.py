@@ -7,13 +7,23 @@ Handles:
 - Trade count limits
 - Drawdown protection
 - Risk-adjusted returns tracking
+
+Composition note (#326 Phase 1 PR-5):
+The daily stats aggregation (PnL counters, trade counter, per-symbol
+PnL, win/loss tracking, DailyStats snapshot lifecycle) lives in
+``src.bot.components.risk.daily_stats.DailyStatsAggregator``. This
+module stays the public façade — re-exports ``DailyStats`` for backward
+compatibility and delegates the aggregator calls. Persistence + the
+trade-logger side effects + per-symbol halt logic continue to live
+here until PR-6 (TradeGate) and PR-7 (RiskStatePersistence) land.
 """
+
+from __future__ import annotations
 
 import json
 import os
-from dataclasses import dataclass, field
 from datetime import datetime, timedelta
-from typing import Optional, Dict, List
+from typing import TYPE_CHECKING, Optional, Dict, List
 
 from src.utils.logger import get_logger, TradeLogger
 
@@ -28,69 +38,29 @@ except ImportError:
 
 logger = get_logger(__name__)
 
+# ``DailyStats`` + ``DailyStatsAggregator`` live in
+# ``src.bot.components.risk.daily_stats`` (extracted in #326 Phase 1 PR-5).
+# Importing that module at the top of this file triggers the parent
+# ``src.bot`` package init which in turn imports ``BotWorker`` → back
+# into ``src.risk.risk_manager`` for ``RiskManager`` — a circular import
+# cycle when ``src.risk`` is the first package loaded (e.g. directly via
+# ``from src.risk.risk_manager import …`` in a test module).
+#
+# We resolve the cycle by importing the aggregator module at the bottom
+# of this file, after ``RiskManager`` is fully defined, and exposing
+# ``DailyStats`` / ``DailyStatsAggregator`` at module scope for legacy
+# ``from src.risk.risk_manager import DailyStats`` callers. ``TYPE_CHECKING``
+# provides the type references for readers + static analysers.
+if TYPE_CHECKING:  # pragma: no cover
+    from src.bot.components.risk.daily_stats import (
+        DailyStats,
+        DailyStatsAggregator,
+    )
 
-@dataclass
-class DailyStats:
-    """Daily trading statistics."""
-    date: str
-    starting_balance: float
-    current_balance: float
-    trades_executed: int
-    winning_trades: int
-    losing_trades: int
-    total_pnl: float
-    total_fees: float
-    total_funding: float
-    max_drawdown: float
-    is_trading_halted: bool = False
-    halt_reason: str = ""
-    # Per-symbol tracking for per-asset risk limits
-    symbol_trades: Dict[str, int] = field(default_factory=dict)
-    symbol_pnl: Dict[str, float] = field(default_factory=dict)
-    halted_symbols: Dict[str, str] = field(default_factory=dict)
-
-    @property
-    def net_pnl(self) -> float:
-        """Net PnL after fees and funding."""
-        return self.total_pnl - self.total_fees - self.total_funding
-
-    @property
-    def return_percent(self) -> float:
-        """Return percentage for the day."""
-        if self.starting_balance == 0:
-            return 0.0
-        return (self.net_pnl / self.starting_balance) * 100
-
-    @property
-    def win_rate(self) -> float:
-        """Win rate percentage."""
-        total = self.winning_trades + self.losing_trades
-        if total == 0:
-            return 0.0
-        return (self.winning_trades / total) * 100
-
-    def to_dict(self) -> dict:
-        """Convert to dictionary."""
-        return {
-            "date": self.date,
-            "starting_balance": self.starting_balance,
-            "current_balance": self.current_balance,
-            "trades_executed": self.trades_executed,
-            "winning_trades": self.winning_trades,
-            "losing_trades": self.losing_trades,
-            "total_pnl": self.total_pnl,
-            "total_fees": self.total_fees,
-            "total_funding": self.total_funding,
-            "net_pnl": self.net_pnl,
-            "return_percent": self.return_percent,
-            "win_rate": self.win_rate,
-            "max_drawdown": self.max_drawdown,
-            "is_trading_halted": self.is_trading_halted,
-            "halt_reason": self.halt_reason,
-            "symbol_trades": self.symbol_trades,
-            "symbol_pnl": self.symbol_pnl,
-            "halted_symbols": self.halted_symbols,
-        }
+# Re-export so ``from src.risk.risk_manager import DailyStats`` keeps
+# working (existing tests + callers rely on the legacy path). The actual
+# binding happens via the deferred import at the bottom of this file.
+__all__ = ["DailyStats", "RiskManager"]
 
 
 class RiskManager:
@@ -148,13 +118,36 @@ class RiskManager:
         self._use_db = bot_config_id is not None and _db_available
 
         self.trade_logger = TradeLogger()
-        self._daily_stats: Optional[DailyStats] = None
+        # DailyStats aggregation is owned by ``DailyStatsAggregator`` —
+        # this façade forwards ``initialize_day`` / ``get_daily_stats`` /
+        # the counter-mutation side of record_trade_entry/exit. The
+        # persistence + trade-logger + halt-on-loss orchestration stays
+        # here until PR-6 (TradeGate) and PR-7 (RiskStatePersistence).
+        self._daily_stats_aggregator = DailyStatsAggregator()
         # Note: record_trade_entry/exit are synchronous with no await points,
         # so they are safe under asyncio's single-threaded model without a lock.
         # Per-symbol locks in BotWorker prevent concurrent calls for the same symbol.
         #
         # Stats are loaded from DB via load_stats_from_db() after async init,
         # not from __init__ (no blocking file I/O).
+
+    # ------------------------------------------------------------------
+    # DailyStats snapshot proxy — all legacy reads/writes of
+    # ``self._daily_stats`` are forwarded to the aggregator. A setter is
+    # kept for test harnesses that assign ``rm._daily_stats = None`` to
+    # force an uninitialised state between assertions.
+    # ------------------------------------------------------------------
+    @property
+    def _daily_stats(self) -> Optional[DailyStats]:
+        return self._daily_stats_aggregator.get_daily_stats()
+
+    @_daily_stats.setter
+    def _daily_stats(self, value: Optional[DailyStats]) -> None:
+        if value is None:
+            # Rebuild the aggregator so ``get_daily_stats()`` returns None.
+            self._daily_stats_aggregator = DailyStatsAggregator()
+        else:
+            self._daily_stats_aggregator.hydrate(value)
 
     def _save_daily_stats(self) -> None:
         """Schedule an async DB write for current daily stats.
@@ -224,13 +217,15 @@ class RiskManager:
                 row = result.scalar_one_or_none()
                 if row:
                     data = json.loads(row.stats_json)
-                    for key in ("net_pnl", "return_percent", "win_rate"):
-                        data.pop(key, None)
-                    self._daily_stats = DailyStats(**data)
+                    # Strip @property computed fields before DailyStats(**data);
+                    # without this the dataclass constructor raises on the
+                    # ``net_pnl`` / ``return_percent`` / ``win_rate`` keys.
+                    stats = DailyStatsAggregator.hydrate_from_dict(data)
+                    self._daily_stats_aggregator.hydrate(stats)
                     logger.info(
                         "Loaded risk stats from DB: %d trades, PnL: $%.2f",
-                        self._daily_stats.trades_executed,
-                        self._daily_stats.net_pnl,
+                        stats.trades_executed,
+                        stats.net_pnl,
                     )
         except Exception as e:
             logger.warning("Failed to load risk stats from DB: %s", e)
@@ -256,7 +251,7 @@ class RiskManager:
 
     def initialize_day(self, starting_balance: float) -> DailyStats:
         """
-        Initialize a new trading day.
+        Initialize a new trading day. Delegates to ``DailyStatsAggregator``.
 
         Args:
             starting_balance: Account balance at start of day
@@ -264,30 +259,18 @@ class RiskManager:
         Returns:
             DailyStats for the new day
         """
+        existing = self._daily_stats_aggregator.get_daily_stats()
         today = datetime.now().strftime("%Y-%m-%d")
+        is_new_day = existing is None or existing.date != today
 
-        # Check if we already have stats for today
-        if self._daily_stats and self._daily_stats.date == today:
-            logger.info(f"Day already initialized. Trades: {self._daily_stats.trades_executed}")
-            return self._daily_stats
+        stats = self._daily_stats_aggregator.initialize_day(starting_balance)
 
-        self._daily_stats = DailyStats(
-            date=today,
-            starting_balance=starting_balance,
-            current_balance=starting_balance,
-            trades_executed=0,
-            winning_trades=0,
-            losing_trades=0,
-            total_pnl=0.0,
-            total_fees=0.0,
-            total_funding=0.0,
-            max_drawdown=0.0,
-        )
+        # Only persist on a genuinely new/replaced snapshot — same-day
+        # idempotent returns skip the DB write (no state mutation).
+        if is_new_day:
+            self._save_daily_stats()
 
-        self._save_daily_stats()
-        logger.info(f"Initialized new trading day with balance: ${starting_balance:,.2f}")
-
-        return self._daily_stats
+        return stats
 
     def get_dynamic_loss_limit(self, symbol: Optional[str] = None) -> Optional[float]:
         """
@@ -469,15 +452,13 @@ class RiskManager:
         Returns:
             True if recorded successfully
         """
-        if not self._daily_stats:
-            logger.error("Daily stats not initialized!")
+        # Delegate counter mutation to the aggregator. Returns False
+        # (and logs an error) if stats were not initialised — matches
+        # the legacy safety path.
+        if not self._daily_stats_aggregator.record_entry(symbol):
             return False
 
-        # Update trade counts (global + per-symbol)
-        self._daily_stats.trades_executed += 1
-        self._daily_stats.symbol_trades[symbol] = self._daily_stats.symbol_trades.get(symbol, 0) + 1
-
-        # Log the trade
+        # Log the trade (façade-side side effect — not aggregator's job).
         self.trade_logger.log_trade_entry(
             symbol=symbol,
             side=side,
@@ -490,7 +471,8 @@ class RiskManager:
         )
 
         self._save_daily_stats()
-        symbol_count = self._daily_stats.symbol_trades[symbol]
+        stats = self._daily_stats_aggregator.get_daily_stats()
+        symbol_count = stats.symbol_trades[symbol]
         limit_str = str(self.max_trades) if self.max_trades is not None else "∞"
         logger.info(f"Trade entry recorded. {symbol}: {symbol_count}/{limit_str} trades today")
 
@@ -525,28 +507,20 @@ class RiskManager:
         Returns:
             True if recorded successfully
         """
-        if not self._daily_stats:
-            logger.error("Daily stats not initialized!")
+        # Delegate PnL + counter mutation to the aggregator. Returns
+        # ``None`` (and logs an error) if stats were not initialised.
+        exit_result = self._daily_stats_aggregator.record_exit(
+            symbol=symbol,
+            side=side,
+            size=size,
+            entry_price=entry_price,
+            exit_price=exit_price,
+            fees=fees,
+            funding_paid=funding_paid,
+        )
+        if exit_result is None:
             return False
-
-        from src.bot.pnl import calculate_pnl
-        pnl, pnl_percent = calculate_pnl(side, entry_price, exit_price, size)
-
-        # Update stats (global + per-symbol)
-        self._daily_stats.total_pnl += pnl
-        self._daily_stats.total_fees += fees
-        self._daily_stats.total_funding += funding_paid
-        self._daily_stats.current_balance += (pnl - fees - funding_paid)
-        self._daily_stats.symbol_pnl[symbol] = self._daily_stats.symbol_pnl.get(symbol, 0.0) + pnl
-
-        if pnl > 0:
-            self._daily_stats.winning_trades += 1
-        else:
-            self._daily_stats.losing_trades += 1
-
-        # Update max drawdown
-        current_drawdown = abs(min(0, self._daily_stats.return_percent))
-        self._daily_stats.max_drawdown = max(self._daily_stats.max_drawdown, current_drawdown)
+        pnl, pnl_percent = exit_result
 
         # Log the trade
         self.trade_logger.log_trade_exit(
@@ -677,3 +651,16 @@ class RiskManager:
             "max_drawdown": max_dd,
             "sharpe_estimate": sharpe,
         }
+
+
+# ---------------------------------------------------------------------------
+# Deferred import of the DailyStats aggregator — see the import-cycle
+# rationale at the top of the module. By now ``RiskManager`` is fully
+# defined, so when this import triggers ``src.bot.__init__`` →
+# ``BotWorker`` → ``from src.risk.risk_manager import RiskManager``, the
+# symbol is already bound.
+# ---------------------------------------------------------------------------
+from src.bot.components.risk.daily_stats import (  # noqa: E402
+    DailyStats,
+    DailyStatsAggregator,
+)

@@ -13,6 +13,7 @@ lives here today. No behaviour change. See the Phase 0/1/2 split in
 the issue for details.
 """
 from src.bot.components.risk.alert_throttler import AlertThrottler
+from src.bot.components.risk.daily_stats import DailyStats, DailyStatsAggregator
 from src.bot.components.risk.protocols import (
     AlertThrottlerProtocol,
     DailyStatsAggregatorProtocol,
@@ -28,4 +29,6 @@ __all__ = [
     "RiskStatePersistenceProtocol",
     "RiskComponentDeps",
     "AlertThrottler",
+    "DailyStats",
+    "DailyStatsAggregator",
 ]

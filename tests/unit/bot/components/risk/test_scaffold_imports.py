@@ -31,8 +31,6 @@ class TestPackageImports:
     def test_all_symbols_exported(self):
         from src.bot.components.risk import __all__ as exported
 
-        # Protocols + deps from Phase 0 always exported. Phase 1 PRs add
-        # the concrete component symbols as they land (PR-4: AlertThrottler).
         protocol_symbols = {
             "DailyStatsAggregatorProtocol",
             "TradeGateProtocol",
