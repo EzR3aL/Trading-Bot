@@ -101,7 +101,7 @@ def test_can_trade_global_trade_limit_increments_block_max_trades():
     rm.initialize_day(starting_balance=1000.0)
     # Force the limit to be hit without going through record_trade_entry
     # (that would also persist stats — irrelevant for this check).
-    rm._daily_stats.trades_executed = 2
+    rm._daily_stats_aggregator.get_daily_stats().trades_executed = 2
 
     before = _counter_value(
         RISK_TRADE_GATE_DECISIONS_TOTAL, bot_id="7", decision="block_max_trades"
@@ -133,7 +133,7 @@ def test_can_trade_global_loss_limit_increments_block_daily_loss():
     )
     rm.initialize_day(starting_balance=1000.0)
     # Simulate a realized loss that pushes us past the loss limit.
-    rm._daily_stats.total_pnl = -30.0  # -3.0% of 1000
+    rm._daily_stats_aggregator.get_daily_stats().total_pnl = -30.0  # -3.0% of 1000
 
     before = _counter_value(
         RISK_TRADE_GATE_DECISIONS_TOTAL, bot_id="13", decision="block_daily_loss"
@@ -164,7 +164,7 @@ def test_can_trade_symbol_trade_limit_increments_block_max_trades_symbol():
         bot_config_id=55,
     )
     rm.initialize_day(starting_balance=1000.0)
-    rm._daily_stats.symbol_trades["BTCUSDT"] = 1
+    rm._daily_stats_aggregator.get_daily_stats().symbol_trades["BTCUSDT"] = 1
 
     before = _counter_value(
         RISK_TRADE_GATE_DECISIONS_TOTAL,
@@ -200,7 +200,7 @@ def test_can_trade_symbol_loss_limit_increments_block_daily_loss_symbol():
     )
     rm.initialize_day(starting_balance=1000.0)
     # -3% on BTC specifically — exceeds the 2% per-symbol limit.
-    rm._daily_stats.symbol_pnl["BTCUSDT"] = -30.0
+    rm._daily_stats_aggregator.get_daily_stats().symbol_pnl["BTCUSDT"] = -30.0
 
     before = _counter_value(
         RISK_TRADE_GATE_DECISIONS_TOTAL,
@@ -234,8 +234,8 @@ def test_can_trade_after_global_halt_increments_block_global_halted():
         bot_config_id=99,
     )
     rm.initialize_day(starting_balance=1000.0)
-    rm._daily_stats.is_trading_halted = True
-    rm._daily_stats.halt_reason = "test halt"
+    rm._daily_stats_aggregator.get_daily_stats().is_trading_halted = True
+    rm._daily_stats_aggregator.get_daily_stats().halt_reason = "test halt"
 
     before = _counter_value(
         RISK_TRADE_GATE_DECISIONS_TOTAL,
@@ -269,7 +269,7 @@ def test_can_trade_after_symbol_halt_increments_block_symbol_halted():
         bot_config_id=111,
     )
     rm.initialize_day(starting_balance=1000.0)
-    rm._daily_stats.halted_symbols["ETHUSDT"] = "manually halted"
+    rm._daily_stats_aggregator.get_daily_stats().halted_symbols["ETHUSDT"] = "manually halted"
 
     before = _counter_value(
         RISK_TRADE_GATE_DECISIONS_TOTAL,
@@ -398,7 +398,7 @@ def test_record_trade_exit_per_symbol_halt_does_not_increment_counter():
     )
     assert ok is True
     # Verify the exit-time halt actually fired so the test is meaningful.
-    assert "BTCUSDT" in rm._daily_stats.halted_symbols
+    assert "BTCUSDT" in rm._daily_stats_aggregator.get_daily_stats().halted_symbols
 
     for decision, before in snapshot.items():
         after = _counter_value(

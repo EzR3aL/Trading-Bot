@@ -548,7 +548,7 @@ async def close_position(
             # Load today's stats; if none exist we seed with the trade's
             # entry balance so record_trade_exit has a valid DailyStats.
             await risk_manager.load_stats_from_db()
-            if risk_manager._daily_stats is None:
+            if risk_manager.get_daily_stats() is None:
                 risk_manager.initialize_day(starting_balance=0.0)
         except Exception as rm_err:
             logger.warning(f"Manual close: could not build RiskManager: {rm_err}")

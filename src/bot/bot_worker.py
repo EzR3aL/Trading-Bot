@@ -141,12 +141,10 @@ class BotWorker:
 
         # Risk alert deduplication (reset daily) — AlertThrottler component
         # owns the dedupe set + last-reset timestamp + notifier dispatch.
-        # Legacy ``_risk_alerts_sent`` / ``_risk_alerts_last_reset`` attrs
-        # stay backward-compatible via properties below so existing tests
-        # (and external readers) keep working. The notifier is wired via
-        # a thunk so tests that swap ``worker._send_notification`` after
-        # construction still route through the mock.
-        # See issue #326, ARCH-H2 Phase 1 PR-4.
+        # The notifier is wired via a thunk so tests that swap
+        # ``worker._send_notification`` after construction still route
+        # through the mock.
+        # See issue #326, ARCH-H2 Phase 1 PR-4 / Phase 2 PR-8 (#339).
         async def _notification_thunk(send_fn, *, event_type, summary):
             await self._send_notification(
                 send_fn, event_type=event_type, summary=summary,
@@ -317,28 +315,6 @@ class BotWorker:
     @_pnl_alert_parsed.setter
     def _pnl_alert_parsed(self, value):
         self._ensure_monitor()._pnl_alert_parsed = value
-
-    # ── AlertThrottler backward-compat surface ──────────────────────
-    # Legacy attribute shims so callers (and characterization tests) that
-    # pre-date ARCH-H2 Phase 1 PR-4 still see ``_risk_alerts_sent`` +
-    # ``_risk_alerts_last_reset`` directly on the worker. New code should
-    # call ``self._alert_throttler`` explicitly.
-
-    @property
-    def _risk_alerts_sent(self) -> set[str]:
-        return self._alert_throttler.sent
-
-    @_risk_alerts_sent.setter
-    def _risk_alerts_sent(self, value: set[str]) -> None:
-        self._alert_throttler.sent = value
-
-    @property
-    def _risk_alerts_last_reset(self) -> datetime:
-        return self._alert_throttler.last_reset
-
-    @_risk_alerts_last_reset.setter
-    def _risk_alerts_last_reset(self, value: datetime) -> None:
-        self._alert_throttler.last_reset = value
 
     # ── PositionMonitor method forwarders ──────────────────────────────
 

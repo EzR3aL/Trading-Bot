@@ -75,7 +75,7 @@ def _prime_worker_for_summary(worker, *, stats, notify_raises=None, stats_raises
     else:
         worker._send_notification = AsyncMock()
 
-    worker._risk_alerts_sent = {"stale-global-key", "stale-per-symbol"}
+    worker._alert_throttler.sent = {"stale-global-key", "stale-per-symbol"}
     return worker
 
 
@@ -137,7 +137,7 @@ class TestSendDailySummary:
         await worker._send_daily_summary()
 
         worker._send_notification.assert_not_awaited()
-        assert worker._risk_alerts_sent == set(), \
+        assert worker._alert_throttler.sent == set(), \
             "cleanup must always run (even with zero trades)"
 
     async def test_no_notification_when_stats_is_none(self):
@@ -148,7 +148,7 @@ class TestSendDailySummary:
         await worker._send_daily_summary()
 
         worker._send_notification.assert_not_awaited()
-        assert worker._risk_alerts_sent == set()
+        assert worker._alert_throttler.sent == set()
 
     async def test_swallows_risk_manager_exception_and_still_clears_alerts(self):
         """If `get_daily_stats()` raises, the summary logs a warning and
@@ -161,7 +161,7 @@ class TestSendDailySummary:
         await worker._send_daily_summary()  # must not raise
 
         worker._send_notification.assert_not_awaited()
-        assert worker._risk_alerts_sent == set()
+        assert worker._alert_throttler.sent == set()
 
     async def test_swallows_notification_exception_and_still_clears_alerts(self):
         """Delivery failure (Discord/Telegram down) must never prevent the
@@ -175,7 +175,7 @@ class TestSendDailySummary:
         await worker._send_daily_summary()
 
         worker._send_notification.assert_awaited_once()
-        assert worker._risk_alerts_sent == set()
+        assert worker._alert_throttler.sent == set()
 
     async def test_risk_alerts_cleared_unconditionally(self):
         """Four independent paths (happy, zero-trades, None, exception) all
@@ -190,9 +190,9 @@ class TestSendDailySummary:
             worker = BotWorker(bot_config_id=1)
             _prime_worker_for_summary(worker, **kwargs)
             # seed stale keys to prove clear() actually runs
-            worker._risk_alerts_sent.update({"stale_1", "stale_2", "stale_3"})
+            worker._alert_throttler.sent.update({"stale_1", "stale_2", "stale_3"})
             await worker._send_daily_summary()
-            assert worker._risk_alerts_sent == set(), (
+            assert worker._alert_throttler.sent == set(), (
                 f"cleanup must run for path {kwargs}"
             )
 
