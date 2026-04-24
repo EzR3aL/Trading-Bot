@@ -346,10 +346,16 @@ class TestJWTConfigValidation:
         """Cover lines 44-49: JWT_SECRET_KEY too short raises RuntimeError."""
         from src.auth.jwt_handler import validate_jwt_config
 
-        with patch.dict(os.environ, {"JWT_SECRET_KEY": "short"}, clear=False):
-            with patch("src.auth.jwt_handler._get_secret_key", return_value="short"):
-                with pytest.raises(RuntimeError, match="too short"):
-                    validate_jwt_config()
+        # Clear RS256 keys so validate_jwt_config takes the HS256 branch and
+        # hits the short-key check. `_get_hs_secret` reads JWT_SECRET_KEY from
+        # the environment directly — no extra patch needed.
+        with patch.dict(
+            os.environ,
+            {"JWT_SECRET_KEY": "short", "JWT_PRIVATE_KEY": "", "JWT_PUBLIC_KEY": ""},
+            clear=False,
+        ):
+            with pytest.raises(RuntimeError, match="too short"):
+                validate_jwt_config()
 
 
 # ─── utils/encryption.py (short key) ──────────────────────────────

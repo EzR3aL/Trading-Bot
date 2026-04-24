@@ -127,14 +127,15 @@ async def test_refresh_token(client, admin_token):
     )
     assert refresh_resp.status_code == 200
 
-    body = refresh_resp.json()
-    assert "access_token" in body
-    assert body["token_type"] == "bearer"
+    # SEC-012: access_token is only in httpOnly cookie, not response body.
+    new_access = refresh_resp.cookies.get("access_token")
+    assert new_access, "Refresh should set a new access_token httpOnly cookie"
+    assert refresh_resp.json()["token_type"] == "bearer"
 
     # The new access token should work on a protected endpoint.
     me_resp = await client.get(
         "/api/auth/me",
-        headers=auth_header(body["access_token"]),
+        headers=auth_header(new_access),
     )
     assert me_resp.status_code == 200
     assert me_resp.json()["username"] == "admin"

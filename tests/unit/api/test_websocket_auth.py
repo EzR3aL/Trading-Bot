@@ -65,9 +65,17 @@ def test_app(monkeypatch):
             )
             await session.commit()
 
+    # pytest-asyncio 1.x auto mode leaves no default loop on the MainThread,
+    # so `asyncio.get_event_loop()` raises. Create and drive a dedicated loop
+    # for this synchronous fixture's async setup/teardown work instead.
     import asyncio as _asyncio
 
-    _asyncio.get_event_loop().run_until_complete(_init())
+    loop = _asyncio.new_event_loop()
+    try:
+        loop.run_until_complete(_init())
+    except BaseException:
+        loop.close()
+        raise
 
     # Point the application session module at our test DB so the
     # endpoint's ``async with get_session()`` uses it.
@@ -86,7 +94,10 @@ def test_app(monkeypatch):
 
     yield app
 
-    _asyncio.get_event_loop().run_until_complete(engine.dispose())
+    try:
+        loop.run_until_complete(engine.dispose())
+    finally:
+        loop.close()
 
 
 @pytest.fixture
