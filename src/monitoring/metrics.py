@@ -16,6 +16,45 @@ APP_INFO = Info("trading_bot", "Trading Bot application info")
 # dedicated CollectorRegistry (#337 removed the legacy middleware that
 # wrote to the default registry here).
 
+# Runtime feature flag state (#338, follows up #327 PR-3).
+# One time series per registered flag in ``config.feature_flags.FEATURE_FLAGS``;
+# 1 = enabled, 0 = disabled. Populated in the FastAPI lifespan on startup so
+# ops can render a single Grafana panel showing which flags are currently live.
+APP_FEATURE_FLAGS = Gauge(
+    "app_feature_flags",
+    "Runtime feature flag state (1=enabled, 0=disabled)",
+    ["flag"],
+)
+
+
+def publish_feature_flag_gauge(flags=None, registry=None) -> None:
+    """Publish the current runtime feature-flag state to Prometheus.
+
+    Iterates over every flag in ``config.feature_flags.FEATURE_FLAGS`` and
+    emits ``1`` if enabled, ``0`` if disabled on the ``APP_FEATURE_FLAGS``
+    gauge. Extracted from the FastAPI lifespan so the block is reachable
+    from unit tests without spinning up the DB/orchestrator (#338).
+
+    Args:
+        flags: Iterable of ``FeatureFlag`` entries. Defaults to the module
+            registry ``config.feature_flags.FEATURE_FLAGS``.
+        registry: ``FeatureFlagRegistry`` used to resolve each flag's
+            current bool value. Defaults to the module-level singleton
+            ``config.feature_flags.feature_flags``.
+    """
+    # Lazy imports so importing this module at test collection time
+    # does not pull the Settings graph (and .env).
+    from config.feature_flags import FEATURE_FLAGS as _REGISTRY_FLAGS
+    from config.feature_flags import feature_flags as _registry_singleton
+
+    entries = _REGISTRY_FLAGS if flags is None else flags
+    resolver = _registry_singleton if registry is None else registry
+
+    for flag in entries:
+        APP_FEATURE_FLAGS.labels(flag=flag.name).set(
+            1 if resolver.get(flag.name) else 0
+        )
+
 # Bot metrics
 BOTS_RUNNING = Gauge("bots_running_total", "Number of currently running bots")
 BOTS_BY_STATUS = Gauge("bots_by_status", "Bots grouped by status", ["status"])
