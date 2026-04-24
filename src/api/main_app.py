@@ -214,7 +214,7 @@ async def lifespan(app: FastAPI):
 
     # Start Prometheus bot-metrics collector
     from src.monitoring.collectors import collect_bot_metrics
-    from src.monitoring.metrics import APP_INFO
+    from src.monitoring.metrics import APP_INFO, publish_feature_flag_gauge
 
     APP_INFO.info({"version": "3.0.0", "environment": environment})
 
@@ -229,6 +229,12 @@ async def lifespan(app: FastAPI):
         ).set(1)
     except Exception:  # pragma: no cover — observability must never block boot
         logger.debug("APP_BUILD_COMMIT gauge init failed", exc_info=True)
+
+    # #338: publish runtime feature-flag state as a Prometheus gauge so
+    # ops can see at a glance which flags are live on the current pod.
+    # One label per entry in config.feature_flags.FEATURE_FLAGS; values
+    # are strictly 0 or 1 — follows up #327 PR-3.
+    publish_feature_flag_gauge()
 
     collector_task = asyncio.create_task(collect_bot_metrics(app))
 

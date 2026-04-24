@@ -204,6 +204,57 @@ Aktuell enthalten:
   `ssh -L 3000:127.0.0.1:3000 trading-bot`.
 - Labels enthalten bewusst **keine** PII (siehe PR-1 Security-Notes).
 
+### `app_feature_flags` Gauge (#338)
+
+Seit Issue #338 publiziert der Bot beim Start der FastAPI-Lifespan fuer
+jedes in `config/feature_flags.py` registrierte Flag eine eigene
+Zeitreihe auf dem Prometheus-Gauge `app_feature_flags`. Damit laesst
+sich auf einen Blick erkennen, welche Laufzeit-Flags auf dem aktuellen
+Pod aktiv sind — ohne SSH, ohne `.env`-Datei einsehen zu muessen.
+
+**Metric-Name:** `app_feature_flags`
+**Labels:** `flag` — der Flag-Name (z. B. `risk_state_manager_enabled`)
+**Werte:** `1` = aktiviert, `0` = deaktiviert
+
+#### PromQL-Beispiele
+
+```promql
+# Alle aktuell aktivierten Flags
+app_feature_flags == 1
+
+# Genau ein Flag pruefen
+app_feature_flags{flag="risk_state_manager_enabled"}
+
+# Zaehlen, wie viele Flags aktiv sind
+count(app_feature_flags == 1)
+```
+
+#### Grafana-Panel
+
+Empfohlen ist ein **Stat-Panel** mit einer Zeile pro Flag:
+
+1. Neues Panel → Visualization: **Stat**.
+2. Query: `app_feature_flags` (ohne Filter, damit alle Flags erscheinen).
+3. Legend: `{{flag}}` — zeigt den Flag-Namen als Titel.
+4. Value mappings:
+   - `0` → Display text `off`, color `gray`
+   - `1` → Display text `on`, color `green`
+5. Reduce-Operation: **Last (not null)**.
+
+Das Panel aktualisiert sich bei jedem Pod-Restart (Lifespan schreibt die
+Werte neu) und bei jedem Scrape-Intervall (Prometheus holt sich den
+aktuellen Gauge-Stand).
+
+#### Hinweise
+
+- Die Werte sind **strikt 0 oder 1** — keine Zwischenwerte.
+- Die Label-Liste stammt aus `FEATURE_FLAGS` in `config/feature_flags.py`.
+  Ein neu hinzugefuegtes Flag erscheint automatisch beim naechsten
+  Pod-Restart auf dem Gauge; kein Grafana-Dashboard-Update noetig.
+- Die Werte spiegeln **nicht** die `.env`-Datei direkt wider, sondern
+  den effektiven Wert auf `config.settings.settings` nach Parsing
+  (Defaults greifen, wenn die ENV-Variable nicht gesetzt ist).
+
 ---
 
 ## English
@@ -403,3 +454,55 @@ Currently shipped:
   `0.0.0.0`. Access only via SSH port forwarding:
   `ssh -L 3000:127.0.0.1:3000 trading-bot`.
 - Labels deliberately carry **no** PII (see PR-1 security notes).
+
+### `app_feature_flags` gauge (#338)
+
+Since issue #338 the bot publishes one time series per registered flag
+in `config/feature_flags.py` on the Prometheus gauge
+`app_feature_flags`, populated during FastAPI lifespan startup. Ops can
+see at a glance which runtime flags are live on the current pod — no
+SSH, no need to read the pod's `.env`.
+
+**Metric name:** `app_feature_flags`
+**Labels:** `flag` — the flag identifier (e.g. `risk_state_manager_enabled`)
+**Values:** `1` = enabled, `0` = disabled
+
+#### PromQL examples
+
+```promql
+# All currently enabled flags
+app_feature_flags == 1
+
+# Check one specific flag
+app_feature_flags{flag="risk_state_manager_enabled"}
+
+# Count how many flags are active
+count(app_feature_flags == 1)
+```
+
+#### Grafana panel
+
+Recommended: a **Stat panel** with one row per flag.
+
+1. Add panel → Visualization: **Stat**.
+2. Query: `app_feature_flags` (no filter so every flag is rendered).
+3. Legend: `{{flag}}` — shows the flag name as the tile title.
+4. Value mappings:
+   - `0` → display text `off`, color `gray`
+   - `1` → display text `on`, color `green`
+5. Reduce operation: **Last (not null)**.
+
+The panel refreshes on every pod restart (lifespan rewrites the values)
+and on every scrape interval (Prometheus pulls the current gauge
+state).
+
+#### Notes
+
+- Values are **strictly 0 or 1** — no intermediate values.
+- The label set comes from `FEATURE_FLAGS` in
+  `config/feature_flags.py`. A newly added flag shows up automatically
+  on the gauge at the next pod restart; no Grafana dashboard update is
+  needed.
+- The values do **not** mirror the `.env` file directly. They reflect
+  the effective value on `config.settings.settings` after parsing
+  (defaults apply when the env var is unset).
