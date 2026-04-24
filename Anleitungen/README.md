@@ -7,6 +7,9 @@
 | Anleitung | Beschreibung |
 |-----------|-------------|
 | [Erste Schritte: Bot & Benachrichtigungen](Anleitung%20f%C3%BCr%20den%20Bot%20%26%20Notification.md) | Komplett-Anleitung fuer Einsteiger |
+| [Bot Builder Wizard](Bot-Builder-Wizard.md) | Schritt-fuer-Schritt durch den 6-Step-Wizard |
+| [Dashboard & Builder-Fee Einnahmen](Dashboard-und-Revenue.md) | Dashboard-Seite + Revenue-Sektion erklaert |
+| [Gebuehren & PnL-Tooltip](Gebuehren-und-PnL-Tooltip.md) | Fees, Funding und PnL-Tooltip verstehen |
 | [Strategien-Uebersicht](Strategien-Uebersicht.md) | Verfuegbare Trading-Strategien im Ueberblick |
 | [Strategie-Dokumentation](Strategie-Dokumentation.md) | Vollstaendige technische Strategie-Dokumentation |
 | [Trailing-Stop & Exit-Strategie](Trailing-Stop-Exit-Strategie.md) | ATR Trailing Stop und Breakeven-Schutz |
