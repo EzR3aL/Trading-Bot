@@ -203,12 +203,29 @@ class RiskConfig:
 
 
 @dataclass
+class MonitoringConfig:
+    """Observability / monitoring feature flags (#327).
+
+    ``prometheus_enabled`` gates the ``/metrics`` endpoint exposed in
+    ``src/observability/metrics.py`` (PR-1 of #327). When off, the
+    endpoint returns 404 so that its mere existence is not leaked. When
+    on, Basic-Auth (``METRICS_BASIC_AUTH_USER`` /
+    ``METRICS_BASIC_AUTH_PASSWORD``) is required. Default off so the
+    observability rollout is opt-in.
+    """
+    prometheus_enabled: bool = field(
+        default_factory=lambda: get_env("PROMETHEUS_ENABLED", "false", bool)
+    )
+
+
+@dataclass
 class Settings:
     """Main settings container."""
     bitget: BitgetConfig = field(default_factory=BitgetConfig)
     trading: TradingConfig = field(default_factory=TradingConfig)
     strategy: StrategyConfig = field(default_factory=StrategyConfig)
     risk: RiskConfig = field(default_factory=RiskConfig)
+    monitoring: MonitoringConfig = field(default_factory=MonitoringConfig)
 
     @property
     def is_demo_mode(self) -> bool:

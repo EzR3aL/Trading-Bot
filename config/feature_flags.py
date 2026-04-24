@@ -76,6 +76,19 @@ FEATURE_FLAGS: List[FeatureFlag] = [
             "from the bot process."
         ),
     ),
+    FeatureFlag(
+        name="prometheus_enabled",
+        settings_path="monitoring.prometheus_enabled",
+        env_var="PROMETHEUS_ENABLED",
+        default=False,
+        description=(
+            "Gate for the Prometheus observability endpoint (#327 PR-1). "
+            "When off, /metrics returns 404 so its existence is not "
+            "leaked; when on, Basic-Auth (METRICS_BASIC_AUTH_USER / "
+            "METRICS_BASIC_AUTH_PASSWORD) is required and the central "
+            "registry in src/observability/metrics.py is served."
+        ),
+    ),
 ]
 
 

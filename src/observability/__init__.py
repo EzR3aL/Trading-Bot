@@ -1,0 +1,56 @@
+"""Observability package (#327).
+
+Central registry and metric definitions for the Prometheus observability
+rollout. PR-1 lands definitions + a flag-gated ``/metrics`` endpoint only;
+``.inc()`` / ``.observe()`` / ``.set()`` call sites are added in PR-2..4.
+"""
+
+from src.observability.metrics import (
+    CONTENT_TYPE_LATEST,
+    REGISTRY,
+    # HTTP
+    HTTP_REQUESTS_TOTAL,
+    HTTP_REQUEST_DURATION_SECONDS,
+    HTTP_REQUESTS_IN_FLIGHT,
+    # Bot
+    BOT_SIGNALS_GENERATED_TOTAL,
+    BOT_TRADES_EXECUTED_TOTAL,
+    BOT_TRADE_EXECUTION_DURATION_SECONDS,
+    BOT_POSITION_MONITOR_TICK_DURATION_SECONDS,
+    BOT_OPEN_POSITIONS,
+    BOT_DAILY_PNL,
+    # Risk
+    RISK_TRADE_GATE_DECISIONS_TOTAL,
+    RISK_ALERTS_EMITTED_TOTAL,
+    # Exchange
+    EXCHANGE_API_REQUESTS_TOTAL,
+    EXCHANGE_API_REQUEST_DURATION_SECONDS,
+    EXCHANGE_WEBSOCKET_CONNECTED,
+    # System
+    APP_BUILD_COMMIT,
+    APP_FEATURE_FLAGS,
+    render_latest,
+)
+
+
+__all__ = [
+    "CONTENT_TYPE_LATEST",
+    "REGISTRY",
+    "HTTP_REQUESTS_TOTAL",
+    "HTTP_REQUEST_DURATION_SECONDS",
+    "HTTP_REQUESTS_IN_FLIGHT",
+    "BOT_SIGNALS_GENERATED_TOTAL",
+    "BOT_TRADES_EXECUTED_TOTAL",
+    "BOT_TRADE_EXECUTION_DURATION_SECONDS",
+    "BOT_POSITION_MONITOR_TICK_DURATION_SECONDS",
+    "BOT_OPEN_POSITIONS",
+    "BOT_DAILY_PNL",
+    "RISK_TRADE_GATE_DECISIONS_TOTAL",
+    "RISK_ALERTS_EMITTED_TOTAL",
+    "EXCHANGE_API_REQUESTS_TOTAL",
+    "EXCHANGE_API_REQUEST_DURATION_SECONDS",
+    "EXCHANGE_WEBSOCKET_CONNECTED",
+    "APP_BUILD_COMMIT",
+    "APP_FEATURE_FLAGS",
+    "render_latest",
+]
