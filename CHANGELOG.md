@@ -11,6 +11,9 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ## [Unreleased]
 
+### Added
+- Frontend health audit report (`Anleitungen/frontend_health_report.md`) — see #328. Inventory over 8 categories (TS strictness, API client integrity, state management, error boundaries, a11y, performance, theme+i18n, test coverage); 3 critical / 5 medium / 6 nice-to-have findings; 8 follow-up issues #329–#336 filed.
+
 ### Refactored
 - **ARCH-H1 Phase 1 finalize: `BotWorker` ist jetzt pure Composition (#285)**: `BotWorker` erbt nicht mehr von den vier historischen Mixins (`TradeExecutorMixin`, `PositionMonitorMixin`, `TradeCloserMixin`, `NotificationsMixin`) — die Klassendeklaration ist jetzt schlicht `class BotWorker:` und `BotWorker.__mro__` reduziert sich auf `(BotWorker, object)`. Alle Mixin-Methoden sind als explizite, dünne Forwarder an die Komponenten (`self._notifier`, `self._position_monitor`, `self._trade_executor`, `self._trade_closer`) inlined. Abweichung von der Issue-Spec (#285 forderte das Löschen der vier Mixin-Module): die Shim-Module `src/bot/notifications.py`, `src/bot/position_monitor.py`, `src/bot/trade_closer.py`, `src/bot/trade_executor.py` bleiben bestehen, da mehrere Test-Harnesses die Mixin-Klassen direkt importieren (`PositionMonitorMixin`, `TradeExecutorMixin` als Test-Doubles) und `tests/integration/test_manual_close_full_flow.py` Symbole auf dem `src.bot.notifications`-Modulpfad patcht. Die Composition-Invariante (MRO == `(BotWorker, object)`) ist dennoch strikt erfüllt — das Ziel des Refactors (keine Mixin-Diamant-Vererbung, keine impliziten `super()`-Hopping) ist erreicht, ohne Test-Kollateral zu erzeugen. 516 unit tests in `tests/unit/bot/`, `tests/unit/services/`, `tests/unit/api/` alle grün.
 
