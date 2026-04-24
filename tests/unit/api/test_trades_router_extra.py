@@ -509,7 +509,12 @@ async def test_trailing_stop_long_active(client, auth_headers, open_long_trailin
     """Open LONG trade with sufficient profit shows active trailing stop."""
     mock_cls = _make_mdf_mock(_mock_klines(600.0))
 
-    with patch("src.api.routers.trades.MarketDataFetcher", mock_cls):
+    # get_trade was moved to TradesService; patch both import sites so the
+    # test still intercepts the fetcher after the #325 PR-1 extraction.
+    with (
+        patch("src.api.routers.trades.MarketDataFetcher", mock_cls),
+        patch("src.services.trades_service.MarketDataFetcher", mock_cls),
+    ):
         resp = await client.get(
             f"/api/trades/{open_long_trailing.id}", headers=auth_headers
         )
@@ -528,7 +533,12 @@ async def test_trailing_stop_short_active(client, auth_headers, open_short_trail
     """Open SHORT trade with sufficient profit shows active trailing stop."""
     mock_cls = _make_mdf_mock(_mock_klines(600.0))
 
-    with patch("src.api.routers.trades.MarketDataFetcher", mock_cls):
+    # get_trade was moved to TradesService; patch both import sites so the
+    # test still intercepts the fetcher after the #325 PR-1 extraction.
+    with (
+        patch("src.api.routers.trades.MarketDataFetcher", mock_cls),
+        patch("src.services.trades_service.MarketDataFetcher", mock_cls),
+    ):
         resp = await client.get(
             f"/api/trades/{open_short_trailing.id}", headers=auth_headers
         )
@@ -570,7 +580,12 @@ async def test_trailing_stop_not_active_when_not_profitable(
 
     mock_cls = _make_mdf_mock(_mock_klines(600.0))
 
-    with patch("src.api.routers.trades.MarketDataFetcher", mock_cls):
+    # get_trade was moved to TradesService; patch both import sites so the
+    # test still intercepts the fetcher after the #325 PR-1 extraction.
+    with (
+        patch("src.api.routers.trades.MarketDataFetcher", mock_cls),
+        patch("src.services.trades_service.MarketDataFetcher", mock_cls),
+    ):
         resp = await client.get(f"/api/trades/{trade_id}", headers=auth_headers)
 
     assert resp.status_code == 200

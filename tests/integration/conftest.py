@@ -155,7 +155,8 @@ async def admin_token(client, test_db):
         json={"username": "admin", "password": "admin123456"},
     )
     if response.status_code == 200:
-        return response.json()["access_token"]
+        # SEC-012: access_token is only in the httpOnly cookie, not the body.
+        return response.cookies.get("access_token")
     return None
 
 
@@ -181,7 +182,8 @@ async def user_token(client, test_db):
         json={"username": "testuser", "password": "testpass123"},
     )
     if response.status_code == 200:
-        return response.json()["access_token"]
+        # SEC-012: access_token is only in the httpOnly cookie, not the body.
+        return response.cookies.get("access_token")
     return None
 
 

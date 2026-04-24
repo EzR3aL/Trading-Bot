@@ -930,45 +930,13 @@ class TestRateLimitingCoverage:
 
 
 # ---------------------------------------------------------------------------
-# 14. Metrics Endpoint IP Restriction
+# 14. Metrics Endpoint Security
+#
+# IP-based restriction (_is_allowed) was replaced by HTTP Basic-Auth +
+# flag-gated 404 in #327 PR-1. The new contract is covered by
+# tests/unit/observability/test_metrics_endpoint.py — this section is
+# intentionally left empty.
 # ---------------------------------------------------------------------------
-
-
-class TestMetricsIPRestriction:
-    """Verify that the /metrics endpoint enforces IP restrictions in production."""
-
-    def test_is_allowed_loopback(self):
-        """Loopback IPs are always allowed."""
-        from src.api.routers.metrics import _is_allowed
-        assert _is_allowed("127.0.0.1") is True
-        assert _is_allowed("::1") is True
-
-    def test_is_allowed_private_networks(self):
-        """Docker internal / private IPs are allowed."""
-        from src.api.routers.metrics import _is_allowed
-        assert _is_allowed("10.0.0.5") is True
-        assert _is_allowed("172.18.0.3") is True
-        assert _is_allowed("192.168.1.100") is True
-
-    def test_is_denied_public_ip(self):
-        """Public IPs without explicit allow are denied."""
-        from src.api.routers.metrics import _is_allowed
-        assert _is_allowed("8.8.8.8") is False
-        assert _is_allowed("203.0.113.50") is False
-
-    def test_is_allowed_with_env_override(self):
-        """IPs in METRICS_ALLOWED_IPS env var are allowed."""
-        from src.api.routers.metrics import _is_allowed
-        with patch.dict(os.environ, {"METRICS_ALLOWED_IPS": "8.8.8.8,203.0.113.0/24"}):
-            assert _is_allowed("8.8.8.8") is True
-            assert _is_allowed("203.0.113.50") is True
-            assert _is_allowed("1.2.3.4") is False
-
-    def test_invalid_ip_denied(self):
-        """Invalid IP strings are denied."""
-        from src.api.routers.metrics import _is_allowed
-        assert _is_allowed("not-an-ip") is False
-        assert _is_allowed("") is False
 
 
 # ---------------------------------------------------------------------------

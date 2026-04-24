@@ -1319,10 +1319,20 @@ class TestClosePositionClassifyClose:
     async def _build_mock_client(self):
         """Exchange-client double: close succeeds, position is gone afterwards."""
         mock_client = AsyncMock()
-        mock_client.close_position = AsyncMock(return_value=MagicMock())
+        close_result = MagicMock()
+        close_result.order_id = "manual_close_fill_001"
+        mock_client.close_position = AsyncMock(return_value=close_result)
         mock_client.get_position = AsyncMock(return_value=None)
         mock_client.get_close_fill_price = AsyncMock(return_value=96500.0)
         mock_client.get_ticker = AsyncMock(return_value=MagicMock(last_price=96500.0))
+        # Fee/funding fetch is awaited by the manual-close path and the
+        # awaited value is written to the DB. Without explicit numeric
+        # returns AsyncMock hands back a child mock → float() raises.
+        mock_client.get_trade_total_fees = AsyncMock(return_value=0.5)
+        mock_client.get_funding_fees = AsyncMock(return_value=0.1)
+        # calculate_builder_fee is called synchronously (no await) so it
+        # must be a plain MagicMock rather than the default AsyncMock.
+        mock_client.calculate_builder_fee = MagicMock(return_value=0.0)
         return mock_client
 
     async def test_close_position_invokes_classify_close_when_rsm_enabled(

@@ -670,10 +670,14 @@ async def test_get_trade_with_trailing_strategy_long_active_branch(
         return_value=[[0, 0, 0, 0, 0, 0]] * 30,
     )
     fetcher_mock.close = AsyncMock()
-    with patch(
-        "src.api.routers.trades.MarketDataFetcher", return_value=fetcher_mock,
-    ) as mdf_cls:
-        mdf_cls.calculate_atr = MagicMock(return_value=[200.0])
+    mdf_cls = MagicMock(return_value=fetcher_mock)
+    mdf_cls.calculate_atr = MagicMock(return_value=[200.0])
+    # get_trade was moved to TradesService; patch both import sites so the
+    # test still intercepts the fetcher after the #325 PR-1 extraction.
+    with (
+        patch("src.api.routers.trades.MarketDataFetcher", mdf_cls),
+        patch("src.services.trades_service.MarketDataFetcher", mdf_cls),
+    ):
         resp = await client.get(f"/api/trades/{trade_id}", headers=auth_headers)
 
     assert resp.status_code == 200
@@ -736,10 +740,14 @@ async def test_get_trade_with_trailing_strategy_short_active_branch(
         return_value=[[0, 0, 0, 0, 0, 0]] * 30,
     )
     fetcher_mock.close = AsyncMock()
-    with patch(
-        "src.api.routers.trades.MarketDataFetcher", return_value=fetcher_mock,
-    ) as mdf_cls:
-        mdf_cls.calculate_atr = MagicMock(return_value=[50.0])  # atr*1.5=75 << 500
+    mdf_cls = MagicMock(return_value=fetcher_mock)
+    mdf_cls.calculate_atr = MagicMock(return_value=[50.0])  # atr*1.5=75 << 500
+    # get_trade was moved to TradesService; patch both import sites so the
+    # test still intercepts the fetcher after the #325 PR-1 extraction.
+    with (
+        patch("src.api.routers.trades.MarketDataFetcher", mdf_cls),
+        patch("src.services.trades_service.MarketDataFetcher", mdf_cls),
+    ):
         resp = await client.get(f"/api/trades/{trade_id}", headers=auth_headers)
 
     assert resp.status_code == 200
