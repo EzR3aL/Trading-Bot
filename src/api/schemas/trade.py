@@ -2,7 +2,7 @@
 
 from typing import Optional
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class TradeFilterBotOption(BaseModel):
@@ -45,6 +45,10 @@ class TradeResponse(BaseModel):
     pnl_percent: Optional[float] = None
     fees: float = 0
     funding_paid: float = 0
+    builder_fee: float = Field(
+        default=0,
+        description="Builder fee charged by Hyperliquid (USD). 0 for non-HL exchanges.",
+    )
     entry_time: str
     exit_time: Optional[str] = None
     exit_reason: Optional[str] = None

@@ -607,10 +607,13 @@ async def test_get_trade_all_fields_present(client, auth_headers, trades):
         "id", "symbol", "side", "size", "entry_price", "exit_price",
         "take_profit", "stop_loss", "leverage", "confidence", "reason",
         "status", "pnl", "pnl_percent", "fees", "funding_paid",
+        "builder_fee",
         "entry_time", "exit_time", "exit_reason", "exchange", "demo_mode",
         "bot_name", "bot_exchange",
     }
     assert expected_fields.issubset(set(data.keys()))
+    # builder_fee defaults to 0 for trades without HL builder fee (#329)
+    assert data["builder_fee"] == 0
 
 
 async def test_get_trade_open_trade_has_null_exit_fields(client, auth_headers, trades):

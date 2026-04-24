@@ -18,6 +18,7 @@ from src.api.schemas.config import (
 )
 from src.api.schemas.auth import LoginRequest, RefreshRequest
 from src.api.schemas.affiliate import AffiliateLinkUpdate
+from src.api.schemas.trade import TradeResponse
 
 
 # ---------------------------------------------------------------------------
@@ -352,3 +353,47 @@ class TestAffiliateSchemas:
         a = AffiliateLinkUpdate(affiliate_url="https://bitget.com/ref/test")
         assert a.is_active is True
         assert a.uid_required is False
+
+
+# ---------------------------------------------------------------------------
+# TradeResponse — FE/BE contract alignment (#329, from audit #328)
+# ---------------------------------------------------------------------------
+
+
+class TestTradeResponseContract:
+    """Lock in the TradeResponse fields the frontend `Trade` type depends on."""
+
+    _base = dict(
+        id=1,
+        symbol="BTCUSDT",
+        side="long",
+        size=0.01,
+        entry_price=95000.0,
+        leverage=4,
+        confidence=75,
+        reason="entry",
+        status="open",
+        entry_time="2026-04-23T12:00:00+00:00",
+    )
+
+    def test_builder_fee_defaults_to_zero(self):
+        """builder_fee is emitted with default 0 when not provided (#329)."""
+        r = TradeResponse(**self._base)
+        assert r.builder_fee == 0
+        assert "builder_fee" in r.model_dump()
+
+    def test_builder_fee_accepts_float(self):
+        """builder_fee carries the per-trade HL builder fee in USD (#329)."""
+        r = TradeResponse(**self._base, builder_fee=0.0123)
+        assert r.builder_fee == 0.0123
+
+    def test_take_profit_and_stop_loss_are_optional(self):
+        """take_profit/stop_loss are nullable — bot worker sets them post-entry."""
+        r = TradeResponse(**self._base)
+        assert r.take_profit is None
+        assert r.stop_loss is None
+
+    def test_take_profit_and_stop_loss_accept_values(self):
+        r = TradeResponse(**self._base, take_profit=97000.0, stop_loss=94000.0)
+        assert r.take_profit == 97000.0
+        assert r.stop_loss == 94000.0

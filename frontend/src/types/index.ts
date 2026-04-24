@@ -28,8 +28,8 @@ export interface Trade {
   size: number
   entry_price: number
   exit_price: number | null
-  take_profit: number
-  stop_loss: number
+  take_profit: number | null
+  stop_loss: number | null
   leverage: number
   confidence: number
   reason: string
