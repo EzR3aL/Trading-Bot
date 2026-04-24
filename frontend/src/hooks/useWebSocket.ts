@@ -31,7 +31,12 @@ export function useWebSocket(handlers: Record<string, EventHandler>) {
 
   const [status, setStatus] = useState<WebSocketStatus>('disconnected')
 
-  // Stabilise the handler map so the effect doesn't re-run on every render
+  // Stabilise the handler map so the effect doesn't re-run on every render.
+  // Excluded handlers: we intentionally key the memo on the sorted key list
+  // instead of the object identity. Callers typically pass a fresh object
+  // literal per render — including `handlers` would defeat the memo and
+  // reconnect the WebSocket on every parent render. Keying on the key-set
+  // is a deliberate "only rebuild when the SHAPE of handlers changes" policy.
   const handlerKeys = Object.keys(handlers).sort().join(',')
   const stableHandlers = useMemo(() => handlers, [handlerKeys]) // eslint-disable-line react-hooks/exhaustive-deps
 

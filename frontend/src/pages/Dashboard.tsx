@@ -92,6 +92,10 @@ export default function Dashboard() {
 
   // Sync trades once per session
   const syncTrades = useSyncTrades()
+  // Intentional: run once on mount. Excluding syncTrades — the mutation object
+  // from react-query is a new reference on every render, so including it would
+  // loop the sync. The sessionStorage guard ensures only one sync per session
+  // even if the component remounts.
   useEffect(() => {
     const syncKey = 'trades_synced'
     if (!sessionStorage.getItem(syncKey)) {

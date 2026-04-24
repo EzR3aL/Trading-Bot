@@ -92,6 +92,9 @@ export default function CopyTradingStepExchange({
   // Set the sentinel trading pair once on mount so backend validation passes.
   useEffect(() => {
     onTradingPairsChange(['__copy__'])
+    // Intentional: run once on mount. Excluding onTradingPairsChange — parent
+    // passes a fresh closure on every render, so including it would re-fire
+    // the effect on every parent render and spam the sentinel write.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 

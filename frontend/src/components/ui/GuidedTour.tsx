@@ -152,6 +152,11 @@ export default function GuidedTour({ tourId, steps, autoStart = true, onComplete
   }, [currentStep, isActive])
 
   // Escape key to close tour
+  // Excluded handleSkip: it's recreated on every render but only closes over
+  // markComplete (stable zustand setter), tourId/onComplete (props that don't
+  // change during a tour), and setCurrentStep (stable setter). Re-attaching
+  // the keydown listener on every render would be wasteful. See TODO(#336)
+  // below — a cleaner fix is to wrap handleSkip in useCallback.
   useEffect(() => {
     if (!isActive) return
     const handler = (e: KeyboardEvent) => {
@@ -159,6 +164,9 @@ export default function GuidedTour({ tourId, steps, autoStart = true, onComplete
     }
     document.addEventListener('keydown', handler)
     return () => document.removeEventListener('keydown', handler)
+    // TODO(#336): wrap handleSkip in useCallback and include it in deps
+    // instead of silencing. Risk is low today (stable closures) but the
+    // disable hides a real stale-closure hazard if handleSkip ever grows.
   }, [isActive]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleNext = () => {

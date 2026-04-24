@@ -146,6 +146,9 @@ export default function Trades() {
   // ── Sync trades on mount ────────────────────────────────────────
   const syncTrades = useSyncTrades()
   const [synced, setSynced] = useState(false)
+  // Intentional: run once on mount. Excluding syncTrades — the mutation object
+  // from react-query is a new reference on every render, so including it would
+  // trigger repeated syncs. We only want a single sync when the page opens.
   useEffect(() => {
     syncTrades.mutate(undefined, {
       onSettled: () => setSynced(true),
