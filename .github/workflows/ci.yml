@@ -50,7 +50,10 @@ jobs:
       - name: Run tests with PostgreSQL
         # Tracked by #354 — PG mode exhausts the connection pool and times out.
         # Non-blocking until #354 is resolved; SQLite run above is authoritative.
+        # Step timeout prevents the PG step from consuming the full 20-min job
+        # budget when it stalls, so the job can complete cleanly.
         continue-on-error: true
+        timeout-minutes: 5
         run: python -m pytest tests/ -q --timeout=120
         env:
           CI: true
