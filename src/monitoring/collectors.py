@@ -19,6 +19,10 @@ from src.monitoring.metrics import (
     DISK_USAGE_PERCENT,
     PROCESS_MEMORY_BYTES,
 )
+from src.observability.metrics import (
+    BOT_DAILY_PNL as OBS_BOT_DAILY_PNL,
+    BOT_OPEN_POSITIONS as OBS_BOT_OPEN_POSITIONS,
+)
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -68,6 +72,69 @@ async def _send_disk_alert(usage_percent: float) -> None:
         logger.warning("Failed to send disk alert to Discord", exc_info=True)
 
 
+async def _collect_observability_bot_gauges(workers: dict) -> None:
+    """Update the per-bot gauges on the observability registry (#327 PR-3).
+
+    Samples two facts per bot per tick:
+
+    * ``bot_open_positions{bot_id, exchange}`` — count of ``TradeRecord``
+      rows with ``status="open"`` for that bot. Pulled from the DB so the
+      gauge reflects the ground truth shared with the rest of the app.
+    * ``bot_daily_pnl{bot_id, exchange}`` — ``DailyStats.net_pnl`` from
+      the worker's own ``RiskManager``, which is already updated on every
+      trade exit.
+
+    Failures are logged at debug level and never raised — the collector
+    loop must survive a single broken worker.
+    """
+    from sqlalchemy import func, select
+
+    from src.models.database import TradeRecord
+    from src.models.session import get_session
+
+    for bot_id, worker in workers.items():
+        try:
+            cfg = getattr(worker, "_config", None)
+            exchange_label = (
+                getattr(cfg, "exchange_type", None) or "unknown"
+            )
+
+            try:
+                async with get_session() as session:
+                    result = await session.execute(
+                        select(func.count(TradeRecord.id)).where(
+                            TradeRecord.bot_config_id == bot_id,
+                            TradeRecord.status == "open",
+                        )
+                    )
+                    open_positions = int(result.scalar_one() or 0)
+            except Exception:
+                open_positions = 0
+
+            OBS_BOT_OPEN_POSITIONS.labels(
+                bot_id=str(bot_id), exchange=exchange_label,
+            ).set(open_positions)
+
+            daily_pnl = 0.0
+            rsm = getattr(worker, "_risk_manager", None)
+            if rsm is not None and hasattr(rsm, "get_daily_stats"):
+                try:
+                    stats = rsm.get_daily_stats()
+                    if stats is not None:
+                        daily_pnl = float(getattr(stats, "net_pnl", 0.0) or 0.0)
+                except Exception:
+                    daily_pnl = 0.0
+
+            OBS_BOT_DAILY_PNL.labels(
+                bot_id=str(bot_id), exchange=exchange_label,
+            ).set(daily_pnl)
+        except Exception:
+            logger.debug(
+                "observability gauge update failed for bot %s",
+                bot_id, exc_info=True,
+            )
+
+
 async def collect_bot_metrics(app) -> None:
     """Periodically update bot gauge metrics from orchestrator state."""
     while True:
@@ -93,6 +160,14 @@ async def collect_bot_metrics(app) -> None:
                     BOT_CONSECUTIVE_ERRORS.labels(str(bot_id)).set(
                         getattr(w, "_consecutive_errors", 0)
                     )
+
+                # Observability registry (#327 PR-3): per-bot open position
+                # count + current-day realised PnL. Open count comes from DB
+                # (TradeRecord, status=open), PnL from the worker's own
+                # ``_risk_manager.get_daily_stats()`` which already tracks it.
+                # Wrapped so a single broken worker doesn't starve the whole
+                # cycle.
+                await _collect_observability_bot_gauges(workers)
 
             # Process memory (cross-platform)
             try:

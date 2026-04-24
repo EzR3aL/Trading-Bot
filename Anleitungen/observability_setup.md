@@ -89,12 +89,55 @@ alte Default-Registry aus `src/monitoring/metrics.py`. Sie wird in
 einem Folge-PR entfernt, sobald kein Code sie mehr importiert —
 siehe CHANGELOG-Eintrag zu PR-2 von #327.
 
+### Bot Metrics (PR-3 von #327)
+
+Mit PR-3 emittieren die Bot-Komponenten (BotWorker, TradeExecutor,
+PositionMonitor) + der `collect_bot_metrics`-Sammler folgende Metriken
+in die Observability-Registry:
+
+| Metrik | Typ | Labels | Call-Site |
+|--------|-----|--------|-----------|
+| `bot_signals_generated_total` | Counter | `bot_id`, `exchange`, `strategy`, `side` | `BotWorker._analyze_symbol_locked` nach `generate_signal()` |
+| `bot_trades_executed_total` | Counter | `bot_id`, `exchange`, `mode`, `result` | `TradeExecutor.execute` um `place_market_order` |
+| `bot_trade_execution_duration_seconds` | Histogram | `exchange` | `TradeExecutor.execute` submit-to-ack |
+| `bot_position_monitor_tick_duration_seconds` | Histogram | `bot_id` | `PositionMonitor.monitor` pro Tick |
+| `bot_open_positions` | Gauge | `bot_id`, `exchange` | `_collect_observability_bot_gauges` (alle 15s) |
+| `bot_daily_pnl` | Gauge | `bot_id`, `exchange` | `_collect_observability_bot_gauges` (alle 15s) |
+| `app_build_commit` | Gauge (Info) | `commit` | `lifespan` bei App-Start — Wert konstant 1, Commit aus `BUILD_COMMIT` env var |
+
+**Werte der Labels:**
+
+- `side ∈ {long, short}` — neutrale Signale werden **nicht** gezählt.
+- `mode ∈ {demo, live}` — reflektiert `demo_mode` beim Order-Submit.
+- `result ∈ {success, rejected, failed}` — `success` wenn die Exchange
+  eine Order zurückgibt, `rejected` wenn sie `None` zurückgibt (z.B.
+  Mindestgröße nicht erreicht ohne Exception), `failed` wenn
+  `place_market_order` eine Exception wirft.
+- `bot_id` ist der `BotConfig.id` als String (Grafana-freundlich).
+- `exchange` ist `BotConfig.exchange_type` (`bitget`, `hyperliquid`,
+  etc.); die Sammler-Gauges fallen auf `"unknown"` zurück, wenn der
+  Worker noch keinen Config hat.
+
+**Gating:** Die Call-Sites laufen **immer** — `.inc()` / `.observe()`
+sind atomar und günstig, ein zusätzlicher Flag-Check pro Trade kostet
+mehr als der Write selbst. Die Registry selbst wird nur dann serviert,
+wenn `PROMETHEUS_ENABLED=true` gesetzt ist (der Endpoint gibt sonst
+404 zurück). Jede Metric-Emission ist in `try/except` gekapselt —
+Observability darf Trading niemals brechen.
+
+**Legacy-Parallelität:** Der alte Sammler in `src/monitoring/collectors.py`
+speist weiterhin `bots_running_total`, `bot_consecutive_errors`, etc.
+in die alte Default-Registry (`src/monitoring/metrics.py`). PR-3
+erweitert ihn, um parallel die neuen observability-Gauges
+(`bot_open_positions`, `bot_daily_pnl`) zu füllen. Die alte Registry
+wird erst in einem Folge-PR entfernt, sobald keine Dashboards sie mehr
+referenzieren.
+
 ### Status — was noch fehlt
 
-Instrumentierung der BotWorker-Komponenten (PR-3), RiskStateManager
-+ Exchange-Adapter (PR-4) und vollständiges Setup mit
-Prometheus-Scraper, Docker-Compose-Snippet und Grafana-Dashboards
-folgen in **PR-5 von #327**.
+Instrumentierung des RiskStateManagers + Exchange-Adapter (PR-4) und
+vollständiges Setup mit Prometheus-Scraper, Docker-Compose-Snippet
+und Grafana-Dashboards folgen in **PR-4/PR-5 von #327**.
 
 ---
 
@@ -182,9 +225,52 @@ registry from `src/monitoring/metrics.py`. It will be removed in a
 follow-up PR once no code imports it — see the PR-2 CHANGELOG entry
 for #327.
 
+### Bot metrics (PR-3 of #327)
+
+PR-3 wires six bot-level metrics plus the `app_build_commit` info
+gauge. They are emitted from the BotWorker / TradeExecutor /
+PositionMonitor call sites and from the `collect_bot_metrics`
+collector:
+
+| Metric | Type | Labels | Call site |
+|--------|------|--------|-----------|
+| `bot_signals_generated_total` | Counter | `bot_id`, `exchange`, `strategy`, `side` | `BotWorker._analyze_symbol_locked` after `generate_signal()` |
+| `bot_trades_executed_total` | Counter | `bot_id`, `exchange`, `mode`, `result` | `TradeExecutor.execute` around `place_market_order` |
+| `bot_trade_execution_duration_seconds` | Histogram | `exchange` | `TradeExecutor.execute` submit-to-ack |
+| `bot_position_monitor_tick_duration_seconds` | Histogram | `bot_id` | `PositionMonitor.monitor` per tick |
+| `bot_open_positions` | Gauge | `bot_id`, `exchange` | `_collect_observability_bot_gauges` (every 15 s) |
+| `bot_daily_pnl` | Gauge | `bot_id`, `exchange` | `_collect_observability_bot_gauges` (every 15 s) |
+| `app_build_commit` | Gauge (info) | `commit` | `lifespan` at app start — value always 1, commit from `BUILD_COMMIT` env var |
+
+**Label values:**
+
+- `side ∈ {long, short}` — neutral signals are **not** counted.
+- `mode ∈ {demo, live}` — reflects the `demo_mode` flag at order submit.
+- `result ∈ {success, rejected, failed}` — `success` when the exchange
+  returns an order object, `rejected` when it returns `None` (e.g.
+  below minimum size, without raising), `failed` when
+  `place_market_order` raises.
+- `bot_id` is `BotConfig.id` as a string (Grafana-friendly).
+- `exchange` is `BotConfig.exchange_type` (`bitget`, `hyperliquid`,
+  etc.); the collector gauges fall back to `"unknown"` when the worker
+  has no config attached yet.
+
+**Gating:** Call sites always run — `.inc()` / `.observe()` are atomic
+and cheap, so the per-write flag check would cost more than the write
+itself. The registry itself is only served when `PROMETHEUS_ENABLED=true`
+(the endpoint returns 404 otherwise). Every metric emission is wrapped
+in `try/except` — observability must never break trading.
+
+**Legacy parallelism:** The pre-existing collector in
+`src/monitoring/collectors.py` keeps populating `bots_running_total`,
+`bot_consecutive_errors`, etc. on the old default registry
+(`src/monitoring/metrics.py`). PR-3 extends it so the new observability
+gauges (`bot_open_positions`, `bot_daily_pnl`) are populated in
+parallel. The old registry will be removed in a follow-up PR once no
+dashboards reference it.
+
 ### Status — what is still missing
 
-Instrumentation of the BotWorker components (PR-3), RiskStateManager
-+ exchange adapters (PR-4) and the full setup with a Prometheus
-scraper, Docker-Compose snippet and Grafana dashboards arrive in
-**PR-5 of #327**.
+Instrumentation of the RiskStateManager + exchange adapters (PR-4)
+and the full setup with a Prometheus scraper, Docker-Compose snippet
+and Grafana dashboards arrive in **PR-4 / PR-5 of #327**.

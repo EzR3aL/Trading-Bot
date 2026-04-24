@@ -1174,6 +1174,22 @@ class BotWorker:
         # Generate signal
         signal = await self._strategy.generate_signal(symbol)
 
+        # Observability: count every signal the strategy produced with a
+        # concrete direction. Neutral signals are skipped so the counter
+        # measures actionable trade intent, not every strategy tick.
+        # ``.inc()`` is atomic and cheap — no flag gate needed here.
+        if signal is not None and getattr(signal.direction, "value", None) in ("long", "short"):
+            try:
+                from src.observability.metrics import BOT_SIGNALS_GENERATED_TOTAL
+                BOT_SIGNALS_GENERATED_TOTAL.labels(
+                    bot_id=str(self.bot_config_id),
+                    exchange=self._config.exchange_type,
+                    strategy=self._config.strategy_type,
+                    side=signal.direction.value,
+                ).inc()
+            except Exception:  # pragma: no cover — metrics must never break trading
+                logger.debug("bot_signals_generated_total inc failed", exc_info=True)
+
         # Check if we should trade
         should_trade, trade_reason = await self._strategy.should_trade(signal)
         if not should_trade:

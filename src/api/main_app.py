@@ -217,6 +217,19 @@ async def lifespan(app: FastAPI):
     from src.monitoring.metrics import APP_INFO
 
     APP_INFO.info({"version": "3.0.0", "environment": environment})
+
+    # Observability registry (#327 PR-3): stamp the deployed commit as an
+    # info-gauge with value 1 so Grafana can use it for build-over-build
+    # diffs. Falls back to "unknown" so the label is never empty.
+    try:
+        from src.observability.metrics import APP_BUILD_COMMIT
+
+        APP_BUILD_COMMIT.labels(
+            commit=os.getenv("BUILD_COMMIT", "unknown"),
+        ).set(1)
+    except Exception:  # pragma: no cover — observability must never block boot
+        logger.debug("APP_BUILD_COMMIT gauge init failed", exc_info=True)
+
     collector_task = asyncio.create_task(collect_bot_metrics(app))
 
     # Start Telegram interactive bot (long-polling for /status, /trades, /pnl)

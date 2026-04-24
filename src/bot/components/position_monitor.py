@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import time
 from datetime import datetime, timezone
 from typing import Any, Awaitable, Callable, Optional
 
@@ -88,6 +89,26 @@ class PositionMonitor:
 
     async def monitor(self) -> None:
         """Check open positions for this bot."""
+        # Observability: measure the full per-tick monitor body so operators
+        # can catch runaway position-check loops before they starve the
+        # scheduler. Timed in a try/finally so exception paths still
+        # contribute to the histogram.
+        _tick_start = time.perf_counter()
+        try:
+            await self._monitor_body()
+        finally:
+            try:
+                from src.observability.metrics import (
+                    BOT_POSITION_MONITOR_TICK_DURATION_SECONDS,
+                )
+                BOT_POSITION_MONITOR_TICK_DURATION_SECONDS.labels(
+                    bot_id=str(self._bot_config_id),
+                ).observe(time.perf_counter() - _tick_start)
+            except Exception:  # pragma: no cover — metrics must never break monitor
+                logger.debug("bot_position_monitor_tick_duration observe failed", exc_info=True)
+
+    async def _monitor_body(self) -> None:
+        """Inner monitor body — owned by ``monitor()`` which times it."""
         async with get_session() as session:
             from sqlalchemy import select
             result = await session.execute(

@@ -33,6 +33,7 @@ from __future__ import annotations
 import asyncio
 import json
 import re
+import time
 from datetime import datetime, timezone
 from typing import Any, Awaitable, Callable, Optional
 
@@ -290,15 +291,43 @@ class TradeExecutor:
             except Exception as pt_err:
                 logger.warning("%s [%s] Could not record pending trade: %s", log_prefix, mode_str, pt_err)
 
-            order = await client.place_market_order(
-                symbol=signal.symbol,
-                side=side,
-                size=position_size,
-                leverage=leverage,
-                take_profit=signal.target_price,
-                stop_loss=signal.stop_loss,
-                margin_mode=margin_mode,
-            )
+            # Observability: measure the exchange submit-to-ack duration and
+            # count each attempt with a result label. Wrapped tightly around
+            # ``place_market_order`` so the histogram reflects exchange
+            # latency only, not our pre-trade validation or DB bookkeeping.
+            _trade_exec_start = time.perf_counter()
+            _trade_exec_result: str = "failed"
+            try:
+                order = await client.place_market_order(
+                    symbol=signal.symbol,
+                    side=side,
+                    size=position_size,
+                    leverage=leverage,
+                    take_profit=signal.target_price,
+                    stop_loss=signal.stop_loss,
+                    margin_mode=margin_mode,
+                )
+                if order:
+                    _trade_exec_result = "success"
+                else:
+                    _trade_exec_result = "rejected"
+            finally:
+                try:
+                    from src.observability.metrics import (
+                        BOT_TRADES_EXECUTED_TOTAL,
+                        BOT_TRADE_EXECUTION_DURATION_SECONDS,
+                    )
+                    BOT_TRADE_EXECUTION_DURATION_SECONDS.labels(
+                        exchange=config.exchange_type,
+                    ).observe(time.perf_counter() - _trade_exec_start)
+                    BOT_TRADES_EXECUTED_TOTAL.labels(
+                        bot_id=str(self._bot_config_id),
+                        exchange=config.exchange_type,
+                        mode=("demo" if demo_mode else "live"),
+                        result=_trade_exec_result,
+                    ).inc()
+                except Exception:  # pragma: no cover — metrics must never break trading
+                    logger.debug("bot trade-execution metric emit failed", exc_info=True)
 
             if not order:
                 logger.error(f"{log_prefix} [{mode_str}] Failed to place order")
