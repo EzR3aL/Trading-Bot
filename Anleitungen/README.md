@@ -15,6 +15,7 @@
 | [Trailing-Stop & Exit-Strategie](Trailing-Stop-Exit-Strategie.md) | ATR Trailing Stop und Breakeven-Schutz |
 | [Risikoprofil & Kline Intervall](Risikoprofil-und-Kline-Intervall.md) | Risikoprofile und Zeitrahmen fuer Edge Indicator |
 | [Alerts einrichten](Alerts-einrichten.md) | Preis- und Signal-Alerts konfigurieren |
+| [Monitoring-Alerts (Alertmanager)](monitoring_alerts_setup.md) | Infrastruktur-Alerts per Discord/Telegram (Ops) |
 | [Telegram Benachrichtigungen](Telegram%20Benachrichtigungen%20einrichten.md) | Telegram-Bot fuer Notifications |
 | [Portfolio-Ansicht](Portfolio-View.md) | Portfolio-Dashboard nutzen |
 | [Weex Exchange Setup](Weex-Exchange-Setup.md) | Weex-Boerse anbinden |
