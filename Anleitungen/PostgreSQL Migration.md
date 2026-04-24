@@ -4,7 +4,7 @@
 
 ### Ueberblick
 
-Ab Version 3.4.0 unterstuetzt der Trading-Bot PostgreSQL als Produktionsdatenbank.
+Ab Version 3.4.0 unterstuetzen Edge Bots by Trading Department PostgreSQL als Produktionsdatenbank.
 SQLite bleibt als Fallback fuer lokale Entwicklung erhalten.
 
 **Warum PostgreSQL?**
@@ -19,7 +19,7 @@ SQLite bleibt als Fallback fuer lokale Entwicklung erhalten.
    ```bash
    docker compose up --build -d
    ```
-   Dies startet automatisch PostgreSQL + Trading-Bot. Die Datenbank wird automatisch erstellt.
+   Dies startet automatisch PostgreSQL + Edge Bots. Die Datenbank wird automatisch erstellt.
 
 2. **Admin-User erstellen:**
    ```bash
@@ -92,7 +92,7 @@ TEST_DATABASE_URL=postgresql+asyncpg://tradingbot:tradingbot_dev@localhost:5432/
 
 ### Overview
 
-Starting with version 3.4.0, the Trading Bot supports PostgreSQL as a production database.
+Starting with version 3.4.0, Edge Bots by Trading Department supports PostgreSQL as a production database.
 SQLite remains as a fallback for local development.
 
 **Why PostgreSQL?**
@@ -107,7 +107,7 @@ SQLite remains as a fallback for local development.
    ```bash
    docker compose up --build -d
    ```
-   This automatically starts PostgreSQL + Trading Bot. The database is created automatically.
+   This automatically starts PostgreSQL + Edge Bots. The database is created automatically.
 
 2. **Create admin user:**
    ```bash

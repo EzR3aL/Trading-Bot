@@ -1,8 +1,8 @@
-# Schritt-für-Schritt: Trading-Bot Integration in trading-department.com
+# Schritt-für-Schritt: Edge Bots Integration in trading-department.com
 
 ## Was ist das Ziel?
 
-Der Trading-Bot ("Edge Bots") soll über die Hauptwebsite trading-department.com erreichbar sein. Ein User loggt sich auf der Hauptseite ein und klickt auf "Trading Bots" — ein neuer Tab öffnet sich und der User ist automatisch eingeloggt im Bot-Dashboard unter `bots.trading-department.com`.
+Edge Bots by Trading Department soll über die Hauptwebsite trading-department.com erreichbar sein. Ein User loggt sich auf der Hauptseite ein und klickt auf "Trading Bots" — ein neuer Tab öffnet sich und der User ist automatisch eingeloggt im Bot-Dashboard unter `bots.trading-department.com`.
 
 ## Wichtigste Regel
 
@@ -30,7 +30,7 @@ Phase 6: Cleanup              → Aufräumen und Sicherheitsprüfung
 
 ### Was passiert hier?
 
-Der Trading-Bot läuft aktuell unter `trading-department.duckdns.org`. Wir richten eine professionelle Subdomain ein: `bots.trading-department.com`. Das ist wie eine neue Adresse für den gleichen Server.
+Edge Bots läuft aktuell unter `trading-department.duckdns.org`. Wir richten eine professionelle Subdomain ein: `bots.trading-department.com`. Das ist wie eine neue Adresse für den gleichen Server.
 
 ### Schritt 0.1: DNS-Eintrag bei GoDaddy
 
@@ -136,7 +136,7 @@ curl -I https://bots.trading-department.com/api/health
 
 Das ist das Herzstück der Integration. Wir bauen eine "Brücke" zwischen zwei Login-Systemen:
 - **Hauptseite:** Supabase Auth (Google Login, Email/Passwort)
-- **Trading-Bot:** Eigenes JWT-System (Username/Passwort)
+- **Edge Bots:** Eigenes JWT-System (Username/Passwort)
 
 Die Brücke funktioniert so: Die Hauptseite gibt dem User einen "Einmal-Code" (wie ein Zugticket), und der Bot akzeptiert dieses Ticket und lässt den User rein.
 
@@ -546,13 +546,13 @@ Push zu "main" Branch
 
 ---
 
-# Step-by-Step: Trading-Bot Integration into trading-department.com
+# Step-by-Step: Edge Bots Integration into trading-department.com
 
 (English version — see German section above for detailed explanations)
 
 ## Goal
 
-Make the Trading Bot accessible via `bots.trading-department.com` with seamless SSO login from the main website `trading-department.com`.
+Make Edge Bots by Trading Department accessible via `bots.trading-department.com` with seamless SSO login from the main website `trading-department.com`.
 
 ## Golden Rule
 

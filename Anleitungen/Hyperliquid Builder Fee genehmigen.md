@@ -1,5 +1,41 @@
 # Hyperliquid: Affiliate Link & Builder Fee genehmigen
 
+---
+
+## Changelog / Aenderungshinweis
+
+### Deutsch
+
+**Stand 2026-03-17 — Hyperliquid Fixes:**
+
+- **Builder-Fee-Berechnung korrigiert:** Die Builder Fee wurde zuvor 10x zu hoch
+  berechnet. Das ist seit dem 2026-03-17 behoben — es gilt jetzt die korrekte
+  Rate von 0.01% (1 Basispunkt) pro Trade.
+- **Referral-Gate verschaerft:** Die Verifizierung prueft jetzt, ob du dich
+  ueber **unseren konkret konfigurierten Affiliate-Code** registriert hast.
+  Frueher wurde bereits jeder beliebige Referral-Code akzeptiert.
+- **Wallet-Wechsel setzt Flags zurueck:** Wenn du deine Hyperliquid-Wallet in
+  den Exchange-Einstellungen aenderst, werden beide Approval-Flags (Affiliate +
+  Builder Fee) jetzt **automatisch zurueckgesetzt**. Der Genehmigen-Dialog
+  erscheint beim naechsten Bot-Start erneut fuer die neue Wallet.
+
+### English
+
+**As of 2026-03-17 — Hyperliquid Fixes:**
+
+- **Builder fee calculation fixed:** The builder fee was previously calculated
+  10x too high. This was fixed on 2026-03-17 — the correct rate of 0.01%
+  (1 basis point) per trade now applies.
+- **Referral gate tightened:** Verification now checks that you registered via
+  **our specifically configured affiliate code**. Previously any referral code
+  was accepted.
+- **Wallet change resets flags:** When you change your Hyperliquid wallet in
+  the exchange settings, both approval flags (affiliate + builder fee) are now
+  **automatically reset**. The approval dialog will reappear on the next bot
+  start for the new wallet.
+
+---
+
 ## Uebersicht
 
 Bevor du einen Hyperliquid Bot starten kannst, sind **zwei einmalige Schritte** noetig:

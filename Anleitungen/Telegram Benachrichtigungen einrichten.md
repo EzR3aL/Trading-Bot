@@ -1,6 +1,6 @@
 # Telegram Benachrichtigungen einrichten
 
-Eine Schritt-für-Schritt Anleitung zum Einrichten von Telegram-Benachrichtigungen für deinen Trading Bot.
+Eine Schritt-für-Schritt Anleitung zum Einrichten von Telegram-Benachrichtigungen für deine Edge Bots.
 
 ---
 
@@ -19,7 +19,7 @@ Eine Schritt-für-Schritt Anleitung zum Einrichten von Telegram-Benachrichtigung
 
 ## 1. Was sind Telegram-Benachrichtigungen?
 
-Dein Trading Bot kann dich per Telegram über wichtige Ereignisse informieren:
+Dein Edge Bot kann dich per Telegram über wichtige Ereignisse informieren:
 
 - **Trade eröffnet** — Symbol, Richtung, Einstiegspreis, Hebel
 - **Trade geschlossen** — Gewinn/Verlust, Dauer

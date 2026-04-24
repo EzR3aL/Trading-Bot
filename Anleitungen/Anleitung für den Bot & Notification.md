@@ -24,7 +24,7 @@ Eine einfache Schritt-für-Schritt Anleitung für Einsteiger.
 
 ## 1. Was macht dieser Bot?
 
-Der Bitget Trading Bot ist ein automatisierter Handelsassistent für Kryptowährungen. Er:
+**Edge Bots by Trading Department** ist ein automatisierter Handelsassistent für Kryptowährungen. Er:
 
 - **Analysiert den Markt** automatisch (Bitcoin, Ethereum)
 - **Erkennt Handelssignale** basierend auf Marktdaten
@@ -679,7 +679,7 @@ Bei Problemen:
 
 ### Kein Anlageberatung
 
-Dieser Trading Bot und alle zugehörigen Materialien (Dashboard, Strategien, Dokumentation) stellen **keine Anlageberatung, Finanzberatung oder Handelsempfehlung** dar. Die Verwendung erfolgt ausschließlich auf eigene Verantwortung.
+Edge Bots und alle zugehörigen Materialien (Dashboard, Strategien, Dokumentation) stellen **keine Anlageberatung, Finanzberatung oder Handelsempfehlung** dar. Die Verwendung erfolgt ausschließlich auf eigene Verantwortung.
 
 ### Risiken des Krypto-Handels
 
@@ -713,4 +713,4 @@ Die Entwickler und Betreiber dieses Bots übernehmen **keine Haftung** für:
 
 ---
 
-*Viel Erfolg mit dem Trading Bot!*
+*Viel Erfolg mit Edge Bots!*

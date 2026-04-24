@@ -4,7 +4,7 @@
 
 ### Übersicht
 
-Der Trading-Bot nutzt **Feature Flags**, um neue oder riskante Code-Pfade
+Edge Bots by Trading Department nutzt **Feature Flags**, um neue oder riskante Code-Pfade
 schrittweise auszurollen. Ein Flag ist eine Umgebungsvariable in der
 `.env`-Datei auf dem Server, die beim Container-Start gelesen wird. Ist
 das Flag aus (Default), läuft der Bot im bewährten Verhalten — ist es an,
@@ -142,7 +142,7 @@ if settings.risk.mein_neues_flag:
 
 ### Overview
 
-The Trading Bot uses **feature flags** to roll out new or risky code
+Edge Bots by Trading Department uses **feature flags** to roll out new or risky code
 paths gradually. A flag is an environment variable in the server's
 `.env` file, read at container start. When the flag is off (default),
 the bot runs the proven behaviour — when it's on, the new code path

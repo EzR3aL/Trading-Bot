@@ -1,6 +1,6 @@
 # Weex Exchange Setup
 
-Anleitung zur Einrichtung der Weex Exchange im Trading Bot.
+Anleitung zur Einrichtung der Weex Exchange in Edge Bots by Trading Department.
 
 ---
 
@@ -17,7 +17,7 @@ Anleitung zur Einrichtung der Weex Exchange im Trading Bot.
 
 ## 1. Ueberblick
 
-**Weex** ist eine Krypto-Futures-Exchange, die im Trading Bot neben Bitget, Hyperliquid, Bitunix und BingX unterstuetzt wird.
+**Weex** ist eine Krypto-Futures-Exchange, die in Edge Bots neben Bitget, Hyperliquid, Bitunix und BingX unterstuetzt wird.
 
 ### Weex im Vergleich
 
@@ -220,13 +220,13 @@ grep -i "weex" logs/trading_bot.log
 
 # Weex Exchange Setup (English)
 
-Guide for setting up the Weex exchange in the Trading Bot.
+Guide for setting up the Weex exchange in Edge Bots by Trading Department.
 
 ---
 
 ## Overview
 
-**Weex** is a crypto futures exchange supported in the Trading Bot alongside Bitget, Hyperliquid, Bitunix, and BingX.
+**Weex** is a crypto futures exchange supported in Edge Bots alongside Bitget, Hyperliquid, Bitunix, and BingX.
 
 | Feature | Weex | Bitget | Hyperliquid | Bitunix | BingX |
 |---------|------|--------|-------------|---------|-------|
