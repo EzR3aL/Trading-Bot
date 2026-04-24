@@ -23,9 +23,8 @@ trade-logger side effects continue to live here until PR-7
 
 from __future__ import annotations
 
-import json
 import os
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import TYPE_CHECKING, Optional, Dict, List
 
 from src.utils.logger import get_logger, TradeLogger

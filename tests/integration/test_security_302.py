@@ -17,7 +17,7 @@ Endpoints under test:
 """
 
 import logging
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import MagicMock
 
 import pytest
 

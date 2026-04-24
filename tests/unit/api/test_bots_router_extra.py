@@ -1828,7 +1828,6 @@ class TestSymbolConflictBlocking:
 
     async def test_conflict_check_case_insensitive(self, factory, admin_user, mock_request):
         """btcusdt from the request must collide with stored BTCUSDT."""
-        from fastapi import HTTPException
 
         async with factory() as session:
             session.add(BotConfig(

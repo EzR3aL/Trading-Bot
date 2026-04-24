@@ -11,6 +11,9 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ## [Unreleased]
 
+### Fixed
+- **ci(lint): resolve pre-existing ruff violations blocking `lint` job (#345)** — 16× F401 unused imports removed across `src/api/middleware/metrics.py`, `src/api/routers/config_exchange.py`, `src/bot/components/risk/alert_throttler.py`, `src/exchanges/hyperliquid/client.py`, `src/risk/risk_manager.py`, `src/observability/metrics.py` (kept `CONTENT_TYPE_LATEST` with `# noqa: F401` — re-exported from `src/observability/__init__.py`), plus several test files. 2× E702 semicolon one-liners in `tests/unit/bot/test_risk_state_manager_characterization.py:474,744` split into two-statement lines. 1× F821 `Any` undefined in `tests/unit/services/test_bots_service.py:822` — added `from typing import Any`. Smoke-tested all import chains (`from src.api.main_app import app` clean). 129 tests across the touched modules pass. CI `lint` job now green; follow-up issue #346 tracks the separate `alembic-check` duplicate-025 failure.
+
 ### Added
 - Frontend health audit report (`Anleitungen/frontend_health_report.md`) — see #328. Inventory over 8 categories (TS strictness, API client integrity, state management, error boundaries, a11y, performance, theme+i18n, test coverage); 3 critical / 5 medium / 6 nice-to-have findings; 8 follow-up issues #329–#336 filed.
 ### Fixed

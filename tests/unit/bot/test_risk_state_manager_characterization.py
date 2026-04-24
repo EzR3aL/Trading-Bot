@@ -471,7 +471,8 @@ class TestAlertThrottlerDedupe:
         worker._config.trading_pairs = '["BTCUSDT"]'
         worker._send_notification = AsyncMock()
         worker._client = MagicMock()
-        bal = MagicMock(); bal.available = 1_000
+        bal = MagicMock()
+        bal.available = 1_000
         worker._client.get_account_balance = AsyncMock(return_value=bal)
         worker._calculate_asset_budgets = MagicMock(return_value={"BTCUSDT": 1_000})
         worker._analyze_symbol = AsyncMock()
@@ -741,7 +742,8 @@ class TestExceptionSwallowContracts:
             side_effect=[RuntimeError("discord 500"), None],
         )
         worker._client = MagicMock()
-        bal = MagicMock(); bal.available = 1_000
+        bal = MagicMock()
+        bal.available = 1_000
         worker._client.get_account_balance = AsyncMock(return_value=bal)
         worker._calculate_asset_budgets = MagicMock(
             return_value={"BTCUSDT": 500, "ETHUSDT": 500},

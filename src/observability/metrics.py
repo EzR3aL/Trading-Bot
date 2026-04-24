@@ -38,7 +38,7 @@ series per metric" guidance:
 from __future__ import annotations
 
 from prometheus_client import (
-    CONTENT_TYPE_LATEST,
+    CONTENT_TYPE_LATEST,  # noqa: F401 — re-exported via src/observability/__init__.py
     CollectorRegistry,
     Counter,
     Gauge,
