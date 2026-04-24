@@ -56,7 +56,6 @@ after the downstream app.
 from __future__ import annotations
 
 import time
-from typing import Awaitable, Callable
 
 from starlette.routing import Match
 from starlette.types import ASGIApp, Message, Receive, Scope, Send

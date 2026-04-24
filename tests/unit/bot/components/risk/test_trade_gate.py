@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import pytest
 
-from src.bot.components.risk.daily_stats import DailyStats, DailyStatsAggregator
+from src.bot.components.risk.daily_stats import DailyStatsAggregator
 from src.bot.components.risk.trade_gate import TradeGate
 
 

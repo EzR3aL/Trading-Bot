@@ -29,7 +29,7 @@ the Phase 1 contract tests.
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Any, Awaitable, Callable, Optional
+from typing import Awaitable, Callable, Optional
 
 from src.utils.logger import get_logger
 

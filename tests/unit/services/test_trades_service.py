@@ -59,7 +59,6 @@ from src.models.database import (  # noqa: E402
     ExchangeConnection,
     TradeRecord,
     User,
-    UserConfig,
 )
 from src.services.exceptions import (  # noqa: E402
     ExchangeConnectionMissing,

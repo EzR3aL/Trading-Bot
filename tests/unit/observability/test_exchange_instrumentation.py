@@ -28,7 +28,7 @@ import asyncio
 import os
 import sys
 from pathlib import Path
-from typing import Any, List, Optional
+from typing import Any, Optional
 from unittest.mock import patch
 
 import pytest

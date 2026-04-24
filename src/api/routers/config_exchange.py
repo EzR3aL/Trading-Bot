@@ -31,7 +31,6 @@ from src.models.session import get_db
 from src.services import config_service
 from src.services.config_service import (
     EXCHANGE_PING_URLS,
-    conn_to_response,
     get_or_create_config,
     get_user_connections,
     ping_service,

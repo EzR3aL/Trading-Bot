@@ -46,7 +46,6 @@ from src.exchanges.hyperliquid.constants import (
 from src.exchanges.hyperliquid.eip712_validator import (
     EIP712ValidationError,
     assert_builder_fee_tenths_bps,
-    assert_chain_id,
     validate_approve_builder_fee,
 )
 from src.exchanges.types import Balance, FundingRateInfo, Order, Position, Ticker
