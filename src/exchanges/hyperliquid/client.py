@@ -36,7 +36,7 @@ import asyncio
 import os
 import time
 from functools import partial
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from eth_account import Account as EthAccount
 from hyperliquid.exchange import Exchange as HLExchange
