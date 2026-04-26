@@ -67,6 +67,10 @@ vi.mock('../../../config/wallet', () => ({
   walletConfig: {},
 }))
 
+vi.mock('../../../api/hyperliquid', () => ({
+  approveBuilderFee: (...args: unknown[]) => mockApproveBuilderFee(...args),
+}))
+
 // API client: mock get and post.
 const mockGet = vi.fn()
 const mockPost = vi.fn()
@@ -78,8 +82,8 @@ vi.mock('../../../api/client', () => ({
   },
 }))
 
-// Global fetch for the direct Hyperliquid exchange call.
-const mockFetch = vi.fn()
+// Hyperliquid DEX client: mock approveBuilderFee so no real HTTP calls are made.
+const mockApproveBuilderFee = vi.fn()
 
 // --------------------------------------------------------------------------
 // Fixtures
@@ -112,12 +116,8 @@ describe('HyperliquidSetup — bounded polling for on-chain confirmation', () =>
     vi.clearAllMocks()
     mockGet.mockResolvedValue({ data: BUILDER_CONFIG_PENDING })
     mockSignTypedData.mockResolvedValue(FAKE_SIG)
-    mockFetch.mockResolvedValue({
-      ok: true,
-      statusText: 'OK',
-      json: async () => ({ status: 'ok' }),
-    })
-    vi.stubGlobal('fetch', mockFetch)
+    // approveBuilderFee resolves successfully by default
+    mockApproveBuilderFee.mockResolvedValue({ status: 'ok' })
 
     // Ensure visibilityState defaults to visible for each test.
     Object.defineProperty(document, 'visibilityState', {
@@ -128,7 +128,6 @@ describe('HyperliquidSetup — bounded polling for on-chain confirmation', () =>
 
   afterEach(() => {
     vi.useRealTimers()
-    vi.unstubAllGlobals()
   })
 
   it('completes happy path once poll returns success', async () => {
