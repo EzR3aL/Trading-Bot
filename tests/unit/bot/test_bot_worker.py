@@ -167,7 +167,7 @@ class TestBotWorkerInitialize:
         mock_session.__aenter__ = AsyncMock(return_value=mock_session)
         mock_session.__aexit__ = AsyncMock(return_value=False)
 
-        with patch("src.bot.bot_worker.get_session", return_value=mock_session):
+        with patch("src.bot._lifecycle_mixin.get_session", return_value=mock_session):
             result = await worker.initialize()
 
         assert result is False
@@ -195,7 +195,7 @@ class TestBotWorkerInitialize:
         mock_session.__aenter__ = AsyncMock(return_value=mock_session)
         mock_session.__aexit__ = AsyncMock(return_value=False)
 
-        with patch("src.bot.bot_worker.get_session", return_value=mock_session):
+        with patch("src.bot._lifecycle_mixin.get_session", return_value=mock_session):
             result = await worker.initialize()
 
         assert result is False

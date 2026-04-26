@@ -99,7 +99,7 @@ class TestGracefulStop:
         session = _mock_session_with_trades([])
 
         assert worker._shutting_down is False
-        with patch("src.bot.bot_worker.get_session", return_value=session):
+        with patch("src.bot._lifecycle_mixin.get_session", return_value=session):
             await worker.graceful_stop(grace_period=0.05)
 
         assert worker._shutting_down is True
@@ -110,7 +110,7 @@ class TestGracefulStop:
         _prime_worker(worker)
         session = _mock_session_with_trades([])
 
-        with patch("src.bot.bot_worker.get_session", return_value=session):
+        with patch("src.bot._lifecycle_mixin.get_session", return_value=session):
             await worker.graceful_stop(grace_period=0.05)
 
         worker.stop.assert_awaited_once()
@@ -133,7 +133,7 @@ class TestGracefulStop:
         ]
         session = _mock_session_with_trades(trades)
 
-        with patch("src.bot.bot_worker.get_session", return_value=session):
+        with patch("src.bot._lifecycle_mixin.get_session", return_value=session):
             result = await worker.graceful_stop(grace_period=0.05)
 
         assert len(result) == 2
@@ -162,7 +162,7 @@ class TestGracefulStop:
         _prime_worker(worker)
         session = _mock_session_with_trades([])
 
-        with patch("src.bot.bot_worker.get_session", return_value=session):
+        with patch("src.bot._lifecycle_mixin.get_session", return_value=session):
             result = await worker.graceful_stop(grace_period=0.05)
 
         assert result == []
@@ -175,7 +175,7 @@ class TestGracefulStop:
         # Default state: event is set (idle) — wait() completes instantly.
         session = _mock_session_with_trades([])
 
-        with patch("src.bot.bot_worker.get_session", return_value=session):
+        with patch("src.bot._lifecycle_mixin.get_session", return_value=session):
             # Even with a short grace period this completes fast.
             await asyncio.wait_for(
                 worker.graceful_stop(grace_period=5.0),
@@ -194,7 +194,7 @@ class TestGracefulStop:
             _make_trade_record(symbol="SOLUSDT"),
         ])
 
-        with patch("src.bot.bot_worker.get_session", return_value=session):
+        with patch("src.bot._lifecycle_mixin.get_session", return_value=session):
             result = await worker.graceful_stop(grace_period=0.05)
 
         # Despite the timeout, downstream work still happened.
@@ -209,7 +209,7 @@ class TestGracefulStop:
         _prime_worker(worker)
         session = _mock_session_that_raises(RuntimeError("DB down"))
 
-        with patch("src.bot.bot_worker.get_session", return_value=session):
+        with patch("src.bot._lifecycle_mixin.get_session", return_value=session):
             result = await worker.graceful_stop(grace_period=0.05)
 
         assert result == []
@@ -229,7 +229,7 @@ class TestGracefulStop:
             _make_trade_record(symbol="BTCUSDT", demo_mode=True),
         ])
 
-        with patch("src.bot.bot_worker.get_session", return_value=session):
+        with patch("src.bot._lifecycle_mixin.get_session", return_value=session):
             result = await worker.graceful_stop(grace_period=0.05)
 
         demo.get_open_positions.assert_awaited_once()
@@ -249,7 +249,7 @@ class TestGracefulStop:
         _prime_worker(worker, demo=demo, live=live)
         session = _mock_session_with_trades([])
 
-        with patch("src.bot.bot_worker.get_session", return_value=session):
+        with patch("src.bot._lifecycle_mixin.get_session", return_value=session):
             await worker.graceful_stop(grace_period=0.05)
 
         demo.get_open_positions.assert_awaited_once()
@@ -262,7 +262,7 @@ class TestGracefulStop:
         _prime_worker(worker, demo=None, live=None)
         session = _mock_session_with_trades([])
 
-        with patch("src.bot.bot_worker.get_session", return_value=session):
+        with patch("src.bot._lifecycle_mixin.get_session", return_value=session):
             result = await worker.graceful_stop(grace_period=0.05)
 
         assert result == []
@@ -284,7 +284,7 @@ class TestGracefulStop:
         worker.stop = AsyncMock(side_effect=_fake_stop)
 
         session = _mock_session_with_trades([])
-        with patch("src.bot.bot_worker.get_session", return_value=session):
+        with patch("src.bot._lifecycle_mixin.get_session", return_value=session):
             await worker.graceful_stop(grace_period=0.05)
 
         assert worker.status == BotStatus.STOPPED
