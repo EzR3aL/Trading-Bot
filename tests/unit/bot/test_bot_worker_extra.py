@@ -175,11 +175,11 @@ class TestInitializeFullFlow:
 
         mock_strategy = MagicMock()
 
-        with patch("src.bot.bot_worker.get_session", return_value=_mock_session_ctx(mock_session)), \
-             patch("src.bot.bot_worker.create_exchange_client", return_value=mock_client), \
-             patch("src.bot.bot_worker.decrypt_value", return_value="decrypted"), \
-             patch("src.bot.bot_worker.StrategyRegistry") as mock_registry, \
-             patch("src.bot.bot_worker.RiskManager") as mock_rm_cls:
+        with patch("src.bot._lifecycle_mixin.get_session", return_value=_mock_session_ctx(mock_session)), \
+             patch("src.bot._lifecycle_mixin.create_exchange_client", return_value=mock_client), \
+             patch("src.bot._lifecycle_mixin.decrypt_value", return_value="decrypted"), \
+             patch("src.bot._lifecycle_mixin.StrategyRegistry") as mock_registry, \
+             patch("src.bot._lifecycle_mixin.RiskManager") as mock_rm_cls:
             mock_registry.create.return_value = mock_strategy
             mock_rm_instance = MagicMock()
             mock_rm_cls.return_value = mock_rm_instance
@@ -217,11 +217,11 @@ class TestInitializeFullFlow:
         mock_client = AsyncMock()
         mock_client.get_account_balance = AsyncMock(return_value=_make_mock_balance())
 
-        with patch("src.bot.bot_worker.get_session", return_value=_mock_session_ctx(mock_session)), \
-             patch("src.bot.bot_worker.create_exchange_client", return_value=mock_client), \
-             patch("src.bot.bot_worker.decrypt_value", return_value="decrypted"), \
-             patch("src.bot.bot_worker.StrategyRegistry") as mock_registry, \
-             patch("src.bot.bot_worker.RiskManager") as mock_rm_cls:
+        with patch("src.bot._lifecycle_mixin.get_session", return_value=_mock_session_ctx(mock_session)), \
+             patch("src.bot._lifecycle_mixin.create_exchange_client", return_value=mock_client), \
+             patch("src.bot._lifecycle_mixin.decrypt_value", return_value="decrypted"), \
+             patch("src.bot._lifecycle_mixin.StrategyRegistry") as mock_registry, \
+             patch("src.bot._lifecycle_mixin.RiskManager") as mock_rm_cls:
             mock_registry.create.return_value = MagicMock()
             mock_rm_cls.return_value = MagicMock()
 
@@ -263,11 +263,11 @@ class TestInitializeFullFlow:
 
         demo_client.get_account_balance = AsyncMock(return_value=_make_mock_balance())
 
-        with patch("src.bot.bot_worker.get_session", return_value=_mock_session_ctx(mock_session)), \
-             patch("src.bot.bot_worker.create_exchange_client", side_effect=clients), \
-             patch("src.bot.bot_worker.decrypt_value", return_value="decrypted"), \
-             patch("src.bot.bot_worker.StrategyRegistry") as mock_registry, \
-             patch("src.bot.bot_worker.RiskManager") as mock_rm_cls:
+        with patch("src.bot._lifecycle_mixin.get_session", return_value=_mock_session_ctx(mock_session)), \
+             patch("src.bot._lifecycle_mixin.create_exchange_client", side_effect=clients), \
+             patch("src.bot._lifecycle_mixin.decrypt_value", return_value="decrypted"), \
+             patch("src.bot._lifecycle_mixin.StrategyRegistry") as mock_registry, \
+             patch("src.bot._lifecycle_mixin.RiskManager") as mock_rm_cls:
             mock_registry.create.return_value = MagicMock()
             mock_rm_cls.return_value = MagicMock()
 
@@ -300,7 +300,7 @@ class TestInitializeFullFlow:
         mock_session = _make_db_session()
         mock_session.execute = mock_execute
 
-        with patch("src.bot.bot_worker.get_session", return_value=_mock_session_ctx(mock_session)):
+        with patch("src.bot._lifecycle_mixin.get_session", return_value=_mock_session_ctx(mock_session)):
             result = await worker.initialize()
 
         assert result is False
@@ -328,7 +328,7 @@ class TestInitializeFullFlow:
         mock_session = _make_db_session()
         mock_session.execute = mock_execute
 
-        with patch("src.bot.bot_worker.get_session", return_value=_mock_session_ctx(mock_session)):
+        with patch("src.bot._lifecycle_mixin.get_session", return_value=_mock_session_ctx(mock_session)):
             result = await worker.initialize()
 
         assert result is False
@@ -363,11 +363,11 @@ class TestInitializeFullFlow:
         mock_client = AsyncMock()
         mock_client.get_account_balance = AsyncMock(return_value=_make_mock_balance())
 
-        with patch("src.bot.bot_worker.get_session", return_value=_mock_session_ctx(mock_session)), \
-             patch("src.bot.bot_worker.create_exchange_client", return_value=mock_client), \
-             patch("src.bot.bot_worker.decrypt_value", return_value="decrypted"), \
-             patch("src.bot.bot_worker.StrategyRegistry") as mock_registry, \
-             patch("src.bot.bot_worker.RiskManager") as mock_rm_cls:
+        with patch("src.bot._lifecycle_mixin.get_session", return_value=_mock_session_ctx(mock_session)), \
+             patch("src.bot._lifecycle_mixin.create_exchange_client", return_value=mock_client), \
+             patch("src.bot._lifecycle_mixin.decrypt_value", return_value="decrypted"), \
+             patch("src.bot._lifecycle_mixin.StrategyRegistry") as mock_registry, \
+             patch("src.bot._lifecycle_mixin.RiskManager") as mock_rm_cls:
             mock_registry.create.return_value = MagicMock()
             mock_rm_cls.return_value = MagicMock()
 
@@ -409,11 +409,11 @@ class TestInitializeFullFlow:
         mock_client = AsyncMock()
         mock_client.get_account_balance = AsyncMock(return_value=_make_mock_balance())
 
-        with patch("src.bot.bot_worker.get_session", return_value=_mock_session_ctx(mock_session)), \
-             patch("src.bot.bot_worker.create_exchange_client", return_value=mock_client), \
-             patch("src.bot.bot_worker.decrypt_value", return_value="decrypted"), \
-             patch("src.bot.bot_worker.StrategyRegistry") as mock_registry, \
-             patch("src.bot.bot_worker.RiskManager") as mock_rm_cls:
+        with patch("src.bot._lifecycle_mixin.get_session", return_value=_mock_session_ctx(mock_session)), \
+             patch("src.bot._lifecycle_mixin.create_exchange_client", return_value=mock_client), \
+             patch("src.bot._lifecycle_mixin.decrypt_value", return_value="decrypted"), \
+             patch("src.bot._lifecycle_mixin.StrategyRegistry") as mock_registry, \
+             patch("src.bot._lifecycle_mixin.RiskManager") as mock_rm_cls:
             mock_registry.create.return_value = MagicMock()
             mock_rm_cls.return_value = MagicMock()
 
@@ -450,11 +450,11 @@ class TestInitializeFullFlow:
         mock_client = AsyncMock()
         mock_client.get_account_balance = AsyncMock(return_value=_make_mock_balance())
 
-        with patch("src.bot.bot_worker.get_session", return_value=_mock_session_ctx(mock_session)), \
-             patch("src.bot.bot_worker.create_exchange_client", return_value=mock_client), \
-             patch("src.bot.bot_worker.decrypt_value", return_value="decrypted"), \
-             patch("src.bot.bot_worker.StrategyRegistry") as mock_registry, \
-             patch("src.bot.bot_worker.RiskManager") as mock_rm_cls:
+        with patch("src.bot._lifecycle_mixin.get_session", return_value=_mock_session_ctx(mock_session)), \
+             patch("src.bot._lifecycle_mixin.create_exchange_client", return_value=mock_client), \
+             patch("src.bot._lifecycle_mixin.decrypt_value", return_value="decrypted"), \
+             patch("src.bot._lifecycle_mixin.StrategyRegistry") as mock_registry, \
+             patch("src.bot._lifecycle_mixin.RiskManager") as mock_rm_cls:
             mock_registry.create.return_value = MagicMock()
             mock_rm_cls.return_value = MagicMock()
 
@@ -490,11 +490,11 @@ class TestInitializeFullFlow:
 
         mock_rm = MagicMock()
 
-        with patch("src.bot.bot_worker.get_session", return_value=_mock_session_ctx(mock_session)), \
-             patch("src.bot.bot_worker.create_exchange_client", return_value=mock_client), \
-             patch("src.bot.bot_worker.decrypt_value", return_value="decrypted"), \
-             patch("src.bot.bot_worker.StrategyRegistry") as mock_registry, \
-             patch("src.bot.bot_worker.RiskManager", return_value=mock_rm):
+        with patch("src.bot._lifecycle_mixin.get_session", return_value=_mock_session_ctx(mock_session)), \
+             patch("src.bot._lifecycle_mixin.create_exchange_client", return_value=mock_client), \
+             patch("src.bot._lifecycle_mixin.decrypt_value", return_value="decrypted"), \
+             patch("src.bot._lifecycle_mixin.StrategyRegistry") as mock_registry, \
+             patch("src.bot._lifecycle_mixin.RiskManager", return_value=mock_rm):
             mock_registry.create.return_value = MagicMock()
 
             result = await worker.initialize()
@@ -506,7 +506,7 @@ class TestInitializeFullFlow:
         """Generic exception during initialization sets error status."""
         worker = BotWorker(bot_config_id=1)
 
-        with patch("src.bot.bot_worker.get_session", side_effect=Exception("DB down")):
+        with patch("src.bot._lifecycle_mixin.get_session", side_effect=Exception("DB down")):
             result = await worker.initialize()
 
         assert result is False
@@ -607,7 +607,7 @@ class TestAnalyzeSymbolLocked:
         mock_session = _make_db_session()
         mock_session.execute = AsyncMock(return_value=mock_result)
 
-        with patch("src.bot.bot_worker.get_session", return_value=_mock_session_ctx(mock_session)):
+        with patch("src.bot._schedule_mixin.get_session", return_value=_mock_session_ctx(mock_session)):
             await worker._analyze_symbol_locked("BTCUSDT")
 
         worker._strategy.generate_signal.assert_not_awaited()
@@ -629,7 +629,7 @@ class TestAnalyzeSymbolLocked:
         mock_session = _make_db_session()
         mock_session.execute = AsyncMock(return_value=mock_result)
 
-        with patch("src.bot.bot_worker.get_session", return_value=_mock_session_ctx(mock_session)):
+        with patch("src.bot._schedule_mixin.get_session", return_value=_mock_session_ctx(mock_session)):
             await worker._analyze_symbol_locked("BTCUSDT")
 
         mock_strategy.generate_signal.assert_awaited_once()
@@ -1825,11 +1825,11 @@ class TestHyperliquidInit:
 
         hl_cfg = {"builder_address": "0x123", "builder_fee": 0.001, "referral_code": ""}
 
-        with patch("src.bot.bot_worker.get_session", return_value=_mock_session_ctx(mock_session)), \
-             patch("src.bot.bot_worker.create_exchange_client", return_value=mock_client) as mock_create, \
-             patch("src.bot.bot_worker.decrypt_value", return_value="decrypted"), \
-             patch("src.bot.bot_worker.StrategyRegistry") as mock_registry, \
-             patch("src.bot.bot_worker.RiskManager") as mock_rm_cls, \
+        with patch("src.bot._lifecycle_mixin.get_session", return_value=_mock_session_ctx(mock_session)), \
+             patch("src.bot._lifecycle_mixin.create_exchange_client", return_value=mock_client) as mock_create, \
+             patch("src.bot._lifecycle_mixin.decrypt_value", return_value="decrypted"), \
+             patch("src.bot._lifecycle_mixin.StrategyRegistry") as mock_registry, \
+             patch("src.bot._lifecycle_mixin.RiskManager") as mock_rm_cls, \
              patch("src.utils.settings.get_hl_config", return_value=hl_cfg), \
              patch("src.exchanges.symbol_fetcher.get_exchange_symbols", new_callable=AsyncMock, return_value=["BTCUSDT"]):
             mock_registry.create.return_value = MagicMock()
@@ -1880,11 +1880,11 @@ class TestHyperliquidInit:
             worker.status = "error"
             return False
 
-        with patch("src.bot.bot_worker.get_session") as mock_get_session, \
-             patch("src.bot.bot_worker.create_exchange_client", return_value=mock_client), \
-             patch("src.bot.bot_worker.decrypt_value", return_value="decrypted"), \
-             patch("src.bot.bot_worker.StrategyRegistry") as mock_registry, \
-             patch("src.bot.bot_worker.RiskManager") as mock_rm_cls, \
+        with patch("src.bot._lifecycle_mixin.get_session") as mock_get_session, \
+             patch("src.bot._lifecycle_mixin.create_exchange_client", return_value=mock_client), \
+             patch("src.bot._lifecycle_mixin.decrypt_value", return_value="decrypted"), \
+             patch("src.bot._lifecycle_mixin.StrategyRegistry") as mock_registry, \
+             patch("src.bot._lifecycle_mixin.RiskManager") as mock_rm_cls, \
              patch("src.utils.settings.get_hl_config", return_value=hl_cfg):
 
             # First call = main init session, second = HL checks session
@@ -1993,7 +1993,7 @@ class TestAnalyzeAndTradeSafe:
         worker._config = MagicMock()
         worker._config.name = "TestBot"
 
-        with patch("src.bot.bot_worker.asyncio.sleep", new_callable=AsyncMock) as mock_sleep:
+        with patch("src.bot._schedule_mixin.asyncio.sleep", new_callable=AsyncMock) as mock_sleep:
             await worker._analyze_and_trade_safe()
 
         assert worker._consecutive_errors == 3  # Reset to allow 2 more retries
