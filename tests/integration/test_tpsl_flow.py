@@ -248,6 +248,9 @@ def _make_trade_record_from_signal(signal, fill_price, leverage, tp, sl, **extra
     trade.demo_mode = True
     trade.exchange = "bitget"
     trade.metrics_snapshot = json.dumps(signal.metrics_snapshot)
+    trade.native_trailing_stop = extra.get("native_trailing_stop", False)
+    trade.trailing_atr_override = extra.get("trailing_atr_override", None)
+    trade.trailing_status = extra.get("trailing_status", None)
     return trade
 
 
@@ -271,7 +274,6 @@ class TradeRecordCapture:
 # ===========================================================================
 
 @pytest.mark.asyncio
-@pytest.mark.xfail(reason="FakeExchangeClient needs update for margin_mode and position monitor changes", strict=False)
 class TestTPSLIntegrationFlow:
 
     # -----------------------------------------------------------------------
@@ -326,6 +328,7 @@ class TestTPSLIntegrationFlow:
         )
         worker._strategy = MagicMock()
         worker._strategy.should_exit = AsyncMock(return_value=(True, "fake exit"))
+        worker._strategy._p = {"trailing_stop_enabled": False}
         worker._get_client = MagicMock(return_value=exchange)
 
         monitor_session = AsyncMock()
@@ -605,6 +608,7 @@ class TestTPSLIntegrationFlow:
         )
         worker._strategy = MagicMock()
         worker._strategy.should_exit = AsyncMock(return_value=(True, "would exit"))
+        worker._strategy._p = {"trailing_stop_enabled": False}
         worker._get_client = MagicMock(return_value=exchange)
 
         monitor_session = AsyncMock()
@@ -615,7 +619,6 @@ class TestTPSLIntegrationFlow:
 
 
 @pytest.mark.asyncio
-@pytest.mark.xfail(reason="FakeExchangeClient needs update for position monitor changes", strict=False)
 class TestTPSLExampleTrades:
     """Concrete example trades with real BTC prices to verify TP/SL math."""
 
@@ -748,6 +751,7 @@ class TestTPSLExampleTrades:
         worker._send_notification = AsyncMock()
         worker._strategy = MagicMock()
         worker._strategy.should_exit = AsyncMock(return_value=(True, "would exit"))
+        worker._strategy._p = {"trailing_stop_enabled": False}
 
         signal = _make_signal(direction=SignalDirection.LONG, entry_price=68200.0)
         db_capture = TradeRecordCapture()

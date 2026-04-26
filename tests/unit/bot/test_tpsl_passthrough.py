@@ -117,6 +117,8 @@ def _make_mock_trade(**overrides):
     trade.entry_time = overrides.get("entry_time", datetime.now(timezone.utc))
     trade.status = overrides.get("status", "open")
     trade.native_trailing_stop = overrides.get("native_trailing_stop", False)
+    trade.trailing_atr_override = overrides.get("trailing_atr_override", None)
+    trade.trailing_status = overrides.get("trailing_status", None)
     return trade
 
 
@@ -260,7 +262,6 @@ class TestTPSLCalculation:
 # 7-8. Position monitor should_exit() guard
 # ---------------------------------------------------------------------------
 
-@pytest.mark.xfail(reason="PositionMonitorMixin mock missing _close_and_record_trade", strict=False)
 class TestPositionMonitorGuard:
 
     @pytest.mark.asyncio
@@ -272,6 +273,7 @@ class TestPositionMonitorGuard:
         mixin.bot_config_id = 1
         mixin._strategy = MagicMock()
         mixin._strategy.should_exit = AsyncMock(return_value=(True, "momentum flip"))
+        mixin._strategy._p = {"trailing_stop_enabled": False}
         mixin._config = MagicMock()
         mixin._config.name = "Test Bot"
 
