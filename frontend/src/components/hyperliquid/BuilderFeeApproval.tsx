@@ -8,6 +8,7 @@ import '@rainbow-me/rainbowkit/styles.css'
 import { walletConfig } from '../../config/wallet'
 import { CheckCircle, AlertTriangle, Wallet, Loader2, ExternalLink, X, Link2 } from 'lucide-react'
 import api from '../../api/client'
+import { approveBuilderFee } from '../../api/hyperliquid'
 
 const queryClient = new QueryClient()
 
@@ -137,32 +138,20 @@ function BuilderFeeApprovalInner({ onApproved, onClose }: BuilderFeeApprovalProp
       const v = parseInt(signature.slice(130, 132), 16)
 
       const action = {
-        type: 'approveBuilderFee',
-        hyperliquidChain: 'Mainnet',
+        type: 'approveBuilderFee' as const,
+        hyperliquidChain: 'Mainnet' as const,
         maxFeeRate: config.max_fee_rate,
         builder: config.builder_address,
         nonce,
         signatureChainId: signatureChainIdHex,
       }
 
-      const hlResponse = await fetch('https://api.hyperliquid.xyz/exchange', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action,
-          nonce,
-          signature: { r, s, v },
-          vaultAddress: null,
-        }),
+      await approveBuilderFee({
+        action,
+        nonce,
+        signature: { r, s, v },
+        vaultAddress: null,
       })
-
-      const hlBody = await hlResponse.json().catch(() => null)
-      if (!hlResponse.ok) {
-        throw new Error(`Hyperliquid: ${JSON.stringify(hlBody) || hlResponse.statusText}`)
-      }
-      if (hlBody?.status === 'err') {
-        throw new Error(`Hyperliquid: ${hlBody.response || 'Unknown error'}`)
-      }
 
       // Delay for on-chain propagation
       await new Promise(resolve => setTimeout(resolve, 3000))
