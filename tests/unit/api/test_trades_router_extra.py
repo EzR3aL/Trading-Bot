@@ -509,11 +509,11 @@ async def test_trailing_stop_long_active(client, auth_headers, open_long_trailin
     """Open LONG trade with sufficient profit shows active trailing stop."""
     mock_cls = _make_mdf_mock(_mock_klines(600.0))
 
-    # get_trade was moved to TradesService; patch both import sites so the
-    # test still intercepts the fetcher after the #325 PR-1 extraction.
+    # After #363 split, _compute_trailing_stop lives in _trades_helpers
+    # which holds the top-level MarketDataFetcher binding.
     with (
         patch("src.api.routers.trades.MarketDataFetcher", mock_cls),
-        patch("src.services.trades_service.MarketDataFetcher", mock_cls),
+        patch("src.services._trades_helpers.MarketDataFetcher", mock_cls),
     ):
         resp = await client.get(
             f"/api/trades/{open_long_trailing.id}", headers=auth_headers
@@ -533,11 +533,11 @@ async def test_trailing_stop_short_active(client, auth_headers, open_short_trail
     """Open SHORT trade with sufficient profit shows active trailing stop."""
     mock_cls = _make_mdf_mock(_mock_klines(600.0))
 
-    # get_trade was moved to TradesService; patch both import sites so the
-    # test still intercepts the fetcher after the #325 PR-1 extraction.
+    # After #363 split, _compute_trailing_stop lives in _trades_helpers
+    # which holds the top-level MarketDataFetcher binding.
     with (
         patch("src.api.routers.trades.MarketDataFetcher", mock_cls),
-        patch("src.services.trades_service.MarketDataFetcher", mock_cls),
+        patch("src.services._trades_helpers.MarketDataFetcher", mock_cls),
     ):
         resp = await client.get(
             f"/api/trades/{open_short_trailing.id}", headers=auth_headers
@@ -580,11 +580,11 @@ async def test_trailing_stop_not_active_when_not_profitable(
 
     mock_cls = _make_mdf_mock(_mock_klines(600.0))
 
-    # get_trade was moved to TradesService; patch both import sites so the
-    # test still intercepts the fetcher after the #325 PR-1 extraction.
+    # After #363 split, _compute_trailing_stop lives in _trades_helpers
+    # which holds the top-level MarketDataFetcher binding.
     with (
         patch("src.api.routers.trades.MarketDataFetcher", mock_cls),
-        patch("src.services.trades_service.MarketDataFetcher", mock_cls),
+        patch("src.services._trades_helpers.MarketDataFetcher", mock_cls),
     ):
         resp = await client.get(f"/api/trades/{trade_id}", headers=auth_headers)
 
@@ -646,11 +646,15 @@ async def test_trailing_stop_in_list_trades(client, auth_headers, open_long_trai
     """list_trades endpoint also enriches open trades with trailing stop info."""
     mock_cls = _make_mdf_mock(_mock_klines(600.0))
 
-    # list_trades was moved to TradesService; patch both import sites so the
-    # test still intercepts the fetcher after the ARCH-C1 extraction.
+    # After #363 split, list_trades lives in _trades_list_mixin and does a
+    # function-local ``from src.data.market_data import MarketDataFetcher``
+    # for its kline pre-fetch — patch the source module to intercept it.
+    # The trailing-stop enrichment then runs through _compute_trailing_stop
+    # in _trades_helpers, which uses its own top-level binding.
     with (
         patch("src.api.routers.trades.MarketDataFetcher", mock_cls),
-        patch("src.services.trades_service.MarketDataFetcher", mock_cls),
+        patch("src.data.market_data.MarketDataFetcher", mock_cls),
+        patch("src.services._trades_helpers.MarketDataFetcher", mock_cls),
     ):
         resp = await client.get(
             "/api/trades", headers=auth_headers, params={"status": "open"}
@@ -673,11 +677,11 @@ async def test_trailing_stop_kline_fetch_failure(
     mock_fetcher.close = AsyncMock()
     mock_cls = MagicMock(return_value=mock_fetcher)
 
-    # get_trade was moved to TradesService; patch both import sites so the
-    # test still intercepts the fetcher after the #325 PR-1 extraction.
+    # After #363 split, _compute_trailing_stop lives in _trades_helpers
+    # which holds the top-level MarketDataFetcher binding.
     with (
         patch("src.api.routers.trades.MarketDataFetcher", mock_cls),
-        patch("src.services.trades_service.MarketDataFetcher", mock_cls),
+        patch("src.services._trades_helpers.MarketDataFetcher", mock_cls),
     ):
         resp = await client.get(
             f"/api/trades/{open_long_trailing.id}", headers=auth_headers

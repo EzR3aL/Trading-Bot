@@ -672,11 +672,13 @@ async def test_get_trade_with_trailing_strategy_long_active_branch(
     fetcher_mock.close = AsyncMock()
     mdf_cls = MagicMock(return_value=fetcher_mock)
     mdf_cls.calculate_atr = MagicMock(return_value=[200.0])
-    # get_trade was moved to TradesService; patch both import sites so the
-    # test still intercepts the fetcher after the #325 PR-1 extraction.
+    # After #363 split, _compute_trailing_stop lives in _trades_helpers
+    # which holds the top-level MarketDataFetcher binding. The router
+    # patch is retained for parity with the rest of the suite (no-op
+    # for GET /trades/{id} but harmless).
     with (
         patch("src.api.routers.trades.MarketDataFetcher", mdf_cls),
-        patch("src.services.trades_service.MarketDataFetcher", mdf_cls),
+        patch("src.services._trades_helpers.MarketDataFetcher", mdf_cls),
     ):
         resp = await client.get(f"/api/trades/{trade_id}", headers=auth_headers)
 
@@ -742,11 +744,11 @@ async def test_get_trade_with_trailing_strategy_short_active_branch(
     fetcher_mock.close = AsyncMock()
     mdf_cls = MagicMock(return_value=fetcher_mock)
     mdf_cls.calculate_atr = MagicMock(return_value=[50.0])  # atr*1.5=75 << 500
-    # get_trade was moved to TradesService; patch both import sites so the
-    # test still intercepts the fetcher after the #325 PR-1 extraction.
+    # After #363 split, _compute_trailing_stop lives in _trades_helpers
+    # which holds the top-level MarketDataFetcher binding.
     with (
         patch("src.api.routers.trades.MarketDataFetcher", mdf_cls),
-        patch("src.services.trades_service.MarketDataFetcher", mdf_cls),
+        patch("src.services._trades_helpers.MarketDataFetcher", mdf_cls),
     ):
         resp = await client.get(f"/api/trades/{trade_id}", headers=auth_headers)
 
