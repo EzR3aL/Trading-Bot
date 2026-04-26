@@ -27,7 +27,11 @@ from typing import Any, Optional
 import websockets
 from websockets.exceptions import ConnectionClosed
 
-from src.exchanges.bitget.constants import PRODUCT_TYPE_USDT, WS_PRIVATE_URL
+from src.exchanges.bitget.constants import (
+    PRODUCT_TYPE_USDT,
+    WS_PRIVATE_URL,
+    WS_PRIVATE_URL_DEMO,
+)
 from src.exchanges.websockets.base import (
     EventCallback,
     ExchangeWebSocketClient,
@@ -59,10 +63,13 @@ class BitgetWebSocketClient(ExchangeWebSocketClient):
     api_key, api_secret, passphrase:
         Credentials for the private channel login. Never logged.
     demo_mode:
-        Unused by the WS URL (Bitget demo uses the same URL + a REST
-        header), kept for parity with the REST client's constructor.
+        Selects the WS host: ``True`` dials ``wspap.bitget.com`` (paper
+        trading), ``False`` dials ``ws.bitget.com`` (live). Live credentials
+        are rejected on the demo host and vice versa with error 30017 —
+        the REST ``paptrading`` header does NOT apply to WS (#357).
     ws_url:
-        Override for tests — default is the production private URL.
+        Explicit URL override (tests + one-off routing). Takes precedence
+        over ``demo_mode`` when set.
     """
 
     def __init__(
@@ -75,7 +82,7 @@ class BitgetWebSocketClient(ExchangeWebSocketClient):
         on_event: EventCallback,
         on_reconnect: Optional[ReconnectCallback] = None,
         demo_mode: bool = False,
-        ws_url: str = WS_PRIVATE_URL,
+        ws_url: Optional[str] = None,
     ) -> None:
         super().__init__(
             user_id=user_id,
@@ -87,7 +94,7 @@ class BitgetWebSocketClient(ExchangeWebSocketClient):
         self._api_secret = api_secret
         self._passphrase = passphrase
         self._demo_mode = demo_mode
-        self._ws_url = ws_url
+        self._ws_url = ws_url or (WS_PRIVATE_URL_DEMO if demo_mode else WS_PRIVATE_URL)
 
     # ── Base-class transport hooks ─────────────────────────────────
 
